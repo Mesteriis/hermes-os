@@ -1,4 +1,8 @@
 use super::*;
+use crate::app::signal_hub_support::{
+    remove_provider_account_signal_connection, sync_provider_account_signal_connection,
+    sync_provider_account_signal_connection_with_status,
+};
 
 pub(crate) async fn get_v1_email_accounts(
     State(state): State<AppState>,
@@ -96,6 +100,7 @@ pub(crate) async fn post_v1_email_account_import(
             .config(config),
         )
         .await?;
+    sync_provider_account_signal_connection(&state, &account, None).await?;
 
     let current_settings = mail_sync_store(&state)
         .map_err(mail_sync_api_error)?
@@ -147,6 +152,13 @@ pub(crate) async fn post_v1_email_account_logout(
             .mark_logged_out(&account.account_id)
             .await?
             .ok_or(ApiError::NotFound)?;
+    sync_provider_account_signal_connection_with_status(
+        &state,
+        &updated_account,
+        "disconnected",
+        None,
+    )
+    .await?;
     let current_settings = mail_sync_store(&state)
         .map_err(mail_sync_api_error)?
         .settings_for_account(&account.account_id)
@@ -189,6 +201,7 @@ pub(crate) async fn delete_v1_email_account(
     }
 
     let deleted = store.delete_metadata(&account.account_id).await?;
+    remove_provider_account_signal_connection(&state, &account).await?;
 
     Ok(Json(EmailAccountDeleteResponse {
         account_id: account.account_id,

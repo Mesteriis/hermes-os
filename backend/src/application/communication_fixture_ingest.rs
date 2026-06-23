@@ -3,13 +3,16 @@ use serde_json::json;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::application::provider_communication_projection::{
-    ProviderCommunicationProjectionError, record_and_project_telegram_message,
-    record_and_project_whatsapp_web_message,
-};
 use crate::application::review_inbox::{
     ReviewInboxWorkflowError, refresh_message_decisions_into_review,
     refresh_message_task_candidates_into_review,
+};
+use crate::domains::communications::core::CommunicationIngestionPort;
+use crate::domains::communications::messages::{
+    CommunicationSignalProjectionError, project_accepted_signal_if_runtime_allows,
+};
+use crate::domains::signal_hub::{
+    SignalHubError, dispatch_telegram_raw_signal, dispatch_whatsapp_raw_signal,
 };
 use crate::integrations::telegram::client::{
     NewTelegramMessage, TelegramError, TelegramMessageIngestResult, TelegramStore, telegram_chat_id,
@@ -50,8 +53,23 @@ impl TelegramFixtureIngestApplicationService {
         request: &NewTelegramMessage,
     ) -> Result<TelegramMessageIngestResult, CommunicationFixtureIngestError> {
         let observed = self.store.ingest_fixture_message(request).await?;
-        let projected =
-            record_and_project_telegram_message(self.pool.clone(), observed.raw).await?;
+        let stored_raw = CommunicationIngestionPort::new(self.pool.clone())
+            .record_raw_source(&observed.raw)
+            .await?;
+        let Some(accepted_event) =
+            dispatch_telegram_raw_signal(self.pool.clone(), &stored_raw).await?
+        else {
+            return Err(CommunicationFixtureIngestError::SignalControlBlocked(
+                "telegram fixture signal was not accepted by Signal Hub".to_owned(),
+            ));
+        };
+        let Some(projected) =
+            project_accepted_signal_if_runtime_allows(self.pool.clone(), &accepted_event).await?
+        else {
+            return Err(CommunicationFixtureIngestError::SignalControlBlocked(
+                "telegram fixture signal did not produce an accepted projection".to_owned(),
+            ));
+        };
         let response = TelegramMessageIngestResult {
             raw_record_id: projected.raw_record_id,
             message_id: projected.message_id,
@@ -114,8 +132,23 @@ impl WhatsappFixtureIngestApplicationService {
         request: &NewWhatsappWebMessage,
     ) -> Result<WhatsappWebMessageIngestResult, CommunicationFixtureIngestError> {
         let observed = self.store.ingest_fixture_message(request).await?;
-        let projected =
-            record_and_project_whatsapp_web_message(self.pool.clone(), observed.raw).await?;
+        let stored_raw = CommunicationIngestionPort::new(self.pool.clone())
+            .record_raw_source(&observed.raw)
+            .await?;
+        let Some(accepted_event) =
+            dispatch_whatsapp_raw_signal(self.pool.clone(), &stored_raw).await?
+        else {
+            return Err(CommunicationFixtureIngestError::SignalControlBlocked(
+                "whatsapp fixture signal was not accepted by Signal Hub".to_owned(),
+            ));
+        };
+        let Some(projected) =
+            project_accepted_signal_if_runtime_allows(self.pool.clone(), &accepted_event).await?
+        else {
+            return Err(CommunicationFixtureIngestError::SignalControlBlocked(
+                "whatsapp fixture signal did not produce an accepted projection".to_owned(),
+            ));
+        };
         let message_ids = vec![projected.message_id.clone()];
         refresh_message_decisions_into_review(&self.pool, &message_ids).await?;
         refresh_message_task_candidates_into_review(&self.pool, &message_ids).await?;
@@ -136,7 +169,16 @@ pub(crate) enum CommunicationFixtureIngestError {
     Whatsapp(#[from] WhatsappWebError),
 
     #[error(transparent)]
-    Projection(#[from] ProviderCommunicationProjectionError),
+    Communication(#[from] crate::domains::communications::core::CommunicationIngestionError),
+
+    #[error(transparent)]
+    SignalHub(#[from] SignalHubError),
+
+    #[error(transparent)]
+    SignalProjection(#[from] CommunicationSignalProjectionError),
+
+    #[error("{0}")]
+    SignalControlBlocked(String),
 
     #[error(transparent)]
     Review(#[from] ReviewInboxWorkflowError),

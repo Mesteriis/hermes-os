@@ -18,6 +18,7 @@ use crate::domains::projects::core::ProjectStoreError;
 use crate::domains::projects::link_reviews::ProjectLinkReviewError;
 use crate::domains::relationships::RelationshipStoreError;
 use crate::domains::review::ReviewInboxError;
+use crate::domains::signal_hub::SignalHubError;
 use crate::domains::tasks::candidates::TaskCandidateError;
 use crate::engines::automation::AutomationError;
 use crate::engines::consistency::ConsistencyError;
@@ -53,9 +54,11 @@ pub enum ApiError {
     InvalidContradictionReview(&'static str),
     InvalidReviewQuery(&'static str),
     InvalidReviewItem(&'static str),
+    FailedPrecondition(String),
     InvalidPersonIdentityReview(&'static str),
     InvalidDocumentProcessingQuery(&'static str),
     Settings(SettingsError),
+    SignalHub(SignalHubError),
     SettingNotFound,
     DocumentProcessing(DocumentProcessingError),
     TaskCandidateNotFound,

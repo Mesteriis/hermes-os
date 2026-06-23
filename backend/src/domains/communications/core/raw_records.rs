@@ -3,6 +3,9 @@ use super::models::{NewRawCommunicationRecord, StoredRawCommunicationRecord};
 use super::rows::row_to_raw_record;
 use super::store::CommunicationIngestionStore;
 use super::validation::validate_non_empty;
+use crate::platform::communications::{
+    CommunicationRawRecordCommandPort, CommunicationRawRecordPortFuture,
+};
 use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 use chrono::Utc;
 use serde_json::json;
@@ -123,6 +126,23 @@ impl CommunicationIngestionStore {
         .await?;
 
         row.map(row_to_raw_record).transpose()
+    }
+}
+
+impl CommunicationRawRecordCommandPort for CommunicationIngestionStore {
+    fn record_raw_source<'a>(
+        &'a self,
+        record: &'a NewRawCommunicationRecord,
+    ) -> CommunicationRawRecordPortFuture<'a, StoredRawCommunicationRecord> {
+        Box::pin(async move {
+            CommunicationIngestionStore::record_raw_source(self, record)
+                .await
+                .map_err(|error| {
+                    crate::platform::communications::ProviderCommunicationMessagePortError::InvalidRequest(
+                        error.to_string(),
+                    )
+                })
+        })
     }
 }
 

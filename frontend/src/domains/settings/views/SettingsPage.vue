@@ -10,6 +10,7 @@ import LanguageSettings from '../components/LanguageSettings.vue'
 import ApplicationSettings from '../components/ApplicationSettings.vue'
 import SidebarSettings from '../components/SidebarSettings.vue'
 import IntegrationsSettings from '../components/IntegrationsSettings.vue'
+import SignalHubSettings from '../components/SignalHubSettings.vue'
 import AISettingsControlCenter from '../components/AISettingsControlCenter.vue'
 
 const { t } = useI18n()
@@ -34,7 +35,8 @@ const settingsTreeGroups: Array<{ label: string; items: Array<{ id: SettingsSect
   {
     label: 'Sources',
     items: [
-      { id: 'integrations', label: 'Integrations', icon: 'tabler:plug-connected' }
+      { id: 'integrations', label: 'Integrations', icon: 'tabler:plug-connected' },
+      { id: 'signal-hub', label: 'Signal Hub', icon: 'tabler:database-import' }
     ]
   },
   {
@@ -85,6 +87,7 @@ const integrationCount = appSettingsData.value?.items?.length ?? 0
         <ApplicationSettings v-else-if="store.selectedSection === 'application'" />
         <SidebarSettings v-else-if="store.selectedSection === 'sidebar'" />
         <IntegrationsSettings v-else-if="store.selectedSection === 'integrations'" />
+        <SignalHubSettings v-else-if="store.selectedSection === 'signal-hub'" />
         <AISettingsControlCenter v-else-if="store.selectedSection === 'ai'" />
       </div>
     </div>

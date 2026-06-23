@@ -297,6 +297,69 @@ pub async fn sync_relationship_review_state_in_transaction(
     Ok(())
 }
 
+pub(crate) async fn sync_relationship_review_state_with_observation(
+    pool: &sqlx::postgres::PgPool,
+    relationship: &Relationship,
+    observation_id: &str,
+) -> Result<(), ReviewMirrorError> {
+    let mut transaction = pool.begin().await?;
+    let review_item = ensure_relationship_review_item_in_transaction(
+        &mut transaction,
+        &relationship.relationship_id,
+        &relationship.relationship_type,
+        relationship.source_entity_kind.as_str(),
+        &relationship.source_entity_id,
+        relationship.target_entity_kind.as_str(),
+        &relationship.target_entity_id,
+        relationship.confidence,
+        None,
+        observation_id,
+    )
+    .await?;
+
+    match relationship.review_state {
+        RelationshipReviewState::Suggested => {
+            let _ = ReviewInboxPort::transition_status_in_transaction(
+                &mut transaction,
+                &review_item.review_item_id,
+                ReviewItemStatus::New,
+            )
+            .await?;
+        }
+        RelationshipReviewState::SystemAccepted => {
+            let _ = ReviewInboxPort::transition_status_in_transaction(
+                &mut transaction,
+                &review_item.review_item_id,
+                ReviewItemStatus::Approved,
+            )
+            .await?;
+        }
+        RelationshipReviewState::UserRejected => {
+            let _ = ReviewInboxPort::transition_status_in_transaction(
+                &mut transaction,
+                &review_item.review_item_id,
+                ReviewItemStatus::Dismissed,
+            )
+            .await?;
+        }
+        RelationshipReviewState::UserConfirmed => {
+            let _ = ReviewInboxPort::promote_in_transaction(
+                &mut transaction,
+                &review_item.review_item_id,
+                ReviewPromotionTarget::new(
+                    "relationships",
+                    "relationship",
+                    &relationship.relationship_id,
+                ),
+            )
+            .await?;
+        }
+    }
+
+    transaction.commit().await?;
+    Ok(())
+}
+
 pub(crate) async fn sync_identity_candidate_to_review(
     pool: &sqlx::postgres::PgPool,
     payload: &PersonIdentityCandidatePayload,

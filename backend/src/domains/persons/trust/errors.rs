@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::platform::events::EventStoreError;
+
 #[derive(Debug, Error)]
 pub enum PersonTrustError {
     #[error(transparent)]
@@ -10,4 +12,7 @@ pub enum PersonTrustError {
 
     #[error(transparent)]
     Observation(#[from] crate::platform::observations::ObservationStoreError),
+
+    #[error(transparent)]
+    Event(#[from] EventStoreError),
 }

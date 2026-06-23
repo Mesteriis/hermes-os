@@ -26,6 +26,7 @@ pub fn build_router(config: AppConfig) -> Router {
 
 pub fn build_router_with_database(config: AppConfig, database: Database) -> Router {
     let api_secret = config.local_api_secret().unwrap_or_default().to_owned();
+    let nats_server_url = config.nats_server_url().map(ToOwned::to_owned);
     let vault = HostVault::new(HostVaultConfig {
         home: config.vault_home().to_path_buf(),
         dev_mode: config.dev_mode(),
@@ -48,14 +49,22 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         crate::application::bootstrap::ApplicationBootstrapContext {
             pool: state.database.pool().cloned(),
             database_url: state.database.database_url().map(ToOwned::to_owned),
+            nats_server_url,
             vault: state.vault.clone(),
             telegram_runtime: state.telegram_runtime.clone(),
             event_bus: state.event_bus.clone(),
         },
     );
 
+    let connect_routes = crate::app::connectrpc::protected_routes(
+        state.database.pool().cloned(),
+        state.config.clone(),
+        api_secret.clone(),
+    );
+
     Router::<AppState>::new()
         .merge(routes::public_routes())
+        .merge(connect_routes)
         .merge(routes::protected_routes(api_secret))
         .with_state(state)
         .layer(local_frontend_cors_layer())

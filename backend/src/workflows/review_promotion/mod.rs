@@ -320,6 +320,11 @@ impl ReviewPromotionService {
                 Ok(ReviewPromotionTarget::new("tasks", "task", task.task_id))
             }
             ReviewItemKind::PotentialDecision => {
+                if evidence.is_empty() {
+                    return Err(ReviewPromotionError::InvalidTarget(
+                        "decision evidence is required".to_owned(),
+                    ));
+                }
                 let decision_store = DecisionReviewPort::new(self.pool.clone());
                 let decision = if metadata_string(&item.metadata, "mirrored_from").as_deref()
                     == Some("decisions")
@@ -401,6 +406,11 @@ impl ReviewPromotionService {
                 ))
             }
             ReviewItemKind::PotentialObligation => {
+                if evidence.is_empty() {
+                    return Err(ReviewPromotionError::InvalidTarget(
+                        "obligation evidence is required".to_owned(),
+                    ));
+                }
                 let obligation_store = ObligationReviewPort::new(self.pool.clone());
                 let obligation = if metadata_string(&item.metadata, "mirrored_from").as_deref()
                     == Some("obligations")
@@ -483,6 +493,11 @@ impl ReviewPromotionService {
                 ))
             }
             ReviewItemKind::PotentialRelationship => {
+                if evidence.is_empty() {
+                    return Err(ReviewPromotionError::InvalidTarget(
+                        "relationship evidence is required".to_owned(),
+                    ));
+                }
                 let relationship_store = RelationshipReviewPort::new(self.pool.clone());
                 let relationship = if metadata_string(&item.metadata, "mirrored_from").as_deref()
                     == Some("relationships")

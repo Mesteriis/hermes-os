@@ -12,6 +12,7 @@ use hermes_hub_backend::domains::communications::core::{
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
+use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
@@ -100,6 +101,54 @@ async fn v1_bilingual_reply_flow_rejects_unsupported_tone_against_postgres() {
     assert_eq!(body["message"], "unsupported bilingual reply tone");
 }
 
+#[tokio::test]
+async fn v1_bilingual_reply_flow_emits_signal_hub_ai_events_when_runtime_runs() {
+    let context = TestContext::new().await;
+    let seeded = seed_message(context.pool().clone()).await;
+    let ollama_base_url = spawn_fake_ollama().await;
+    configure_fake_ollama_setting(context.pool(), &ollama_base_url).await;
+    let app = router(&context.connection_string()).await;
+
+    let response = app
+        .oneshot(post(
+            &format!(
+                "/api/v1/communications/messages/{}/bilingual-reply-flow",
+                seeded.message_id
+            ),
+            json!({
+                "reply_text_ru": "Спасибо, мы проверим контракт сегодня.",
+                "tone": "business"
+            }),
+        ))
+        .await
+        .expect("bilingual reply flow response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["send_ready"], true);
+    assert_eq!(body["translation"]["translated"], true);
+    assert_eq!(body["back_translation"]["translated"], true);
+
+    let signal_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::bigint
+        FROM event_log
+        WHERE event_type IN (
+            'signal.raw.ai.bilingual_reply_inbound_translation.observed',
+            'signal.accepted.ai.bilingual_reply_inbound_translation',
+            'signal.raw.ai.bilingual_reply_back_translation.observed',
+            'signal.accepted.ai.bilingual_reply_back_translation'
+        )
+          AND subject->>'message_id' = $1
+        "#,
+    )
+    .bind(&seeded.message_id)
+    .fetch_one(context.pool())
+    .await
+    .expect("bilingual reply flow signal count");
+    assert_eq!(signal_count, 4);
+}
+
 struct SeededMessage {
     message_id: String,
 }
@@ -178,4 +227,67 @@ fn uid() -> u128 {
         .duration_since(UNIX_EPOCH)
         .expect("system clock after unix epoch")
         .as_nanos()
+}
+
+async fn spawn_fake_ollama() -> String {
+    let app = axum::Router::new()
+        .route(
+            "/api/version",
+            axum::routing::get(|| async { axum::Json(json!({ "version": "0.17.4" })) }),
+        )
+        .route(
+            "/api/tags",
+            axum::routing::get(|| async {
+                axum::Json(json!({
+                    "models": [
+                        { "name": "qwen3:4b" },
+                        { "name": "qwen3-embedding:4b" }
+                    ]
+                }))
+            }),
+        )
+        .route(
+            "/api/chat",
+            axum::routing::post(|axum::Json(body): axum::Json<Value>| async move {
+                let text = body["messages"]
+                    .as_array()
+                    .and_then(|messages| messages.last())
+                    .and_then(|message| message["content"].as_str())
+                    .unwrap_or_default();
+                let content = if text.contains("Translate the following text to ru") {
+                    "Спасибо, вот перевод входящего письма."
+                } else {
+                    "Thanks, we will review the contract today."
+                };
+                axum::Json(json!({
+                    "model": "qwen3:4b",
+                    "message": { "role": "assistant", "content": content },
+                    "done": true,
+                    "total_duration": 10_000_000u64,
+                    "prompt_eval_count": 16u32,
+                    "eval_count": 8u32
+                }))
+            }),
+        );
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("listener");
+    let address = listener.local_addr().expect("local address");
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("fake ollama");
+    });
+
+    format!("http://{address}")
+}
+
+async fn configure_fake_ollama_setting(pool: &sqlx::PgPool, ollama_base_url: &str) {
+    ApplicationSettingsStore::new(pool.clone())
+        .update_setting_value(
+            "ai.ollama_base_url",
+            &json!(ollama_base_url),
+            "hermes-frontend",
+        )
+        .await
+        .expect("fake Ollama setting");
 }

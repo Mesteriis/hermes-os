@@ -301,6 +301,31 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
             .await
             .expect("account response");
         assert_eq!(response.status(), StatusCode::OK);
+        let signal_connection = sqlx::query(
+            r#"
+            SELECT source_code, status, settings
+            FROM signal_connections
+            WHERE source_code = 'telegram'
+              AND settings->>'account_id' = $1
+            ORDER BY created_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .expect("telegram signal connection");
+        let signal_settings: Value = signal_connection
+            .try_get("settings")
+            .expect("telegram signal settings");
+        assert_eq!(
+            signal_connection
+                .try_get::<String, _>("status")
+                .expect("signal status"),
+            "connected"
+        );
+        assert_eq!(signal_settings["account_id"], json!(id));
+        assert_eq!(signal_settings["provider_kind"], json!("telegram_user"));
     }
 
     let start_response = app
@@ -392,6 +417,21 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     assert_eq!(logged_out_status.status(), StatusCode::OK);
     let logged_out_status_body = json_body(logged_out_status).await;
     assert_eq!(logged_out_status_body["status"], json!("stopped"));
+    let logged_out_signal_status: String = sqlx::query_scalar(
+        r#"
+        SELECT status
+        FROM signal_connections
+        WHERE source_code = 'telegram'
+          AND settings->>'account_id' = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("logged out signal status");
+    assert_eq!(logged_out_signal_status, "disconnected");
 
     let logged_out_list_response = app
         .clone()
@@ -423,6 +463,21 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let remove_body = json_body(remove_response).await;
     assert_eq!(remove_body["account"]["account_id"], json!(account_id));
     assert_eq!(remove_body["account"]["lifecycle_state"], json!("removed"));
+    let removed_signal_status: String = sqlx::query_scalar(
+        r#"
+        SELECT status
+        FROM signal_connections
+        WHERE source_code = 'telegram'
+          AND settings->>'account_id' = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("removed signal status");
+    assert_eq!(removed_signal_status, "removed");
 
     let default_list_response = app
         .clone()

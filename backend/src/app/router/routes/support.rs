@@ -21,6 +21,7 @@ pub(super) use crate::app::handlers::projects::*;
 pub(super) use crate::app::handlers::relationships::*;
 pub(super) use crate::app::handlers::review::*;
 pub(super) use crate::app::handlers::settings::*;
+pub(super) use crate::app::handlers::signal_hub::*;
 pub(super) use crate::app::handlers::tasks::*;
 pub(super) use crate::app::handlers::telegram::*;
 pub(super) use crate::app::handlers::whatsapp::*;

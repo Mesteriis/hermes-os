@@ -6,6 +6,9 @@ use crate::app::api_support::{
     WhatsappWebSessionListResponse, ensure_fixture_routes_enabled, whatsapp_fixture_ingest_service,
     whatsapp_provider_runtime_service,
 };
+use crate::app::signal_hub_support::{
+    provider_account_or_not_found, sync_provider_account_signal_connection,
+};
 use crate::app::{ApiError, AppState};
 use crate::application::provider_runtime_contracts::{
     NewWhatsappWebMessage, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
@@ -23,11 +26,12 @@ pub(crate) async fn post_whatsapp_fixture_account(
     Json(request): Json<WhatsappWebAccountSetupRequest>,
 ) -> Result<Json<WhatsappWebAccountSetupResponse>, ApiError> {
     ensure_fixture_routes_enabled(&state)?;
-    Ok(Json(
-        whatsapp_provider_runtime_service(&state)?
-            .setup_fixture_account(&request)
-            .await?,
-    ))
+    let response = whatsapp_provider_runtime_service(&state)?
+        .setup_fixture_account(&request)
+        .await?;
+    let account = provider_account_or_not_found(&state, &response.account_id).await?;
+    sync_provider_account_signal_connection(&state, &account, None).await?;
+    Ok(Json(response))
 }
 
 pub(crate) async fn get_whatsapp_sessions(

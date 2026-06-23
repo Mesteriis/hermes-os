@@ -1,7 +1,6 @@
 use sqlx::postgres::PgPool;
 
 use crate::domains::communications::core::CommunicationIngestionPort;
-use crate::domains::communications::messages::CommunicationMessageProjectionPort;
 use crate::domains::communications::storage::{
     CommunicationBlobMetadataPort, HeuristicAttachmentSafetyScanner, LocalCommunicationBlobPort,
 };
@@ -24,7 +23,6 @@ pub async fn project_email_sync_batch_with_mail_blobs(
 ) -> Result<EmailSyncPipelineReport, EmailSyncPipelineError> {
     let communication_store = CommunicationIngestionPort::new(pool.clone());
     let mail_store = CommunicationBlobMetadataPort::new(pool.clone());
-    let message_store = CommunicationMessageProjectionPort::new(pool.clone());
     let person_store = PersonProjectionPort::new(pool.clone());
     let attachment_scanner = HeuristicAttachmentSafetyScanner;
     let import_report = record_email_sync_batch_with_mail_blobs(
@@ -38,7 +36,7 @@ pub async fn project_email_sync_batch_with_mail_blobs(
     .await?;
 
     let projection_report = project_raw_records(
-        &message_store,
+        &pool,
         &mail_store,
         blob_store,
         &import_report.raw_records,

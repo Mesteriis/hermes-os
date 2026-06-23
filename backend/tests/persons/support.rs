@@ -4,7 +4,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::platform::events::{EventConsumerConfig, EventConsumerRunner};
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::person_derived_evidence::{
+    PERSON_DERIVED_EVIDENCE_CONSUMER, project_person_derived_evidence_event,
+};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
 pub async fn live_persons_pool(_test_name: &str) -> Option<PgPool> {
@@ -34,4 +38,15 @@ pub fn unique_suffix() -> u128 {
         .duration_since(UNIX_EPOCH)
         .expect("system clock after unix epoch")
         .as_nanos()
+}
+
+pub async fn run_person_derived_evidence_consumer(pool: PgPool) {
+    let runner = EventConsumerRunner::new(
+        pool.clone(),
+        EventConsumerConfig::new(PERSON_DERIVED_EVIDENCE_CONSUMER),
+    );
+    runner
+        .process_next_batch(|event| project_person_derived_evidence_event(pool.clone(), event))
+        .await
+        .expect("person derived evidence consumer");
 }

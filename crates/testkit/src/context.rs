@@ -2,6 +2,7 @@ use sqlx::postgres::PgPool;
 use tokio::sync::{Mutex, OnceCell};
 use uuid::Uuid;
 
+use crate::containers::nats::NatsContainer;
 use crate::containers::postgres::PostgresContainer;
 use crate::vault::{TestVault, new_test_vault};
 use hermes_hub_backend::platform::config::AppConfig;
@@ -9,6 +10,7 @@ use hermes_hub_backend::platform::storage::Database;
 use std::path::Path;
 
 static POSTGRES_CONTAINER: OnceCell<PostgresContainer> = OnceCell::const_new();
+static NATS_CONTAINER: OnceCell<NatsContainer> = OnceCell::const_new();
 static DATABASE_SETUP_LOCK: Mutex<()> = Mutex::const_new(());
 
 /// Isolated test environment with a fresh migrated database.
@@ -92,6 +94,25 @@ impl TestContext {
                 api_secret,
                 self.connection_string(),
             ))
+    }
+
+    pub async fn nats_server_url(&self) -> String {
+        NATS_CONTAINER
+            .get_or_init(NatsContainer::start)
+            .await
+            .server_url()
+    }
+
+    pub async fn app_config_with_nats(&self, api_secret: impl Into<String>) -> AppConfig {
+        self.vault
+            .apply_to_config(
+                AppConfig::test_with_api_secret_and_database_url(
+                    api_secret,
+                    self.connection_string(),
+                )
+                .with_test_pairs([("HERMES_NATS_SERVER_URL", self.nats_server_url().await)])
+                .expect("test NATS config must be valid"),
+            )
     }
 
     pub fn app_config_without_database(&self, api_secret: impl Into<String>) -> AppConfig {

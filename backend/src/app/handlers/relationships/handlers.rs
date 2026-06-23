@@ -6,9 +6,9 @@ use super::models::{
     RelationshipListQuery, RelationshipListResponse, RelationshipReviewApiRequest,
 };
 use crate::app::{ApiError, AppState};
+use crate::application::RelationshipReviewApplicationService;
 use crate::domains::relationships::{
-    Relationship, RelationshipCommandService, RelationshipEntityKind, RelationshipReviewState,
-    RelationshipStore,
+    Relationship, RelationshipEntityKind, RelationshipReviewState, RelationshipStore,
 };
 use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
 
@@ -73,7 +73,7 @@ pub(crate) async fn put_v1_relationship_review(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let relationship = RelationshipCommandService::new(pool)
+    let relationship = RelationshipReviewApplicationService::new(pool)
         .review_manual(&relationship_id, review_state)
         .await?;
 

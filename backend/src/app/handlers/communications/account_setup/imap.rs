@@ -1,6 +1,9 @@
 use super::super::*;
 use super::calendar::upsert_apple_icloud_calendar_account;
 use super::models::{EmailAccountSetupApiResponse, ImapAccountSetupApiRequest};
+use crate::app::signal_hub_support::{
+    provider_account_or_not_found, sync_provider_account_signal_connection,
+};
 
 pub(crate) async fn post_imap_account_setup(
     State(state): State<AppState>,
@@ -18,6 +21,8 @@ pub(crate) async fn post_imap_account_setup(
             )
         });
     let result = service.setup_imap_account(setup_request).await?;
+    let account = provider_account_or_not_found(&state, &result.account_id).await?;
+    sync_provider_account_signal_connection(&state, &account, Some(&result.secret_ref)).await?;
     if let Some((mail_account_id, display_name, external_account_id)) = icloud_calendar_account {
         upsert_apple_icloud_calendar_account(
             &state,

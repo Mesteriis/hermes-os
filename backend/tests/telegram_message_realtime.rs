@@ -8,7 +8,10 @@ use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, CommunicationProviderAccountStore, CommunicationProviderKind,
     CommunicationProviderSecretBindingStore, NewProviderAccount,
 };
-use hermes_hub_backend::domains::communications::messages::ProviderChannelMessageStore;
+use hermes_hub_backend::domains::communications::messages::{
+    ProviderChannelMessageStore, consume_accepted_signal_event,
+};
+use hermes_hub_backend::domains::signal_hub::dispatch_telegram_raw_signal;
 use hermes_hub_backend::integrations::telegram::client::lifecycle::{
     self, reconcile_delete_commands_from_provider_state,
     reconcile_edit_commands_from_provider_state,
@@ -18,7 +21,6 @@ use hermes_hub_backend::integrations::telegram::client::lifecycle::{
 use hermes_hub_backend::integrations::telegram::client::{
     NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramMessage, TelegramStore,
 };
-use hermes_hub_backend::workflows::provider_communication_projection::record_and_project_telegram_message;
 use testkit::context::TestContext;
 
 #[tokio::test]
@@ -527,6 +529,11 @@ fn telegram_store(pool: &sqlx::PgPool) -> TelegramStore {
         Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
         Arc::new(
+            hermes_hub_backend::domains::communications::core::CommunicationIngestionStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
             hermes_hub_backend::platform::communications::EventStoreProviderMessageObservationEventPort::new(
                 pool.clone(),
             ),
@@ -543,9 +550,18 @@ async fn ingest_projected_fixture_message(
         .ingest_fixture_message(&message)
         .await
         .expect("observe fixture message");
-    let projected = record_and_project_telegram_message(pool.clone(), observed.raw)
+    let stored_raw = CommunicationIngestionStore::new(pool.clone())
+        .record_raw_source(&observed.raw)
         .await
-        .expect("project fixture message");
+        .expect("store raw fixture message");
+    let accepted_event = dispatch_telegram_raw_signal(pool.clone(), &stored_raw)
+        .await
+        .expect("dispatch raw fixture signal")
+        .expect("accepted fixture signal");
+    let projected = consume_accepted_signal_event(pool.clone(), &accepted_event)
+        .await
+        .expect("project accepted signal")
+        .expect("projected message");
     store
         .message_by_id(&projected.message_id)
         .await

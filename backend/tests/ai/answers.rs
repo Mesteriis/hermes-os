@@ -1,4 +1,7 @@
 use crate::support::*;
+use hermes_hub_backend::domains::signal_hub::{
+    SignalHubStore, SignalPolicy, SignalPolicyMode, SignalPolicyScope,
+};
 use testkit::context::TestContext;
 
 #[tokio::test]
@@ -114,6 +117,26 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
         "expected run requested + completed observations"
     );
 
+    let raw_signal_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::bigint
+        FROM event_log
+        WHERE correlation_id IS NULL
+          AND event_type IN (
+            'signal.raw.ai.run_requested.observed',
+            'signal.raw.ai.run_completed.observed',
+            'signal.accepted.ai.run_requested',
+            'signal.accepted.ai.run_completed'
+          )
+          AND subject->>'run_id' = $1
+        "#,
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .expect("ai signal hub event count");
+    assert_eq!(raw_signal_count, 4);
+
     let run_attribution = sqlx::query(
         r#"
         SELECT agent_persona_id, owner_persona_id
@@ -139,6 +162,77 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
             .as_deref(),
         Some(owner.person_id.as_str())
     );
+}
+
+#[tokio::test]
+async fn ai_answer_api_is_blocked_when_ai_source_is_muted_by_signal_hub() {
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
+    let _guard = AI_RUNTIME_TEST_LOCK.lock().await;
+    let ollama_base_url = spawn_fake_ollama().await;
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    configure_fake_ollama_setting(&pool, &ollama_base_url).await;
+    let suffix = unique_suffix();
+
+    SignalHubStore::new(pool.clone())
+        .restore_system_sources()
+        .await
+        .expect("restore system sources");
+    SignalHubStore::new(pool.clone())
+        .create_policy(&SignalPolicy {
+            scope: SignalPolicyScope::Source,
+            source_code: Some("ai".to_owned()),
+            connection_id: None,
+            event_pattern: None,
+            mode: SignalPolicyMode::Muted,
+            reason: "mute AI while debugging signal controls".to_owned(),
+            expires_at: None,
+        })
+        .await
+        .expect("create ai mute policy");
+
+    let app = build_router_with_database(
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([
+                ("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str()),
+                ("HERMES_OLLAMA_CHAT_MODEL", "qwen3:4b"),
+                ("HERMES_OLLAMA_EMBED_MODEL", "qwen3-embedding:4b"),
+            ])
+            .expect("config"),
+        database,
+    );
+
+    let response = app
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/ai/answers",
+            json!({
+                "command_id": format!("answer-blocked-{suffix}"),
+                "query": format!("Blocked AI query {suffix}"),
+                "agent_id": "MNEMOSYNE"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
+
+    let status = response.status();
+    let body = json_body(response).await;
+    assert_eq!(status, StatusCode::PRECONDITION_FAILED, "body={body}");
+    assert_eq!(body["error"], json!("failed_precondition"));
+    assert!(
+        body["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("AI runtime is disabled by Signal Hub policy"))
+    );
+
+    let run_count: i64 = sqlx::query_scalar("SELECT count(*)::bigint FROM ai_agent_runs")
+        .fetch_one(&pool)
+        .await
+        .expect("run count");
+    assert_eq!(run_count, 0);
 }
 
 #[tokio::test]
@@ -188,6 +282,7 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
     assert_eq!(status, StatusCode::OK, "body={body}");
     assert_eq!(body["status"], json!("completed"));
     assert_eq!(body["created_count"], json!(1));
+    let run_id = body["run_id"].as_str().expect("run id");
 
     let message_observation_id: String = sqlx::query_scalar(
         "SELECT observation_id FROM communication_messages WHERE message_id = $1",
@@ -246,4 +341,26 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
     assert_eq!(review_item_row.get::<String, _>("status"), "new");
     let metadata = review_item_row.get::<serde_json::Value, _>("metadata");
     assert_eq!(metadata["mirrored_from"], json!("task_candidates"));
+
+    let raw_signal_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::bigint
+        FROM event_log
+        WHERE correlation_id IS NULL
+          AND event_type IN (
+            'signal.raw.ai.run_requested.observed',
+            'signal.raw.ai.run_completed.observed',
+            'signal.raw.ai.task_extraction.observed',
+            'signal.accepted.ai.run_requested',
+            'signal.accepted.ai.run_completed',
+            'signal.accepted.ai.task_extraction'
+          )
+          AND subject->>'run_id' = $1
+        "#,
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .expect("ai task refresh signal hub event count");
+    assert_eq!(raw_signal_count, 6);
 }

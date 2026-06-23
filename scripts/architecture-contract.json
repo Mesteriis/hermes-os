@@ -24,6 +24,27 @@
         ]
       },
       "domains": {
+        "owned": [
+          "agents",
+          "calendar",
+          "communications",
+          "decisions",
+          "documents",
+          "graph",
+          "knowledge",
+          "mail",
+          "notes",
+          "obligations",
+          "organizations",
+          "personas",
+          "persons",
+          "projects",
+          "radar",
+          "relationships",
+          "signal_hub",
+          "tasks",
+          "timeline"
+        ],
         "allow": [
           "own_modules",
           "platform",

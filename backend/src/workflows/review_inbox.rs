@@ -6,16 +6,23 @@ use thiserror::Error;
 use crate::domains::communications::messages::ProjectedMessage;
 use crate::domains::decisions::DecisionReviewPort;
 use crate::domains::obligations::ObligationReviewPort;
+use crate::domains::persons::identity::{
+    PersonIdentityCandidatePayload, PersonIdentityError, load_identity_candidate_payload,
+    parse_person_identity_candidate_kind, parse_person_identity_review_state,
+    person_identity_candidate_detected_event_type,
+};
 use crate::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxPort, ReviewItemKind,
 };
 use crate::domains::tasks::candidates::TaskCandidatePort;
+use crate::platform::events::{EventStoreError, StoredEventEnvelope};
 use crate::workflows::email_intelligence::{
     EmailIntelligenceService, EmailKnowledgeCandidate, EmailSummaryContract,
 };
 use crate::workflows::review_mirror::{
     ReviewMirrorError, ensure_decision_review_item, ensure_obligation_review_item,
     ensure_relationship_review_item, ensure_task_candidate_review_item,
+    sync_identity_candidate_review_state_in_transaction, sync_identity_candidate_to_review,
 };
 
 #[derive(Debug, Error)]
@@ -34,6 +41,9 @@ pub enum ReviewInboxWorkflowError {
 
     #[error(transparent)]
     TaskCandidate(#[from] crate::domains::tasks::candidates::TaskCandidateError),
+
+    #[error(transparent)]
+    PersonIdentity(#[from] PersonIdentityError),
 
     #[error(transparent)]
     ReviewMirror(#[from] ReviewMirrorError),
@@ -120,6 +130,87 @@ pub async fn refresh_message_knowledge_candidates_into_review(
     }
 
     Ok(mirrored)
+}
+
+pub const PERSON_IDENTITY_REVIEW_INBOX_CONSUMER: &str = "person_identity_review_inbox";
+
+pub async fn project_person_identity_review_event(
+    pool: PgPool,
+    event: StoredEventEnvelope,
+) -> Result<(), EventStoreError> {
+    project_person_identity_review_event_inner(&pool, event)
+        .await
+        .map_err(|error| EventStoreError::ConsumerHandlerFailed(error.to_string()))
+}
+
+async fn project_person_identity_review_event_inner(
+    pool: &PgPool,
+    event: StoredEventEnvelope,
+) -> Result<(), ReviewInboxWorkflowError> {
+    if event.event.event_type == person_identity_candidate_detected_event_type() {
+        let payload = identity_candidate_payload_from_event(&event)?;
+        sync_identity_candidate_to_review(pool, &payload).await?;
+        return Ok(());
+    }
+
+    if event.event.event_type == "person_identity.review_state_changed" {
+        let identity_candidate_id =
+            required_event_string(&event.event.payload, "identity_candidate_id")?;
+        let review_state = parse_person_identity_review_state(required_event_string(
+            &event.event.payload,
+            "review_state",
+        )?)?;
+        let mut transaction = pool.begin().await?;
+        let payload =
+            load_identity_candidate_payload(&mut transaction, identity_candidate_id).await?;
+        sync_identity_candidate_review_state_in_transaction(
+            &mut transaction,
+            identity_candidate_id,
+            review_state,
+            &payload,
+        )
+        .await?;
+        transaction.commit().await?;
+    }
+
+    Ok(())
+}
+
+fn identity_candidate_payload_from_event(
+    event: &StoredEventEnvelope,
+) -> Result<PersonIdentityCandidatePayload, PersonIdentityError> {
+    let payload = &event.event.payload;
+    Ok(PersonIdentityCandidatePayload {
+        candidate_kind: parse_person_identity_candidate_kind(required_event_string(
+            payload,
+            "candidate_kind",
+        )?)?,
+        left_person_id: required_event_string(payload, "left_person_id")?.to_owned(),
+        right_person_id: payload
+            .get("right_person_id")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        email_address: payload
+            .get("email_address")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        evidence_summary: required_event_string(payload, "evidence_summary")?.to_owned(),
+        confidence: payload
+            .get("confidence")
+            .and_then(serde_json::Value::as_f64)
+            .ok_or_else(|| PersonIdentityError::MissingPayloadField("confidence".to_owned()))?,
+    })
+}
+
+fn required_event_string<'a>(
+    payload: &'a serde_json::Value,
+    field: &str,
+) -> Result<&'a str, PersonIdentityError> {
+    payload
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| PersonIdentityError::MissingPayloadField(field.to_owned()))
 }
 
 pub async fn sync_task_candidates_to_review_for_observations(

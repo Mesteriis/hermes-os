@@ -165,6 +165,13 @@ async fn handle_dispatch_result(
                     return;
                 }
             };
+            if let Err(error) = telegram_store
+                .publish_observed_message_raw_signal(&projection, Some(event_bus))
+                .await
+            {
+                handle_command_error(pool, event_bus, command, error, now).await;
+                return;
+            }
             let provider_state = json!({
                 "provider_chat_id": snapshot.provider_chat_id,
                 "provider_message_id": snapshot.provider_message_id,

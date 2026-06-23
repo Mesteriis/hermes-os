@@ -73,6 +73,14 @@ export class ApiClient {
 		return this.request<T>('DELETE', path, body, fallbackMessage)
 	}
 
+	getBaseUrl(): string {
+		return this.baseUrl
+	}
+
+	getSecret(): string {
+		return this.secret
+	}
+
 	private static _instance: ApiClient | null = null
 
 	static get instance(): ApiClient {

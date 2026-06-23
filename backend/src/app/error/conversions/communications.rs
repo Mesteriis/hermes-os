@@ -14,7 +14,10 @@ impl From<CommunicationIngestionError> for ApiError {
 
 impl From<MessageProjectionError> for ApiError {
     fn from(error: MessageProjectionError) -> Self {
-        Self::Messages(error)
+        match error {
+            MessageProjectionError::MessageNotFound => ApiError::CommunicationMessageNotFound,
+            error => Self::Messages(error),
+        }
     }
 }
 
@@ -194,6 +197,9 @@ impl From<crate::domains::communications::delivery_notifications::CommunicationD
             crate::domains::communications::delivery_notifications::CommunicationDeliveryNotificationError::Invalid(_) => {
                 ApiError::InvalidCommunicationQuery("invalid mail delivery notification request")
             }
+            crate::domains::communications::delivery_notifications::CommunicationDeliveryNotificationError::SignalControlBlocked(_) => {
+                ApiError::InvalidCommunicationQuery("mail delivery notification deferred by Signal Hub control")
+            }
             error => {
                 tracing::error!(error = %error, "mail delivery notification operation failed");
                 ApiError::InvalidCommunicationQuery("mail delivery notification operation failed")
@@ -239,8 +245,14 @@ impl From<crate::domains::communications::search::IndexEmailError> for ApiError 
 
 impl From<crate::domains::communications::flags::MessageFlagsError> for ApiError {
     fn from(error: crate::domains::communications::flags::MessageFlagsError) -> Self {
-        tracing::error!(error = %error, "message flags operation failed");
-        ApiError::InvalidCommunicationQuery("message flags operation failed")
+        match error {
+            crate::domains::communications::flags::MessageFlagsError::NotFound => {
+                ApiError::CommunicationMessageNotFound
+            }
+            crate::domains::communications::flags::MessageFlagsError::MessageProjection(inner) => {
+                ApiError::from(inner)
+            }
+        }
     }
 }
 

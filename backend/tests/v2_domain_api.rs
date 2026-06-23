@@ -60,8 +60,6 @@ async fn tasks_endpoint_returns_first_class_task_payload_against_postgres() {
         .create(&NewTask {
             title: format!("V1 first-class task {suffix}"),
             description: Some("contract test task".to_owned()),
-            source_kind: Some("manual".to_owned()),
-            source_id: Some(format!("manual-v1-task-{suffix}")),
             source_type: Some("manual".to_owned()),
             hermes_status: Some("ready".to_owned()),
             priority_score: Some(0.7),
@@ -95,7 +93,7 @@ async fn tasks_endpoint_returns_first_class_task_payload_against_postgres() {
         .expect("seeded task item");
 
     assert_eq!(item["title"], json!(task.title));
-    assert_eq!(item["source_type"], json!("manual"));
+    assert_eq!(item["source_type"], json!("observation"));
     assert_eq!(item["hermes_status"], json!("ready"));
     assert_eq!(item["confidentiality"], json!("private_local"));
     assert_eq!(item["task_metadata"], json!({}));

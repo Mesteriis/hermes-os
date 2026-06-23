@@ -83,13 +83,44 @@ pub(crate) async fn post_v1_translate(
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
     let service = email_multilingual_service(&state).await?;
+    let detection =
+        crate::domains::communications::multilingual::MultilingualService::detect_language(
+            &msg.body_text,
+        );
     match service
         .translate(&msg.body_text, &req.target_language)
         .await?
     {
-        Some(t) => Ok(Json(
-            serde_json::json!({"translated": true, "text": t.translated_text, "target": t.target_language, "model": t.model}),
-        )),
+        Some(t) => {
+            if let Some(pool) = state.database.pool() {
+                crate::domains::signal_hub::dispatch_ai_helper_signal(
+                    pool.clone(),
+                    "message_translation",
+                    &message_id,
+                    serde_json::json!({
+                        "kind": "communication_message",
+                        "source_code": "ai",
+                        "message_id": message_id,
+                        "operation": "translation",
+                    }),
+                    serde_json::json!({
+                        "target_language": t.target_language,
+                        "original_language": detection.language,
+                        "model": t.model,
+                    }),
+                    serde_json::json!({
+                        "source": "communication_message_translation",
+                        "message_id": message_id,
+                    }),
+                    None,
+                )
+                .await?;
+            }
+
+            Ok(Json(
+                serde_json::json!({"translated": true, "text": t.translated_text, "target": t.target_language, "model": t.model}),
+            ))
+        }
         None => Ok(Json(
             serde_json::json!({"translated": false, "reason": "no LLM configured"}),
         )),
@@ -131,19 +162,49 @@ pub(crate) async fn post_v1_translate_attachment(
     let service = email_multilingual_service(&state).await?;
 
     match service.translate(source_text, target_language).await {
-        Ok(Some(translation)) => Ok(Json(AttachmentTranslationResponse {
-            attachment_id: attachment.attachment.attachment_id,
-            message_id: attachment.attachment.message_id,
-            filename: attachment.attachment.filename,
-            original_language: detection.language,
-            confidence: detection.confidence,
-            translated: true,
-            text: Some(translation.translated_text),
-            target: translation.target_language,
-            model: Some(translation.model),
-            reason: None,
-            source: ATTACHMENT_TRANSLATION_SOURCE,
-        })),
+        Ok(Some(translation)) => {
+            if let Some(pool) = state.database.pool() {
+                crate::domains::signal_hub::dispatch_ai_helper_signal(
+                    pool.clone(),
+                    "attachment_translation",
+                    &attachment.attachment.attachment_id,
+                    serde_json::json!({
+                        "kind": "communication_attachment",
+                        "source_code": "ai",
+                        "attachment_id": attachment.attachment.attachment_id,
+                        "message_id": attachment.attachment.message_id,
+                        "operation": "attachment_translation",
+                    }),
+                    serde_json::json!({
+                        "target_language": translation.target_language,
+                        "original_language": detection.language,
+                        "model": translation.model,
+                        "source": ATTACHMENT_TRANSLATION_SOURCE,
+                    }),
+                    serde_json::json!({
+                        "source": "communication_attachment_translation",
+                        "attachment_id": attachment.attachment.attachment_id,
+                        "message_id": attachment.attachment.message_id,
+                    }),
+                    None,
+                )
+                .await?;
+            }
+
+            Ok(Json(AttachmentTranslationResponse {
+                attachment_id: attachment.attachment.attachment_id,
+                message_id: attachment.attachment.message_id,
+                filename: attachment.attachment.filename,
+                original_language: detection.language,
+                confidence: detection.confidence,
+                translated: true,
+                text: Some(translation.translated_text),
+                target: translation.target_language,
+                model: Some(translation.model),
+                reason: None,
+                source: ATTACHMENT_TRANSLATION_SOURCE,
+            }))
+        }
         Ok(None) => Ok(Json(AttachmentTranslationResponse {
             attachment_id: attachment.attachment.attachment_id,
             message_id: attachment.attachment.message_id,
@@ -222,16 +283,47 @@ pub(crate) async fn post_v1_translate_thread(
                 &message.body_text,
             );
         match service.translate(&message.body_text, target_language).await {
-            Ok(Some(translation)) => items.push(ThreadTranslationItem {
-                message_id: message.message_id,
-                original_language: detection.language,
-                confidence: detection.confidence,
-                translated: true,
-                text: Some(translation.translated_text),
-                target: translation.target_language,
-                model: Some(translation.model),
-                reason: None,
-            }),
+            Ok(Some(translation)) => {
+                if let Some(pool) = state.database.pool() {
+                    crate::domains::signal_hub::dispatch_ai_helper_signal(
+                        pool.clone(),
+                        "thread_message_translation",
+                        &message.message_id,
+                        serde_json::json!({
+                            "kind": "communication_message",
+                            "source_code": "ai",
+                            "message_id": message.message_id,
+                            "operation": "thread_message_translation",
+                            "account_id": account_id,
+                            "thread_subject": subject,
+                        }),
+                        serde_json::json!({
+                            "target_language": translation.target_language,
+                            "original_language": detection.language,
+                            "model": translation.model,
+                        }),
+                        serde_json::json!({
+                            "source": "communication_thread_message_translation",
+                            "message_id": message.message_id,
+                            "account_id": account_id,
+                            "thread_subject": subject,
+                        }),
+                        None,
+                    )
+                    .await?;
+                }
+
+                items.push(ThreadTranslationItem {
+                    message_id: message.message_id,
+                    original_language: detection.language,
+                    confidence: detection.confidence,
+                    translated: true,
+                    text: Some(translation.translated_text),
+                    target: translation.target_language,
+                    model: Some(translation.model),
+                    reason: None,
+                })
+            }
             Ok(None) => items.push(ThreadTranslationItem {
                 message_id: message.message_id,
                 original_language: detection.language,

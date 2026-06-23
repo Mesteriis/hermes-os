@@ -3,11 +3,15 @@ use serde_json::json;
 use sqlx::Row;
 use sqlx::Transaction;
 use sqlx::postgres::{PgPool, Postgres};
+use uuid::Uuid;
 
 use super::errors::PersonIdentityError;
 use super::models::{
     PersonIdentityCandidateKind, PersonIdentityCandidatePayload, PersonIdentityReviewState,
 };
+use crate::platform::events::{EventStore, NewEventEnvelope};
+
+const PERSON_IDENTITY_CANDIDATE_DETECTED_EVENT_TYPE: &str = "person_identity.candidate.detected";
 
 pub(super) async fn upsert_candidate(
     pool: &PgPool,
@@ -15,66 +19,21 @@ pub(super) async fn upsert_candidate(
     identity_candidate_id: String,
     review_state: PersonIdentityReviewState,
 ) -> Result<(), PersonIdentityError> {
-    let review_state: String = sqlx::query_scalar(
-        r#"
-        INSERT INTO person_identity_candidates (
-            identity_candidate_id,
-            candidate_kind,
-            left_person_id,
-            right_person_id,
-            email_address,
-            evidence_summary,
-            confidence,
-            review_state,
-            event_id,
-            actor_id,
-            reviewed_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, NULL, NULL)
-        ON CONFLICT (identity_candidate_id)
-        DO UPDATE SET
-            candidate_kind = EXCLUDED.candidate_kind,
-            left_person_id = EXCLUDED.left_person_id,
-            right_person_id = EXCLUDED.right_person_id,
-            email_address = EXCLUDED.email_address,
-            evidence_summary = EXCLUDED.evidence_summary,
-            confidence = EXCLUDED.confidence,
-            review_state = CASE
-                WHEN person_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
-                    THEN person_identity_candidates.review_state
-                ELSE EXCLUDED.review_state
-            END,
-            event_id = CASE
-                WHEN person_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
-                    THEN person_identity_candidates.event_id
-                ELSE NULL
-            END,
-            actor_id = CASE
-                WHEN person_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
-                    THEN person_identity_candidates.actor_id
-                ELSE NULL
-            END,
-            reviewed_at = CASE
-                WHEN person_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
-                    THEN person_identity_candidates.reviewed_at
-                ELSE NULL
-            END,
-            updated_at = now()
-        RETURNING review_state
-        "#,
+    let mut transaction = pool.begin().await?;
+    upsert_candidate_in_transaction(
+        &mut transaction,
+        payload,
+        identity_candidate_id,
+        review_state,
     )
-    .bind(identity_candidate_id)
-    .bind(payload.candidate_kind.as_str())
-    .bind(&payload.left_person_id)
-    .bind(&payload.right_person_id)
-    .bind(&payload.email_address)
-    .bind(&payload.evidence_summary)
-    .bind(payload.confidence)
-    .bind(review_state.as_str())
-    .fetch_one(pool)
     .await?;
+    transaction.commit().await?;
 
     Ok(())
+}
+
+pub(crate) fn person_identity_candidate_detected_event_type() -> &'static str {
+    PERSON_IDENTITY_CANDIDATE_DETECTED_EVENT_TYPE
 }
 
 pub(super) async fn upsert_candidate_in_transaction(
@@ -83,7 +42,7 @@ pub(super) async fn upsert_candidate_in_transaction(
     identity_candidate_id: String,
     review_state: PersonIdentityReviewState,
 ) -> Result<(), PersonIdentityError> {
-    let review_state: String = sqlx::query_scalar(
+    let stored_review_state: String = sqlx::query_scalar(
         r#"
         INSERT INTO person_identity_candidates (
             identity_candidate_id,
@@ -131,7 +90,7 @@ pub(super) async fn upsert_candidate_in_transaction(
         RETURNING review_state
         "#,
     )
-    .bind(identity_candidate_id)
+    .bind(&identity_candidate_id)
     .bind(payload.candidate_kind.as_str())
     .bind(&payload.left_person_id)
     .bind(&payload.right_person_id)
@@ -142,19 +101,61 @@ pub(super) async fn upsert_candidate_in_transaction(
     .fetch_one(&mut **transaction)
     .await?;
 
+    append_candidate_detected_event(
+        transaction,
+        payload,
+        &identity_candidate_id,
+        &stored_review_state,
+    )
+    .await?;
+
     Ok(())
 }
 
-pub(crate) async fn sync_identity_candidate_review_state_to_inbox_in_transaction(
+async fn append_candidate_detected_event(
     transaction: &mut Transaction<'_, Postgres>,
+    payload: &PersonIdentityCandidatePayload,
     identity_candidate_id: &str,
-    review_state: PersonIdentityReviewState,
+    review_state: &str,
 ) -> Result<(), PersonIdentityError> {
-    let _ = (transaction, identity_candidate_id, review_state);
-    Ok(())
+    let event_instance_id = Uuid::now_v7();
+    let event = NewEventEnvelope::builder(
+        format!(
+            "person_identity_candidate_detected:{identity_candidate_id}:{}",
+            event_instance_id
+        ),
+        PERSON_IDENTITY_CANDIDATE_DETECTED_EVENT_TYPE,
+        Utc::now(),
+        json!({
+            "kind": "person_identity",
+            "provider": "hermes",
+            "source_id": format!("{identity_candidate_id}:{event_instance_id}"),
+        }),
+        json!({
+            "kind": "person_identity_candidate",
+            "identity_candidate_id": identity_candidate_id,
+        }),
+    )
+    .payload(json!({
+        "identity_candidate_id": identity_candidate_id,
+        "candidate_kind": payload.candidate_kind.as_str(),
+        "left_person_id": &payload.left_person_id,
+        "right_person_id": &payload.right_person_id,
+        "email_address": &payload.email_address,
+        "evidence_summary": &payload.evidence_summary,
+        "confidence": payload.confidence,
+        "review_state": review_state,
+    }))
+    .build()?;
+
+    match EventStore::append_in_transaction(transaction, &event).await {
+        Ok(_) => Ok(()),
+        Err(error) if error.is_unique_violation() => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
-async fn load_identity_candidate_payload(
+pub(crate) async fn load_identity_candidate_payload(
     transaction: &mut Transaction<'_, Postgres>,
     identity_candidate_id: &str,
 ) -> Result<PersonIdentityCandidatePayload, PersonIdentityError> {
@@ -191,4 +192,26 @@ async fn load_identity_candidate_payload(
         evidence_summary: row.try_get("evidence_summary")?,
         confidence: row.try_get("confidence")?,
     })
+}
+
+pub(crate) fn parse_person_identity_candidate_kind(
+    value: &str,
+) -> Result<PersonIdentityCandidateKind, PersonIdentityError> {
+    match value {
+        "merge_persons" => Ok(PersonIdentityCandidateKind::MergePersons),
+        "attach_email_address" => Ok(PersonIdentityCandidateKind::AttachEmailAddress),
+        "split_person" => Ok(PersonIdentityCandidateKind::SplitPerson),
+        other => Err(PersonIdentityError::InvalidCandidateKind(other.to_owned())),
+    }
+}
+
+pub(crate) fn parse_person_identity_review_state(
+    value: &str,
+) -> Result<PersonIdentityReviewState, PersonIdentityError> {
+    match value {
+        "suggested" => Ok(PersonIdentityReviewState::Suggested),
+        "user_confirmed" => Ok(PersonIdentityReviewState::UserConfirmed),
+        "user_rejected" => Ok(PersonIdentityReviewState::UserRejected),
+        other => Err(PersonIdentityError::InvalidReviewState(other.to_owned())),
+    }
 }

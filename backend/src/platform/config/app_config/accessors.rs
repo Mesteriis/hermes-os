@@ -24,6 +24,10 @@ impl AppConfig {
         self.local_api_secret.as_deref()
     }
 
+    pub fn nats_server_url(&self) -> Option<&str> {
+        self.nats_server_url.as_deref()
+    }
+
     pub fn secret_vault_path(&self) -> Option<&Path> {
         self.secret_vault_path.as_deref()
     }

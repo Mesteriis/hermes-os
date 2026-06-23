@@ -10,9 +10,9 @@ use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
     NewRawCommunicationRecord,
 };
-use hermes_hub_backend::domains::communications::messages::MessageProjectionStore;
+use hermes_hub_backend::domains::communications::messages::consume_accepted_signal_event;
+use hermes_hub_backend::domains::signal_hub::dispatch_telegram_raw_signal;
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::provider_communication_projection::project_raw_telegram_message;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, json_body, json_post_request_with_actor, unique_suffix,
 };
@@ -26,7 +26,6 @@ async fn telegram_tdlib_projection_accepts_media_message_without_text() {
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
-    let message_store = MessageProjectionStore::new(pool);
     let suffix = unique_suffix();
     let account_id = format!("telegram-empty-media-{suffix}");
     let provider_chat_id = format!("-100{suffix}");
@@ -81,9 +80,14 @@ async fn telegram_tdlib_projection_accepts_media_message_without_text() {
         .await
         .expect("raw source");
 
-    let projected = project_raw_telegram_message(&message_store, &raw)
+    let accepted_event = dispatch_telegram_raw_signal(pool.clone(), &raw)
         .await
-        .expect("project empty media message");
+        .expect("dispatch empty media telegram signal")
+        .expect("accepted empty media telegram signal");
+    let projected = consume_accepted_signal_event(pool.clone(), &accepted_event)
+        .await
+        .expect("project accepted empty media signal")
+        .expect("projected empty media message");
 
     assert_eq!(projected.provider_record_id, provider_message_id);
     assert_eq!(projected.conversation_id, Some(provider_chat_id));

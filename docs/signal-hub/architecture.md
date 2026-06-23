@@ -67,7 +67,7 @@ Filesystem watcher event
 | `domains/radar` | attention signals and review candidates | provider runtime or message storage |
 | `workflows/*` | event-driven cross-domain orchestration | direct store mutation outside owner domain |
 | `frontend/src/platform` | generated ConnectRPC client setup, SSE bootstrap, shared query plumbing | domain ownership |
-| `frontend/src/domains/signal-hub` | user-facing Signal Hub UI state and composition | provider protocol UI internals |
+| `frontend/src/domains/settings/*` | current user-facing Signal Hub Settings state, queries and composition | provider protocol UI internals or standalone Signal Hub route ownership |
 | `frontend/src/integrations/*` | provider setup/runtime panels when needed | business communication workspace |
 
 ## Event Backbone

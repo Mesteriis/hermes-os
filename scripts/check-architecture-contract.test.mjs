@@ -35,6 +35,10 @@ assert.ok(contract.backend?.layers?.domains?.deny, 'backend domain deny rules mu
 assert.ok(contract.backend.layers.domains.deny.includes('other_domains'));
 assert.ok(contract.backend.layers.domains.deny.includes('integrations'));
 assert.ok(contract.backend.layers.domains.deny.includes('vault'));
+assert.ok(
+	contract.backend.layers.domains.owned.includes('signal_hub'),
+	'Signal Hub must be registered as a backend business domain'
+);
 assert.ok(contract.backend.layers.integrations.deny.includes('domains'));
 assert.ok(contract.backend.layers.workflows.allow.includes('domain_command_ports'));
 assert.ok(contract.backend.layers.workflows.allow.includes('domain_query_ports'));

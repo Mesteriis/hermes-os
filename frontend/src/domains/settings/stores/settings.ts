@@ -9,6 +9,7 @@ export type SettingsSection =
   | 'application'
   | 'sidebar'
   | 'integrations'
+  | 'signal-hub'
   | 'ai'
 
 export const useSettingsStore = defineStore('settings-ui', () => {

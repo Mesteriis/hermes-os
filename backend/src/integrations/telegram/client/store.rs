@@ -3,8 +3,9 @@ use std::sync::Arc;
 use sqlx::postgres::PgPool;
 
 use crate::platform::communications::{
-    ProviderAccountCommandPort, ProviderChannelMessageLookupPort,
-    ProviderMessageObservationEventPort, ProviderSecretBindingCommandPort,
+    CommunicationRawRecordCommandPort, ProviderAccountCommandPort,
+    ProviderChannelMessageLookupPort, ProviderMessageObservationEventPort,
+    ProviderSecretBindingCommandPort,
 };
 
 #[derive(Clone)]
@@ -13,6 +14,7 @@ pub struct TelegramStore {
     provider_account_store: Arc<dyn ProviderAccountCommandPort>,
     provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
     provider_channel_message_store: Arc<dyn ProviderChannelMessageLookupPort>,
+    communication_raw_record_store: Arc<dyn CommunicationRawRecordCommandPort>,
     provider_observation_events: Arc<dyn ProviderMessageObservationEventPort>,
 }
 
@@ -22,6 +24,7 @@ impl TelegramStore {
         provider_account_store: Arc<dyn ProviderAccountCommandPort>,
         provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
         provider_channel_message_store: Arc<dyn ProviderChannelMessageLookupPort>,
+        communication_raw_record_store: Arc<dyn CommunicationRawRecordCommandPort>,
         provider_observation_events: Arc<dyn ProviderMessageObservationEventPort>,
     ) -> Self {
         Self {
@@ -29,6 +32,7 @@ impl TelegramStore {
             provider_account_store,
             provider_secret_binding_store,
             provider_channel_message_store,
+            communication_raw_record_store,
             provider_observation_events,
         }
     }
@@ -47,6 +51,12 @@ impl TelegramStore {
 
     pub(super) fn provider_channel_message_store(&self) -> &dyn ProviderChannelMessageLookupPort {
         self.provider_channel_message_store.as_ref()
+    }
+
+    pub(in crate::integrations::telegram) fn communication_raw_record_store(
+        &self,
+    ) -> &dyn CommunicationRawRecordCommandPort {
+        self.communication_raw_record_store.as_ref()
     }
 
     pub(in crate::integrations::telegram) fn provider_observation_events(

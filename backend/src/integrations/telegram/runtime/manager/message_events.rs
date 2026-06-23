@@ -28,8 +28,7 @@ mod projection;
 mod tests;
 
 use envelopes::{
-    append_and_broadcast, message_created_event, message_deleted_event, message_updated_event,
-    reaction_changed_event,
+    append_and_broadcast, message_deleted_event, message_updated_event, reaction_changed_event,
 };
 use projection::{
     observed_edit_timestamp, project_provider_message_content_observation,
@@ -45,7 +44,6 @@ pub(super) async fn publish_message_created_event(
     let Some(store) = telegram_store else {
         return;
     };
-    let pool = store.pool();
 
     let import_batch_id = format!(
         "telegram-tdlib-runtime:{}:{}",
@@ -61,19 +59,12 @@ pub(super) async fn publish_message_created_event(
             return;
         }
     };
-    let message = match store.message_by_id(&projection.message_id).await {
-        Ok(Some(message)) => message,
-        Ok(None) => return,
-        Err(error) => {
-            tracing::warn!(error = %error, "Telegram runtime event bridge: failed to load created message");
-            return;
-        }
-    };
-
-    let Ok(event) = message_created_event(account_id, &message, Utc::now()) else {
-        return;
-    };
-    append_and_broadcast(Some(pool.clone()), event_bus, event).await;
+    if let Err(error) = store
+        .publish_observed_message_raw_signal(&projection, Some(event_bus))
+        .await
+    {
+        tracing::warn!(error = %error, account_id, "Telegram runtime event bridge: failed to publish Signal Hub raw create event");
+    }
 }
 
 pub(super) async fn publish_message_deleted_event(

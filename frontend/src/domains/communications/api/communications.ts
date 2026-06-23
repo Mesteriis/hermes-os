@@ -70,6 +70,15 @@ export {
   translateThread
 } from './threadApi'
 export {
+  fetchCommunicationMessagesConnect,
+  fetchCommunicationMessageConnect,
+  fetchCommunicationThreadsConnect,
+  fetchCommunicationThreadMessagesConnect,
+  fetchCommunicationDraftsConnect,
+  fetchCommunicationOutboxConnect,
+  sendCommunicationConnect
+} from './connectCommunications'
+export {
   searchAttachments,
   inspectAttachmentArchive,
   previewAttachment,

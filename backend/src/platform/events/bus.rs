@@ -3,18 +3,20 @@ use std::sync::Arc;
 use serde_json::Value;
 use tokio::sync::broadcast;
 
-use super::models::NewEventEnvelope;
+use super::models::{EventEnvelope, NewEventEnvelope};
 
 /// Max events in the broadcast ring buffer before oldest are dropped.
 const BUS_CAPACITY: usize = 4096;
 
+pub type EventBus = InMemoryEventBus;
+
 /// Shared event bus for realtime dispatch.
 #[derive(Clone)]
-pub struct EventBus {
+pub struct InMemoryEventBus {
     tx: broadcast::Sender<Arc<NewEventEnvelope>>,
 }
 
-impl EventBus {
+impl InMemoryEventBus {
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(BUS_CAPACITY);
         Self { tx }
@@ -22,6 +24,22 @@ impl EventBus {
 
     pub fn broadcast(&self, event: NewEventEnvelope) -> usize {
         self.tx.send(Arc::new(event)).unwrap_or(0)
+    }
+
+    pub fn broadcast_stored(&self, event: &EventEnvelope) -> usize {
+        self.broadcast(NewEventEnvelope {
+            event_id: event.event_id.clone(),
+            event_type: event.event_type.clone(),
+            schema_version: event.schema_version,
+            occurred_at: event.occurred_at,
+            source: event.source.clone(),
+            actor: event.actor.clone(),
+            subject: event.subject.clone(),
+            payload: event.payload.clone(),
+            provenance: event.provenance.clone(),
+            causation_id: event.causation_id.clone(),
+            correlation_id: event.correlation_id.clone(),
+        })
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Arc<NewEventEnvelope>> {
@@ -33,7 +51,7 @@ impl EventBus {
     }
 }
 
-impl Default for EventBus {
+impl Default for InMemoryEventBus {
     fn default() -> Self {
         Self::new()
     }

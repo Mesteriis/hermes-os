@@ -159,6 +159,11 @@ pub(crate) async fn get_project_link_candidates(
 ) -> Result<Json<ProjectLinkCandidateListResponse>, ApiError> {
     let query = parse_project_link_candidates_query(raw_query.as_deref())?;
     let project_id = validate_non_empty_project_link_field("project_id", &project_id)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
 
     let project_store = project_store(&state)?;
     let review_store = project_link_review_store(&state)?;
@@ -168,6 +173,19 @@ pub(crate) async fn get_project_link_candidates(
         let graph_node_id = node_id(GraphNodeKind::Message, &message.message_id);
         let title = text_preview(&message.subject, 120);
         let sender_excerpt = text_preview(&message.sender, 140);
+        crate::workflows::review_mirror::ensure_project_link_candidate_review_item(
+            &pool,
+            &project_id,
+            ProjectLinkTargetKind::Message,
+            &message.message_id,
+            &title,
+            &sender_excerpt,
+            1.0,
+            &message.observation_id,
+            Some(&graph_node_id),
+        )
+        .await
+        .map_err(|error| ApiError::FailedPrecondition(error.to_string()))?;
         let review_state = review_store
             .explicit_review(
                 &project_id,
@@ -199,6 +217,19 @@ pub(crate) async fn get_project_link_candidates(
     {
         let graph_node_id = node_id(GraphNodeKind::Document, &document.document_id);
         let title = text_preview(&document.title, 140);
+        crate::workflows::review_mirror::ensure_project_link_candidate_review_item(
+            &pool,
+            &project_id,
+            ProjectLinkTargetKind::Document,
+            &document.document_id,
+            &title,
+            &title,
+            1.0,
+            &document.observation_id,
+            Some(&graph_node_id),
+        )
+        .await
+        .map_err(|error| ApiError::FailedPrecondition(error.to_string()))?;
         let review_state = review_store
             .explicit_review(
                 &project_id,
@@ -252,9 +283,105 @@ pub(crate) async fn put_project_link_review(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
 
-    let result = crate::domains::projects::link_reviews::ProjectLinkReviewService::new(pool)
-        .review_manual(&command)
-        .await?;
+    let result =
+        crate::domains::projects::link_reviews::ProjectLinkReviewService::new(pool.clone())
+            .review_manual(&command)
+            .await?;
+    let stored_event = crate::platform::events::EventStore::new(pool.clone())
+        .get_by_id(&result.event_id)
+        .await?
+        .ok_or_else(|| {
+            ApiError::Store(
+                crate::platform::events::EventStoreError::ConsumerHandlerFailed(
+                    "project link review event was not stored".to_owned(),
+                ),
+            )
+        })?;
+    crate::application::project_link_review_effect(&pool, &stored_event)
+        .await
+        .map_err(|error| ApiError::FailedPrecondition(error.to_string()))?;
+    let observation_id = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT observation_id
+        FROM observation_links
+        WHERE domain = 'projects'
+          AND entity_kind = 'project_link_review'
+          AND entity_id = $1
+          AND relationship_kind = 'review_transition'
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&result.event_id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(ProjectStoreError::from)
+    .map_err(ApiError::Projects)?
+    .ok_or_else(|| {
+        ApiError::Store(
+            crate::platform::events::EventStoreError::ConsumerHandlerFailed(
+                "project link review observation link was not stored".to_owned(),
+            ),
+        )
+    })?;
+    let project_store = project_store(&state)?;
+    let mut transaction = pool
+        .begin()
+        .await
+        .map_err(ProjectStoreError::from)
+        .map_err(ApiError::Projects)?;
+    match command.target_kind {
+        ProjectLinkTargetKind::Message => {
+            let message = project_store
+                .matching_project_messages(&command.project_id)
+                .await?
+                .into_iter()
+                .find(|item| item.message_id == command.target_id)
+                .ok_or(ApiError::ProjectLinkTargetNotFound)?;
+            let title = text_preview(&message.subject, 120);
+            let summary = text_preview(&message.sender, 140);
+            crate::workflows::review_mirror::sync_project_link_review_state_in_transaction(
+                &mut transaction,
+                &command.project_id,
+                command.target_kind,
+                &command.target_id,
+                command.review_state,
+                &title,
+                &summary,
+                1.0,
+                &observation_id,
+            )
+            .await
+            .map_err(|error| ApiError::FailedPrecondition(error.to_string()))?;
+        }
+        ProjectLinkTargetKind::Document => {
+            let document = project_store
+                .matching_project_documents(&command.project_id)
+                .await?
+                .into_iter()
+                .find(|item| item.document_id == command.target_id)
+                .ok_or(ApiError::ProjectLinkTargetNotFound)?;
+            let title = text_preview(&document.title, 140);
+            crate::workflows::review_mirror::sync_project_link_review_state_in_transaction(
+                &mut transaction,
+                &command.project_id,
+                command.target_kind,
+                &command.target_id,
+                command.review_state,
+                &title,
+                &title,
+                1.0,
+                &observation_id,
+            )
+            .await
+            .map_err(|error| ApiError::FailedPrecondition(error.to_string()))?;
+        }
+    }
+    transaction
+        .commit()
+        .await
+        .map_err(ProjectStoreError::from)
+        .map_err(ApiError::Projects)?;
 
     Ok(Json(result.into()))
 }

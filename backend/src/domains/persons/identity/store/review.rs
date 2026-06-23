@@ -10,7 +10,6 @@ use super::super::events::{ReviewCommandEvent, ReviewEvent};
 use super::super::models::{
     PersonIdentityReviewCommand, PersonIdentityReviewCommandResult, PersonIdentityReviewState,
 };
-use super::super::upsert::sync_identity_candidate_review_state_to_inbox_in_transaction;
 use super::super::validation::validate_non_empty;
 use super::PersonIdentityStore;
 use super::review_state::{apply_review_state_in_transaction, ensure_candidate_exists};
@@ -61,12 +60,6 @@ impl PersonIdentityStore {
         )
         .await?;
         materialize_split_candidate_for_confirmed_merge_in_transaction(
-            &mut transaction,
-            &identity_candidate_id,
-            command.review_state,
-        )
-        .await?;
-        sync_identity_candidate_review_state_to_inbox_in_transaction(
             &mut transaction,
             &identity_candidate_id,
             command.review_state,
@@ -132,12 +125,6 @@ impl PersonIdentityStore {
         )
         .await?;
         materialize_split_candidate_for_confirmed_merge_in_transaction(
-            &mut transaction,
-            &parsed.identity_candidate_id,
-            parsed.review_state,
-        )
-        .await?;
-        sync_identity_candidate_review_state_to_inbox_in_transaction(
             &mut transaction,
             &parsed.identity_candidate_id,
             parsed.review_state,

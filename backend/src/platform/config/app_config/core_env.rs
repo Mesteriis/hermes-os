@@ -28,6 +28,10 @@ pub(super) fn apply_core_env(
             config.local_api_secret =
                 Some(non_empty(value, ConfigError::EmptyLocalApiSecret)?.to_owned());
         }
+        "HERMES_NATS_SERVER_URL" => {
+            config.nats_server_url =
+                Some(non_empty(value, ConfigError::EmptyNatsServerUrl)?.to_owned());
+        }
         "HERMES_SECRET_VAULT_PATH" => {
             config.secret_vault_path = Some(PathBuf::from(non_empty(
                 value,

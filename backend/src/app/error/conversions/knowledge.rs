@@ -1,7 +1,10 @@
 use super::super::types::ApiError;
 use crate::application::consistency_review::ContradictionReviewServiceError;
 use crate::application::review_promotion::ReviewPromotionError;
-use crate::application::{DecisionReviewApplicationError, ObligationReviewApplicationError};
+use crate::application::{
+    DecisionReviewApplicationError, ObligationReviewApplicationError,
+    RelationshipReviewApplicationError, TaskCandidateReviewApplicationError,
+};
 use crate::domains::decisions::{DecisionCommandServiceError, DecisionStoreError};
 use crate::domains::obligations::{ObligationCommandServiceError, ObligationStoreError};
 use crate::domains::projects::core::ProjectStoreError;
@@ -64,6 +67,24 @@ impl From<TaskCandidateReviewServiceError> for ApiError {
             TaskCandidateReviewServiceError::Observation(error) => {
                 tracing::error!(error = %error, "task candidate review observation capture failed");
                 Self::InvalidTaskCandidateQuery("task candidate review observation capture failed")
+            }
+        }
+    }
+}
+
+impl From<TaskCandidateReviewApplicationError> for ApiError {
+    fn from(error: TaskCandidateReviewApplicationError) -> Self {
+        match error {
+            TaskCandidateReviewApplicationError::TaskCandidate(error) => Self::from(error),
+            TaskCandidateReviewApplicationError::TaskCandidateNotFound => {
+                Self::TaskCandidateNotFound
+            }
+            TaskCandidateReviewApplicationError::Sqlx(error) => Self::TaskCandidate(
+                TaskCandidateError::Sqlx(error),
+            ),
+            TaskCandidateReviewApplicationError::ReviewMirror(error) => {
+                tracing::error!(error = %error, "task candidate review mirror sync failed");
+                Self::InvalidTaskCandidateQuery("task candidate review mirror sync failed")
             }
         }
     }
@@ -220,6 +241,22 @@ impl From<RelationshipCommandServiceError> for ApiError {
     }
 }
 
+impl From<RelationshipReviewApplicationError> for ApiError {
+    fn from(error: RelationshipReviewApplicationError) -> Self {
+        match error {
+            RelationshipReviewApplicationError::Relationship(error) => Self::from(error),
+            RelationshipReviewApplicationError::Observation(error) => {
+                tracing::error!(error = %error, "relationship review observation capture failed");
+                Self::InvalidRelationshipReview("relationship review observation capture failed")
+            }
+            RelationshipReviewApplicationError::ReviewMirror(error) => {
+                tracing::error!(error = %error, "relationship review inbox sync failed");
+                Self::InvalidRelationshipReview("relationship review inbox sync failed")
+            }
+        }
+    }
+}
+
 impl From<ConsistencyError> for ApiError {
     fn from(error: ConsistencyError) -> Self {
         match error {
@@ -296,8 +333,17 @@ impl From<ReviewPromotionError> for ApiError {
             ReviewPromotionError::Observation(inner) => {
                 Self::ReviewPromotion(ReviewPromotionError::Observation(inner))
             }
-            ReviewPromotionError::InvalidTarget(_) => {
-                Self::InvalidReviewQuery("review promotion target is invalid for this item kind")
+            ReviewPromotionError::InvalidTarget(message) => match message.as_str() {
+                "decision evidence is required" => {
+                    Self::InvalidDecisionQuery("decision evidence is required")
+                }
+                "obligation evidence is required" => {
+                    Self::InvalidObligationQuery("obligation evidence is required")
+                }
+                "relationship evidence is required" => {
+                    Self::InvalidRelationshipQuery("relationship evidence is required")
+                }
+                _ => Self::InvalidReviewQuery("review promotion target is invalid for this item kind"),
             }
             ReviewPromotionError::Sqlx(inner) => {
                 Self::ReviewPromotion(ReviewPromotionError::Sqlx(inner))

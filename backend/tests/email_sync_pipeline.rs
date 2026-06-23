@@ -121,6 +121,22 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
         json!([format!("Recipient <{recipient_email}>")])
     );
 
+    let accepted_signal_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM event_log
+        WHERE event_type = 'signal.accepted.mail.message'
+          AND source ->> 'account_id' = $1
+          AND subject ->> 'provider_record_id' = $2
+        "#,
+    )
+    .bind(&account_id)
+    .bind(&provider_record_id)
+    .fetch_one(&pool)
+    .await
+    .expect("accepted mail signal count");
+    assert_eq!(accepted_signal_count, 1);
+
     let identity_count: i64 = sqlx::query_scalar(
         r#"
         SELECT count(*)::BIGINT

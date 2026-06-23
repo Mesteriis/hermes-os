@@ -5,6 +5,9 @@ use super::models::{
     EmailAccountSetupApiResponse, GmailOAuthCompleteApiRequest, GmailOAuthStartApiRequest,
     GmailOAuthStartApiResponse,
 };
+use crate::app::signal_hub_support::{
+    provider_account_or_not_found, sync_provider_account_signal_connection,
+};
 
 pub(crate) async fn post_gmail_oauth_start(
     State(state): State<AppState>,
@@ -57,6 +60,8 @@ pub(crate) async fn post_gmail_oauth_complete(
     let result = service
         .complete_gmail_oauth(pending, &request.authorization_code)
         .await?;
+    let account = provider_account_or_not_found(&state, &result.account_id).await?;
+    sync_provider_account_signal_connection(&state, &account, Some(&result.secret_ref)).await?;
     upsert_google_workspace_calendar_account(
         &state,
         &mail_account_id,

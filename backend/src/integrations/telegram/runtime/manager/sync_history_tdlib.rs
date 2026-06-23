@@ -80,12 +80,22 @@ impl TelegramRuntimeManager {
             request.provider_chat_id.trim()
         );
         for snapshot in &snapshots {
-            context
+            let observed = context
                 .telegram_store
                 .ingest_tdlib_message_snapshot(
                     &context.account.account_id,
                     snapshot,
                     &import_batch_id,
+                )
+                .await?;
+            context
+                .telegram_store
+                .publish_observed_message_raw_signal(
+                    &observed,
+                    context
+                        .event_bridge
+                        .as_ref()
+                        .map(|bridge| &bridge.event_bus),
                 )
                 .await?;
             if let Some(lifecycle) =

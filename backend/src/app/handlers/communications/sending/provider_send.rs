@@ -2,6 +2,7 @@ use super::super::*;
 use crate::application::communication_send::{
     CommunicationSendDependencies, CommunicationSendError, CommunicationSendRequest, send_email,
 };
+use serde_json::json;
 
 pub(crate) async fn post_v1_send(
     State(state): State<AppState>,
@@ -32,6 +33,7 @@ pub(crate) async fn post_v1_send(
             draft_id: req.draft_id,
             scheduled_send_at: req.scheduled_send_at,
             undo_send_seconds: req.undo_send_seconds,
+            metadata: json!({}),
         },
     )
     .await

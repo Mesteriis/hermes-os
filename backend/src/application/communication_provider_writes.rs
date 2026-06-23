@@ -6,10 +6,12 @@ use thiserror::Error;
 use crate::application::communication_fixture_ingest::{
     build_event, telegram_message_snapshot_payload,
 };
-use crate::application::provider_communication_projection::{
-    ProviderCommunicationProjectionError, record_and_project_telegram_message,
-};
 use crate::application::telegram_runtime::{self, TelegramRuntimeUseCaseContext};
+use crate::domains::communications::core::CommunicationIngestionPort;
+use crate::domains::communications::messages::{
+    CommunicationSignalProjectionError, project_accepted_signal_if_runtime_allows,
+};
+use crate::domains::signal_hub::{SignalHubError, dispatch_telegram_raw_signal};
 use crate::integrations::telegram::client::lifecycle;
 use crate::integrations::telegram::client::models::messages::{
     TelegramDeleteRequest, TelegramEditRequest, TelegramForwardChainResponse,
@@ -718,7 +720,25 @@ impl TelegramMessageWriteApplicationService {
             )
             .into());
         };
-        let projected = record_and_project_telegram_message(self.store.pool().clone(), raw).await?;
+        let stored_raw = CommunicationIngestionPort::new(self.store.pool().clone())
+            .record_raw_source(&raw)
+            .await?;
+        let Some(accepted_event) =
+            dispatch_telegram_raw_signal(self.store.pool().clone(), &stored_raw).await?
+        else {
+            return Err(TelegramMessageWriteError::SignalControlBlocked(
+                "telegram manual send raw signal was not accepted by Signal Hub".to_owned(),
+            ));
+        };
+        let Some(projected) =
+            project_accepted_signal_if_runtime_allows(self.store.pool().clone(), &accepted_event)
+                .await?
+        else {
+            return Err(TelegramMessageWriteError::SignalControlBlocked(
+                "telegram manual send accepted signal did not produce a message projection"
+                    .to_owned(),
+            ));
+        };
         response.raw_record_id = projected.raw_record_id;
         response.message_id = projected.message_id;
         Ok(())
@@ -812,7 +832,16 @@ pub(crate) enum TelegramMessageWriteError {
     Telegram(#[from] TelegramError),
 
     #[error(transparent)]
-    Projection(#[from] ProviderCommunicationProjectionError),
+    Communication(#[from] crate::domains::communications::core::CommunicationIngestionError),
+
+    #[error(transparent)]
+    SignalHub(#[from] SignalHubError),
+
+    #[error(transparent)]
+    SignalProjection(#[from] CommunicationSignalProjectionError),
+
+    #[error("{0}")]
+    SignalControlBlocked(String),
 
     #[error(transparent)]
     Audit(#[from] ApiAuditError),

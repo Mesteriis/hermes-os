@@ -1,7 +1,13 @@
+use chrono::Utc;
+use serde_json::json;
 use sqlx::Row;
+use sqlx::{Postgres, Transaction};
+use uuid::Uuid;
 
 use crate::domains::persons::core::link_persons_entity_in_transaction;
+use crate::domains::persons::enrichment::PERSON_TRUST_SCORE_CHANGED_EVENT_TYPE;
 use crate::domains::persons::intelligence::CommunicationFingerprint;
+use crate::platform::events::{EventStore, EventStoreError, NewEventEnvelope};
 
 use super::errors::PersonEnrichmentError;
 use super::materialization::{
@@ -42,6 +48,13 @@ impl PersonEnrichmentStore {
             return Err(PersonEnrichmentError::NotFound);
         };
         let enriched = row_to_enriched(row)?;
+        append_trust_score_changed_event(
+            &mut transaction,
+            person_id,
+            fingerprint.trust_score,
+            None,
+        )
+        .await?;
         transaction.commit().await?;
 
         Ok(enriched)
@@ -78,6 +91,13 @@ impl PersonEnrichmentStore {
             return Err(PersonEnrichmentError::NotFound);
         };
         let enriched = row_to_enriched(row)?;
+        append_trust_score_changed_event(
+            &mut transaction,
+            person_id,
+            fingerprint.trust_score,
+            Some(observation_id),
+        )
+        .await?;
         link_persons_entity_in_transaction(
             &mut transaction,
             observation_id,
@@ -215,4 +235,40 @@ impl PersonEnrichmentStore {
         sync_notes_memory_card_in_transaction(transaction, person_id, notes, source).await?;
         Ok(())
     }
+}
+
+async fn append_trust_score_changed_event(
+    transaction: &mut Transaction<'_, Postgres>,
+    person_id: &str,
+    trust_score: Option<i16>,
+    source_observation_id: Option<&str>,
+) -> Result<(), PersonEnrichmentError> {
+    let Some(trust_score) = trust_score else {
+        return Ok(());
+    };
+
+    let event = NewEventEnvelope::builder(
+        format!("person_trust_score_changed:{}", Uuid::now_v7()),
+        PERSON_TRUST_SCORE_CHANGED_EVENT_TYPE,
+        Utc::now(),
+        json!({
+            "kind": "person_enrichment",
+            "provider": "hermes",
+            "source_id": person_id,
+        }),
+        json!({
+            "kind": "persona",
+            "person_id": person_id,
+        }),
+    )
+    .payload(json!({
+        "person_id": person_id,
+        "trust_score": trust_score,
+        "source_observation_id": source_observation_id,
+    }))
+    .build()
+    .map_err(EventStoreError::from)?;
+
+    EventStore::append_in_transaction(transaction, &event).await?;
+    Ok(())
 }

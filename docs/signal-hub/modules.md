@@ -89,26 +89,23 @@ backend/contracts/proto/
 ## Frontend Target Layout
 
 ```text
-frontend/src/domains/signal-hub/
+frontend/src/domains/settings/
 ├── api/
-│   └── signalHubClient.ts
+│   └── signalHub.ts
 ├── queries/
 │   └── useSignalHubQuery.ts
-├── views/
-│   └── SignalHubPage.vue
 ├── components/
-│   ├── SignalSourceCard.vue
-│   ├── SignalConnectionPanel.vue
-│   ├── SignalPolicyPanel.vue
-│   ├── SignalHealthBadge.vue
-│   ├── SignalReplayDialog.vue
-│   └── SignalFixturePanel.vue
-└── stores/
-    └── signalHubUi.ts
+│   └── SignalHubSettings.vue
+├── views/
+│   └── SettingsPage.vue
+└── lib/
+    └── signalHubReplay.ts
 ```
 
-Provider setup/runtime details can stay under `frontend/src/integrations/*`, but
-Signal Hub UI owns the cross-source overview and source control commands.
+Current implementation keeps Signal Hub under Settings rather than a standalone
+top-level frontend domain. Provider setup/runtime details can stay under
+`frontend/src/integrations/*`, but the Settings-owned Signal Hub UI owns the
+cross-source overview and source control commands.
 
 ## Required Traits / Ports
 

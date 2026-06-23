@@ -195,7 +195,7 @@ pub(crate) struct TimelineQuery {
 pub(crate) async fn post_relationship_event(
     State(state): State<AppState>,
     Path(person_id): Path<String>,
-    Json(req): Json<NewRelationshipEvent>,
+    Json(req): Json<NewRelationshipEventRequest>,
 ) -> Result<Json<crate::domains::persons::memory::RelationshipEvent>, ApiError> {
     let pool = state
         .database
@@ -204,7 +204,27 @@ pub(crate) async fn post_relationship_event(
         .clone();
     Ok(Json(
         crate::domains::persons::service::PersonCommandService::new(pool)
-            .add_relationship_event_manual(&NewRelationshipEvent { person_id, ..req })
+            .add_relationship_event_manual(&NewRelationshipEvent {
+                person_id,
+                event_type: req.event_type,
+                title: req.title,
+                description: req.description,
+                occurred_at: req.occurred_at,
+                source: req.source,
+                related_entity_id: req.related_entity_id,
+                related_entity_kind: req.related_entity_kind,
+            })
             .await?,
     ))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct NewRelationshipEventRequest {
+    event_type: String,
+    title: String,
+    description: Option<String>,
+    occurred_at: DateTime<Utc>,
+    source: String,
+    related_entity_id: Option<String>,
+    related_entity_kind: Option<String>,
 }

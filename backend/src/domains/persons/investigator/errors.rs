@@ -2,6 +2,7 @@ use thiserror::Error;
 
 use crate::domains::persons::enrichment::PersonEnrichmentError;
 use crate::domains::persons::memory::PersonMemoryError;
+use crate::platform::events::EventStoreError;
 use crate::platform::observations::ObservationStoreError;
 
 #[derive(Debug, Error)]
@@ -18,6 +19,8 @@ pub enum InvestigatorError {
     Trust(#[from] crate::engines::trust::TrustEngineError),
     #[error(transparent)]
     Observation(#[from] ObservationStoreError),
+    #[error(transparent)]
+    Event(#[from] EventStoreError),
     #[error("person not found")]
     PersonNotFound,
     #[error("dossier snapshot not found")]
@@ -33,6 +36,7 @@ impl From<PersonEnrichmentError> for InvestigatorError {
             PersonEnrichmentError::Sqlx(error) => Self::Sqlx(error),
             PersonEnrichmentError::Trust(error) => Self::Trust(error),
             PersonEnrichmentError::Observation(error) => Self::Observation(error),
+            PersonEnrichmentError::Event(error) => Self::Event(error),
         }
     }
 }

@@ -10,7 +10,6 @@ use crate::app::api_support::{
     ai_runtime_client, ai_runtime_settings, ai_service,
 };
 use crate::app::{ApiError, AppState};
-
 pub(crate) async fn get_ai_status(
     State(state): State<AppState>,
 ) -> Result<Json<AiStatusResponse>, ApiError> {
@@ -96,6 +95,7 @@ pub(crate) async fn post_ai_answer(
     State(state): State<AppState>,
     Json(request): Json<AiAnswerRequest>,
 ) -> Result<Json<crate::ai::core::AiAnswerResponse>, ApiError> {
+    ensure_ai_requests_allowed(&state).await?;
     let actor_id = "hermes-frontend".to_string();
     let service = ai_service(&state).await?;
     let response = service.answer(request, &actor_id).await?;
@@ -107,6 +107,7 @@ pub(crate) async fn post_ai_task_candidates_refresh(
     State(state): State<AppState>,
     Json(request): Json<AiTaskCandidateRefreshRequest>,
 ) -> Result<Json<crate::ai::core::AiTaskCandidateRefreshResponse>, ApiError> {
+    ensure_ai_requests_allowed(&state).await?;
     let actor_id = "hermes-frontend".to_string();
     let service = ai_service(&state).await?;
     let response = service.refresh_task_candidates(request, &actor_id).await?;
@@ -118,9 +119,20 @@ pub(crate) async fn post_ai_meeting_prep(
     State(state): State<AppState>,
     Json(request): Json<AiMeetingPrepRequest>,
 ) -> Result<Json<crate::ai::core::AiMeetingPrepResponse>, ApiError> {
+    ensure_ai_requests_allowed(&state).await?;
     let actor_id = "hermes-frontend".to_string();
     let service = ai_service(&state).await?;
     let response = service.meeting_prep(request, &actor_id).await?;
 
     Ok(Json(response))
+}
+
+async fn ensure_ai_requests_allowed(state: &AppState) -> Result<(), ApiError> {
+    if crate::app::api_support::ai_requests_allowed(state).await? {
+        return Ok(());
+    }
+
+    Err(ApiError::FailedPrecondition(
+        "AI runtime is disabled by Signal Hub policy or runtime state".to_owned(),
+    ))
 }

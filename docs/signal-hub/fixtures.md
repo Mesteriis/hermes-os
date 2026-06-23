@@ -1,6 +1,6 @@
 # Signal Hub Fixtures And Recovery
 
-Status: target fixture and recovery contract.
+Status: target fixture and recovery contract with initial implementation.
 
 Signal Hub has two kinds of fixtures:
 
@@ -8,6 +8,19 @@ Signal Hub has two kinds of fixtures:
 2. test signal fixtures.
 
 They solve different problems and must not be mixed.
+
+Current implementation note:
+
+- the system recovery fixture is implemented and loaded idempotently from
+  `backend/fixtures/signal_hub/system_sources.toml`;
+- the initial test signal fixture catalog is implemented at
+  `backend/fixtures/signal_hub/test_signals.toml`;
+- fixture raw signals can now be emitted through Signal Hub REST/ConnectRPC and
+  then flow through the normal `signal_hub_raw_signal_dispatcher` consumer
+  path;
+- the current test fixture catalog is intentionally narrow and does not yet
+  replace the broader provider-specific fixture coverage already present in the
+  repository.
 
 ## System Recovery Fixture
 

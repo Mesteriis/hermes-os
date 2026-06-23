@@ -3,6 +3,12 @@ use super::super::*;
 const MAX_BILINGUAL_REPLY_TEXT_CHARS: usize = 64_000;
 const BILINGUAL_REPLY_TONES: [&str; 5] = ["formal", "business", "friendly", "short", "detailed"];
 
+struct AiSignalContext {
+    event_kind: &'static str,
+    subject: serde_json::Value,
+    provenance: serde_json::Value,
+}
+
 #[derive(Deserialize)]
 pub(crate) struct BilingualReplyFlowRequest {
     pub(super) reply_text_ru: String,
@@ -80,10 +86,48 @@ pub(crate) async fn post_v1_bilingual_reply_flow(
     };
     let service = email_multilingual_service(&state).await?;
 
-    let translation = bilingual_translation_step(&service, &msg.body_text, "ru", &message_id).await;
-    let back_translation =
-        bilingual_translation_step(&service, reply_text, &back_translation_target, &message_id)
-            .await;
+    let translation = bilingual_translation_step_with_signal(
+        &state,
+        &service,
+        &msg.body_text,
+        "ru",
+        &message_id,
+        AiSignalContext {
+            event_kind: "bilingual_reply_inbound_translation",
+            subject: json!({
+                "kind": "communication_message",
+                "source_code": "ai",
+                "message_id": message_id,
+                "operation": "bilingual_reply_inbound_translation",
+            }),
+            provenance: json!({
+                "source": "bilingual_reply_flow_inbound_translation",
+                "message_id": message_id,
+            }),
+        },
+    )
+    .await?;
+    let back_translation = bilingual_translation_step_with_signal(
+        &state,
+        &service,
+        reply_text,
+        &back_translation_target,
+        &message_id,
+        AiSignalContext {
+            event_kind: "bilingual_reply_back_translation",
+            subject: json!({
+                "kind": "communication_message",
+                "source_code": "ai",
+                "message_id": message_id,
+                "operation": "bilingual_reply_back_translation",
+            }),
+            provenance: json!({
+                "source": "bilingual_reply_flow_back_translation",
+                "message_id": message_id,
+            }),
+        },
+    )
+    .await?;
     let send_ready = translation.translated && back_translation.translated;
 
     Ok(Json(BilingualReplyFlowResponse {
@@ -118,26 +162,76 @@ fn normalize_bilingual_reply_tone(value: &str) -> Result<String, ApiError> {
 }
 
 async fn bilingual_translation_step(
+    state: &AppState,
     service: &crate::domains::communications::multilingual::MultilingualService,
     text: &str,
     target_language: &str,
     message_id: &str,
-) -> BilingualTranslationStep {
-    match service.translate(text, target_language).await {
-        Ok(Some(translation)) => BilingualTranslationStep {
-            target: translation.target_language,
-            translated: true,
-            text: Some(translation.translated_text),
-            model: Some(translation.model),
-            reason: None,
+) -> Result<BilingualTranslationStep, ApiError> {
+    bilingual_translation_step_with_signal(
+        state,
+        service,
+        text,
+        target_language,
+        message_id,
+        AiSignalContext {
+            event_kind: "bilingual_reply_translation",
+            subject: json!({
+                "kind": "communication_message",
+                "source_code": "ai",
+                "message_id": message_id,
+                "operation": "bilingual_reply_translation",
+            }),
+            provenance: json!({
+                "source": "bilingual_reply_flow_translation",
+                "message_id": message_id,
+            }),
         },
-        Ok(None) => BilingualTranslationStep {
+    )
+    .await
+}
+
+async fn bilingual_translation_step_with_signal(
+    state: &AppState,
+    service: &crate::domains::communications::multilingual::MultilingualService,
+    text: &str,
+    target_language: &str,
+    message_id: &str,
+    signal: AiSignalContext,
+) -> Result<BilingualTranslationStep, ApiError> {
+    match service.translate(text, target_language).await {
+        Ok(Some(translation)) => {
+            if let Some(pool) = state.database.pool() {
+                crate::domains::signal_hub::dispatch_ai_helper_signal(
+                    pool.clone(),
+                    signal.event_kind,
+                    message_id,
+                    signal.subject,
+                    json!({
+                        "target_language": translation.target_language,
+                        "model": translation.model,
+                    }),
+                    signal.provenance,
+                    None,
+                )
+                .await?;
+            }
+
+            Ok(BilingualTranslationStep {
+                target: translation.target_language,
+                translated: true,
+                text: Some(translation.translated_text),
+                model: Some(translation.model),
+                reason: None,
+            })
+        }
+        Ok(None) => Ok(BilingualTranslationStep {
             target: target_language.to_owned(),
             translated: false,
             text: None,
             model: None,
             reason: Some("no LLM configured".to_owned()),
-        },
+        }),
         Err(error) => {
             tracing::warn!(
                 error = %error,
@@ -145,13 +239,13 @@ async fn bilingual_translation_step(
                 target_language = %target_language,
                 "bilingual reply translation failed"
             );
-            BilingualTranslationStep {
+            Ok(BilingualTranslationStep {
                 target: target_language.to_owned(),
                 translated: false,
                 text: None,
                 model: None,
                 reason: Some("translation runtime unavailable".to_owned()),
-            }
+            })
         }
     }
 }

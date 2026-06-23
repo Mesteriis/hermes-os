@@ -245,3 +245,40 @@ async fn projection_cursor_store_tracks_monotonic_positions_against_postgres() {
         10
     );
 }
+
+#[tokio::test]
+async fn projection_cursor_store_can_explicitly_rewind_against_postgres() {
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let cursors = ProjectionCursorStore::new(database.pool().expect("configured pool").clone());
+
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock after unix epoch")
+        .as_nanos();
+    let projection_name = format!("projection_cursor_rewind_test_{suffix}");
+
+    cursors
+        .save_position(&projection_name, 25)
+        .await
+        .expect("save initial position");
+
+    assert_eq!(
+        cursors
+            .rewind_position(&projection_name, 9)
+            .await
+            .expect("rewind projection cursor"),
+        9
+    );
+    assert_eq!(
+        cursors
+            .last_processed_position(&projection_name)
+            .await
+            .expect("rewound cursor"),
+        9
+    );
+}

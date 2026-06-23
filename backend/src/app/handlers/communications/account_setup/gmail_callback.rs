@@ -2,6 +2,9 @@ use super::super::*;
 use super::calendar::upsert_google_workspace_calendar_account;
 use super::helpers::{gmail_pending_external_account_id, trimmed_optional};
 use super::models::GmailOAuthCallbackQuery;
+use crate::app::signal_hub_support::{
+    provider_account_or_not_found, sync_provider_account_signal_connection,
+};
 
 pub(crate) async fn get_gmail_oauth_callback(
     State(state): State<AppState>,
@@ -65,6 +68,26 @@ pub(crate) async fn get_gmail_oauth_callback(
     let external_account_id = gmail_pending_external_account_id(&pending);
     match service.complete_gmail_oauth(pending, &code).await {
         Ok(result) => {
+            let account = match provider_account_or_not_found(&state, &result.account_id).await {
+                Ok(account) => account,
+                Err(error) => {
+                    tracing::error!("Gmail OAuth callback account lookup failed");
+                    return gmail_oauth_callback_error_page(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Signal Hub sync failed. Check local backend status.",
+                    );
+                }
+            };
+            if let Err(error) =
+                sync_provider_account_signal_connection(&state, &account, Some(&result.secret_ref))
+                    .await
+            {
+                tracing::error!("Gmail OAuth callback signal hub sync failed");
+                return gmail_oauth_callback_error_page(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Signal Hub sync failed. Check local backend status.",
+                );
+            }
             if let Err(error) = upsert_google_workspace_calendar_account(
                 &state,
                 &mail_account_id,

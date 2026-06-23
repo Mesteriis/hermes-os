@@ -31,7 +31,13 @@ export function isProductionSourceFile(filePath) {
 
 export function isLineCountCheckedSourceFile(filePath) {
 	const normalized = filePath.split(path.sep).join('/');
-	return checkedExtensions.has(path.extname(normalized));
+	if (!checkedExtensions.has(path.extname(normalized))) {
+		return false;
+	}
+	if (normalized === 'src/gen' || normalized.startsWith('src/gen/') || normalized.includes('/src/gen/')) {
+		return false;
+	}
+	return isProductionSourceFile(normalized);
 }
 
 async function collectSourceFiles(directory) {

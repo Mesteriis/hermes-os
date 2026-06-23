@@ -21,6 +21,7 @@ pub struct AppConfig {
     http_addr: SocketAddr,
     database_url: Option<String>,
     local_api_secret: Option<String>,
+    nats_server_url: Option<String>,
     secret_vault_path: Option<PathBuf>,
     secret_vault_key: Option<ResolvedSecret>,
     vault_home: PathBuf,

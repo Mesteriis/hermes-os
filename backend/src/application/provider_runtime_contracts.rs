@@ -76,6 +76,9 @@ pub(crate) fn telegram_provider_runtime_store(pool: PgPool) -> TelegramProviderR
             ),
         ),
         Arc::new(
+            crate::domains::communications::core::CommunicationIngestionStore::new(pool.clone()),
+        ),
+        Arc::new(
             crate::platform::communications::EventStoreProviderMessageObservationEventPort::new(
                 pool,
             ),

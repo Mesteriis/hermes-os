@@ -43,10 +43,12 @@ fn parts(error: ApiError) -> ErrorParts {
         | ApiError::SecretVaultNotConfigured
         | ApiError::HostVault(_)
         | ApiError::InvalidEnvelope(_)
+        | ApiError::FailedPrecondition(_)
         | ApiError::Audit(_)
         | ApiError::Store(_)
         | ApiError::SettingNotFound
-        | ApiError::Settings(_) => platform::parts(error),
+        | ApiError::Settings(_)
+        | ApiError::SignalHub(_) => platform::parts(error),
         ApiError::Graph(_)
         | ApiError::InvalidGraphQuery(_)
         | ApiError::Projects(_)

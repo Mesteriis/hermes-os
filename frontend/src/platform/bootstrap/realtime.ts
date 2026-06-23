@@ -72,6 +72,10 @@ const TELEGRAM_QUERY_KEYS: readonly (readonly unknown[])[] = [
 	['communications', 'telegram', 'calls']
 ]
 
+const SIGNAL_HUB_QUERY_KEYS: readonly (readonly unknown[])[] = [
+	['signal-hub']
+]
+
 export function initializeRealtime(
 	config: FrontendConfig,
 	queryClient: RealtimeQueryClient,
@@ -251,12 +255,21 @@ export function handleRealtimeEvent(
 }
 
 function laggedRealtimeQueryKeys(): readonly (readonly unknown[])[] {
-	return [...REALTIME_QUERY_KEYS, ...MAIL_RUNTIME_QUERY_KEYS, ...TELEGRAM_QUERY_KEYS]
+	return [
+		...REALTIME_QUERY_KEYS,
+		...MAIL_RUNTIME_QUERY_KEYS,
+		...TELEGRAM_QUERY_KEYS,
+		...SIGNAL_HUB_QUERY_KEYS
+	]
 }
 
 function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly unknown[])[] {
 	const eventType = canonicalEventType(event.data)
 	if (!eventType) return REALTIME_QUERY_KEYS
+
+	if (eventType.startsWith('signal.')) {
+		return SIGNAL_HUB_QUERY_KEYS
+	}
 
 	if (eventType === 'mail.ai_state.changed') {
 		return [['communications-ai-state'], ['communications-message'], ['communications-list']]

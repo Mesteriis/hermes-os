@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClient } from '../../../platform/api/ApiClient'
+import { resetCommunicationsConnectClientForTests } from '../../../platform/connect/communicationsClient'
 import {
   copyMessageToFolder,
   createCommunicationFolder,
@@ -18,16 +19,18 @@ describe('communications API attachment and folder helpers', () => {
   beforeEach(() => {
     ApiClient.resetForTests()
     ApiClient.init('http://127.0.0.1:8080', 'test-secret')
+    resetCommunicationsConnectClientForTests()
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    resetCommunicationsConnectClientForTests()
     ApiClient.resetForTests()
   })
 
   it('searches attachment metadata with cursor filters', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ items: [], next_cursor: null, has_more: false }), {
+      new Response(JSON.stringify({ items: [], nextCursor: null, hasMore: false }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       })
@@ -44,23 +47,36 @@ describe('communications API attachment and folder helpers', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledOnce()
-    const [url] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/attachments/search?')
-    expect(url).toContain('account_id=account-1')
-    expect(url).toContain('q=invoice+pdf')
-    expect(url).toContain('content_type=pdf')
-    expect(url).toContain('scan_status=not_scanned')
-    expect(url).toContain('limit=25')
-    expect(url).toContain('cursor=cursor%3Avalue')
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe(
+      'http://127.0.0.1:8080/hermes.communications.v1.CommunicationsService/SearchAttachments'
+    )
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(decodeBody(init.body))).toEqual({
+      accountId: 'account-1',
+      query: 'invoice pdf',
+      contentType: 'pdf',
+      scanStatus: 'not_scanned',
+      cursor: 'cursor:value',
+      limit: 25
+    })
   })
 
   it('posts attachment translation requests with provided extracted text', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          attachment_id: 'mail_attachment:1',
+          attachmentId: 'mail_attachment:1',
+          messageId: 'msg-1',
+          filename: 'contract.txt',
+          originalLanguage: 'es',
+          confidence: 0.91,
           translated: false,
-          reason: 'translation runtime unavailable'
+          text: null,
+          target: 'en',
+          model: null,
+          reason: 'translation runtime unavailable',
+          source: 'caller_provided_extracted_text'
         }),
         {
           status: 200,
@@ -77,11 +93,14 @@ describe('communications API attachment and folder helpers', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/attachments/mail_attachment%3A1/translate')
+    expect(url).toBe(
+      'http://127.0.0.1:8080/hermes.communications.v1.CommunicationsService/TranslateAttachment'
+    )
     expect(init.method).toBe('POST')
-    expect(JSON.parse(init.body as string)).toEqual({
-      target_language: 'en',
-      source_text: 'Hola equipo'
+    expect(JSON.parse(decodeBody(init.body))).toEqual({
+      attachmentId: 'mail_attachment:1',
+      targetLanguage: 'en',
+      sourceText: 'Hola equipo'
     })
   })
 
@@ -89,12 +108,16 @@ describe('communications API attachment and folder helpers', () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          attachment_id: 'mail_attachment:1',
+          attachmentId: 'mail_attachment:1',
+          messageId: 'msg-1',
+          filename: 'archive.zip',
+          contentType: 'application/zip',
+          scanStatus: 'not_scanned',
           report: {
-            archive_kind: 'zip',
-            entry_count: 1,
-            total_uncompressed_bytes: 5,
-            has_nested_archive: false,
+            archiveKind: 'zip',
+            entryCount: 1,
+            totalUncompressedBytes: 5,
+            hasNestedArchive: false,
             entries: []
           }
         }),
@@ -111,19 +134,30 @@ describe('communications API attachment and folder helpers', () => {
     expect(report.report.archive_kind).toBe('zip')
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/attachments/mail_attachment%3A1/archive-inspection')
-    expect(init.method).toBe('GET')
+    expect(url).toBe(
+      'http://127.0.0.1:8080/hermes.communications.v1.CommunicationsService/GetAttachmentArchiveInspection'
+    )
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(decodeBody(init.body))).toEqual({
+      attachmentId: 'mail_attachment:1'
+    })
   })
 
   it('fetches safe attachment previews by attachment id', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          attachment_id: 'mail_attachment:1',
-          preview_kind: 'text',
+          attachmentId: 'mail_attachment:1',
+          messageId: 'msg-1',
+          filename: 'notes.txt',
+          contentType: 'text/plain',
+          scanStatus: 'clean',
+          previewKind: 'text',
           text: 'First line',
-          data_url: null,
-          truncated: false
+          dataUrl: null,
+          truncated: false,
+          byteCount: 10,
+          maxPreviewBytes: 65536
         }),
         {
           status: 200,
@@ -140,8 +174,13 @@ describe('communications API attachment and folder helpers', () => {
     expect(preview.data_url).toBeNull()
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/attachments/mail_attachment%3A1/preview')
-    expect(init.method).toBe('GET')
+    expect(url).toBe(
+      'http://127.0.0.1:8080/hermes.communications.v1.CommunicationsService/GetAttachmentPreview'
+    )
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(decodeBody(init.body))).toEqual({
+      attachmentId: 'mail_attachment:1'
+    })
   })
 
   it('manages custom folders and local folder message actions', async () => {
@@ -150,43 +189,42 @@ describe('communications API attachment and folder helpers', () => {
       .mockResolvedValueOnce(
         new Response(JSON.stringify({
           items: [{
-            folder_id: 'mail_folder:1',
-            account_id: 'account-1',
+            folderId: 'mail_folder:1',
+            accountId: 'account-1',
             name: 'Clients',
             description: null,
             color: '#3b82f6',
-            sort_order: 10,
-            message_count: 3,
-            created_at: '2026-06-14T00:00:00Z',
-            updated_at: '2026-06-14T00:00:00Z'
+            sortOrder: 10,
+            messageCount: 3,
+            createdAt: '2026-06-14T00:00:00Z',
+            updatedAt: '2026-06-14T00:00:00Z'
           }],
-          next_cursor: null,
-          has_more: false
+          page: { nextCursor: '', hasMore: false }
         }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
         })
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ folder_id: 'mail_folder:1', name: 'Clients' }), {
+        new Response(JSON.stringify({ item: { folderId: 'mail_folder:1', accountId: 'account-1', name: 'Clients', color: '#3b82f6', sortOrder: 10, messageCount: 0, createdAt: '2026-06-14T00:00:00Z', updatedAt: '2026-06-14T00:00:00Z' } }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
         })
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ operation: 'copy', folder_id: 'mail_folder:1', message_id: 'msg-1' }), {
+        new Response(JSON.stringify({ item: { operation: 'copy', folderId: 'mail_folder:1', messageId: 'msg-1', message: { folderId: 'mail_folder:1', messageId: 'msg-1', accountId: 'account-1', subject: 'Clients note', sender: 'Ada <ada@example.com>', projectedAt: '2026-06-14T00:00:00Z', workflowState: 'new', localState: 'active', addedAt: '2026-06-14T00:00:00Z', attachmentCount: 0 } } }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
         })
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ operation: 'move', folder_id: 'mail_folder:1', message_id: 'msg-1' }), {
+        new Response(JSON.stringify({ item: { operation: 'move', folderId: 'mail_folder:1', messageId: 'msg-1', message: { folderId: 'mail_folder:1', messageId: 'msg-1', accountId: 'account-1', subject: 'Clients note', sender: 'Ada <ada@example.com>', projectedAt: '2026-06-14T00:00:00Z', workflowState: 'new', localState: 'active', addedAt: '2026-06-14T00:00:00Z', attachmentCount: 0 } } }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
         })
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ items: [], next_cursor: null, has_more: false }), {
+        new Response(JSON.stringify({ items: [], page: { nextCursor: '', hasMore: false } }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
         })
@@ -206,27 +244,46 @@ describe('communications API attachment and folder helpers', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(5)
     expect(folders.items[0].message_count).toBe(3)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/folders?')
-    expect(fetchMock.mock.calls[0][0]).toContain('account_id=account-1')
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'http://127.0.0.1:8080/hermes.communications.v1.CommunicationsService/ListFolders'
+    )
     expect(fetchMock.mock.calls[1][1].method).toBe('POST')
-    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/communications/folders')
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      'http://127.0.0.1:8080/hermes.communications.v1.CommunicationsService/CreateFolder'
+    )
+    expect(JSON.parse(decodeBody(fetchMock.mock.calls[1][1].body))).toEqual({
       name: 'Clients',
-      account_id: 'account-1',
+      accountId: 'account-1',
       color: '#3b82f6',
-      sort_order: 10
+      sortOrder: 10
     })
-    expect(fetchMock.mock.calls[2][0]).toContain('/api/v1/communications/folders/mail_folder%3A1/messages/msg-1/copy')
+    expect(fetchMock.mock.calls[2][0]).toBe(
+      'http://127.0.0.1:8080/hermes.communications.v1.CommunicationsService/CopyMessageToFolder'
+    )
     expect(fetchMock.mock.calls[2][1].method).toBe('POST')
-    expect(fetchMock.mock.calls[3][0]).toContain('/api/v1/communications/folders/mail_folder%3A1/messages/msg-1/move')
-    expect(fetchMock.mock.calls[4][0]).toContain('/api/v1/communications/folders/mail_folder%3A1/messages?')
-    expect(fetchMock.mock.calls[4][0]).toContain('limit=25')
-    expect(fetchMock.mock.calls[4][0]).toContain('cursor=cursor%3Avalue')
+    expect(fetchMock.mock.calls[3][0]).toBe(
+      'http://127.0.0.1:8080/hermes.communications.v1.CommunicationsService/MoveMessageToFolder'
+    )
+    expect(fetchMock.mock.calls[4][0]).toBe(
+      'http://127.0.0.1:8080/hermes.communications.v1.CommunicationsService/ListFolderMessages'
+    )
+    expect(JSON.parse(decodeBody(fetchMock.mock.calls[4][1].body))).toMatchObject({
+      folderId: 'mail_folder:1',
+      page: {
+        limit: 25,
+        cursor: 'cursor:value'
+      }
+    })
   })
 
   it('posts thread translation requests with account and subject filters', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ items: [], target_language: 'en' }), {
+      new Response(JSON.stringify({
+        accountId: 'account-1',
+        subject: 'Thread Translation',
+        targetLanguage: 'en',
+        items: []
+      }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       })
@@ -237,16 +294,31 @@ describe('communications API attachment and folder helpers', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/threads/translate?')
-    expect(url).toContain('account_id=account-1')
-    expect(url).toContain('subject=Thread+Translation')
+    expect(url).toBe(
+      'http://127.0.0.1:8080/hermes.communications.v1.CommunicationsService/TranslateThread'
+    )
     expect(init.method).toBe('POST')
-    expect(JSON.parse(init.body as string)).toEqual({ target_language: 'en' })
+    expect(JSON.parse(decodeBody(init.body))).toEqual({
+      accountId: 'account-1',
+      subject: 'Thread Translation',
+      targetLanguage: 'en',
+      limit: 50
+    })
   })
 
   it('posts redirect requests to the message redirect endpoint', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ outbox_id: 'outbox-1', status: 'queued' }), {
+      new Response(JSON.stringify({
+        messageId: 'outbox-1',
+        outboxId: 'outbox-1',
+        accepted: ['redirect@example.com'],
+        acceptedRecipients: ['redirect@example.com'],
+        transport: 'outbox',
+        status: 'queued',
+        scheduledSendAt: null,
+        undoDeadlineAt: null,
+        failureReason: null
+      }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       })
@@ -261,12 +333,25 @@ describe('communications API attachment and folder helpers', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/messages/msg-1/redirect')
+    expect(url).toBe(
+      'http://127.0.0.1:8080/hermes.communications.v1.CommunicationsService/RedirectMessage'
+    )
     expect(init.method).toBe('POST')
-    expect(JSON.parse(init.body as string)).toEqual({
-      to: ['redirect@example.com'],
-      cc: ['copy@example.com'],
-      confirmed_provider_write: true
+    expect(JSON.parse(decodeBody(init.body))).toEqual({
+      messageId: 'msg-1',
+      toRecipients: ['redirect@example.com'],
+      ccRecipients: ['copy@example.com'],
+      confirmedProviderWrite: true
     })
   })
 })
+
+function decodeBody(body: BodyInit | null | undefined): string {
+  if (typeof body === 'string') {
+    return body
+  }
+  if (body instanceof Uint8Array) {
+    return new TextDecoder().decode(body)
+  }
+  return ''
+}

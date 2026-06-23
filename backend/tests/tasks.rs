@@ -154,9 +154,11 @@ async fn task_manual_creation_materializes_explicit_observation_provenance_again
 
     let row = sqlx::query(
         r#"
-        SELECT kind_code, payload
-        FROM observations
-        WHERE observation_id = $1
+        SELECT kind.code AS kind_code, observation.payload
+        FROM observations observation
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE observation.observation_id = $1
         "#,
     )
     .bind(&task.provenance_id)
@@ -1135,7 +1137,7 @@ async fn task_providers_against_postgres() {
     let observation_id: String = sqlx::query_scalar(
         "SELECT observation_id
          FROM observation_links
-         WHERE domain = 'vault'
+         WHERE domain = 'tasks'
            AND entity_kind = 'task_provider_account'
            AND entity_id = $1
            AND relationship_kind = 'create'

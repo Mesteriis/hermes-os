@@ -1,10 +1,15 @@
 use chrono::{DateTime, Utc};
+use serde_json::json;
 use sqlx::Postgres;
 use sqlx::postgres::PgPool;
+
+use crate::platform::events::{EventStore, EventStoreError, NewEventEnvelope};
 
 use super::errors::PersonTrustError;
 use super::models::PersonPromise;
 use super::rows::row_to_promise;
+
+pub const PERSON_PROMISE_CREATED_EVENT_TYPE: &str = "person.promise.created";
 
 #[derive(Clone)]
 pub struct PersonPromiseStore {
@@ -47,6 +52,7 @@ impl PersonPromiseStore {
         .fetch_one(&mut *transaction)
         .await?;
         let promise = row_to_promise(row)?;
+        append_promise_created_event(&mut transaction, &promise).await?;
         transaction.commit().await?;
 
         Ok(promise)
@@ -72,5 +78,39 @@ impl PersonPromiseStore {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+}
+
+async fn append_promise_created_event(
+    transaction: &mut sqlx::Transaction<'_, Postgres>,
+    promise: &PersonPromise,
+) -> Result<(), PersonTrustError> {
+    let event = NewEventEnvelope::builder(
+        format!("person_promise_created:{}", promise.id),
+        PERSON_PROMISE_CREATED_EVENT_TYPE,
+        promise.promised_at,
+        json!({
+            "kind": "person_promise",
+            "provider": "hermes",
+            "source_id": promise.id,
+        }),
+        json!({
+            "kind": "persona",
+            "person_id": &promise.person_id,
+        }),
+    )
+    .payload(json!({
+        "promise_id": &promise.id,
+        "person_id": &promise.person_id,
+        "description": &promise.description,
+        "due_at": promise.due_at,
+    }))
+    .build()
+    .map_err(EventStoreError::from)?;
+
+    match EventStore::append_in_transaction(transaction, &event).await {
+        Ok(_) => Ok(()),
+        Err(error) if error.is_unique_violation() => Ok(()),
+        Err(error) => Err(error.into()),
     }
 }

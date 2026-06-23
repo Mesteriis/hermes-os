@@ -1,4 +1,5 @@
 mod append;
+mod outbox;
 mod read;
 mod replay;
 
@@ -12,5 +13,9 @@ pub struct EventStore {
 impl EventStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
     }
 }

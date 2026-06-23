@@ -111,6 +111,12 @@ impl EventConsumerRunner {
                         .record_processed(&self.config.consumer_name, &event)
                         .await?;
                     self.consumer_store
+                        .mark_dead_letter_replayed_for_event(
+                            &self.config.consumer_name,
+                            event.position,
+                        )
+                        .await?;
+                    self.consumer_store
                         .clear_failure(&self.config.consumer_name, event.position)
                         .await?;
                     self.consumer_store
@@ -282,6 +288,38 @@ impl EventConsumerStore {
         Ok(saved_position)
     }
 
+    pub async fn rewind_position(
+        &self,
+        consumer_name: &str,
+        position: i64,
+    ) -> Result<i64, EventStoreError> {
+        validate_non_empty("consumer_name", consumer_name)?;
+        if position < 0 {
+            return Err(EventStoreError::InvalidReplayPosition(position));
+        }
+        self.ensure_consumer(consumer_name).await?;
+
+        let saved_position = sqlx::query_scalar::<_, i64>(
+            r#"
+            UPDATE event_consumers
+            SET
+                last_processed_position = LEAST(
+                    COALESCE(last_processed_position, $2),
+                    $2
+                ),
+                updated_at = now()
+            WHERE consumer_name = $1
+            RETURNING COALESCE(last_processed_position, 0)
+            "#,
+        )
+        .bind(consumer_name.trim())
+        .bind(position)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(saved_position)
+    }
+
     pub async fn next_attempt_at(
         &self,
         consumer_name: &str,
@@ -391,6 +429,104 @@ impl EventConsumerStore {
         .await?;
 
         Ok(())
+    }
+
+    pub async fn clear_failures_for_positions(
+        &self,
+        consumer_name: &str,
+        event_positions: &[i64],
+    ) -> Result<u64, EventStoreError> {
+        validate_non_empty("consumer_name", consumer_name)?;
+        if event_positions.is_empty() {
+            return Ok(0);
+        }
+
+        let result = sqlx::query(
+            r#"
+            DELETE FROM event_consumer_failures
+            WHERE consumer_name = $1
+              AND event_position = ANY($2)
+            "#,
+        )
+        .bind(consumer_name.trim())
+        .bind(event_positions.to_vec())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    pub async fn request_replay_for_positions(
+        &self,
+        consumer_name: &str,
+        event_positions: &[i64],
+    ) -> Result<u64, EventStoreError> {
+        validate_non_empty("consumer_name", consumer_name)?;
+        if event_positions.is_empty() {
+            return Ok(0);
+        }
+        self.ensure_consumer(consumer_name).await?;
+
+        self.clear_failures_for_positions(consumer_name, event_positions)
+            .await?;
+
+        let min_position = event_positions
+            .iter()
+            .copied()
+            .min()
+            .ok_or(EventStoreError::InvalidReplayPosition(0))?;
+        self.rewind_position(consumer_name, min_position.saturating_sub(1))
+            .await?;
+
+        let dead_letters_updated = sqlx::query(
+            r#"
+            UPDATE event_dead_letters
+            SET
+                review_state = CASE
+                    WHEN review_state = 'replayed' THEN review_state
+                    ELSE 'replay_requested'
+                END,
+                replay_requested_at = CASE
+                    WHEN review_state = 'replayed' THEN replay_requested_at
+                    ELSE now()
+                END,
+                updated_at = now()
+            WHERE consumer_name = $1
+              AND event_position = ANY($2)
+            "#,
+        )
+        .bind(consumer_name.trim())
+        .bind(event_positions.to_vec())
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        Ok(dead_letters_updated)
+    }
+
+    pub async fn clear_processed_for_positions(
+        &self,
+        consumer_name: &str,
+        event_positions: &[i64],
+    ) -> Result<u64, EventStoreError> {
+        validate_non_empty("consumer_name", consumer_name)?;
+        if event_positions.is_empty() {
+            return Ok(0);
+        }
+
+        let result = sqlx::query(
+            r#"
+            DELETE FROM event_consumer_processed_events
+            WHERE consumer_name = $1
+              AND event_position = ANY($2)
+            "#,
+        )
+        .bind(consumer_name.trim())
+        .bind(event_positions.to_vec())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
     }
 
     pub async fn has_processed_event(
@@ -638,6 +774,32 @@ impl EventConsumerStore {
         .await?;
 
         Ok(())
+    }
+
+    pub async fn mark_dead_letter_replayed_for_event(
+        &self,
+        consumer_name: &str,
+        event_position: i64,
+    ) -> Result<u64, EventStoreError> {
+        validate_non_empty("consumer_name", consumer_name)?;
+        let result = sqlx::query(
+            r#"
+            UPDATE event_dead_letters
+            SET
+                review_state = 'replayed',
+                replayed_at = now(),
+                updated_at = now()
+            WHERE consumer_name = $1
+              AND event_position = $2
+              AND review_state <> 'replayed'
+            "#,
+        )
+        .bind(consumer_name.trim())
+        .bind(event_position)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
     }
 }
 

@@ -68,4 +68,37 @@ impl ProjectionCursorStore {
 
         Ok(saved_position)
     }
+
+    pub async fn rewind_position(
+        &self,
+        projection_name: &str,
+        position: i64,
+    ) -> Result<i64, EventStoreError> {
+        validate_non_empty("projection_name", projection_name)?;
+        if position < 0 {
+            return Err(EventStoreError::InvalidReplayPosition(position));
+        }
+
+        let saved_position = sqlx::query_scalar::<_, i64>(
+            r#"
+            INSERT INTO projection_cursors (
+                projection_name,
+                last_processed_position,
+                updated_at
+            )
+            VALUES ($1, $2, now())
+            ON CONFLICT (projection_name)
+            DO UPDATE SET
+                last_processed_position = EXCLUDED.last_processed_position,
+                updated_at = now()
+            RETURNING last_processed_position
+            "#,
+        )
+        .bind(projection_name.trim())
+        .bind(position)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(saved_position)
+    }
 }

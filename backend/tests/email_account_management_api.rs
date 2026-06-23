@@ -8,6 +8,7 @@ use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
     NewProviderAccountSecretBinding, NewRawCommunicationRecord, ProviderAccountSecretPurpose,
 };
+use hermes_hub_backend::domains::signal_hub::SignalHubStore;
 use hermes_hub_backend::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
@@ -94,6 +95,10 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
         ))
         .await
         .expect("bind provider secret");
+    SignalHubStore::new(ctx.pool().clone())
+        .restore_system_sources()
+        .await
+        .expect("restore signal hub sources");
 
     let app = app(&ctx).await;
 
@@ -159,6 +164,20 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
     let body = json_body(response).await;
     assert_eq!(body["account"]["config"]["auth_state"], "logged_out");
     assert_eq!(body["sync_settings"]["sync_enabled"], false);
+    let logged_out_signal_status: String = sqlx::query_scalar(
+        r#"
+        SELECT status
+        FROM signal_connections
+        WHERE source_code = 'mail'
+          AND settings->>'account_id' = 'fastmail-primary'
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .fetch_one(ctx.pool())
+    .await
+    .expect("logged out mail signal status");
+    assert_eq!(logged_out_signal_status, "disconnected");
 
     let logout_observation = sqlx::query(
         "SELECT observation.origin_kind, kind.code AS kind_code, link.relationship_kind, observation.payload
@@ -209,6 +228,20 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
         body["unbound_secret_refs"],
         json!(["secret:fastmail-primary:imap-password"])
     );
+    let removed_signal_status: String = sqlx::query_scalar(
+        r#"
+        SELECT status
+        FROM signal_connections
+        WHERE source_code = 'mail'
+          AND settings->>'account_id' = 'fastmail-primary'
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .fetch_one(ctx.pool())
+    .await
+    .expect("removed mail signal status");
+    assert_eq!(removed_signal_status, "removed");
 
     let account_delete_observation = sqlx::query(
         "SELECT observation.origin_kind, kind.code AS kind_code, link.relationship_kind

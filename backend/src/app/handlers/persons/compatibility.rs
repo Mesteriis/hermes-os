@@ -87,7 +87,7 @@ pub(crate) async fn get_person_personas(
 pub(crate) async fn post_person_persona(
     State(state): State<AppState>,
     Path(person_id): Path<String>,
-    Json(req): Json<NewPersonPersona>,
+    Json(req): Json<NewPersonPersonaRequest>,
 ) -> Result<Json<PersonPersona>, ApiError> {
     let pool = state
         .database
@@ -96,9 +96,27 @@ pub(crate) async fn post_person_persona(
         .clone();
     Ok(Json(
         crate::domains::persons::service::PersonCommandService::new(pool)
-            .upsert_person_persona_manual(&NewPersonPersona { person_id, ..req })
+            .upsert_person_persona_manual(&NewPersonPersona {
+                person_id,
+                persona_id: req.persona_id,
+                name: req.name,
+                context: req.context,
+                default_tone: req.default_tone,
+                default_language: req.default_language,
+                preferred_channel: req.preferred_channel,
+            })
             .await?,
     ))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct NewPersonPersonaRequest {
+    persona_id: String,
+    name: String,
+    context: Option<String>,
+    default_tone: Option<String>,
+    default_language: Option<String>,
+    preferred_channel: Option<String>,
 }
 
 pub(crate) async fn delete_person_persona(

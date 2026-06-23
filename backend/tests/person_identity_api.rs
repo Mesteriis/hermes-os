@@ -12,7 +12,11 @@ use hermes_hub_backend::app::{build_router, build_router_with_database};
 use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
 use hermes_hub_backend::domains::persons::identity::PersonIdentityStore;
 use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::events::{EventConsumerConfig, EventConsumerRunner};
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::review_inbox::{
+    PERSON_IDENTITY_REVIEW_INBOX_CONSUMER, project_person_identity_review_event,
+};
 
 const LOCAL_API_TOKEN: &str = "person-identity-api-test-token";
 
@@ -75,6 +79,7 @@ async fn identity_candidates_returns_safe_candidate_payload() {
     promote_identity_candidate(&pool, &candidate_id)
         .await
         .expect("promote candidate");
+    run_person_identity_review_inbox_consumer(pool.clone()).await;
 
     let app = build_router_with_database(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
@@ -198,6 +203,7 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
         .await
         .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
+    run_person_identity_review_inbox_consumer(pool.clone()).await;
 
     let split_candidate_id =
         split_identity_candidate_id_from_persons(&left.person_id, &right.person_id);
@@ -283,6 +289,7 @@ async fn put_identity_candidate_review_confirms_candidate() {
         .expect("response");
 
     assert_eq!(response.status(), StatusCode::OK);
+    run_person_identity_review_inbox_consumer(pool.clone()).await;
     let body = json_body(response).await;
     assert_eq!(
         body,
@@ -309,6 +316,26 @@ async fn put_identity_candidate_review_confirms_candidate() {
     assert_eq!(review_item.0, "promoted");
     assert_eq!(review_item.1, "identity_candidate");
     assert_eq!(review_item.2, identity_candidate_id);
+}
+
+async fn run_person_identity_review_inbox_consumer(pool: PgPool) {
+    let runner = EventConsumerRunner::new(
+        pool.clone(),
+        EventConsumerConfig::new(PERSON_IDENTITY_REVIEW_INBOX_CONSUMER),
+    );
+
+    for _ in 0..10 {
+        let handler_pool = pool.clone();
+        let report = runner
+            .process_next_batch(|event| {
+                project_person_identity_review_event(handler_pool.clone(), event)
+            })
+            .await
+            .expect("person identity review inbox consumer");
+        if report.processed == 0 {
+            break;
+        }
+    }
 }
 
 #[tokio::test]

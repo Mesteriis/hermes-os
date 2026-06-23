@@ -21,8 +21,13 @@ use hermes_hub_backend::domains::projects::link_reviews::{
 use hermes_hub_backend::domains::relationships::{
     RelationshipEntityKind, RelationshipReviewState, RelationshipStore,
 };
-use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
+use hermes_hub_backend::platform::events::{
+    EventConsumerConfig, EventConsumerRunner, EventStore, NewEventEnvelope,
+};
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::project_link_review_effects::{
+    PROJECT_LINK_REVIEW_EFFECTS_CONSUMER, project_link_review_effect_event,
+};
 
 const PROJECT_LINK_REVIEW_EVENT_TYPE: &str = "project.link_review_state_changed";
 
@@ -141,6 +146,7 @@ async fn project_link_review_confirm_materializes_user_confirmed_decision_agains
         })
         .await
         .expect("confirm project link review");
+    run_project_link_review_effects(&context).await;
 
     let decisions = context
         .decision_store
@@ -255,6 +261,7 @@ async fn project_link_review_confirm_materializes_relationship_against_postgres(
         })
         .await
         .expect("confirm project link review");
+    run_project_link_review_effects(&context).await;
 
     let relationships = context
         .relationship_store
@@ -371,6 +378,7 @@ async fn project_link_review_reset_clears_review_and_demotes_relationship_agains
         })
         .await
         .expect("reset link");
+    run_project_link_review_effects(&context).await;
     assert_eq!(result.review_state, ProjectLinkReviewState::Suggested);
 
     let review = context
@@ -408,7 +416,8 @@ async fn project_link_review_reset_clears_review_and_demotes_relationship_agains
         r#"
         SELECT source_kind, source_id, excerpt
         FROM relationship_evidence
-        WHERE relationship_id = $1 AND source_id = $2
+        WHERE relationship_id = $1
+          AND metadata->>'event_id' = $2
         "#,
     )
     .bind(&relationship.relationship_id)
@@ -573,6 +582,17 @@ async fn live_review_context(_test_name: &str) -> Option<LiveReviewContext> {
         relationship_store: RelationshipStore::new(pool.clone()),
         event_store: EventStore::new(pool),
     })
+}
+
+async fn run_project_link_review_effects(context: &LiveReviewContext) {
+    let runner = EventConsumerRunner::new(
+        context.pool.clone(),
+        EventConsumerConfig::new(PROJECT_LINK_REVIEW_EFFECTS_CONSUMER),
+    );
+    runner
+        .process_next_batch(|event| project_link_review_effect_event(context.pool.clone(), event))
+        .await
+        .expect("project link review effects consumer");
 }
 
 async fn seed_message(

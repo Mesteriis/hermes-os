@@ -33,6 +33,9 @@ pub enum MessageProjectionError {
         provider_record_id: String,
     },
 
+    #[error("raw communication record was not found: {0}")]
+    RawRecordNotFound(String),
+
     #[error("stored communication message recipients must be a JSON array of strings")]
     InvalidStoredRecipients,
 

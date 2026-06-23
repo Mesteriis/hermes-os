@@ -1,7 +1,9 @@
 use thiserror::Error;
 
 use crate::domains::communications::core::CommunicationIngestionError;
-use crate::domains::communications::messages::MessageProjectionError;
+use crate::domains::communications::messages::{
+    CommunicationSignalProjectionError, MessageProjectionError,
+};
 use crate::domains::communications::storage::{
     AttachmentSafetyScanError, CommunicationStorageError,
 };
@@ -11,6 +13,7 @@ use crate::domains::organizations::core::OrgCoreError;
 use crate::domains::persons::api::PersonProjectionError;
 use crate::domains::persons::memory::PersonMemoryError;
 use crate::domains::relationships::RelationshipReviewPortError;
+use crate::domains::signal_hub::SignalHubError;
 use crate::domains::tasks::candidates::TaskCandidateError;
 use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 
@@ -49,6 +52,12 @@ pub enum EmailSyncPipelineError {
 
     #[error(transparent)]
     Message(#[from] MessageProjectionError),
+
+    #[error(transparent)]
+    SignalHub(#[from] SignalHubError),
+
+    #[error(transparent)]
+    SignalProjection(#[from] CommunicationSignalProjectionError),
 
     #[error(transparent)]
     Contact(#[from] PersonProjectionError),

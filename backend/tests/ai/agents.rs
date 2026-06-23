@@ -66,6 +66,27 @@ async fn ai_meeting_prep_returns_briefing_without_calendar_dependency() {
         json!("Discuss V3 risks and validation evidence.")
     );
     assert!(!body["citations"].as_array().expect("citations").is_empty());
+    let run_id = body["run_id"].as_str().expect("run id");
+
+    let raw_signal_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::bigint
+        FROM event_log
+        WHERE correlation_id IS NULL
+          AND event_type IN (
+            'signal.raw.ai.run_requested.observed',
+            'signal.raw.ai.run_completed.observed',
+            'signal.accepted.ai.run_requested',
+            'signal.accepted.ai.run_completed'
+          )
+          AND subject->>'run_id' = $1
+        "#,
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .expect("ai meeting prep signal hub event count");
+    assert_eq!(raw_signal_count, 4);
 }
 
 #[tokio::test]

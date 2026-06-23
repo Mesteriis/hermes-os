@@ -1,4 +1,4 @@
-use sqlx::postgres::PgPool;
+use sqlx::postgres::{PgPool, PgPoolOptions};
 use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
@@ -6,6 +6,7 @@ use tokio::time::{Duration, Instant, sleep};
 
 const POSTGRES_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const POSTGRES_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(250);
+const TEST_POOL_MAX_CONNECTIONS: u32 = 2;
 pub const SESSION_POSTGRES_HOST_PORT_ENV: &str = "HERMES_TEST_POSTGRES_HOST_PORT";
 pub const SESSION_ID_ENV: &str = "HERMES_TEST_SESSION_ID";
 
@@ -113,7 +114,11 @@ fn session_host_port() -> Option<u16> {
 async fn connect_with_retry(database_url: &str, label: &str) -> PgPool {
     let deadline = Instant::now() + POSTGRES_CONNECT_TIMEOUT;
     loop {
-        match PgPool::connect(database_url).await {
+        match PgPoolOptions::new()
+            .max_connections(TEST_POOL_MAX_CONNECTIONS)
+            .connect(database_url)
+            .await
+        {
             Ok(pool) => return pool,
             Err(_error) if Instant::now() < deadline => {
                 sleep(POSTGRES_CONNECT_RETRY_DELAY).await;

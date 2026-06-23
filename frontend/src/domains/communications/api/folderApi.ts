@@ -1,4 +1,12 @@
-import { ApiClient } from '../../../platform/api/ApiClient'
+import {
+  copyMessageToFolderConnect,
+  createCommunicationFolderConnect,
+  deleteCommunicationFolderConnect,
+  fetchCommunicationFoldersConnect,
+  fetchFolderMessagesConnect,
+  moveMessageToFolderConnect,
+  updateCommunicationFolderConnect
+} from './connectCommunications'
 import type {
   FolderDeleteResponse,
   FolderMessageActionResponse,
@@ -14,39 +22,22 @@ export async function fetchCommunicationFolders(
   limit = 500,
   cursor?: string | null
 ): Promise<CommunicationFolderListResponse> {
-  const params = new URLSearchParams({ limit: String(Math.trunc(limit)) })
-  if (accountId?.trim()) params.set('account_id', accountId.trim())
-  if (cursor?.trim()) params.set('cursor', cursor.trim())
-  return ApiClient.instance.get<CommunicationFolderListResponse>(
-    `/api/v1/communications/folders?${params.toString()}`,
-    'Mail folders request failed'
-  )
+  return fetchCommunicationFoldersConnect(accountId, limit, cursor ?? undefined)
 }
 
 export async function createCommunicationFolder(request: CommunicationFolderInput): Promise<CommunicationFolder> {
-  return ApiClient.instance.post<CommunicationFolder>(
-    '/api/v1/communications/folders',
-    request,
-    'Mail folder creation failed'
-  )
+  return createCommunicationFolderConnect(request)
 }
 
 export async function updateCommunicationFolder(
   folderId: string,
   request: CommunicationFolderUpdate
 ): Promise<CommunicationFolder> {
-  return ApiClient.instance.put<CommunicationFolder>(
-    `/api/v1/communications/folders/${encodeURIComponent(folderId)}`,
-    request,
-    'Mail folder update failed'
-  )
+  return updateCommunicationFolderConnect(folderId, request)
 }
 
 export async function deleteCommunicationFolder(folderId: string): Promise<FolderDeleteResponse> {
-  return ApiClient.instance.delete<FolderDeleteResponse>(
-    `/api/v1/communications/folders/${encodeURIComponent(folderId)}`,
-    'Mail folder deletion failed'
-  )
+  return deleteCommunicationFolderConnect(folderId)
 }
 
 export async function fetchFolderMessages(
@@ -54,36 +45,19 @@ export async function fetchFolderMessages(
   limit = 250,
   cursor?: string | null
 ): Promise<FolderMessageListResponse> {
-  const params = new URLSearchParams({ limit: String(Math.trunc(limit)) })
-  if (cursor?.trim()) params.set('cursor', cursor.trim())
-  return ApiClient.instance.get<FolderMessageListResponse>(
-    `/api/v1/communications/folders/${encodeURIComponent(folderId)}/messages?${params.toString()}`,
-    'Folder messages request failed'
-  )
+  return fetchFolderMessagesConnect(folderId, limit, cursor ?? undefined)
 }
 
 export async function copyMessageToFolder(
   folderId: string,
   messageId: string
 ): Promise<FolderMessageActionResponse> {
-  return ApiClient.instance.post<FolderMessageActionResponse>(
-    `/api/v1/communications/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(
-      messageId
-    )}/copy`,
-    {},
-    'Copy message to folder failed'
-  )
+  return copyMessageToFolderConnect(folderId, messageId)
 }
 
 export async function moveMessageToFolder(
   folderId: string,
   messageId: string
 ): Promise<FolderMessageActionResponse> {
-  return ApiClient.instance.post<FolderMessageActionResponse>(
-    `/api/v1/communications/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(
-      messageId
-    )}/move`,
-    {},
-    'Move message to folder failed'
-  )
+  return moveMessageToFolderConnect(folderId, messageId)
 }

@@ -26,7 +26,11 @@ pub(crate) use message_ai_state::*;
 pub(crate) use remote_images::get_v1_communication_message_remote_image;
 pub(crate) use sending::*;
 pub(crate) use templates_status::*;
-pub(crate) use workflow_actions::post_v1_workflow_action;
+pub(crate) use workflow_actions::{
+    WorkflowActionInput, WorkflowActionKind, WorkflowActionProvenance, WorkflowActionRequest,
+    WorkflowActionResponse, WorkflowActionSource, WorkflowActionStatus, WorkflowActionTarget,
+    WorkflowActionTargetKind, execute_workflow_action, post_v1_workflow_action,
+};
 pub(crate) use workflow_state::*;
 
 use std::collections::HashMap;

@@ -9,12 +9,36 @@ pub(crate) async fn post_v1_extract_tasks(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    let runtime_settings = ai_runtime_settings(&state).await?;
-    let svc = crate::domains::communications::extract::EmailExtractService::new(ai_runtime_port(
-        &state,
-        &runtime_settings,
-    ));
+    let svc = crate::domains::communications::extract::EmailExtractService::new(
+        ai_runtime_port_optional(&state).await?,
+    );
     let tasks = svc.extract_tasks(&msg).await?;
+    let llm_task_count = tasks.iter().filter(|task| task.source == "llm").count();
+    if llm_task_count > 0
+        && let Some(pool) = state.database.pool()
+    {
+        crate::domains::signal_hub::dispatch_ai_helper_signal(
+            pool.clone(),
+            "message_task_extraction",
+            &message_id,
+            serde_json::json!({
+                "kind": "communication_message",
+                "source_code": "ai",
+                "message_id": message_id,
+                "operation": "task_extraction",
+            }),
+            serde_json::json!({
+                "task_count": tasks.len(),
+                "llm_task_count": llm_task_count,
+            }),
+            serde_json::json!({
+                "source": "communication_message_task_extraction",
+                "message_id": message_id,
+            }),
+            None,
+        )
+        .await?;
+    }
     Ok(Json(serde_json::json!({"tasks": tasks})))
 }
 

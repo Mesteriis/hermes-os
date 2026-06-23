@@ -1,0 +1,155 @@
+[[sources]]
+code = "system"
+display_name = "System"
+category = "system"
+source_kind = "system"
+default_enabled = true
+supports_connections = false
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
+code = "ai"
+display_name = "AI"
+category = "intelligence"
+source_kind = "system"
+default_enabled = true
+supports_connections = false
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
+code = "mail"
+display_name = "Mail"
+category = "communications"
+source_kind = "provider"
+default_enabled = true
+supports_connections = true
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
+code = "telegram"
+display_name = "Telegram"
+category = "communications"
+source_kind = "provider"
+default_enabled = true
+supports_connections = true
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
+code = "whatsapp"
+display_name = "WhatsApp"
+category = "communications"
+source_kind = "provider"
+default_enabled = true
+supports_connections = true
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
+code = "github"
+display_name = "GitHub"
+category = "code"
+source_kind = "provider"
+default_enabled = true
+supports_connections = true
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
+code = "browser"
+display_name = "Browser"
+category = "capture"
+source_kind = "local"
+default_enabled = true
+supports_connections = false
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
+code = "rss"
+display_name = "RSS"
+category = "knowledge"
+source_kind = "provider"
+default_enabled = true
+supports_connections = true
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
+code = "calendar"
+display_name = "Calendar"
+category = "time"
+source_kind = "provider"
+default_enabled = true
+supports_connections = true
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
+code = "filesystem"
+display_name = "Filesystem"
+category = "documents"
+source_kind = "local"
+default_enabled = true
+supports_connections = false
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
+code = "home_assistant"
+display_name = "Home Assistant"
+category = "environment"
+source_kind = "provider"
+default_enabled = true
+supports_connections = true
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
+code = "voice"
+display_name = "Voice"
+category = "capture"
+source_kind = "local"
+default_enabled = true
+supports_connections = false
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
+code = "fixture"
+display_name = "Fixture"
+category = "test"
+source_kind = "fixture"
+default_enabled = true
+supports_connections = false
+supports_runtime = false
+supports_replay = true
+supports_pause = true
+supports_mute = true

@@ -26,6 +26,22 @@ pub struct StoredEventEnvelope {
     pub event: EventEnvelope,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct EventOutboxItem {
+    pub event_id: String,
+    pub subject: String,
+    pub status: String,
+    pub attempts: i32,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct DispatchableEventOutboxItem {
+    pub event_id: String,
+    pub subject: String,
+    pub attempts: i32,
+    pub event: EventEnvelope,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NewEventEnvelope {
     pub event_id: String,

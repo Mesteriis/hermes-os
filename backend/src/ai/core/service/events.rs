@@ -1,6 +1,7 @@
 use chrono::Utc;
 use serde_json::{Value, json};
 
+use crate::application::dispatch_ai_runtime_signal;
 use crate::platform::events::{EventStore, NewEventEnvelope};
 
 use super::super::constants::AI_PROMPT_TEMPLATE_VERSION;
@@ -21,6 +22,7 @@ pub(super) struct AiRunEvent<'a> {
 
 impl AiService {
     pub(super) async fn append_run_event(&self, event: AiRunEvent<'_>) -> Result<(), AiError> {
+        let event_store = EventStore::new(self.pool.clone());
         let builder = NewEventEnvelope::builder(
             event.event_id,
             event.event_type,
@@ -52,9 +54,63 @@ impl AiService {
         } else {
             builder
         };
-        EventStore::new(self.pool.clone())
-            .append(&builder.build()?)
-            .await?;
+        let ai_event = builder.build()?;
+        event_store.append(&ai_event).await?;
+        self.append_ai_signal_event(&event).await?;
         Ok(())
     }
+
+    async fn append_ai_signal_event(&self, event: &AiRunEvent<'_>) -> Result<(), AiError> {
+        let Some(event_kind) = ai_raw_signal_event_kind(event.event_type) else {
+            return Ok(());
+        };
+        let _ = dispatch_ai_runtime_signal(
+            self.pool.clone(),
+            event_kind,
+            event.run_id,
+            json!({
+                "kind": "ai_run",
+                "source_code": "ai",
+                "run_id": event.run_id,
+                "agent_id": event.agent_id,
+                "event_type": event.event_type,
+            }),
+            json!({
+                "agent_id": event.agent_id,
+                "workflow": event.payload.get("workflow").cloned(),
+                "details": signal_safe_payload(&event.payload),
+            }),
+            json!({
+                "source": "ai_run_event",
+                "source_code": "ai",
+                "runtime": self.runtime.runtime_name(),
+                "chat_model": self.chat_model,
+                "embedding_model": self.embedding_model,
+                "prompt_template_version": AI_PROMPT_TEMPLATE_VERSION,
+                "ai_event_type": event.event_type,
+            }),
+            event.correlation_id,
+        )
+        .await?;
+        Ok(())
+    }
+}
+
+fn ai_raw_signal_event_kind(event_type: &str) -> Option<&'static str> {
+    match event_type {
+        "ai.run.requested" => Some("run_requested"),
+        "ai.run.completed" => Some("run_completed"),
+        "ai.task_extraction.completed" => Some("task_extraction"),
+        _ => None,
+    }
+}
+
+fn signal_safe_payload(payload: &Value) -> Value {
+    let mut redacted = payload.clone();
+    if let Some(object) = redacted.as_object_mut() {
+        object.remove("query");
+        object.remove("answer");
+        object.remove("briefing");
+    }
+    redacted
 }

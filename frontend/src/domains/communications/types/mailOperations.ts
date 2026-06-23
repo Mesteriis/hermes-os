@@ -24,6 +24,24 @@ export type DraftListResponse = {
   next_cursor: string | null
   has_more: boolean
 }
+
+export type DraftUpsertRequest = {
+  draft_id: string
+  account_id: string
+  persona_id?: string | null
+  to_recipients: string[]
+  cc_recipients?: string[]
+  bcc_recipients?: string[]
+  subject: string
+  body_text: string
+  body_html?: string | null
+  in_reply_to?: string | null
+  references?: string[]
+  status?: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed'
+  scheduled_send_at?: string | null
+  metadata?: Record<string, unknown>
+}
+
 export type DraftDeleteResponse = { deleted: boolean }
 
 export type SendCommunicationRequest = {

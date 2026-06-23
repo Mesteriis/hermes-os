@@ -153,6 +153,63 @@ impl CommunicationOutboxStore {
         Self { pool }
     }
 
+    pub async fn get(
+        &self,
+        outbox_id: &str,
+    ) -> Result<Option<CommunicationOutboxItem>, CommunicationOutboxError> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                outbox.outbox_id,
+                outbox.account_id,
+                outbox.draft_id,
+                outbox.to_participants AS to_recipients,
+                outbox.cc_participants AS cc_recipients,
+                outbox.bcc_participants AS bcc_recipients,
+                outbox.subject,
+                outbox.body_text,
+                outbox.body_html,
+                outbox.status,
+                outbox.scheduled_send_at,
+                outbox.undo_deadline_at,
+                outbox.send_attempts,
+                outbox.claimed_at,
+                outbox.sent_at,
+                outbox.provider_message_id,
+                outbox.last_error,
+                CASE
+                    WHEN latest_receipt.latest_read_receipt IS NULL THEN outbox.metadata
+                    ELSE jsonb_set(
+                        outbox.metadata,
+                        '{latest_read_receipt}',
+                        latest_receipt.latest_read_receipt,
+                        true
+                    )
+                END AS metadata,
+                outbox.created_at,
+                outbox.updated_at
+            FROM communication_outbox outbox
+            LEFT JOIN LATERAL (
+                SELECT jsonb_build_object(
+                    'receipt_kind', receipt.receipt_kind,
+                    'read_at', receipt.read_at,
+                    'source_kind', receipt.source_kind
+                ) AS latest_read_receipt
+                FROM communication_read_receipts receipt
+                WHERE receipt.outbox_id = outbox.outbox_id
+                ORDER BY receipt.read_at DESC, receipt.receipt_id ASC
+                LIMIT 1
+            ) latest_receipt ON true
+            WHERE outbox.outbox_id = $1
+            "#,
+        )
+        .bind(outbox_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_outbox_item).transpose()
+    }
+
     pub async fn enqueue(
         &self,
         item: &NewCommunicationOutboxItem,

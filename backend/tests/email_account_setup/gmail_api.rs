@@ -1,6 +1,6 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
-use serde_json::json;
+use serde_json::{Value, json};
 use sqlx::Row;
 use tempfile::tempdir;
 use tower::ServiceExt;
@@ -351,6 +351,44 @@ async fn gmail_oauth_callback_completes_pending_grant_without_api_secret() {
             .try_get::<String, _>("kind_code")
             .expect("kind code"),
         "COMMUNICATION_PROVIDER_ACCOUNT"
+    );
+    let signal_connection = sqlx::query(
+        r#"
+        SELECT source_code, status, settings, secret_ref
+        FROM signal_connections
+        WHERE source_code = 'mail'
+          AND settings->>'account_id' = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("gmail signal connection");
+    let signal_settings: Value = signal_connection
+        .try_get("settings")
+        .expect("gmail signal settings");
+    assert_eq!(
+        signal_connection
+            .try_get::<String, _>("source_code")
+            .expect("signal source"),
+        "mail"
+    );
+    assert_eq!(
+        signal_connection
+            .try_get::<String, _>("status")
+            .expect("signal status"),
+        "connected"
+    );
+    assert_eq!(signal_settings["account_id"], json!(account_id));
+    assert_eq!(signal_settings["provider_kind"], json!("gmail"));
+    assert_eq!(signal_settings["external_account_id"], json!(account_id));
+    assert_eq!(
+        signal_connection
+            .try_get::<String, _>("secret_ref")
+            .expect("signal secret ref"),
+        format!("secret:provider-account:{account_id}:oauth_token")
     );
 
     let calendar_account_id = format!("google-calendar:{account_id}");

@@ -29,6 +29,12 @@ pub(super) fn parts(error: ApiError) -> ErrorParts {
             error.to_string(),
             false,
         ),
+        ApiError::FailedPrecondition(message) => (
+            StatusCode::PRECONDITION_FAILED,
+            "failed_precondition",
+            message,
+            false,
+        ),
         ApiError::Audit(error) => {
             tracing::error!(error = %error, "event API audit operation failed");
             (
@@ -71,6 +77,33 @@ pub(super) fn parts(error: ApiError) -> ErrorParts {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "application_settings_error",
                 "application settings operation failed".to_owned(),
+                false,
+            )
+        }
+        ApiError::SignalHub(error) if error.is_invalid_request() => (
+            StatusCode::BAD_REQUEST,
+            "invalid_signal_hub_request",
+            error.to_string(),
+            false,
+        ),
+        ApiError::SignalHub(error) if error.is_not_found() => (
+            StatusCode::NOT_FOUND,
+            "signal_hub_not_found",
+            error.to_string(),
+            false,
+        ),
+        ApiError::SignalHub(error) if error.is_failed_precondition() => (
+            StatusCode::PRECONDITION_FAILED,
+            "signal_hub_precondition_failed",
+            error.to_string(),
+            false,
+        ),
+        ApiError::SignalHub(error) => {
+            tracing::error!(error = %error, "Signal Hub operation failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "signal_hub_error",
+                "Signal Hub operation failed".to_owned(),
                 false,
             )
         }

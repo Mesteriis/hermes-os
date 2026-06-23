@@ -1,4 +1,5 @@
 use super::super::types::ApiError;
+use crate::domains::signal_hub::SignalHubError;
 use crate::platform::audit::ApiAuditError;
 use crate::platform::events::{EventEnvelopeError, EventStoreError};
 use crate::platform::settings::SettingsError;
@@ -22,6 +23,12 @@ impl From<SettingsError> for ApiError {
             SettingsError::SettingNotFound { .. } => Self::SettingNotFound,
             _ => Self::Settings(error),
         }
+    }
+}
+
+impl From<SignalHubError> for ApiError {
+    fn from(error: SignalHubError) -> Self {
+        Self::SignalHub(error)
     }
 }
 

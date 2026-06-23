@@ -27,6 +27,10 @@ const forbiddenCanonicalEvidenceDirs = [
 ];
 const communicationRawRecordInsertOwner = 'backend/src/domains/communications/core/raw_records.rs';
 const communicationMessageInsertOwner = 'backend/src/domains/communications/messages/store/upsert.rs';
+const communicationAcceptedSignalProjectionOwner =
+	'backend/src/domains/communications/messages/provider_observation_projection.rs';
+const communicationAcceptedSignalProjectionBootstrapOwner =
+	'backend/src/application/bootstrap.rs';
 const reviewPromotionWorkflow = 'backend/src/workflows/review_promotion/mod.rs';
 const communicationProviderCrudFacadeOwners = new Set([
 	'backend/src/domains/communications/core/accounts.rs',
@@ -113,6 +117,7 @@ const businessBackendDomains = new Set([
 	'projects',
 	'radar',
 	'relationships',
+	'signal_hub',
 	'tasks',
 	'timeline'
 ]);
@@ -842,6 +847,54 @@ function canonicalCommunicationMessageWriteFailures(fileContents) {
 			errors.push(`${file}: communication_messages writes must go through ${communicationMessageInsertOwner} so every message projection keeps its canonical observation reference`);
 		}
 	}
+	return errors;
+}
+
+function communicationAcceptedSignalBoundaryFailures(fileContents) {
+	const errors = [];
+	const projectionOwnerSource = fileContents.get(communicationAcceptedSignalProjectionOwner);
+	if (projectionOwnerSource !== undefined) {
+		if (/\bintegration\.telegram\./.test(projectionOwnerSource)) {
+			errors.push(
+				`${communicationAcceptedSignalProjectionOwner}: Communications accepted-signal projection must not consume legacy integration.telegram.* events; consume only signal.accepted.* families`
+			);
+		}
+		if (/\bsignal\.raw\./.test(projectionOwnerSource)) {
+			errors.push(
+				`${communicationAcceptedSignalProjectionOwner}: Communications projection must not consume signal.raw.* events directly; Signal Hub accepted events are the only supported input`
+			);
+		}
+	}
+
+	for (const [file, content] of fileContents.entries()) {
+		if (/\bproject_mail_signal_event\s*\(/.test(content) && file !== communicationAcceptedSignalProjectionOwner) {
+			errors.push(
+				`${file}: direct project_mail_signal_event() usage is forbidden outside ${communicationAcceptedSignalProjectionOwner}; consume accepted signals through the owner entry point`
+			);
+		}
+
+		if (
+			/\bproject_provider_observation_event\s*\(/.test(content) &&
+			file !== communicationAcceptedSignalProjectionOwner &&
+			file !== communicationAcceptedSignalProjectionBootstrapOwner &&
+			!file.startsWith('backend/tests/')
+		) {
+			errors.push(
+				`${file}: project_provider_observation_event() may only be called by the accepted-signal consumer bootstrap or tests`
+			);
+		}
+
+		if (
+			/\bproject_accepted_signal_event\s*\(/.test(content) &&
+			file !== communicationAcceptedSignalProjectionOwner &&
+			!file.startsWith('backend/tests/')
+		) {
+			errors.push(
+				`${file}: direct project_accepted_signal_event() usage is forbidden outside ${communicationAcceptedSignalProjectionOwner}; route callers through consume_accepted_signal_event() or the event consumer`
+			);
+		}
+	}
+
 	return errors;
 }
 
@@ -1820,6 +1873,7 @@ async function checkCanonicalEvidenceBoundaries() {
 	}
 	failures.push(...canonicalCommunicationRawRecordWriteFailures(fileContents));
 	failures.push(...canonicalCommunicationMessageWriteFailures(fileContents));
+	failures.push(...communicationAcceptedSignalBoundaryFailures(fileContents));
 	failures.push(...canonicalTaskCandidateWriteFailures(fileContents));
 	failures.push(...canonicalGraphEvidenceWriteFailures(fileContents));
 	failures.push(...canonicalSemanticEmbeddingWriteFailures(fileContents));
@@ -2516,6 +2570,51 @@ function runSelfTests() {
 		'provider CRUD facade usage outside communications owner layer fails',
 		communicationProviderCrudFacadeFailures(new Map([
 			['backend/src/domains/communications/outbox/provider_sender.rs', 'store.upsert_provider_account(&account);']
+		])).length === 1
+	);
+	assertSelfTest(
+		'communications projection rejects legacy integration telegram events',
+		communicationAcceptedSignalBoundaryFailures(new Map([
+			[
+				communicationAcceptedSignalProjectionOwner,
+				'matches!(event_type, "integration.telegram.message.content_observed")'
+			]
+		])).length === 1
+	);
+	assertSelfTest(
+		'communications projection rejects raw signal consumption',
+		communicationAcceptedSignalBoundaryFailures(new Map([
+			[
+				communicationAcceptedSignalProjectionOwner,
+				'if event_type == "signal.raw.telegram.message.content.observed" { return Ok(()); }'
+			]
+		])).length === 1
+	);
+	assertSelfTest(
+		'direct mail accepted-signal projection call outside owner fails',
+		communicationAcceptedSignalBoundaryFailures(new Map([
+			[
+				'backend/src/workflows/example.rs',
+				'let _ = project_mail_signal_event(pool.clone(), &event).await?;'
+			]
+		])).length === 1
+	);
+	assertSelfTest(
+		'direct accepted-signal projection call outside owner fails',
+		communicationAcceptedSignalBoundaryFailures(new Map([
+			[
+				'backend/src/workflows/email_sync_pipeline/raw_records.rs',
+				'let _ = project_accepted_signal_event(pool.clone(), &event).await?;'
+			]
+		])).length === 1
+	);
+	assertSelfTest(
+		'provider observation consumer call outside bootstrap or tests fails',
+		communicationAcceptedSignalBoundaryFailures(new Map([
+			[
+				'backend/src/workflows/example.rs',
+				'project_provider_observation_event(pool.clone(), event)'
+			]
 		])).length === 1
 	);
 	assertSelfTest(

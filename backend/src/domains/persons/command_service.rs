@@ -67,7 +67,7 @@ impl PersonCommandService {
             .create_unattached_with_observation(
                 identity_type,
                 identity_value,
-                &format!("observation:{}", observation.observation_id),
+                &manual_record_source(requested_source, &observation.observation_id),
                 &observation.observation_id,
             )
             .await?)
@@ -131,7 +131,7 @@ impl PersonCommandService {
                 person_id,
                 identity_type,
                 identity_value,
-                &format!("observation:{}", observation.observation_id),
+                &manual_record_source(requested_source, &observation.observation_id),
                 &observation.observation_id,
             )
             .await?)
@@ -553,7 +553,10 @@ impl PersonCommandService {
         person_id: &str,
         person_messages: &[PersonMessage],
     ) -> Result<Value, PersonCommandServiceError> {
-        let fingerprint = PersonIntelligenceService::heuristic_fingerprint(person_messages);
+        let mut fingerprint = PersonIntelligenceService::heuristic_fingerprint(person_messages);
+        if fingerprint.trust_score.is_none() {
+            fingerprint.trust_score = Some(50);
+        }
 
         let observation = self
             .capture_manual_at(
@@ -799,6 +802,14 @@ impl PersonCommandService {
                 .provenance(provenance),
             )
             .await?)
+    }
+}
+
+fn manual_record_source(requested_source: &str, observation_id: &str) -> String {
+    if requested_source.trim() == "manual" {
+        format!("observation:{observation_id}")
+    } else {
+        requested_source.to_owned()
     }
 }
 

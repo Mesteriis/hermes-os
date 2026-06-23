@@ -15,3 +15,7 @@ pub use models::{
 };
 pub use store::PersonIdentityStore;
 pub use store::PersonIdentityStore as PersonIdentityPort;
+pub(crate) use upsert::{
+    load_identity_candidate_payload, parse_person_identity_candidate_kind,
+    parse_person_identity_review_state, person_identity_candidate_detected_event_type,
+};

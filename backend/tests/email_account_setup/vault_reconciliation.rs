@@ -98,6 +98,12 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
 
     let _enriching_app = build_router_with_database(config.clone(), database.clone());
     wait_for_manifest_metadata_key(&vault, secret_ref, "display_name").await;
+    wait_for_provider_account_secret_binding(
+        &CommunicationIngestionStore::new(pool.clone()),
+        account_id,
+        ProviderAccountSecretPurpose::ImapPassword,
+    )
+    .await;
 
     sqlx::query("DELETE FROM calendar_accounts WHERE account_id = $1")
         .bind(format!("icloud-calendar:{account_id}"))

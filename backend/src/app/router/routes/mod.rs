@@ -10,6 +10,7 @@ mod persons;
 mod public;
 mod review;
 mod settings;
+mod signal_hub;
 mod status_vault;
 mod support;
 mod tasks;
@@ -27,6 +28,7 @@ pub(super) fn protected_routes(api_secret: String) -> Router<AppState> {
     let routes = tasks::add_routes(routes);
     let routes = review::add_routes(routes);
     let routes = settings::add_routes(routes);
+    let routes = signal_hub::add_routes(routes);
     let routes = ai::add_routes(routes);
     let routes = messaging::add_routes(routes);
     let routes = email_accounts::add_routes(routes);

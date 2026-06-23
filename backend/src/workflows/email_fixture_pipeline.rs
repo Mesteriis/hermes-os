@@ -11,12 +11,14 @@ use crate::domains::communications::import::{
     FixtureEmailImportError, FixtureEmailImportRequest, import_fixture_email_messages_with_records,
 };
 use crate::domains::communications::messages::{
-    CommunicationMessageProjectionPort, MessageProjectionError, project_raw_email_message,
+    CommunicationSignalProjectionError, MessageProjectionError,
+    project_accepted_signal_if_runtime_allows,
 };
 use crate::domains::graph::core::{GraphProjectionPort, GraphProjectionPortError, GraphSummary};
 use crate::domains::persons::api::{
     PersonProjectionError, PersonProjectionPort, upsert_persons_from_message_participants,
 };
+use crate::domains::signal_hub::{SignalHubError, dispatch_mail_raw_signal};
 use crate::workflows::graph_projection::{
     GraphProjectionError, GraphProjectionReport, GraphProjectionService,
 };
@@ -113,12 +115,19 @@ pub async fn project_fixture_email_messages(
     )
     .await?;
 
-    let message_store = CommunicationMessageProjectionPort::new(pool.clone());
     let person_store = PersonProjectionPort::new(pool.clone());
     let mut projected_messages = 0;
     let mut participants = Vec::new();
     for raw_record in &import_report.raw_records {
-        let message = project_raw_email_message(&message_store, raw_record).await?;
+        let Some(accepted_event) = dispatch_mail_raw_signal(pool.clone(), raw_record, None).await?
+        else {
+            continue;
+        };
+        let Some(message) =
+            project_accepted_signal_if_runtime_allows(pool.clone(), &accepted_event).await?
+        else {
+            continue;
+        };
         participants.push(message.sender.clone());
         participants.extend(message.recipients.clone());
         projected_messages += 1;
@@ -196,6 +205,12 @@ pub enum EmailFixturePipelineError {
 
     #[error(transparent)]
     Message(#[from] MessageProjectionError),
+
+    #[error(transparent)]
+    SignalHub(#[from] SignalHubError),
+
+    #[error(transparent)]
+    SignalProjection(#[from] CommunicationSignalProjectionError),
 
     #[error(transparent)]
     Contact(#[from] PersonProjectionError),

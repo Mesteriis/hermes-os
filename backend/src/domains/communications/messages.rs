@@ -28,7 +28,10 @@ pub use projection::{
 };
 pub use provider_channel_store::ProviderChannelMessageStore;
 pub use provider_observation_projection::{
-    COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, project_provider_observation_event,
+    COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, CommunicationSignalProjectionError,
+    consume_accepted_signal_event, project_accepted_signal_if_runtime_allows,
+    project_provider_observation_event, replay_accepted_signal_event,
+    supports_communication_projection_signal_event,
 };
 pub(crate) use query_parser::parse_communication_message_search_query;
 pub use search::{

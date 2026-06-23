@@ -1,9 +1,12 @@
 use super::super::*;
 use super::ai_routing::ai_model_routing;
 use super::database::database_pool;
+use crate::domains::signal_hub::{SignalHubError, SignalHubStore};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+
+const AI_REQUEST_RUNTIME: &str = "ai_request_runtime";
 
 #[derive(Clone)]
 struct PersonProjectionAiPersonaAttributionPort {
@@ -88,6 +91,28 @@ pub(crate) async fn ai_service(state: &AppState) -> Result<AiService, ApiError> 
     )
 }
 
+pub(crate) async fn ai_requests_allowed(state: &AppState) -> Result<bool, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Ok(true);
+    };
+
+    SignalHubStore::new(pool.clone())
+        .restore_system_sources()
+        .await?;
+    crate::platform::events::runtime_allows_processing(
+        pool,
+        "ai",
+        AI_REQUEST_RUNTIME,
+        &serde_json::json!({
+            "label": "AI request runtime",
+            "scope": "runtime",
+        }),
+    )
+    .await
+    .map_err(SignalHubError::from)
+    .map_err(ApiError::from)
+}
+
 pub(crate) fn ai_persona_attribution_port_from_pool(
     pool: sqlx::postgres::PgPool,
 ) -> crate::ai::core::SharedAiPersonaAttributionPort {
@@ -155,24 +180,33 @@ pub(crate) fn ai_runtime_port(
         .map(|runtime| Arc::new(runtime) as crate::platform::ai_runtime::SharedAiRuntimePort)
 }
 
+pub(crate) async fn ai_runtime_port_optional(
+    state: &AppState,
+) -> Result<Option<crate::platform::ai_runtime::SharedAiRuntimePort>, ApiError> {
+    if !ai_requests_allowed(state).await? {
+        return Ok(None);
+    }
+
+    let settings = ai_runtime_settings(state).await?;
+    Ok(ai_runtime_port(state, &settings))
+}
+
 pub(crate) async fn email_multilingual_service(
     state: &AppState,
 ) -> Result<crate::domains::communications::multilingual::MultilingualService, ApiError> {
-    let settings = ai_runtime_settings(state).await?;
     Ok(
-        crate::domains::communications::multilingual::MultilingualService::new(ai_runtime_port(
-            state, &settings,
-        )),
+        crate::domains::communications::multilingual::MultilingualService::new(
+            ai_runtime_port_optional(state).await?,
+        ),
     )
 }
 
 pub(crate) async fn email_ai_reply_service(
     state: &AppState,
 ) -> Result<crate::domains::communications::ai_reply::AiReplyService, ApiError> {
-    let settings = ai_runtime_settings(state).await?;
     Ok(
-        crate::domains::communications::ai_reply::AiReplyService::new(ai_runtime_port(
-            state, &settings,
-        )),
+        crate::domains::communications::ai_reply::AiReplyService::new(
+            ai_runtime_port_optional(state).await?,
+        ),
     )
 }

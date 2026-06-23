@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use serde_json::Value;
 use thiserror::Error;
 
 use crate::domains::communications::core::{
@@ -40,6 +41,7 @@ pub(crate) struct CommunicationSendRequest {
     pub(crate) draft_id: Option<String>,
     pub(crate) scheduled_send_at: Option<DateTime<Utc>>,
     pub(crate) undo_send_seconds: Option<i64>,
+    pub(crate) metadata: Value,
 }
 
 #[derive(Clone, Debug)]
@@ -89,6 +91,11 @@ pub(crate) async fn send_email(
             "at least one recipient is required",
         ));
     }
+    if !req.metadata.is_object() {
+        return Err(CommunicationSendError::InvalidRequest(
+            "message metadata must be a JSON object",
+        ));
+    }
 
     let recipient_count = email.to.len() + email.cc.len() + email.bcc.len();
     let accepted_recipients = email
@@ -106,6 +113,7 @@ pub(crate) async fn send_email(
                 draft_id,
                 scheduled_send_at,
                 undo_send_seconds,
+                metadata: req.metadata,
             },
         )
         .await?;

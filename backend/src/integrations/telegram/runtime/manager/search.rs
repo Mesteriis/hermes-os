@@ -84,7 +84,26 @@ impl TelegramRuntimeManager {
                 .ingest_tdlib_message_snapshot(&request.account_id, snapshot, &import_batch_id)
                 .await
             {
-                Ok(result) => message_ids.push(result.message_id),
+                Ok(result) => {
+                    if let Err(error) = context
+                        .telegram_store
+                        .publish_observed_message_raw_signal(
+                            &result,
+                            context
+                                .event_bridge
+                                .as_ref()
+                                .map(|bridge| &bridge.event_bus),
+                        )
+                        .await
+                    {
+                        tracing::warn!(
+                            error = %error,
+                            provider_message_id = %snapshot.provider_message_id,
+                            "search_provider_messages: failed to publish Signal Hub raw signal"
+                        );
+                    }
+                    message_ids.push(result.message_id);
+                }
                 Err(error) => {
                     tracing::warn!(
                         error = %error,

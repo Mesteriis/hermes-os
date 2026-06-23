@@ -240,6 +240,7 @@ make backend-validate
 ```
 
 Run `make validate` before reporting broad backend or development-infrastructure work as complete. Use `make backend-validate` for targeted backend-only changes.
+For full backend validation, prefer `make backend-test` or `make backend-validate` over direct `cargo test`. These targets run the `crates/testkit` session harness (`hermes_test_session`) that reuses the shared testcontainers PostgreSQL session correctly and cleans it up after the run. Direct full-suite `cargo test` bypasses that harness, can create excessive testcontainers churn, and may leave Docker container garbage behind after failures or interrupted runs.
 
 ### SvelteKit / TypeScript validation
 

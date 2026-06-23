@@ -3,9 +3,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
+use uuid::Uuid;
+
+use crate::platform::events::{EventStore, EventStoreError, NewEventEnvelope};
 
 use super::errors::PersonCoreError;
 use super::link_persons_entity_in_transaction;
+
+pub const PERSON_ROLE_ASSIGNED_EVENT_TYPE: &str = "person.role.assigned";
+pub const PERSON_ROLE_REMOVED_EVENT_TYPE: &str = "person.role.removed";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonRole {
@@ -80,12 +86,13 @@ impl PersonRoleStore {
                 None,
                 Some(json!({
                     "person_id": person_id,
-                    "role": role.role,
+                    "role": &role.role,
                     "action": "assign",
                 })),
             )
             .await?;
         }
+        append_role_assigned_event(&mut transaction, &role).await?;
         transaction.commit().await?;
 
         Ok(role)
@@ -122,7 +129,7 @@ impl PersonRoleStore {
             .await?;
         let removed = result.rows_affected() > 0;
 
-        if let Some(existing_role) = existing_role
+        if let Some(existing_role) = existing_role.as_ref()
             && removed
             && let Some(observation_id) = observation_id
         {
@@ -133,13 +140,19 @@ impl PersonRoleStore {
                 format!("{person_id}:{role}"),
                 None,
                 Some(json!({
-                    "person_id": existing_role.person_id,
-                    "role": existing_role.role,
+                    "person_id": &existing_role.person_id,
+                    "role": &existing_role.role,
                     "action": "delete",
                     "deleted": removed,
                 })),
             )
             .await?;
+        }
+
+        if let Some(existing_role) = existing_role.as_ref()
+            && removed
+        {
+            append_role_removed_event(&mut transaction, existing_role).await?;
         }
 
         transaction.commit().await?;
@@ -158,7 +171,7 @@ fn row_to_role(row: PgRow) -> Result<PersonRole, PersonCoreError> {
     })
 }
 
-fn person_role_knowledge_id(role: &str) -> String {
+pub(crate) fn person_role_knowledge_id(role: &str) -> String {
     let mut slug = String::new();
     let mut previous_was_separator = false;
 
@@ -181,4 +194,74 @@ fn person_role_knowledge_id(role: &str) -> String {
     } else {
         format!("person_role:{slug}")
     }
+}
+
+async fn append_role_assigned_event(
+    transaction: &mut Transaction<'_, Postgres>,
+    role: &PersonRole,
+) -> Result<(), PersonCoreError> {
+    let role_knowledge_id = person_role_knowledge_id(&role.role);
+    let event = NewEventEnvelope::builder(
+        format!(
+            "person_role_assigned:{}:{role_knowledge_id}",
+            role.person_id
+        ),
+        PERSON_ROLE_ASSIGNED_EVENT_TYPE,
+        role.assigned_at,
+        json!({
+            "kind": "persons",
+            "provider": "hermes",
+            "source_id": &role.person_id,
+        }),
+        json!({
+            "kind": "persona",
+            "person_id": &role.person_id,
+        }),
+    )
+    .payload(json!({
+        "person_id": &role.person_id,
+        "role": &role.role,
+        "assigned_by": &role.assigned_by,
+        "role_knowledge_id": role_knowledge_id,
+    }))
+    .build()
+    .map_err(EventStoreError::from)?;
+
+    match EventStore::append_in_transaction(transaction, &event).await {
+        Ok(_) => Ok(()),
+        Err(error) if error.is_unique_violation() => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+async fn append_role_removed_event(
+    transaction: &mut Transaction<'_, Postgres>,
+    role: &PersonRole,
+) -> Result<(), PersonCoreError> {
+    let role_knowledge_id = person_role_knowledge_id(&role.role);
+    let event = NewEventEnvelope::builder(
+        format!("person_role_removed:{}", Uuid::now_v7()),
+        PERSON_ROLE_REMOVED_EVENT_TYPE,
+        Utc::now(),
+        json!({
+            "kind": "persons",
+            "provider": "hermes",
+            "source_id": &role.person_id,
+        }),
+        json!({
+            "kind": "persona",
+            "person_id": &role.person_id,
+        }),
+    )
+    .payload(json!({
+        "person_id": &role.person_id,
+        "role": &role.role,
+        "assigned_by": &role.assigned_by,
+        "role_knowledge_id": role_knowledge_id,
+    }))
+    .build()
+    .map_err(EventStoreError::from)?;
+
+    EventStore::append_in_transaction(transaction, &event).await?;
+    Ok(())
 }

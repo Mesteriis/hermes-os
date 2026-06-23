@@ -9,12 +9,12 @@ use hermes_hub_backend::domains::communications::core::{
     NewRawCommunicationRecord,
 };
 use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
+    MessageProjectionStore, consume_accepted_signal_event, project_raw_email_message,
+};
+use hermes_hub_backend::domains::signal_hub::{
+    dispatch_telegram_raw_signal, dispatch_whatsapp_raw_signal,
 };
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::provider_communication_projection::{
-    project_raw_telegram_message, project_raw_whatsapp_web_message,
-};
 use serde_json::json;
 use sqlx::postgres::PgPool;
 
@@ -137,10 +137,14 @@ pub async fn seed_telegram_message(
         .await
         .expect("raw telegram message");
 
-    let message_store = MessageProjectionStore::new(pool.clone());
-    project_raw_telegram_message(&message_store, &raw)
+    let accepted_event = dispatch_telegram_raw_signal(pool.clone(), &raw)
         .await
-        .expect("project telegram message")
+        .expect("dispatch telegram raw signal")
+        .expect("accepted telegram signal");
+    consume_accepted_signal_event(pool.clone(), &accepted_event)
+        .await
+        .expect("project accepted telegram signal")
+        .expect("projected telegram message")
         .message_id
 }
 
@@ -194,9 +198,13 @@ pub async fn seed_whatsapp_message(
         .await
         .expect("raw WhatsApp message");
 
-    let message_store = MessageProjectionStore::new(pool.clone());
-    project_raw_whatsapp_web_message(&message_store, &raw)
+    let accepted_event = dispatch_whatsapp_raw_signal(pool.clone(), &raw)
         .await
-        .expect("project WhatsApp message")
+        .expect("dispatch WhatsApp raw signal")
+        .expect("accepted WhatsApp signal");
+    consume_accepted_signal_event(pool.clone(), &accepted_event)
+        .await
+        .expect("project accepted WhatsApp signal")
+        .expect("projected WhatsApp message")
         .message_id
 }

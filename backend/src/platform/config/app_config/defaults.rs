@@ -24,6 +24,7 @@ impl Default for AppConfig {
                 .expect("default HTTP bind address must be valid"),
             database_url: None,
             local_api_secret: None,
+            nats_server_url: None,
             secret_vault_path: None,
             secret_vault_key: None,
             vault_home: default_vault_home(&home_dir),

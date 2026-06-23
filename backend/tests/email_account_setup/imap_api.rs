@@ -220,6 +220,43 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
     assert_eq!(account.config["smtp_username"], "user@icloud.com");
     assert!(account.config.get("password").is_none());
     assert!(account.config.get("smtp_password").is_none());
+    let signal_connection = sqlx::query(
+        r#"
+        SELECT source_code, status, settings, secret_ref
+        FROM signal_connections
+        WHERE source_code = 'mail'
+          AND settings->>'account_id' = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("mail signal connection");
+    let signal_settings: serde_json::Value = signal_connection
+        .try_get("settings")
+        .expect("signal settings");
+    assert_eq!(
+        signal_connection
+            .try_get::<String, _>("source_code")
+            .expect("signal source"),
+        "mail"
+    );
+    assert_eq!(
+        signal_connection
+            .try_get::<String, _>("status")
+            .expect("signal status"),
+        "connected"
+    );
+    assert_eq!(signal_settings["account_id"], json!(account_id));
+    assert_eq!(signal_settings["provider_kind"], json!("icloud"));
+    assert_eq!(
+        signal_connection
+            .try_get::<String, _>("secret_ref")
+            .expect("signal secret ref"),
+        "secret:provider-account:icloud-primary:imap_password"
+    );
 
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let secret_store = SecretReferenceStore::new(pool.clone());

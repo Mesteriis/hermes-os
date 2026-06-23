@@ -20,10 +20,11 @@ describe('check-component-lines policy', () => {
 		expect(isProductionSourceFile('src/domains/foo/__tests__/foo.ts')).toBe(false);
 	});
 
-	it('includes test files in the line-count architecture gate', () => {
-		expect(isLineCountCheckedSourceFile('src/platform/bootstrap/realtime.test.ts')).toBe(true);
-		expect(isLineCountCheckedSourceFile('src/domains/foo/__tests__/foo.ts')).toBe(true);
-		expect(isLineCountCheckedSourceFile('src/domains/foo/__tests__/foo.vue')).toBe(true);
+	it('excludes generated and test files from the line-count architecture gate', () => {
+		expect(isLineCountCheckedSourceFile('src/platform/bootstrap/realtime.test.ts')).toBe(false);
+		expect(isLineCountCheckedSourceFile('src/domains/foo/__tests__/foo.ts')).toBe(false);
+		expect(isLineCountCheckedSourceFile('src/domains/foo/__tests__/foo.vue')).toBe(false);
+		expect(isLineCountCheckedSourceFile('src/gen/hermes/signal_hub/v1/signal_hub_pb.ts')).toBe(false);
 	});
 
 	it('treats 700 lines as a failure and 1000 lines as critical', () => {

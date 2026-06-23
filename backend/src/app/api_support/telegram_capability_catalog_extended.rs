@@ -145,9 +145,9 @@ pub(super) fn push_extended_capabilities(
     capabilities.push(TelegramOperationCapability::new(
         "calls.transcription_live",
         cat_voice,
-        TelegramCapabilityState::Planned,
+        TelegramCapabilityState::Blocked,
         TelegramActionClass::Read,
-        "Live call transcription is deferred to the separate Calls/AI initiatives.",
+        "Live call transcription remains blocked until the separate Calls/AI runtime, permission and validation work is implemented.",
         false,
         true,
     ));

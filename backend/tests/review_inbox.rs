@@ -20,6 +20,8 @@ use hermes_hub_backend::domains::tasks::api::TaskStore;
 use hermes_hub_backend::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore,
 };
+use hermes_hub_backend::platform::events::EventStore;
+use hermes_hub_backend::workflows::review_inbox::project_person_identity_review_event;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::review_inbox::sync_decisions_to_review_for_observations;
 use hermes_hub_backend::workflows::review_inbox::sync_obligations_to_review_for_observations;
@@ -581,10 +583,12 @@ async fn review_item_promotion_rejects_missing_evidence_with_bad_request() {
     let test_context = TestContext::new().await;
     let database_url = test_context.connection_string();
     let app = build_review_api_app(&database_url).await;
-    let (pool, observation_store, review_store) =
-        live_review_context("review promotion rejects orphaned evidence")
-            .await
-            .expect("live context");
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let observation_store = ObservationStore::new(pool.clone());
+    let review_store = ReviewInboxStore::new(pool.clone());
 
     let suffix = unique_suffix();
 
@@ -1438,6 +1442,7 @@ async fn identity_candidate_review_mirror_promotes_existing_candidate_against_po
         .await
         .expect("refresh identity candidates");
     assert!(refreshed >= 1);
+    let _ = project_identity_review_events(&pool, 0).await;
 
     let identity_candidate_id = if left.person_id <= right.person_id {
         format!(
@@ -1547,6 +1552,8 @@ async fn identity_candidate_review_mirror_reuses_review_item_and_attaches_new_ev
         .await
         .expect("refresh identity candidates");
     assert!(refreshed >= 1);
+    let mut event_position = 0;
+    event_position = project_identity_review_events(&pool, event_position).await;
 
     let identity_candidate_id = if left.person_id <= right.person_id {
         format!(
@@ -1573,6 +1580,7 @@ async fn identity_candidate_review_mirror_reuses_review_item_and_attaches_new_ev
         .await
         .expect("refresh identity candidates again");
     assert!(refreshed_again >= 1);
+    let _ = project_identity_review_events(&pool, event_position).await;
 
     let review_rows: Vec<(String,)> = sqlx::query_as(
         r#"
@@ -2128,6 +2136,23 @@ async fn live_review_context(
         ObservationStore::new(pool.clone()),
         ReviewInboxStore::new(pool),
     ))
+}
+
+async fn project_identity_review_events(pool: &PgPool, after_position: i64) -> i64 {
+    let events = EventStore::new(pool.clone())
+        .list_after_position(after_position, 100)
+        .await
+        .expect("list person identity events");
+    let mut last_position = after_position;
+    for event in events {
+        last_position = event.position;
+        if event.event.event_type == "person_identity.candidate.detected" {
+            project_person_identity_review_event(pool.clone(), event)
+                .await
+                .expect("project person identity review event");
+        }
+    }
+    last_position
 }
 
 async fn seed_manual_note(store: &ObservationStore, suffix: u128) -> String {

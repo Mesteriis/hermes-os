@@ -7,7 +7,12 @@ use serde_json::Value;
 
 use hermes_hub_backend::app::{build_router, build_router_with_database};
 use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::events::{EventConsumerConfig, EventConsumerRunner};
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::person_derived_evidence::{
+    PERSON_DERIVED_EVIDENCE_CONSUMER, project_person_derived_evidence_event,
+};
+use sqlx::postgres::PgPool;
 
 pub const LOCAL_API_TOKEN: &str = "persons-api-test-token";
 
@@ -110,4 +115,15 @@ pub async fn live_database_url(test_name: &str) -> Option<String> {
     let test_context = TestContext::new().await;
     let database_url = test_context.connection_string();
     Some(database_url)
+}
+
+pub async fn run_person_derived_evidence_consumer(pool: PgPool) {
+    let runner = EventConsumerRunner::new(
+        pool.clone(),
+        EventConsumerConfig::new(PERSON_DERIVED_EVIDENCE_CONSUMER),
+    );
+    runner
+        .process_next_batch(|event| project_person_derived_evidence_event(pool.clone(), event))
+        .await
+        .expect("person derived evidence consumer");
 }

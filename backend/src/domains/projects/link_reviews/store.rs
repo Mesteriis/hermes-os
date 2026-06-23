@@ -1,8 +1,9 @@
-use serde_json::Value;
+use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::platform::events::{EventEnvelope, EventStore};
+use crate::platform::observations::materialize_review_transition_link_in_transaction;
 
 use super::constants::PROJECT_LINK_REVIEW_EVENT_TYPE;
 use super::errors::ProjectLinkReviewError;
@@ -35,8 +36,8 @@ impl ProjectLinkReviewStore {
     pub async fn set_review_state_with_observation(
         &self,
         command: &ProjectLinkReviewCommand,
-        _observation_id: Option<&str>,
-        _metadata: Option<Value>,
+        observation_id: Option<&str>,
+        metadata: Option<Value>,
     ) -> Result<ProjectLinkReviewCommandResult, ProjectLinkReviewError> {
         let command_id = validate_non_empty("command_id", &command.command_id)?;
         let project_id = validate_non_empty("project_id", &command.project_id)?;
@@ -72,6 +73,26 @@ impl ProjectLinkReviewStore {
                 actor_id: &actor_id,
                 reviewed_at: event.occurred_at,
             },
+        )
+        .await?;
+        let metadata = match metadata {
+            Some(extra) => Some(json!({
+                "event_id": event_id,
+                "context": extra,
+            })),
+            None => Some(json!({
+                "event_id": event_id,
+            })),
+        };
+        materialize_review_transition_link_in_transaction(
+            &mut transaction,
+            observation_id,
+            "projects",
+            "project_link_review",
+            &event_id,
+            "review_state",
+            command.review_state.as_str(),
+            metadata,
         )
         .await?;
 

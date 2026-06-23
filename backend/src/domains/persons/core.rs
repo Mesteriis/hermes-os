@@ -9,4 +9,7 @@ pub use errors::PersonCoreError;
 pub(crate) use evidence::{link_persons_entity, link_persons_entity_in_transaction};
 pub use identities::{PersonIdentity, PersonsIdentityStore};
 pub use interaction_contexts::{NewPersonPersona, PersonPersona, PersonPersonaStore};
-pub use roles::{PersonRole, PersonRoleStore};
+pub(crate) use roles::person_role_knowledge_id;
+pub use roles::{
+    PERSON_ROLE_ASSIGNED_EVENT_TYPE, PERSON_ROLE_REMOVED_EVENT_TYPE, PersonRole, PersonRoleStore,
+};

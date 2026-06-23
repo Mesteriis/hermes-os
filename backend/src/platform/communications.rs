@@ -12,9 +12,11 @@ use crate::platform::observations::{ObservationOriginKind, ObservationStoreError
 use crate::platform::secrets::{ResolvedSecret, SecretKind, SecretReference};
 
 mod email_sync;
+mod raw_signals;
 pub mod rfc822;
 
 pub use email_sync::{EmailSyncPlanError, imap_mailbox_stream_id, plan_email_sync};
+pub use raw_signals::{CommunicationRawSignalSource, build_communication_raw_signal_event};
 
 pub const DEFAULT_MAIL_SYNC_BLOB_ROOT: &str = "docker/data/mail";
 
@@ -199,6 +201,16 @@ pub type ProviderMessageObservationEventFuture<'a> = Pin<
     >,
 >;
 
+pub type CommunicationRawRecordPortFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, ProviderCommunicationMessagePortError>> + Send + 'a>>;
+
+pub trait CommunicationRawRecordCommandPort: Send + Sync {
+    fn record_raw_source<'a>(
+        &'a self,
+        record: &'a NewRawCommunicationRecord,
+    ) -> CommunicationRawRecordPortFuture<'a, StoredRawCommunicationRecord>;
+}
+
 pub trait ProviderMessageObservationEventPort: Send + Sync {
     fn append_provider_message_observation<'a>(
         &'a self,
@@ -281,7 +293,7 @@ impl ProviderMessageObservationEventPort for EventStoreProviderMessageObservatio
             let event = builder.build()?;
 
             self.event_store
-                .append_idempotent(&event)
+                .append_for_dispatch_idempotent(&event)
                 .await
                 .map_err(Into::into)
         })
@@ -1208,8 +1220,21 @@ fn validate_provider_observation_event(
 }
 
 fn provider_observation_event_type(provider: &str, event_kind: &str) -> String {
-    if provider == "telegram" && event_kind == "attachment_download_state_observed" {
-        return "integration.telegram.attachment.download_state_observed".to_owned();
+    if provider == "telegram" {
+        return match event_kind {
+            "content_observed" => "signal.raw.telegram.message.content.observed".to_owned(),
+            "metadata_observed" => "signal.raw.telegram.message.metadata.observed".to_owned(),
+            "delivery_state_observed" => {
+                "signal.raw.telegram.message.delivery_state.observed".to_owned()
+            }
+            "pinned_state_observed" => {
+                "signal.raw.telegram.message.pinned_state.observed".to_owned()
+            }
+            "attachment_download_state_observed" => {
+                "signal.raw.telegram.attachment.download_state.observed".to_owned()
+            }
+            other => format!("signal.raw.telegram.message.{other}.observed"),
+        };
     }
     format!("integration.{provider}.message.{event_kind}")
 }

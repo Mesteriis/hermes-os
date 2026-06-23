@@ -501,7 +501,7 @@ async fn telegram_message_pin_route_records_local_projection_command_and_audit()
         r#"
         SELECT payload
         FROM event_log
-        WHERE event_type = 'integration.telegram.message.pinned_state_observed'
+        WHERE event_type = 'signal.raw.telegram.message.pinned_state.observed'
           AND payload->>'message_id' = $1
         ORDER BY event_id DESC
         LIMIT 1

@@ -1,4 +1,4 @@
-import { ApiClient } from '../../../platform/api/ApiClient'
+import { fetchCommunicationOutboxConnect, undoCommunicationOutboxItemConnect } from './connectCommunications'
 import type { CommunicationOutboxItem, CommunicationOutboxStatus, OutboxListResponse } from '../types/communications'
 
 export async function fetchOutboxItems(
@@ -7,20 +7,9 @@ export async function fetchOutboxItems(
   limit = 100,
   cursor?: string | null
 ): Promise<OutboxListResponse> {
-  const params = new URLSearchParams({ limit: String(Math.trunc(limit)) })
-  if (accountId?.trim()) params.set('account_id', accountId.trim())
-  if (status?.trim()) params.set('status', status.trim())
-  if (cursor?.trim()) params.set('cursor', cursor.trim())
-  return ApiClient.instance.get<OutboxListResponse>(
-    `/api/v1/communications/outbox?${params.toString()}`,
-    'Outbox request failed'
-  )
+  return fetchCommunicationOutboxConnect(accountId, status, limit, cursor ?? undefined)
 }
 
 export async function undoOutboxItem(outboxId: string): Promise<CommunicationOutboxItem> {
-  return ApiClient.instance.post<CommunicationOutboxItem>(
-    `/api/v1/communications/outbox/${encodeURIComponent(outboxId)}/undo`,
-    {},
-    'Undo send failed'
-  )
+  return undoCommunicationOutboxItemConnect(outboxId)
 }

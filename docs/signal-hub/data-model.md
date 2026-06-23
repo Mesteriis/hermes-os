@@ -30,6 +30,11 @@ created_at
 updated_at
 ```
 
+`settings` is non-secret control metadata. It may carry binding keys such as
+`account_id` that let Signal Hub map raw provider signals onto a specific
+connection scope for policy and replay decisions. Secrets still belong outside
+Signal Hub.
+
 `code` is canonical and stable, for example:
 
 ```text

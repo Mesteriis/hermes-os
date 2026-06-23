@@ -53,6 +53,20 @@ async fn fixture_email_pipeline_imports_projects_persons_and_graph_against_postg
     assert!(!report.graph_summary.is_empty);
     assert!(report.total_graph_nodes >= 4);
     assert!(report.total_graph_edges >= 3);
+
+    let accepted_signal_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM event_log
+        WHERE event_type = 'signal.accepted.mail.message'
+          AND source ->> 'account_id' = $1
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(test_context.pool())
+    .await
+    .expect("accepted mail signal count");
+    assert_eq!(accepted_signal_count, 1);
 }
 
 fn unique_suffix() -> u128 {

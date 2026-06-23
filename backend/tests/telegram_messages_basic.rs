@@ -9,9 +9,9 @@ use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::domains::communications::messages::MessageProjectionStore;
+use hermes_hub_backend::domains::communications::messages::consume_accepted_signal_event;
+use hermes_hub_backend::domains::signal_hub::dispatch_telegram_raw_signal;
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::provider_communication_projection::project_raw_telegram_message;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, get_request_with_token, json_body, json_post_request_with_actor,
     json_post_request_with_explicit_actor_header, unique_suffix,
@@ -261,10 +261,14 @@ async fn telegram_raw_message_endpoint_returns_sanitized_source_evidence() {
         )
         .await
         .expect("raw source");
-    let projected =
-        project_raw_telegram_message(&MessageProjectionStore::new(pool.clone()), &raw_record)
-            .await
-            .expect("project raw telegram message");
+    let accepted_event = dispatch_telegram_raw_signal(pool.clone(), &raw_record)
+        .await
+        .expect("dispatch raw telegram signal")
+        .expect("accepted telegram signal");
+    let projected = consume_accepted_signal_event(pool.clone(), &accepted_event)
+        .await
+        .expect("project accepted telegram signal")
+        .expect("projected telegram message");
     let message_id = projected.message_id;
 
     let raw_response = app

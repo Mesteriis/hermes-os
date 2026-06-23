@@ -72,6 +72,77 @@ async fn publish_message_content_updated_event_skips_without_projected_message()
 }
 
 #[tokio::test]
+async fn publish_message_created_event_publishes_signal_hub_raw_signal_instead_of_legacy_event() {
+    let ctx = TestContext::new().await;
+    let pool = ctx.pool().clone();
+    let account_id = "acct-created-runtime";
+    let provider_chat_id = "-100created-runtime";
+    let event_bus = EventBus::new();
+    let mut events = event_bus.subscribe();
+
+    seed_runtime_account(&pool, account_id, "telegram-ext-created").await;
+
+    let snapshot = TelegramTdlibMessageSnapshot {
+        provider_chat_id: provider_chat_id.to_owned(),
+        provider_message_id: "42".to_owned(),
+        sender_id: "user:777".to_owned(),
+        sender_display_name: "Alice".to_owned(),
+        text: "hello from runtime".to_owned(),
+        occurred_at: Utc::now(),
+        delivery_state: TelegramDeliveryState::Received,
+        raw: json!({
+            "@type": "message",
+            "chat_id": provider_chat_id,
+            "id": 42,
+            "content": {
+                "@type": "messageText",
+                "text": {
+                    "@type": "formattedText",
+                    "text": "hello from runtime"
+                }
+            }
+        }),
+    };
+
+    publish_message_created_event(
+        &Some(crate::test_support::telegram_store(&pool)),
+        &event_bus,
+        account_id,
+        &snapshot,
+    )
+    .await;
+
+    let event = events.try_recv().expect("raw signal broadcast");
+    assert_eq!(event.event_type, "signal.raw.telegram.message.observed");
+
+    let legacy_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'telegram.message.created'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("legacy event count");
+    assert_eq!(legacy_count, 0);
+
+    let raw_signal_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.raw.telegram.message.observed'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("raw signal count");
+    assert_eq!(raw_signal_count, 1);
+
+    let raw_record_id = event.source["source_id"]
+        .as_str()
+        .expect("raw signal source_id");
+    let raw_record = crate::test_support::load_communication_raw_record(&pool, raw_record_id).await;
+    assert_eq!(raw_record.account_id, account_id);
+    assert_eq!(
+        raw_record.provider_record_id,
+        format!("{provider_chat_id}:42")
+    );
+}
+
+#[tokio::test]
 async fn publish_message_edited_event_skips_without_projected_message() {
     let ctx = TestContext::new().await;
     let pool = ctx.pool().clone();

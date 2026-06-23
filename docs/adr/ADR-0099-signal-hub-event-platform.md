@@ -1,6 +1,6 @@
 # ADR-0099 Signal Hub Event Platform
 
-Status: Proposed
+Status: Accepted
 Date: 2026-06-22
 
 Clarifies:

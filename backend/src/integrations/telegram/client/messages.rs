@@ -6,6 +6,7 @@ mod intelligence;
 mod manual_send;
 mod message_metadata;
 mod queries;
+mod raw_signals;
 pub(in crate::integrations::telegram) mod reaction_metadata;
 mod tdlib_ingestion;
 

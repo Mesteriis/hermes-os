@@ -83,6 +83,37 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
         .await
         .expect("account response");
     assert_eq!(account_response.status(), StatusCode::OK);
+    let signal_connection = sqlx::query(
+        r#"
+        SELECT source_code, status, settings
+        FROM signal_connections
+        WHERE source_code = 'whatsapp'
+          AND settings->>'account_id' = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("whatsapp signal connection");
+    let signal_settings: Value = signal_connection
+        .try_get("settings")
+        .expect("whatsapp signal settings");
+    assert_eq!(
+        signal_connection
+            .try_get::<String, _>("source_code")
+            .expect("signal source"),
+        "whatsapp"
+    );
+    assert_eq!(
+        signal_connection
+            .try_get::<String, _>("status")
+            .expect("signal status"),
+        "connected"
+    );
+    assert_eq!(signal_settings["account_id"], json!(account_id));
+    assert_eq!(signal_settings["provider_kind"], json!("whatsapp_web"));
 
     let message_response = app
         .clone()
@@ -112,6 +143,34 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
         .as_str()
         .expect("message id")
         .to_owned();
+    let observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message observation id");
+    let raw_signal_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.raw.whatsapp.message.observed'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("raw whatsapp signal count");
+    let accepted_signal_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.accepted.whatsapp.message'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("accepted whatsapp signal count");
+    let legacy_integration_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM event_log WHERE event_type LIKE 'integration.whatsapp.%'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("legacy whatsapp integration event count");
+    assert_eq!(raw_signal_count, 1);
+    assert_eq!(accepted_signal_count, 1);
+    assert_eq!(legacy_integration_count, 0);
 
     let decision_row: (String, String, String, String, String) = sqlx::query_as(
         r#"
@@ -137,12 +196,12 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
         r#"
         SELECT title, review_state, candidate_kind, due_text
         FROM task_candidates
-        WHERE source_kind = 'message'
+        WHERE source_kind = 'observation'
           AND source_id = $1
           AND candidate_kind = 'obligation_task'
         "#,
     )
-    .bind(&message_id)
+    .bind(&observation_id)
     .fetch_one(&pool)
     .await
     .expect("WhatsApp message should create an obligation-derived task candidate");
@@ -373,6 +432,20 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
             .expect("message id")
             .starts_with("message:v5:whatsapp_web:")
     );
+    let raw_signal_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.raw.whatsapp.message.observed'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("raw whatsapp signal count");
+    let accepted_signal_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.accepted.whatsapp.message'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("accepted whatsapp signal count");
+    assert_eq!(raw_signal_count, 1);
+    assert_eq!(accepted_signal_count, 1);
 
     let sessions_response = app
         .clone()
@@ -439,10 +512,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
         messages_body["items"][0]["channel_kind"],
         json!("whatsapp_web")
     );
-    assert_eq!(
-        messages_body["items"][0]["provider_chat_id"],
-        json!(chat_id)
-    );
+    assert_eq!(messages_body["items"][0]["conversation_id"], json!(chat_id));
 
     let projected_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM communication_messages WHERE account_id = $1 AND channel_kind = 'whatsapp_web'",

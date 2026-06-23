@@ -8,7 +8,7 @@ use hermes_hub_backend::domains::persons::enrichment::PersonEnrichmentStore;
 use hermes_hub_backend::domains::persons::intelligence::CommunicationFingerprint;
 use hermes_hub_backend::domains::persons::trust::PersonPromiseStore;
 
-use super::support::{live_persons_pool, unique_suffix};
+use super::support::{live_persons_pool, run_person_derived_evidence_consumer, unique_suffix};
 
 #[tokio::test]
 async fn person_role_assign_and_remove_materializes_relationship_against_postgres() {
@@ -31,6 +31,7 @@ async fn person_role_assign_and_remove_materializes_relationship_against_postgre
         )
         .await
         .expect("assign person role");
+    run_person_derived_evidence_consumer(pool.clone()).await;
 
     let relationship: (
         String,
@@ -50,7 +51,7 @@ async fn person_role_assign_and_remove_materializes_relationship_against_postgre
             source_entity_kind,
             source_entity_id,
             target_entity_kind,
-            entity_id,
+            target_entity_id AS entity_id,
             review_state,
             trust_score::float8 AS trust_score,
             strength_score::float8 AS strength_score,
@@ -60,7 +61,7 @@ async fn person_role_assign_and_remove_materializes_relationship_against_postgre
         WHERE source_entity_kind = 'persona'
           AND source_entity_id = $1
           AND target_entity_kind = 'knowledge'
-          AND entity_id = 'person_role:technical_advisor'
+          AND target_entity_id = 'person_role:technical_advisor'
           AND relationship_type = 'has_role'
         "#,
     )
@@ -116,6 +117,7 @@ async fn person_role_assign_and_remove_materializes_relationship_against_postgre
         .await
         .expect("remove person role");
     assert!(removed);
+    run_person_derived_evidence_consumer(pool.clone()).await;
 
     let review_state: String =
         sqlx::query_scalar("SELECT review_state FROM relationships WHERE relationship_id = $1")
@@ -162,6 +164,7 @@ async fn person_enrichment_trust_score_materializes_owner_relationship_against_p
         .enrich_person(&target.person_id, &fingerprint)
         .await
         .expect("enrich target persona");
+    run_person_derived_evidence_consumer(pool.clone()).await;
 
     let relationship: (
         String,
@@ -177,7 +180,7 @@ async fn person_enrichment_trust_score_materializes_owner_relationship_against_p
         SELECT
             relationship_id,
             source_entity_id,
-            entity_id,
+            target_entity_id AS entity_id,
             review_state,
             trust_score::float8 AS trust_score,
             strength_score::float8 AS strength_score,
@@ -187,7 +190,7 @@ async fn person_enrichment_trust_score_materializes_owner_relationship_against_p
         WHERE source_entity_kind = 'persona'
           AND source_entity_id = $1
           AND target_entity_kind = 'persona'
-          AND entity_id = $2
+          AND target_entity_id = $2
           AND relationship_type = 'trusts'
         "#,
     )
@@ -298,6 +301,7 @@ async fn person_promise_create_materializes_user_confirmed_obligation_without_ta
         .create(&person.person_id, &description, Some(due_at))
         .await
         .expect("create person promise");
+    run_person_derived_evidence_consumer(pool.clone()).await;
 
     let obligations = obligation_store
         .list_for_entity(ObligationEntityKind::Persona, &person.person_id, 10)

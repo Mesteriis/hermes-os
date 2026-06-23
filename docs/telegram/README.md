@@ -73,3 +73,4 @@ execution remain unsupported.
 - [Status](status.md)
 - [Gap Analysis](gap-analysis.md)
 - [Blockers](blockers.md)
+- [Product Research](product-research.md)

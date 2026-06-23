@@ -329,6 +329,22 @@ async fn v1_provider_delivery_event_records_delivery_status_against_postgres() {
         .expect("delivery payload");
     assert_eq!(delivery_origin_kind, "local_runtime");
     assert_eq!(delivery_payload["operation"], "delivery_status_recorded");
+
+    let raw_signal_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.raw.mail.delivery_status.observed'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("raw mail delivery signal count");
+    assert_eq!(raw_signal_count, 1);
+
+    let accepted_signal_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.accepted.mail.delivery_status'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("accepted mail delivery signal count");
+    assert_eq!(accepted_signal_count, 1);
 }
 
 #[tokio::test]
@@ -385,6 +401,22 @@ async fn v1_provider_delivery_event_records_read_receipt_against_postgres() {
     .await
     .expect("provider message read receipt links");
     assert!(provider_message_link_count >= 1);
+
+    let raw_signal_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.raw.mail.read_receipt.observed'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("raw mail read receipt signal count");
+    assert_eq!(raw_signal_count, 1);
+
+    let accepted_signal_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.accepted.mail.read_receipt'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("accepted mail read receipt signal count");
+    assert_eq!(accepted_signal_count, 1);
 }
 
 #[tokio::test]
@@ -484,6 +516,22 @@ async fn v1_delivery_notification_parses_dsn_and_appends_delivery_status_event_a
     .await
     .expect("provider message delivery status links");
     assert!(failed_delivery_link >= 1);
+
+    let raw_signal_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.raw.mail.delivery_status.observed'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("dsn raw mail delivery signal count");
+    assert_eq!(raw_signal_count, 1);
+
+    let accepted_signal_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.accepted.mail.delivery_status'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("dsn accepted mail delivery signal count");
+    assert_eq!(accepted_signal_count, 1);
 }
 
 #[tokio::test]
@@ -555,6 +603,22 @@ async fn v1_delivery_notification_parses_mdn_into_read_receipt_against_postgres(
     .await
     .expect("mdn outbox read receipt links");
     assert!(mdn_receipt_links >= 1);
+
+    let raw_signal_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.raw.mail.read_receipt.observed'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("mdn raw mail read receipt signal count");
+    assert_eq!(raw_signal_count, 1);
+
+    let accepted_signal_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.accepted.mail.read_receipt'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("mdn accepted mail read receipt signal count");
+    assert_eq!(accepted_signal_count, 1);
 }
 
 async fn response_json(response: axum::response::Response) -> Value {

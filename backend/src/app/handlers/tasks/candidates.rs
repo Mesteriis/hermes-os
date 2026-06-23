@@ -7,6 +7,7 @@ use crate::app::api_support::{
     api_audit_log, observation_store, parse_task_candidates_query, task_candidate_store,
 };
 use crate::app::{ApiError, AppState};
+use crate::application::TaskCandidateReviewApplicationService;
 use crate::platform::audit::NewApiAuditRecord;
 pub(crate) async fn get_task_candidates(
     State(state): State<AppState>,
@@ -39,7 +40,7 @@ pub(crate) async fn put_task_candidate_review(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let result = crate::domains::tasks::candidates::TaskCandidateReviewService::new(pool)
+    let result = TaskCandidateReviewApplicationService::new(pool)
         .review_manual(&command)
         .await?;
 

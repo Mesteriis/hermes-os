@@ -21,6 +21,8 @@ use super::message_events::{
 };
 use super::topic_events::publish_topic_event;
 
+const TELEGRAM_RUNTIME_EVENT_BRIDGE_RUNTIME: &str = "telegram_runtime_event_bridge";
+
 #[derive(Clone)]
 pub struct TelegramRuntimeEventBridgeContext {
     pub(super) telegram_store: Option<TelegramStore>,
@@ -44,6 +46,9 @@ pub(super) fn spawn_telegram_runtime_event_bridge(
 ) {
     tokio::spawn(async move {
         while let Some(event) = runtime_events.recv().await {
+            if !telegram_runtime_event_bridge_allows_processing(&telegram_store).await {
+                continue;
+            }
             match event {
                 TelegramRuntimeEvent::MessageCreated(snapshot) => {
                     publish_message_created_event(
@@ -152,6 +157,37 @@ pub(super) fn spawn_telegram_runtime_event_bridge(
             }
         }
     });
+}
+
+async fn telegram_runtime_event_bridge_allows_processing(
+    telegram_store: &Option<TelegramStore>,
+) -> bool {
+    let Some(store) = telegram_store else {
+        return true;
+    };
+
+    match crate::platform::events::runtime_allows_processing(
+        store.pool(),
+        "telegram",
+        TELEGRAM_RUNTIME_EVENT_BRIDGE_RUNTIME,
+        &json!({
+            "label": "Telegram realtime event bridge",
+            "scope": "subscription",
+            "runtime": "tdlib",
+        }),
+    )
+    .await
+    {
+        Ok(allowed) => allowed,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                runtime_kind = TELEGRAM_RUNTIME_EVENT_BRIDGE_RUNTIME,
+                "telegram runtime event bridge gate check failed"
+            );
+            true
+        }
+    }
 }
 
 pub(super) async fn publish_command_reconciled_events(
@@ -443,9 +479,16 @@ fn typing_changed_event(
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use chrono::TimeZone;
+    use serde_json::json;
+    use testkit::context::TestContext;
+    use tokio::sync::mpsc::unbounded_channel;
+    use tokio::time::timeout;
 
     use super::*;
+    use crate::integrations::telegram::tdjson::TelegramTdlibMessageSnapshot;
 
     #[test]
     fn typing_changed_event_contains_sanitized_runtime_projection_payload() {
@@ -470,5 +513,80 @@ mod tests {
         assert_eq!(event.payload["sender_id"], "user:777");
         assert_eq!(event.payload["is_active"], true);
         assert_eq!(event.provenance["tdlib_event"], "updateUserChatAction");
+    }
+
+    #[tokio::test]
+    async fn telegram_runtime_event_bridge_skips_broadcast_when_runtime_paused() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.pool().clone();
+        crate::test_support::restore_signal_hub_system_sources(&pool).await;
+        crate::test_support::set_signal_runtime_state(
+            &pool,
+            "telegram",
+            TELEGRAM_RUNTIME_EVENT_BRIDGE_RUNTIME,
+            "paused",
+            json!({"scope": "subscription", "requested_by": "test"}),
+        )
+        .await;
+
+        crate::test_support::upsert_telegram_runtime_account(
+            &pool,
+            "acct-runtime-bridge-paused",
+            "Telegram Runtime Paused",
+            "telegram-ext-runtime-paused",
+        )
+        .await;
+
+        let event_bus = EventBus::new();
+        let mut events = event_bus.subscribe();
+        let (tx, rx) = unbounded_channel();
+        let telegram_store = crate::test_support::telegram_store(&pool);
+        assert!(
+            !telegram_runtime_event_bridge_allows_processing(&Some(telegram_store.clone())).await,
+            "paused telegram runtime bridge must fail runtime gate"
+        );
+        spawn_telegram_runtime_event_bridge(
+            Some(telegram_store),
+            event_bus,
+            "acct-runtime-bridge-paused".to_owned(),
+            rx,
+        );
+
+        tx.send(TelegramRuntimeEvent::MessageCreated(
+            TelegramTdlibMessageSnapshot {
+                provider_chat_id: "-100bridge-paused".to_owned(),
+                provider_message_id: "42".to_owned(),
+                sender_id: "user:777".to_owned(),
+                sender_display_name: "Alice".to_owned(),
+                text: "skip while paused".to_owned(),
+                occurred_at: Utc::now(),
+                delivery_state:
+                    crate::integrations::telegram::client::TelegramDeliveryState::Received,
+                raw: json!({
+                    "@type": "message",
+                    "chat_id": "-100bridge-paused",
+                    "id": 42,
+                }),
+            },
+        ))
+        .expect("send runtime event");
+        drop(tx);
+
+        let no_event = timeout(Duration::from_millis(250), events.recv()).await;
+        match no_event {
+            Err(_) | Ok(Err(_)) => {}
+            Ok(Ok(event)) => panic!(
+                "paused bridge must not broadcast runtime event, got {}",
+                event.event_type
+            ),
+        }
+
+        let raw_signal_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.raw.telegram.message.observed'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("raw signal count");
+        assert_eq!(raw_signal_count, 0);
     }
 }

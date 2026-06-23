@@ -68,7 +68,9 @@ validates them through the Timeline replay mapper, advances
 `ProjectionCursorStore` progress and returns derived timeline entries. Persona
 relationship events, Organization timeline events and Project detail timelines
 now use this shared policy while retaining their current compatibility storage
-and API shapes.
+and API shapes. Signal Hub replay now uses this same cursor-backed baseline as
+the first projection rebuild target through `target_projection =
+"timeline_event_log"`, rather than introducing a parallel rebuild substrate.
 
 ## Migration Plan
 

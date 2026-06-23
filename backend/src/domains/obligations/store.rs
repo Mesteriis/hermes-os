@@ -273,6 +273,26 @@ impl ObligationStore {
     ) -> Result<Obligation, ObligationStoreError> {
         validate_non_empty("obligation_id", obligation_id)?;
         let mut transaction = self.pool.begin().await?;
+        let obligation = Self::set_review_state_in_transaction(
+            &mut transaction,
+            obligation_id,
+            review_state,
+            observation_id,
+            metadata,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(obligation)
+    }
+
+    pub(crate) async fn set_review_state_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        obligation_id: &str,
+        review_state: ObligationReviewState,
+        observation_id: Option<&str>,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<Obligation, ObligationStoreError> {
+        validate_non_empty("obligation_id", obligation_id)?;
         let row = sqlx::query(
             r#"
             UPDATE obligations
@@ -300,20 +320,19 @@ impl ObligationStore {
         )
         .bind(review_state.as_str())
         .bind(obligation_id)
-        .fetch_optional(&mut *transaction)
+        .fetch_optional(&mut **transaction)
         .await?
         .ok_or(ObligationStoreError::ObligationNotFound)?;
 
         let obligation = row_to_obligation(row)?;
         link_obligation_review_transition_in_transaction(
-            &mut transaction,
+            transaction,
             observation_id,
             &obligation.obligation_id,
             obligation.review_state,
             metadata,
         )
         .await?;
-        transaction.commit().await?;
         Ok(obligation)
     }
 }

@@ -36,6 +36,7 @@ use super::storage::{
     ImportedCommunicationAttachment, LocalCommunicationBlobStore, NewCommunicationAttachmentImport,
     NewCommunicationBlob, new_communication_attachment_import_id,
 };
+use crate::domains::communications::evidence::merge_metadata;
 use crate::platform::communications::{DEFAULT_MAIL_SYNC_BLOB_ROOT, OutgoingEmail};
 use crate::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
@@ -477,6 +478,11 @@ impl CommunicationCommandService {
         email: &OutgoingEmail,
         command: &CommunicationOutboxSendCommand,
     ) -> Result<CommunicationOutboxItem, CommunicationCommandServiceError> {
+        if !command.metadata.is_object() {
+            return Err(CommunicationCommandServiceError::InvalidRequest(
+                "message metadata must be a JSON object",
+            ));
+        }
         let now = Utc::now();
         let undo_deadline_at = command
             .undo_send_seconds
@@ -539,11 +545,14 @@ impl CommunicationCommandService {
                     status,
                     scheduled_send_at: command.scheduled_send_at,
                     undo_deadline_at,
-                    metadata: json!({
+                    metadata: merge_metadata(
+                        json!({
                         "from": email.from,
                         "in_reply_to": email.in_reply_to,
                         "references": email.references
-                    }),
+                        }),
+                        Some(command.metadata.clone()),
+                    ),
                 },
                 Some(&observation.observation_id),
                 "outbox_status_transition",
@@ -1296,6 +1305,7 @@ pub struct CommunicationOutboxSendCommand {
     pub draft_id: Option<String>,
     pub scheduled_send_at: Option<DateTime<Utc>>,
     pub undo_send_seconds: Option<i64>,
+    pub metadata: Value,
 }
 
 #[derive(Clone, Debug)]

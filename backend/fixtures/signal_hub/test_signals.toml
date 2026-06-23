@@ -1,0 +1,20 @@
+schema_version = 1
+
+[[fixtures]]
+fixture_id = "fixture_basic_message"
+source = "fixture"
+event_type = "signal.raw.fixture.message.observed"
+source_id = "fixture-message-001"
+subject_kind = "signal"
+subject_entity_id = "fixture-message-001"
+occurred_at = "2026-01-01T00:00:00Z"
+correlation_id = "fixture-basic-message"
+
+[fixtures.payload]
+message_key = "fixture-message-001"
+summary = "Fixture message"
+text = "Representative fixture signal"
+
+[fixtures.provenance]
+catalog = "signal_hub"
+kind = "test_fixture"

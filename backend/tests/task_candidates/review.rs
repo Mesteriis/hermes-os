@@ -1,5 +1,5 @@
 use hermes_hub_backend::domains::tasks::candidates::{
-    TaskCandidateError, TaskCandidateReviewCommand, TaskCandidateReviewState,
+    TaskCandidateReviewCommand, TaskCandidateReviewState,
 };
 use hermes_hub_backend::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore,
@@ -484,7 +484,7 @@ async fn task_candidate_review_reset_removes_active_task_against_postgres() {
 }
 
 #[tokio::test]
-async fn task_candidate_review_confirm_rejects_legacy_non_observation_candidate_against_postgres() {
+async fn task_candidate_schema_rejects_legacy_non_observation_candidate_against_postgres() {
     let Some(context) = live_task_candidate_context().await else {
         return;
     };
@@ -525,23 +525,7 @@ async fn task_candidate_review_confirm_rejects_legacy_non_observation_candidate_
     .bind(format!("Legacy evidence {suffix}"))
     .execute(&context.pool)
     .await
-    .expect("insert legacy task candidate");
-
-    let error = context
-        .store
-        .set_review_state(&TaskCandidateReviewCommand {
-            command_id: format!("task-candidate-legacy-confirm-{suffix}"),
-            task_candidate_id: task_candidate_id.clone(),
-            review_state: TaskCandidateReviewState::UserConfirmed,
-            actor_id: "tests-reviewer".to_owned(),
-        })
-        .await
-        .expect_err("legacy non-observation candidate must be rejected");
-
-    assert!(
-        matches!(error, TaskCandidateError::ObservationRequired(_)),
-        "unexpected error: {error}"
-    );
+    .expect_err("legacy non-observation candidate must violate current observation constraint");
 
     let exists: bool =
         sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM tasks WHERE task_candidate_id = $1)")

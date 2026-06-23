@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::domains::obligations::ObligationStoreError;
+use crate::domains::tasks::core::TaskCoreError;
 use crate::engines::obligation::ObligationEngineError;
 use crate::platform::events::{EventEnvelopeError, EventStoreError};
 use crate::platform::observations::ObservationStoreError;
@@ -50,6 +52,12 @@ pub enum TaskCandidateError {
 
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),
+
+    #[error(transparent)]
+    ObligationStore(#[from] ObligationStoreError),
+
+    #[error(transparent)]
+    TaskCore(#[from] TaskCoreError),
 
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),

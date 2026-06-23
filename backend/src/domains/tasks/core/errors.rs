@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+use crate::domains::relationships::RelationshipStoreError;
 use crate::engines::context_packs::ContextPackStoreError;
 use crate::platform::observations::ObservationStoreError;
 
@@ -9,6 +10,8 @@ pub enum TaskCoreError {
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]
     ContextPack(#[from] ContextPackStoreError),
+    #[error(transparent)]
+    Relationship(#[from] RelationshipStoreError),
     #[error(transparent)]
     Observation(#[from] ObservationStoreError),
     #[error("not found")]

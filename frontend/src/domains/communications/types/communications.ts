@@ -9,6 +9,7 @@ export type WorkflowState = 'new' | 'reviewed' | 'needs_action' | 'waiting' | 'd
 export type CommunicationMessageSummary = {
   message_id: string
   raw_record_id: string
+  observation_id?: string | null
   account_id: string
   provider_record_id: string
   subject: string
@@ -63,6 +64,7 @@ export type CommunicationAttachment = {
 export type CommunicationMessageDetailItem = {
   message_id: string
   raw_record_id: string
+  observation_id?: string | null
   account_id: string
   provider_record_id: string
   subject: string
@@ -531,6 +533,7 @@ export type {
   BulkMessageActionResponse,
   DraftDeleteResponse,
   DraftListResponse,
+  DraftUpsertRequest,
   CommunicationDraft,
   CommunicationOutboxItem,
   CommunicationOutboxStatus,

@@ -178,6 +178,11 @@ fn telegram_store(pool: &sqlx::PgPool) -> TelegramStore {
         Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
         Arc::new(
+            hermes_hub_backend::domains::communications::core::CommunicationIngestionStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
             hermes_hub_backend::platform::communications::EventStoreProviderMessageObservationEventPort::new(
                 pool.clone(),
             ),

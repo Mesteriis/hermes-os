@@ -4,6 +4,7 @@ use serde_json::json;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use super::messages::COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER;
 use super::outbox::{
     CommunicationOutboxStore, NewOutboxDeliveryStatus, OutboxDeliveryStatus,
     OutboxDeliveryStatusRecord,
@@ -33,7 +34,7 @@ pub enum ProviderDeliveryEventKind {
 }
 
 impl ProviderDeliveryEventKind {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Delivered => "delivered",
             Self::Delayed => "delayed",
@@ -63,6 +64,7 @@ pub struct NewProviderDeliveryEvent {
     pub smtp_status: Option<String>,
     pub provider_record_id: Option<String>,
     pub raw_record_id: Option<String>,
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -180,6 +182,14 @@ impl CommunicationDeliveryNotificationStore {
 
         let recipient = normalize_optional(event.recipient)
             .ok_or(CommunicationDeliveryNotificationError::Invalid("recipient"))?;
+        let mut metadata = json!({ "provider_event_kind": event.event_kind.as_str() });
+        if let Some(extra) = event.metadata
+            && let (Some(target), Some(extra_map)) = (metadata.as_object_mut(), extra.as_object())
+        {
+            for (key, value) in extra_map {
+                target.insert(key.clone(), value.clone());
+            }
+        }
         let receipt = CommunicationReadReceiptStore::new(self.pool.clone())
             .record(NewCommunicationReadReceipt {
                 receipt_id: None,
@@ -190,12 +200,94 @@ impl CommunicationDeliveryNotificationStore {
                 source_kind: Some(source_kind),
                 provider_record_id,
                 raw_record_id,
-                metadata: Some(json!({ "provider_event_kind": event.event_kind.as_str() })),
+                metadata: Some(metadata),
             })
             .await?;
 
         Ok(read_receipt_response(receipt))
     }
+}
+
+pub fn provider_event_from_delivery_notification(
+    notification: &NewCommunicationDeliveryNotification,
+) -> Result<NewProviderDeliveryEvent, CommunicationDeliveryNotificationError> {
+    let account_id = normalize_required("account_id", &notification.account_id)?;
+    let occurred_at = notification.received_at.unwrap_or_else(Utc::now);
+    let provider_record_id = normalize_optional(notification.provider_record_id.clone());
+    let raw_record_id = normalize_optional(notification.raw_record_id.clone());
+    let parsed = parse_delivery_notification(&notification.raw_message)?;
+
+    match parsed {
+        ParsedDeliveryNotification::DeliveryStatus {
+            provider_message_id,
+            delivery_status,
+            smtp_status,
+        } => Ok(NewProviderDeliveryEvent {
+            account_id,
+            provider_message_id,
+            event_kind: delivery_status_provider_event_kind(delivery_status),
+            recipient: None,
+            occurred_at: Some(occurred_at),
+            source_kind: Some("dsn".to_owned()),
+            smtp_status,
+            provider_record_id,
+            raw_record_id,
+            metadata: None,
+        }),
+        ParsedDeliveryNotification::ReadReceipt {
+            provider_message_id,
+            recipient,
+            reporting_ua,
+        } => Ok(NewProviderDeliveryEvent {
+            account_id,
+            provider_message_id,
+            event_kind: ProviderDeliveryEventKind::Read,
+            recipient: Some(recipient),
+            occurred_at: Some(occurred_at),
+            source_kind: Some("mdn".to_owned()),
+            smtp_status: None,
+            provider_record_id,
+            raw_record_id,
+            metadata: Some(json!({ "reporting_ua": reporting_ua })),
+        }),
+    }
+}
+
+pub async fn project_accepted_mail_delivery_signal_if_runtime_allows(
+    pool: PgPool,
+    event: &crate::platform::events::EventEnvelope,
+) -> Result<Option<CommunicationDeliveryNotificationRecord>, CommunicationDeliveryNotificationError>
+{
+    if !crate::platform::events::runtime_allows_processing(
+        &pool,
+        "system",
+        COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER,
+        &json!({
+            "label": "Communications accepted-signal consumer",
+            "scope": "consumer",
+        }),
+    )
+    .await?
+    {
+        return Ok(None);
+    }
+
+    consume_accepted_mail_delivery_signal(pool, event).await
+}
+
+pub async fn consume_accepted_mail_delivery_signal(
+    pool: PgPool,
+    event: &crate::platform::events::EventEnvelope,
+) -> Result<Option<CommunicationDeliveryNotificationRecord>, CommunicationDeliveryNotificationError>
+{
+    let Some(provider_event) = provider_event_from_accepted_signal(event)? else {
+        return Ok(None);
+    };
+
+    CommunicationDeliveryNotificationStore::new(pool)
+        .record_provider_event(provider_event)
+        .await
+        .map(Some)
 }
 
 fn delivery_status_response(
@@ -225,6 +317,64 @@ fn read_receipt_response(
         smtp_status: None,
         source_kind: receipt.source_kind.clone(),
         read_receipt: Some(receipt),
+    }
+}
+
+fn provider_event_from_accepted_signal(
+    event: &crate::platform::events::EventEnvelope,
+) -> Result<Option<NewProviderDeliveryEvent>, CommunicationDeliveryNotificationError> {
+    match event.event_type.as_str() {
+        "signal.accepted.mail.delivery_status" => Ok(Some(NewProviderDeliveryEvent {
+            account_id: required_payload_str(&event.payload, "account_id")?,
+            provider_message_id: required_payload_str(&event.payload, "provider_message_id")?,
+            event_kind: provider_event_kind_from_str(
+                required_payload_str(&event.payload, "event_kind")?.as_str(),
+            )?,
+            recipient: None,
+            occurred_at: Some(payload_occurred_at(&event.payload).unwrap_or(event.occurred_at)),
+            source_kind: normalize_optional(
+                event.payload.get("source_kind").and_then(|v| v.as_str()),
+            ),
+            smtp_status: normalize_optional(
+                event.payload.get("smtp_status").and_then(|v| v.as_str()),
+            ),
+            provider_record_id: normalize_optional(
+                event
+                    .payload
+                    .get("provider_record_id")
+                    .and_then(|v| v.as_str()),
+            ),
+            raw_record_id: normalize_optional(
+                event.payload.get("raw_record_id").and_then(|v| v.as_str()),
+            ),
+            metadata: None,
+        })),
+        "signal.accepted.mail.read_receipt" => Ok(Some(NewProviderDeliveryEvent {
+            account_id: required_payload_str(&event.payload, "account_id")?,
+            provider_message_id: required_payload_str(&event.payload, "provider_message_id")?,
+            event_kind: ProviderDeliveryEventKind::Read,
+            recipient: Some(required_payload_str(&event.payload, "recipient")?),
+            occurred_at: Some(payload_occurred_at(&event.payload).unwrap_or(event.occurred_at)),
+            source_kind: normalize_optional(
+                event.payload.get("source_kind").and_then(|v| v.as_str()),
+            ),
+            smtp_status: None,
+            provider_record_id: normalize_optional(
+                event
+                    .payload
+                    .get("provider_record_id")
+                    .and_then(|v| v.as_str()),
+            ),
+            raw_record_id: normalize_optional(
+                event.payload.get("raw_record_id").and_then(|v| v.as_str()),
+            ),
+            metadata: Some(json!({
+                "reporting_ua": normalize_optional(
+                    event.payload.get("reporting_ua").and_then(|v| v.as_str())
+                ),
+            })),
+        })),
+        _ => Ok(None),
     }
 }
 
@@ -275,6 +425,30 @@ fn parse_delivery_notification(
         smtp_status: first_field(&fields, "status")
             .and_then(|value| normalize_optional(Some(value))),
     })
+}
+
+fn delivery_status_provider_event_kind(
+    delivery_status: OutboxDeliveryStatus,
+) -> ProviderDeliveryEventKind {
+    match delivery_status {
+        OutboxDeliveryStatus::Delivered => ProviderDeliveryEventKind::Delivered,
+        OutboxDeliveryStatus::Delayed => ProviderDeliveryEventKind::Delayed,
+        OutboxDeliveryStatus::Failed => ProviderDeliveryEventKind::Failed,
+    }
+}
+
+fn provider_event_kind_from_str(
+    value: &str,
+) -> Result<ProviderDeliveryEventKind, CommunicationDeliveryNotificationError> {
+    match value.trim() {
+        "delivered" => Ok(ProviderDeliveryEventKind::Delivered),
+        "delayed" => Ok(ProviderDeliveryEventKind::Delayed),
+        "failed" => Ok(ProviderDeliveryEventKind::Failed),
+        "read" => Ok(ProviderDeliveryEventKind::Read),
+        _ => Err(CommunicationDeliveryNotificationError::Invalid(
+            "event_kind",
+        )),
+    }
 }
 
 fn unfolded_fields(raw_message: &str) -> Vec<(String, String)> {
@@ -379,12 +553,37 @@ fn normalize_optional(value: Option<impl AsRef<str>>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn required_payload_str(
+    payload: &serde_json::Value,
+    field_name: &'static str,
+) -> Result<String, CommunicationDeliveryNotificationError> {
+    payload
+        .get(field_name)
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .ok_or(CommunicationDeliveryNotificationError::Invalid(field_name))
+}
+
+fn payload_occurred_at(payload: &serde_json::Value) -> Option<DateTime<Utc>> {
+    payload
+        .get("occurred_at")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| value.with_timezone(&Utc))
+}
+
 #[derive(Debug, Error)]
 pub enum CommunicationDeliveryNotificationError {
     #[error(transparent)]
     Outbox(#[from] super::outbox::CommunicationOutboxError),
     #[error(transparent)]
     ReadReceipt(#[from] super::read_receipts::CommunicationReadReceiptError),
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+    #[error("{0}")]
+    SignalControlBlocked(String),
     #[error("invalid mail delivery notification field: {0}")]
     Invalid(&'static str),
 }

@@ -81,6 +81,34 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
         .as_str()
         .expect("message id")
         .to_owned();
+    let observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message observation id");
+    let raw_signal_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.raw.telegram.message.observed'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("raw telegram signal count");
+    let accepted_signal_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM event_log WHERE event_type = 'signal.accepted.telegram.message'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("accepted telegram signal count");
+    let legacy_integration_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM event_log WHERE event_type LIKE 'integration.telegram.%'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("legacy telegram integration event count");
+    assert_eq!(raw_signal_count, 1);
+    assert_eq!(accepted_signal_count, 1);
+    assert_eq!(legacy_integration_count, 0);
 
     let decision_row: (String, String, String, String, String) = sqlx::query_as(
         r#"
@@ -106,12 +134,12 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
         r#"
         SELECT title, review_state, candidate_kind, due_text
         FROM task_candidates
-        WHERE source_kind = 'message'
+        WHERE source_kind = 'observation'
           AND source_id = $1
           AND candidate_kind = 'obligation_task'
         "#,
     )
-    .bind(&message_id)
+    .bind(&observation_id)
     .fetch_one(&pool)
     .await
     .expect("Telegram message should create an obligation-derived task candidate");

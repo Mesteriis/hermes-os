@@ -7,7 +7,8 @@ use hermes_hub_backend::platform::storage::Database;
 
 use super::support::{
     LOCAL_API_TOKEN, build_persons_app_with_database, json_body, post_request_with_token,
-    put_request_with_token, unique_suffix, urlencoding_percent_encode,
+    put_request_with_token, run_person_derived_evidence_consumer, unique_suffix,
+    urlencoding_percent_encode,
 };
 
 #[tokio::test]
@@ -150,6 +151,7 @@ async fn person_manual_memory_entrypoints_capture_observations_against_postgres(
         .await
         .expect("fingerprint response");
     assert_eq!(response.status(), axum::http::StatusCode::OK);
+    run_person_derived_evidence_consumer(pool.clone()).await;
 
     let fingerprint_observation_row = sqlx::query(
         "SELECT observation.observation_id, observation.origin_kind, kind.code AS kind_code

@@ -19,6 +19,10 @@ impl LocalCommunicationBlobStore {
         }
     }
 
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     pub async fn put_blob(
         &self,
         bytes: &[u8],

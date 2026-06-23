@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 use crate::platform::events::{EventEnvelopeError, EventStoreError};
+use crate::platform::observations::ObservationStoreError;
 
 #[derive(Debug, Error)]
 pub enum ProjectLinkReviewError {
@@ -39,4 +40,7 @@ pub enum ProjectLinkReviewError {
 
     #[error(transparent)]
     EventStore(#[from] EventStoreError),
+
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
 }

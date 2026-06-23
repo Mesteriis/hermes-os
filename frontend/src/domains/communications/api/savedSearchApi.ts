@@ -1,4 +1,9 @@
-import { ApiClient } from '../../../platform/api/ApiClient'
+import {
+  createCommunicationSavedSearchConnect,
+  deleteCommunicationSavedSearchConnect,
+  fetchCommunicationSavedSearchesConnect,
+  updateCommunicationSavedSearchConnect
+} from './connectCommunications'
 import type {
   SavedSearchDeleteResponse,
   SavedSearchInput,
@@ -13,39 +18,20 @@ export async function fetchSavedSearches(
   limit = 500,
   cursor?: string | null
 ): Promise<SavedSearchListResponse> {
-  const params = new URLSearchParams()
-  if (typeof smartFolder === 'boolean') params.set('smart_folder', String(smartFolder))
-  if (accountId?.trim()) params.set('account_id', accountId.trim())
-  if (cursor?.trim()) params.set('cursor', cursor.trim())
-  params.set('limit', String(Math.trunc(limit)))
-  return ApiClient.instance.get<SavedSearchListResponse>(
-    `/api/v1/communications/saved-searches?${params.toString()}`,
-    'Saved searches request failed'
-  )
+  return fetchCommunicationSavedSearchesConnect(smartFolder, accountId, limit, cursor ?? undefined)
 }
 
 export async function createSavedSearch(request: SavedSearchInput): Promise<CommunicationSavedSearch> {
-  return ApiClient.instance.post<CommunicationSavedSearch>(
-    '/api/v1/communications/saved-searches',
-    request,
-    'Saved search creation failed'
-  )
+  return createCommunicationSavedSearchConnect(request)
 }
 
 export async function updateSavedSearch(
   savedSearchId: string,
   request: SavedSearchUpdate
 ): Promise<CommunicationSavedSearch> {
-  return ApiClient.instance.put<CommunicationSavedSearch>(
-    `/api/v1/communications/saved-searches/${encodeURIComponent(savedSearchId)}`,
-    request,
-    'Saved search update failed'
-  )
+  return updateCommunicationSavedSearchConnect(savedSearchId, request)
 }
 
 export async function deleteSavedSearch(savedSearchId: string): Promise<SavedSearchDeleteResponse> {
-  return ApiClient.instance.delete<SavedSearchDeleteResponse>(
-    `/api/v1/communications/saved-searches/${encodeURIComponent(savedSearchId)}`,
-    'Saved search deletion failed'
-  )
+  return deleteCommunicationSavedSearchConnect(savedSearchId)
 }

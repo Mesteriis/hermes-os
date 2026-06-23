@@ -6,11 +6,15 @@ use chrono::Utc;
 use serde_json::json;
 
 use hermes_hub_backend::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderKind, NewProviderAccount,
+    CommunicationIngestionPort, CommunicationProviderAccountStore, CommunicationProviderKind,
+    NewProviderAccount,
 };
 use hermes_hub_backend::domains::communications::messages::{
     COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, ProviderChannelMessageStore,
-    project_provider_observation_event,
+    consume_accepted_signal_event, project_provider_observation_event,
+};
+use hermes_hub_backend::domains::signal_hub::{
+    SIGNAL_HUB_RAW_SIGNAL_CONSUMER, dispatch_telegram_raw_signal, process_signal_hub_raw_event,
 };
 use hermes_hub_backend::integrations::telegram::client::{
     NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramStore,
@@ -24,7 +28,6 @@ use hermes_hub_backend::platform::events::{
     EventStoreError, NewEventEnvelope,
 };
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::provider_communication_projection::record_and_project_telegram_message;
 use testkit::context::TestContext;
 
 async fn live_context(_test_name: &str) -> Option<(Database, EventStore)> {
@@ -437,15 +440,32 @@ async fn provider_observation_events_are_emitted_with_required_telegram_event_ty
     .await
     .expect("provider observation event types");
 
-    assert!(event_types.contains(&"integration.telegram.message.content_observed".to_owned()));
-    assert!(event_types.contains(&"integration.telegram.message.metadata_observed".to_owned()));
+    assert!(event_types.contains(&"signal.raw.telegram.message.content.observed".to_owned()));
+    assert!(event_types.contains(&"signal.raw.telegram.message.metadata.observed".to_owned()));
     assert!(
-        event_types.contains(&"integration.telegram.message.delivery_state_observed".to_owned())
+        event_types.contains(&"signal.raw.telegram.message.delivery_state.observed".to_owned())
     );
-    assert!(event_types.contains(&"integration.telegram.message.pinned_state_observed".to_owned()));
+    assert!(event_types.contains(&"signal.raw.telegram.message.pinned_state.observed".to_owned()));
     assert!(
-        event_types.contains(&"integration.telegram.attachment.download_state_observed".to_owned())
+        event_types.contains(&"signal.raw.telegram.attachment.download_state.observed".to_owned())
     );
+
+    let outbox_event_types = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT event_log.event_type
+        FROM event_outbox
+        JOIN event_log ON event_log.event_id = event_outbox.event_id
+        WHERE event_log.source->>'kind' = 'provider_observation'
+          AND event_log.source->>'account_id' = $1
+        ORDER BY event_log.event_type ASC
+        "#,
+    )
+    .bind(&message.account_id)
+    .fetch_all(&pool)
+    .await
+    .expect("provider observation outbox event types");
+
+    assert_eq!(outbox_event_types, event_types);
 }
 
 #[tokio::test]
@@ -480,6 +500,9 @@ async fn communication_provider_observation_projection_is_idempotent_against_pos
     .expect("duplicate provider observation");
     assert_eq!(duplicate_position, None);
 
+    run_signal_hub_raw_consumer(pool.clone(), first_position - 1).await;
+    let accepted_position = accepted_position_for_raw_event(&pool, first_position).await;
+
     let runner = EventConsumerRunner::new(
         pool.clone(),
         EventConsumerConfig {
@@ -493,10 +516,10 @@ async fn communication_provider_observation_projection_is_idempotent_against_pos
         .store()
         .save_position(
             COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER,
-            first_position - 1,
+            accepted_position - 1,
         )
         .await
-        .expect("place consumer before provider event");
+        .expect("place consumer before accepted provider event");
 
     let first_run = runner
         .process_next_batch(|event| project_provider_observation_event(pool.clone(), event))
@@ -545,11 +568,172 @@ async fn communication_provider_observation_projection_is_idempotent_against_pos
           )
         "#,
     )
-    .bind(first_position)
+    .bind(accepted_position)
     .fetch_one(&pool)
     .await
     .expect("communication update event count");
     assert_eq!(communication_update_events, 1);
+}
+
+#[tokio::test]
+async fn communication_provider_observation_projection_consumes_accepted_telegram_message_against_postgres()
+ {
+    let ctx = TestContext::new().await;
+    let pool = ctx.pool().clone();
+    let unique = unique_suffix();
+    let suffix = format!("accepted-base-{unique}");
+    let account_id = format!("acct-{suffix}");
+    let account = NewProviderAccount::new(
+        account_id.clone(),
+        CommunicationProviderKind::TelegramUser,
+        format!("Telegram {suffix}"),
+        format!("telegram:{suffix}"),
+    )
+    .config(json!({"runtime": "fixture"}));
+    CommunicationProviderAccountStore::new(pool.clone())
+        .upsert(&account)
+        .await
+        .expect("provider account");
+
+    let store = TelegramStore::new(
+        pool.clone(),
+        Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
+        Arc::new(
+            hermes_hub_backend::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(ProviderChannelMessageStore::new(pool.clone())),
+        Arc::new(
+            hermes_hub_backend::domains::communications::core::CommunicationIngestionStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(EventStoreProviderMessageObservationEventPort::new(pool.clone())),
+    );
+    let provider_chat_id = format!("-100{suffix}");
+    let provider_message_id = format!("{provider_chat_id}:1");
+    let observed = store
+        .ingest_fixture_message(&NewTelegramMessage {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            chat_kind: TelegramChatKind::Private,
+            chat_title: format!("Chat {suffix}"),
+            sender_id: "user:1".to_owned(),
+            sender_display_name: "Alice".to_owned(),
+            text: "accepted base message".to_owned(),
+            import_batch_id: format!("batch-{suffix}"),
+            occurred_at: Utc::now(),
+            delivery_state: TelegramDeliveryState::Received,
+        })
+        .await
+        .expect("ingest fixture");
+    let stored_raw = CommunicationIngestionPort::new(pool.clone())
+        .record_raw_source(&observed.raw)
+        .await
+        .expect("store raw record");
+    let accepted_event = dispatch_telegram_raw_signal(pool.clone(), &stored_raw)
+        .await
+        .expect("dispatch raw telegram signal")
+        .expect("accepted telegram signal");
+    let accepted_position = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT position
+        FROM event_log
+        WHERE event_id = $1
+        "#,
+    )
+    .bind(&accepted_event.event_id)
+    .fetch_one(&pool)
+    .await
+    .expect("accepted telegram event position");
+
+    let runner = EventConsumerRunner::new(
+        pool.clone(),
+        EventConsumerConfig {
+            consumer_name: COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER.to_owned(),
+            batch_size: 10,
+            max_attempts: 3,
+            retry_base_seconds: 0,
+        },
+    );
+    runner
+        .store()
+        .save_position(
+            COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER,
+            accepted_position - 1,
+        )
+        .await
+        .expect("place consumer before accepted telegram event");
+
+    let report = runner
+        .process_next_batch(|event| project_provider_observation_event(pool.clone(), event))
+        .await
+        .expect("project accepted telegram base event");
+    assert_eq!(report.processed, 1);
+
+    let projected_message_id = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT message_id
+        FROM communication_messages
+        WHERE raw_record_id = $1
+        "#,
+    )
+    .bind(&stored_raw.raw_record_id)
+    .fetch_one(&pool)
+    .await
+    .expect("projected telegram message id");
+    let projected = store
+        .message_by_id(&projected_message_id)
+        .await
+        .expect("load projected telegram message")
+        .expect("projected telegram message exists");
+    assert_eq!(projected.provider_message_id, provider_message_id);
+}
+
+async fn run_signal_hub_raw_consumer(pool: sqlx::PgPool, cursor: i64) {
+    let runner = EventConsumerRunner::new(
+        pool.clone(),
+        EventConsumerConfig::new(SIGNAL_HUB_RAW_SIGNAL_CONSUMER),
+    );
+    runner
+        .store()
+        .save_position(SIGNAL_HUB_RAW_SIGNAL_CONSUMER, cursor)
+        .await
+        .expect("place signal hub consumer before raw event");
+
+    for _ in 0..10 {
+        let handler_pool = pool.clone();
+        let report = runner
+            .process_next_batch(|event| process_signal_hub_raw_event(handler_pool.clone(), event))
+            .await
+            .expect("signal hub raw consumer");
+        if report.processed == 0 {
+            break;
+        }
+    }
+}
+
+async fn accepted_position_for_raw_event(pool: &sqlx::PgPool, raw_position: i64) -> i64 {
+    sqlx::query_scalar(
+        r#"
+        SELECT position
+        FROM event_log
+        WHERE causation_id = (
+            SELECT event_id
+            FROM event_log
+            WHERE position = $1
+        )
+          AND event_type LIKE 'signal.accepted.telegram.%'
+        ORDER BY position ASC
+        LIMIT 1
+        "#,
+    )
+    .bind(raw_position)
+    .fetch_one(pool)
+    .await
+    .expect("accepted telegram event position")
 }
 
 #[tokio::test]
@@ -613,6 +797,11 @@ async fn create_projected_telegram_message(
             ),
         ),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
+        Arc::new(
+            hermes_hub_backend::domains::communications::core::CommunicationIngestionStore::new(
+                pool.clone(),
+            ),
+        ),
         Arc::new(EventStoreProviderMessageObservationEventPort::new(pool.clone())),
     );
     let provider_chat_id = format!("-100{suffix}{unique}");
@@ -633,9 +822,18 @@ async fn create_projected_telegram_message(
         })
         .await
         .expect("ingest fixture");
-    let projected = record_and_project_telegram_message(pool.clone(), observed.raw)
+    let stored_raw = CommunicationIngestionPort::new(pool.clone())
+        .record_raw_source(&observed.raw)
         .await
-        .expect("project fixture");
+        .expect("stored raw fixture");
+    let accepted_event = dispatch_telegram_raw_signal(pool.clone(), &stored_raw)
+        .await
+        .expect("dispatch raw signal")
+        .expect("accepted signal");
+    let projected = consume_accepted_signal_event(pool.clone(), &accepted_event)
+        .await
+        .expect("accepted projection")
+        .expect("projected message");
     store
         .message_by_id(&projected.message_id)
         .await

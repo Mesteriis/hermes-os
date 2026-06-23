@@ -26,15 +26,23 @@ pub(crate) async fn post_v1_workflow_action(
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
+    let actor_id = actor_id_from_headers(&headers);
+    let response = execute_workflow_action(&pool, &actor_id, request).await?;
+    Ok(Json(response))
+}
 
+pub(crate) async fn execute_workflow_action(
+    pool: &sqlx::postgres::PgPool,
+    actor_id: &str,
+    request: WorkflowActionRequest,
+) -> Result<WorkflowActionResponse, ApiError> {
     let command_id = normalize_non_empty("command_id", &request.command_id)?;
     let event_id = format!("workflow_action:{command_id}");
     let event_store = crate::app::api_support::app_store::<EventStore>(pool.clone());
     if let Some(existing) = event_store.get_by_id(&event_id).await? {
-        return Ok(Json(response_from_event(existing)?));
+        return response_from_event(existing);
     }
 
-    let actor_id = actor_id_from_headers(&headers);
     let message_store = crate::app::api_support::app_store::<MessageProjectionStore>(pool.clone());
     let source_message = load_source_message(&message_store, request.source.as_ref()).await?;
     let mut transaction = pool
@@ -47,11 +55,11 @@ pub(crate) async fn post_v1_workflow_action(
         }
         WorkflowActionKind::CreateTask => {
             create_task_response(
-                &pool,
+                pool,
                 &mut transaction,
                 &command_id,
                 &event_id,
-                &actor_id,
+                actor_id,
                 &request,
                 source_message.as_ref(),
             )
@@ -154,14 +162,14 @@ pub(crate) async fn post_v1_workflow_action(
                 .commit()
                 .await
                 .map_err(|error| ApiError::Store(error.into()))?;
-            Ok(Json(response))
+            Ok(response)
         }
         Err(error) if error.is_unique_violation() => {
             let _ = transaction.rollback().await;
             let Some(existing) = event_store.get_by_id(&event_id).await? else {
                 return Err(ApiError::Store(error));
             };
-            Ok(Json(response_from_event(existing)?))
+            Ok(response_from_event(existing)?)
         }
         Err(error) => Err(ApiError::Store(error)),
     }

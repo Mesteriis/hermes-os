@@ -14,6 +14,7 @@ pub(crate) mod projects;
 pub(crate) mod relationships;
 pub(crate) mod review;
 pub(crate) mod settings;
+pub(crate) mod signal_hub;
 pub(crate) mod tasks;
 pub(crate) mod telegram;
 pub(crate) mod whatsapp;

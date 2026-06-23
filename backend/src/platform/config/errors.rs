@@ -25,6 +25,9 @@ pub enum ConfigError {
     #[error("HERMES_LOCAL_API_SECRET is set but empty")]
     EmptyLocalApiSecret,
 
+    #[error("HERMES_NATS_SERVER_URL is set but empty")]
+    EmptyNatsServerUrl,
+
     #[error("HERMES_SECRET_VAULT_PATH is set but empty")]
     EmptySecretVaultPath,
 
