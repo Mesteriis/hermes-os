@@ -6,8 +6,8 @@ use sqlx::{Postgres, Row, Transaction};
 
 use super::{TaskCoreError, materialize_task_entity_link_in_transaction};
 use crate::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
-    RelationshipReviewPort, RelationshipReviewState,
+    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewPort,
+    RelationshipReviewState,
 };
 use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 
@@ -154,9 +154,11 @@ impl TaskRelationStore {
         {
             observation_id.to_owned()
         } else {
-            let observation =
-                ObservationStore::capture_in_transaction(transaction, &Self::relation_observation(relation))
-                    .await?;
+            let observation = ObservationStore::capture_in_transaction(
+                transaction,
+                &Self::relation_observation(relation),
+            )
+            .await?;
             observation.observation_id
         };
 

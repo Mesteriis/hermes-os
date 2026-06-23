@@ -9,10 +9,12 @@ status-level = "slow"
 final-status-level = "slow"
 failure-output = "immediate-final"
 success-output = "never"
-junit.path = "target/nextest/default/junit.xml"
-junit.report-name = "hermes-backend-default"
-junit.store-success-output = false
-junit.store-failure-output = true
+
+[profile.default.junit]
+path = "junit.xml"
+report-name = "hermes-backend-default"
+store-success-output = false
+store-failure-output = true
 
 [profile.ci]
 inherits = "default"
@@ -20,8 +22,10 @@ retries = { backoff = "fixed", count = 2, delay = "1s" }
 slow-timeout = { period = "60s", terminate-after = 4, grace-period = "15s" }
 status-level = "retry"
 final-status-level = "flaky"
-junit.path = "target/nextest/ci/junit.xml"
-junit.report-name = "hermes-backend-ci"
+
+[profile.ci.junit]
+path = "junit.xml"
+report-name = "hermes-backend-ci"
 
 [profile.integration]
 inherits = "default"
@@ -29,5 +33,7 @@ retries = { backoff = "fixed", count = 1, delay = "2s" }
 slow-timeout = { period = "120s", terminate-after = 2, grace-period = "15s" }
 status-level = "retry"
 final-status-level = "slow"
-junit.path = "target/nextest/integration/junit.xml"
-junit.report-name = "hermes-backend-integration"
+
+[profile.integration.junit]
+path = "junit.xml"
+report-name = "hermes-backend-integration"

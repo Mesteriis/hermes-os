@@ -5,14 +5,27 @@ use tokio::time::{Duration, Instant, sleep};
 
 const NATS_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const NATS_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(250);
+pub const SESSION_NATS_HOST_PORT_ENV: &str = "HERMES_TEST_NATS_HOST_PORT";
 
 pub struct NatsContainer {
-    _container: ContainerAsync<GenericImage>,
+    _container: Option<ContainerAsync<GenericImage>>,
     host_port: u16,
 }
 
 impl NatsContainer {
     pub async fn start() -> Self {
+        if let Some(host_port) = session_host_port() {
+            wait_for_nats_port(host_port).await;
+            return Self {
+                _container: None,
+                host_port,
+            };
+        }
+
+        Self::start_owned().await
+    }
+
+    pub async fn start_owned() -> Self {
         let container = GenericImage::new("nats", "2.11-alpine")
             .with_exposed_port(4222.tcp())
             .with_cmd(vec!["-js", "-sd", "/data"])
@@ -28,7 +41,7 @@ impl NatsContainer {
         wait_for_nats_port(host_port).await;
 
         Self {
-            _container: container,
+            _container: Some(container),
             host_port,
         }
     }
@@ -36,6 +49,22 @@ impl NatsContainer {
     pub fn server_url(&self) -> String {
         format!("nats://127.0.0.1:{}", self.host_port)
     }
+
+    pub fn host_port(&self) -> u16 {
+        self.host_port
+    }
+}
+
+fn session_host_port() -> Option<u16> {
+    let value = std::env::var(SESSION_NATS_HOST_PORT_ENV).ok()?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    Some(trimmed.parse::<u16>().unwrap_or_else(|error| {
+        panic!("invalid {SESSION_NATS_HOST_PORT_ENV} value '{trimmed}': {error}")
+    }))
 }
 
 async fn wait_for_nats_port(host_port: u16) {

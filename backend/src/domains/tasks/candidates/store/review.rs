@@ -201,11 +201,11 @@ async fn sync_obligation_candidate_in_transaction(
 
     match review_state {
         TaskCandidateReviewState::UserConfirmed => {
-            let observation_id = candidate
-                .observation_id
-                .as_deref()
-                .ok_or_else(|| TaskCandidateError::ObservationRequired(task_candidate_id.to_owned()))?;
-            let obligation_candidate = obligation_candidate_from_metadata(&candidate.candidate_metadata)?;
+            let observation_id = candidate.observation_id.as_deref().ok_or_else(|| {
+                TaskCandidateError::ObservationRequired(task_candidate_id.to_owned())
+            })?;
+            let obligation_candidate =
+                obligation_candidate_from_metadata(&candidate.candidate_metadata)?;
             let mut obligation = NewObligation::new(
                 map_obligation_entity_kind(obligation_candidate.obligated_entity_kind),
                 obligation_candidate.obligated_entity_id.clone(),

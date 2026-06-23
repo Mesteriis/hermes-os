@@ -1,6 +1,7 @@
 use std::env;
 use std::process::{Command, Stdio};
 
+use testkit::containers::nats::{NatsContainer, SESSION_NATS_HOST_PORT_ENV};
 use testkit::containers::postgres::{
     PostgresContainer, SESSION_ID_ENV, SESSION_POSTGRES_HOST_PORT_ENV,
 };
@@ -15,14 +16,16 @@ async fn main() {
     }
 
     let session_id = format!("hermes-test-{}", Uuid::new_v4());
-    let container = PostgresContainer::start_owned().await;
+    let postgres_container = PostgresContainer::start_owned().await;
+    let nats_container = NatsContainer::start_owned().await;
     let status = Command::new(&command_args[0])
         .args(&command_args[1..])
         .env(SESSION_ID_ENV, &session_id)
         .env(
             SESSION_POSTGRES_HOST_PORT_ENV,
-            container.host_port().to_string(),
+            postgres_container.host_port().to_string(),
         )
+        .env(SESSION_NATS_HOST_PORT_ENV, nats_container.host_port().to_string())
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -34,6 +37,7 @@ async fn main() {
             )
         });
 
-    drop(container);
+    drop(nats_container);
+    drop(postgres_container);
     std::process::exit(status.code().unwrap_or(1));
 }

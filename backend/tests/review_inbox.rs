@@ -17,12 +17,12 @@ use hermes_hub_backend::domains::review::{
     ReviewPromotionTarget,
 };
 use hermes_hub_backend::domains::tasks::api::TaskStore;
+use hermes_hub_backend::platform::events::EventStore;
 use hermes_hub_backend::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore,
 };
-use hermes_hub_backend::platform::events::EventStore;
-use hermes_hub_backend::workflows::review_inbox::project_person_identity_review_event;
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::review_inbox::project_person_identity_review_event;
 use hermes_hub_backend::workflows::review_inbox::sync_decisions_to_review_for_observations;
 use hermes_hub_backend::workflows::review_inbox::sync_obligations_to_review_for_observations;
 use hermes_hub_backend::workflows::review_inbox::sync_relationships_to_review_for_observations;

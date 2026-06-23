@@ -19,8 +19,8 @@ use crate::platform::observations::{
 };
 use crate::workflows::review_mirror::{
     ReviewMirrorError, sync_decision_review_state_with_observation,
-    sync_obligation_review_state_with_observation,
-    sync_relationship_review_state_with_observation, sync_task_candidate_review_state_in_transaction,
+    sync_obligation_review_state_with_observation, sync_relationship_review_state_with_observation,
+    sync_task_candidate_review_state_in_transaction,
 };
 
 #[derive(Clone)]

@@ -79,9 +79,9 @@ impl From<TaskCandidateReviewApplicationError> for ApiError {
             TaskCandidateReviewApplicationError::TaskCandidateNotFound => {
                 Self::TaskCandidateNotFound
             }
-            TaskCandidateReviewApplicationError::Sqlx(error) => Self::TaskCandidate(
-                TaskCandidateError::Sqlx(error),
-            ),
+            TaskCandidateReviewApplicationError::Sqlx(error) => {
+                Self::TaskCandidate(TaskCandidateError::Sqlx(error))
+            }
             TaskCandidateReviewApplicationError::ReviewMirror(error) => {
                 tracing::error!(error = %error, "task candidate review mirror sync failed");
                 Self::InvalidTaskCandidateQuery("task candidate review mirror sync failed")
@@ -343,8 +343,10 @@ impl From<ReviewPromotionError> for ApiError {
                 "relationship evidence is required" => {
                     Self::InvalidRelationshipQuery("relationship evidence is required")
                 }
-                _ => Self::InvalidReviewQuery("review promotion target is invalid for this item kind"),
-            }
+                _ => Self::InvalidReviewQuery(
+                    "review promotion target is invalid for this item kind",
+                ),
+            },
             ReviewPromotionError::Sqlx(inner) => {
                 Self::ReviewPromotion(ReviewPromotionError::Sqlx(inner))
             }

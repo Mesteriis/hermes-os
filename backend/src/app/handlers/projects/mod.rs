@@ -173,7 +173,7 @@ pub(crate) async fn get_project_link_candidates(
         let graph_node_id = node_id(GraphNodeKind::Message, &message.message_id);
         let title = text_preview(&message.subject, 120);
         let sender_excerpt = text_preview(&message.sender, 140);
-        crate::workflows::review_mirror::ensure_project_link_candidate_review_item(
+        crate::application::ensure_project_link_candidate_review_item(
             &pool,
             &project_id,
             ProjectLinkTargetKind::Message,
@@ -217,7 +217,7 @@ pub(crate) async fn get_project_link_candidates(
     {
         let graph_node_id = node_id(GraphNodeKind::Document, &document.document_id);
         let title = text_preview(&document.title, 140);
-        crate::workflows::review_mirror::ensure_project_link_candidate_review_item(
+        crate::application::ensure_project_link_candidate_review_item(
             &pool,
             &project_id,
             ProjectLinkTargetKind::Document,
@@ -340,7 +340,7 @@ pub(crate) async fn put_project_link_review(
                 .ok_or(ApiError::ProjectLinkTargetNotFound)?;
             let title = text_preview(&message.subject, 120);
             let summary = text_preview(&message.sender, 140);
-            crate::workflows::review_mirror::sync_project_link_review_state_in_transaction(
+            crate::application::sync_project_link_review_state_in_transaction(
                 &mut transaction,
                 &command.project_id,
                 command.target_kind,
@@ -362,7 +362,7 @@ pub(crate) async fn put_project_link_review(
                 .find(|item| item.document_id == command.target_id)
                 .ok_or(ApiError::ProjectLinkTargetNotFound)?;
             let title = text_preview(&document.title, 140);
-            crate::workflows::review_mirror::sync_project_link_review_state_in_transaction(
+            crate::application::sync_project_link_review_state_in_transaction(
                 &mut transaction,
                 &command.project_id,
                 command.target_kind,

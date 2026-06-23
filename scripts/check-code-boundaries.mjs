@@ -24,6 +24,8 @@ const ignoredSegments = new Set([
 	'frontend/.svelte-kit',
 	'frontend/build',
 	'frontend/coverage',
+	'frontend/dist',
+	'frontend/src/gen',
 	'frontend/node_modules'
 ]);
 const checkedExtensions = new Set([
@@ -48,6 +50,7 @@ const generatedPrefixes = [
 	'frontend/.svelte-kit/',
 	'frontend/build/',
 	'frontend/coverage/',
+	'frontend/dist/',
 	'frontend/node_modules/'
 ];
 const secretPattern =

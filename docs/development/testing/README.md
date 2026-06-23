@@ -3,7 +3,9 @@
 Hermes uses a split test stack:
 
 - Rust backend execution runs through `cargo-nextest`.
-- Backend integration and coverage runs go through the `crates/testkit` session harness so PostgreSQL testcontainers are reused and cleaned correctly.
+- Backend integration and coverage runs go through the `crates/testkit` session harness so PostgreSQL and NATS testcontainers are reused and cleaned correctly.
+- Local wrapper scripts and Makefile nextest targets force a visible progress mode via `--show-progress`.
+- Post-run JUnit analysis prints a compact completed/passed/failed/flaky summary with an ASCII progress bar, so non-interactive Codex/CI output is not silent after a test set finishes.
 - Frontend unit tests stay on Vitest.
 - Architecture checks remain first-class and are part of the test taxonomy.
 
@@ -30,6 +32,7 @@ Hermes uses a split test stack:
 - `make watch-integration`
 - `make cache-stats`
 - `make cache-reset`
+- `make test-performance-report`
 
 ## Classification model
 
@@ -53,3 +56,5 @@ Current baseline and optimization notes live in:
 
 - `reports/test-performance/README.md`
 - `reports/test-performance/2026-06-23-baseline.md`
+- `reports/test-performance/backend-full.md`
+- `docs/development/testing/status.md`

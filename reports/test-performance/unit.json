@@ -1,0 +1,74 @@
+{
+  "suite": "unit",
+  "generatedAt": "2026-06-23T20:05:37.037Z",
+  "source": "target/nextest/default/junit.xml",
+  "totalTests": 261,
+  "failedTests": 0,
+  "flakyTests": [],
+  "totalSeconds": 166.72,
+  "averageSeconds": 0.639,
+  "p95Seconds": 6.133,
+  "p99Seconds": 7.19,
+  "slowest": [
+    {
+      "id": "hermes-hub-backend::integrations::telegram::runtime::manager::chat_events::tests::archive_reconciliation::publish_chat_position_event_reconciles_archive_command_when_provider_chat_is_archived",
+      "timeSeconds": 7.203,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::integrations::telegram::runtime::manager::chat_events::tests::archive_reconciliation::publish_chat_position_event_reconciles_unarchive_command_when_provider_chat_is_unarchived",
+      "timeSeconds": 7.198,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::integrations::telegram::runtime::manager::chat_events::tests::mark_unread_reconciliation::publish_chat_marked_as_unread_event_marks_mark_unread_as_mismatch_when_provider_disagrees",
+      "timeSeconds": 7.19,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::integrations::telegram::client::participants::tests::marks_stale_tdlib_participants_as_absent_from_exhaustive_roster",
+      "timeSeconds": 7.068,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::integrations::telegram::runtime::manager::chat_events::tests::mark_unread_reconciliation::publish_chat_marked_as_unread_event_reconciles_mark_unread_command_and_emits_events",
+      "timeSeconds": 7.007,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::integrations::telegram::client::reactions::tests::provider_state_sync_deactivates_absent_self_reactions",
+      "timeSeconds": 6.885,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::integrations::telegram::runtime::manager::chat_events::tests::archive_reconciliation::publish_chat_position_event_marks_unarchive_command_as_mismatch_when_provider_disagrees",
+      "timeSeconds": 6.808,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::integrations::telegram::runtime::manager::chat_events::tests::archive_reconciliation::publish_chat_position_event_marks_archive_command_as_mismatch_when_provider_disagrees",
+      "timeSeconds": 6.806,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::integrations::telegram::runtime::manager::chat_events::tests::publish_chat_folders_event_emits_chat_updated_for_folder_label_projection_changes",
+      "timeSeconds": 6.334,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::integrations::telegram::runtime::manager::chat_events::tests::publish_chat_folders_event_refreshes_unknown_labels_when_folder_snapshot_disappears",
+      "timeSeconds": 6.333,
+      "failed": false,
+      "flaky": false
+    }
+  ]
+}

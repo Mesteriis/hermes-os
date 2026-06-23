@@ -98,6 +98,32 @@ const mailCommandServiceOwner = 'backend/src/domains/communications/service.rs';
 const emailSyncPipelineOrganizationOwner = 'backend/src/workflows/email_sync_pipeline/organizations.rs';
 const emailSyncPipelineParticipantsOwner = 'backend/src/workflows/email_sync_pipeline/participants.rs';
 const emailSyncPipelineRelationshipsOwner = 'backend/src/workflows/email_sync_pipeline/relationships.rs';
+const backendDomainProjectionBridgeOwners = new Map([
+	[
+		'backend/src/domains/relationships/errors.rs',
+		new Set(['graph'])
+	],
+	[
+		'backend/src/domains/relationships/store.rs',
+		new Set(['graph'])
+	],
+	[
+		'backend/src/domains/tasks/candidates/errors.rs',
+		new Set(['obligations'])
+	],
+	[
+		'backend/src/domains/tasks/candidates/store/review.rs',
+		new Set(['obligations'])
+	],
+	[
+		'backend/src/domains/tasks/core/errors.rs',
+		new Set(['relationships'])
+	],
+	[
+		'backend/src/domains/tasks/core/relations.rs',
+		new Set(['relationships'])
+	]
+]);
 
 const sharedBackendDomainModules = new Set();
 const businessBackendDomains = new Set([
@@ -330,6 +356,10 @@ function backendBoundaryViolations(relativePath, source) {
 		if (domainMatch !== null) {
 			const currentDomain = domainMatch[1];
 			if (importedDomain !== currentDomain) {
+				const allowedBridgeImports = backendDomainProjectionBridgeOwners.get(relativePath);
+				if (allowedBridgeImports?.has(importedDomain)) {
+					continue;
+				}
 				violations.push({
 					file: relativePath,
 					importedDomain,

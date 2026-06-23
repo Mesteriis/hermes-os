@@ -36,6 +36,14 @@ function percentile(sortedValues, ratio) {
   return sortedValues[index];
 }
 
+function progressBar(completed, total, width = 30) {
+  if (total === 0) {
+    return `[${"-".repeat(width)}]`;
+  }
+  const filled = Math.min(width, Math.max(0, Math.round((completed / total) * width)));
+  return `[${"#".repeat(filled)}${"-".repeat(width - filled)}]`;
+}
+
 const args = parseArgs(process.argv.slice(2));
 const input = args.input;
 const outputBase = args.output;
@@ -115,3 +123,10 @@ const markdown = [
 mkdirSync(path.dirname(outputBase), { recursive: true });
 writeFileSync(`${outputBase}.json`, `${JSON.stringify(report, null, 2)}\n`);
 writeFileSync(`${outputBase}.md`, markdown);
+
+const passedTests = report.totalTests - report.failedTests;
+const reportPath = path.relative(process.cwd(), `${outputBase}.md`);
+console.log(
+  `${suiteName} ${progressBar(report.totalTests, report.totalTests)} ${report.totalTests}/${report.totalTests} completed | passed ${passedTests} | failed ${report.failedTests} | flaky ${report.flakyTests.length} | total ${report.totalSeconds}s`,
+);
+console.log(`Report: ${reportPath}`);

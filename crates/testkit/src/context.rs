@@ -17,7 +17,8 @@ static DATABASE_SETUP_LOCK: Mutex<()> = Mutex::const_new(());
 ///
 /// Each `TestContext` creates its own unique database on the PostgreSQL
 /// container owned by the current test session. `make backend-test` starts one
-/// pgvector container before `cargo test` and removes it after the session.
+/// pgvector container and one NATS container before nextest, then removes them
+/// after the session.
 ///
 /// # Usage
 ///
