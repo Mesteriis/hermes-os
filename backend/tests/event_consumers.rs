@@ -690,6 +690,20 @@ async fn communication_provider_observation_projection_consumes_accepted_telegra
         .expect("load projected telegram message")
         .expect("projected telegram message exists");
     assert_eq!(projected.provider_message_id, provider_message_id);
+
+    let communication_recorded_events = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM event_log
+        WHERE event_type = 'communication.message.recorded'
+          AND causation_id = $1
+        "#,
+    )
+    .bind(&accepted_event.event_id)
+    .fetch_one(&pool)
+    .await
+    .expect("communication recorded event count");
+    assert_eq!(communication_recorded_events, 1);
 }
 
 async fn run_signal_hub_raw_consumer(pool: sqlx::PgPool, cursor: i64) {
@@ -864,6 +878,7 @@ async fn append_provider_observation(
             external_event_id,
             payload,
             causation_id: Some("event-consumer-test"),
+            correlation_id: Some("event-consumer-test"),
         })
         .await
 }

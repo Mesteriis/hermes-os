@@ -193,6 +193,7 @@ pub struct ProviderMessageObservationEvent<'a> {
     pub external_event_id: Option<&'a str>,
     pub payload: &'a Value,
     pub causation_id: Option<&'a str>,
+    pub correlation_id: Option<&'a str>,
 }
 
 pub type ProviderMessageObservationEventFuture<'a> = Pin<
@@ -251,7 +252,7 @@ impl ProviderMessageObservationEventPort for EventStoreProviderMessageObservatio
             );
             let event_type =
                 provider_observation_event_type(observation.provider, observation.event_kind);
-            let mut builder = crate::platform::events::NewEventEnvelope::builder(
+            let builder = crate::platform::events::NewEventEnvelope::builder(
                 format!(
                     "evt_provider_observation_{}",
                     stable_event_id_fragment(&idempotency_key)
@@ -285,8 +286,13 @@ impl ProviderMessageObservationEventPort for EventStoreProviderMessageObservatio
             .provenance(json!({
                 "provider": observation.provider,
                 "ownership": "provider_observation_fact",
-            }))
-            .correlation_id(idempotency_key);
+            }));
+            let correlation_id = observation
+                .correlation_id
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or(&idempotency_key);
+            let mut builder = builder.correlation_id(correlation_id);
             if let Some(causation_id) = observation.causation_id {
                 builder = builder.causation_id(causation_id);
             }

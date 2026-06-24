@@ -11,9 +11,8 @@ source "$SCRIPT_DIR/lib/env.sh"
 source "$SCRIPT_DIR/lib/postgres.sh"
 
 load_hermes_env
-confirm_or_exit "This will delete local PostgreSQL data under $(postgres_data_dir())." "DELETE"
+confirm_or_exit "This will delete local PostgreSQL data under $(postgres_data_dir)." "DELETE"
 compose_cmd down --remove-orphans >/dev/null 2>&1 || true
-rm -rf "$(postgres_data_dir())"
-mkdir -p "$(postgres_data_dir())"
+rm -rf "$(postgres_data_dir)"
+mkdir -p "$(postgres_data_dir)"
 success "Deleted PostgreSQL development data"
-

@@ -49,18 +49,22 @@ impl AiService {
             "embedding_model": self.embedding_model,
             "prompt_template_version": AI_PROMPT_TEMPLATE_VERSION,
         }));
-        let builder = if let Some(correlation_id) = event.correlation_id {
-            builder.correlation_id(correlation_id)
-        } else {
-            builder
-        };
-        let ai_event = builder.build()?;
+        let trace_id = event
+            .correlation_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(event.run_id);
+        let ai_event = builder.correlation_id(trace_id).build()?;
         event_store.append(&ai_event).await?;
-        self.append_ai_signal_event(&event).await?;
+        self.append_ai_signal_event(&event, trace_id).await?;
         Ok(())
     }
 
-    async fn append_ai_signal_event(&self, event: &AiRunEvent<'_>) -> Result<(), AiError> {
+    async fn append_ai_signal_event(
+        &self,
+        event: &AiRunEvent<'_>,
+        correlation_id: &str,
+    ) -> Result<(), AiError> {
         let Some(event_kind) = ai_raw_signal_event_kind(event.event_type) else {
             return Ok(());
         };
@@ -89,7 +93,7 @@ impl AiService {
                 "prompt_template_version": AI_PROMPT_TEMPLATE_VERSION,
                 "ai_event_type": event.event_type,
             }),
-            event.correlation_id,
+            Some(correlation_id),
         )
         .await?;
         Ok(())

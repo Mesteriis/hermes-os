@@ -112,6 +112,7 @@ impl TelegramStore {
                 external_event_id: None,
                 payload,
                 causation_id: None,
+                correlation_id: None,
             })
             .await
             .map_err(Into::into)

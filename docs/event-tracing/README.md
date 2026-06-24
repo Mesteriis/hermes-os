@@ -1,0 +1,42 @@
+# Event Tracing
+
+## Purpose
+
+Event Tracing is the causal observability layer of Hermes.
+
+It does not replace the event backbone. It formalizes how persistent events are
+connected into traces.
+
+Hermes does not need a separate telemetry server to answer:
+
+- why does this object exist?
+- what caused this event?
+- what happened before this projection?
+- which provider signal created this communication message?
+- which review promoted this task?
+
+## Position
+
+The canonical trace store is PostgreSQL append-only `event_log`.
+
+```text
+EventEnvelope = Span
+event_id = span_id
+correlation_id = trace_id
+causation_id = parent_span_id
+event_log = trace store
+```
+
+OpenTelemetry, logs and metrics may export or diagnose traces, but they do not
+own the canonical causal graph.
+
+## Package
+
+- [ADR-0100](../adr/ADR-0100-trace-first-event-observability.md)
+- [Architecture](architecture.md)
+- [Data model](data-model.md)
+- [API](api.md)
+- [Testing](testing.md)
+- [Operations](operations.md)
+- [Gap analysis](gap-analysis.md)
+- [Status](status.md)

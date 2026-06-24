@@ -115,6 +115,30 @@ pub async fn consume_accepted_signal_event(
     pool: PgPool,
     event: &EventEnvelope,
 ) -> Result<Option<ProjectedMessage>, CommunicationSignalProjectionError> {
+    let Some(projection) = project_accepted_signal_event(pool.clone(), event).await? else {
+        return Ok(None);
+    };
+
+    append_communication_message_projected_event(
+        pool,
+        event,
+        &projection.message,
+        projection.message_existed,
+    )
+    .await?;
+
+    Ok(Some(projection.message))
+}
+
+struct AcceptedSignalProjection {
+    message: ProjectedMessage,
+    message_existed: bool,
+}
+
+async fn project_accepted_signal_event(
+    pool: PgPool,
+    event: &EventEnvelope,
+) -> Result<Option<AcceptedSignalProjection>, CommunicationSignalProjectionError> {
     if event.event_type == "signal.accepted.mail.message" {
         return project_mail_signal_event(pool, event).await;
     }
@@ -126,13 +150,6 @@ pub async fn consume_accepted_signal_event(
     }
 
     Ok(None)
-}
-
-async fn project_accepted_signal_event(
-    pool: PgPool,
-    event: &EventEnvelope,
-) -> Result<Option<ProjectedMessage>, CommunicationSignalProjectionError> {
-    consume_accepted_signal_event(pool, event).await
 }
 
 async fn accepted_signal_projection_runtime_allows(
@@ -153,7 +170,7 @@ async fn accepted_signal_projection_runtime_allows(
 async fn project_mail_signal_event(
     pool: PgPool,
     event: &EventEnvelope,
-) -> Result<Option<ProjectedMessage>, CommunicationSignalProjectionError> {
+) -> Result<Option<AcceptedSignalProjection>, CommunicationSignalProjectionError> {
     if event.event_type != "signal.accepted.mail.message" {
         return Ok(None);
     }
@@ -163,24 +180,31 @@ async fn project_mail_signal_event(
         .raw_record(raw_record_id)
         .await?
         .ok_or_else(|| MessageProjectionError::RawRecordNotFound(raw_record_id.to_owned()))?;
+    let message_existed = communication_message_exists(
+        &pool,
+        &raw_record.account_id,
+        &raw_record.provider_record_id,
+    )
+    .await?;
     let message_store = CommunicationMessageProjectionPort::new(pool);
 
-    if raw_record.payload.get("raw_blob_storage_path").is_some() {
+    let message = if raw_record.payload.get("raw_blob_storage_path").is_some() {
         let blob_store = LocalCommunicationBlobStore::new(mail_blob_root_from_event(event));
-        Ok(Some(
-            project_raw_email_message_from_blob(&message_store, &blob_store, &raw_record).await?,
-        ))
+        project_raw_email_message_from_blob(&message_store, &blob_store, &raw_record).await?
     } else {
-        Ok(Some(
-            project_raw_email_message(&message_store, &raw_record).await?,
-        ))
-    }
+        project_raw_email_message(&message_store, &raw_record).await?
+    };
+
+    Ok(Some(AcceptedSignalProjection {
+        message,
+        message_existed,
+    }))
 }
 
 async fn project_whatsapp_signal_event(
     pool: PgPool,
     event: &EventEnvelope,
-) -> Result<Option<ProjectedMessage>, CommunicationSignalProjectionError> {
+) -> Result<Option<AcceptedSignalProjection>, CommunicationSignalProjectionError> {
     if event.event_type != "signal.accepted.whatsapp.message" {
         return Ok(None);
     }
@@ -195,36 +219,45 @@ async fn project_whatsapp_signal_event(
     let sender_display_name = required_payload_str(&raw_record.payload, "sender_display_name")?;
     let body_text = required_payload_str(&raw_record.payload, "text")?;
     let delivery_state = required_payload_str(&raw_record.payload, "delivery_state")?;
+    let message_existed = communication_message_exists(
+        &pool,
+        &raw_record.account_id,
+        &raw_record.provider_record_id,
+    )
+    .await?;
 
-    Ok(Some(
-        CommunicationMessageProjectionPort::new(pool)
-            .upsert_channel_message(&NewProjectedMessage {
-                message_id: whatsapp_web_message_id(
-                    &raw_record.account_id,
-                    &raw_record.provider_record_id,
-                ),
-                raw_record_id: raw_record.raw_record_id.clone(),
-                account_id: raw_record.account_id.clone(),
-                provider_record_id: raw_record.provider_record_id.clone(),
-                subject: chat_title,
-                sender: sender_display_name.clone(),
-                recipients: vec![provider_chat_id.clone()],
-                body_text,
-                occurred_at: raw_record.occurred_at,
-                channel_kind: "whatsapp_web".to_owned(),
-                conversation_id: Some(provider_chat_id),
-                sender_display_name: Some(sender_display_name),
-                delivery_state,
-                message_metadata: raw_record.payload,
-            })
-            .await?,
-    ))
+    let message = CommunicationMessageProjectionPort::new(pool)
+        .upsert_channel_message(&NewProjectedMessage {
+            message_id: whatsapp_web_message_id(
+                &raw_record.account_id,
+                &raw_record.provider_record_id,
+            ),
+            raw_record_id: raw_record.raw_record_id.clone(),
+            account_id: raw_record.account_id.clone(),
+            provider_record_id: raw_record.provider_record_id.clone(),
+            subject: chat_title,
+            sender: sender_display_name.clone(),
+            recipients: vec![provider_chat_id.clone()],
+            body_text,
+            occurred_at: raw_record.occurred_at,
+            channel_kind: "whatsapp_web".to_owned(),
+            conversation_id: Some(provider_chat_id),
+            sender_display_name: Some(sender_display_name),
+            delivery_state,
+            message_metadata: raw_record.payload,
+        })
+        .await?;
+
+    Ok(Some(AcceptedSignalProjection {
+        message,
+        message_existed,
+    }))
 }
 
 async fn project_telegram_signal_event(
     pool: PgPool,
     event: &EventEnvelope,
-) -> Result<Option<ProjectedMessage>, CommunicationSignalProjectionError> {
+) -> Result<Option<AcceptedSignalProjection>, CommunicationSignalProjectionError> {
     if event.event_type != "signal.accepted.telegram.message" {
         return Ok(None);
     }
@@ -254,6 +287,12 @@ async fn project_telegram_signal_event(
             .map(str::trim)
             == Some("tdlib")
         && raw_record.payload.get("tdlib_raw").is_some();
+    let message_existed = communication_message_exists(
+        &pool,
+        &raw_record.account_id,
+        &raw_record.provider_record_id,
+    )
+    .await?;
 
     let message = NewProjectedMessage {
         message_id: telegram_message_id(&raw_record.account_id, &raw_record.provider_record_id),
@@ -282,7 +321,10 @@ async fn project_telegram_signal_event(
             .await?
     };
 
-    Ok(Some(projected))
+    Ok(Some(AcceptedSignalProjection {
+        message: projected,
+        message_existed,
+    }))
 }
 
 async fn project_telegram_observation(
@@ -409,6 +451,8 @@ async fn append_communication_message_updated_event(
         json!({
             "kind": "communication_message",
             "id": message.message_id,
+            "entity_id": message.message_id,
+            "message_id": message.message_id,
         }),
     )
     .payload(json!({
@@ -439,6 +483,91 @@ async fn append_communication_message_updated_event(
 
     EventStore::new(pool).append_idempotent(&event).await?;
     Ok(())
+}
+
+async fn append_communication_message_projected_event(
+    pool: PgPool,
+    accepted_event: &EventEnvelope,
+    message: &ProjectedMessage,
+    message_existed: bool,
+) -> Result<(), EventStoreError> {
+    let event_name = if message_existed {
+        "communication.message.updated"
+    } else {
+        "communication.message.recorded"
+    };
+    let event_suffix = if message_existed {
+        "updated"
+    } else {
+        "recorded"
+    };
+    let event_id = format!(
+        "evt_communication_message_{}_{}",
+        event_suffix, accepted_event.event_id
+    );
+    let event = NewEventEnvelope::builder(
+        event_id,
+        event_name,
+        Utc::now(),
+        json!({
+            "kind": "communication_projection",
+            "consumer": COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER,
+        }),
+        json!({
+            "kind": "communication_message",
+            "id": message.message_id,
+            "entity_id": message.message_id,
+            "message_id": message.message_id,
+        }),
+    )
+    .payload(json!({
+        "message_id": message.message_id,
+        "raw_record_id": message.raw_record_id,
+        "account_id": message.account_id,
+        "provider_record_id": message.provider_record_id,
+        "channel_kind": message.channel_kind,
+        "conversation_id": message.conversation_id,
+        "delivery_state": message.delivery_state,
+        "accepted_signal_event_id": accepted_event.event_id,
+        "accepted_signal_event_type": accepted_event.event_type,
+        "projection_kind": event_suffix,
+    }))
+    .provenance(json!({
+        "ownership": "communications_projection",
+        "source_event_id": accepted_event.event_id,
+    }))
+    .causation_id(accepted_event.event_id.clone())
+    .correlation_id(
+        accepted_event
+            .correlation_id
+            .clone()
+            .unwrap_or_else(|| accepted_event.event_id.clone()),
+    )
+    .build()?;
+
+    EventStore::new(pool).append_idempotent(&event).await?;
+    Ok(())
+}
+
+async fn communication_message_exists(
+    pool: &PgPool,
+    account_id: &str,
+    provider_record_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS (
+            SELECT 1
+            FROM communication_messages
+            WHERE account_id = $1
+              AND provider_record_id = $2
+        )
+        "#,
+    )
+    .bind(account_id.trim())
+    .bind(provider_record_id.trim())
+    .fetch_one(pool)
+    .await
 }
 
 fn parse_observed_at(
@@ -569,6 +698,9 @@ pub enum CommunicationSignalProjectionError {
 
     #[error(transparent)]
     Message(#[from] MessageProjectionError),
+
+    #[error(transparent)]
+    EventStore(#[from] EventStoreError),
 
     #[error("accepted signal subject is missing `{0}`")]
     MissingSubjectField(&'static str),

@@ -20,7 +20,7 @@ use crate::app::api_support::{
 use crate::app::{ApiError, AppState};
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::bus::sanitize_event_payload;
-use crate::platform::events::{EventEnvelope, StoredEventEnvelope};
+use crate::platform::events::{EventEnvelope, EventTrace, StoredEventEnvelope};
 
 pub(crate) async fn post_event(
     State(state): State<AppState>,
@@ -64,6 +64,56 @@ pub(crate) async fn get_event(
     };
 
     Ok(Json(event))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct EventTraceQuery {
+    limit: Option<u32>,
+}
+
+pub(crate) async fn get_event_trace(
+    State(state): State<AppState>,
+    Path(event_id): Path<String>,
+    Query(query): Query<EventTraceQuery>,
+) -> Result<Json<EventTrace>, ApiError> {
+    let store = event_store(&state)?;
+    let Some(trace) = store
+        .trace_by_event_id(&event_id, query.limit.unwrap_or(1000))
+        .await?
+    else {
+        return Err(ApiError::NotFound);
+    };
+
+    Ok(Json(sanitize_trace_payloads(trace)))
+}
+
+pub(crate) async fn get_event_trace_by_correlation(
+    State(state): State<AppState>,
+    Path(correlation_id): Path<String>,
+    Query(query): Query<EventTraceQuery>,
+) -> Result<Json<EventTrace>, ApiError> {
+    let store = event_store(&state)?;
+    let trace = store
+        .trace_by_correlation_id(&correlation_id, query.limit.unwrap_or(1000))
+        .await?;
+
+    Ok(Json(sanitize_trace_payloads(trace)))
+}
+
+pub(crate) async fn get_event_children(
+    State(state): State<AppState>,
+    Path(event_id): Path<String>,
+    Query(query): Query<EventTraceQuery>,
+) -> Result<Json<Vec<StoredEventEnvelope>>, ApiError> {
+    let store = event_store(&state)?;
+    let children = store
+        .list_children(&event_id, query.limit.unwrap_or(1000))
+        .await?
+        .into_iter()
+        .map(sanitize_stored_event_payload)
+        .collect();
+
+    Ok(Json(children))
 }
 
 #[derive(Deserialize)]
@@ -231,7 +281,7 @@ struct EventStreamState {
 
 fn stored_event_to_sse(envelope: StoredEventEnvelope) -> Event {
     let position = envelope.position;
-    match serde_json::to_string(&envelope) {
+    match serde_json::to_string(&sanitize_stored_event_payload(envelope)) {
         Ok(data) => Event::default()
             .id(position.to_string())
             .event("event")
@@ -247,7 +297,13 @@ async fn event_websocket_loop(mut socket: WebSocket, mut state: EventStreamState
     loop {
         if let Some(envelope) = state.pending.pop_front() {
             state.after_position = envelope.position;
-            if send_ws_json(&mut socket, "event", serde_json::to_value(envelope)).await {
+            if send_ws_json(
+                &mut socket,
+                "event",
+                serde_json::to_value(sanitize_stored_event_payload(envelope)),
+            )
+            .await
+            {
                 continue;
             }
             return;
@@ -371,10 +427,17 @@ pub(crate) async fn get_realtime_websocket(
                         let payload = json!({
                             "type": "event",
                             "data": {
-                                "event_type": &event.event_type,
                                 "event_id": &event.event_id,
+                                "event_type": &event.event_type,
+                                "schema_version": event.schema_version,
                                 "occurred_at": event.occurred_at.to_rfc3339(),
+                                "recorded_at": null,
+                                "source": &event.source,
+                                "actor": &event.actor,
                                 "subject": &event.subject,
+                                "provenance": &event.provenance,
+                                "causation_id": &event.causation_id,
+                                "correlation_id": &event.correlation_id,
                                 "payload": sanitize_event_payload(event.payload.clone()),
                             }
                         });
@@ -407,3 +470,17 @@ pub(crate) async fn get_realtime_websocket(
 }
 
 use tokio::sync::broadcast;
+
+fn sanitize_trace_payloads(mut trace: EventTrace) -> EventTrace {
+    trace.events = trace
+        .events
+        .into_iter()
+        .map(sanitize_stored_event_payload)
+        .collect();
+    trace
+}
+
+fn sanitize_stored_event_payload(mut envelope: StoredEventEnvelope) -> StoredEventEnvelope {
+    envelope.event.payload = sanitize_event_payload(envelope.event.payload);
+    envelope
+}

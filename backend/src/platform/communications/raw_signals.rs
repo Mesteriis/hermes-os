@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 
 use super::StoredRawCommunicationRecord;
 use crate::platform::events::NewEventEnvelope;
+use crate::platform::observations::observation_captured_event_id;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationRawSignalSource {
@@ -80,6 +81,7 @@ pub fn build_communication_raw_signal_event(
     )
     .payload(raw_record.payload.clone())
     .provenance(provenance)
+    .causation_id(observation_captured_event_id(&raw_record.observation_id))
     .correlation_id(raw_record.observation_id.clone())
     .build()
 }

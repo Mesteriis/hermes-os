@@ -11,6 +11,8 @@ mod query;
 mod rows;
 mod runtime;
 mod store;
+mod trace;
+mod trace_context;
 mod validation;
 
 pub use self::builder::NewEventEnvelopeBuilder;
@@ -36,3 +38,7 @@ pub use self::runtime::{
 };
 pub use self::store::EventStore;
 pub use self::store::EventStore as EventLogPort;
+pub use self::trace::{
+    EventConsumerAnnotation, EventDeadLetterAnnotation, EventTrace, EventTraceEdge,
+};
+pub use self::trace_context::TraceContext;

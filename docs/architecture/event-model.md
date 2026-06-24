@@ -70,6 +70,26 @@ happened after evidence enters Hermes.
 - Provenance for imported and AI-derived facts.
 - Projection rebuild support.
 
+## Trace Semantics
+
+Every canonical event is also a span.
+
+```text
+event_id = span id
+correlation_id = trace id
+causation_id = parent span id
+event_log = trace store
+```
+
+Every event written through the canonical event builder must have a non-empty
+`correlation_id`. Root events may have no `causation_id`. Derived events must
+set `causation_id = parent.event_id` and inherit `correlation_id` from the
+parent event.
+
+Trace reconstruction belongs to `platform/events` and reads from append-only
+`event_log`. Timeline Engine remains a chronological projection engine; it may
+display trace links but must not become the trace source of truth.
+
 ## Event Examples
 
 - `message_received`

@@ -2,6 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use serde_json::json;
+use sqlx::Row;
 
 use hermes_hub_backend::domains::communications::core::EmailProviderKind;
 use hermes_hub_backend::platform::storage::Database;
@@ -67,6 +68,77 @@ async fn fixture_email_pipeline_imports_projects_persons_and_graph_against_postg
     .await
     .expect("accepted mail signal count");
     assert_eq!(accepted_signal_count, 1);
+
+    let observation_id: String = sqlx::query_scalar(
+        r#"
+        SELECT observation_id
+        FROM communication_messages
+        WHERE account_id = $1
+        ORDER BY projected_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(test_context.pool())
+    .await
+    .expect("message observation id");
+    let trace_rows = sqlx::query(
+        r#"
+        SELECT event_id, event_type, causation_id, correlation_id
+        FROM event_log
+        WHERE correlation_id = $1
+          AND event_type IN (
+              'observation.captured.v1',
+              'signal.raw.mail.message.observed',
+              'signal.accepted.mail.message',
+              'communication.message.recorded'
+          )
+        ORDER BY position ASC
+        "#,
+    )
+    .bind(&observation_id)
+    .fetch_all(test_context.pool())
+    .await
+    .expect("mail trace rows");
+    assert_eq!(trace_rows.len(), 4);
+    let observation_event_id = format!("event:v1:observation-captured:{observation_id}");
+    let raw_event_id: String = trace_rows[1].try_get("event_id").expect("raw event id");
+    let accepted_event_id: String = trace_rows[2]
+        .try_get("event_id")
+        .expect("accepted event id");
+    assert_eq!(
+        trace_rows[0]
+            .try_get::<String, _>("event_id")
+            .expect("observation event id"),
+        observation_event_id
+    );
+    assert_eq!(
+        trace_rows[1]
+            .try_get::<Option<String>, _>("causation_id")
+            .expect("raw causation")
+            .as_deref(),
+        Some(observation_event_id.as_str())
+    );
+    assert_eq!(
+        trace_rows[2]
+            .try_get::<Option<String>, _>("causation_id")
+            .expect("accepted causation")
+            .as_deref(),
+        Some(raw_event_id.as_str())
+    );
+    assert_eq!(
+        trace_rows[3]
+            .try_get::<Option<String>, _>("causation_id")
+            .expect("communication causation")
+            .as_deref(),
+        Some(accepted_event_id.as_str())
+    );
+    assert!(trace_rows.iter().all(|row| {
+        row.try_get::<Option<String>, _>("correlation_id")
+            .expect("trace correlation")
+            .as_deref()
+            == Some(observation_id.as_str())
+    }));
 }
 
 fn unique_suffix() -> u128 {

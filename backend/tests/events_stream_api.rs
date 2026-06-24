@@ -77,6 +77,102 @@ async fn event_stream_replays_event_log_positions_as_sse_against_postgres() {
     assert!(text.contains(&format!("id: {position}")), "{text}");
     assert!(text.contains("event: event"), "{text}");
     assert!(text.contains("system_api_test_event"), "{text}");
+    assert!(text.contains("correlation_id"), "{text}");
+    assert!(text.contains(&event_id), "{text}");
+}
+
+#[tokio::test]
+async fn event_trace_api_returns_causal_edges_against_postgres() {
+    let context = TestContext::new().await;
+    let app = app_with_database(&context.connection_string()).await;
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock after unix epoch")
+        .as_nanos();
+    let trace_id = format!("trace_api_{suffix}");
+    let root_id = format!("evt_api_trace_root_{suffix}");
+    let child_id = format!("evt_api_trace_child_{suffix}");
+
+    let root_response = app
+        .clone()
+        .oneshot(json_request_with_token(
+            "/api/v1/events",
+            json!({
+                "event_id": root_id,
+                "event_type": "system_api_trace_test_event",
+                "occurred_at": Utc::now(),
+                "source": {
+                    "kind": "test",
+                    "provider": "integration",
+                    "source_id": root_id
+                },
+                "subject": {"kind": "system", "entity_id": "backend"},
+                "correlation_id": trace_id
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("root create response");
+    assert_eq!(root_response.status(), StatusCode::CREATED);
+
+    let child_response = app
+        .clone()
+        .oneshot(json_request_with_token(
+            "/api/v1/events",
+            json!({
+                "event_id": child_id,
+                "event_type": "system_api_trace_test_event",
+                "occurred_at": Utc::now(),
+                "source": {
+                    "kind": "test",
+                    "provider": "integration",
+                    "source_id": child_id
+                },
+                "subject": {"kind": "system", "entity_id": "backend"},
+                "causation_id": root_id,
+                "correlation_id": trace_id
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("child create response");
+    assert_eq!(child_response.status(), StatusCode::CREATED);
+
+    let trace_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/events/{child_id}/trace"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("trace response");
+    assert_eq!(trace_response.status(), StatusCode::OK);
+    let trace_body = json_body(trace_response).await;
+
+    assert_eq!(trace_body["correlation_id"], json!(trace_id));
+    assert_eq!(trace_body["root_event_ids"], json!([root_id]));
+    assert_eq!(trace_body["events"].as_array().expect("events").len(), 2);
+    assert_eq!(
+        trace_body["edges"],
+        json!([{
+            "parent_event_id": root_id,
+            "child_event_id": child_id
+        }])
+    );
+    assert_eq!(trace_body["missing_parent_ids"], json!([]));
+    assert_eq!(trace_body["orphan_event_ids"], json!([]));
+
+    let children_response = app
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/events/{root_id}/children"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("children response");
+    assert_eq!(children_response.status(), StatusCode::OK);
+    let children_body = json_body(children_response).await;
+    assert_eq!(children_body.as_array().expect("children").len(), 1);
+    assert_eq!(children_body[0]["event"]["event_id"], json!(child_id));
 }
 
 async fn app_with_database(database_url: &str) -> axum::Router {

@@ -18,8 +18,9 @@ Hermes through one governed source boundary.
 ```text
 External Provider / Fixture
   -> Integration Adapter / Fixture Source
-  -> Signal Hub Control Plane
-  -> Event Backbone
+  -> observation.captured.v1
+  -> signal.raw.<source>.<thing>.observed
+  -> signal.accepted.<source>.<thing>
   -> Owning Domain Consumers
   -> Projections
   -> SSE / UI
@@ -29,8 +30,10 @@ Communication example:
 
 ```text
 Telegram runtime update
-  -> signal.telegram.message.observed
-  -> communication.message.recorded
+  -> observation.captured.v1
+  -> signal.raw.telegram.message.observed
+  -> signal.accepted.telegram.message
+  -> communication.message.recorded / communication.message.updated
   -> radar.signal.detected
   -> review.item.promoted
   -> task.created / persona.identity_trace.recorded / document.import.requested
@@ -62,7 +65,7 @@ Filesystem watcher event
 |---|---|---|
 | `domains/signal_hub` | source registry, connections, capabilities, runtime state, health, profiles, mute/pause/replay policy, fixture catalog metadata | provider protocol code, communication messages, tasks, personas, documents |
 | `backend/src/integrations/*` | provider protocol, transport, auth/session runtime, provider command execution, raw provider observation capture | Signal Hub policy, Communications state, Radar state, business domain state |
-| `platform/events` | event envelope, event store, EventBus abstraction, NATS JetStream transport, consumer cursors, DLQ, replay primitives | business meaning, provider sessions, UI state |
+| `platform/events` | event envelope, event store, trace context, trace reconstruction, EventBus abstraction, NATS JetStream transport, consumer cursors, DLQ, replay primitives | business meaning, provider sessions, UI state |
 | `domains/communications` | messages, conversations, participants, attachments, drafts, outbox, provider-neutral command state | provider runtime sessions, Signal Hub source policy |
 | `domains/radar` | attention signals and review candidates | provider runtime or message storage |
 | `workflows/*` | event-driven cross-domain orchestration | direct store mutation outside owner domain |
@@ -166,6 +169,23 @@ correlation_id
 
 Signal Hub extensions live inside `source`, `subject`, `payload` and
 `provenance`; the envelope shape remains stable.
+
+## Trace Contract
+
+Signal Hub participates in the canonical trace graph but does not own product
+domain state.
+
+```text
+observation.captured.v1
+  -> signal.raw.<source>.<thing>.observed
+  -> signal.accepted.<source>.<thing>
+  -> owning domain event
+```
+
+Raw source signals inherit `correlation_id` from the root observation and set
+`causation_id` to the observation captured event id. Accepted, rejected, muted
+and paused Signal Hub events set `causation_id = raw_event.event_id` and inherit
+the raw event correlation id.
 
 ## Signal Control Plane
 

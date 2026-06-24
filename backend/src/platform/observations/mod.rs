@@ -14,5 +14,5 @@ pub(crate) use review_links::{
     link_domain_entity, link_domain_entity_in_transaction, materialize_review_transition_link,
     materialize_review_transition_link_in_transaction,
 };
-pub use store::ObservationStore;
 pub use store::ObservationStore as ObservationPort;
+pub use store::{ObservationStore, observation_captured_event_id};

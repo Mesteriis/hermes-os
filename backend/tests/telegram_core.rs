@@ -109,6 +109,63 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     assert_eq!(raw_signal_count, 1);
     assert_eq!(accepted_signal_count, 1);
     assert_eq!(legacy_integration_count, 0);
+    let trace_rows = sqlx::query(
+        r#"
+        SELECT event_id, event_type, causation_id, correlation_id
+        FROM event_log
+        WHERE correlation_id = $1
+          AND event_type IN (
+              'observation.captured.v1',
+              'signal.raw.telegram.message.observed',
+              'signal.accepted.telegram.message',
+              'communication.message.recorded'
+          )
+        ORDER BY position ASC
+        "#,
+    )
+    .bind(&observation_id)
+    .fetch_all(&pool)
+    .await
+    .expect("telegram trace rows");
+    assert_eq!(trace_rows.len(), 4);
+    let observation_event_id = format!("event:v1:observation-captured:{observation_id}");
+    let raw_event_id: String = trace_rows[1].try_get("event_id").expect("raw event id");
+    let accepted_event_id: String = trace_rows[2]
+        .try_get("event_id")
+        .expect("accepted event id");
+    assert_eq!(
+        trace_rows[0]
+            .try_get::<String, _>("event_id")
+            .expect("observation event id"),
+        observation_event_id
+    );
+    assert_eq!(
+        trace_rows[1]
+            .try_get::<Option<String>, _>("causation_id")
+            .expect("raw causation")
+            .as_deref(),
+        Some(observation_event_id.as_str())
+    );
+    assert_eq!(
+        trace_rows[2]
+            .try_get::<Option<String>, _>("causation_id")
+            .expect("accepted causation")
+            .as_deref(),
+        Some(raw_event_id.as_str())
+    );
+    assert_eq!(
+        trace_rows[3]
+            .try_get::<Option<String>, _>("causation_id")
+            .expect("communication causation")
+            .as_deref(),
+        Some(accepted_event_id.as_str())
+    );
+    assert!(trace_rows.iter().all(|row| {
+        row.try_get::<Option<String>, _>("correlation_id")
+            .expect("trace correlation")
+            .as_deref()
+            == Some(observation_id.as_str())
+    }));
 
     let decision_row: (String, String, String, String, String) = sqlx::query_as(
         r#"

@@ -67,9 +67,9 @@ async fn manual_capture_creates_observation_without_vault_source_against_postgre
     );
     assert_eq!(provenance["captured_by"], json!("manual_voice_memo"));
 
-    let event_count = sqlx::query_scalar::<_, i64>(
+    let event_row = sqlx::query(
         r#"
-        SELECT count(*)
+        SELECT event_id, correlation_id, causation_id, subject
         FROM event_log
         WHERE event_type = 'observation.captured.v1'
           AND subject ->> 'observation_id' = $1
@@ -78,8 +78,26 @@ async fn manual_capture_creates_observation_without_vault_source_against_postgre
     .bind(&stored.observation_id)
     .fetch_one(&pool)
     .await
-    .expect("observation captured event count");
-    assert_eq!(event_count, 1);
+    .expect("observation captured event row");
+    let event_id: String = event_row.try_get("event_id").expect("event_id");
+    let correlation_id: Option<String> =
+        event_row.try_get("correlation_id").expect("correlation_id");
+    let causation_id: Option<String> = event_row.try_get("causation_id").expect("causation_id");
+    let subject: Value = event_row.try_get("subject").expect("subject");
+
+    assert_eq!(
+        event_id,
+        format!("event:v1:observation-captured:{}", stored.observation_id)
+    );
+    assert_eq!(
+        correlation_id.as_deref(),
+        Some(stored.observation_id.as_str())
+    );
+    assert_eq!(causation_id, None);
+    assert_eq!(subject["kind"], json!("observation"));
+    assert_eq!(subject["entity_id"], json!(stored.observation_id));
+    assert_eq!(subject["observation_id"], json!(stored.observation_id));
+    assert_eq!(subject["observation_kind"], json!("VOICE_RECORDING"));
 }
 
 #[tokio::test]

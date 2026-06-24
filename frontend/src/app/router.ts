@@ -15,6 +15,7 @@ import ReviewView from './views/ReviewView.vue'
 import SettingsView from './views/SettingsView.vue'
 import AgentsView from './views/AgentsView.vue'
 import OrganizationsView from './views/OrganizationsView.vue'
+import EventTracingView from './views/EventTracingView.vue'
 
 const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/home' },
@@ -29,6 +30,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/notes', name: 'notes', component: NotesView },
   { path: '/knowledge', name: 'knowledge', component: KnowledgeView },
   { path: '/review', name: 'review', component: ReviewView },
+  { path: '/event-tracing', name: 'event-tracing', component: EventTracingView },
   { path: '/settings', name: 'settings', component: SettingsView },
   { path: '/agents', name: 'agents', component: AgentsView },
   { path: '/organizations', name: 'organizations', component: OrganizationsView }

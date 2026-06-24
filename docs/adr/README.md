@@ -101,3 +101,4 @@ ADR status vocabulary:
 - [ADR-0097 Communications Channel Domains To Integrations](ADR-0097-communications-channel-domains-to-integrations.md)
 - [ADR-0098 Provider-Neutral Communications API And Strict Boundaries](ADR-0098-provider-neutral-communications-api-and-strict-boundaries.md)
 - [ADR-0099 Signal Hub Event Platform](ADR-0099-signal-hub-event-platform.md)
+- [ADR-0100 Trace-First Event Observability](ADR-0100-trace-first-event-observability.md)

@@ -14,6 +14,7 @@ export type PrimaryNavId =
   | 'notes'
   | 'knowledge'
   | 'review'
+  | 'event-tracing'
   | 'agents'
 
 export type CommunicationSectionId =
@@ -80,6 +81,7 @@ const viewCopy: Record<string, ViewCopy> = {
   notes: { title: 'Notes', subtitle: 'Notes and memos', search: 'Search notes…', icon: 'tabler:notes' },
   knowledge: { title: 'Knowledge Graph', subtitle: 'Graph exploration', search: 'Search knowledge graph…', icon: 'tabler:share' },
   review: { title: 'Review', subtitle: 'Review queue', search: 'Search review…', icon: 'tabler:clipboard-check' },
+  'event-tracing': { title: 'Event Traces', subtitle: 'Causal event graph', search: 'Search event traces…', icon: 'tabler:route' },
   settings: { title: 'Settings', subtitle: 'Application settings', search: 'Search settings…', icon: 'tabler:settings' },
   agents: { title: 'AI Agents', subtitle: 'AI control center', search: '', icon: 'tabler:sparkles' },
   organizations: { title: 'Organizations', subtitle: 'Organizations workspace', search: 'Search organizations…', icon: 'tabler:building-community' },

@@ -67,8 +67,15 @@ impl NewEventEnvelopeBuilder {
             validate_object("actor", actor)?;
         }
 
+        let event_id = self.event_id.trim().to_owned();
+        let correlation_id = self
+            .correlation_id
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| event_id.clone());
+
         Ok(NewEventEnvelope {
-            event_id: self.event_id.trim().to_owned(),
+            event_id,
             event_type: self.event_type.trim().to_owned(),
             schema_version: self.schema_version,
             occurred_at: self.occurred_at,
@@ -78,7 +85,7 @@ impl NewEventEnvelopeBuilder {
             payload: self.payload,
             provenance: self.provenance,
             causation_id: self.causation_id,
-            correlation_id: self.correlation_id,
+            correlation_id: Some(correlation_id),
         })
     }
 }

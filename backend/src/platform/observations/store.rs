@@ -434,10 +434,7 @@ async fn append_observation_captured_event(
     observation: &Observation,
 ) -> Result<(), ObservationStoreError> {
     let event = NewEventEnvelope::builder(
-        format!(
-            "event:v1:observation-captured:{}",
-            observation.observation_id
-        ),
+        observation_captured_event_id(&observation.observation_id),
         "observation.captured.v1",
         observation.captured_at,
         json!({
@@ -446,7 +443,9 @@ async fn append_observation_captured_event(
         }),
         json!({
             "observation_id": observation.observation_id,
-            "kind": observation.kind_code
+            "kind": "observation",
+            "entity_id": observation.observation_id,
+            "observation_kind": observation.kind_code
         }),
     )
     .payload(json!({
@@ -459,10 +458,15 @@ async fn append_observation_captured_event(
     .provenance(json!({
         "canonical_evidence_store": true
     }))
+    .correlation_id(observation.observation_id.clone())
     .build()?;
 
     EventStore::append_in_transaction(transaction, &event).await?;
     Ok(())
+}
+
+pub fn observation_captured_event_id(observation_id: &str) -> String {
+    format!("event:v1:observation-captured:{observation_id}")
 }
 
 fn observation_id(

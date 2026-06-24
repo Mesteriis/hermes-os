@@ -6,6 +6,7 @@ use super::service::signal_hub_raw_dispatcher_allows_processing;
 use super::{SignalHubError, SignalHubSignalService, SignalHubStore, SignalProcessingOutcome};
 use crate::platform::communications::StoredRawCommunicationRecord;
 use crate::platform::events::{EventEnvelope, EventStore, NewEventEnvelope};
+use crate::platform::observations::observation_captured_event_id;
 
 pub async fn dispatch_telegram_raw_signal(
     pool: PgPool,
@@ -79,6 +80,7 @@ fn build_telegram_raw_signal(
     )
     .payload(raw_record.payload.clone())
     .provenance(provenance)
+    .causation_id(observation_captured_event_id(&raw_record.observation_id))
     .correlation_id(raw_record.observation_id.clone())
     .build()?)
 }

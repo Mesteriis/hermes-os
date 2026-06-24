@@ -72,7 +72,7 @@ async fn ai_meeting_prep_returns_briefing_without_calendar_dependency() {
         r#"
         SELECT count(*)::bigint
         FROM event_log
-        WHERE correlation_id IS NULL
+        WHERE correlation_id = $1
           AND event_type IN (
             'signal.raw.ai.run_requested.observed',
             'signal.raw.ai.run_completed.observed',

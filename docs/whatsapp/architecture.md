@@ -38,11 +38,11 @@ Detailed flow:
 
 ```text
 WhatsApp Web runtime event
-  -> raw provider event
-  -> normalized WhatsApp source record
-  -> canonical Communication projection
-  -> typed whatsapp.* event
-  -> Timeline evidence
+  -> observation.captured.v1
+  -> signal.raw.whatsapp.message.observed
+  -> signal.accepted.whatsapp.message
+  -> communication.message.recorded / communication.message.updated
+  -> Timeline evidence / trace link
   -> Search / Risk / Enrichment / AI candidates
   -> UI cache patch + replay
 ```
@@ -51,6 +51,23 @@ WhatsApp Web runtime event
 secondary or background WebView after explicit owner setup, but it must expose
 session state, linking, revocation, permission and failure status to the owner.
 It must not become hidden headless scraping.
+
+## Trace Contract
+
+WhatsApp runtime events must not create product domain state directly.
+
+WhatsApp provider observations enter the canonical trace as:
+
+```text
+observation.captured.v1
+  -> signal.raw.whatsapp.message.observed
+  -> signal.accepted.whatsapp.message
+  -> communication.message.recorded / communication.message.updated
+```
+
+WhatsApp integration code owns companion runtime and provider protocol state.
+Signal Hub owns source acceptance policy. Communications owns canonical message
+state. Trace reconstruction belongs to `platform/events`.
 
 ## Key ADR
 

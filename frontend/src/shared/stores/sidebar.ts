@@ -13,6 +13,7 @@ export type PrimaryNavId =
   | 'notes'
   | 'knowledge'
   | 'review'
+  | 'event-tracing'
   | 'agents'
 
 export type CommunicationSectionId =
@@ -98,6 +99,7 @@ export const primaryWorkspaceNav: PrimaryWorkspaceNavItem[] = [
   { id: 'notes', label: 'Notes', icon: 'tabler:notes' },
   { id: 'knowledge', label: 'Knowledge Graph', icon: 'tabler:share' },
   { id: 'review', label: 'Review', icon: 'tabler:clipboard-check' },
+  { id: 'event-tracing', label: 'Event Traces', icon: 'tabler:route' },
   { id: 'agents', label: 'AI Agents', icon: 'tabler:sparkles' }
 ]
 

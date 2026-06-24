@@ -82,6 +82,31 @@ Each imported communication must preserve source provenance:
 Source evidence is immutable. Corrections are represented as later events,
 review decisions or superseding derived records.
 
+## Trace Context
+
+Communications consumes accepted provider/source signals and emits canonical
+communication events with inherited trace context.
+
+```text
+signal.accepted.<source>.message
+  -> communication.message.recorded / communication.message.updated
+```
+
+Communication events set `causation_id = accepted_signal.event_id` and inherit
+`correlation_id = accepted_signal.correlation_id`. Subjects must identify the
+canonical communication entity, for example:
+
+```json
+{
+  "kind": "communication_message",
+  "entity_id": "message_...",
+  "message_id": "message_..."
+}
+```
+
+Provider-specific runtime state stays in integrations. Trace reconstruction
+stays in `platform/events`.
+
 ## Extraction Pipeline
 
 ```text

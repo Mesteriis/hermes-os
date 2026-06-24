@@ -46,14 +46,31 @@ Fixture / TDLib snapshot
 
 ```text
 Telegram runtime event
-  -> raw provider event
-  -> normalized Telegram source record
-  -> canonical Communication projection
-  -> typed telegram.* event
-  -> Timeline evidence
+  -> observation.captured.v1
+  -> signal.raw.telegram.message.observed
+  -> signal.accepted.telegram.message
+  -> communication.message.recorded / communication.message.updated
+  -> Timeline evidence / trace link
   -> Search / Risk / Enrichment / AI candidates
   -> UI cache patch + replay
 ```
+
+## Trace Contract
+
+Telegram runtime events must not create product domain state directly.
+
+Telegram provider observations enter the canonical trace as:
+
+```text
+observation.captured.v1
+  -> signal.raw.telegram.message.observed
+  -> signal.accepted.telegram.message
+  -> communication.message.recorded / communication.message.updated
+```
+
+Telegram integration code owns provider protocol and runtime state. Signal Hub
+owns source acceptance policy. Communications owns canonical message state.
+Trace reconstruction belongs to `platform/events`.
 
 ## Key ADR
 

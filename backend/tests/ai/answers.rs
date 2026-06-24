@@ -121,7 +121,7 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
         r#"
         SELECT count(*)::bigint
         FROM event_log
-        WHERE correlation_id IS NULL
+        WHERE correlation_id = $1
           AND event_type IN (
             'signal.raw.ai.run_requested.observed',
             'signal.raw.ai.run_completed.observed',
@@ -346,7 +346,7 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
         r#"
         SELECT count(*)::bigint
         FROM event_log
-        WHERE correlation_id IS NULL
+        WHERE correlation_id = $1
           AND event_type IN (
             'signal.raw.ai.run_requested.observed',
             'signal.raw.ai.run_completed.observed',
