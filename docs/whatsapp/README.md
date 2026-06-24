@@ -34,6 +34,18 @@ Hidden desktop WebView
 явным owner-visible lifecycle, permissions и status UI. Это не headless scraping,
 не невидимая запись и не попытка заменить WhatsApp Web неофициальным API.
 
+
+## 2026-06-24 planning documents
+
+The following documents extend the original WhatsApp Channel audit toward full
+functionality and provider-runtime selection:
+
+- [`current-audit-2026-06-24.md`](./current-audit-2026-06-24.md) — current repository audit and implemented fixture foundation.
+- [`full-functionality-target.md`](./full-functionality-target.md) — complete WhatsApp capability target plus Hermes intelligence flows.
+- [`rust-provider-research.md`](./rust-provider-research.md) — Rust project evaluation: `whatsapp-rust`, `wa-rs`, `whatsappweb-rs`, Business Cloud SDKs and references.
+- [`implementation-plan.md`](./implementation-plan.md) — phased implementation plan from fixture foundation to live provider and Hermes intelligence.
+- [`../adr/ADR-0101-whatsapp-provider-runtime-selection.md`](../adr/ADR-0101-whatsapp-provider-runtime-selection.md) — proposed runtime/provider selection decision.
+
 ## Роль в Communications Domain
 
 WhatsApp использует те же базовые границы, что и другие каналы коммуникации:
