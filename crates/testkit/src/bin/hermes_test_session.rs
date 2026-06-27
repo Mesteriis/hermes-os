@@ -25,7 +25,10 @@ async fn main() {
             SESSION_POSTGRES_HOST_PORT_ENV,
             postgres_container.host_port().to_string(),
         )
-        .env(SESSION_NATS_HOST_PORT_ENV, nats_container.host_port().to_string())
+        .env(
+            SESSION_NATS_HOST_PORT_ENV,
+            nats_container.host_port().to_string(),
+        )
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())

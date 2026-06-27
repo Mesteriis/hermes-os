@@ -30,7 +30,8 @@ pub use provider_channel_store::ProviderChannelMessageStore;
 pub use provider_observation_projection::{
     COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, CommunicationSignalProjectionError,
     consume_accepted_signal_event, project_accepted_signal_if_runtime_allows,
-    project_provider_observation_event, replay_accepted_signal_event,
+    project_provider_observation_event, project_whatsapp_content_observed,
+    project_whatsapp_delivery_state_observed, replay_accepted_signal_event,
     supports_communication_projection_signal_event,
 };
 pub(crate) use query_parser::parse_communication_message_search_query;

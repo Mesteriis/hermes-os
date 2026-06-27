@@ -126,11 +126,26 @@ impl PersonsIdentityStore {
         identity_value: &str,
         source: &str,
     ) -> Result<PersonIdentity, PersonCoreError> {
+        self.create_unattached_with_metadata(identity_type, identity_value, source, json!({}))
+            .await
+    }
+
+    pub async fn create_unattached_with_metadata(
+        &self,
+        identity_type: &str,
+        identity_value: &str,
+        source: &str,
+        metadata: Value,
+    ) -> Result<PersonIdentity, PersonCoreError> {
         let row = sqlx::query(
-            r#"INSERT INTO person_identities (person_id, identity_type, identity_value, source)
-               VALUES (NULL, $1, $2, $3)
+            r#"INSERT INTO person_identities (
+                   person_id, identity_type, identity_value, source, metadata
+               )
+               VALUES (NULL, $1, $2, $3, $4)
                ON CONFLICT (identity_type, identity_value) WHERE status = 'active'
-               DO UPDATE SET updated_at = now()
+               DO UPDATE SET
+                   metadata = person_identities.metadata || EXCLUDED.metadata,
+                   updated_at = now()
                RETURNING id::text, person_id, identity_type, identity_value, source,
                          confidence::float8 AS confidence,
                          last_verified_at, status, metadata, created_at, updated_at"#,
@@ -138,6 +153,7 @@ impl PersonsIdentityStore {
         .bind(identity_type)
         .bind(identity_value)
         .bind(source)
+        .bind(metadata)
         .fetch_one(&self.pool)
         .await?;
         row_to_identity(row)
@@ -152,6 +168,32 @@ impl PersonsIdentityStore {
     ) -> Result<PersonIdentity, PersonCoreError> {
         let identity = self
             .create_unattached(identity_type, identity_value, source)
+            .await?;
+        link_persons_entity(
+            &self.pool,
+            observation_id,
+            "identity_trace",
+            identity.id.clone(),
+            None,
+            Some(json!({
+                "identity_type": identity.identity_type,
+                "person_id": identity.person_id,
+            })),
+        )
+        .await?;
+        Ok(identity)
+    }
+
+    pub async fn create_unattached_with_metadata_and_observation(
+        &self,
+        identity_type: &str,
+        identity_value: &str,
+        source: &str,
+        metadata: Value,
+        observation_id: &str,
+    ) -> Result<PersonIdentity, PersonCoreError> {
+        let identity = self
+            .create_unattached_with_metadata(identity_type, identity_value, source, metadata)
             .await?;
         link_persons_entity(
             &self.pool,

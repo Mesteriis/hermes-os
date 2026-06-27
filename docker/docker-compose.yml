@@ -38,3 +38,29 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+
+  whatsapp-business-cloud-edge-proxy:
+    profiles:
+      - whatsapp-business-cloud-edge
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: whatsapp-business-cloud-edge-proxy
+    restart: unless-stopped
+    environment:
+      HERMES_WHATSAPP_BUSINESS_CLOUD_EDGE_BIND_ADDR: 0.0.0.0:8787
+      HERMES_WHATSAPP_BUSINESS_CLOUD_EDGE_HERMES_BASE_URL: ${HERMES_WHATSAPP_BUSINESS_CLOUD_EDGE_HERMES_BASE_URL:-http://host.docker.internal:8080}
+      HERMES_WHATSAPP_BUSINESS_CLOUD_EDGE_ACCOUNT_ID: ${HERMES_WHATSAPP_BUSINESS_CLOUD_EDGE_ACCOUNT_ID:-}
+      HERMES_LOCAL_API_SECRET: ${HERMES_LOCAL_API_SECRET:?Set HERMES_LOCAL_API_SECRET in docker/.env}
+      HERMES_LOG_FORMAT: ${HERMES_LOG_FORMAT:-json}
+      RUST_LOG: ${HERMES_WHATSAPP_BUSINESS_CLOUD_EDGE_RUST_LOG:-info}
+    ports:
+      - "${HERMES_WHATSAPP_BUSINESS_CLOUD_EDGE_BIND:-127.0.0.1}:${HERMES_WHATSAPP_BUSINESS_CLOUD_EDGE_PORT:-8787}:8787"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8787/healthz >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s

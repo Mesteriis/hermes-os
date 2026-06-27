@@ -26,9 +26,10 @@ WhatsApp должен поставлять Hermes:
 Целевой provider flow:
 
 ```text
-Hidden desktop WebView
-  -> WhatsApp Adapter
-  -> Communication Projection
+Owner-visible desktop WebView companion
+  -> WhatsApp Adapter / runtime bridge
+  -> Signal Hub raw + accepted events
+  -> Communications projection
   -> Events
   -> Timeline
   -> Shared Engines
@@ -47,10 +48,14 @@ WhatsApp Web runtime event
   -> UI cache patch + replay
 ```
 
-`Hidden desktop WebView` is a desktop-owned companion surface. It may run as a
-secondary or background WebView after explicit owner setup, but it must expose
-session state, linking, revocation, permission and failure status to the owner.
-It must not become hidden headless scraping.
+`Owner-visible desktop WebView companion` is a desktop-owned companion surface.
+It may run as a secondary or background WebView after explicit owner setup, but
+it must expose session state, linking, revocation, permission and failure status
+to the owner. It must not become hidden headless scraping. Its bridge contract is
+machine-readable through `runtime/health`: runtime events enter protected
+`/api/v1/integrations/whatsapp/runtime-bridge/*` routes, provider writes use the
+durable outbox claim/failure paths, and session/cookie/profile secrets stay out
+of PostgreSQL, events, logs and health payloads.
 
 ## Trace Contract
 
@@ -171,7 +176,7 @@ Target runtime map:
 | Runtime | Назначение | Initial state |
 |---|---|---|
 | Fixture/manual runtime | Deterministic local validation and docs-driven smoke data | planned |
-| WebView companion runtime | Owner-linked WhatsApp Web session | blocked |
+| WebView companion runtime | Owner-linked WhatsApp Web session with health-exposed bridge contract | blocked until active desktop producer smoke |
 | Offline command runtime | Durable local outbox and replay | planned |
 | Media transfer runtime | Download/upload orchestration through companion runtime | blocked |
 | Meta Business Cloud runtime | Future official business provider | unsupported |

@@ -11,6 +11,7 @@ pub enum CommunicationProviderKind {
     TelegramUser,
     TelegramBot,
     WhatsappWeb,
+    WhatsappBusinessCloud,
 }
 
 pub type EmailProviderKind = CommunicationProviderKind;
@@ -24,6 +25,7 @@ impl CommunicationProviderKind {
             Self::TelegramUser => "telegram_user",
             Self::TelegramBot => "telegram_bot",
             Self::WhatsappWeb => "whatsapp_web",
+            Self::WhatsappBusinessCloud => "whatsapp_business_cloud",
         }
     }
 
@@ -36,7 +38,7 @@ impl CommunicationProviderKind {
     }
 
     pub fn is_whatsapp(self) -> bool {
-        matches!(self, Self::WhatsappWeb)
+        matches!(self, Self::WhatsappWeb | Self::WhatsappBusinessCloud)
     }
 }
 
@@ -51,6 +53,7 @@ impl TryFrom<&str> for CommunicationProviderKind {
             "telegram_user" => Ok(Self::TelegramUser),
             "telegram_bot" => Ok(Self::TelegramBot),
             "whatsapp_web" => Ok(Self::WhatsappWeb),
+            "whatsapp_business_cloud" => Ok(Self::WhatsappBusinessCloud),
             other => Err(CommunicationIngestionError::UnsupportedProviderKind(
                 other.to_owned(),
             )),

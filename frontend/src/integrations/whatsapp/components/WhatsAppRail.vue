@@ -19,12 +19,36 @@ const { t } = useI18n()
 
 function capabilityLabel(capability: string): string {
   const labels: Record<string, string> = {
-    whatsapp_web_messaging: 'WhatsApp Web Messaging',
-    whatsapp_web_sync: 'WhatsApp Web Sync',
-    whatsapp_web_link: 'QR Link',
-    whatsapp_web_runtime: 'Companion Runtime',
-    wa_web_contacts: 'Contacts',
-    wa_web_media: 'Media'
+    'runtime.fixture': 'Fixture Runtime',
+    'sessions.manual_state': 'Session Metadata',
+    'sessions.restore': 'Session Restore',
+    'auth.qr_link_start': 'QR Link',
+    'auth.pair_code_link_start': 'Pair-code Link',
+    'sync.chats': 'Chat Sync',
+    'sync.history': 'History Sync',
+    'messages.read_projection': 'Message Projection Reads',
+    'search.messages': 'Message Search',
+    'search.media': 'Media Search',
+    'media.upload_send': 'Media Upload',
+    'media.download': 'Media Download',
+    'messages.send_text': 'Send Text',
+    'messages.reply': 'Reply',
+    'messages.forward': 'Forward',
+    'messages.edit': 'Edit',
+    'messages.delete': 'Delete',
+    'messages.react': 'React',
+    'messages.unreact': 'Remove Reaction',
+    'status.publish': 'Publish Status',
+    'conversations.mark_read': 'Mark Read',
+    'conversations.mark_unread': 'Mark Unread',
+    'conversations.archive': 'Archive',
+    'conversations.unarchive': 'Unarchive',
+    'conversations.mute': 'Mute',
+    'conversations.unmute': 'Unmute',
+    'conversations.pin': 'Pin',
+    'conversations.unpin': 'Unpin',
+    'conversations.join_group': 'Join Group',
+    'conversations.leave_group': 'Leave Group'
   }
   return labels[capability] ?? capability
 }

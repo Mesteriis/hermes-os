@@ -177,4 +177,42 @@ impl WhatsappWebStore {
         transaction.commit().await?;
         Ok(())
     }
+
+    pub(in crate::integrations::whatsapp) async fn update_session_link_state(
+        &self,
+        account_id: &str,
+        link_state: &str,
+        actor: &str,
+    ) -> Result<(), WhatsappWebError> {
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(
+            r#"
+            UPDATE whatsapp_web_sessions
+            SET link_state = $2,
+                updated_at = now()
+            WHERE account_id = $1
+            RETURNING
+                session_id, account_id, device_name, companion_runtime,
+                link_state, local_state_path, last_sync_at, metadata,
+                created_at, updated_at
+            "#,
+        )
+        .bind(account_id.trim())
+        .bind(link_state.trim())
+        .fetch_optional(&mut *transaction)
+        .await?;
+        if let Some(row) = row {
+            let session = row_to_whatsapp_web_session(row)?;
+            capture_whatsapp_session_observation(
+                &mut transaction,
+                &session,
+                "link_state_update",
+                actor,
+                session.updated_at,
+            )
+            .await?;
+        }
+        transaction.commit().await?;
+        Ok(())
+    }
 }

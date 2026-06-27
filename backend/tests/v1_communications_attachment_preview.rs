@@ -92,6 +92,40 @@ async fn v1_attachment_preview_reads_bounded_local_image_blob_against_postgres()
 }
 
 #[tokio::test]
+async fn v1_attachment_preview_reads_bounded_local_pdf_blob_against_postgres() {
+    let context = TestContext::new().await;
+    let seeded = seed_text_attachment(
+        context.pool().clone(),
+        "spec.pdf",
+        "application/pdf",
+        AttachmentSafetyScanStatus::NotScanned,
+        b"%PDF-1.4\n",
+    )
+    .await;
+    let app = router(&context.connection_string()).await;
+
+    let response = app
+        .oneshot(get(&format!(
+            "/api/v1/communications/attachments/{}/preview",
+            seeded.attachment_id
+        )))
+        .await
+        .expect("attachment pdf preview response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["attachment_id"], seeded.attachment_id);
+    assert_eq!(body["filename"], "spec.pdf");
+    assert_eq!(body["content_type"], "application/pdf");
+    assert_eq!(body["preview_kind"], "pdf");
+    assert_eq!(body["text"], "");
+    assert_eq!(body["data_url"], "data:application/pdf;base64,JVBERi0xLjQK");
+    assert_eq!(body["truncated"], false);
+    assert_eq!(body["byte_count"], 9);
+    assert_eq!(body["max_preview_bytes"], 16777216);
+}
+
+#[tokio::test]
 async fn v1_attachment_preview_rejects_malicious_attachment_metadata() {
     let context = TestContext::new().await;
     let seeded = seed_text_attachment(

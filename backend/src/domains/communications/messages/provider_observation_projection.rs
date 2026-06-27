@@ -27,6 +27,7 @@ pub const COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER: &str =
     "communication_provider_observation_projection";
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
+const WHATSAPP_CHANNEL_KINDS: &[&str] = &["whatsapp_web", "whatsapp_business_cloud"];
 
 pub async fn project_provider_observation_event(
     pool: PgPool,
@@ -219,6 +220,14 @@ async fn project_whatsapp_signal_event(
     let sender_display_name = required_payload_str(&raw_record.payload, "sender_display_name")?;
     let body_text = required_payload_str(&raw_record.payload, "text")?;
     let delivery_state = required_payload_str(&raw_record.payload, "delivery_state")?;
+    let channel_kind = raw_record
+        .provenance
+        .get("provider_kind")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| matches!(*value, "whatsapp_web" | "whatsapp_business_cloud"))
+        .unwrap_or("whatsapp_web")
+        .to_owned();
     let message_existed = communication_message_exists(
         &pool,
         &raw_record.account_id,
@@ -240,7 +249,7 @@ async fn project_whatsapp_signal_event(
             recipients: vec![provider_chat_id.clone()],
             body_text,
             occurred_at: raw_record.occurred_at,
-            channel_kind: "whatsapp_web".to_owned(),
+            channel_kind,
             conversation_id: Some(provider_chat_id),
             sender_display_name: Some(sender_display_name),
             delivery_state,
@@ -414,6 +423,40 @@ async fn project_telegram_observation(
     }
 }
 
+pub async fn project_whatsapp_content_observed(
+    pool: PgPool,
+    message_id: &str,
+    body_text: &str,
+    metadata: &Value,
+    observed_at: DateTime<Utc>,
+) -> Result<Option<ProviderChannelMessage>, ProviderCommunicationMessagePortError> {
+    ProviderChannelMessageStore::new(pool)
+        .apply_content_update(
+            message_id,
+            body_text,
+            metadata,
+            observed_at,
+            whatsapp_projection_context("whatsapp_content_observed"),
+        )
+        .await
+}
+
+pub async fn project_whatsapp_delivery_state_observed(
+    pool: PgPool,
+    message_id: &str,
+    delivery_state: &str,
+    observed_at: DateTime<Utc>,
+) -> Result<Option<ProviderChannelMessage>, ProviderCommunicationMessagePortError> {
+    ProviderChannelMessageStore::new(pool)
+        .set_delivery_state(
+            message_id,
+            delivery_state,
+            observed_at,
+            whatsapp_projection_context("whatsapp_delivery_state_observed"),
+        )
+        .await
+}
+
 fn telegram_projection_context(
     event_kind: &str,
 ) -> ProviderMessageProjectionObservationContext<'static> {
@@ -427,6 +470,16 @@ fn telegram_projection_context(
             "attachment_download_state_observed" => "telegram_attachment_download_state_observed",
             _ => "telegram_provider_observed",
         },
+        actor: "domains.communications.messages.communication_provider_observation_projection",
+    }
+}
+
+fn whatsapp_projection_context(
+    relationship_kind: &'static str,
+) -> ProviderMessageProjectionObservationContext<'static> {
+    ProviderMessageProjectionObservationContext {
+        channel_kinds: WHATSAPP_CHANNEL_KINDS,
+        relationship_kind,
         actor: "domains.communications.messages.communication_provider_observation_projection",
     }
 }

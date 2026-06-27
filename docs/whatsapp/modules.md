@@ -17,7 +17,7 @@ them with this package.
 | `api` | `backend/src/integrations/whatsapp/api/` | Protected HTTP handlers for capabilities, accounts, sessions, chats, messages, media, statuses and commands | MISSING |
 | `accounts` | `backend/src/integrations/whatsapp/client/accounts/` | Account metadata, lifecycle, secret/session references and account kind validation | MISSING |
 | `capabilities` | `backend/src/domains/api_support/` | Operation-level capability matrix with account/runtime overrides | MISSING |
-| `runtime_webview` | `backend/src/integrations/whatsapp/runtime/` | Account-scoped desktop WebView companion runtime and runtime event bridge | MISSING |
+| `runtime_webview` | `backend/src/integrations/whatsapp/runtime/`, `frontend/src-tauri/src/whatsapp_companion.rs`, `frontend/src/integrations/whatsapp/api/whatsappCompanion.ts`, `frontend/src/integrations/whatsapp/views/WhatsAppRuntimePanel.vue` | Account-scoped desktop WebView companion runtime and runtime event bridge | PARTIAL: visible Tauri shell + typed frontend invoke bridge + runtime-panel `Open Companion` action + backend bridge contract + origin-guarded extractor contract + allowlisted runtime-event relay dispatch; live smoke missing |
 | `sessions` | `backend/src/integrations/whatsapp/client/sessions/` | Local WebView session metadata and lifecycle state | MISSING |
 | `adapter` | `backend/src/integrations/whatsapp/client/` | Provider event normalization, validation and source-record conversion | MISSING |
 | `dialogs` | WhatsApp client/store projection module | Private, group, community, broadcast and status dialog projection | MISSING |
@@ -41,7 +41,7 @@ them with this package.
 
 | Module | Назначение | Why needed |
 |---|---|---|
-| `webview_companion_runtime` | Owner-linked WhatsApp Web session | Required before live sync or provider writes |
+| `webview_companion_runtime` | Owner-linked WhatsApp Web session | Visible shell, runtime-panel action, safe extractor injection contract and allowlisted runtime-event relay dispatch exist; live smoke required before live sync or provider writes |
 | `capability_matrix` | Per-operation capability model | Required before exposing UI commands |
 | `command_outbox` | Durable provider-write command queue | Required for send/reply/forward/reaction/delete/media/status/voice commands |
 | `provider_observed_reconciliation` | Confirm provider state after command execution | Required before marking commands `completed` |
@@ -94,7 +94,7 @@ them with this package.
 |---|---|---|
 | `accounts` | Account metadata, lifecycle and secret/session refs | MISSING |
 | `runtime_fixture` | Deterministic local/test runtime | MISSING |
-| `runtime_webview` | Desktop WhatsApp Web companion runtime | MISSING |
+| `runtime_webview` | Desktop WhatsApp Web companion runtime | PARTIAL: visible shell, typed frontend bridge, runtime-panel action, event/outbox contract, metadata-only extractor contract and allowlisted runtime-event relay dispatch; live smoke missing |
 | `runtime_business_cloud` | Future Meta Business provider | UNSUPPORTED |
 | `dialogs` | Private/group/community/broadcast/status projection | MISSING |
 | `private_chats` | 1:1 chat projection | MISSING |

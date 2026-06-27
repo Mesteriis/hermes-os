@@ -684,6 +684,82 @@ impl CommunicationProviderSecretBindingStore {
 
         row.map(row_to_provider_secret_binding).transpose()
     }
+
+    pub async fn unbind_for_account(
+        &self,
+        account_id: &str,
+        secret_purpose: ProviderAccountSecretPurpose,
+    ) -> Result<Option<ProviderAccountSecretBinding>, CommunicationIngestionError> {
+        validate_non_empty_field("account_id", account_id)?;
+        let binding_entity_id = format!("{}:{}", account_id.trim(), secret_purpose.as_str());
+        let mut transaction = self.pool.begin().await?;
+        let observation = ObservationStore::capture_in_transaction(
+            &mut transaction,
+            &NewObservation::new(
+                "COMMUNICATION_PROVIDER_SECRET_BINDING_REMOVED",
+                ObservationOriginKind::LocalRuntime,
+                chrono::Utc::now(),
+                json!({
+                    "account_id": account_id.trim(),
+                    "secret_purpose": secret_purpose.as_str(),
+                    "action": "remove_provider_account_secret_binding",
+                }),
+                format!(
+                    "communication-provider-account://{}/secret-binding/{}/delete",
+                    account_id.trim(),
+                    secret_purpose.as_str()
+                ),
+            )
+            .provenance(json!({
+                "captured_by": "vault.communication_provider_secret_bindings.unbind",
+                "action": "remove_provider_account_secret_binding",
+            })),
+        )
+        .await?;
+        let row = sqlx::query(
+            r#"
+            DELETE FROM communication_provider_account_secret_refs
+            WHERE account_id = $1
+              AND secret_purpose = $2
+            RETURNING
+                account_id,
+                secret_purpose,
+                secret_ref,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(account_id.trim())
+        .bind(secret_purpose.as_str())
+        .fetch_optional(&mut *transaction)
+        .await?;
+
+        if let Some(row) = row {
+            let binding = row_to_provider_secret_binding(row)?;
+            link_vault_owned_entity_in_transaction(
+                &mut transaction,
+                VaultOwnedEntityLink {
+                    observation_id: observation.observation_id.clone(),
+                    domain: "vault",
+                    entity_kind: "communication_provider_secret_binding",
+                    entity_id: binding_entity_id,
+                    relationship_kind: "remove",
+                    base_metadata: json!({
+                        "account_id": binding.account_id,
+                        "secret_purpose": binding.secret_purpose.as_str(),
+                        "secret_ref": binding.secret_ref,
+                    }),
+                    extra_metadata: None,
+                },
+            )
+            .await?;
+            transaction.commit().await?;
+            return Ok(Some(binding));
+        }
+
+        transaction.rollback().await?;
+        Ok(None)
+    }
 }
 
 impl ProviderAccountLookupPort for CommunicationProviderAccountStore {
@@ -918,6 +994,32 @@ impl ProviderSecretBindingCommandPort for CommunicationProviderSecretBindingStor
             CommunicationProviderSecretBindingStore::bind(self, binding)
                 .await
                 .map_err(ProviderSecretBindingPortError::new)
+        })
+    }
+
+    fn unbind_for_account<'a>(
+        &'a self,
+        account_id: &'a str,
+        secret_purpose: ProviderAccountSecretPurpose,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Option<ProviderAccountSecretBinding>,
+                        ProviderSecretBindingPortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            CommunicationProviderSecretBindingStore::unbind_for_account(
+                self,
+                account_id,
+                secret_purpose,
+            )
+            .await
+            .map_err(ProviderSecretBindingPortError::new)
         })
     }
 }

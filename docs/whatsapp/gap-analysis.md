@@ -35,7 +35,7 @@ WhatsApp Channel implementation is counted in this audit.
 | Secret/session boundary | MISSING | Session protection must use `account_id + secret_purpose`; no secrets in PostgreSQL. |
 | WebView companion runtime | MISSING | ADR-0051 requires owner-visible desktop runtime before live support. |
 | Fixture/manual runtime | MISSING | Needed for deterministic validation before live provider work. |
-| Runtime health | MISSING | Need blocked/degraded diagnostics for session, WebView, storage and validation. |
+| Runtime health | PARTIAL | Sanitized health route exists and now reports blocked/degraded diagnostics for session, WebView/runtime, storage and validation, but real live producer diagnostics remain incomplete until WebView/native/business runtimes exist. |
 | Meta Business Cloud provider | UNSUPPORTED | Future provider shape only, not a substitute for personal WhatsApp Web. |
 
 ## Dialogs / Chat Management
@@ -46,7 +46,7 @@ WhatsApp Channel implementation is counted in this audit.
 | Groups | MISSING | Need group projection, participant evidence and join/leave commands. |
 | Communities | MISSING | Need community membership and source evidence model. |
 | Broadcasts | MISSING | Need broadcast evidence projection without treating it as a separate domain. |
-| Status dialog surface | MISSING | Need Status evidence projection and Timeline integration. |
+| Status dialog surface | PARTIAL | Status evidence now projects into a synthetic `status-feed` conversation surface backed by canonical `communication_conversations` and provider-neutral conversation reads/search, but live feed sync/media lifecycle is still incomplete. |
 | Unread/read state | MISSING | Requires provider-observed evidence and command model if mirrored to provider. |
 | Pin/archive/mute overlays | MISSING | Need local-vs-provider state distinction and capability states. |
 | Join/leave | MISSING | Must be provider-write commands with outbox and reconciliation. |
@@ -57,7 +57,7 @@ WhatsApp Channel implementation is counted in this audit.
 |---|---|---|
 | Text messages | MISSING | Need raw records, projection and `whatsapp.message.created`. |
 | Replies | MISSING | Need reply target projection and reply command. |
-| Forwards | MISSING | Need forward attribution when provider exposes it and command path. |
+| Forwards | PARTIAL | Native `whatsapp_native_md` can submit smoke-gated forwarded-text reemit through `WhatsAppProviderRuntime` and provider-observed reconciliation; richer provider-native forward/copy attribution still depends on live evidence and provider support. |
 | Deletes | MISSING | Need tombstones, delete evidence and destructive command path. |
 | Edits | MISSING | Only if provider/runtime supports it; must store observed versions only. |
 | Raw provider evidence | MISSING | Need sanitized raw evidence route and append-only source records. |
@@ -235,8 +235,9 @@ WhatsApp Status is not a separate domain.
 
 1. Durable outbox.
 2. Command audit and retry/dead-letter UX.
-3. Send/reply/forward/reaction/delete/media/status/voice commands.
-4. Provider-observed reconciliation.
+3. Send/reply/edit/delete/reaction/native media upload/native voice-note upload.
+4. Native forward/media download submission exists behind smoke gates; status/archive/mute/pin/join/unread live commands remain open.
+5. Provider-observed reconciliation.
 
 ### P3 — ADR-blocked future work
 

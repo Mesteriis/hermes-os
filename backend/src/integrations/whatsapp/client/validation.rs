@@ -32,3 +32,15 @@ pub(crate) fn validate_object(field: &'static str, value: &Value) -> Result<(), 
     }
     Ok(())
 }
+
+pub(crate) fn validate_string_array(
+    field: &'static str,
+    values: &[String],
+) -> Result<(), WhatsappWebError> {
+    if values.iter().any(|value| value.trim().is_empty()) {
+        return Err(WhatsappWebError::InvalidRequest(format!(
+            "{field} must contain only non-empty strings"
+        )));
+    }
+    Ok(())
+}

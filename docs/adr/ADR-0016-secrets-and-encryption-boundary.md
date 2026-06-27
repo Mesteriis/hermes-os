@@ -1,8 +1,6 @@
 # ADR-0016 Secrets and Encryption Boundary
 
-Status: Superseded by ADR-0053
-
-This decision was superseded by ADR-0053, which keeps the secret boundary but moves encrypted provider credential payloads into a dedicated PostgreSQL vault table while keeping the vault key outside PostgreSQL.
+Status: Proposed
 
 ## Context
 
@@ -11,8 +9,6 @@ Provider tokens, app passwords, private keys and backup credentials are high-val
 ## Decision
 
 Keep secrets outside ordinary application tables and access them through an OS-backed secret store or encrypted vault abstraction.
-
-Current implementation stores PostgreSQL `secret_references` metadata only. Secret values are not stored in PostgreSQL.
 
 ## Consequences
 

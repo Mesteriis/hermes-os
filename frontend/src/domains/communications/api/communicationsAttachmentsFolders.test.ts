@@ -183,6 +183,36 @@ describe('communications API attachment and folder helpers', () => {
     })
   })
 
+  it('maps pdf attachment previews from connect responses', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          attachmentId: 'mail_attachment:pdf',
+          messageId: 'msg-pdf',
+          filename: 'spec.pdf',
+          contentType: 'application/pdf',
+          scanStatus: 'clean',
+          previewKind: 'pdf',
+          text: '',
+          dataUrl: 'data:application/pdf;base64,JVBERi0x',
+          truncated: false,
+          byteCount: 8,
+          maxPreviewBytes: 16777216
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const preview = await previewAttachment('mail_attachment:pdf')
+
+    expect(preview.preview_kind).toBe('pdf')
+    expect(preview.data_url).toBe('data:application/pdf;base64,JVBERi0x')
+  })
+
   it('manages custom folders and local folder message actions', async () => {
     const fetchMock = vi
       .fn()

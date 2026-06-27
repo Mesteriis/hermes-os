@@ -1,11 +1,6 @@
 # ADR-0003 SvelteKit Frontend
 
-Status: Superseded by ADR-0093
-
-## Superseded
-
-This ADR is superseded by [ADR-0093](ADR-0093-frontend-platform-migration-to-vue-3.md).
-The frontend platform has migrated from SvelteKit to Vue 3.
+Status: Proposed
 
 ## Context
 

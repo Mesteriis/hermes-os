@@ -67,9 +67,26 @@ fn build_whatsapp_raw_signal(
         "raw_record_provenance": raw_record.provenance,
     });
 
+    let event_kind = match raw_record.record_kind.as_str() {
+        "whatsapp_web_reaction" => "reaction",
+        "whatsapp_web_media" => "media",
+        "whatsapp_web_status" => "status",
+        "whatsapp_web_status_view" => "status_view",
+        "whatsapp_web_status_delete" => "status_delete",
+        "whatsapp_web_presence" => "presence",
+        "whatsapp_web_call" => "call_metadata",
+        "whatsapp_web_runtime_event" => "runtime_event",
+        "whatsapp_web_dialog" => "dialog",
+        "whatsapp_web_participant" => "participant",
+        "whatsapp_web_message_update" => "message_update",
+        "whatsapp_web_message_delete" => "message_delete",
+        "whatsapp_web_receipt" => "receipt",
+        _ => "message",
+    };
+
     Ok(NewEventEnvelope::builder(
         whatsapp_raw_signal_event_id(&raw_record.raw_record_id),
-        "signal.raw.whatsapp.message.observed",
+        format!("signal.raw.whatsapp.{event_kind}.observed"),
         occurred_at,
         source,
         subject,

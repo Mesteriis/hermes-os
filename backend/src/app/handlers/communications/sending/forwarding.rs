@@ -1,7 +1,13 @@
 use super::super::*;
+use crate::app::provider_runtime_handlers::whatsapp::{
+    post_whatsapp_command_forward, post_whatsapp_command_reply,
+};
 use crate::application::communication_provider_writes::{
     CommunicationForwardRequest, CommunicationProviderMessageCommandResponse,
     CommunicationReplyRequest, new_telegram_command_id,
+};
+use crate::application::provider_runtime_contracts::{
+    WhatsAppForwardRequest, WhatsAppProviderCommandResponse, WhatsAppReplyRequest,
 };
 use crate::domains::communications::service::CommunicationCommandService;
 
@@ -15,6 +21,43 @@ pub(crate) async fn post_v1_reply(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    if msg.channel_kind.starts_with("whatsapp") {
+        let mut request: CommunicationReplyRequest = serde_json::from_value(req)
+            .map_err(|_| ApiError::InvalidCommunicationQuery("invalid WhatsApp reply payload"))?;
+        let command_id = request
+            .command_id
+            .clone()
+            .unwrap_or_else(next_whatsapp_command_id);
+        request.command_id = Some(command_id.clone());
+        let provider_chat_id =
+            msg.conversation_id
+                .clone()
+                .ok_or(ApiError::InvalidCommunicationQuery(
+                    "whatsapp message is missing provider conversation metadata",
+                ))?;
+        let response = post_whatsapp_command_reply(
+            State(state.clone()),
+            Path(message_id.clone()),
+            Json(WhatsAppReplyRequest {
+                command_id: Some(command_id.clone()),
+                idempotency_key: whatsapp_command_idempotency_key("reply", &command_id),
+                account_id: msg.account_id.clone(),
+                provider_chat_id: provider_chat_id.clone(),
+                reply_to_provider_message_id: msg.provider_record_id.clone(),
+                text: request.text,
+            }),
+        )
+        .await?
+        .0;
+        return Ok(Json(json!(
+            whatsapp_command_response_to_communication_response(
+                &command_id,
+                &provider_chat_id,
+                Some(&message_id),
+                &response,
+            )
+        )));
+    }
     if msg.channel_kind.starts_with("telegram") {
         let mut request: CommunicationReplyRequest = serde_json::from_value(req)
             .map_err(|_| ApiError::InvalidCommunicationQuery("invalid Telegram reply payload"))?;
@@ -80,6 +123,44 @@ pub(crate) async fn post_v1_forward(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    if msg.channel_kind.starts_with("whatsapp") {
+        let mut request: CommunicationForwardRequest = serde_json::from_value(req)
+            .map_err(|_| ApiError::InvalidCommunicationQuery("invalid WhatsApp forward payload"))?;
+        let command_id = request
+            .command_id
+            .clone()
+            .unwrap_or_else(next_whatsapp_command_id);
+        request.command_id = Some(command_id.clone());
+        let from_provider_chat_id =
+            msg.conversation_id
+                .clone()
+                .ok_or(ApiError::InvalidCommunicationQuery(
+                    "whatsapp message is missing provider conversation metadata",
+                ))?;
+        let response = post_whatsapp_command_forward(
+            State(state.clone()),
+            Path(message_id.clone()),
+            Json(WhatsAppForwardRequest {
+                command_id: Some(command_id.clone()),
+                idempotency_key: whatsapp_command_idempotency_key("forward", &command_id),
+                account_id: msg.account_id.clone(),
+                provider_chat_id: request.conversation_id.clone(),
+                from_provider_chat_id,
+                from_provider_message_id: msg.provider_record_id.clone(),
+                text: Some(msg.body_text.clone()),
+            }),
+        )
+        .await?
+        .0;
+        return Ok(Json(json!(
+            whatsapp_command_response_to_communication_response(
+                &command_id,
+                &request.conversation_id,
+                Some(&message_id),
+                &response,
+            )
+        )));
+    }
     if msg.channel_kind.starts_with("telegram") {
         let mut request: CommunicationForwardRequest = serde_json::from_value(req)
             .map_err(|_| ApiError::InvalidCommunicationQuery("invalid Telegram forward payload"))?;
@@ -111,6 +192,40 @@ pub(crate) async fn post_v1_forward(
     Ok(Json(
         serde_json::json!({"forwarded": true, "to": req.to, "cc": cc, "subject": format!("Fwd: {}", msg.subject), "body_preview": &fwd_body[..200.min(fwd_body.len())]}),
     ))
+}
+
+fn next_whatsapp_command_id() -> String {
+    format!(
+        "whatsapp-command-{}",
+        Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    )
+}
+
+fn whatsapp_command_idempotency_key(operation: &str, command_id: &str) -> String {
+    format!("communications:whatsapp:{operation}:{command_id}")
+}
+
+fn whatsapp_command_response_to_communication_response(
+    command_id: &str,
+    conversation_id: &str,
+    message_id: Option<&str>,
+    response: &WhatsAppProviderCommandResponse,
+) -> CommunicationProviderMessageCommandResponse {
+    CommunicationProviderMessageCommandResponse {
+        message_id: message_id.unwrap_or(command_id).to_owned(),
+        raw_record_id: String::new(),
+        conversation_id: conversation_id.to_owned(),
+        provider_chat_id: response.provider_chat_id.clone(),
+        provider_message_id: response.provider_message_id.clone(),
+        channel_kind: if response.provider_kind == "whatsapp_business_cloud" {
+            "whatsapp_business_cloud"
+        } else {
+            "whatsapp_web"
+        },
+        status: response.status.clone(),
+        command_id: response.command_id.clone(),
+        provider: "whatsapp",
+    }
 }
 
 #[derive(Deserialize)]

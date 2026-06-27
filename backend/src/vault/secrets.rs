@@ -140,6 +140,19 @@ impl HostVault {
 
         String::from_utf8(plaintext).map_err(|_| HostVaultError::InvalidEncoding)
     }
+
+    pub fn delete_secret(&self, secret_ref: &str) -> Result<bool, HostVaultError> {
+        validate_non_empty("secret_ref", secret_ref)?;
+        let deleted = self.connection()?.execute(
+            r#"
+            DELETE FROM vault_entries
+            WHERE secret_ref = ?1
+            "#,
+            params![secret_ref.trim()],
+        )?;
+        self.delete_manifest_entry(secret_ref)?;
+        Ok(deleted > 0)
+    }
 }
 
 impl SecretResolver for HostVault {

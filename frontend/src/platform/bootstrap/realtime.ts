@@ -8,9 +8,11 @@ import type {
 } from '../sse'
 import type { FrontendConfig } from '../config/env'
 import { applyMailRealtimePatch } from '../../domains/communications/queries/realtimeMailPatches'
+import { applyWhatsAppRealtimePatch } from '../../domains/communications/queries/realtimeWhatsAppPatches'
 import { applyTelegramParticipantRealtimePatch } from '../../domains/communications/queries/realtimeTelegramParticipantPatches'
 import { applyTelegramRealtimePatch } from '../../domains/communications/queries/realtimeTelegramPatches'
 import { applyTelegramCommandRealtimePatch } from '../../integrations/telegram/queries/realtimeTelegramCommandPatches'
+import { applyWhatsAppRuntimeRealtimePatch } from '../../integrations/whatsapp/queries/realtimeWhatsAppRuntimePatches'
 
 export type RealtimeClient = {
 	connect: () => void
@@ -70,6 +72,27 @@ const TELEGRAM_QUERY_KEYS: readonly (readonly unknown[])[] = [
 	['communications', 'telegram', 'messages'],
 	['integrations', 'telegram', 'runtime'],
 	['communications', 'telegram', 'calls']
+]
+
+const WHATSAPP_QUERY_KEYS: readonly (readonly unknown[])[] = [
+	['integrations', 'whatsapp', 'capabilities'],
+	['integrations', 'whatsapp', 'account-capabilities'],
+	['integrations', 'whatsapp', 'sessions'],
+	['integrations', 'whatsapp', 'runtime', 'status'],
+	['integrations', 'whatsapp', 'runtime', 'health'],
+	['integrations', 'whatsapp', 'commands'],
+	['integrations', 'whatsapp', 'runtime', 'sync-chats'],
+	['integrations', 'whatsapp', 'runtime', 'sync-history'],
+	['integrations', 'whatsapp', 'runtime', 'sync-members'],
+	['integrations', 'whatsapp', 'runtime', 'sync-statuses'],
+	['integrations', 'whatsapp', 'runtime', 'sync-presence'],
+	['integrations', 'whatsapp', 'runtime', 'sync-calls'],
+	['integrations', 'whatsapp', 'runtime', 'sync-contacts'],
+	['integrations', 'whatsapp', 'runtime', 'sync-media'],
+	['communications', 'whatsapp', 'conversations'],
+	['communications', 'whatsapp', 'conversation-detail'],
+	['communications', 'whatsapp', 'chat-members'],
+	['communications', 'whatsapp', 'messages']
 ]
 
 const SIGNAL_HUB_QUERY_KEYS: readonly (readonly unknown[])[] = [
@@ -245,6 +268,8 @@ export function handleRealtimeEvent(
 	}
 
 	applyMailRealtimePatch(event.data, queryClient)
+	applyWhatsAppRealtimePatch(event.data, queryClient)
+	applyWhatsAppRuntimeRealtimePatch(event.data, queryClient)
 	applyTelegramRealtimePatch(event.data, queryClient)
 	applyTelegramParticipantRealtimePatch(event.data, queryClient)
 	applyTelegramCommandRealtimePatch(event.data, queryClient)
@@ -259,6 +284,7 @@ function laggedRealtimeQueryKeys(): readonly (readonly unknown[])[] {
 		...REALTIME_QUERY_KEYS,
 		...MAIL_RUNTIME_QUERY_KEYS,
 		...TELEGRAM_QUERY_KEYS,
+		...WHATSAPP_QUERY_KEYS,
 		...SIGNAL_HUB_QUERY_KEYS
 	]
 }
@@ -342,6 +368,120 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 	}
 	if (eventType.startsWith('telegram.')) {
 		return TELEGRAM_QUERY_KEYS
+	}
+	if (eventType.startsWith('whatsapp.sync.')) {
+		return [
+			['integrations', 'whatsapp', 'runtime', 'sync-chats'],
+			['integrations', 'whatsapp', 'runtime', 'sync-history'],
+			['integrations', 'whatsapp', 'runtime', 'sync-members'],
+			['integrations', 'whatsapp', 'runtime', 'sync-statuses'],
+			['integrations', 'whatsapp', 'runtime', 'sync-presence'],
+			['integrations', 'whatsapp', 'runtime', 'sync-calls'],
+			['integrations', 'whatsapp', 'runtime', 'sync-contacts'],
+			['integrations', 'whatsapp', 'runtime', 'sync-media'],
+			['communications', 'whatsapp', 'conversations'],
+			['communications', 'whatsapp', 'messages'],
+			['integrations', 'whatsapp', 'sessions'],
+			['integrations', 'whatsapp', 'runtime', 'status'],
+			['integrations', 'whatsapp', 'runtime', 'health'],
+		]
+	}
+	if (eventType === 'whatsapp.dialog.updated') {
+		return [
+			['communications', 'whatsapp', 'conversations'],
+			['communications', 'whatsapp', 'conversation-detail'],
+			['communications', 'whatsapp', 'messages']
+		]
+	}
+	if (
+		eventType.startsWith('whatsapp.message.') ||
+		eventType === 'whatsapp.reaction.changed' ||
+		eventType === 'whatsapp.receipt.changed'
+	) {
+		return [['communications', 'whatsapp', 'messages']]
+	}
+	if (
+		eventType === 'whatsapp.participant.changed' ||
+		eventType === 'whatsapp.presence.changed' ||
+		eventType === 'whatsapp.call.updated' ||
+		eventType === 'whatsapp.status.updated' ||
+		eventType === 'whatsapp.status.deleted'
+	) {
+		return [
+			['communications', 'whatsapp', 'conversations'],
+			['communications', 'whatsapp', 'conversation-detail'],
+			['communications', 'whatsapp', 'chat-members'],
+				...(eventType === 'whatsapp.participant.changed'
+					? [[
+							'integrations',
+							'whatsapp',
+							'runtime',
+							'sync-contacts',
+					  ] as const]
+					: []),
+				...(eventType === 'whatsapp.presence.changed'
+					? [[
+							'integrations',
+							'whatsapp',
+							'runtime',
+							'sync-presence',
+					  ] as const]
+					: []),
+				...(eventType === 'whatsapp.call.updated'
+					? [[
+							'integrations',
+							'whatsapp',
+							'runtime',
+							'sync-calls',
+					  ] as const]
+					: []),
+				...(eventType === 'whatsapp.status.updated' || eventType === 'whatsapp.status.deleted'
+					? [[
+							'integrations',
+							'whatsapp',
+							'runtime',
+							'sync-statuses',
+					  ] as const]
+					: []),
+		]
+	}
+	if (
+		eventType === 'whatsapp.runtime.status_changed' ||
+		eventType === 'whatsapp.session.link_state_changed' ||
+		eventType === 'whatsapp.runtime.event'
+	) {
+		return [
+			['integrations', 'whatsapp', 'sessions'],
+			['integrations', 'whatsapp', 'capabilities'],
+			['integrations', 'whatsapp', 'account-capabilities'],
+			['integrations', 'whatsapp', 'runtime', 'status'],
+			['integrations', 'whatsapp', 'runtime', 'health'],
+		]
+	}
+	if (
+		eventType.startsWith('whatsapp.command.') ||
+		eventType.startsWith('whatsapp.media.upload.') ||
+		eventType.startsWith('whatsapp.media.download.')
+	) {
+		return [
+			['integrations', 'whatsapp', 'commands'],
+			['integrations', 'whatsapp', 'sessions'],
+			['integrations', 'whatsapp', 'capabilities'],
+			['integrations', 'whatsapp', 'account-capabilities'],
+			['integrations', 'whatsapp', 'runtime', 'status'],
+			['integrations', 'whatsapp', 'runtime', 'health'],
+				...(eventType.startsWith('whatsapp.media.')
+					? [[
+							'integrations',
+							'whatsapp',
+							'runtime',
+							'sync-media',
+					  ] as const]
+					: []),
+		]
+	}
+	if (eventType.startsWith('whatsapp.')) {
+		return WHATSAPP_QUERY_KEYS
 	}
 
 	return [...REALTIME_QUERY_KEYS, ...MAIL_RUNTIME_QUERY_KEYS]

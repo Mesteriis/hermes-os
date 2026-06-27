@@ -24,6 +24,12 @@ pub(crate) fn telegram_secret_reference_store(
     Ok(SecretReferenceStore::new(database_pool(state)?))
 }
 
+pub(crate) fn whatsapp_secret_reference_store(
+    state: &AppState,
+) -> Result<SecretReferenceStore, ApiError> {
+    Ok(SecretReferenceStore::new(database_pool(state)?))
+}
+
 pub(crate) fn telegram_runtime_use_case_context(
     state: &AppState,
 ) -> Result<crate::application::telegram_runtime::TelegramRuntimeUseCaseContext<'_>, ApiError> {
@@ -86,8 +92,8 @@ pub(crate) fn telegram_fixture_ingest_service(
 
 fn build_whatsapp_provider_store(
     state: &AppState,
-) -> Result<crate::application::WhatsappProviderRuntimeStore, ApiError> {
-    Ok(crate::application::whatsapp_provider_runtime_store(
+) -> Result<crate::application::WhatsAppProviderRuntimeRef, ApiError> {
+    Ok(crate::application::whatsapp_provider_runtime(
         database_pool(state)?,
     ))
 }
@@ -110,6 +116,8 @@ pub(crate) fn whatsapp_fixture_ingest_service(
         crate::application::communication_fixture_ingest::WhatsappFixtureIngestApplicationService::new(
             database_pool(state)?,
             build_whatsapp_provider_store(state)?,
+            event_store(state)?,
+            state.event_bus.clone(),
         ),
     )
 }

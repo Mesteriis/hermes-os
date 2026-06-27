@@ -132,6 +132,86 @@ pub async fn refresh_message_knowledge_candidates_into_review(
     Ok(mirrored)
 }
 
+pub async fn refresh_message_people_candidates_into_review(
+    pool: &PgPool,
+    messages: &[ProjectedMessage],
+) -> Result<usize, ReviewInboxWorkflowError> {
+    if messages.is_empty() {
+        return Ok(0);
+    }
+
+    let review_store = ReviewInboxPort::new(pool.clone());
+    let mut mirrored = 0;
+    for message in messages {
+        let summary_contract = message_summary_contract(message);
+        for candidate in &summary_contract.persona_candidates {
+            let summary = if candidate.evidence.trim().is_empty() {
+                "Source-backed persona candidate from communication evidence".to_owned()
+            } else {
+                candidate.evidence.clone()
+            };
+            let item = NewReviewItem::new(
+                ReviewItemKind::NewPerson,
+                candidate.title.clone(),
+                summary,
+                0.68,
+            )
+            .metadata(json!({
+                "mirrored_from": "message_summary_contract",
+                "message_id": message.message_id,
+                "observation_id": message.observation_id,
+                "candidate_group": "persona",
+                "candidate_title": candidate.title,
+            }));
+            let evidence = NewReviewItemEvidence::new(message.observation_id.clone())
+                .role("primary")
+                .metadata(json!({
+                    "mirrored_from": "message_summary_contract",
+                    "message_id": message.message_id,
+                    "candidate_group": "persona",
+                }));
+            let _ = review_store
+                .create_with_evidence(&item, &[evidence])
+                .await?;
+            mirrored += 1;
+        }
+
+        for candidate in &summary_contract.organization_candidates {
+            let summary = if candidate.evidence.trim().is_empty() {
+                "Source-backed organization candidate from communication evidence".to_owned()
+            } else {
+                candidate.evidence.clone()
+            };
+            let item = NewReviewItem::new(
+                ReviewItemKind::NewOrganization,
+                candidate.title.clone(),
+                summary,
+                0.7,
+            )
+            .metadata(json!({
+                "mirrored_from": "message_summary_contract",
+                "message_id": message.message_id,
+                "observation_id": message.observation_id,
+                "candidate_group": "organization",
+                "candidate_title": candidate.title,
+            }));
+            let evidence = NewReviewItemEvidence::new(message.observation_id.clone())
+                .role("primary")
+                .metadata(json!({
+                    "mirrored_from": "message_summary_contract",
+                    "message_id": message.message_id,
+                    "candidate_group": "organization",
+                }));
+            let _ = review_store
+                .create_with_evidence(&item, &[evidence])
+                .await?;
+            mirrored += 1;
+        }
+    }
+
+    Ok(mirrored)
+}
+
 pub const PERSON_IDENTITY_REVIEW_INBOX_CONSUMER: &str = "person_identity_review_inbox";
 
 pub async fn project_person_identity_review_event(

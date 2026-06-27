@@ -123,7 +123,18 @@ async fn communications_connect_api_exposes_provider_neutral_queries_and_send() 
         &app.context().pool().clone(),
         &raw.raw_record_id,
         &projected.message_id,
+        "connectrpc-note.txt",
+        "text/plain",
         b"Hola equipo\n",
+    )
+    .await;
+    let seeded_pdf_attachment = seed_connectrpc_attachment(
+        &app.context().pool().clone(),
+        &raw.raw_record_id,
+        &projected.message_id,
+        "connectrpc-spec.pdf",
+        "application/pdf",
+        b"%PDF-1.4\n",
     )
     .await;
 
@@ -838,6 +849,29 @@ async fn communications_connect_api_exposes_provider_neutral_queries_and_send() 
     assert_eq!(attachment_preview["previewKind"], "text");
     assert_eq!(attachment_preview["text"], "Hola equipo\n");
 
+    let pdf_attachment_preview = response_json(
+        router
+            .clone()
+            .oneshot(post_json(
+                "/hermes.communications.v1.CommunicationsService/GetAttachmentPreview",
+                json!({
+                    "attachment_id": seeded_pdf_attachment.attachment_id
+                }),
+            ))
+            .await
+            .expect("attachment pdf preview response"),
+    )
+    .await;
+    assert_eq!(
+        pdf_attachment_preview["attachmentId"],
+        seeded_pdf_attachment.attachment_id
+    );
+    assert_eq!(pdf_attachment_preview["previewKind"], "pdf");
+    assert_eq!(
+        pdf_attachment_preview["dataUrl"],
+        "data:application/pdf;base64,JVBERi0xLjQK"
+    );
+
     let attachment_translation = response_json(
         router
             .clone()
@@ -1259,6 +1293,8 @@ async fn seed_connectrpc_attachment(
     pool: &sqlx::PgPool,
     raw_record_id: &str,
     message_id: &str,
+    filename: &str,
+    content_type: &str,
     bytes: &[u8],
 ) -> SeededAttachment {
     let storage_store = CommunicationStorageStore::new(pool.clone());
@@ -1268,7 +1304,7 @@ async fn seed_connectrpc_attachment(
         .await
         .expect("write connectrpc attachment blob");
     let blob = storage_store
-        .upsert_blob(&NewCommunicationBlob::from_local_blob(&local_blob).content_type("text/plain"))
+        .upsert_blob(&NewCommunicationBlob::from_local_blob(&local_blob).content_type(content_type))
         .await
         .expect("store connectrpc attachment blob");
     let attachment = storage_store
@@ -1278,11 +1314,11 @@ async fn seed_connectrpc_attachment(
                 raw_record_id,
                 blob.blob_id,
                 "part-connectrpc-attachment",
-                "text/plain",
+                content_type,
                 local_blob.size_bytes,
                 local_blob.sha256,
             )
-            .filename("connectrpc-note.txt")
+            .filename(filename)
             .disposition(CommunicationAttachmentDisposition::Attachment)
             .scan_report(AttachmentSafetyScanReport {
                 status: AttachmentSafetyScanStatus::NotScanned,

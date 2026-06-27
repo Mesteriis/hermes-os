@@ -99,8 +99,68 @@ export function isPreviewableImageAttachment(attachment: CommunicationAttachment
   )
 }
 
+export function isPreviewableAudioAttachment(attachment: CommunicationAttachment): boolean {
+  if (!isPreviewAllowedByScanStatus(attachment)) {
+    return false
+  }
+  const contentType = attachment.content_type.trim().toLowerCase()
+  if (contentType.startsWith('audio/')) {
+    return true
+  }
+  const filename = attachment.filename?.trim().toLowerCase()
+  return Boolean(
+    filename
+    && (
+      filename.endsWith('.mp3')
+      || filename.endsWith('.m4a')
+      || filename.endsWith('.aac')
+      || filename.endsWith('.ogg')
+      || filename.endsWith('.opus')
+      || filename.endsWith('.wav')
+      || filename.endsWith('.webm')
+    )
+  )
+}
+
+export function isPreviewableVideoAttachment(attachment: CommunicationAttachment): boolean {
+  if (!isPreviewAllowedByScanStatus(attachment)) {
+    return false
+  }
+  const contentType = attachment.content_type.trim().toLowerCase()
+  if (contentType.startsWith('video/')) {
+    return true
+  }
+  const filename = attachment.filename?.trim().toLowerCase()
+  return Boolean(
+    filename
+    && (
+      filename.endsWith('.mp4')
+      || filename.endsWith('.webm')
+      || filename.endsWith('.mov')
+    )
+  )
+}
+
+export function isPreviewablePdfAttachment(attachment: CommunicationAttachment): boolean {
+  if (!isPreviewAllowedByScanStatus(attachment)) {
+    return false
+  }
+  const contentType = attachment.content_type.trim().toLowerCase()
+  if (contentType === 'application/pdf') {
+    return true
+  }
+  const filename = attachment.filename?.trim().toLowerCase()
+  return Boolean(filename && filename.endsWith('.pdf'))
+}
+
 export function isPreviewableAttachment(attachment: CommunicationAttachment): boolean {
-  return isPreviewableTextAttachment(attachment) || isPreviewableImageAttachment(attachment)
+  return (
+    isPreviewableTextAttachment(attachment) ||
+    isPreviewableImageAttachment(attachment) ||
+    isPreviewableAudioAttachment(attachment) ||
+    isPreviewableVideoAttachment(attachment) ||
+    isPreviewablePdfAttachment(attachment)
+  )
 }
 
 function isPreviewAllowedByScanStatus(attachment: CommunicationAttachment): boolean {

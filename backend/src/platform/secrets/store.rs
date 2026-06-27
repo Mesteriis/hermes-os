@@ -86,6 +86,25 @@ impl SecretReferenceStore {
 
         row.map(row_to_secret_reference).transpose()
     }
+
+    pub async fn delete_secret_reference(
+        &self,
+        secret_ref: &str,
+    ) -> Result<bool, SecretReferenceError> {
+        validate_non_empty("secret_ref", secret_ref)?;
+
+        let deleted = sqlx::query(
+            r#"
+            DELETE FROM secret_references
+            WHERE secret_ref = $1
+            "#,
+        )
+        .bind(secret_ref.trim())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(deleted.rows_affected() > 0)
+    }
 }
 
 fn row_to_secret_reference(row: PgRow) -> Result<SecretReference, SecretReferenceError> {

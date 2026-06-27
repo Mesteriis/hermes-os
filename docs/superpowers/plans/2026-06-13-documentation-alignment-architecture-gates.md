@@ -6,7 +6,7 @@
 
 **Architecture:** Documentation remains the source of truth. The first executable stream eliminates God Files and God Components, then implementation can proceed through capability-gated mail and Telegram slices without expanding monoliths. Existing public routes stay stable only when the current documentation allows them; backward compatibility is not a constraint.
 
-**Tech Stack:** Rust 1.88 backend with Axum/SQLx, SvelteKit 2/Svelte 5 frontend with pnpm, Tauri 2 desktop shell, Makefile validation gates.
+**Tech Stack:** Rust 1.89 backend with Axum/SQLx, SvelteKit 2/Svelte 5 frontend with pnpm, Tauri 2 desktop shell, Makefile validation gates.
 
 ---
 

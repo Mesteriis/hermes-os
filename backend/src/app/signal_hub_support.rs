@@ -2,6 +2,7 @@ use serde_json::{Map, Value, json};
 use sqlx::postgres::PgPool;
 
 use crate::app::{ApiError, AppState};
+use crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus;
 use crate::domains::communications::core::{CommunicationProviderAccountStore, ProviderAccount};
 use crate::domains::signal_hub::{
     SignalHealth, SignalHealthCheckRequest, SignalHealthSnapshotWrite, SignalHubConnectionService,
@@ -92,6 +93,59 @@ pub(crate) async fn remove_provider_account_signal_connection(
     Ok(())
 }
 
+pub(crate) async fn sync_whatsapp_runtime_signal_connection(
+    state: &AppState,
+    account: &ProviderAccount,
+    status: &WhatsAppRuntimeStatus,
+) -> Result<(), ApiError> {
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    sync_whatsapp_runtime_signal_connection_for_pool(
+        &pool,
+        account,
+        status,
+        status.session_secret_ref.clone(),
+    )
+    .await
+    .map_err(ApiError::from)
+}
+
+pub(crate) async fn sync_whatsapp_runtime_signal_connection_for_pool(
+    pool: &PgPool,
+    account: &ProviderAccount,
+    status: &WhatsAppRuntimeStatus,
+    secret_ref: Option<String>,
+) -> Result<(), crate::domains::signal_hub::SignalHubError> {
+    let signal_store = SignalHubStore::new(pool.clone());
+    let connection_service =
+        SignalHubConnectionService::new(signal_store.clone(), EventStore::new(pool.clone()));
+    signal_store.restore_system_sources().await?;
+    let source_code = provider_signal_source_code(account.provider_kind);
+    let settings = merged_whatsapp_runtime_connection_settings(
+        signal_store
+            .find_connection_by_account(source_code, &account.account_id)
+            .await?
+            .as_ref()
+            .map(|connection| &connection.settings),
+        account,
+        status,
+    );
+    connection_service
+        .upsert_account_connection(
+            source_code,
+            &account.account_id,
+            &account.display_name,
+            whatsapp_runtime_signal_status(status),
+            settings,
+            secret_ref,
+        )
+        .await?;
+    Ok(())
+}
+
 pub(crate) async fn run_signal_hub_health_check(
     config: &AppConfig,
     pool: PgPool,
@@ -151,7 +205,8 @@ fn provider_signal_source_code(provider_kind: CommunicationProviderKind) -> &'st
         CommunicationProviderKind::TelegramUser | CommunicationProviderKind::TelegramBot => {
             "telegram"
         }
-        CommunicationProviderKind::WhatsappWeb => "whatsapp",
+        CommunicationProviderKind::WhatsappWeb
+        | CommunicationProviderKind::WhatsappBusinessCloud => "whatsapp",
     }
 }
 
@@ -288,11 +343,28 @@ fn provider_account_signal_status(account: &ProviderAccount) -> &'static str {
                 },
             }
         }
-        CommunicationProviderKind::WhatsappWeb => {
+        CommunicationProviderKind::WhatsappWeb
+        | CommunicationProviderKind::WhatsappBusinessCloud => {
             match account.config.get("runtime").and_then(Value::as_str) {
-                Some("blocked") => "awaiting_user_action",
+                Some("blocked") | Some("live_blocked") => "awaiting_user_action",
                 Some("manual_webview") => "connecting",
                 _ => "connected",
+            }
+        }
+    }
+}
+
+fn whatsapp_runtime_signal_status(status: &WhatsAppRuntimeStatus) -> &'static str {
+    match status.status.as_str() {
+        "removed" => "removed",
+        "revoked" | "link_required" | "created" | "blocked" => "awaiting_user_action",
+        "qr_pending" | "pair_code_pending" | "syncing" | "degraded" => "connecting",
+        "available" | "linked" => "connected",
+        _ => {
+            if status.session_restore_available {
+                "connected"
+            } else {
+                "awaiting_user_action"
             }
         }
     }
@@ -318,6 +390,43 @@ fn merged_provider_connection_settings(
     copy_config_field(&mut settings, &account.config, "runtime");
     copy_config_field(&mut settings, &account.config, "lifecycle_state");
     copy_config_field(&mut settings, &account.config, "auth_state");
+    Value::Object(settings)
+}
+
+fn merged_whatsapp_runtime_connection_settings(
+    current: Option<&Value>,
+    account: &ProviderAccount,
+    status: &WhatsAppRuntimeStatus,
+) -> Value {
+    let mut settings = merged_provider_connection_settings(current, account)
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    settings.insert(
+        "whatsapp_runtime_status".to_owned(),
+        json!(status.status.as_str()),
+    );
+    settings.insert(
+        "whatsapp_provider_shape".to_owned(),
+        json!(status.provider_shape.as_str()),
+    );
+    settings.insert(
+        "whatsapp_runtime_kind".to_owned(),
+        json!(status.runtime_kind.as_str()),
+    );
+    settings.insert(
+        "whatsapp_session_restore_available".to_owned(),
+        json!(status.session_restore_available),
+    );
+    settings.insert(
+        "whatsapp_live_runtime_available".to_owned(),
+        json!(status.live_runtime_available),
+    );
+    settings.insert(
+        "whatsapp_runtime_blockers".to_owned(),
+        json!(status.runtime_blockers),
+    );
+    settings.insert("whatsapp_last_error".to_owned(), json!(status.last_error));
     Value::Object(settings)
 }
 

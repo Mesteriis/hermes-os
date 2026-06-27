@@ -18,7 +18,7 @@ use crate::domains::communications::messages::states::{LocalMessageState, Workfl
 use crate::domains::communications::messages::validation::{validate_limit, validate_non_empty};
 
 const TELEGRAM_CHANNEL_KIND_ALIAS: &[&str] = &["telegram_user", "telegram_bot"];
-const WHATSAPP_CHANNEL_KIND_ALIAS: &[&str] = &["whatsapp_web"];
+const WHATSAPP_CHANNEL_KIND_ALIAS: &[&str] = &["whatsapp_web", "whatsapp_business_cloud"];
 const MAIL_CHANNEL_KIND_ALIAS: &[&str] = &["email"];
 
 impl MessageProjectionStore {

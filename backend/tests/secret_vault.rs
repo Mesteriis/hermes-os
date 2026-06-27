@@ -278,6 +278,53 @@ async fn host_vault_unlock_existing_reopens_session_after_runtime_restart() {
     );
 }
 
+#[test]
+fn host_vault_delete_removes_secret_and_manifest() {
+    let directory = tempdir().expect("tempdir");
+    let vault = test_host_vault(directory.path());
+    vault
+        .collect_entropy(entropy_events(2_000))
+        .expect("collect entropy");
+    vault.create().expect("create vault");
+    let metadata = serde_json::json!({
+        "provider": "whatsapp_web",
+        "account_id": "acct-whatsapp-delete"
+    });
+    let secret_ref = "secret:provider-account:acct-whatsapp-delete:whatsapp_web_session_key";
+    vault
+        .store_secret(
+            secret_ref,
+            "session-material",
+            SecretEntryContext {
+                entry_kind: "provider_session",
+                account_id: "acct-whatsapp-delete",
+                purpose: "whatsapp_web_session_key",
+                secret_kind: "other",
+                label: "WhatsApp session credential",
+                metadata: &metadata,
+            },
+        )
+        .expect("store host vault secret");
+
+    assert_eq!(vault.account_secret_manifest().expect("manifest").len(), 1);
+    assert!(vault.delete_secret(secret_ref).expect("delete secret"));
+    assert!(!vault.delete_secret(secret_ref).expect("idempotent delete"));
+    assert!(
+        vault
+            .account_secret_manifest()
+            .expect("manifest")
+            .is_empty()
+    );
+    let error = vault
+        .read_secret(secret_ref)
+        .expect_err("secret should be removed");
+    assert!(
+        error
+            .to_string()
+            .contains("secret was not found in host vault")
+    );
+}
+
 #[tokio::test]
 async fn host_vault_rejects_tampered_ciphertext() {
     let directory = tempdir().expect("tempdir");

@@ -5,6 +5,15 @@
 Блокеры ниже фиксируют причины, последствия и план решения. Они не являются
 разрешением на реализацию новых крупных подсистем вне WhatsApp Channel.
 
+Актуализация на 2026-06-27: WhatsApp closure is currently **blocked**, not
+complete. The audit gate must continue to report `closure_achieved = false`
+until sanitized live-smoke evidence exists for `whatsapp_native_md`,
+`whatsapp_web_companion` and `whatsapp_business_cloud`, and until Native MD has
+safe provider API coverage plus smoke evidence for `archive`, `unarchive`,
+`mute`, `unmute`, `pin`, `unpin`, `mark_unread`, `join_group` and
+`publish_status`. Do not mark the provider domain closed before
+`make whatsapp-domain-closure-gate` passes.
+
 ## 1. WebView Companion Boundary
 
 **Причина**: ADR-0051 permits WhatsApp Web only through an explicit companion
