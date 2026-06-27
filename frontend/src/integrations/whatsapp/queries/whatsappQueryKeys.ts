@@ -1,0 +1,17 @@
+export const whatsappQueryKeys = {
+  accounts: ['integrations', 'whatsapp', 'accounts'] as const,
+  capabilities: ['integrations', 'whatsapp', 'capabilities'] as const,
+  accountCapabilities: ['integrations', 'whatsapp', 'account-capabilities'] as const,
+  sessions: ['integrations', 'whatsapp', 'sessions'] as const,
+  runtimeStatus: ['integrations', 'whatsapp', 'runtime', 'status'] as const,
+  runtimeHealth: ['integrations', 'whatsapp', 'runtime', 'health'] as const,
+  commands: ['integrations', 'whatsapp', 'commands'] as const,
+  syncChats: ['integrations', 'whatsapp', 'runtime', 'sync-chats'] as const,
+  syncHistory: ['integrations', 'whatsapp', 'runtime', 'sync-history'] as const,
+  syncMembers: ['integrations', 'whatsapp', 'runtime', 'sync-members'] as const,
+  syncStatuses: ['integrations', 'whatsapp', 'runtime', 'sync-statuses'] as const,
+  syncPresence: ['integrations', 'whatsapp', 'runtime', 'sync-presence'] as const,
+  syncCalls: ['integrations', 'whatsapp', 'runtime', 'sync-calls'] as const,
+  syncContacts: ['integrations', 'whatsapp', 'runtime', 'sync-contacts'] as const,
+  syncMedia: ['integrations', 'whatsapp', 'runtime', 'sync-media'] as const,
+}

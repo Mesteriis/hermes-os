@@ -100,6 +100,39 @@ pub mod telegram_event_types {
     pub const COMMAND_RECONCILED: &str = "telegram.command.reconciled";
 }
 
+pub mod whatsapp_event_types {
+    pub const SYNC_STARTED: &str = "whatsapp.sync.started";
+    pub const SYNC_PROGRESS: &str = "whatsapp.sync.progress";
+    pub const SYNC_COMPLETED: &str = "whatsapp.sync.completed";
+    pub const SYNC_FAILED: &str = "whatsapp.sync.failed";
+    pub const RUNTIME_STATUS_CHANGED: &str = "whatsapp.runtime.status_changed";
+    pub const RUNTIME_EVENT: &str = "whatsapp.runtime.event";
+    pub const SESSION_LINK_STATE_CHANGED: &str = "whatsapp.session.link_state_changed";
+    pub const DIALOG_UPDATED: &str = "whatsapp.dialog.updated";
+    pub const MESSAGE_CREATED: &str = "whatsapp.message.created";
+    pub const MESSAGE_UPDATED: &str = "whatsapp.message.updated";
+    pub const MESSAGE_DELETED: &str = "whatsapp.message.deleted";
+    pub const REACTION_CHANGED: &str = "whatsapp.reaction.changed";
+    pub const RECEIPT_CHANGED: &str = "whatsapp.receipt.changed";
+    pub const PARTICIPANT_CHANGED: &str = "whatsapp.participant.changed";
+    pub const PRESENCE_CHANGED: &str = "whatsapp.presence.changed";
+    pub const CALL_UPDATED: &str = "whatsapp.call.updated";
+    pub const STATUS_UPDATED: &str = "whatsapp.status.updated";
+    pub const STATUS_DELETED: &str = "whatsapp.status.deleted";
+    pub const COMMAND_STATUS_CHANGED: &str = "whatsapp.command.status_changed";
+    pub const COMMAND_RECONCILED: &str = "whatsapp.command.reconciled";
+    pub const MEDIA_DOWNLOAD_REQUESTED: &str = "whatsapp.media.download.requested";
+    pub const MEDIA_DOWNLOAD_STARTED: &str = "whatsapp.media.download.started";
+    pub const MEDIA_DOWNLOAD_PROGRESS: &str = "whatsapp.media.download.progress";
+    pub const MEDIA_DOWNLOAD_COMPLETED: &str = "whatsapp.media.download.completed";
+    pub const MEDIA_DOWNLOAD_FAILED: &str = "whatsapp.media.download.failed";
+    pub const MEDIA_UPLOAD_REQUESTED: &str = "whatsapp.media.upload.requested";
+    pub const MEDIA_UPLOAD_STARTED: &str = "whatsapp.media.upload.started";
+    pub const MEDIA_UPLOAD_PROGRESS: &str = "whatsapp.media.upload.progress";
+    pub const MEDIA_UPLOAD_COMPLETED: &str = "whatsapp.media.upload.completed";
+    pub const MEDIA_UPLOAD_FAILED: &str = "whatsapp.media.upload.failed";
+}
+
 /// Sanitize an event payload to never include secrets or raw message bodies.
 pub fn sanitize_event_payload(mut payload: Value) -> Value {
     if let Some(obj) = payload.as_object_mut() {

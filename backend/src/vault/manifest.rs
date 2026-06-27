@@ -84,4 +84,16 @@ impl HostVault {
         )?;
         Ok(())
     }
+
+    pub(super) fn delete_manifest_entry(&self, secret_ref: &str) -> Result<bool, HostVaultError> {
+        validate_non_empty("secret_ref", secret_ref)?;
+        let deleted = self.connection()?.execute(
+            r#"
+            DELETE FROM account_secret_manifest
+            WHERE secret_ref = ?1
+            "#,
+            params![secret_ref.trim()],
+        )?;
+        Ok(deleted > 0)
+    }
 }

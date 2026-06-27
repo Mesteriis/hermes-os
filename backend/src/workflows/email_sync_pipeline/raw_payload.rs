@@ -33,9 +33,10 @@ pub(super) fn raw_message_bytes(
         }
         EmailProviderKind::TelegramUser
         | EmailProviderKind::TelegramBot
-        | EmailProviderKind::WhatsappWeb => Err(EmailSyncRecordError::UnsupportedProviderKind(
-            provider_kind.as_str().to_owned(),
-        )),
+        | EmailProviderKind::WhatsappWeb
+        | EmailProviderKind::WhatsappBusinessCloud => Err(
+            EmailSyncRecordError::UnsupportedProviderKind(provider_kind.as_str().to_owned()),
+        ),
     }
 }
 

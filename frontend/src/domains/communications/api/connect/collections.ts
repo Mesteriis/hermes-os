@@ -225,7 +225,16 @@ export async function previewAttachmentConnect(
     filename: response.filename ?? null,
     content_type: response.contentType,
     scan_status: normalizeAttachmentScanStatus(response.scanStatus),
-    preview_kind: response.previewKind === 'image' ? 'image' : 'text',
+    preview_kind:
+      response.previewKind === 'image'
+        ? 'image'
+        : response.previewKind === 'audio'
+          ? 'audio'
+          : response.previewKind === 'video'
+            ? 'video'
+            : response.previewKind === 'pdf'
+              ? 'pdf'
+              : 'text',
     text: response.text,
     data_url: response.dataUrl ?? null,
     truncated: response.truncated,

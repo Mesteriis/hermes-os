@@ -44,6 +44,7 @@ pub fn whatsapp_web_store(pool: &PgPool) -> WhatsappWebStore {
     WhatsappWebStore::new(
         pool.clone(),
         Arc::new(communication_provider_account_store(pool)),
+        Arc::new(communication_provider_secret_binding_store(pool)),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
     )
 }

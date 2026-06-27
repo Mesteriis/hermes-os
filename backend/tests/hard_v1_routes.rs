@@ -54,9 +54,11 @@ async fn telegram_and_whatsapp_capabilities_are_split_under_v1() {
         .expect("whatsapp capabilities response");
     assert_eq!(whatsapp.status(), StatusCode::OK);
     let whatsapp_body = json_body(whatsapp).await;
-    assert_eq!(whatsapp_body["version"], json!("1.0"));
+    assert_eq!(whatsapp_body["version"], json!("2.0"));
     assert_eq!(whatsapp_body["runtime_mode"], json!("fixture"));
-    assert_has_capability(&whatsapp_body, "whatsapp_web_fixture_runtime");
+    assert!(whatsapp_body["planned_features"].is_array());
+    assert!(whatsapp_body["provider_shapes"].is_array());
+    assert_has_capability(&whatsapp_body, "runtime.fixture");
 }
 
 fn config_with_api_secret() -> AppConfig {

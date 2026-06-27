@@ -82,11 +82,16 @@ pub(super) async fn recent_channel_message_evidence(
                 AND identity.identity_type = 'telegram'
                 )
              OR (
-                    message.channel_kind = 'whatsapp_web'
+                    message.channel_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
                 AND identity.identity_type = 'whatsapp'
                 )
              )
-        WHERE message.channel_kind IN ('telegram_user', 'telegram_bot', 'whatsapp_web')
+        WHERE message.channel_kind IN (
+            'telegram_user',
+            'telegram_bot',
+            'whatsapp_web',
+            'whatsapp_business_cloud'
+        )
           AND length(trim(message.body_text)) > 0
           AND length(trim(message.message_metadata->>'sender_id')) > 0
         ORDER BY COALESCE(message.occurred_at, message.projected_at) DESC, message.message_id

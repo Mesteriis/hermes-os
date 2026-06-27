@@ -27,10 +27,13 @@ pub fn plan_email_sync(account: &ProviderAccount) -> Result<EmailSyncPlan, Email
         EmailProviderKind::Icloud | EmailProviderKind::Imap => plan_imap_sync(account, account_id),
         EmailProviderKind::TelegramUser
         | EmailProviderKind::TelegramBot
-        | EmailProviderKind::WhatsappWeb => Err(EmailSyncPlanError::InvalidProviderConfig {
-            field: "provider_kind",
-            message: "email sync supports only gmail, icloud or imap",
-        }),
+        | EmailProviderKind::WhatsappWeb
+        | EmailProviderKind::WhatsappBusinessCloud => {
+            Err(EmailSyncPlanError::InvalidProviderConfig {
+                field: "provider_kind",
+                message: "email sync supports only gmail, icloud or imap",
+            })
+        }
     }
 }
 

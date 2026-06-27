@@ -105,15 +105,11 @@ impl TestContext {
     }
 
     pub async fn app_config_with_nats(&self, api_secret: impl Into<String>) -> AppConfig {
-        self.vault
-            .apply_to_config(
-                AppConfig::test_with_api_secret_and_database_url(
-                    api_secret,
-                    self.connection_string(),
-                )
+        self.vault.apply_to_config(
+            AppConfig::test_with_api_secret_and_database_url(api_secret, self.connection_string())
                 .with_test_pairs([("HERMES_NATS_SERVER_URL", self.nats_server_url().await)])
                 .expect("test NATS config must be valid"),
-            )
+        )
     }
 
     pub fn app_config_without_database(&self, api_secret: impl Into<String>) -> AppConfig {

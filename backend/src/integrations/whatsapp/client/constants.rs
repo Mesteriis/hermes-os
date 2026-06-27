@@ -1,1 +1,14 @@
 pub(crate) const WHATSAPP_WEB_MESSAGE_RECORD_KIND: &str = "whatsapp_web_message";
+pub(crate) const WHATSAPP_WEB_REACTION_RECORD_KIND: &str = "whatsapp_web_reaction";
+pub(crate) const WHATSAPP_WEB_MEDIA_RECORD_KIND: &str = "whatsapp_web_media";
+pub(crate) const WHATSAPP_WEB_STATUS_RECORD_KIND: &str = "whatsapp_web_status";
+pub(crate) const WHATSAPP_WEB_STATUS_VIEW_RECORD_KIND: &str = "whatsapp_web_status_view";
+pub(crate) const WHATSAPP_WEB_STATUS_DELETE_RECORD_KIND: &str = "whatsapp_web_status_delete";
+pub(crate) const WHATSAPP_WEB_PRESENCE_RECORD_KIND: &str = "whatsapp_web_presence";
+pub(crate) const WHATSAPP_WEB_CALL_RECORD_KIND: &str = "whatsapp_web_call";
+pub(crate) const WHATSAPP_WEB_RUNTIME_EVENT_RECORD_KIND: &str = "whatsapp_web_runtime_event";
+pub(crate) const WHATSAPP_WEB_DIALOG_RECORD_KIND: &str = "whatsapp_web_dialog";
+pub(crate) const WHATSAPP_WEB_PARTICIPANT_RECORD_KIND: &str = "whatsapp_web_participant";
+pub(crate) const WHATSAPP_WEB_MESSAGE_UPDATE_RECORD_KIND: &str = "whatsapp_web_message_update";
+pub(crate) const WHATSAPP_WEB_MESSAGE_DELETE_RECORD_KIND: &str = "whatsapp_web_message_delete";
+pub(crate) const WHATSAPP_WEB_RECEIPT_RECORD_KIND: &str = "whatsapp_web_receipt";

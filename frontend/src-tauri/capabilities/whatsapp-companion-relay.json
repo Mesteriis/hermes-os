@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "whatsapp-companion-relay",
+  "description": "Allows owner-visible WhatsApp Web companion windows to invoke only the sanitized relay preflight command.",
+  "local": false,
+  "remote": {
+    "urls": [
+      "https://web.whatsapp.com"
+    ]
+  },
+  "windows": [
+    "whatsapp-companion-*"
+  ],
+  "permissions": [
+    "allow-whatsapp-web-companion-relay-observation"
+  ]
+}

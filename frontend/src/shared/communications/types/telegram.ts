@@ -175,6 +175,7 @@ export type TelegramChatSearchResponse = {
   total: number
 }
 export type TelegramMediaItem = {
+  attachment_id?: string | null
   message_id: string
   provider_message_id: string
   provider_chat_id: string

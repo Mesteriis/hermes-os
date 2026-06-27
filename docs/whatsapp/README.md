@@ -44,6 +44,9 @@ functionality and provider-runtime selection:
 - [`full-functionality-target.md`](./full-functionality-target.md) — complete WhatsApp capability target plus Hermes intelligence flows.
 - [`rust-provider-research.md`](./rust-provider-research.md) — Rust project evaluation: `whatsapp-rust`, `wa-rs`, `whatsappweb-rs`, Business Cloud SDKs and references.
 - [`implementation-plan.md`](./implementation-plan.md) — phased implementation plan from fixture foundation to live provider and Hermes intelligence.
+- [`api.md`](./api.md) — current backend integration/runtime API surface.
+- [`fixture-test-matrix.md`](./fixture-test-matrix.md) — fixture/runtime-safe source-record and command-class coverage map.
+- [`live-smoke-checklist.md`](./live-smoke-checklist.md) — manual local checklist for live runtime validation, redaction verification and vault-backed session restore.
 - [`../adr/ADR-0101-whatsapp-provider-runtime-selection.md`](../adr/ADR-0101-whatsapp-provider-runtime-selection.md) — proposed runtime/provider selection decision.
 
 ## Роль в Communications Domain
@@ -213,8 +216,14 @@ WhatsApp Channel сохраняет identity traces:
 - community member evidence.
 
 Эти traces могут создавать Persona candidates, relationship candidates и contact
-resolution evidence. WhatsApp Channel не реализует Persona Domain и не объявляет
-номер телефона окончательной Persona truth.
+resolution evidence. Текущая fixture foundation уже материализует source-backed
+unattached `person_identities` traces для `whatsapp` и `phone` через existing
+Persona compatibility boundary, а также `message_participant` traces для group /
+community member evidence и phone traces из contact-card metadata. Эти traces
+теперь также сохраняют source-backed WhatsApp evidence metadata, включая push
+name, business profile, profile photo ref, participant role/status и
+contact-card payload, но WhatsApp Channel не реализует Persona Domain и не
+объявляет номер телефона окончательной Persona truth.
 
 ## WhatsApp Statuses
 
@@ -274,7 +283,7 @@ source-backed events and projections.
 
 - WhatsApp Web desktop companion runtime;
 - account/session lifecycle and local WebView storage policy;
-- operation-level capability contract;
+- live-complete capability policy/runtime enablement over the existing operation-level capability contract;
 - durable provider-write outbox;
 - dialog/message/status/media projections;
 - phone-centric identity trace model;
@@ -286,9 +295,10 @@ source-backed events and projections.
 
 ## Навигация
 
-- [Architecture](architecture.md)
-- [Modules](modules.md)
+- [Current Audit](current-audit-2026-06-24.md)
+- [Full Functionality Target](full-functionality-target.md)
+- [Implementation Plan](implementation-plan.md)
 - [API Reference](api.md)
-- [Status](status.md)
-- [Gap Analysis](gap-analysis.md)
-- [Blockers](blockers.md)
+- [Fixture Test Matrix](fixture-test-matrix.md)
+- [Rust Provider Research](rust-provider-research.md)
+- [Live Smoke Checklist](live-smoke-checklist.md)

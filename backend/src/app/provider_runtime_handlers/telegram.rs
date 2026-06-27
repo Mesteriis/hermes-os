@@ -38,7 +38,11 @@ pub(crate) use media::{post_telegram_media_download, post_telegram_media_upload}
 pub(crate) use messages::{
     delete_telegram_reaction, get_telegram_forward_chain, get_telegram_message_tombstones,
     get_telegram_message_versions, get_telegram_reactions, get_telegram_reply_chain,
-    post_communication_conversation_message, post_telegram_fixture_message,
+    post_communication_conversation_archive, post_communication_conversation_mark_read,
+    post_communication_conversation_mark_unread, post_communication_conversation_message,
+    post_communication_conversation_mute, post_communication_conversation_pin,
+    post_communication_conversation_unarchive, post_communication_conversation_unmute,
+    post_communication_conversation_unpin, post_telegram_fixture_message,
     post_telegram_manual_send, post_telegram_message_delete, post_telegram_message_edit,
     post_telegram_message_forward, post_telegram_message_mark_read, post_telegram_message_pin,
     post_telegram_message_reply, post_telegram_message_restore_visibility, post_telegram_reaction,

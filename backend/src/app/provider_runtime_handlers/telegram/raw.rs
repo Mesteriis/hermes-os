@@ -3,9 +3,18 @@ use axum::extract::{Path, State};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::app::api_support::{communication_ingestion_store, telegram_provider_runtime_service};
+use crate::app::api_support::communication_ingestion_store;
 use crate::app::{ApiError, AppState};
+use crate::application::provider_runtime_contracts::TelegramError;
 use crate::domains::communications::core::StoredRawCommunicationRecord;
+use crate::domains::communications::messages::ProviderChannelMessageStore;
+
+const COMMUNICATION_RAW_EVIDENCE_CHANNEL_KINDS: &[&str] = &[
+    "telegram_user",
+    "telegram_bot",
+    "whatsapp_web",
+    "whatsapp_business_cloud",
+];
 
 #[derive(Serialize)]
 pub(crate) struct TelegramRawMessageResponse {
@@ -48,9 +57,15 @@ pub(crate) async fn get_telegram_message_raw(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
 ) -> Result<Json<TelegramRawMessageResponse>, ApiError> {
-    let Some(message) = telegram_provider_runtime_service(&state)?
-        .message_by_id(&message_id)
-        .await?
+    let pool = state
+        .database
+        .pool()
+        .expect("database pool configured")
+        .clone();
+    let Some(message) = ProviderChannelMessageStore::new(pool)
+        .message_by_id(&message_id, COMMUNICATION_RAW_EVIDENCE_CHANNEL_KINDS)
+        .await
+        .map_err(TelegramError::from)?
     else {
         return Err(ApiError::CommunicationMessageNotFound);
     };

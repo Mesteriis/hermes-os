@@ -22,10 +22,11 @@ ifneq ($(strip $(SCCACHE_BIN)),)
 export RUSTC_WRAPPER := $(SCCACHE_BIN)
 endif
 
-.PHONY: help dev logs build migrate validate lint-architecture lint-rust lint-frontend architecture-check code-boundaries-check backend-fmt-check backend-clippy backend-test backend-validate frontend-lint frontend-test frontend-build frontend-validate test test-fast test-ci test-unit test-integration test-e2e test-architecture test-snapshot snapshot-test snapshot-accept coverage coverage-html coverage-ci mutants audit deny security udeps watch-test watch-unit watch-integration cache-stats cache-reset test-performance-report vault-backup vault-restore clean clean-dev clean-validate clean-build clean-data clean-vault
+.PHONY: help docker-env dev logs build migrate validate lint-architecture lint-rust lint-frontend architecture-check code-boundaries-check backend-fmt-check backend-clippy backend-test backend-validate frontend-lint frontend-test frontend-build frontend-validate test test-fast test-ci test-unit test-integration test-e2e test-architecture test-snapshot snapshot-test snapshot-accept coverage coverage-html coverage-ci mutants audit deny security udeps watch-test watch-unit watch-integration cache-stats cache-reset test-performance-report whatsapp-live-smoke-readiness whatsapp-native-md-sdk-gap-readiness whatsapp-live-smoke-evidence whatsapp-live-smoke-collect-evidence whatsapp-domain-closure-audit whatsapp-domain-closure-gate whatsapp-business-cloud-edge-readiness whatsapp-business-cloud-edge-config whatsapp-business-cloud-edge-up whatsapp-business-cloud-edge-stop whatsapp-business-cloud-edge-logs vault-backup vault-restore clean clean-dev clean-validate clean-build clean-data clean-vault
 
 help:
 	@printf '%s\n' 'Hermes development commands:'
+	@printf '%s\n' '  make docker-env    Create docker/.env from docker/.env.example when missing'
 	@printf '%s\n' '  make dev           Start PostgreSQL, backend watcher, and Vite dev server'
 	@printf '%s\n' '  make logs          Tail the active live development log'
 	@printf '%s\n' '  make build         Build backend, frontend, and Tauri release artifacts'
@@ -54,6 +55,17 @@ help:
 	@printf '%s\n' '  make cache-stats   Show sccache stats'
 	@printf '%s\n' '  make cache-reset   Reset sccache stats'
 	@printf '%s\n' '  make test-performance-report Rebuild reports from existing nextest JUnit XML files'
+	@printf '%s\n' '  make whatsapp-live-smoke-readiness Run static WhatsApp live-smoke readiness checks'
+	@printf '%s\n' '  make whatsapp-native-md-sdk-gap-readiness Verify native MD wa-rs command gap inventory'
+	@printf '%s\n' '  make whatsapp-live-smoke-evidence Validate sanitized WhatsApp manual live-smoke evidence'
+	@printf '%s\n' '  make whatsapp-live-smoke-collect-evidence Build and validate evidence from sanitized live-smoke observations'
+	@printf '%s\n' '  make whatsapp-domain-closure-audit Report WhatsApp domain closure blockers'
+	@printf '%s\n' '  make whatsapp-domain-closure-gate Fail until WhatsApp domain closure evidence is complete'
+	@printf '%s\n' '  make whatsapp-business-cloud-edge-readiness Run Business Cloud edge proxy readiness checks'
+	@printf '%s\n' '  make whatsapp-business-cloud-edge-config Validate the Business Cloud edge proxy compose profile'
+	@printf '%s\n' '  make whatsapp-business-cloud-edge-up Start the Business Cloud edge proxy compose profile'
+	@printf '%s\n' '  make whatsapp-business-cloud-edge-stop Stop the Business Cloud edge proxy compose service'
+	@printf '%s\n' '  make whatsapp-business-cloud-edge-logs Tail the Business Cloud edge proxy compose logs'
 	@printf '%s\n' '  make vault-backup  Create a timestamped PostgreSQL + vault backup'
 	@printf '%s\n' '  make vault-restore Interactively restore PostgreSQL + vault from a backup'
 	@printf '%s\n' '  make clean         Remove build artifacts, temporary files, and logs'
@@ -62,6 +74,9 @@ help:
 	@printf '%s\n' '  make clean-build   Remove release/Tauri build artifacts'
 	@printf '%s\n' '  make clean-data    Delete local PostgreSQL data after confirmation'
 	@printf '%s\n' '  make clean-vault   Delete local vault data after confirmation'
+
+docker-env:
+	@bash -lc 'source scripts/lib/env.sh; ensure_docker_env_file'
 
 dev:
 	@./scripts/dev.sh
@@ -182,6 +197,39 @@ cache-reset:
 
 test-performance-report:
 	@./scripts/test/collect-performance-reports.sh
+
+whatsapp-live-smoke-readiness:
+	@node scripts/whatsapp-live-smoke-readiness.mjs
+
+whatsapp-native-md-sdk-gap-readiness:
+	@node scripts/whatsapp-native-md-sdk-gap-readiness.mjs
+
+whatsapp-live-smoke-evidence:
+	@node scripts/whatsapp-live-smoke-evidence.mjs
+
+whatsapp-live-smoke-collect-evidence:
+	@node scripts/whatsapp-live-smoke-collect-evidence.mjs
+
+whatsapp-domain-closure-audit:
+	@node scripts/whatsapp-domain-closure-audit.mjs
+
+whatsapp-domain-closure-gate:
+	@node scripts/whatsapp-domain-closure-audit.mjs --require-closed
+
+whatsapp-business-cloud-edge-readiness:
+	@node scripts/whatsapp-business-cloud-edge-readiness.mjs
+
+whatsapp-business-cloud-edge-config: docker-env
+	@docker compose --env-file docker/.env --project-directory docker -f docker/docker-compose.yml --profile whatsapp-business-cloud-edge config >/dev/null
+
+whatsapp-business-cloud-edge-up: docker-env
+	@docker compose --env-file docker/.env --project-directory docker -f docker/docker-compose.yml --profile whatsapp-business-cloud-edge up -d --build whatsapp-business-cloud-edge-proxy
+
+whatsapp-business-cloud-edge-stop: docker-env
+	@docker compose --env-file docker/.env --project-directory docker -f docker/docker-compose.yml --profile whatsapp-business-cloud-edge stop whatsapp-business-cloud-edge-proxy
+
+whatsapp-business-cloud-edge-logs: docker-env
+	@docker compose --env-file docker/.env --project-directory docker -f docker/docker-compose.yml --profile whatsapp-business-cloud-edge logs -f whatsapp-business-cloud-edge-proxy
 
 frontend-lint:
 	@cd frontend && pnpm lint

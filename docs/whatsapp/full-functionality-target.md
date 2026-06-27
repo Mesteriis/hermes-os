@@ -56,6 +56,10 @@ Target capabilities:
 - account-scoped local state path;
 - account-scoped secret/session protection material;
 - no session secrets in PostgreSQL.
+- successful QR/pair-code/native authorization must write session material to
+  host vault and create an account-scoped `whatsapp_web_session_key` secret
+  reference/binding so runtime startup can restore the account without owner
+  action.
 
 Lifecycle states:
 
@@ -105,6 +109,25 @@ Dialog state:
 - local Hermes folders/saved searches separately from provider state;
 - source-backed participant count and role metadata.
 
+Current fixture foundation:
+
+- fixture dialog records are source-backed through `WhatsAppProviderRuntime`;
+- projected WhatsApp conversations already back provider-neutral conversation
+  list/detail/member/search reads;
+- fixture dialog metadata now carries source-backed unread count,
+  participant-count, avatar/profile-picture and provider-label facts through
+  canonical conversation metadata, with the same sanitized fields emitted on
+  `whatsapp.dialog.updated`;
+- live `/runtime-bridge/dialogs` observed reconciliation now preserves
+  `provider_observed.runtime_bridge_dialog` provenance and emits canonical
+  `conversation.archive.completed` runtime-event evidence through the same
+  event spine contract used by fixture dialog reconciliation;
+- fixture-backed `/api/v1/integrations/whatsapp/provider-sync/chats` and
+  `/provider-sync/history` can return projected conversations/history for
+  runtime-control flows and emit sanitized `whatsapp.sync.*` lifecycle events;
+- live runtime sync, paging, reconciliation breadth and realtime runtime
+  bridging are still required.
+
 ### 3. Messages
 
 Target message classes:
@@ -141,6 +164,67 @@ Required message metadata:
 
 Message lifecycle must store only observed provider facts. Hermes must not invent edit history, missing deletes, missing receipts or unobserved provider metadata. Apparently facts need evidence now. Humanity had a long run without it.
 
+Current fixture foundation:
+
+- fixture message update records are source-backed through
+  `WhatsAppProviderRuntime`;
+- fixture message metadata can already carry broader structured provider facts
+  for mentions, link previews, polls, location, contact cards, stickers,
+  join/leave service updates, system/service messages, ephemeral flags and
+  view-once flags through canonical `message_metadata`;
+- projected WhatsApp message/status evidence can already reuse the shared
+  Communications summary workflow to mirror review candidates for
+  `new_person`, `new_organization` and `knowledge_candidate` items, so
+  people/organization discovery remains event-driven and review-driven rather
+  than a direct provider-to-Personas write path;
+- fixture reply/forward evidence can project canonical
+  `communication_message_refs` when provider reference metadata is observed;
+- accepted update signals project into canonical
+  `communication_message_versions`;
+- fixture message delete records project into canonical
+  `communication_message_tombstones`;
+- fixture receipt records project into canonical
+  `communication_messages.delivery_state`;
+- live `/runtime-bridge/messages`, `/message-updates`, `/message-deletes`,
+  `/reactions`, `/media`, `/dialogs`, `/participants` and `/statuses` now also
+  stamp raw-evidence provenance with their respective
+  `provider_observed.runtime_bridge_*` sources, so accepted Signal Hub evidence
+  keeps live-runtime origin instead of collapsing back into fixture-only raw
+  metadata before downstream consumers see it;
+- live `/runtime-bridge/receipts` now also stamps raw-evidence provenance with
+  `provider_observed.runtime_bridge_receipt`, so receipt observations keep
+  their live-runtime ingress origin before Signal Hub acceptance;
+- accepted WhatsApp receipt events now also participate in the shared
+  provider-observation reconciliation consumer, so later receipt evidence can
+  advance durable command `delivery_state` after the original
+  provider-observed message completion has established a stable
+  `provider_message_id`;
+- live `/runtime-bridge/runtime-events` now also stamps raw-evidence
+  provenance with `provider_observed.runtime_bridge_runtime_event`, while
+  live `/runtime-bridge/sync-lifecycle` and `/runtime-bridge/media-lifecycle`
+  captured runtime events preserve their lifecycle `source` markers as raw
+  `observed_source` values instead of collapsing back into fixture-only or
+  internal capture semantics;
+- provider-neutral `/api/v1/communications/messages/{message_id}/reply-chain`
+  and `/api/v1/communications/messages/{message_id}/forward-chain` can now read
+  canonical WhatsApp refs;
+- live provider lifecycle consumer, reconciliation and realtime runtime event
+  bridge are still required.
+- live command workers should receive explicit provider/runtime dispatch
+  metadata from `/runtime-bridge/commands/claim` (`provider_kind`,
+  `provider_shape`, `runtime_kind`, `lifecycle_state`,
+  `session_restore_available`, `runtime_blockers`) plus durable execution
+  state (`capability_state`, `action_class`, `confirmation_decision`,
+  `provider_state`, `result_payload`) instead of relying on hidden account
+  lookups.
+- live command failure reports should also be able to carry structured
+  `error_code` and retry-delay hints so a replaceable runtime worker can feed
+  the durable retry/dead-letter path without collapsing everything into one
+  opaque error string.
+- the durable retry path should use the same capped exponential backoff policy
+  for runtime-reported failures and stale interrupted executions, with
+  structured failure metadata preserved in durable command state.
+
 ### 4. Reactions
 
 Target capabilities:
@@ -157,6 +241,16 @@ Projection target:
 ```text
 communication_message_reactions
 ```
+
+Current fixture foundation:
+
+- fixture reaction records are source-backed through `WhatsAppProviderRuntime`;
+- accepted reaction signals project into `communication_message_reactions`;
+- provider-neutral `/api/v1/communications/messages/{message_id}/reactions`
+  can now read canonical WhatsApp reaction rows;
+- live runtime reaction execution is still required; fixture
+  provider-observed reaction reconciliation now completes durable command rows
+  through the event spine.
 
 Command path:
 
@@ -208,6 +302,37 @@ whatsapp.media.upload.completed
 whatsapp.media.upload.failed
 ```
 
+Current fixture foundation:
+
+- fixture media metadata is source-backed through `WhatsAppProviderRuntime`;
+- media metadata projects into `communication_attachments`;
+- `/api/v1/integrations/whatsapp/provider-sync/media` can now return
+  projected WhatsApp attachment snapshots from canonical attachment storage,
+  optionally scoped by `provider_chat_id` and `content_type`;
+- provider-neutral `/api/v1/communications/search/media` can already return
+  projected WhatsApp attachments from canonical attachment storage;
+- fixture media command retries now emit sanitized
+  `whatsapp.media.upload.started|progress|completed` and
+  `whatsapp.media.download.started|progress|completed` lifecycle events through
+  the event spine while reconciling durable provider-command rows;
+- scanner state is `not_scanned` until a real scanner backend provides a
+  verdict;
+- blocked-safe `/api/v1/integrations/whatsapp/provider-media/upload` and
+  `/provider-media/download` routes now persist durable command rows and emit
+  sanitized `whatsapp.media.*.(requested|failed)` events, and those blocked-safe
+  media lifecycle phases now also materialize canonical accepted
+  `whatsapp.runtime_event` evidence through the shared raw-signal path;
+- fixture executor `whatsapp.media.upload.started|progress|completed` and
+  `whatsapp.media.download.started|progress|completed` phases now also
+  materialize canonical accepted `whatsapp.runtime_event` evidence through the
+  same shared raw-signal path while keeping the existing realtime lifecycle
+  events;
+- `/runtime-bridge/sync-lifecycle` now also accepts `scope = media` so an
+  external runtime can publish attachment/media sync phases into the same event
+  spine contract without fixture-only endpoints;
+- live transfer execution/progress/completion, blob byte persistence and media
+  reconciliation are still required.
+
 ### 6. Voice notes
 
 Target capabilities:
@@ -248,6 +373,83 @@ communication_attachments
 Timeline evidence projection
 ```
 
+Current fixture foundation:
+
+- fixture status records are source-backed through `WhatsAppProviderRuntime`;
+- statuses project as provider-neutral Communication messages with status
+  metadata;
+- fixture status records can now also materialize source-backed author
+  identity evidence into canonical `communication_identities` and link that
+  identity through status message metadata when explicit author identity fields
+  are present;
+- projected fixture status messages now also run through the shared
+  decision/task candidate refresh path, giving status evidence the same
+  Review-bound candidate extraction boundary as other Communications evidence;
+- fixture status lifecycle events now also satisfy the generic Timeline replay
+  contract by carrying `subject.entity_id` plus `source.kind` and
+  `source.source_id`, so status evidence can already enter Timeline through the
+  shared event-log replay path;
+- projected fixture status messages now also upsert a synthetic canonical
+  `status-feed` conversation surface, so provider-neutral conversation
+  list/detail/search can expose WhatsApp statuses without introducing a Status
+  domain;
+- `/api/v1/integrations/whatsapp/runtime-bridge/statuses` now reuses the same
+  status-feed projection path and can reconcile live/runtime-bridge
+  `publish_status` completion through provider-observed evidence without
+  mislabeling that provenance as fixture-only;
+- live `/runtime-bridge/status-views` and `/runtime-bridge/status-deletes` now
+  also preserve explicit raw-evidence provenance as
+  `provider_observed.runtime_bridge_status_view` and
+  `provider_observed.runtime_bridge_status_delete` instead of collapsing those
+  observed paths into fixture-only ingress metadata;
+- fixture media metadata can already attach to projected status messages through
+  the canonical attachment path when provider evidence targets the status
+  provider id;
+- fixture replies can already target projected status messages through canonical
+  reply refs;
+- blocked-safe and retried `publish_status` command lifecycle now also
+  materializes canonical accepted `whatsapp.runtime_event` evidence for
+  `status.publish.requested|failed|started|completed`, in addition to durable
+  provider-command reconciliation and status projection;
+- live status feed, status media, identity trace handoff and publish command are
+  still required.
+
+### 7.5 Presence
+
+Target capabilities:
+
+- online/offline observations;
+- typing observations;
+- recording-audio observations;
+- last-seen evidence where observed;
+- sanitized realtime presence patches;
+- identity-trace metadata updates without creating Personas directly.
+
+Presence must remain observed provider fact, not inferred truth.
+
+Current fixture foundation:
+
+- fixture presence records are source-backed through `WhatsAppProviderRuntime`;
+- presence evidence emits raw and accepted Signal Hub events through the event
+  spine;
+- known canonical communication identities can be patched with observed
+  `presence_state`, `last_seen_at` and related provenance metadata;
+- sanitized realtime `whatsapp.presence.changed` events now exist for fixture
+  presence ingest;
+- `/api/v1/integrations/whatsapp/provider-sync/presence` now exposes an
+  integration-side presence snapshot surface over canonical identity metadata,
+  optionally scoped by `provider_chat_id`, and emits the same sanitized
+  `whatsapp.sync.*` plus accepted runtime-event evidence as the other sync
+  control flows;
+- live `/runtime-bridge/presence` now also stamps raw-evidence provenance with
+  `provider_observed.runtime_bridge_presence`, so accepted Signal Hub evidence
+  can distinguish live runtime ingest from fixture-only observation paths;
+- `/runtime-bridge/sync-lifecycle` now also accepts `scope = presence` so an
+  external runtime can publish presence-sync lifecycle phases into the same
+  event spine contract;
+- live runtime presence feed and broader frontend/runtime bridging are still
+  required.
+
 ### 8. Groups, communities and membership
 
 Target capabilities:
@@ -263,6 +465,29 @@ Target capabilities:
 - membership change events;
 - role changes;
 - invite link evidence.
+
+Current fixture foundation:
+
+- fixture dialog records are source-backed through `WhatsAppProviderRuntime`;
+- fixture dialog metadata projects into canonical conversation rows and can now
+  carry source-backed community/subgroup linkage, invite-link evidence and
+  broadcast/newsletter/community-root flags;
+- provider-neutral Communications conversation list/detail/search already read
+  projected WhatsApp conversation rows;
+- fixture participant records are source-backed through `WhatsAppProviderRuntime`;
+- fixture participant metadata projects into canonical identities and
+  conversation participants;
+- repeated participant evidence can now update a stable canonical participant
+  row, preserve previous/current role and status facts in participant metadata,
+  and emit sanitized `whatsapp.participant.changed` lifecycle events;
+- live `/runtime-bridge/participants` observed reconciliation now preserves
+  `provider_observed.runtime_bridge_participant` provenance and emits canonical
+  `group.join.completed` runtime-event evidence through the shared event spine
+  instead of inventing a separate live-only completion path;
+- provider-neutral conversation member reads already resolve projected WhatsApp
+  participant rows;
+- live roster sync, group/community reconciliation and membership commands are
+  still required.
 
 All provider writes must go through the outbox and must require capability checks.
 
@@ -292,6 +517,35 @@ Trust/Risk signal
 ```
 
 WhatsApp integration must never merge Personas by itself.
+
+Current fixture foundation:
+
+- phone/wa_id/display-name traces can be projected into canonical communication
+  identities from fixture participant evidence;
+- fixture participant evidence now also carries source-backed `push_name`,
+  `business_profile` and `profile_photo_ref` traces through canonical
+  communication identity and participant metadata;
+- fixture participant and status ingest now also create unattached
+  compatibility `person_identities` traces for `whatsapp` and `phone` with
+  observation links, so Persona assignment stays explicit and review-driven;
+- fixture participant ingest also records `message_participant` traces for
+  group/community member evidence, and fixture message ingest records phone
+  traces from contact-card evidence through the same compatibility boundary;
+- these compatibility traces now also retain source-backed WhatsApp evidence
+  metadata for push name, business profile, profile photo refs, participant
+  role/status and contact-card payloads;
+- canonical `communication_identities.metadata` now also preserves
+  `display_name_history` and previous/current observed display names when
+  repeated WhatsApp evidence changes the visible provider name;
+- `/api/v1/integrations/whatsapp/provider-sync/contacts` now exposes an
+  integration-side contact snapshot over canonical communication identities
+  plus compatibility WhatsApp/phone trace metadata, so a replaceable runtime
+  can resync contact/identity evidence without coupling to Personas;
+- `/runtime-bridge/sync-lifecycle` now also accepts `scope = contacts` so an
+  external runtime can publish contact-sync lifecycle phases into the same
+  event spine contract;
+- no Persona is created directly from WhatsApp integration projection;
+- automatic Persona merge remains out of scope for WhatsApp integration.
 
 ### 10. Provider command outbox
 
@@ -328,6 +582,33 @@ cancelled
 
 Completion requires provider-observed reconciliation, not merely “we called a function and it didn’t explode.” Software has tried that religion. It ended poorly.
 
+Current foundation:
+
+- blocked-safe text send/reply/forward/edit/delete/react/unreact, voice-note
+  send, status publish, join/leave, mark-read/unread, archive/unarchive,
+  mute/unmute and pin/unpin command rows are durable;
+- the current WhatsApp Communications panel can already drive projected
+  send/reply/forward/edit/delete flows plus conversation read/unread,
+  pin/unpin, archive/unarchive and mute/unmute through the provider-neutral
+  `/api/v1/communications/*` routes instead of going through integration-only
+  endpoints for day-to-day communication mutations;
+- idempotency keys are required;
+- `whatsapp_provider_write_commands` is mirrored into canonical
+  `communication_provider_commands`;
+- command list, manual retry and manual dead-letter integration-control
+  endpoints exist;
+- fixture provider-observed dialog state now completes durable `archive`,
+  `unarchive`, `pin`, `unpin`, `mute`, `unmute`, `mark_read` and
+  `mark_unread` command rows through the event spine;
+- a background fixture command executor can now claim retried outbox rows and
+  drive supported fixture command kinds such as `send_text`, `reply`,
+  `forward`, `edit`, `delete`, `react`/`unreact`, media upload/download,
+  voice-note send, dialog-state changes, group join/leave and status publish
+  into provider-observed completion;
+- live provider execution, full backoff worker coverage and provider-observed
+  completion are still required before send/mutate capabilities can become
+  available.
+
 ### 11. Realtime
 
 Realtime event families:
@@ -341,6 +622,8 @@ whatsapp.message.updated
 whatsapp.message.deleted
 whatsapp.reaction.changed
 whatsapp.receipt.changed
+whatsapp.presence.changed
+whatsapp.call.updated
 whatsapp.media.download.*
 whatsapp.command.status_changed
 whatsapp.command.reconciled
@@ -390,6 +673,15 @@ Timeline events:
 
 Timeline entries must preserve source evidence links.
 
+Current fixture foundation:
+
+- sanitized WhatsApp projection events for status, participant lifecycle and
+  call metadata now carry `subject.entity_id` and source references compatible
+  with the generic `TimelineEngine::replay_event_log` contract;
+- exact WhatsApp fixture coverage verifies that these events replay into
+  Timeline entries with source-backed references rather than using a
+  WhatsApp-specific timeline path.
+
 ### 14. Calls
 
 First target:
@@ -399,6 +691,30 @@ First target:
 - call duration where observed;
 - Timeline evidence;
 - relationship signal.
+
+Current fixture foundation:
+
+- fixture call-metadata records are source-backed through
+  `WhatsAppProviderRuntime`;
+- call evidence emits raw and accepted Signal Hub events through the event
+  spine using `call_metadata` event kind;
+- fixture call metadata can upsert the existing calls read model with observed
+  direction/state/timestamps and provenance;
+- sanitized realtime `whatsapp.call.updated` events now exist for fixture call
+  ingest;
+- `/api/v1/integrations/whatsapp/provider-sync/calls` now exposes an
+  integration-side call snapshot surface over the shared calls read model,
+  optionally scoped by `provider_chat_id`, and emits the same sanitized
+  `whatsapp.sync.*` plus accepted runtime-event evidence as the other sync
+  control flows;
+- live `/runtime-bridge/calls` now also stamps raw-evidence provenance with
+  `provider_observed.runtime_bridge_call`, so accepted call evidence preserves
+  live ingress provenance before Timeline/search/review consumers read it;
+- `/runtime-bridge/sync-lifecycle` now also accepts `scope = calls` so an
+  external runtime can publish call-sync lifecycle phases into the same event
+  spine contract;
+- live runtime call feed, timeline workflow integration and broader
+  relationship-signal handling are still required.
 
 Unsupported until separate ADR:
 
@@ -464,6 +780,9 @@ No direct `WhatsApp -> Task` mutation.
 - create Knowledge Note candidates;
 - source link to message/status/media;
 - confidence and evidence;
+- projected WhatsApp message and status evidence now already feed shared
+  knowledge candidates through Review using the same Communications summary
+  contract path as other channels;
 - promotion to Documents/Notes/Knowledge through Review/Radar.
 
 #### Persona and relationship intelligence

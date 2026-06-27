@@ -29,6 +29,9 @@ importers:
       '@tanstack/vue-virtual':
         specifier: ^3.13.28
         version: 3.13.28(vue@3.5.38(typescript@6.0.3))
+      '@tauri-apps/api':
+        specifier: ^2.11.1
+        version: 2.11.1
       '@tiptap/vue-3':
         specifier: ^3.26.1
         version: 3.26.1(@floating-ui/dom@1.7.6)(@tiptap/core@3.26.1(@tiptap/pm@3.26.1))(@tiptap/pm@3.26.1)(vue@3.5.38(typescript@6.0.3))
@@ -481,6 +484,9 @@ packages:
     resolution: {integrity: sha512-A+jWpXtMpWXKhGLKQrXeC9mk1VgYeMWSJ+o0CTCEi+HLYMSQFdVmPG9lJz7d4XJyIkc5xVwZU9QY67QpScqnxA==}
     peerDependencies:
       vue: ^2.7.0 || ^3.0.0
+
+  '@tauri-apps/api@2.11.1':
+    resolution: {integrity: sha512-M2FPuYND2m+wh5hfW9ZpSdxMPdEJovPBWwoHJmwUpysTYNHaOkVFN419m/K0LIgjb/7KU2vBgsUepJWugQCvAA==}
 
   '@tauri-apps/cli-darwin-arm64@2.11.2':
     resolution: {integrity: sha512-+4UZzLt+eOAEQCwgd+TqKgyUJMrvx+BgdXLLaqJYmPqzP+nE6YZr/hY6CWLYGQb8jFn99jEkmC6uA3tNvamA1w==}
@@ -1847,6 +1853,8 @@ snapshots:
     dependencies:
       '@tanstack/virtual-core': 3.17.0
       vue: 3.5.38(typescript@6.0.3)
+
+  '@tauri-apps/api@2.11.1': {}
 
   '@tauri-apps/cli-darwin-arm64@2.11.2':
     optional: true

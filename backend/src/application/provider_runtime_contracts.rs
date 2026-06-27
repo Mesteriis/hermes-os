@@ -51,11 +51,39 @@ pub(crate) mod models {
     }
 }
 pub(crate) use crate::integrations::telegram::client::TelegramStore as TelegramProviderRuntimeStore;
-pub(crate) use crate::integrations::whatsapp::client::WhatsappWebStore as WhatsappProviderRuntimeStore;
 pub(crate) use crate::integrations::whatsapp::client::{
-    NewWhatsappWebMessage, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
-    WhatsappWebError, WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
+    NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
+    NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
+    NewWhatsappWebPresence, NewWhatsappWebReaction, NewWhatsappWebReceipt,
+    NewWhatsappWebRuntimeEvent, NewWhatsappWebStatus, NewWhatsappWebStatusDelete,
+    NewWhatsappWebStatusView, WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupRequest,
+    WhatsappWebAccountSetupResponse, WhatsappWebCallIngestResult, WhatsappWebDeliveryState,
+    WhatsappWebDialogIngestResult, WhatsappWebError, WhatsappWebMediaIngestResult,
+    WhatsappWebMessage, WhatsappWebMessageDeleteIngestResult, WhatsappWebMessageIngestResult,
+    WhatsappWebMessageUpdateIngestResult, WhatsappWebParticipantIngestResult,
+    WhatsappWebPresenceIngestResult, WhatsappWebReactionIngestResult,
+    WhatsappWebReceiptIngestResult, WhatsappWebRuntimeEventIngestResult, WhatsappWebSession,
+    WhatsappWebStatusDeleteIngestResult, WhatsappWebStatusIngestResult,
+    WhatsappWebStatusViewIngestResult,
 };
+pub(crate) use crate::integrations::whatsapp::runtime::{
+    WhatsAppAuthorizedSessionCredentialWrite, WhatsAppCommandDeadLetterRequest,
+    WhatsAppConversationCommandRequest, WhatsAppCredentialBinding, WhatsAppDeleteRequest,
+    WhatsAppEditRequest, WhatsAppForwardRequest, WhatsAppMediaDownloadRequest,
+    WhatsAppMediaUploadRequest, WhatsAppPairCodeSession, WhatsAppPairCodeStartRequest,
+    WhatsAppProviderCommand, WhatsAppProviderCommandListResponse, WhatsAppProviderCommandResponse,
+    WhatsAppProviderRuntime, WhatsAppProviderRuntimeShape, WhatsAppQrLinkSession,
+    WhatsAppQrLinkStartRequest, WhatsAppReactionRequest, WhatsAppReplyRequest,
+    WhatsAppRuntimeHealth, WhatsAppRuntimeRelinkRequest, WhatsAppRuntimeRemoveRequest,
+    WhatsAppRuntimeRemoveResponse, WhatsAppRuntimeRevokeRequest, WhatsAppRuntimeStartRequest,
+    WhatsAppRuntimeStatus, WhatsAppRuntimeStopRequest, WhatsAppStatusPublishRequest,
+    WhatsAppTextSendRequest, WhatsAppVoiceNoteSendRequest,
+    whatsapp_business_cloud_access_token_secret_ref, whatsapp_business_cloud_app_secret_ref,
+    whatsapp_business_cloud_runtime, whatsapp_business_cloud_webhook_verify_token_ref,
+    whatsapp_native_md_runtime, whatsapp_provider_runtime_mux, whatsapp_web_companion_runtime,
+};
+
+pub(crate) type WhatsAppProviderRuntimeRef = Arc<dyn WhatsAppProviderRuntime>;
 
 pub(crate) fn telegram_provider_runtime_store(pool: PgPool) -> TelegramProviderRuntimeStore {
     TelegramProviderRuntimeStore::new(
@@ -86,14 +114,44 @@ pub(crate) fn telegram_provider_runtime_store(pool: PgPool) -> TelegramProviderR
     )
 }
 
-pub(crate) fn whatsapp_provider_runtime_store(pool: PgPool) -> WhatsappProviderRuntimeStore {
-    WhatsappProviderRuntimeStore::new(
-        pool.clone(),
-        Arc::new(
-            crate::domains::communications::core::CommunicationProviderAccountStore::new(
-                pool.clone(),
-            ),
+pub(crate) fn whatsapp_provider_runtime(pool: PgPool) -> WhatsAppProviderRuntimeRef {
+    let provider_account_store = Arc::new(
+        crate::domains::communications::core::CommunicationProviderAccountStore::new(pool.clone()),
+    );
+    let provider_secret_binding_store = Arc::new(
+        crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+            pool.clone(),
         ),
-        Arc::new(crate::domains::communications::messages::ProviderChannelMessageStore::new(pool)),
+    );
+    let provider_channel_message_store = Arc::new(
+        crate::domains::communications::messages::ProviderChannelMessageStore::new(pool.clone()),
+    );
+    let whatsapp_runtime_event_sink = Arc::new(
+        crate::application::WhatsappRuntimeSignalIngestService::new(pool.clone()),
+    );
+    let web_companion_runtime = whatsapp_web_companion_runtime(
+        pool.clone(),
+        provider_account_store.clone(),
+        provider_secret_binding_store.clone(),
+        provider_channel_message_store.clone(),
+    );
+    let native_md_runtime = whatsapp_native_md_runtime(
+        pool.clone(),
+        provider_account_store.clone(),
+        provider_secret_binding_store.clone(),
+        provider_channel_message_store.clone(),
+        whatsapp_runtime_event_sink,
+    );
+    let business_cloud_runtime = whatsapp_business_cloud_runtime(
+        pool,
+        provider_account_store.clone(),
+        provider_secret_binding_store.clone(),
+        provider_channel_message_store.clone(),
+    );
+    whatsapp_provider_runtime_mux(
+        provider_account_store,
+        web_companion_runtime,
+        native_md_runtime,
+        business_cloud_runtime,
     )
 }

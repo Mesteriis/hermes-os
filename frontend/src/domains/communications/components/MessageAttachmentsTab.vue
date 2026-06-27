@@ -16,6 +16,7 @@ import {
   formatAttachmentSize,
   isInspectableArchiveAttachment,
   isPreviewableAttachment,
+  isPreviewablePdfAttachment,
   isPreviewableImageAttachment,
   scanStatusClass
 } from './attachmentTable'
@@ -159,7 +160,13 @@ async function translateSelectedAttachment() {
                     :disabled="isAttachmentPreviewFetching && selectedPreviewAttachmentId === row.original.attachment_id"
                     @click="showAttachmentPreview(row.original.attachment_id)"
                   >
-                    {{ isPreviewableImageAttachment(row.original) ? 'Preview image' : 'Preview' }}
+                    {{
+                      isPreviewableImageAttachment(row.original)
+                        ? 'Preview image'
+                        : isPreviewablePdfAttachment(row.original)
+                          ? 'Preview PDF'
+                          : 'Preview'
+                    }}
                   </button>
                   <button
                     v-if="isInspectableArchiveAttachment(row.original)"
@@ -213,6 +220,9 @@ async function translateSelectedAttachment() {
             Truncated to {{ formatAttachmentSize(attachmentPreview.max_preview_bytes) }}
           </span>
           <span v-if="attachmentPreview.preview_kind === 'image'">Image preview</span>
+          <span v-else-if="attachmentPreview.preview_kind === 'audio'">Audio preview</span>
+          <span v-else-if="attachmentPreview.preview_kind === 'video'">Video preview</span>
+          <span v-else-if="attachmentPreview.preview_kind === 'pdf'">PDF preview</span>
           <label v-if="attachmentPreview.preview_kind === 'text'" class="attachment-translation-target">
             <span>Translate</span>
             <select v-model="attachmentTranslationTarget">
@@ -237,6 +247,26 @@ async function translateSelectedAttachment() {
           :src="attachmentPreview.data_url"
           :alt="selectedPreviewAttachment.filename || 'Attachment image preview'"
         >
+        <audio
+          v-else-if="attachmentPreview.preview_kind === 'audio' && attachmentPreview.data_url"
+          class="attachment-preview-media"
+          controls
+          preload="metadata"
+          :src="attachmentPreview.data_url"
+        />
+        <video
+          v-else-if="attachmentPreview.preview_kind === 'video' && attachmentPreview.data_url"
+          class="attachment-preview-media"
+          controls
+          preload="metadata"
+          :src="attachmentPreview.data_url"
+        />
+        <iframe
+          v-else-if="attachmentPreview.preview_kind === 'pdf' && attachmentPreview.data_url"
+          class="attachment-preview-document"
+          :src="attachmentPreview.data_url"
+          :title="selectedPreviewAttachment.filename || 'Attachment PDF preview'"
+        />
         <pre v-else class="attachment-preview-text">{{ attachmentPreview.text }}</pre>
         <section
           v-if="attachmentTranslationResult || attachmentTranslationError"
@@ -544,6 +574,26 @@ async function translateSelectedAttachment() {
   border-radius: 0.25rem;
   background: color-mix(in srgb, var(--hh-bg-primary, #ffffff) 78%, transparent);
   object-fit: contain;
+}
+
+.attachment-preview-media {
+  display: block;
+  width: 100%;
+  max-height: 18rem;
+  margin-top: 0.625rem;
+  border: 1px solid var(--hh-border, #e5e7eb);
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--hh-bg-primary, #ffffff) 78%, transparent);
+}
+
+.attachment-preview-document {
+  display: block;
+  width: 100%;
+  min-height: 20rem;
+  margin-top: 0.625rem;
+  border: 1px solid var(--hh-border, #e5e7eb);
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--hh-bg-primary, #ffffff) 78%, transparent);
 }
 
 .attachment-translation-panel {

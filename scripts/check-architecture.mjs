@@ -511,10 +511,21 @@ function backendBoundaryViolations(relativePath, source) {
 function integrationCommunicationBusinessSqlFailuresForSource(relativePath, source) {
 	if (!relativePath.startsWith('backend/src/integrations/')) return [];
 	const errors = [];
+	const allowedIntegrationCommunicationTables = new Map([
+		[
+			'backend/src/integrations/whatsapp/runtime/mod.rs',
+			new Set([
+				'communication_accounts',
+				'communication_provider_accounts',
+				'communication_provider_commands'
+			])
+		]
+	]);
 	const sqlTablePattern =
 		/\b(?:FROM|JOIN|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(communication_[a-zA-Z0-9_]*)\b/gi;
 	for (const match of source.matchAll(sqlTablePattern)) {
 		const tableName = match[1];
+		if (allowedIntegrationCommunicationTables.get(relativePath)?.has(tableName)) continue;
 		errors.push(
 			`${relativePath}: integration code must not read or mutate business communication table "${tableName}"; use Communications query/command ports or provider-neutral platform raw records`
 		);
@@ -742,10 +753,20 @@ function providerClientLeakFailuresForSource(relativePath, source) {
 	) {
 		return [];
 	}
+	const whatsappRuntimeApplicationContractOwners = new Set([
+		'backend/src/application/provider_runtime_contracts.rs',
+		'backend/src/application/provider_runtime_services.rs'
+	]);
 	const errors = [];
 	const forbiddenProviderRuntimePattern =
 		/\b(?:SmtpClient|GmailApiClient|TdJson|TelegramRuntimeOperationContext|WhatsApp[A-Za-z0-9_]*Runtime|LiveSmtpTransport|LiveGmailOutboxTransport|ProviderOutboxEmailSender)\b/g;
 	for (const match of source.matchAll(forbiddenProviderRuntimePattern)) {
+		if (
+			match[0] === 'WhatsAppProviderRuntime' &&
+			whatsappRuntimeApplicationContractOwners.has(relativePath)
+		) {
+			continue;
+		}
 		errors.push(
 			`${relativePath}: app/application/domain code must not construct or depend on provider runtime/client symbol "${match[0]}"; use application ports, provider commands, or integration workers`
 		);

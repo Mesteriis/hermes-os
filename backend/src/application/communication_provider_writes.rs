@@ -1,6 +1,9 @@
+use std::collections::{HashMap, HashSet, VecDeque};
+
 use chrono::Utc;
 use serde::Serialize;
 use serde_json::json;
+use sqlx::Row;
 use thiserror::Error;
 
 use crate::application::communication_fixture_ingest::{
@@ -9,17 +12,20 @@ use crate::application::communication_fixture_ingest::{
 use crate::application::telegram_runtime::{self, TelegramRuntimeUseCaseContext};
 use crate::domains::communications::core::CommunicationIngestionPort;
 use crate::domains::communications::messages::{
-    CommunicationSignalProjectionError, project_accepted_signal_if_runtime_allows,
+    CommunicationSignalProjectionError, ProviderChannelMessageStore,
+    project_accepted_signal_if_runtime_allows,
 };
 use crate::domains::signal_hub::{SignalHubError, dispatch_telegram_raw_signal};
 use crate::integrations::telegram::client::lifecycle;
 use crate::integrations::telegram::client::models::messages::{
-    TelegramDeleteRequest, TelegramEditRequest, TelegramForwardChainResponse,
+    TelegramDeleteRequest, TelegramEditRequest, TelegramForwardChainResponse, TelegramForwardRef,
     TelegramForwardRequest, TelegramLifecycleResponse, TelegramManualSendRequest,
-    TelegramManualSendResponse, TelegramMessageTombstoneListResponse,
-    TelegramMessageVersionListResponse, TelegramPinRequest, TelegramReactionListResponse,
-    TelegramReactionRequest, TelegramReactionResponse, TelegramReplyChainResponse,
-    TelegramReplyRequest, TelegramRestoreVisibilityRequest,
+    TelegramManualSendResponse, TelegramMessageReferenceSummary, TelegramMessageTombstone,
+    TelegramMessageTombstoneListResponse, TelegramMessageVersion,
+    TelegramMessageVersionListResponse, TelegramPinRequest, TelegramReaction,
+    TelegramReactionGroup, TelegramReactionListResponse, TelegramReactionRequest,
+    TelegramReactionResponse, TelegramReactionSummary, TelegramReplyChainResponse,
+    TelegramReplyRef, TelegramReplyRequest, TelegramRestoreVisibilityRequest,
 };
 use crate::integrations::telegram::client::{TelegramError, TelegramStore};
 use crate::platform::audit::{ApiAuditError, ApiAuditLog, NewApiAuditRecord};
@@ -27,9 +33,529 @@ use crate::platform::events::bus::telegram_event_types;
 use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
 
 const AUDIT_ACTOR_ID: &str = "hermes-frontend";
+const CANONICAL_REFERENCE_CHAIN_DEPTH: usize = 16;
+const CANONICAL_REFERENCE_CHAIN_EDGES: usize = 128;
 
 pub(crate) fn new_telegram_command_id() -> String {
     lifecycle::new_command_id()
+}
+
+async fn list_canonical_message_versions(
+    pool: &sqlx::PgPool,
+    message_id: &str,
+) -> Result<Vec<TelegramMessageVersion>, TelegramError> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            version_id,
+            message_id,
+            account_id,
+            provider_message_id,
+            COALESCE(provider_conversation_id, '') AS provider_chat_id,
+            version_number,
+            body_text,
+            edited_at AS edit_timestamp,
+            source_event,
+            diff_payload AS raw_diff_payload,
+            provenance,
+            created_at
+        FROM communication_message_versions
+        WHERE message_id = $1
+        ORDER BY version_number ASC, created_at ASC
+        "#,
+    )
+    .bind(message_id)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(TelegramMessageVersion {
+                version_id: row.try_get("version_id")?,
+                message_id: row.try_get("message_id")?,
+                account_id: row.try_get("account_id")?,
+                provider_message_id: row.try_get("provider_message_id")?,
+                provider_chat_id: row.try_get("provider_chat_id")?,
+                version_number: row.try_get("version_number")?,
+                body_text: row.try_get("body_text")?,
+                edit_timestamp: row.try_get("edit_timestamp")?,
+                source_event: row.try_get("source_event")?,
+                raw_diff_payload: row.try_get("raw_diff_payload")?,
+                provenance: row.try_get("provenance")?,
+                created_at: row.try_get("created_at")?,
+            })
+        })
+        .collect()
+}
+
+async fn list_canonical_message_tombstones(
+    pool: &sqlx::PgPool,
+    message_id: &str,
+) -> Result<Vec<TelegramMessageTombstone>, TelegramError> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            tombstone_id,
+            message_id,
+            account_id,
+            provider_message_id,
+            COALESCE(provider_conversation_id, '') AS provider_chat_id,
+            reason_class,
+            actor_class,
+            observed_at,
+            source_event,
+            is_provider_delete,
+            is_local_visible,
+            metadata,
+            provenance,
+            created_at
+        FROM communication_message_tombstones
+        WHERE message_id = $1
+        ORDER BY observed_at ASC, created_at ASC
+        "#,
+    )
+    .bind(message_id)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(TelegramMessageTombstone {
+                tombstone_id: row.try_get("tombstone_id")?,
+                message_id: row.try_get("message_id")?,
+                account_id: row.try_get("account_id")?,
+                provider_message_id: row.try_get("provider_message_id")?,
+                provider_chat_id: row.try_get("provider_chat_id")?,
+                reason_class: row.try_get("reason_class")?,
+                actor_class: row.try_get("actor_class")?,
+                observed_at: row.try_get("observed_at")?,
+                source_event: row.try_get("source_event")?,
+                is_provider_delete: row.try_get("is_provider_delete")?,
+                is_local_visible: row.try_get("is_local_visible")?,
+                metadata: row.try_get("metadata")?,
+                provenance: row.try_get("provenance")?,
+                created_at: row.try_get("created_at")?,
+            })
+        })
+        .collect()
+}
+
+async fn list_canonical_reactions(
+    pool: &sqlx::PgPool,
+    message_id: &str,
+) -> Result<Vec<TelegramReaction>, TelegramError> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            reaction_id,
+            message_id,
+            account_id,
+            provider_message_id,
+            COALESCE(provider_conversation_id, '') AS provider_chat_id,
+            COALESCE(sender_identity_id, provider_actor_id, reaction_id) AS sender_id,
+            sender_display_name,
+            reaction AS reaction_emoji,
+            is_active,
+            observed_at,
+            source_event,
+            provider_actor_id,
+            metadata,
+            provenance,
+            created_at,
+            updated_at
+        FROM communication_message_reactions
+        WHERE message_id = $1
+          AND is_active = true
+        ORDER BY observed_at DESC, created_at DESC
+        "#,
+    )
+    .bind(message_id)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(TelegramReaction {
+                reaction_id: row.try_get("reaction_id")?,
+                message_id: row.try_get("message_id")?,
+                account_id: row.try_get("account_id")?,
+                provider_message_id: row.try_get("provider_message_id")?,
+                provider_chat_id: row.try_get("provider_chat_id")?,
+                sender_id: row.try_get("sender_id")?,
+                sender_display_name: row.try_get("sender_display_name")?,
+                reaction_emoji: row.try_get("reaction_emoji")?,
+                is_active: row.try_get("is_active")?,
+                observed_at: row.try_get("observed_at")?,
+                source_event: row.try_get("source_event")?,
+                provider_actor_id: row.try_get("provider_actor_id")?,
+                metadata: row.try_get("metadata")?,
+                provenance: row.try_get("provenance")?,
+                created_at: row.try_get("created_at")?,
+                updated_at: row.try_get("updated_at")?,
+            })
+        })
+        .collect()
+}
+
+fn canonical_reaction_summary(
+    message_id: &str,
+    reactions: &[TelegramReaction],
+) -> TelegramReactionSummary {
+    let total_reactions = reactions.len() as i64;
+    let mut groups: HashMap<String, Vec<String>> = HashMap::new();
+    for reaction in reactions {
+        groups
+            .entry(reaction.reaction_emoji.clone())
+            .or_default()
+            .push(
+                reaction
+                    .sender_display_name
+                    .clone()
+                    .unwrap_or_else(|| reaction.sender_id.clone()),
+            );
+    }
+    let grouped_reactions = groups
+        .into_iter()
+        .map(|(reaction_emoji, senders)| TelegramReactionGroup {
+            reaction_emoji,
+            count: senders.len() as i64,
+            senders,
+        })
+        .collect();
+    TelegramReactionSummary {
+        message_id: message_id.to_owned(),
+        total_reactions,
+        active_reactions: total_reactions,
+        reactions: grouped_reactions,
+    }
+}
+
+async fn list_canonical_reference_summaries(
+    pool: &sqlx::PgPool,
+    message_ids: Vec<String>,
+) -> Result<HashMap<String, TelegramMessageReferenceSummary>, TelegramError> {
+    if message_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            message_id,
+            provider_record_id,
+            conversation_id,
+            subject,
+            sender,
+            sender_display_name,
+            body_text,
+            occurred_at
+        FROM communication_messages
+        WHERE message_id = ANY($1)
+        "#,
+    )
+    .bind(&message_ids)
+    .fetch_all(pool)
+    .await?;
+
+    let mut summaries = HashMap::new();
+    for row in rows {
+        let message_id: String = row.try_get("message_id")?;
+        summaries.insert(
+            message_id.clone(),
+            TelegramMessageReferenceSummary {
+                message_id,
+                provider_message_id: row.try_get("provider_record_id")?,
+                provider_chat_id: row.try_get("conversation_id")?,
+                chat_title: row.try_get("subject")?,
+                sender: row.try_get("sender")?,
+                sender_display_name: row.try_get("sender_display_name")?,
+                text: row.try_get("body_text")?,
+                occurred_at: row.try_get("occurred_at")?,
+            },
+        );
+    }
+    Ok(summaries)
+}
+
+async fn canonical_reply_refs_by_target(
+    pool: &sqlx::PgPool,
+    message_id: &str,
+) -> Result<Vec<TelegramReplyRef>, TelegramError> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            message_ref_id AS reply_ref_id,
+            source_message_id,
+            target_message_id,
+            account_id,
+            COALESCE(provider_conversation_id, '') AS provider_chat_id,
+            COALESCE(source_provider_id, '') AS source_provider_id,
+            COALESCE(target_provider_id, '') AS target_provider_id,
+            depth AS reply_depth,
+            COALESCE((metadata->>'is_topic_reply')::boolean, false) AS is_topic_reply,
+            metadata->>'topic_id' AS topic_id,
+            metadata,
+            provenance,
+            created_at
+        FROM communication_message_refs
+        WHERE ref_kind = 'reply'
+          AND target_message_id = $1
+        ORDER BY created_at DESC
+        "#,
+    )
+    .bind(message_id)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(TelegramReplyRef {
+                reply_ref_id: row.try_get("reply_ref_id")?,
+                source_message_id: row.try_get("source_message_id")?,
+                target_message_id: row.try_get("target_message_id")?,
+                account_id: row.try_get("account_id")?,
+                provider_chat_id: row.try_get("provider_chat_id")?,
+                source_provider_id: row.try_get("source_provider_id")?,
+                target_provider_id: row.try_get("target_provider_id")?,
+                reply_depth: row.try_get("reply_depth")?,
+                is_topic_reply: row.try_get("is_topic_reply")?,
+                topic_id: row.try_get("topic_id")?,
+                source_message_summary: None,
+                target_message_summary: None,
+                metadata: row.try_get("metadata")?,
+                provenance: row.try_get("provenance")?,
+                created_at: row.try_get("created_at")?,
+            })
+        })
+        .collect()
+}
+
+async fn canonical_reply_refs_by_source(
+    pool: &sqlx::PgPool,
+    message_id: &str,
+) -> Result<Vec<TelegramReplyRef>, TelegramError> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            message_ref_id AS reply_ref_id,
+            source_message_id,
+            target_message_id,
+            account_id,
+            COALESCE(provider_conversation_id, '') AS provider_chat_id,
+            COALESCE(source_provider_id, '') AS source_provider_id,
+            COALESCE(target_provider_id, '') AS target_provider_id,
+            depth AS reply_depth,
+            COALESCE((metadata->>'is_topic_reply')::boolean, false) AS is_topic_reply,
+            metadata->>'topic_id' AS topic_id,
+            metadata,
+            provenance,
+            created_at
+        FROM communication_message_refs
+        WHERE ref_kind = 'reply'
+          AND source_message_id = $1
+        ORDER BY created_at DESC
+        "#,
+    )
+    .bind(message_id)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(TelegramReplyRef {
+                reply_ref_id: row.try_get("reply_ref_id")?,
+                source_message_id: row.try_get("source_message_id")?,
+                target_message_id: row.try_get("target_message_id")?,
+                account_id: row.try_get("account_id")?,
+                provider_chat_id: row.try_get("provider_chat_id")?,
+                source_provider_id: row.try_get("source_provider_id")?,
+                target_provider_id: row.try_get("target_provider_id")?,
+                reply_depth: row.try_get("reply_depth")?,
+                is_topic_reply: row.try_get("is_topic_reply")?,
+                topic_id: row.try_get("topic_id")?,
+                source_message_summary: None,
+                target_message_summary: None,
+                metadata: row.try_get("metadata")?,
+                provenance: row.try_get("provenance")?,
+                created_at: row.try_get("created_at")?,
+            })
+        })
+        .collect()
+}
+
+async fn canonical_forward_refs_by_source(
+    pool: &sqlx::PgPool,
+    message_id: &str,
+) -> Result<Vec<TelegramForwardRef>, TelegramError> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            message_ref_id AS forward_ref_id,
+            source_message_id,
+            target_message_id,
+            account_id,
+            COALESCE(provider_conversation_id, '') AS provider_chat_id,
+            COALESCE(source_provider_id, '') AS source_provider_id,
+            metadata->>'forward_origin_chat_id' AS forward_origin_chat_id,
+            metadata->>'forward_origin_message_id' AS forward_origin_message_id,
+            metadata->>'forward_origin_sender_id' AS forward_origin_sender_id,
+            metadata->>'forward_origin_sender_name' AS forward_origin_sender_name,
+            NULLIF(metadata->>'forwarded_at', '')::timestamptz AS forward_date,
+            depth AS forward_depth,
+            metadata,
+            provenance,
+            created_at
+        FROM communication_message_refs
+        WHERE ref_kind = 'forward'
+          AND source_message_id = $1
+        ORDER BY created_at DESC
+        "#,
+    )
+    .bind(message_id)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            let target_message_id: Option<String> = row.try_get("target_message_id")?;
+            let mut metadata: serde_json::Value = row.try_get("metadata")?;
+            if let Some(target_message_id) = target_message_id {
+                metadata["target_message_id"] = json!(target_message_id);
+            }
+            Ok(TelegramForwardRef {
+                forward_ref_id: row.try_get("forward_ref_id")?,
+                source_message_id: row.try_get("source_message_id")?,
+                account_id: row.try_get("account_id")?,
+                provider_chat_id: row.try_get("provider_chat_id")?,
+                source_provider_id: row.try_get("source_provider_id")?,
+                forward_origin_chat_id: row.try_get("forward_origin_chat_id")?,
+                forward_origin_message_id: row.try_get("forward_origin_message_id")?,
+                forward_origin_sender_id: row.try_get("forward_origin_sender_id")?,
+                forward_origin_sender_name: row.try_get("forward_origin_sender_name")?,
+                forward_date: row.try_get("forward_date")?,
+                forward_depth: row.try_get("forward_depth")?,
+                source_message_summary: None,
+                metadata,
+                provenance: row.try_get("provenance")?,
+                created_at: row.try_get("created_at")?,
+            })
+        })
+        .collect()
+}
+
+async fn canonical_reply_chain(
+    pool: &sqlx::PgPool,
+    message_id: &str,
+) -> Result<TelegramReplyChainResponse, TelegramError> {
+    let mut replies = Vec::new();
+    let mut reply_to = Vec::new();
+    let mut visited = HashSet::new();
+    let mut queue = VecDeque::new();
+    visited.insert(message_id.to_owned());
+    queue.push_back((message_id.to_owned(), 0usize));
+    while let Some((current_id, depth)) = queue.pop_front() {
+        if depth >= CANONICAL_REFERENCE_CHAIN_DEPTH {
+            continue;
+        }
+        for mut item in canonical_reply_refs_by_target(pool, &current_id).await? {
+            let next_id = item.source_message_id.clone();
+            if !visited.insert(next_id.clone()) {
+                continue;
+            }
+            item.reply_depth = (depth + 1) as i32;
+            replies.push(item);
+            if replies.len() >= CANONICAL_REFERENCE_CHAIN_EDGES {
+                break;
+            }
+            queue.push_back((next_id, depth + 1));
+        }
+    }
+
+    visited.clear();
+    queue.clear();
+    visited.insert(message_id.to_owned());
+    queue.push_back((message_id.to_owned(), 0usize));
+    while let Some((current_id, depth)) = queue.pop_front() {
+        if depth >= CANONICAL_REFERENCE_CHAIN_DEPTH {
+            continue;
+        }
+        for mut item in canonical_reply_refs_by_source(pool, &current_id).await? {
+            let next_id = item.target_message_id.clone();
+            if !visited.insert(next_id.clone()) {
+                continue;
+            }
+            item.reply_depth = (depth + 1) as i32;
+            reply_to.push(item);
+            if reply_to.len() >= CANONICAL_REFERENCE_CHAIN_EDGES {
+                break;
+            }
+            queue.push_back((next_id, depth + 1));
+        }
+    }
+
+    let mut summary_ids = Vec::new();
+    for item in replies.iter().chain(reply_to.iter()) {
+        summary_ids.push(item.source_message_id.clone());
+        summary_ids.push(item.target_message_id.clone());
+    }
+    let summaries = list_canonical_reference_summaries(pool, summary_ids).await?;
+    for item in &mut replies {
+        item.source_message_summary = summaries.get(&item.source_message_id).cloned();
+        item.target_message_summary = summaries.get(&item.target_message_id).cloned();
+    }
+    for item in &mut reply_to {
+        item.source_message_summary = summaries.get(&item.source_message_id).cloned();
+        item.target_message_summary = summaries.get(&item.target_message_id).cloned();
+    }
+
+    Ok(TelegramReplyChainResponse {
+        message_id: message_id.to_owned(),
+        replies,
+        reply_to,
+    })
+}
+
+async fn canonical_forward_chain(
+    pool: &sqlx::PgPool,
+    message_id: &str,
+) -> Result<TelegramForwardChainResponse, TelegramError> {
+    let mut forwards = Vec::new();
+    let mut visited = HashSet::new();
+    let mut current_id = Some(message_id.to_owned());
+    let mut depth = 0usize;
+    while let Some(source_message_id) = current_id {
+        if depth >= CANONICAL_REFERENCE_CHAIN_DEPTH || !visited.insert(source_message_id.clone()) {
+            break;
+        }
+        let current_refs = canonical_forward_refs_by_source(pool, &source_message_id).await?;
+        let Some(mut item) = current_refs.into_iter().next() else {
+            break;
+        };
+        item.forward_depth = (depth + 1) as i32;
+        current_id = item
+            .metadata
+            .get("target_message_id")
+            .and_then(|value| value.as_str())
+            .map(ToOwned::to_owned);
+        forwards.push(item);
+        if forwards.len() >= CANONICAL_REFERENCE_CHAIN_EDGES {
+            break;
+        }
+        depth += 1;
+    }
+
+    let summary_ids = forwards
+        .iter()
+        .map(|item| item.source_message_id.clone())
+        .collect();
+    let summaries = list_canonical_reference_summaries(pool, summary_ids).await?;
+    for item in &mut forwards {
+        item.source_message_summary = summaries.get(&item.source_message_id).cloned();
+    }
+
+    Ok(TelegramForwardChainResponse {
+        message_id: message_id.to_owned(),
+        forwards,
+    })
 }
 
 #[derive(Clone)]
@@ -555,7 +1081,10 @@ impl TelegramMessageWriteApplicationService {
         &self,
         message_id: &str,
     ) -> Result<TelegramMessageVersionListResponse, TelegramMessageWriteError> {
-        let versions = lifecycle::list_message_versions(self.store.pool(), message_id).await?;
+        let mut versions = lifecycle::list_message_versions(self.store.pool(), message_id).await?;
+        if versions.is_empty() {
+            versions = list_canonical_message_versions(self.store.pool(), message_id).await?;
+        }
         Ok(TelegramMessageVersionListResponse {
             message_id: message_id.to_owned(),
             versions,
@@ -566,7 +1095,10 @@ impl TelegramMessageWriteApplicationService {
         &self,
         message_id: &str,
     ) -> Result<TelegramMessageTombstoneListResponse, TelegramMessageWriteError> {
-        let tombstones = lifecycle::list_tombstones(self.store.pool(), message_id).await?;
+        let mut tombstones = lifecycle::list_tombstones(self.store.pool(), message_id).await?;
+        if tombstones.is_empty() {
+            tombstones = list_canonical_message_tombstones(self.store.pool(), message_id).await?;
+        }
         Ok(TelegramMessageTombstoneListResponse {
             message_id: message_id.to_owned(),
             tombstones,
@@ -577,22 +1109,39 @@ impl TelegramMessageWriteApplicationService {
         &self,
         message_id: &str,
     ) -> Result<TelegramReplyChainResponse, TelegramMessageWriteError> {
-        Ok(lifecycle::reply_chain(&self.store, message_id).await?)
+        match lifecycle::reply_chain(&self.store, message_id).await {
+            Ok(response) if !response.replies.is_empty() || !response.reply_to.is_empty() => {
+                Ok(response)
+            }
+            Ok(_) => Ok(canonical_reply_chain(self.store.pool(), message_id).await?),
+            Err(_) => Ok(canonical_reply_chain(self.store.pool(), message_id).await?),
+        }
     }
 
     pub(crate) async fn forward_chain(
         &self,
         message_id: &str,
     ) -> Result<TelegramForwardChainResponse, TelegramMessageWriteError> {
-        Ok(lifecycle::forward_chain(&self.store, message_id).await?)
+        match lifecycle::forward_chain(&self.store, message_id).await {
+            Ok(response) if !response.forwards.is_empty() => Ok(response),
+            Ok(_) => Ok(canonical_forward_chain(self.store.pool(), message_id).await?),
+            Err(_) => Ok(canonical_forward_chain(self.store.pool(), message_id).await?),
+        }
     }
 
     pub(crate) async fn reactions(
         &self,
         message_id: &str,
     ) -> Result<TelegramReactionListResponse, TelegramMessageWriteError> {
-        let reactions = lifecycle::list_reactions(self.store.pool(), message_id).await?;
-        let summary = lifecycle::reaction_summary(self.store.pool(), message_id).await?;
+        let mut reactions = lifecycle::list_reactions(self.store.pool(), message_id).await?;
+        if reactions.is_empty() {
+            reactions = list_canonical_reactions(self.store.pool(), message_id).await?;
+        }
+        let summary = if reactions.is_empty() {
+            lifecycle::reaction_summary(self.store.pool(), message_id).await?
+        } else {
+            canonical_reaction_summary(message_id, &reactions)
+        };
         Ok(TelegramReactionListResponse {
             message_id: message_id.to_owned(),
             reactions,

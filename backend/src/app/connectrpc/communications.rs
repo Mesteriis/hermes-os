@@ -163,6 +163,9 @@ const ATTACHMENT_TRANSLATION_SOURCE: &str = "caller_provided_extracted_text";
 const MAX_ATTACHMENT_TRANSLATION_SOURCE_CHARS: usize = 64_000;
 const MAX_TEXT_PREVIEW_BYTES: usize = 64 * 1024;
 const MAX_IMAGE_PREVIEW_BYTES: usize = 5 * 1024 * 1024;
+const MAX_AUDIO_PREVIEW_BYTES: usize = 24 * 1024 * 1024;
+const MAX_VIDEO_PREVIEW_BYTES: usize = 32 * 1024 * 1024;
+const MAX_PDF_PREVIEW_BYTES: usize = 16 * 1024 * 1024;
 
 pub(crate) fn register(
     router: ConnectRouter,
@@ -2337,7 +2340,9 @@ impl CommunicationsService for CommunicationsConnectService {
             ));
         }
         let preview_kind = attachment_preview_kind(&attachment).ok_or_else(|| {
-            invalid_argument_error("attachment preview supports text and image attachments only")
+            invalid_argument_error(
+                "attachment preview supports text, image, audio, video and pdf attachments only",
+            )
         })?;
 
         let bytes = crate::app::api_support::communication_blob_store()
@@ -2352,6 +2357,15 @@ impl CommunicationsService for CommunicationsConnectService {
             }
             AttachmentPreviewKind::Image => {
                 image_attachment_preview_proto(attachment, bytes, byte_count)
+            }
+            AttachmentPreviewKind::Audio => {
+                audio_attachment_preview_proto(attachment, bytes, byte_count)
+            }
+            AttachmentPreviewKind::Video => {
+                video_attachment_preview_proto(attachment, bytes, byte_count)
+            }
+            AttachmentPreviewKind::Pdf => {
+                pdf_attachment_preview_proto(attachment, bytes, byte_count)
             }
         }
     }
@@ -3382,6 +3396,9 @@ fn is_preview_allowed_by_scan_status(attachment: &StoredCommunicationAttachmentW
 enum AttachmentPreviewKind {
     Text,
     Image,
+    Audio,
+    Video,
+    Pdf,
 }
 
 fn attachment_preview_kind(
@@ -3392,6 +3409,15 @@ fn attachment_preview_kind(
     }
     if is_previewable_image_attachment(attachment) {
         return Some(AttachmentPreviewKind::Image);
+    }
+    if is_previewable_audio_attachment(attachment) {
+        return Some(AttachmentPreviewKind::Audio);
+    }
+    if is_previewable_video_attachment(attachment) {
+        return Some(AttachmentPreviewKind::Video);
+    }
+    if is_previewable_pdf_attachment(attachment) {
+        return Some(AttachmentPreviewKind::Pdf);
     }
     None
 }
@@ -3434,12 +3460,132 @@ fn is_previewable_image_attachment(attachment: &StoredCommunicationAttachmentWit
         .starts_with("image/")
 }
 
+fn is_previewable_audio_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
+    let content_type = attachment
+        .attachment
+        .content_type
+        .trim()
+        .to_ascii_lowercase();
+    content_type.starts_with("audio/")
+        || attachment
+            .attachment
+            .filename
+            .as_deref()
+            .map(|filename| {
+                let filename = filename.trim().to_ascii_lowercase();
+                filename.ends_with(".mp3")
+                    || filename.ends_with(".m4a")
+                    || filename.ends_with(".aac")
+                    || filename.ends_with(".ogg")
+                    || filename.ends_with(".opus")
+                    || filename.ends_with(".wav")
+                    || filename.ends_with(".webm")
+            })
+            .unwrap_or(false)
+}
+
+fn is_previewable_video_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
+    let content_type = attachment
+        .attachment
+        .content_type
+        .trim()
+        .to_ascii_lowercase();
+    content_type.starts_with("video/")
+        || attachment
+            .attachment
+            .filename
+            .as_deref()
+            .map(|filename| {
+                let filename = filename.trim().to_ascii_lowercase();
+                filename.ends_with(".mp4")
+                    || filename.ends_with(".webm")
+                    || filename.ends_with(".mov")
+            })
+            .unwrap_or(false)
+}
+
+fn is_previewable_pdf_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
+    preview_pdf_content_type(attachment).is_some()
+}
+
 fn preview_image_content_type(attachment: &StoredCommunicationAttachmentWithBlob) -> Option<&str> {
     let content_type = attachment.attachment.content_type.trim();
     if content_type.is_empty() || !content_type.to_ascii_lowercase().starts_with("image/") {
         return None;
     }
     Some(content_type)
+}
+
+fn preview_audio_content_type(attachment: &StoredCommunicationAttachmentWithBlob) -> Option<&str> {
+    let content_type = attachment.attachment.content_type.trim();
+    let lowered = content_type.to_ascii_lowercase();
+    if lowered.starts_with("audio/") && !content_type.is_empty() {
+        return Some(content_type);
+    }
+    attachment
+        .attachment
+        .filename
+        .as_deref()
+        .and_then(|filename| {
+            let filename = filename.trim().to_ascii_lowercase();
+            if filename.ends_with(".mp3") {
+                Some("audio/mpeg")
+            } else if filename.ends_with(".m4a") || filename.ends_with(".aac") {
+                Some("audio/mp4")
+            } else if filename.ends_with(".ogg") || filename.ends_with(".opus") {
+                Some("audio/ogg")
+            } else if filename.ends_with(".wav") {
+                Some("audio/wav")
+            } else if filename.ends_with(".webm") {
+                Some("audio/webm")
+            } else {
+                None
+            }
+        })
+}
+
+fn preview_video_content_type(attachment: &StoredCommunicationAttachmentWithBlob) -> Option<&str> {
+    let content_type = attachment.attachment.content_type.trim();
+    let lowered = content_type.to_ascii_lowercase();
+    if lowered.starts_with("video/") && !content_type.is_empty() {
+        return Some(content_type);
+    }
+    attachment
+        .attachment
+        .filename
+        .as_deref()
+        .and_then(|filename| {
+            let filename = filename.trim().to_ascii_lowercase();
+            if filename.ends_with(".mp4") {
+                Some("video/mp4")
+            } else if filename.ends_with(".webm") {
+                Some("video/webm")
+            } else if filename.ends_with(".mov") {
+                Some("video/quicktime")
+            } else {
+                None
+            }
+        })
+}
+
+fn preview_pdf_content_type(attachment: &StoredCommunicationAttachmentWithBlob) -> Option<&str> {
+    let content_type = attachment.attachment.content_type.trim();
+    let lowered = content_type.to_ascii_lowercase();
+    if lowered == "application/pdf" && !content_type.is_empty() {
+        return Some(content_type);
+    }
+    attachment
+        .attachment
+        .filename
+        .as_deref()
+        .and_then(|filename| {
+            let filename = filename.trim().to_ascii_lowercase();
+            if filename.ends_with(".pdf") {
+                Some("application/pdf")
+            } else {
+                None
+            }
+        })
 }
 
 fn is_zip_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
@@ -3514,6 +3660,102 @@ fn image_attachment_preview_proto(
         truncated: false,
         byte_count: byte_count as u64,
         max_preview_bytes: MAX_IMAGE_PREVIEW_BYTES as u64,
+        ..Default::default()
+    })
+}
+
+fn audio_attachment_preview_proto(
+    attachment: StoredCommunicationAttachmentWithBlob,
+    bytes: Vec<u8>,
+    byte_count: usize,
+) -> ServiceResult<GetAttachmentPreviewResponse> {
+    if byte_count > MAX_AUDIO_PREVIEW_BYTES {
+        return Err(invalid_argument_error(
+            "attachment audio preview exceeds size limit",
+        ));
+    }
+    let content_type = preview_audio_content_type(&attachment).unwrap_or("audio/mpeg");
+    let data_url = format!(
+        "data:{content_type};base64,{}",
+        BASE64_STANDARD.encode(bytes)
+    );
+
+    Response::ok(GetAttachmentPreviewResponse {
+        attachment_id: attachment.attachment.attachment_id,
+        message_id: attachment.attachment.message_id,
+        filename: attachment.attachment.filename,
+        content_type: attachment.attachment.content_type,
+        scan_status: attachment.attachment.scan_status.as_str().to_owned(),
+        preview_kind: "audio".to_owned(),
+        text: String::new(),
+        data_url: Some(data_url),
+        truncated: false,
+        byte_count: byte_count as u64,
+        max_preview_bytes: MAX_AUDIO_PREVIEW_BYTES as u64,
+        ..Default::default()
+    })
+}
+
+fn video_attachment_preview_proto(
+    attachment: StoredCommunicationAttachmentWithBlob,
+    bytes: Vec<u8>,
+    byte_count: usize,
+) -> ServiceResult<GetAttachmentPreviewResponse> {
+    if byte_count > MAX_VIDEO_PREVIEW_BYTES {
+        return Err(invalid_argument_error(
+            "attachment video preview exceeds size limit",
+        ));
+    }
+    let content_type = preview_video_content_type(&attachment).unwrap_or("video/mp4");
+    let data_url = format!(
+        "data:{content_type};base64,{}",
+        BASE64_STANDARD.encode(bytes)
+    );
+
+    Response::ok(GetAttachmentPreviewResponse {
+        attachment_id: attachment.attachment.attachment_id,
+        message_id: attachment.attachment.message_id,
+        filename: attachment.attachment.filename,
+        content_type: attachment.attachment.content_type,
+        scan_status: attachment.attachment.scan_status.as_str().to_owned(),
+        preview_kind: "video".to_owned(),
+        text: String::new(),
+        data_url: Some(data_url),
+        truncated: false,
+        byte_count: byte_count as u64,
+        max_preview_bytes: MAX_VIDEO_PREVIEW_BYTES as u64,
+        ..Default::default()
+    })
+}
+
+fn pdf_attachment_preview_proto(
+    attachment: StoredCommunicationAttachmentWithBlob,
+    bytes: Vec<u8>,
+    byte_count: usize,
+) -> ServiceResult<GetAttachmentPreviewResponse> {
+    if byte_count > MAX_PDF_PREVIEW_BYTES {
+        return Err(invalid_argument_error(
+            "attachment pdf preview exceeds size limit",
+        ));
+    }
+    let content_type = preview_pdf_content_type(&attachment).unwrap_or("application/pdf");
+    let data_url = format!(
+        "data:{content_type};base64,{}",
+        BASE64_STANDARD.encode(bytes)
+    );
+
+    Response::ok(GetAttachmentPreviewResponse {
+        attachment_id: attachment.attachment.attachment_id,
+        message_id: attachment.attachment.message_id,
+        filename: attachment.attachment.filename,
+        content_type: attachment.attachment.content_type,
+        scan_status: attachment.attachment.scan_status.as_str().to_owned(),
+        preview_kind: "pdf".to_owned(),
+        text: String::new(),
+        data_url: Some(data_url),
+        truncated: false,
+        byte_count: byte_count as u64,
+        max_preview_bytes: MAX_PDF_PREVIEW_BYTES as u64,
         ..Default::default()
     })
 }

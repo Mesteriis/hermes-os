@@ -16,6 +16,9 @@ pub enum ProviderAccountSecretPurpose {
     TelegramSessionKey,
     TelegramBotToken,
     WhatsappWebSessionKey,
+    WhatsappBusinessCloudAccessToken,
+    WhatsappBusinessCloudAppSecret,
+    WhatsappBusinessCloudWebhookVerifyToken,
 }
 
 impl ProviderAccountSecretPurpose {
@@ -28,6 +31,11 @@ impl ProviderAccountSecretPurpose {
             Self::TelegramSessionKey => "telegram_session_key",
             Self::TelegramBotToken => "telegram_bot_token",
             Self::WhatsappWebSessionKey => "whatsapp_web_session_key",
+            Self::WhatsappBusinessCloudAccessToken => "whatsapp_business_cloud_access_token",
+            Self::WhatsappBusinessCloudAppSecret => "whatsapp_business_cloud_app_secret",
+            Self::WhatsappBusinessCloudWebhookVerifyToken => {
+                "whatsapp_business_cloud_webhook_verify_token"
+            }
         }
     }
 
@@ -41,6 +49,9 @@ impl ProviderAccountSecretPurpose {
             Self::TelegramSessionKey | Self::WhatsappWebSessionKey => {
                 matches!(secret_kind, SecretKind::PrivateKey | SecretKind::Other)
             }
+            Self::WhatsappBusinessCloudAccessToken
+            | Self::WhatsappBusinessCloudAppSecret
+            | Self::WhatsappBusinessCloudWebhookVerifyToken => secret_kind == SecretKind::ApiToken,
         }
     }
 }
@@ -57,6 +68,11 @@ impl TryFrom<&str> for ProviderAccountSecretPurpose {
             "telegram_session_key" => Ok(Self::TelegramSessionKey),
             "telegram_bot_token" => Ok(Self::TelegramBotToken),
             "whatsapp_web_session_key" => Ok(Self::WhatsappWebSessionKey),
+            "whatsapp_business_cloud_access_token" => Ok(Self::WhatsappBusinessCloudAccessToken),
+            "whatsapp_business_cloud_app_secret" => Ok(Self::WhatsappBusinessCloudAppSecret),
+            "whatsapp_business_cloud_webhook_verify_token" => {
+                Ok(Self::WhatsappBusinessCloudWebhookVerifyToken)
+            }
             other => Err(CommunicationIngestionError::UnsupportedSecretPurpose(
                 other.to_owned(),
             )),

@@ -191,7 +191,8 @@ fn provider_config(provider_kind: EmailProviderKind) -> serde_json::Value {
         }
         EmailProviderKind::TelegramUser
         | EmailProviderKind::TelegramBot
-        | EmailProviderKind::WhatsappWeb => json!({}),
+        | EmailProviderKind::WhatsappWeb
+        | EmailProviderKind::WhatsappBusinessCloud => json!({}),
     }
 }
 

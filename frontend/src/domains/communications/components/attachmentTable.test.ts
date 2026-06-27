@@ -5,7 +5,9 @@ import {
   attachmentTableRowId,
   formatAttachmentSize,
   isInspectableArchiveAttachment,
+  isPreviewableAttachment,
   isPreviewableImageAttachment,
+  isPreviewablePdfAttachment,
   isPreviewableTextAttachment,
   scanStatusClass
 } from './attachmentTable'
@@ -118,5 +120,28 @@ describe('attachment table helpers', () => {
       content_type: 'image/png',
       scan_status: 'malicious'
     }))).toBe(false)
+  })
+
+  it('recognizes safe pdf attachments as previewable', () => {
+    expect(isPreviewablePdfAttachment(attachment({
+      filename: 'invoice.pdf',
+      content_type: 'application/pdf',
+      scan_status: 'not_scanned'
+    }))).toBe(true)
+    expect(isPreviewablePdfAttachment(attachment({
+      filename: 'invoice.pdf',
+      content_type: 'application/octet-stream',
+      scan_status: 'clean'
+    }))).toBe(true)
+    expect(isPreviewablePdfAttachment(attachment({
+      filename: 'invoice.pdf',
+      content_type: 'application/pdf',
+      scan_status: 'malicious'
+    }))).toBe(false)
+    expect(isPreviewableAttachment(attachment({
+      filename: 'invoice.pdf',
+      content_type: 'application/pdf',
+      scan_status: 'clean'
+    }))).toBe(true)
   })
 })

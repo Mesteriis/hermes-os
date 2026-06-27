@@ -2,8 +2,10 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, Runtime};
-use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+
+mod whatsapp_companion;
 
 #[derive(Default)]
 struct BackendSidecar {
@@ -23,6 +25,11 @@ impl Drop for BackendSidecar {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .invoke_handler(tauri::generate_handler![
+            whatsapp_companion::open_whatsapp_web_companion,
+            whatsapp_companion::whatsapp_web_companion_manifest,
+            whatsapp_companion::whatsapp_web_companion_relay_observation,
+        ])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

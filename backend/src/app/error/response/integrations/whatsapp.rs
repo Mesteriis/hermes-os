@@ -30,6 +30,24 @@ pub(super) fn whatsapp_web_error_parts(error: WhatsappWebError) -> ErrorParts {
             "whatsapp_web_observation_error",
             "WhatsApp Web store operation failed",
         ),
+        WhatsappWebError::SecretReference(error) => internal(
+            error,
+            "WhatsApp Web secret reference operation failed",
+            "whatsapp_web_secret_reference_error",
+            "WhatsApp Web credential metadata operation failed",
+        ),
+        WhatsappWebError::SecretResolution(error) => internal(
+            error,
+            "WhatsApp Web secret resolution operation failed",
+            "whatsapp_web_secret_resolution_error",
+            "WhatsApp Web credential resolution failed",
+        ),
+        WhatsappWebError::HostVault(error) => internal(
+            error,
+            "WhatsApp Web host vault operation failed",
+            "whatsapp_web_host_vault_error",
+            "WhatsApp Web credential vault operation failed",
+        ),
         WhatsappWebError::Sqlx(error) => internal(
             error,
             "WhatsApp Web database operation failed",

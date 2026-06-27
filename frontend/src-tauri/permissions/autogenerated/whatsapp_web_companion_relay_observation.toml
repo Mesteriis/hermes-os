@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-whatsapp-web-companion-relay-observation"
+description = "Enables the whatsapp_web_companion_relay_observation command without any pre-configured scope."
+commands.allow = ["whatsapp_web_companion_relay_observation"]
+
+[[permission]]
+identifier = "deny-whatsapp-web-companion-relay-observation"
+description = "Denies the whatsapp_web_companion_relay_observation command without any pre-configured scope."
+commands.deny = ["whatsapp_web_companion_relay_observation"]

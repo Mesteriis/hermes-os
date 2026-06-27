@@ -45,7 +45,8 @@ pub(super) fn email_provider_connected_services(
         EmailProviderKind::Imap
         | EmailProviderKind::TelegramUser
         | EmailProviderKind::TelegramBot
-        | EmailProviderKind::WhatsappWeb => None,
+        | EmailProviderKind::WhatsappWeb
+        | EmailProviderKind::WhatsappBusinessCloud => None,
     }
 }
 

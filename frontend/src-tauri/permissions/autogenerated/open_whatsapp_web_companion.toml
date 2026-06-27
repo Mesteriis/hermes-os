@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-whatsapp-web-companion"
+description = "Enables the open_whatsapp_web_companion command without any pre-configured scope."
+commands.allow = ["open_whatsapp_web_companion"]
+
+[[permission]]
+identifier = "deny-open-whatsapp-web-companion"
+description = "Denies the open_whatsapp_web_companion command without any pre-configured scope."
+commands.deny = ["open_whatsapp_web_companion"]

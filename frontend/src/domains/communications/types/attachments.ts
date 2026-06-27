@@ -72,7 +72,7 @@ export type AttachmentPreviewResponse = {
   filename: string | null
   content_type: string
   scan_status: AttachmentScanStatus
-  preview_kind: 'text' | 'image'
+  preview_kind: 'text' | 'image' | 'audio' | 'video' | 'pdf'
   text: string
   data_url: string | null
   truncated: boolean

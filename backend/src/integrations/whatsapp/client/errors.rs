@@ -2,6 +2,8 @@ use thiserror::Error;
 
 use crate::platform::communications::ProviderCommunicationMessagePortError;
 use crate::platform::observations::ObservationStoreError;
+use crate::platform::secrets::{SecretReferenceError, SecretResolutionError};
+use crate::vault::HostVaultError;
 
 #[derive(Debug, Error)]
 pub enum WhatsappWebError {
@@ -16,6 +18,15 @@ pub enum WhatsappWebError {
 
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),
+
+    #[error(transparent)]
+    SecretReference(#[from] SecretReferenceError),
+
+    #[error(transparent)]
+    SecretResolution(#[from] SecretResolutionError),
+
+    #[error(transparent)]
+    HostVault(#[from] HostVaultError),
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),

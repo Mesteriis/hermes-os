@@ -1520,6 +1520,7 @@ fn provider_from_channel_kind(channel_kind: &str) -> &'static str {
     match channel_kind {
         "telegram_user" | "telegram_bot" => "telegram",
         "whatsapp_web" => "whatsapp_web",
+        "whatsapp_business_cloud" => "whatsapp_business_cloud",
         _ => "provider",
     }
 }
