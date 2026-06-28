@@ -48,7 +48,8 @@ pub(super) fn email_provider_connected_services(
         | EmailProviderKind::WhatsappWeb
         | EmailProviderKind::WhatsappBusinessCloud
         | EmailProviderKind::ZoomUser
-        | EmailProviderKind::ZoomServerToServer => None,
+        | EmailProviderKind::ZoomServerToServer
+        | EmailProviderKind::YandexTelemostUser => None,
     }
 }
 

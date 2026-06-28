@@ -194,7 +194,8 @@ fn provider_config(provider_kind: EmailProviderKind) -> serde_json::Value {
         | EmailProviderKind::WhatsappWeb
         | EmailProviderKind::WhatsappBusinessCloud
         | EmailProviderKind::ZoomUser
-        | EmailProviderKind::ZoomServerToServer => json!({}),
+        | EmailProviderKind::ZoomServerToServer
+        | EmailProviderKind::YandexTelemostUser => json!({}),
     }
 }
 

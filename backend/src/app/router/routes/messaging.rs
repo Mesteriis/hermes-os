@@ -15,6 +15,50 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_zoom_capabilities),
         )
         .route(
+            "/api/v1/integrations/yandex-telemost/capabilities",
+            get(get_yandex_telemost_capabilities),
+        )
+        .route(
+            "/api/v1/integrations/yandex-telemost/accounts",
+            get(get_yandex_telemost_accounts).post(post_yandex_telemost_account),
+        )
+        .route(
+            "/api/v1/integrations/yandex-telemost/runtime/status",
+            get(get_yandex_telemost_runtime_status),
+        )
+        .route(
+            "/api/v1/integrations/yandex-telemost/accounts/{account_id}/retention/prune",
+            post(post_yandex_telemost_retention_cleanup),
+        )
+        .route(
+            "/api/v1/integrations/yandex-telemost/conferences",
+            post(post_yandex_telemost_conference),
+        )
+        .route(
+            "/api/v1/integrations/yandex-telemost/conferences/{account_id}/{conference_id}",
+            get(get_yandex_telemost_conference).patch(patch_yandex_telemost_conference),
+        )
+        .route(
+            "/api/v1/integrations/yandex-telemost/conferences/{account_id}/{conference_id}/cohosts",
+            get(get_yandex_telemost_cohosts),
+        )
+        .route(
+            "/api/v1/integrations/yandex-telemost/webview/manifest",
+            post(post_yandex_telemost_webview_manifest),
+        )
+        .route(
+            "/api/v1/integrations/yandex-telemost/recording/intent",
+            post(post_yandex_telemost_recording_intent),
+        )
+        .route(
+            "/api/v1/integrations/yandex-telemost/runtime-bridge/recordings",
+            post(post_yandex_telemost_runtime_bridge_recording),
+        )
+        .route(
+            "/api/v1/integrations/yandex-telemost/runtime-bridge/transcripts",
+            post(post_yandex_telemost_runtime_bridge_transcript),
+        )
+        .route(
             "/api/v1/integrations/zoom/accounts",
             get(get_zoom_accounts).post(post_zoom_account),
         )

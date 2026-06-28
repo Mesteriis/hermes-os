@@ -200,3 +200,10 @@ pub(crate) fn zoom_provider_runtime_store(
         event_bus,
     )
 }
+
+pub(crate) use crate::integrations::yandex_telemost::client::{
+    YandexTelemostError, YandexTelemostRetentionCleanupRequest,
+    YandexTelemostRetentionCleanupResponse,
+    YandexTelemostStore as YandexTelemostProviderRuntimeStore,
+    YandexTelemostTranscriptBridgeRequest, YandexTelemostTranscriptBridgeResponse,
+};

@@ -1,7 +1,9 @@
 use super::super::types::ApiError;
 use crate::application::communication_fixture_ingest::CommunicationFixtureIngestError;
 use crate::application::communication_provider_writes::TelegramMessageWriteError;
-use crate::application::provider_runtime_contracts::{TelegramError, WhatsappWebError, ZoomError};
+use crate::application::provider_runtime_contracts::{
+    TelegramError, WhatsappWebError, YandexTelemostError, ZoomError,
+};
 use crate::application::review_inbox::ReviewInboxWorkflowError;
 use crate::engines::automation::AutomationError;
 use crate::platform::calls::CallError;
@@ -21,6 +23,12 @@ impl From<WhatsappWebError> for ApiError {
 impl From<ZoomError> for ApiError {
     fn from(error: ZoomError) -> Self {
         Self::Zoom(error)
+    }
+}
+
+impl From<YandexTelemostError> for ApiError {
+    fn from(error: YandexTelemostError) -> Self {
+        Self::YandexTelemost(error)
     }
 }
 

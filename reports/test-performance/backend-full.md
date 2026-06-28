@@ -1,24 +1,24 @@
 # backend-full nextest report
 
-- Generated at: 2026-06-28T00:18:29.545Z
+- Generated at: 2026-06-28T20:41:24.982Z
 - Source JUnit: `target/nextest/default/junit.xml`
-- Total tests: 1357
+- Total tests: 1401
 - Failed tests: 0
-- Flaky tests: 3
-- Total time: 5663.595s
-- Average time: 4.174s
-- p95: 12.558s
-- p99: 19.029s
+- Flaky tests: none detected
+- Total time: 9252.439s
+- Average time: 6.604s
+- p95: 16.809s
+- p99: 33.486s
 
 ## Slowest tests
 
-1. `hermes-hub-backend::graph_api::neighborhood::graph_neighborhood_caps_depth_one_edges_nodes_and_evidence` - 30.099s
-2. `hermes-hub-backend::graph_api::search::graph_summary_returns_empty_state_for_empty_database` - 29.562s
-3. `hermes-hub-backend::graph_api::search::graph_search_returns_matching_nodes` - 29.562s
-4. `hermes-hub-backend::graph_api::neighborhood::graph_neighborhood_caps_evidence_for_returned_edges` - 27.092s
-5. `hermes-hub-backend::graph_api::neighborhood::graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence` - 25.228s
-6. `hermes-hub-backend::tasks_api::mutations::task_post_provider` - 23.678s
-7. `hermes-hub-backend::v1_communications_regressions::messages_threads::v1_extract_tasks_skips_llm_candidates_when_ai_source_is_muted` - 22.442s
-8. `hermes-hub-backend::graph_api::search::graph_nodes_returns_connected_picker_nodes_first` - 22.301s
-9. `hermes-hub-backend::persons_api::dossier_owner::person_owner_get_and_put_uses_owner_persona_against_postgres` - 21.019s
-10. `hermes-hub-backend::whatsapp::whatsapp_background_command_executor_completes_retried_fixture_join_and_leave_group_commands` - 20.302s
+1. `hermes-hub-backend::ai::semantic_store::pgvector_semantic_store_indexes_and_searches_sources_against_postgres` - 65.207s
+2. `hermes-hub-backend::ai_control_center::ai_control_center_mutations_record_observation_trail_against_postgres` - 63.502s
+3. `hermes-hub-backend::ai_control_center::api_provider_create_with_locked_host_vault_does_not_leave_provider_row` - 63.224s
+4. `hermes-hub-backend::ai_control_center::non_api_provider_consent_mutation_is_rejected` - 62.27s
+5. `hermes-hub-backend::ai::agents::ai_agents_api_materializes_agent_personas_against_postgres` - 44.552s
+6. `hermes-hub-backend::integrations::telegram::runtime::manager::realtime_events::tests::telegram_runtime_event_bridge_skips_broadcast_when_runtime_paused` - 44.418s
+7. `hermes-hub-backend::integrations::telegram::runtime::manager::topic_events::tests::publish_topic_event_reconciles_topic_close_and_appends_runtime_events` - 43.994s
+8. `hermes-hub-backend::integrations::telegram::runtime::manager::realtime_events::typing_tests::publish_command_reconciled_events_appends_status_and_reconciled_records` - 43.694s
+9. `hermes-hub-backend::ai::agents::ai_meeting_prep_returns_briefing_without_calendar_dependency` - 40.253s
+10. `hermes-hub-backend::ai::answers::ai_answer_api_returns_source_backed_answer_and_persists_run` - 40.149s

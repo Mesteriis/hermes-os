@@ -36,7 +36,8 @@ pub(super) fn raw_message_bytes(
         | EmailProviderKind::WhatsappWeb
         | EmailProviderKind::WhatsappBusinessCloud
         | EmailProviderKind::ZoomUser
-        | EmailProviderKind::ZoomServerToServer => Err(
+        | EmailProviderKind::ZoomServerToServer
+        | EmailProviderKind::YandexTelemostUser => Err(
             EmailSyncRecordError::UnsupportedProviderKind(provider_kind.as_str().to_owned()),
         ),
     }

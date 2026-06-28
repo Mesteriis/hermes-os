@@ -22,6 +22,7 @@ pub enum ProviderAccountSecretPurpose {
     ZoomOauthToken,
     ZoomClientSecret,
     ZoomWebhookSecret,
+    YandexTelemostOauthToken,
 }
 
 impl ProviderAccountSecretPurpose {
@@ -42,6 +43,7 @@ impl ProviderAccountSecretPurpose {
             Self::ZoomOauthToken => "zoom_oauth_token",
             Self::ZoomClientSecret => "zoom_client_secret",
             Self::ZoomWebhookSecret => "zoom_webhook_secret",
+            Self::YandexTelemostOauthToken => "yandex_telemost_oauth_token",
         }
     }
 
@@ -60,7 +62,9 @@ impl ProviderAccountSecretPurpose {
             | Self::WhatsappBusinessCloudWebhookVerifyToken
             | Self::ZoomClientSecret
             | Self::ZoomWebhookSecret => secret_kind == SecretKind::ApiToken,
-            Self::ZoomOauthToken => secret_kind == SecretKind::OauthToken,
+            Self::ZoomOauthToken | Self::YandexTelemostOauthToken => {
+                secret_kind == SecretKind::OauthToken
+            }
         }
     }
 }

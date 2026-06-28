@@ -121,6 +121,45 @@ pub(crate) fn zoom_provider_runtime_service(
     ))
 }
 
+pub(crate) fn yandex_telemost_secret_reference_store(
+    state: &AppState,
+) -> Result<SecretReferenceStore, ApiError> {
+    Ok(SecretReferenceStore::new(database_pool(state)?))
+}
+
+pub(crate) fn yandex_telemost_provider_runtime_store(
+    state: &AppState,
+) -> Result<crate::integrations::yandex_telemost::client::YandexTelemostStore, ApiError> {
+    let pool = database_pool(state)?;
+    Ok(
+        crate::integrations::yandex_telemost::client::YandexTelemostStore::new(
+            Arc::new(
+                crate::domains::communications::core::CommunicationProviderAccountStore::new(
+                    pool.clone(),
+                ),
+            ),
+            Arc::new(
+                crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                    pool.clone(),
+                ),
+            ),
+            event_store(state)?,
+            state.event_bus.clone(),
+        ),
+    )
+}
+
+pub(crate) fn yandex_telemost_provider_runtime_service(
+    state: &AppState,
+) -> Result<crate::application::YandexTelemostProviderRuntimeApplicationService, ApiError> {
+    Ok(
+        crate::application::yandex_telemost_provider_runtime_service(
+            database_pool(state)?,
+            state.event_bus.clone(),
+        ),
+    )
+}
+
 pub(crate) fn whatsapp_fixture_ingest_service(
     state: &AppState,
 ) -> Result<

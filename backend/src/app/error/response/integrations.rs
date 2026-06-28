@@ -2,9 +2,12 @@ mod automation;
 mod call;
 mod telegram;
 mod whatsapp;
+mod yandex_telemost;
 mod zoom;
 
-use crate::application::provider_runtime_contracts::{TelegramError, WhatsappWebError, ZoomError};
+use crate::application::provider_runtime_contracts::{
+    TelegramError, WhatsappWebError, YandexTelemostError, ZoomError,
+};
 use crate::engines::automation::AutomationError;
 use crate::platform::calls::CallError;
 
@@ -20,6 +23,10 @@ pub(super) fn whatsapp_web_error_parts(error: WhatsappWebError) -> ErrorParts {
 
 pub(super) fn zoom_error_parts(error: ZoomError) -> ErrorParts {
     zoom::zoom_error_parts(error)
+}
+
+pub(super) fn yandex_telemost_error_parts(error: YandexTelemostError) -> ErrorParts {
+    yandex_telemost::yandex_telemost_error_parts(error)
 }
 
 pub(super) fn automation_error_parts(error: AutomationError) -> ErrorParts {

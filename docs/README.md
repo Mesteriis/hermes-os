@@ -99,6 +99,7 @@ Integrations are not product domains.
 - [Telegram](integrations/telegram/README.md)
 - [WhatsApp](integrations/whatsapp/README.md)
 - [Zoom](integrations/zoom/README.md)
+- [Yandex Telemost](integrations/yandex-telemost/README.md)
 - [Ollama](integrations/ollama/README.md)
 - [OmniRoute](integrations/omniroute/README.md)
 
@@ -120,6 +121,8 @@ detailed engine catalog is in [Engine Catalog](engines/README.md).
 - [Context Packs Engine](engines/context-packs/README.md)
 - [Identity Resolution Engine](engines/identity-resolution/README.md)
 - [Relationship Candidate Engine](engines/relationships/README.md)
+- [Call Intelligence Engine](engines/call-intelligence/README.md)
+- [Speaker Identity Engine](engines/speaker-identity/README.md)
 
 Do not duplicate engine ownership inside domain documents.
 
@@ -171,6 +174,7 @@ Important current examples:
 - ADR-0095 - event-driven domain communication and DLQ.
 - ADR-0099 - Signal Hub event platform.
 - ADR-0102 - accepted Zoom provider runtime boundary.
+- ADR-0104 - proposed Yandex Telemost provider runtime boundary.
 
 ## Implementation Status Documents
 

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-yandex-telemost-recording-stop"
+description = "Enables the yandex_telemost_recording_stop command without any pre-configured scope."
+commands.allow = ["yandex_telemost_recording_stop"]
+
+[[permission]]
+identifier = "deny-yandex-telemost-recording-stop"
+description = "Denies the yandex_telemost_recording_stop command without any pre-configured scope."
+commands.deny = ["yandex_telemost_recording_stop"]

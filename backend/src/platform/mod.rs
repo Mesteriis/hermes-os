@@ -9,6 +9,7 @@ pub mod formatting;
 pub mod graph;
 pub mod observations;
 pub mod projections;
+pub mod realtime_conversation;
 pub mod secrets;
 pub mod settings;
 pub mod storage;

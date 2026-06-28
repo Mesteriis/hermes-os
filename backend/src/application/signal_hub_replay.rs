@@ -20,18 +20,23 @@ use crate::platform::events::{
     StoredEventEnvelope,
 };
 use crate::workflows::project_link_review_effects::PROJECT_LINK_REVIEW_EVENT_TYPE;
+use crate::workflows::realtime_conversation_transcript_projection::REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER;
 
 use super::{
     PERSON_DERIVED_EVIDENCE_CONSUMER, PROJECT_LINK_REVIEW_EFFECTS_CONSUMER,
     ZOOM_CALENDAR_MATCHING_CONSUMER, project_link_review_effect_event,
-    project_person_derived_evidence_event, project_zoom_calendar_matching_event,
+    project_person_derived_evidence_event, project_realtime_conversation_transcript_event,
+    project_yandex_telemost_calendar_matching_event, project_zoom_calendar_matching_event,
 };
 
 const DEFAULT_REPLAY_BATCH_SIZE: u32 = 500;
 const COMMUNICATION_MESSAGES_PROJECTION: &str = "communication_messages";
 const PERSON_DERIVED_EVIDENCE_PROJECTION: &str = "person_derived_evidence";
 const PROJECT_LINK_REVIEW_EFFECTS_PROJECTION: &str = "project_link_review_effects";
+const REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION: &str =
+    "realtime_conversation_transcript_projection";
 const TIMELINE_EVENT_LOG_PROJECTION: &str = "timeline_event_log";
+const YANDEX_TELEMOST_CALENDAR_MATCHING_PROJECTION: &str = "yandex_telemost_calendar_matching";
 const ZOOM_CALENDAR_MATCHING_PROJECTION: &str = "zoom_calendar_matching";
 const TIMELINE_EVENT_LOG_CURSOR: &str = "signal_hub.timeline_event_log";
 
@@ -187,6 +192,14 @@ impl SignalHubReplayService {
             }
             PROJECT_LINK_REVIEW_EFFECTS_PROJECTION => {
                 self.rebuild_project_link_review_effects_projection(request)
+                    .await
+            }
+            REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION => {
+                self.rebuild_realtime_conversation_transcript_projection(request)
+                    .await
+            }
+            YANDEX_TELEMOST_CALENDAR_MATCHING_PROJECTION => {
+                self.rebuild_yandex_telemost_calendar_matching_projection(request)
                     .await
             }
             ZOOM_CALENDAR_MATCHING_PROJECTION => {
@@ -642,6 +655,194 @@ impl SignalHubReplayService {
         Ok(u32::try_from(replay_events.len()).unwrap_or(u32::MAX))
     }
 
+    async fn rebuild_realtime_conversation_transcript_projection(
+        &self,
+        request: &SignalReplayRequest,
+    ) -> Result<u32, SignalHubError> {
+        let replay_events = self
+            .list_matching_projection_events(request)
+            .await?
+            .into_iter()
+            .filter(|event| {
+                supports_realtime_conversation_transcript_projection_event(&event.event.event_type)
+            })
+            .collect::<Vec<_>>();
+        let Some(first_position) = replay_events.first().map(|event| event.position) else {
+            return Ok(0);
+        };
+        let last_position = replay_events
+            .last()
+            .map(|event| event.position)
+            .unwrap_or(first_position);
+        let positions: Vec<i64> = replay_events.iter().map(|event| event.position).collect();
+        let consumer_store = EventConsumerStore::new(self.event_store.pool().clone());
+        let cleared_processed = consumer_store
+            .clear_processed_for_positions(
+                REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER,
+                &positions,
+            )
+            .await?;
+        consumer_store
+            .clear_failures_for_positions(
+                REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER,
+                &positions,
+            )
+            .await?;
+        consumer_store
+            .rewind_position(
+                REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER,
+                first_position.saturating_sub(1),
+            )
+            .await?;
+
+        for replay_event in &replay_events {
+            project_realtime_conversation_transcript_event(
+                self.event_store.pool().clone(),
+                replay_event.clone(),
+            )
+            .await
+            .map_err(|error| {
+                SignalHubError::InvalidReplayRequest(format!(
+                    "realtime_conversation_transcript projection replay failed: {error}"
+                ))
+            })?;
+            consumer_store
+                .record_processed(
+                    REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER,
+                    replay_event,
+                )
+                .await?;
+            consumer_store
+                .mark_dead_letter_replayed_for_event(
+                    REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER,
+                    replay_event.position,
+                )
+                .await?;
+            consumer_store
+                .clear_failure(
+                    REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER,
+                    replay_event.position,
+                )
+                .await?;
+            consumer_store
+                .save_position(
+                    REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER,
+                    replay_event.position,
+                )
+                .await?;
+        }
+
+        self.append_projection_lifecycle_event(
+            "realtime_conversation.transcript_projection.updated",
+            request,
+            json!({
+                "target_projection": REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION,
+                "consumer_name": REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER,
+                "from_position": first_position,
+                "to_position": last_position,
+                "replayed_count": replay_events.len(),
+                "cleared_processed_count": cleared_processed,
+            }),
+        )
+        .await?;
+
+        Ok(u32::try_from(replay_events.len()).unwrap_or(u32::MAX))
+    }
+
+    async fn rebuild_yandex_telemost_calendar_matching_projection(
+        &self,
+        request: &SignalReplayRequest,
+    ) -> Result<u32, SignalHubError> {
+        let replay_events = self
+            .list_matching_projection_events(request)
+            .await?
+            .into_iter()
+            .filter(|event| {
+                supports_yandex_telemost_calendar_matching_projection_event(&event.event.event_type)
+            })
+            .collect::<Vec<_>>();
+        let Some(first_position) = replay_events.first().map(|event| event.position) else {
+            return Ok(0);
+        };
+        let last_position = replay_events
+            .last()
+            .map(|event| event.position)
+            .unwrap_or(first_position);
+        let positions: Vec<i64> = replay_events.iter().map(|event| event.position).collect();
+        let consumer_store = EventConsumerStore::new(self.event_store.pool().clone());
+        let cleared_processed = consumer_store
+            .clear_processed_for_positions(
+                crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                &positions,
+            )
+            .await?;
+        consumer_store
+            .clear_failures_for_positions(
+                crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                &positions,
+            )
+            .await?;
+        consumer_store
+            .rewind_position(
+                crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                first_position.saturating_sub(1),
+            )
+            .await?;
+
+        for replay_event in &replay_events {
+            project_yandex_telemost_calendar_matching_event(
+                self.event_store.pool().clone(),
+                replay_event.clone(),
+            )
+            .await
+            .map_err(|error| {
+                SignalHubError::InvalidReplayRequest(format!(
+                    "yandex_telemost_calendar_matching projection replay failed: {error}"
+                ))
+            })?;
+            consumer_store
+                .record_processed(
+                    crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                    replay_event,
+                )
+                .await?;
+            consumer_store
+                .mark_dead_letter_replayed_for_event(
+                    crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                    replay_event.position,
+                )
+                .await?;
+            consumer_store
+                .clear_failure(
+                    crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                    replay_event.position,
+                )
+                .await?;
+            consumer_store
+                .save_position(
+                    crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                    replay_event.position,
+                )
+                .await?;
+        }
+
+        self.append_projection_lifecycle_event(
+            "yandex_telemost.calendar_matching.updated",
+            request,
+            json!({
+                "target_projection": YANDEX_TELEMOST_CALENDAR_MATCHING_PROJECTION,
+                "consumer_name": crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                "from_position": first_position,
+                "to_position": last_position,
+                "replayed_count": replay_events.len(),
+                "cleared_processed_count": cleared_processed,
+            }),
+        )
+        .await?;
+
+        Ok(u32::try_from(replay_events.len()).unwrap_or(u32::MAX))
+    }
+
     async fn rebuild_zoom_calendar_matching_projection(
         &self,
         request: &SignalReplayRequest,
@@ -791,6 +992,14 @@ fn supports_person_derived_evidence_projection_event(event_type: &str) -> bool {
 
 fn supports_project_link_review_effects_projection_event(event_type: &str) -> bool {
     event_type == PROJECT_LINK_REVIEW_EVENT_TYPE
+}
+
+fn supports_realtime_conversation_transcript_projection_event(event_type: &str) -> bool {
+    event_type == crate::platform::realtime_conversation::REALTIME_CONVERSATION_TRANSCRIPT_COMPLETED
+}
+
+fn supports_yandex_telemost_calendar_matching_projection_event(event_type: &str) -> bool {
+    crate::workflows::yandex_telemost_calendar_matching::supports_yandex_telemost_calendar_matching_event(event_type)
 }
 
 fn supports_zoom_calendar_matching_projection_event(event_type: &str) -> bool {

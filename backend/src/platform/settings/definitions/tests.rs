@@ -148,3 +148,43 @@ fn zoom_transcript_retention_setting_is_declared_as_editable_integer() {
     assert_eq!(setting.metadata["max"], json!(3650));
     assert_eq!(setting.metadata["stores_private_content"], json!(true));
 }
+
+#[test]
+fn yandex_telemost_recording_retention_setting_is_declared_as_editable_integer() {
+    let setting = declared_setting("privacy.yandex_telemost_recording_retention_days")
+        .expect("yandex telemost recording retention setting");
+
+    assert_eq!(setting.category, "privacy");
+    assert_eq!(setting.value_kind, SettingValueKind::Integer);
+    assert!(setting.is_editable);
+    assert_eq!(setting.default_value, json!(0));
+    assert_eq!(setting.metadata["ui_control"], json!("number"));
+    assert_eq!(setting.metadata["scope"], json!("yandex_telemost"));
+    assert_eq!(
+        setting.metadata["policy_kind"],
+        json!("owner_visible_retention")
+    );
+    assert_eq!(setting.metadata["min"], json!(0));
+    assert_eq!(setting.metadata["max"], json!(3650));
+    assert_eq!(setting.metadata["stores_private_content"], json!(true));
+}
+
+#[test]
+fn yandex_telemost_speaker_timeline_retention_setting_is_declared_as_editable_integer() {
+    let setting = declared_setting("privacy.yandex_telemost_speaker_timeline_retention_days")
+        .expect("yandex telemost speaker timeline retention setting");
+
+    assert_eq!(setting.category, "privacy");
+    assert_eq!(setting.value_kind, SettingValueKind::Integer);
+    assert!(setting.is_editable);
+    assert_eq!(setting.default_value, json!(0));
+    assert_eq!(setting.metadata["ui_control"], json!("number"));
+    assert_eq!(setting.metadata["scope"], json!("yandex_telemost"));
+    assert_eq!(
+        setting.metadata["policy_kind"],
+        json!("owner_visible_retention")
+    );
+    assert_eq!(setting.metadata["min"], json!(0));
+    assert_eq!(setting.metadata["max"], json!(3650));
+    assert_eq!(setting.metadata["stores_private_content"], json!(true));
+}

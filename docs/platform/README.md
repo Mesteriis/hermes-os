@@ -12,6 +12,7 @@ business source-of-truth entities.
 
 - [Event Tracing](event-tracing/README.md)
 - [Application Settings](settings/README.md)
+- [Realtime Conversation](realtime-conversation/README.md)
 
 ## Current Code Areas
 
@@ -22,6 +23,8 @@ business source-of-truth entities.
 - `platform/secrets` - secret reference metadata and resolver contracts.
 - `platform/storage` - local storage primitives.
 - `platform/calls` - provider-neutral call/transcript evidence primitives.
+- `platform/realtime_conversation` - provider-neutral live-conversation
+  bundle and provider capability contracts.
 
 ## Documentation Rule
 

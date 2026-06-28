@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::PgPool;
@@ -51,6 +53,11 @@ pub(crate) struct TelegramProviderRuntimeApplicationService {
 #[derive(Clone)]
 pub(crate) struct ZoomProviderRuntimeApplicationService {
     store: ZoomProviderRuntimeStore,
+}
+
+#[derive(Clone)]
+pub(crate) struct YandexTelemostProviderRuntimeApplicationService {
+    store: crate::application::provider_runtime_contracts::YandexTelemostProviderRuntimeStore,
 }
 
 impl ZoomProviderRuntimeApplicationService {
@@ -298,6 +305,35 @@ impl ZoomProviderRuntimeApplicationService {
         self.store
             .remove_webhook_subscription(secret_store, vault, request)
             .await
+    }
+}
+
+impl YandexTelemostProviderRuntimeApplicationService {
+    pub(crate) fn new(
+        store: crate::application::provider_runtime_contracts::YandexTelemostProviderRuntimeStore,
+    ) -> Self {
+        Self { store }
+    }
+
+    pub(crate) async fn list_accounts(
+        &self,
+        include_removed: bool,
+    ) -> Result<
+        crate::integrations::yandex_telemost::client::YandexTelemostAccountListResponse,
+        crate::integrations::yandex_telemost::client::YandexTelemostError,
+    > {
+        self.store.list_accounts(include_removed).await
+    }
+
+    pub(crate) async fn cleanup_retention(
+        &self,
+        account_id: &str,
+        request: &crate::application::provider_runtime_contracts::YandexTelemostRetentionCleanupRequest,
+    ) -> Result<
+        crate::application::provider_runtime_contracts::YandexTelemostRetentionCleanupResponse,
+        crate::application::provider_runtime_contracts::YandexTelemostError,
+    > {
+        self.store.cleanup_retention(account_id, request).await
     }
 }
 
@@ -1065,6 +1101,28 @@ pub(crate) fn zoom_provider_runtime_service(
     ZoomProviderRuntimeApplicationService::new(
         crate::application::provider_runtime_contracts::zoom_provider_runtime_store(
             pool, event_bus,
+        ),
+    )
+}
+
+pub(crate) fn yandex_telemost_provider_runtime_service(
+    pool: PgPool,
+    event_bus: EventBus,
+) -> YandexTelemostProviderRuntimeApplicationService {
+    YandexTelemostProviderRuntimeApplicationService::new(
+        crate::application::provider_runtime_contracts::YandexTelemostProviderRuntimeStore::new(
+            Arc::new(
+                crate::domains::communications::core::CommunicationProviderAccountStore::new(
+                    pool.clone(),
+                ),
+            ),
+            Arc::new(
+                crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                    pool.clone(),
+                ),
+            ),
+            crate::platform::events::EventStore::new(pool),
+            event_bus,
         ),
     )
 }

@@ -41,10 +41,20 @@ static ZOOM_CALENDAR_MATCHING_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static ZOOM_PARTICIPANT_IDENTITY_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
+static YANDEX_TELEMOST_RETENTION_CLEANUP_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_CONSUMER_DATABASES: LazyLock<
+    Mutex<HashSet<String>>,
+> = LazyLock::new(|| Mutex::new(HashSet::new()));
 static PERSON_IDENTITY_REVIEW_INBOX_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static PROJECT_LINK_REVIEW_EFFECTS_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
+static REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER_DATABASES: LazyLock<
+    Mutex<HashSet<String>>,
+> = LazyLock::new(|| Mutex::new(HashSet::new()));
 static SIGNAL_HUB_RAW_SIGNAL_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static EVENT_OUTBOX_DISPATCHER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
@@ -73,6 +83,9 @@ const ZOOM_RECORDING_SYNC_LOOKBACK_DAYS: i64 = 7;
 const ZOOM_RETENTION_CLEANUP_RUNTIME: &str = "zoom_retention_cleanup";
 const ZOOM_RETENTION_CLEANUP_TICK_SECONDS: u64 = 3600;
 const ZOOM_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT: i64 = 100;
+const YANDEX_TELEMOST_RETENTION_CLEANUP_RUNTIME: &str = "yandex_telemost_retention_cleanup";
+const YANDEX_TELEMOST_RETENTION_CLEANUP_TICK_SECONDS: u64 = 3600;
+const YANDEX_TELEMOST_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT: i64 = 100;
 const WHATSAPP_RUNTIME_EVENT_CONSUMER_RUNTIME: &str = "whatsapp_runtime_event_projection";
 const WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME: &str =
     "whatsapp_provider_observation_reconciliation";
@@ -82,8 +95,13 @@ const PERSON_DERIVED_EVIDENCE_RUNTIME: &str = "person_derived_evidence";
 const ZOOM_SIGNAL_DETECTION_RUNTIME: &str = "zoom_signal_detection";
 const ZOOM_CALENDAR_MATCHING_RUNTIME: &str = "zoom_calendar_matching";
 const ZOOM_PARTICIPANT_IDENTITY_RUNTIME: &str = "zoom_participant_identity";
+const YANDEX_TELEMOST_CALENDAR_MATCHING_RUNTIME: &str = "yandex_telemost_calendar_matching";
+const REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_RUNTIME: &str =
+    "realtime_conversation_transcript_execution";
 const PERSON_IDENTITY_REVIEW_INBOX_RUNTIME: &str = "person_identity_review_inbox";
 const PROJECT_LINK_REVIEW_EFFECTS_RUNTIME: &str = "project_link_review_effects";
+const REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_RUNTIME: &str =
+    "realtime_conversation_transcript_projection";
 const SIGNAL_HUB_RAW_SIGNAL_RUNTIME: &str = "signal_hub_raw_signal_dispatcher";
 const EVENT_OUTBOX_DISPATCHER_RUNTIME: &str = "event_outbox_dispatcher";
 const SIGNAL_REPLAY_DISPATCHER_RUNTIME: &str = "signal_replay_dispatcher";
@@ -110,6 +128,7 @@ pub(crate) fn start_background_services(context: ApplicationBootstrapContext) {
     start_zoom_token_maintenance(context.clone());
     start_zoom_recording_sync(context.clone());
     start_zoom_retention_cleanup(context.clone());
+    start_yandex_telemost_retention_cleanup(context.clone());
     start_whatsapp_runtime_event_projection(context.clone());
     start_whatsapp_provider_observation_reconciliation(context.clone());
     start_communication_provider_observation_projection(context.clone());
@@ -117,8 +136,11 @@ pub(crate) fn start_background_services(context: ApplicationBootstrapContext) {
     start_zoom_signal_detection_projection(context.clone());
     start_zoom_calendar_matching_projection(context.clone());
     start_zoom_participant_identity_projection(context.clone());
+    start_yandex_telemost_calendar_matching_projection(context.clone());
+    start_realtime_conversation_transcript_execution(context.clone());
     start_person_identity_review_inbox_projection(context.clone());
     start_project_link_review_effects_projection(context.clone());
+    start_realtime_conversation_transcript_projection(context.clone());
     start_signal_hub_raw_signal_dispatcher(context.clone());
     start_event_outbox_dispatcher(context.clone());
     start_signal_replay_dispatcher(context);
@@ -635,6 +657,67 @@ fn start_zoom_retention_cleanup(context: ApplicationBootstrapContext) {
     });
 }
 
+fn start_yandex_telemost_retention_cleanup(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_yandex_telemost_retention_cleanup_scheduler(&database_url) {
+        return;
+    }
+    let event_bus = context.event_bus;
+
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(
+            YANDEX_TELEMOST_RETENTION_CLEANUP_TICK_SECONDS,
+        ));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "yandex_telemost",
+                YANDEX_TELEMOST_RETENTION_CLEANUP_RUNTIME,
+                json!({
+                    "label": "Yandex Telemost retention cleanup",
+                    "scope": "scheduler",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            match run_yandex_telemost_retention_cleanup_once(&pool, &event_bus).await {
+                Ok(result)
+                    if result.accounts_checked > 0
+                        || result.accounts_cleaned > 0
+                        || result.audio_files_removed > 0
+                        || result.speaker_hint_files_removed > 0 =>
+                {
+                    tracing::info!(
+                        accounts_checked = result.accounts_checked,
+                        accounts_cleaned = result.accounts_cleaned,
+                        audio_files_removed = result.audio_files_removed,
+                        speaker_hint_files_removed = result.speaker_hint_files_removed,
+                        limit_per_account = result.limit_per_account,
+                        "yandex telemost retention cleanup scheduler tick completed"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        "yandex telemost retention cleanup scheduler tick failed"
+                    );
+                }
+            }
+        }
+    });
+}
+
 fn start_whatsapp_runtime_event_projection(context: ApplicationBootstrapContext) {
     let Some(pool) = context.pool else {
         return;
@@ -1093,6 +1176,61 @@ fn start_zoom_participant_identity_projection(context: ApplicationBootstrapConte
     });
 }
 
+fn start_yandex_telemost_calendar_matching_projection(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_yandex_telemost_calendar_matching_consumer(&database_url) {
+        return;
+    }
+
+    tokio::spawn(async move {
+        let runner = crate::platform::events::EventConsumerRunner::new(
+            pool.clone(),
+            crate::platform::events::EventConsumerConfig::new(
+                crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+            ),
+        );
+        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "yandex_telemost",
+                YANDEX_TELEMOST_CALENDAR_MATCHING_RUNTIME,
+                json!({
+                    "label": "Yandex Telemost calendar matching consumer",
+                    "scope": "consumer",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            let handler_pool = pool.clone();
+            if let Err(error) = runner
+                .process_next_batch(|event| {
+                    crate::application::project_yandex_telemost_calendar_matching_event(
+                        handler_pool.clone(),
+                        event,
+                    )
+                })
+                .await
+            {
+                tracing::warn!(
+                    error = %error,
+                    "yandex telemost calendar matching projection consumer tick failed"
+                );
+            }
+        }
+    });
+}
+
 fn start_project_link_review_effects_projection(context: ApplicationBootstrapContext) {
     let Some(pool) = context.pool else {
         return;
@@ -1142,6 +1280,125 @@ fn start_project_link_review_effects_projection(context: ApplicationBootstrapCon
                 tracing::warn!(
                     error = %error,
                     "project link review effects projection consumer tick failed"
+                );
+            }
+        }
+    });
+}
+
+fn start_realtime_conversation_transcript_execution(context: ApplicationBootstrapContext) {
+    if !crate::application::realtime_conversation_transcriber_is_configured() {
+        tracing::info!(
+            "HERMES_REALTIME_CONVERSATION_TRANSCRIBER is not configured; realtime conversation transcript execution consumer is disabled"
+        );
+        return;
+    }
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_realtime_conversation_transcript_execution_consumer(&database_url) {
+        return;
+    }
+    let event_bus = context.event_bus.clone();
+
+    tokio::spawn(async move {
+        let runner = crate::platform::events::EventConsumerRunner::new(
+            pool.clone(),
+            crate::platform::events::EventConsumerConfig::new(
+                crate::application::REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_CONSUMER,
+            ),
+        );
+        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "system",
+                REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_RUNTIME,
+                json!({
+                    "label": "Realtime conversation transcript execution consumer",
+                    "scope": "consumer",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            let handler_pool = pool.clone();
+            let handler_event_bus = event_bus.clone();
+            if let Err(error) = runner
+                .process_next_batch(|event| {
+                    crate::application::execute_realtime_conversation_transcript_request_event(
+                        handler_pool.clone(),
+                        handler_event_bus.clone(),
+                        event,
+                    )
+                })
+                .await
+            {
+                tracing::warn!(
+                    error = %error,
+                    "realtime conversation transcript execution consumer tick failed"
+                );
+            }
+        }
+    });
+}
+
+fn start_realtime_conversation_transcript_projection(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_realtime_conversation_transcript_projection_consumer(&database_url) {
+        return;
+    }
+
+    tokio::spawn(async move {
+        let runner = crate::platform::events::EventConsumerRunner::new(
+            pool.clone(),
+            crate::platform::events::EventConsumerConfig::new(
+                crate::application::REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER,
+            ),
+        );
+        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "system",
+                REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_RUNTIME,
+                json!({
+                    "label": "Realtime conversation transcript projection consumer",
+                    "scope": "consumer",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            let handler_pool = pool.clone();
+            if let Err(error) = runner
+                .process_next_batch(|event| {
+                    crate::application::project_realtime_conversation_transcript_event(
+                        handler_pool.clone(),
+                        event,
+                    )
+                })
+                .await
+            {
+                tracing::warn!(
+                    error = %error,
+                    "realtime conversation transcript projection consumer tick failed"
                 );
             }
         }
@@ -1459,6 +1716,32 @@ fn register_zoom_participant_identity_consumer(database_url: &str) -> bool {
     }
 }
 
+fn register_yandex_telemost_retention_cleanup_scheduler(database_url: &str) -> bool {
+    match YANDEX_TELEMOST_RETENTION_CLEANUP_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "yandex telemost retention cleanup scheduler registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn register_yandex_telemost_calendar_matching_consumer(database_url: &str) -> bool {
+    match YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "yandex telemost calendar matching consumer registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
 fn register_person_identity_review_inbox_consumer(database_url: &str) -> bool {
     match PERSON_IDENTITY_REVIEW_INBOX_CONSUMER_DATABASES.lock() {
         Ok(mut databases) => databases.insert(database_url.to_owned()),
@@ -1479,6 +1762,31 @@ fn register_project_link_review_effects_consumer(database_url: &str) -> bool {
             tracing::warn!(
                 error = %error,
                 "project link review effects consumer registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn register_realtime_conversation_transcript_execution_consumer(database_url: &str) -> bool {
+    match REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_CONSUMER_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(_) => {
+            tracing::warn!(
+                "realtime conversation transcript execution consumer registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn register_realtime_conversation_transcript_projection_consumer(database_url: &str) -> bool {
+    match REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "realtime conversation transcript projection consumer registry is unavailable"
             );
             false
         }
@@ -1681,6 +1989,14 @@ struct ZoomRetentionCleanupSchedulerResult {
     limit_per_account: i64,
 }
 
+struct YandexTelemostRetentionCleanupSchedulerResult {
+    accounts_checked: usize,
+    accounts_cleaned: usize,
+    audio_files_removed: usize,
+    speaker_hint_files_removed: usize,
+    limit_per_account: i64,
+}
+
 async fn run_zoom_recording_sync_once(
     pool: &PgPool,
     vault: &HostVault,
@@ -1825,6 +2141,53 @@ async fn run_zoom_retention_cleanup_once(
         }
         result.recordings_removed += response.recordings_removed;
         result.transcripts_removed += response.transcripts_removed;
+    }
+
+    Ok(result)
+}
+
+async fn run_yandex_telemost_retention_cleanup_once(
+    pool: &PgPool,
+    event_bus: &EventBus,
+) -> Result<YandexTelemostRetentionCleanupSchedulerResult, String> {
+    let service = crate::application::yandex_telemost_provider_runtime_service(
+        pool.clone(),
+        event_bus.clone(),
+    );
+    let accounts = service
+        .list_accounts(false)
+        .await
+        .map_err(|error| error.to_string())?
+        .items;
+    let mut result = YandexTelemostRetentionCleanupSchedulerResult {
+        accounts_checked: 0,
+        accounts_cleaned: 0,
+        audio_files_removed: 0,
+        speaker_hint_files_removed: 0,
+        limit_per_account: YANDEX_TELEMOST_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT,
+    };
+
+    for account in accounts {
+        if account.provider_kind != "yandex_telemost_user" {
+            continue;
+        }
+        result.accounts_checked += 1;
+        let response = service
+            .cleanup_retention(
+                &account.account_id,
+                &crate::application::provider_runtime_contracts::YandexTelemostRetentionCleanupRequest {
+                    remove_audio: true,
+                    remove_speaker_hints: true,
+                    limit: YANDEX_TELEMOST_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT,
+                },
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+        if response.bundles_cleaned > 0 {
+            result.accounts_cleaned += 1;
+        }
+        result.audio_files_removed += response.audio_files_removed;
+        result.speaker_hint_files_removed += response.speaker_hint_files_removed;
     }
 
     Ok(result)

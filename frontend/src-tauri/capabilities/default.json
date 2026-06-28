@@ -8,6 +8,11 @@
   "permissions": [
     "core:default",
     "allow-open-whatsapp-web-companion",
-    "allow-whatsapp-web-companion-manifest"
+    "allow-whatsapp-web-companion-manifest",
+    "allow-open-yandex-telemost-companion",
+    "allow-yandex-telemost-companion-manifest",
+    "allow-yandex-telemost-prepare-audio-device",
+    "allow-yandex-telemost-recording-start",
+    "allow-yandex-telemost-recording-stop"
   ]
 }

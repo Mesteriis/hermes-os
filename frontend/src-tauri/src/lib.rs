@@ -6,6 +6,7 @@ use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 
 mod whatsapp_companion;
+mod yandex_telemost_companion;
 
 #[derive(Default)]
 struct BackendSidecar {
@@ -29,6 +30,12 @@ pub fn run() {
             whatsapp_companion::open_whatsapp_web_companion,
             whatsapp_companion::whatsapp_web_companion_manifest,
             whatsapp_companion::whatsapp_web_companion_relay_observation,
+            yandex_telemost_companion::open_yandex_telemost_companion,
+            yandex_telemost_companion::yandex_telemost_companion_manifest,
+            yandex_telemost_companion::yandex_telemost_prepare_audio_device,
+            yandex_telemost_companion::yandex_telemost_recording_start,
+            yandex_telemost_companion::yandex_telemost_recording_stop,
+            yandex_telemost_companion::yandex_telemost_speaker_timeline_append,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -39,6 +46,7 @@ pub fn run() {
                 )?;
             }
             app.manage(BackendSidecar::default());
+            app.manage(yandex_telemost_companion::TelemostLocalRecorder::default());
             if !cfg!(debug_assertions) {
                 start_backend_sidecar(app.handle())?;
             }

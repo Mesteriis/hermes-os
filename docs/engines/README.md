@@ -40,6 +40,8 @@ An engine must not:
 | Context Packs Engine | [Context Packs Engine](context-packs/README.md) |
 | Identity Resolution Engine | [Identity Resolution Engine](identity-resolution/README.md) |
 | Relationship Candidate Engine | [Relationship Candidate Engine](relationships/README.md) |
+| Call Intelligence Engine | [Call Intelligence Engine](call-intelligence/README.md) |
+| Speaker Identity Engine | [Speaker Identity Engine](speaker-identity/README.md) |
 
 ## Package Shape
 
@@ -53,6 +55,7 @@ implementation needs that detail.
 The current repository contains dedicated baseline modules for:
 
 - `backend/src/engines/automation.rs` and `backend/src/engines/automation/`;
+- `backend/src/engines/call_intelligence/`;
 - `backend/src/engines/search.rs`;
 - `backend/src/engines/consistency.rs`;
 - `backend/src/engines/context_packs/`;
@@ -62,6 +65,7 @@ The current repository contains dedicated baseline modules for:
 - `backend/src/engines/obligation/`;
 - `backend/src/engines/relationships/`;
 - `backend/src/engines/risk/`;
+- `backend/src/engines/speaker_identity/`;
 - `backend/src/engines/timeline.rs` and `backend/src/engines/timeline/`;
 - `backend/src/engines/trust/`.
 

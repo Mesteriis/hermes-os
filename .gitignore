@@ -58,3 +58,5 @@ temp/
 
 # AutoClaw KDream data
 .autoclaw/
+# wiki
+docs/wiki/_meta

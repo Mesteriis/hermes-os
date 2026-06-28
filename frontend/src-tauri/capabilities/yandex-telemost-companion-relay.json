@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "yandex-telemost-companion-relay",
+  "description": "Allows owner-visible Yandex Telemost WebView windows to append sanitized active-speaker timeline hints only.",
+  "local": false,
+  "remote": {
+    "urls": [
+      "https://telemost.yandex.ru",
+      "https://telemost.yandex.com"
+    ]
+  },
+  "windows": [
+    "yandex-telemost-*"
+  ],
+  "permissions": [
+    "allow-yandex-telemost-speaker-timeline-append"
+  ]
+}

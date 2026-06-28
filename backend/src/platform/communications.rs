@@ -47,6 +47,7 @@ pub enum CommunicationProviderKind {
     WhatsappBusinessCloud,
     ZoomUser,
     ZoomServerToServer,
+    YandexTelemostUser,
 }
 
 pub type EmailProviderKind = CommunicationProviderKind;
@@ -63,6 +64,7 @@ impl CommunicationProviderKind {
             Self::WhatsappBusinessCloud => "whatsapp_business_cloud",
             Self::ZoomUser => "zoom_user",
             Self::ZoomServerToServer => "zoom_server_to_server",
+            Self::YandexTelemostUser => "yandex_telemost_user",
         }
     }
 
@@ -81,6 +83,10 @@ impl CommunicationProviderKind {
     pub fn is_zoom(self) -> bool {
         matches!(self, Self::ZoomUser | Self::ZoomServerToServer)
     }
+
+    pub fn is_yandex_telemost(self) -> bool {
+        matches!(self, Self::YandexTelemostUser)
+    }
 }
 
 impl TryFrom<&str> for CommunicationProviderKind {
@@ -97,6 +103,7 @@ impl TryFrom<&str> for CommunicationProviderKind {
             "whatsapp_business_cloud" => Ok(Self::WhatsappBusinessCloud),
             "zoom_user" => Ok(Self::ZoomUser),
             "zoom_server_to_server" => Ok(Self::ZoomServerToServer),
+            "yandex_telemost_user" => Ok(Self::YandexTelemostUser),
             other => Err(CommunicationContractError::UnsupportedProviderKind(
                 other.to_owned(),
             )),
@@ -525,6 +532,7 @@ pub enum ProviderAccountSecretPurpose {
     ZoomOauthToken,
     ZoomClientSecret,
     ZoomWebhookSecret,
+    YandexTelemostOauthToken,
 }
 
 impl ProviderAccountSecretPurpose {
@@ -545,6 +553,7 @@ impl ProviderAccountSecretPurpose {
             Self::ZoomOauthToken => "zoom_oauth_token",
             Self::ZoomClientSecret => "zoom_client_secret",
             Self::ZoomWebhookSecret => "zoom_webhook_secret",
+            Self::YandexTelemostOauthToken => "yandex_telemost_oauth_token",
         }
     }
 
@@ -563,7 +572,9 @@ impl ProviderAccountSecretPurpose {
             | Self::WhatsappBusinessCloudWebhookVerifyToken
             | Self::ZoomClientSecret
             | Self::ZoomWebhookSecret => secret_kind == SecretKind::ApiToken,
-            Self::ZoomOauthToken => secret_kind == SecretKind::OauthToken,
+            Self::ZoomOauthToken | Self::YandexTelemostOauthToken => {
+                secret_kind == SecretKind::OauthToken
+            }
         }
     }
 }
@@ -588,6 +599,7 @@ impl TryFrom<&str> for ProviderAccountSecretPurpose {
             "zoom_oauth_token" => Ok(Self::ZoomOauthToken),
             "zoom_client_secret" => Ok(Self::ZoomClientSecret),
             "zoom_webhook_secret" => Ok(Self::ZoomWebhookSecret),
+            "yandex_telemost_oauth_token" => Ok(Self::YandexTelemostOauthToken),
             other => Err(CommunicationContractError::UnsupportedSecretPurpose(
                 other.to_owned(),
             )),

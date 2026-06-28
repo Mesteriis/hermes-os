@@ -96,8 +96,12 @@ async fn event_outbox_dispatcher_publishes_pending_events_to_nats() {
     let client = async_nats::connect(&nats_server_url)
         .await
         .expect("connect NATS client");
+    let event_subject = format!(
+        "signal.accepted.telegram.message.test.{}",
+        Utc::now().timestamp_nanos_opt().unwrap()
+    );
     let mut subscriber = client
-        .subscribe("signal.accepted.telegram.message")
+        .subscribe(event_subject.clone())
         .await
         .expect("subscribe to accepted telegram signal");
 
@@ -107,7 +111,7 @@ async fn event_outbox_dispatcher_publishes_pending_events_to_nats() {
             "evt_dispatch_{}",
             occurred_at.timestamp_nanos_opt().unwrap()
         ),
-        "signal.accepted.telegram.message",
+        event_subject.clone(),
         occurred_at,
         json!({
             "kind": "signal_source",
@@ -184,13 +188,17 @@ async fn event_outbox_dispatcher_broadcasts_published_events_to_realtime_bus() {
     let dispatcher = EventOutboxDispatcher::new(store.clone(), jetstream_bus)
         .with_realtime_bus(realtime_bus.clone());
 
+    let event_subject = format!(
+        "signal.accepted.telegram.message.test.{}",
+        Utc::now().timestamp_nanos_opt().unwrap()
+    );
     let occurred_at = Utc::now();
     let event = NewEventEnvelope::builder(
         format!(
             "evt_realtime_dispatch_{}",
             occurred_at.timestamp_nanos_opt().unwrap()
         ),
-        "signal.accepted.telegram.message",
+        event_subject,
         occurred_at,
         json!({
             "kind": "signal_source",

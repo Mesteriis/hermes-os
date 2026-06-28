@@ -30,7 +30,8 @@ pub fn plan_email_sync(account: &ProviderAccount) -> Result<EmailSyncPlan, Email
         | EmailProviderKind::WhatsappWeb
         | EmailProviderKind::WhatsappBusinessCloud
         | EmailProviderKind::ZoomUser
-        | EmailProviderKind::ZoomServerToServer => Err(EmailSyncPlanError::InvalidProviderConfig {
+        | EmailProviderKind::ZoomServerToServer
+        | EmailProviderKind::YandexTelemostUser => Err(EmailSyncPlanError::InvalidProviderConfig {
             field: "provider_kind",
             message: "email sync supports only gmail, icloud or imap",
         }),

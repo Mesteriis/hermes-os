@@ -147,6 +147,25 @@ pub mod zoom_event_types {
     pub const RETENTION_CLEANUP_COMPLETED: &str = "zoom.retention.cleanup.completed";
 }
 
+pub mod yandex_telemost_event_types {
+    pub const ACCOUNT_CONFIGURED: &str = "integration.yandex_telemost.account.configured";
+    pub const AUTHORIZATION_COMPLETED: &str = "integration.yandex_telemost.authorization.completed";
+    pub const RUNTIME_STATUS_CHANGED: &str = "integration.yandex_telemost.runtime.status_changed";
+    pub const CONFERENCE_CREATED: &str = "integration.yandex_telemost.conference.created";
+    pub const CONFERENCE_OBSERVED: &str = "integration.yandex_telemost.conference.observed";
+    pub const CONFERENCE_UPDATED: &str = "integration.yandex_telemost.conference.updated";
+    pub const COHOSTS_OBSERVED: &str = "integration.yandex_telemost.cohosts.observed";
+    pub const WEBVIEW_OPEN_REQUESTED: &str = "integration.yandex_telemost.webview.open_requested";
+    pub const SPEAKER_HINT_OBSERVED: &str = "integration.yandex_telemost.speaker_hint.observed";
+    pub const LOCAL_CAPTURE_OBSERVED: &str = "integration.yandex_telemost.local_capture.observed";
+    pub const LOCAL_RECORDING_REQUESTED: &str =
+        "integration.yandex_telemost.local_recording.requested";
+    pub const LOCAL_RECORDING_COMPLETED: &str =
+        "integration.yandex_telemost.local_recording.completed";
+    pub const RETENTION_CLEANUP_COMPLETED: &str =
+        "integration.yandex_telemost.retention.cleanup.completed";
+}
+
 /// Sanitize an event payload to never include secrets or raw message bodies.
 pub fn sanitize_event_payload(mut payload: Value) -> Value {
     if let Some(obj) = payload.as_object_mut() {

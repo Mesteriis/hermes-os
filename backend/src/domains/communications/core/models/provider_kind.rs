@@ -14,6 +14,7 @@ pub enum CommunicationProviderKind {
     WhatsappBusinessCloud,
     ZoomUser,
     ZoomServerToServer,
+    YandexTelemostUser,
 }
 
 pub type EmailProviderKind = CommunicationProviderKind;
@@ -30,6 +31,7 @@ impl CommunicationProviderKind {
             Self::WhatsappBusinessCloud => "whatsapp_business_cloud",
             Self::ZoomUser => "zoom_user",
             Self::ZoomServerToServer => "zoom_server_to_server",
+            Self::YandexTelemostUser => "yandex_telemost_user",
         }
     }
 
@@ -48,6 +50,10 @@ impl CommunicationProviderKind {
     pub fn is_zoom(self) -> bool {
         matches!(self, Self::ZoomUser | Self::ZoomServerToServer)
     }
+
+    pub fn is_yandex_telemost(self) -> bool {
+        matches!(self, Self::YandexTelemostUser)
+    }
 }
 
 impl TryFrom<&str> for CommunicationProviderKind {
@@ -64,6 +70,7 @@ impl TryFrom<&str> for CommunicationProviderKind {
             "whatsapp_business_cloud" => Ok(Self::WhatsappBusinessCloud),
             "zoom_user" => Ok(Self::ZoomUser),
             "zoom_server_to_server" => Ok(Self::ZoomServerToServer),
+            "yandex_telemost_user" => Ok(Self::YandexTelemostUser),
             other => Err(CommunicationIngestionError::UnsupportedProviderKind(
                 other.to_owned(),
             )),
