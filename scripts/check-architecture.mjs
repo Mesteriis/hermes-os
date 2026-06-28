@@ -1742,7 +1742,7 @@ function projectLinkReviewApiManualOrchestrationFailures(fileContents) {
 }
 
 function contradictionReviewApiManualOrchestrationFailures(fileContents) {
-	const content = fileContents.get('backend/src/engines/consistency_api.rs');
+	const content = fileContents.get('backend/src/app/handlers/consistency.rs');
 	if (content === undefined) return [];
 	const forbiddenPatterns = [
 		/\bNewObservation\b/,
@@ -1752,7 +1752,7 @@ function contradictionReviewApiManualOrchestrationFailures(fileContents) {
 	];
 	if (forbiddenPatterns.some((pattern) => pattern.test(content))) {
 		return [
-			`backend/src/engines/consistency_api.rs: manual contradiction review orchestration must stay in ${contradictionReviewServiceOwner}, not the API layer`
+			`backend/src/app/handlers/consistency.rs: manual contradiction review orchestration must stay in ${contradictionReviewServiceOwner}, not the API layer`
 		];
 	}
 	return [];
@@ -2242,7 +2242,7 @@ function runSelfTests() {
 	assertSelfTest(
 		'engine-to-domain backend import fails',
 		backendBoundaryViolations(
-			'backend/src/engines/decision/models.rs',
+			'backend/src/engines/relationships/mod.rs',
 			'use crate::domains::decisions::DecisionReviewState;'
 		).length === 1
 	);

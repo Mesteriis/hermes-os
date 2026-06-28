@@ -104,8 +104,8 @@ Negative:
 
 ## Required Follow-Up
 
-- Keep detailed engine behavior in `docs/engines/consistency-contradiction.md`.
-- Keep communication ingestion behavior in `docs/domains/communications.md`.
+- Keep detailed engine behavior in `docs/engines/consistency/README.md`.
+- Keep communication ingestion behavior in `docs/domains/communications/README.md`.
 - Add implementation ADRs before introducing persistence, route groups or
   automated contradiction resolution.
 - Start future implementation with reviewable contradiction observations.

@@ -18,7 +18,7 @@ fn whatsapp_signal_hub_fixture_matrix_covers_event_families() {
     let provider_handler = read(root.join("backend/src/app/provider_runtime_handlers/whatsapp.rs"));
     let event_producers =
         provider_handler.clone() + &read_all_sources(root.join("backend/src/application"));
-    let fixture_matrix = read(root.join("docs/whatsapp/fixture-test-matrix.md"));
+    let fixture_matrix = read(root.join("docs/integrations/whatsapp/fixture-test-matrix.md"));
 
     for fixture in signal_hub_fixtures() {
         if let Some(raw_record_kind) = fixture.raw_record_kind {
@@ -157,8 +157,8 @@ fn whatsapp_live_smoke_evidence_requires_typed_sanitized_refs() {
     let root = repo_root();
     let evidence_validator = read(root.join("scripts/whatsapp-live-smoke-evidence.mjs"));
     let readiness = read(root.join("scripts/whatsapp-live-smoke-readiness.mjs"));
-    let checklist = read(root.join("docs/whatsapp/live-smoke-checklist.md"));
-    let status = read(root.join("docs/whatsapp/status.md"));
+    let checklist = read(root.join("docs/integrations/whatsapp/live-smoke-checklist.md"));
+    let status = read(root.join("docs/integrations/whatsapp/status.md"));
 
     assert!(
         evidence_validator.contains("allowedEvidenceRefPrefixes")
@@ -204,8 +204,8 @@ fn whatsapp_live_smoke_evidence_collector_is_not_a_bypass() {
     let evidence_validator = read(root.join("scripts/whatsapp-live-smoke-evidence.mjs"));
     let makefile = read(root.join("Makefile"));
     let readiness = read(root.join("scripts/whatsapp-live-smoke-readiness.mjs"));
-    let checklist = read(root.join("docs/whatsapp/live-smoke-checklist.md"));
-    let status = read(root.join("docs/whatsapp/status.md"));
+    let checklist = read(root.join("docs/integrations/whatsapp/live-smoke-checklist.md"));
+    let status = read(root.join("docs/integrations/whatsapp/status.md"));
 
     assert!(
         evidence_validator.contains("--provider-shape")
@@ -246,7 +246,7 @@ fn whatsapp_native_md_upgrade_path_is_executable_evidence_not_assumption() {
     let gap_readiness = read(root.join("scripts/whatsapp-native-md-sdk-gap-readiness.mjs"));
     let cargo_toml = read(root.join("backend/Cargo.toml"));
     let cargo_lock = read(root.join("Cargo.lock"));
-    let status = read(root.join("docs/whatsapp/status.md"));
+    let status = read(root.join("docs/integrations/whatsapp/status.md"));
 
     assert!(
         gap_readiness.contains("verifyRustAndCrateUpgradeContext()")
@@ -428,7 +428,7 @@ fn whatsapp_native_md_unsupported_write_gap_is_explicit_and_structured() {
     let command_executor_source =
         read(root.join("backend/src/application/whatsapp_command_executor.rs"));
     let adr_0101 = read(root.join("docs/adr/ADR-0101-whatsapp-provider-runtime-selection.md"));
-    let whatsapp_gap_analysis = read(root.join("docs/whatsapp/gap-analysis.md"));
+    let whatsapp_gap_analysis = read(root.join("docs/integrations/whatsapp/gap-analysis.md"));
 
     assert!(
         native_md_source.contains("native_md_wa_rs_sdk_command_gap_health")

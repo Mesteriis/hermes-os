@@ -52,7 +52,7 @@ source communication
 Current related implementation exists through task candidates, task rules, task
 intelligence and communication workflow state. The accepted Obligation
 persistence baseline exists in `backend/src/domains/obligations/mod.rs`.
-Message task candidate refresh now uses `backend/src/engines/obligation.rs`
+Message task candidate refresh now uses `backend/src/engines/obligation/`
 for explicit commitment/request language when the legacy task scanner does not
 match.
 

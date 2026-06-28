@@ -120,9 +120,15 @@ Before contributing:
 - [docs/vision](docs/vision) - долгосрочное видение.
 - [docs/product](docs/product) - charter, scope и продуктовые границы.
 - [docs/architecture](docs/architecture) - системная архитектура и ключевые технические модели.
-- [docs/domains](docs/domains) - доменные области.
+- [docs/app](docs/app) - HTTP/router/application shell layer.
+- [docs/application](docs/application) - application-service coordination.
+- [docs/domains](docs/domains) - доменные области, зеркальные `backend/src/domains`.
+- [docs/engines](docs/engines) - reusable engines.
+- [docs/integrations](docs/integrations) - provider/runtime integrations.
+- [docs/platform](docs/platform) - platform primitives.
+- [docs/vault](docs/vault) - host-vault and secret-payload boundary.
 - [docs/adr](docs/adr) - Architecture Decision Records.
-- [docs/agents](docs/agents) - AI agent architecture.
+- [docs/ai](docs/ai) - AI layer and agent architecture.
 - [docs/ui](docs/ui) - UI architecture и design system vision.
 - [docs/roadmap](docs/roadmap) - план развития до версии 5.0.
 - [docs/research](docs/research) - вопросы исследования и открытые риски.

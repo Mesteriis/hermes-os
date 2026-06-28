@@ -128,7 +128,7 @@ function nativeUnsupportedCommands() {
 }
 
 function statusClosureState() {
-  const status = readText('docs/whatsapp/status.md')
+  const status = readText('docs/integrations/whatsapp/status.md')
   if (status.includes('DOMAIN CLOSURE          = achieved')) {
     return 'achieved'
   }
@@ -151,7 +151,7 @@ requireContains('static_readiness_targets_exist', 'Makefile', [
   'whatsapp-business-cloud-edge-readiness:',
 ])
 
-requireContains('acceptance_docs_track_current_blockers', 'docs/whatsapp/status.md', [
+requireContains('acceptance_docs_track_current_blockers', 'docs/integrations/whatsapp/status.md', [
   'DOMAIN CLOSURE          = not achieved',
   'manual smoke',
   'remaining safe write APIs',
@@ -196,7 +196,7 @@ requireContains('native_md_upgrade_path_context_exists', 'scripts/whatsapp-nativ
   'native_md_upgrade_requires_provider_api_not_toolchain_only',
 ])
 
-requireContains('native_md_upgrade_docs_track_toolchain_limit', 'docs/whatsapp/status.md', [
+requireContains('native_md_upgrade_docs_track_toolchain_limit', 'docs/integrations/whatsapp/status.md', [
   'native Rust/wa-rs upgrade path verifier',
   'Rust/toolchain upgrade is not treated as sufficient evidence',
   'HERMES_WA_RS_CRATES_IO_PROBE=1',
@@ -215,7 +215,7 @@ requireContains('live_smoke_evidence_collector_target_exists', 'Makefile', [
   'node scripts/whatsapp-live-smoke-collect-evidence.mjs',
 ])
 
-requireContains('live_smoke_evidence_collector_docs_exist', 'docs/whatsapp/live-smoke-checklist.md', [
+requireContains('live_smoke_evidence_collector_docs_exist', 'docs/integrations/whatsapp/live-smoke-checklist.md', [
   'make whatsapp-live-smoke-collect-evidence',
   'normalizer, not a bypass',
   'Gates without operator-provided sanitized',
@@ -285,19 +285,19 @@ const closureAchieved =
 
 if (closureAchieved) {
   pass('docs_status_claims_closure_only_after_evidence', [
-    'docs/whatsapp/status.md claims DOMAIN CLOSURE = achieved and closure evidence is complete',
+    'docs/integrations/whatsapp/status.md claims DOMAIN CLOSURE = achieved and closure evidence is complete',
   ])
 } else if (closureState === 'not_achieved') {
   pass('docs_status_does_not_overclaim_closure', [
-    'docs/whatsapp/status.md keeps DOMAIN CLOSURE = not achieved while blockers remain',
+    'docs/integrations/whatsapp/status.md keeps DOMAIN CLOSURE = not achieved while blockers remain',
   ])
 } else if (closureState === 'achieved') {
   fail('docs_status_overclaims_closure', [
-    'docs/whatsapp/status.md claims achieved but closure audit still has blockers',
+    'docs/integrations/whatsapp/status.md claims achieved but closure audit still has blockers',
   ])
 } else {
   fail('docs_status_closure_state_unknown', [
-    'docs/whatsapp/status.md must state DOMAIN CLOSURE = achieved or not achieved',
+    'docs/integrations/whatsapp/status.md must state DOMAIN CLOSURE = achieved or not achieved',
   ])
 }
 

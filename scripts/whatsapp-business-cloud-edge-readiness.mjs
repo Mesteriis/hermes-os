@@ -254,7 +254,7 @@ requireContains('edge_proxy_makefile_targets', 'Makefile', [
   'whatsapp-business-cloud-edge-logs:',
 ])
 
-requireContains('edge_proxy_docs_smoke_contract', 'docs/whatsapp/live-smoke-checklist.md', [
+requireContains('edge_proxy_docs_smoke_contract', 'docs/integrations/whatsapp/live-smoke-checklist.md', [
   'Business Cloud edge proxy checks',
   'make whatsapp-business-cloud-edge-config',
   'make whatsapp-business-cloud-edge-up',
@@ -264,7 +264,7 @@ requireContains('edge_proxy_docs_smoke_contract', 'docs/whatsapp/live-smoke-chec
   'X-Hub-Signature-256',
 ])
 
-requireContains('edge_proxy_status_tracks_remaining_public_gate', 'docs/whatsapp/status.md', [
+requireContains('edge_proxy_status_tracks_remaining_public_gate', 'docs/integrations/whatsapp/status.md', [
   'DOMAIN CLOSURE          = not achieved',
   'Business Cloud public exposure/smoke',
   'business cloud edge proxy binary',

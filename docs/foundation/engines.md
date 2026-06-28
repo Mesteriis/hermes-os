@@ -17,6 +17,10 @@ Detailed engine specs live under [Engine Catalog](../engines/README.md).
 | Obligation Engine | Detect and track commitments. | obligations, follow-ups, task candidates | communications, meetings, documents, decisions |
 | Risk Engine | Detect evidence-backed risks. | risk observations, attention signals | tasks, projects, organizations, relationships, obligations |
 | Consistency / Contradiction Engine | Detect conflicts between new evidence and accepted memory. | contradiction observations, stale fact warnings, review items | communications, documents, events, decisions, obligations, knowledge |
+| Automation Engine | Evaluate owner-approved automation policies and dry-runs. | dry-run results, policy decisions, automation command metadata | templates, policies, provider capabilities, source context |
+| Context Packs Engine | Build rebuildable context bundles. | context packs, source links | observations, domains, knowledge, relationships, decisions |
+| Identity Resolution Engine | Propose same-entity candidates. | identity candidates | observations, identity traces, source evidence |
+| Relationship Candidate Engine | Propose entity relationship candidates. | relationship candidates | observations, graph evidence, source-backed domain records |
 
 ## Memory Engine
 

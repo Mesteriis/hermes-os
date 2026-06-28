@@ -1050,10 +1050,10 @@ fn canonical_communication_migration_exists_after_0148() {
 #[test]
 fn whatsapp_docs_bundle_exists_for_acceptance_artifacts() {
     let root = repo_root();
-    let whatsapp_readme = read(root.join("docs/whatsapp/README.md"));
-    let fixture_matrix = read(root.join("docs/whatsapp/fixture-test-matrix.md"));
-    let smoke_checklist = read(root.join("docs/whatsapp/live-smoke-checklist.md"));
-    let api_reference = read(root.join("docs/whatsapp/api.md"));
+    let whatsapp_readme = read(root.join("docs/integrations/whatsapp/README.md"));
+    let fixture_matrix = read(root.join("docs/integrations/whatsapp/fixture-test-matrix.md"));
+    let smoke_checklist = read(root.join("docs/integrations/whatsapp/live-smoke-checklist.md"));
+    let api_reference = read(root.join("docs/integrations/whatsapp/api.md"));
 
     assert!(
         whatsapp_readme.contains("fixture-test-matrix.md")

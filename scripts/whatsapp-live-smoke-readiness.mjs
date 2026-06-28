@@ -357,7 +357,7 @@ requireNotContains('runtime_panel_companion_action_avoids_backend_http', 'fronte
   'ApiClient',
 ])
 
-requireContains('manual_smoke_checklist_has_exit_criteria', 'docs/whatsapp/live-smoke-checklist.md', [
+requireContains('manual_smoke_checklist_has_exit_criteria', 'docs/integrations/whatsapp/live-smoke-checklist.md', [
   'Open Companion',
   'contract_injected_relay_dispatch_available',
   'tauri_allowlisted_companion_runtime_bridge_dispatch',
@@ -405,7 +405,7 @@ requireContains('manual_smoke_evidence_collector_contract', 'scripts/whatsapp-li
   'Gates without operator-provided',
 ])
 
-requireContains('manual_smoke_evidence_collector_docs', 'docs/whatsapp/live-smoke-checklist.md', [
+requireContains('manual_smoke_evidence_collector_docs', 'docs/integrations/whatsapp/live-smoke-checklist.md', [
   'make whatsapp-live-smoke-collect-evidence',
   '.local/whatsapp/live-smoke-observations.json',
   'normalizer, not a bypass',
@@ -460,7 +460,7 @@ requireContains('native_md_sdk_gap_make_target', 'Makefile', [
   'node scripts/whatsapp-native-md-sdk-gap-readiness.mjs',
 ])
 
-requireContains('status_tracks_remaining_live_gates', 'docs/whatsapp/status.md', [
+requireContains('status_tracks_remaining_live_gates', 'docs/integrations/whatsapp/status.md', [
   'IMPLEMENTED CHECKPOINTS = 67',
   'DOMAIN CLOSURE          = not achieved',
   'WebView live smoke',

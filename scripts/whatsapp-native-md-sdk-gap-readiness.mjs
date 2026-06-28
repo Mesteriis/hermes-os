@@ -394,7 +394,7 @@ function verifyLocalWaRsApi(root) {
 function verifyRustAndCrateUpgradeContext() {
   const cargoToml = readText('backend/Cargo.toml')
   const cargoLock = readText('Cargo.lock')
-  const status = readText('docs/whatsapp/status.md')
+  const status = readText('docs/integrations/whatsapp/status.md')
   const nativeMd = readText('backend/src/integrations/whatsapp/runtime/native_md.rs')
 
   const rustVersion = cargoToml.match(/^rust-version\s*=\s*"(?<version>[^"]+)"/m)?.groups
@@ -500,9 +500,9 @@ function verifyHermesGapManifest() {
     fail('hermes_native_md_gap_manifest', missing.map((marker) => `missing ${marker}`))
   }
 
-  const status = readText('docs/whatsapp/status.md')
+  const status = readText('docs/integrations/whatsapp/status.md')
   const adr0101 = readText('docs/adr/ADR-0101-whatsapp-provider-runtime-selection.md')
-  const gapAnalysis = readText('docs/whatsapp/gap-analysis.md')
+  const gapAnalysis = readText('docs/integrations/whatsapp/gap-analysis.md')
   const statusMarkers = [
     'native wa-rs command gap manifest',
     'remaining native SDK command gap verifier',
@@ -513,7 +513,7 @@ function verifyHermesGapManifest() {
   const missingStatus = statusMarkers.filter((marker) => !status.includes(marker))
   if (missingStatus.length === 0) {
     pass('docs_track_native_md_gap_verifier', [
-      'docs/whatsapp/status.md tracks the native SDK command gap verifier and remaining unsupported writes',
+      'docs/integrations/whatsapp/status.md tracks the native SDK command gap verifier and remaining unsupported writes',
     ])
   } else {
     fail('docs_track_native_md_gap_verifier', missingStatus.map((marker) => `missing ${marker}`))
@@ -553,7 +553,7 @@ function verifyHermesGapManifest() {
   const missingGapMarkers = gapMarkers.filter((marker) => !gapAnalysis.includes(marker))
   if (missingGapMarkers.length === 0 && !gapAnalysis.includes('| Forwards | MISSING |')) {
     pass('gap_analysis_tracks_forward_partial_support', [
-      'docs/whatsapp/gap-analysis.md no longer lists forward as fully missing after native text reemit support',
+      'docs/integrations/whatsapp/gap-analysis.md no longer lists forward as fully missing after native text reemit support',
     ])
   } else {
     fail('gap_analysis_tracks_forward_partial_support', [

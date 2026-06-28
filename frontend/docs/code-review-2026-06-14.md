@@ -389,7 +389,7 @@ Blocking split-induced regressions в Telegram account modules, Decision models 
 ## Дополнение: ревью текущего Persons Trust SRP split diff
 
 **Объём:** `backend/src/domains/persons/trust.rs`, новые `backend/src/domains/persons/trust/*` modules, `IMPLEMENTATION_STATUS.md`.
-**ADR:** ADR-0084, ADR-0086; `docs/persons/architecture.md`.
+**ADR:** ADR-0084, ADR-0086; `docs/domains/persons/architecture.md`.
 
 ### Major: новый Persons trust split directory сейчас untracked
 
@@ -459,7 +459,7 @@ Blocking split-induced regressions внутри Dev Email Sync modules не по
 ## Дополнение: ревью текущего Mail Communication Queries / Finance Analytics SRP split diff
 
 **Объём:** `backend/src/domains/communications/handlers/communication_queries.rs`, новые `backend/src/domains/communications/handlers/communication_queries/*` modules, `backend/src/domains/communications/handlers/finance_analytics.rs`, новые `backend/src/domains/communications/handlers/finance_analytics/*` modules, `IMPLEMENTATION_STATUS.md`.
-**ADR:** ADR-0080, ADR-0085; `docs/domains/communications.md`.
+**ADR:** ADR-0080, ADR-0085; `docs/domains/communications/README.md`.
 
 ### Major: новые Mail handler split directories сейчас untracked
 

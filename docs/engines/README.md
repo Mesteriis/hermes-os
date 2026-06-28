@@ -1,5 +1,7 @@
 # Hermes Engine Catalog
 
+Status: documentation package aligned to the current repository structure.
+
 Engines are reusable system mechanisms. They are used by domains but do not own
 domain source-of-truth entities.
 
@@ -26,23 +28,42 @@ An engine must not:
 
 | Engine | Spec |
 |---|---|
-| Memory Engine | [Memory Engine](memory.md) |
-| Timeline Engine | [Timeline Engine](timeline.md) |
-| Trust Engine | [Trust Engine](trust.md) |
-| Search Engine | [Search Engine](search.md) |
-| Enrichment Engine | [Enrichment Engine](enrichment.md) |
-| Obligation Engine | [Obligation Engine](obligation.md) |
-| Risk Engine | [Risk Engine](risk.md) |
-| Consistency / Contradiction Engine | [Consistency / Contradiction Engine](consistency-contradiction.md) |
+| Memory Engine | [Memory Engine](memory/README.md) |
+| Timeline Engine | [Timeline Engine](timeline/README.md) |
+| Trust Engine | [Trust Engine](trust/README.md) |
+| Search Engine | [Search Engine](search/README.md), [architecture](search/architecture.md) |
+| Enrichment Engine | [Enrichment Engine](enrichment/README.md) |
+| Obligation Engine | [Obligation Engine](obligation/README.md) |
+| Risk Engine | [Risk Engine](risk/README.md) |
+| Consistency / Contradiction Engine | [Consistency / Contradiction Engine](consistency/README.md) |
+| Automation Engine | [Automation Engine](automation/README.md) |
+| Context Packs Engine | [Context Packs Engine](context-packs/README.md) |
+| Identity Resolution Engine | [Identity Resolution Engine](identity-resolution/README.md) |
+| Relationship Candidate Engine | [Relationship Candidate Engine](relationships/README.md) |
+
+## Package Shape
+
+Engine documentation mirrors `backend/src/engines/<engine>/` where possible.
+Use `README.md` for engine semantics and add `architecture.md`, `api.md`,
+`status.md`, `gap-analysis.md` or `modules.md` only when the current
+implementation needs that detail.
 
 ## Current Implementation Evidence
 
 The current repository contains dedicated baseline modules for:
 
+- `backend/src/engines/automation.rs` and `backend/src/engines/automation/`;
 - `backend/src/engines/search.rs`;
 - `backend/src/engines/consistency.rs`;
-- `backend/src/engines/decision.rs`;
-- `backend/src/engines/obligation.rs`.
+- `backend/src/engines/context_packs/`;
+- `backend/src/engines/enrichment/`;
+- `backend/src/engines/identity_resolution/`;
+- `backend/src/engines/memory.rs` and `backend/src/engines/memory/`;
+- `backend/src/engines/obligation/`;
+- `backend/src/engines/relationships/`;
+- `backend/src/engines/risk/`;
+- `backend/src/engines/timeline.rs` and `backend/src/engines/timeline/`;
+- `backend/src/engines/trust/`.
 
 Many other engine-like behaviors are still domain-local:
 

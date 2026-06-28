@@ -86,14 +86,14 @@
 | Knowledge page | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Graph view | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-### 2.6 Settings Domain
+### 2.6 Settings UI Package
 
 | Компонент | Loading | Empty | Error | Skeleton | Success/Transition |
 |-----------|---------|-------|-------|----------|-------------------|
 | Settings page | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Account setup | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-### 2.7 Telegram Channel
+### 2.7 Telegram Integration Surface
 
 | Компонент | Loading | Empty | Error | Skeleton | Success/Transition |
 |-----------|---------|-------|-------|----------|-------------------|

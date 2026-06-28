@@ -104,14 +104,18 @@ Direct ownership transfer is not allowed. For example:
 
 Current backend modules observed during this audit:
 
-- domains: `calendar`, `decisions`, `documents`, `graph`, `mail`,
+- domains: `calendar`, `communications`, `decisions`, `documents`, `graph`,
   `obligations`, `organizations`, `persons`, `projects`, `relationships`,
-  `review`, `settings`, `tasks`;
-- engines: `automation`, `consistency`, `context_packs`, `decision`,
-  `enrichment`, `identity_resolution`, `memory`, `obligation`,
-  `relationships`, `risk`, `search`, `timeline`, `trust`;
+  `review`, `settings`, `signal_hub`, `tasks`;
+- engines: `automation`, `consistency`, `context_packs`, `enrichment`,
+  `identity_resolution`, `memory`, `obligation`, `relationships`, `risk`,
+  `search`, `timeline`, `trust`;
 - platform: `events`, `observations`;
-- integrations: `gmail`, `telegram`, `whatsapp`, `ollama`, `omniroute`.
+- integrations: `mail`, `ollama`, `omniroute`, `telegram`, `whatsapp`,
+  `zoom`.
 
 This evidence explains the current implementation shape. It does not authorize
 renaming modules or moving code without a later refactoring plan.
+
+Implementation caveat: `backend/src/domains/settings` is exported but currently
+empty. Working application settings code lives under `platform/settings`.

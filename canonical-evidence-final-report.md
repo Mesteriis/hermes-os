@@ -281,12 +281,12 @@ gap в текущем периоде закрыт.
 - Удалены старые root-level отчеты и разовые audit/refactoring артефакты прошлого периода.
 - Проверка `find . -maxdepth 1 -type f \( -iname '*report*.md' -o -iname '*status*.md' -o -iname '*audit*.md' -o -iname '*qa*.md' \) | sort` сейчас возвращает только `./canonical-evidence-final-report.md`.
 - В `docs/` сознательно сохранены domain status files:
-  - `docs/calendar/status.md`
-  - `docs/mail/status.md`
-  - `docs/persons/status.md`
-  - `docs/tasks/status.md`
-  - `docs/telegram/status.md`
-  - `docs/whatsapp/status.md`
+  - `docs/domains/calendar/status.md`
+  - `docs/integrations/mail/status.md`
+  - `docs/domains/persons/status.md`
+  - `docs/domains/tasks/status.md`
+  - `docs/integrations/telegram/status.md`
+  - `docs/integrations/whatsapp/status.md`
 - Эти файлы не считаются мусорными отчетами прошлого периода, пока они работают как живые domain status sources и не конфликтуют с root canonical report.
 
 ## 5.2. Следующий технический хвост после cleanup

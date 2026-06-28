@@ -1,5 +1,7 @@
 # Testing Infrastructure
 
+Status: documentation package aligned to the current repository structure.
+
 Hermes uses a split test stack:
 
 - Rust backend execution runs through `cargo-nextest`.
@@ -58,3 +60,13 @@ Current baseline and optimization notes live in:
 - `reports/test-performance/2026-06-23-baseline.md`
 - `reports/test-performance/backend-full.md`
 - `docs/development/testing/status.md`
+
+## Navigation
+
+- [Status](./status.md)
+- [CI](./ci.md)
+- [Coverage](./coverage.md)
+- [Mutation Testing](./mutation-testing.md)
+- [Nextest](./nextest.md)
+- [Security](./security.md)
+- [Snapshots](./snapshots.md)

@@ -74,11 +74,12 @@ backend/src/integrations/
   whatsapp/
 ```
 
-The current repository has `docs/mail`, `docs/telegram` and `docs/whatsapp`.
-Those directories should be interpreted as channel capability specs, not as
-separate product domains. Mail, Telegram and WhatsApp provider/runtime panels
-belong under integration modules and may be embedded into the Communications
-workspace.
+The current repository has `docs/integrations/mail`,
+`docs/integrations/telegram`, `docs/integrations/whatsapp` and
+`docs/integrations/zoom`. Those directories should be interpreted as channel or
+provider capability specs, not as separate product domains. Mail, Telegram,
+WhatsApp and Zoom provider/runtime panels belong under integration modules and
+may be embedded into the Communications workspace.
 
 ## Shared Abstractions
 

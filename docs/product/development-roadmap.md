@@ -32,7 +32,7 @@ The repository already contains meaningful implementation slices:
 | Area | Current implementation evidence |
 |---|---|
 | Communications and email | `domains/communications`, communication ingestion/messages migrations, `/api/v1/communications/*`, mail sync, drafts, send/reply/forward, workflow state, analytics, invoices, legal docs, certificates and attachment metadata. |
-| Telegram | Telegram integration modules, runtime manager, migrations for chats/messages/policies/calls, `/api/v1/integrations/telegram/*` routes, Telegram frontend page and production capability target in `docs/telegram/` / ADR-0091. |
+| Telegram | Telegram integration modules, runtime manager, migrations for chats/messages/policies/calls, `/api/v1/integrations/telegram/*` routes, Telegram frontend page and production capability target in `docs/integrations/telegram/` / ADR-0091. |
 | WhatsApp | WhatsApp integration modules, WhatsApp Web sessions/messages migrations, `/api/v1/integrations/whatsapp/*` routes and WhatsApp frontend page. |
 | Graph | Graph tables, graph projection module and `/api/v1/graph/*` routes. |
 | Documents | Document tables, processing jobs/artifacts, document processing APIs and Documents frontend page. |
@@ -50,7 +50,7 @@ The repository already contains meaningful implementation slices:
 | Gap | Why it matters | Refactoring or delivery direction |
 |---|---|---|
 | Communication is not yet documented as the single ingestion spine across all channels. | Mail, Telegram, WhatsApp, calls and meetings can drift into separate apps. | Create Communications domain spec and normalize channel docs around source evidence and canonical Communication. |
-| Telegram production capability model is broader than current implementation. | The requested production surface includes account/session lifecycle, proxies, chat management, message commands, soft delete, message history, attachments, voice/video messages, calls, channels, groups, forums, search, drafts, notifications, address book data, media gallery, offline, export and desktop UX. | Use ADR-0091 and `docs/telegram/` as the delivery contract; expose every new feature through backend capability states before enabling UI controls. |
+| Telegram production capability model is broader than current implementation. | The requested production surface includes account/session lifecycle, proxies, chat management, message commands, soft delete, message history, attachments, voice/video messages, calls, channels, groups, forums, search, drafts, notifications, address book data, media gallery, offline, export and desktop UX. | Use ADR-0091 and `docs/integrations/telegram/` as the delivery contract; expose every new feature through backend capability states before enabling UI controls. |
 | Persona target model is not implemented end-to-end. | Current `persons` compatibility still carries contact/person history. Owner Persona storage, GET/PUT owner compatibility route, ADR-0090 Persona-native read/write compatibility bridge, PersonaType, person role Relationship adapters, `person_personas` interaction-context Preference adapters, enrichment trust Relationship adapters and notes-to-memory-card adapters have baselines. | Plan physical Persona-native schema migration beyond the compatibility bridge. |
 | Relationships are not a complete first-class model. | Roles, organization links, graph edges and relationship events are spread across domains. Durable Relationship records, graph projection for all current Relationship entity kinds, guarded entity/global review routes, manual/API person role adapters, manual/API and email-sync organization contact link adapters, manual task relation adapters, project link review adapters, Personas workspace review and cross-domain Review workspace review/action routing have a baseline. | Migrate remaining relationship-shaped compatibility surfaces behind Relationship records and keep review routing in the Review workspace. |
 | Polygraph engine is partially implemented. | Structured direct contradictions can be stored as reviewable observations, deterministic structured and limited natural-language `location` / `status` claims can be extracted from Communication/Document/Event evidence text, projected email/Telegram/WhatsApp message refresh, imported Document refresh, meeting-note refresh and call-transcript refresh can compare active `person_facts` Memory claims against evidence by Persona email identity, active Telegram/WhatsApp identity, event participant link or active Telegram call identity, guarded backend routes can list/review observations without overwriting Memory, and the Knowledge workspace plus cross-domain Review workspace have Polygraph review panels and shared review action routing. Broad natural-language extraction and broader provider evidence remain incomplete. | Expand ingestion refresh to broader provider evidence, then add reviewed-outcome semantics. |
@@ -65,7 +65,7 @@ Goal: make Communications the clear ingestion backbone.
 
 Documentation outcomes:
 
-- `docs/domains/communications.md`;
+- `docs/domains/communications/README.md`;
 - channel mapping for email, Telegram, WhatsApp, calls and meetings;
 - source evidence rules;
 - canonical Communication lifecycle;
@@ -84,8 +84,8 @@ Relationship memory.
 
 Documentation outcomes:
 
-- `docs/domains/personas.md`;
-- `docs/domains/relationships.md`;
+- `docs/domains/persons/spec.md`;
+- `docs/domains/relationships/README.md`;
 - Owner Persona behavior;
 - PersonaType behavior;
 - Persona identity trace lifecycle;
@@ -106,8 +106,8 @@ memory.
 
 Documentation outcomes:
 
-- `docs/domains/knowledge.md`;
-- `docs/engines/consistency-contradiction-engine.md`;
+- `docs/domains/graph/README.md`;
+- `docs/engines/consistency/README.md`;
 - contradiction review workflow;
 - memory conflict taxonomy.
 
@@ -124,9 +124,9 @@ Goal: separate commitments, executable work and durable choices.
 
 Documentation outcomes:
 
-- `docs/domains/obligations.md`;
-- `docs/domains/tasks.md`;
-- `docs/domains/decisions.md`;
+- `docs/domains/obligations/README.md`;
+- `docs/domains/tasks/spec.md`;
+- `docs/domains/decisions/README.md`;
 - workflow docs for communication-to-obligation and meeting-to-decisions.
 
 Refactoring plan topics:
@@ -143,8 +143,8 @@ work.
 
 Documentation outcomes:
 
-- `docs/domains/projects.md`;
-- `docs/domains/documents.md`;
+- `docs/domains/projects/README.md`;
+- `docs/domains/documents/README.md`;
 - workflow docs for document-to-context;
 - project context and document evidence rules.
 
@@ -160,7 +160,7 @@ Goal: make agents operate through source-backed context, not private guesses.
 
 Documentation outcomes:
 
-- agent context rules in `docs/agents/`;
+- agent context rules in `docs/ai/agents/`;
 - workflow doc for agent-assisted recall;
 - alignment with AI control center and capability policy.
 

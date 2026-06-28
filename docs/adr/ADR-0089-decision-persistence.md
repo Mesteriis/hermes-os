@@ -152,8 +152,8 @@ uses the guarded list/review routes and sends only explicit owner
 `user_confirmed` / `user_rejected` review state. It does not create Tasks,
 Projects or Obligations.
 
-`backend/src/engines/decision.rs` adds a deterministic candidate detector for
-explicit Communication and Document evidence, for example
+`backend/src/domains/decisions/extraction/` adds a deterministic candidate
+detector for explicit Communication and Document evidence, for example
 `Decision: Use local-first storage because private context must work offline`.
 The detector produces reviewable Decision drafts and evidence references; it
 does not persist accepted Decisions or mutate Projects, Tasks or Obligations.

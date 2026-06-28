@@ -27,7 +27,7 @@
 4. Каноническая продуктовая и foundation-документация:
    `docs/product/master-spec.md`, `docs/foundation/`, `docs/domains/`,
    `docs/engines/`, `docs/workflows/`.
-5. Архитектурная документация в `docs/architecture/`, `docs/agents/`, `docs/ui/`.
+5. Архитектурная документация в `docs/architecture/`, `docs/ai/agents/`, `docs/ui/`.
 6. Текущие файлы реализации как источник фактов о том, что уже реально
    реализовано.
 7. Внешняя документация, только если она нужна и проверена.

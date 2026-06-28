@@ -95,9 +95,9 @@ knowledge, relationships, obligations, decisions, tasks and project context.
 
 Provider-specific production behavior stays under channel capability specs. The
 current Telegram channel capability matrix is
-[Telegram Channel Capability Spec](../telegram/README.md) and
-[Telegram Gap Analysis](../telegram/gap-analysis.md), governed by ADR-0091 and
-ADR-0097.
+[Telegram Channel Capability Spec](../integrations/telegram/README.md) and
+[Telegram Gap Analysis](../integrations/telegram/gap-analysis.md), governed by
+ADR-0091 and ADR-0097.
 
 Communications are primary, but they are not the only source of evidence.
 Documents, calendar events, manual owner input, imported files and provider
@@ -206,24 +206,32 @@ This inventory is based on current repository files.
 The backend currently has domain modules for:
 
 - calendar;
+- communications;
+- decisions;
 - documents;
 - graph;
-- mail;
+- obligations;
 - organizations;
 - persons;
 - projects;
-- settings;
+- relationships;
+- review;
+- signal_hub;
 - tasks.
+
+The backend also exports `domains/settings`, but its current module file is
+empty. Working application settings logic lives under `platform/settings`.
 
 The backend also has AI, engines, integrations, platform and workflow modules.
 
 Notable integrations:
 
-- Gmail;
+- Mail;
 - Ollama;
 - Omniroute;
 - Telegram;
-- WhatsApp.
+- WhatsApp;
+- Zoom.
 
 Platform support exists for:
 
@@ -231,6 +239,7 @@ Platform support exists for:
 - audit log;
 - capabilities;
 - calls and transcripts;
+- observations;
 - secrets;
 - settings;
 - storage;
@@ -318,12 +327,12 @@ target product model.
 | Persona-native model incomplete | `persons`, `person_id`, `person_roles`, `person_personas`, `person_promises` and `/api/v1/persons/*` still exist. Owner Persona, PersonaType, Persona-native read/write compatibility bridge per ADR-0090, role-to-Relationship, interaction-context-to-Preference, enrichment trust-to-Relationship, notes-to-memory-card, favorite-to-preference, watchlist-to-preference, risk-to-health-cache, Dossier section adapters and reviewable Dossier snapshots have compatibility baselines. | Keep compatibility short-term. Plan physical Persona-native schema migration under a dedicated migration ADR. |
 | Owner Persona partially implemented | Migration `0059` adds `is_self` uniqueness and `person_type` constraints on the compatibility `persons` table, and GET/PUT `/api/v1/persons/owner` exposes the compatibility Owner Persona route. Agents and UI still need to consistently route owner-scoped context through that Owner Persona. | Wire agent attribution and context assembly to the Owner Persona before expanding autonomous actions. |
 | First-class Relationships partially implemented | Migrations `0060`, `0061` and `0068` plus `backend/src/domains/relationships/` add first-class Relationship persistence with evidence, trust score, strength score, confidence, review state, graph projection for all current Relationship entity kinds, and guarded entity/global review routes. Manual/API person roles now materialize source-backed `has_role` Relationships from Persona to role Knowledge anchors and demote those Relationships to `user_rejected` when the role is removed. Manual/API and email-sync organization contact links now materialize source-backed `member_of` Relationships from Persona to Organization. Manual task relations now materialize source-backed Relationships from Task to known target entity kinds. Explicit project link reviews now materialize source-backed Relationships from Project to reviewed Communication or Document and demote the candidate back to `suggested` when explicit review is reset. The Personas workspace and cross-domain Review workspace include suggested Relationship review, and the Review service owns confirm/reject routing for Relationship review items. Downstream engine projections remain incomplete. | Migrate remaining relationship-shaped read-model semantics behind compatibility boundaries and keep review routing in the Review workspace. |
-| Polygraph engine partially implemented | ADR-0087, migration `0062`, `backend/src/engines/consistency.rs` and `backend/src/engines/consistency_api.rs` add structured direct-contradiction detection, deterministic structured and limited natural-language `location` / `status` claim extraction from Communication/Document/Event evidence text, reviewable `ContradictionObservation` persistence and guarded backend review routes. `ContradictionObservationStore::refresh_deterministic_observations` now compares active `person_facts` Memory claims with claims from projected email message subject/body evidence matched by Persona email sender, projected Telegram/WhatsApp message evidence matched through active channel identities and provider `sender_id`, imported Document title/extracted-text evidence that references the Persona email, meeting-note content linked through event participants and successful call transcript text linked through active Telegram identity. The Knowledge workspace and cross-domain Review workspace include Polygraph review, and the Review service owns confirm/reject routing for contradiction observations. Broad natural-language extraction and broader provider evidence remain incomplete. | Expand ingestion wiring to broader provider evidence, then add reviewed-outcome semantics without automatic memory overwrite. |
+| Polygraph engine partially implemented | ADR-0087, migration `0062`, `backend/src/engines/consistency.rs`, `backend/src/engines/consistency/`, `backend/src/app/handlers/consistency.rs` and `backend/src/application/consistency_review.rs` add structured direct-contradiction detection, deterministic structured and limited natural-language `location` / `status` claim extraction from Communication/Document/Event evidence text, reviewable `ContradictionObservation` persistence and guarded backend review routes. `ContradictionObservationStore::refresh_deterministic_observations` now compares active `person_facts` Memory claims with claims from projected email message subject/body evidence matched by Persona email sender, projected Telegram/WhatsApp message evidence matched through active channel identities and provider `sender_id`, imported Document title/extracted-text evidence that references the Persona email, meeting-note content linked through event participants and successful call transcript text linked through active Telegram identity. The Knowledge workspace and cross-domain Review workspace include Polygraph review, and the Review service owns confirm/reject routing for contradiction observations. Broad natural-language extraction and broader provider evidence remain incomplete. | Expand ingestion wiring to broader provider evidence, then add reviewed-outcome semantics without automatic memory overwrite. |
 | Communications still mail-heavy | Many modules are email-specific under `domains/communications`. | Keep provider-specific modules but document Communications as the product domain and email as one channel. |
-| Telegram production capability matrix is not implemented end-to-end | Current Telegram foundation covers account setup, runtime status/start, chat/history sync, manual send, media download facade, policy dry-runs, call metadata and fixture transcripts. ADR-0091 and `docs/telegram/` define the broader production target for accounts, sessions, proxies, chats, messages, tombstones, history, attachments, calls, offline, export and desktop UX. | Deliver Telegram in gated slices. Do not expose provider-write, destructive, call, export, proxy or session import/export features as available until capability state, storage, audit, UI and validation exist. |
+| Telegram production capability matrix is not implemented end-to-end | Current Telegram foundation covers account setup, runtime status/start, chat/history sync, manual send, media download facade, policy dry-runs, call metadata and fixture transcripts. ADR-0091 and `docs/integrations/telegram/` define the broader production target for accounts, sessions, proxies, chats, messages, tombstones, history, attachments, calls, offline, export and desktop UX. | Deliver Telegram in gated slices. Do not expose provider-write, destructive, call, export, proxy or session import/export features as available until capability state, storage, audit, UI and validation exist. |
 | Engine boundaries are partial | Search, automation, Polygraph and Obligation have baseline engine modules. Memory, Timeline, Trust, Risk and Enrichment remain partly embedded in domain modules. | Continue extracting shared engine behavior only behind dedicated plans and review workflows. |
 | Knowledge model incomplete | Knowledge graph exists, but Knowledge as reviewed understanding is not fully documented or implemented as a lifecycle. | Define Knowledge domain spec and review states before implementation work. |
-| Decisions and Obligations partially implemented | ADR-0088/ADR-0089 plus migrations `0063`, `0064`, `0065`, `0066` and `0067` add source-backed Obligation and Decision persistence with evidence, review state, links, accepted graph projection and task-candidate classification for obligation-derived candidates. `backend/src/engines/obligation.rs` adds a deterministic Obligation candidate baseline, `backend/src/engines/decision.rs` adds a deterministic explicit-Decision candidate baseline, message and document task candidate refresh use Obligation detection for explicit commitments/requests, confirmed `obligation_task` candidates materialize source-backed Obligations linked to Tasks, and reset/reject review on those candidates now synchronizes the durable Obligation review state without leaving stale Tasks or links. Email sync and Telegram/WhatsApp fixture ingestion refresh explicit Decision candidates and obligation-derived task candidates for projected Communications without auto-creating Tasks or accepted Obligations. Explicit message/imported-document Decision candidates persist as source-backed `suggested` Decisions, compatibility `person_promises` persist source-backed `user_confirmed` Obligations, meeting `decision` outcomes persist source-backed `suggested` Decisions, project link review decisions persist source-backed `user_confirmed` Decisions, meeting `promise`/`task`/`follow_up` outcomes persist source-backed `suggested` Obligations without creating Tasks, guarded backend routes can list/review accepted Obligations and Decisions by entity or review state, and the Tasks workspace plus cross-domain Review workspace include suggested review panels and shared confirm/reject routing for both. Broader live-provider ingestion and broader candidate-to-domain review workflow coverage remain incomplete. | Connect remaining extraction/review workflows to the domain models without auto-creating Tasks, Projects or Obligations outside explicit review actions. |
+| Decisions and Obligations partially implemented | ADR-0088/ADR-0089 plus migrations `0063`, `0064`, `0065`, `0066` and `0067` add source-backed Obligation and Decision persistence with evidence, review state, links, accepted graph projection and task-candidate classification for obligation-derived candidates. `backend/src/engines/obligation/` adds a deterministic Obligation candidate baseline, `backend/src/domains/decisions/extraction/` adds a deterministic explicit-Decision candidate baseline, message and document task candidate refresh use Obligation detection for explicit commitments/requests, confirmed `obligation_task` candidates materialize source-backed Obligations linked to Tasks, and reset/reject review on those candidates now synchronizes the durable Obligation review state without leaving stale Tasks or links. Email sync and Telegram/WhatsApp fixture ingestion refresh explicit Decision candidates and obligation-derived task candidates for projected Communications without auto-creating Tasks or accepted Obligations. Explicit message/imported-document Decision candidates persist as source-backed `suggested` Decisions, compatibility `person_promises` persist source-backed `user_confirmed` Obligations, meeting `decision` outcomes persist source-backed `suggested` Decisions, project link review decisions persist source-backed `user_confirmed` Decisions, meeting `promise`/`task`/`follow_up` outcomes persist source-backed `suggested` Obligations without creating Tasks, guarded backend routes can list/review accepted Obligations and Decisions by entity or review state, and the Tasks workspace plus cross-domain Review workspace include suggested review panels and shared confirm/reject routing for both. Broader live-provider ingestion and broader candidate-to-domain review workflow coverage remain incomplete. | Connect remaining extraction/review workflows to the domain models without auto-creating Tasks, Projects or Obligations outside explicit review actions. |
 | Notes are ambiguous | Frontend has Notes page, while foundation says Notes are document-like artifacts unless a future ADR promotes them. | Treat Notes as document-like capture artifacts until a separate ADR changes scope. |
 
 ## Core Workflows

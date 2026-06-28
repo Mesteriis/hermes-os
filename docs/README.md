@@ -42,7 +42,8 @@ Canonical active vocabulary is defined in:
 - [Domain Map](foundation/domain-map.md)
 
 If another document conflicts with these files, prefer the foundation documents
-unless a newer ADR explicitly supersedes them.
+unless a newer ADR explicitly supersedes them. For code-structure and
+architecture-boundary conflicts, ADRs are the source of truth.
 
 ## Product Documents
 
@@ -70,44 +71,71 @@ versioned implementation milestones and may use compatibility terminology.
 
 Canonical domain specs live under [Domain Catalog](domains/README.md).
 
-- [Signal Hub](domains/signal-hub.md), [Signal Hub Folder](signal-hub/README.md)
-- [Communications](domains/communications.md)
-- [Telegram Channel Capability Spec](telegram/README.md)
-- [Zoom Provider Stage](zoom/README.md)
-- [Personas / Persona Intelligence](persons/README.md)
-- [Organizations](domains/organizations.md)
-- [Projects](domains/projects.md)
-- [Documents](domains/documents.md)
-- [Tasks](domains/tasks.md)
-- [Calendar And Events](domains/calendar-events.md)
-- [Decisions](domains/decisions.md)
-- [Obligations](domains/obligations.md)
-- [Knowledge Graph](domains/knowledge-graph.md)
-- [Agents](domains/agents.md)
-- [Notes Boundary](domains/notes.md)
-- [Search Architecture](domains/search-architecture.md)
+- [Signal Hub](domains/signal-hub/spec.md), [package](domains/signal-hub/README.md)
+- [Communications](domains/communications/README.md)
+- [Personas / Persona Intelligence](domains/persons/spec.md), [package](domains/persons/README.md)
+- [Organizations](domains/organizations/spec.md), [package](domains/organizations/README.md)
+- [Projects](domains/projects/README.md)
+- [Documents](domains/documents/README.md)
+- [Tasks](domains/tasks/spec.md), [package](domains/tasks/README.md)
+- [Calendar And Events](domains/calendar/spec.md), [package](domains/calendar/README.md)
+- [Decisions](domains/decisions/README.md)
+- [Obligations](domains/obligations/README.md)
+- [Review](domains/review/README.md)
+- [Knowledge Graph](domains/graph/README.md)
+- [Agents](domains/agents/README.md)
+- [Notes Boundary](domains/notes/README.md)
 
-Dedicated historical or implementation-heavy folders still exist for Personas,
-Organizations, Tasks, Mail and Calendar. When they conflict with canonical
-domain specs, treat the conflict as a migration gap and update the relevant
-refactoring plan before changing code.
+Domain folders mirror `backend/src/domains/<domain>/` where possible. When a
+package contains both canonical semantics and implementation details, the
+canonical semantics live in `spec.md`.
+
+## Integration Documents
+
+Provider and channel docs live under [Integration Catalog](integrations/README.md).
+Integrations are not product domains.
+
+- [Mail](integrations/mail/README.md)
+- [Telegram](integrations/telegram/README.md)
+- [WhatsApp](integrations/whatsapp/README.md)
+- [Zoom](integrations/zoom/README.md)
+- [Ollama](integrations/ollama/README.md)
+- [OmniRoute](integrations/omniroute/README.md)
 
 ## Engine Documents
 
 The current engine map is in [Foundation Engines](foundation/engines.md). The
 detailed engine catalog is in [Engine Catalog](engines/README.md).
 
-- [Memory Engine](engines/memory.md)
-- [Timeline Engine](engines/timeline.md)
-- [Trust Engine](engines/trust.md)
-- [Search Engine](engines/search.md)
-- [Enrichment Engine](engines/enrichment.md)
-- [Obligation Engine](engines/obligation.md)
-- [Risk Engine](engines/risk.md)
-- [Consistency / Contradiction Engine](engines/consistency-contradiction.md),
+- [Memory Engine](engines/memory/README.md)
+- [Timeline Engine](engines/timeline/README.md)
+- [Trust Engine](engines/trust/README.md)
+- [Search Engine](engines/search/README.md), [architecture](engines/search/architecture.md)
+- [Enrichment Engine](engines/enrichment/README.md)
+- [Obligation Engine](engines/obligation/README.md)
+- [Risk Engine](engines/risk/README.md)
+- [Consistency / Contradiction Engine](engines/consistency/README.md),
   user-facing alias Polygraph.
+- [Automation Engine](engines/automation/README.md)
+- [Context Packs Engine](engines/context-packs/README.md)
+- [Identity Resolution Engine](engines/identity-resolution/README.md)
+- [Relationship Candidate Engine](engines/relationships/README.md)
 
 Do not duplicate engine ownership inside domain documents.
+
+## Code-Layer Documents
+
+Documentation now follows the backend layer map from ADR-0073:
+
+- [App Layer](app/README.md)
+- [Application Services](application/README.md)
+- [Domains](domains/README.md)
+- [Engines](engines/README.md)
+- [Integrations](integrations/README.md)
+- [AI](ai/README.md)
+- [Workflows](workflows/README.md)
+- [Platform](platform/README.md)
+- [Vault](vault/README.md)
 
 ## Workflow Documents
 
@@ -151,15 +179,19 @@ not always canonical product language.
 
 Examples:
 
-- `docs/mail/status.md`
-- `docs/calendar/status.md`
-- `docs/tasks/status.md`
-- `docs/persons/status.md`
-- `docs/*/api.md`
+- `docs/integrations/mail/status.md`
+- `docs/domains/calendar/status.md`
+- `docs/domains/tasks/status.md`
+- `docs/domains/persons/status.md`
+- `docs/domains/*/api.md`
+- `docs/integrations/*/api.md`
 
 Root-level current-period status/reporting is centralized in
 `canonical-evidence-final-report.md`. Domain status files remain bounded-context
 implementation notes, not the primary report for the current refactor wave.
+
+Current code/documentation alignment notes are tracked in
+[Documentation Code Alignment Report](refactoring/documentation-code-alignment-report.md).
 
 If a status document mentions compatibility terms such as `persons`,
 `person_id`, `health`, `watchlist`, historical `contacts` naming or
@@ -168,13 +200,6 @@ glossary.
 
 ## Historical Documents
 
-Historical plans and specs under `docs/superpowers/` are implementation history.
-They can explain why something was built, but they are not the current product
-model.
-
-Use them for traceability, not vocabulary authority.
-
 Historical reviews under `docs/reviews/` and version closure files under
-`docs/roadmap/` are also traceability records unless a current product,
-foundation, architecture or ADR document explicitly references them as active
-requirements.
+`docs/roadmap/` are traceability records unless a current product, foundation,
+architecture or ADR document explicitly references them as active requirements.

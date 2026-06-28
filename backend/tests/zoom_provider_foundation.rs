@@ -1913,10 +1913,7 @@ async fn zoom_webhook_url_validation_uses_host_vault_secret() {
     assert_eq!(body["plainToken"], json!(validation_nonce));
     assert_eq!(
         body["encryptedToken"],
-        json!(zoom_validation_token(
-            webhook_signing_key,
-            validation_nonce
-        ))
+        json!(zoom_validation_token(webhook_signing_key, validation_nonce))
     );
 }
 
