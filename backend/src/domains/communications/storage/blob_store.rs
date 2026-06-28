@@ -73,6 +73,19 @@ impl LocalCommunicationBlobStore {
         let storage_path = validate_storage_path(storage_path)?;
         Ok(tokio::fs::read(self.root.join(storage_path)).await?)
     }
+
+    pub async fn delete_blob(&self, storage_path: &str) -> Result<bool, CommunicationStorageError> {
+        let storage_path = validate_storage_path(storage_path)?;
+        let absolute_path = self.root.join(&storage_path);
+        match tokio::fs::remove_file(&absolute_path).await {
+            Ok(()) => {
+                prune_empty_parent_dirs(&self.root, &absolute_path).await?;
+                Ok(true)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(error.into()),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -93,6 +106,22 @@ async fn path_exists(path: &Path) -> Result<bool, std::io::Error> {
 
 fn relative_blob_path(digest_hex: &str) -> String {
     format!("sha256/{}/{}.blob", &digest_hex[..2], digest_hex)
+}
+
+async fn prune_empty_parent_dirs(root: &Path, path: &Path) -> Result<(), std::io::Error> {
+    let mut current = path.parent();
+    while let Some(dir) = current {
+        if dir == root {
+            break;
+        }
+        match tokio::fs::remove_dir(dir).await {
+            Ok(()) => current = dir.parent(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+            Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => break,
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

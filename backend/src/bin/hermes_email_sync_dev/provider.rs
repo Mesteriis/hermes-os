@@ -15,7 +15,9 @@ pub(super) fn parse_provider_kind(value: &str) -> Result<EmailProviderKind, DevE
         | EmailProviderKind::TelegramUser
         | EmailProviderKind::TelegramBot
         | EmailProviderKind::WhatsappWeb
-        | EmailProviderKind::WhatsappBusinessCloud => {
+        | EmailProviderKind::WhatsappBusinessCloud
+        | EmailProviderKind::ZoomUser
+        | EmailProviderKind::ZoomServerToServer => {
             Err(DevEmailSyncError::UnsupportedProviderForDevSync)
         }
     }
@@ -29,6 +31,8 @@ pub(super) fn default_host(provider_kind: EmailProviderKind) -> &'static str {
         | EmailProviderKind::TelegramUser
         | EmailProviderKind::TelegramBot
         | EmailProviderKind::WhatsappWeb
-        | EmailProviderKind::WhatsappBusinessCloud => "",
+        | EmailProviderKind::WhatsappBusinessCloud
+        | EmailProviderKind::ZoomUser
+        | EmailProviderKind::ZoomServerToServer => "",
     }
 }

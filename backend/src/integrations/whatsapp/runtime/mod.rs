@@ -3227,6 +3227,7 @@ impl WhatsappWebStore {
             let Some(expected_reaction) = command
                 .payload
                 .get("reaction_emoji")
+                .or_else(|| command.payload.get("reaction"))
                 .and_then(Value::as_str)
             else {
                 continue;
@@ -3401,11 +3402,25 @@ impl WhatsappWebStore {
         .await?;
 
         let mut reconciled = Vec::new();
+        let executor_command_id = dialog
+            .import_batch_id
+            .strip_prefix("whatsapp-command:")
+            .and_then(|value| value.rsplit_once(':'))
+            .map(|(_, command_id)| command_id);
         for row in rows {
             let command = row_to_whatsapp_provider_write_command(row)?;
+            if executor_command_id.is_some_and(|command_id| command_id != command.command_id) {
+                continue;
+            }
             let (observed_state, state_key) = match command.command_kind.as_str() {
-                "archive" | "unarchive" => (dialog.is_archived, "is_archived"),
-                "pin" | "unpin" => (dialog.is_pinned, "is_pinned"),
+                "archive" | "unarchive" => match dialog.is_archived {
+                    Some(state) => (state, "is_archived"),
+                    None => continue,
+                },
+                "pin" | "unpin" => match dialog.is_pinned {
+                    Some(state) => (state, "is_pinned"),
+                    None => continue,
+                },
                 "mute" | "unmute" => match dialog.is_muted {
                     Some(state) => (state, "is_muted"),
                     None => continue,
@@ -3490,21 +3505,23 @@ impl WhatsappWebStore {
         let mut reconciled = Vec::new();
         for row in rows {
             let command = row_to_whatsapp_provider_write_command(row)?;
-            if !participant.is_self {
+            let inferred_self_participant = participant.provider_member_id.trim().is_empty();
+            if !participant.is_self && !inferred_self_participant {
                 continue;
             }
 
-            let expected_status = match command.command_kind.as_str() {
-                "join_group" => "member",
-                "leave_group" => "left",
+            let observed_membership_matches = match command.command_kind.as_str() {
+                "join_group" => matches!(participant.status.as_str(), "member" | "joined"),
+                "leave_group" => participant.status == "left",
                 _ => continue,
             };
+            let provider_member_id = participant.effective_provider_member_id();
             let provider_state = json!({
                 "provider_chat_id": participant.provider_chat_id,
-                "provider_member_id": participant.provider_member_id,
+                "provider_member_id": provider_member_id,
                 "provider_identity_id": participant.provider_identity_id,
-                "chat_kind": participant.chat_kind,
-                "chat_title": participant.chat_title,
+                "chat_kind": participant.effective_chat_kind(),
+                "chat_title": participant.effective_chat_title(),
                 "role": participant.role,
                 "status": participant.status,
                 "is_self": participant.is_self,
@@ -3512,10 +3529,10 @@ impl WhatsappWebStore {
             });
             let result_payload = json!({
                 "provider_chat_id": participant.provider_chat_id,
-                "provider_member_id": participant.provider_member_id,
+                "provider_member_id": provider_member_id,
                 "provider_identity_id": participant.provider_identity_id,
-                "chat_kind": participant.chat_kind,
-                "chat_title": participant.chat_title,
+                "chat_kind": participant.effective_chat_kind(),
+                "chat_title": participant.effective_chat_title(),
                 "role": participant.role,
                 "status": participant.status,
                 "is_self": participant.is_self,
@@ -3523,7 +3540,7 @@ impl WhatsappWebStore {
                 "observed_via": "fixture_participant",
             });
 
-            let updated = if participant.status == expected_status {
+            let updated = if observed_membership_matches {
                 self.mark_provider_command_reconciled(
                     &command.command_id,
                     participant.observed_at,
@@ -3871,6 +3888,9 @@ impl WhatsappWebStore {
         let effective_status = match status {
             "available" | "linked" | "revoked" | "removed" | "blocked" | "degraded" | "created"
             | "link_required" | "qr_pending" | "pair_code_pending" => status.to_owned(),
+            _ if session_restore_available && runtime_kind == "fixture" && status == "running" => {
+                "available".to_owned()
+            }
             _ if lifecycle_state == "revoked" || lifecycle_state == "removed" => {
                 lifecycle_state.to_owned()
             }
@@ -3883,9 +3903,6 @@ impl WhatsappWebStore {
             ) =>
             {
                 lifecycle_state.to_owned()
-            }
-            _ if session_restore_available && runtime_kind == "fixture" && status == "running" => {
-                "available".to_owned()
             }
             _ if session_restore_available => "linked".to_owned(),
             _ => "link_required".to_owned(),
@@ -4082,12 +4099,15 @@ impl WhatsappWebStore {
                 provider_conversation_id, provider_message_id, target_ref, payload,
                 capability_state, action_class, confirmation_decision, status,
                 retry_count, max_retries, last_error, result_payload, audit_metadata,
-                actor_id, happened_at, completed_at, created_at, updated_at
+                provider_state, reconciliation_status, next_attempt_at, last_attempt_at,
+                provider_observed_at, reconciled_at, dead_lettered_at, actor_id,
+                happened_at, completed_at, created_at, updated_at
             )
             VALUES (
                 $1, $2, 'whatsapp', $3, $4, $5, $6, $7, $8,
                 $9, $10, $11, $12, $13, $14, $15, $16, $17,
-                'hermes-frontend', $18, $19, $20, $21
+                $18, $19, $20, $21, $22, $23, $24, 'hermes-frontend',
+                $25, $26, $27, $28
             )
             ON CONFLICT (account_id, idempotency_key)
             DO UPDATE SET
@@ -4105,6 +4125,13 @@ impl WhatsappWebStore {
                 last_error = EXCLUDED.last_error,
                 result_payload = EXCLUDED.result_payload,
                 audit_metadata = EXCLUDED.audit_metadata,
+                provider_state = EXCLUDED.provider_state,
+                reconciliation_status = EXCLUDED.reconciliation_status,
+                next_attempt_at = EXCLUDED.next_attempt_at,
+                last_attempt_at = EXCLUDED.last_attempt_at,
+                provider_observed_at = EXCLUDED.provider_observed_at,
+                reconciled_at = EXCLUDED.reconciled_at,
+                dead_lettered_at = EXCLUDED.dead_lettered_at,
                 completed_at = EXCLUDED.completed_at,
                 updated_at = EXCLUDED.updated_at
             "#,
@@ -4126,6 +4153,13 @@ impl WhatsappWebStore {
         .bind(&command.last_error)
         .bind(&command.result_payload)
         .bind(&command.audit_metadata)
+        .bind(&command.provider_state)
+        .bind(&command.reconciliation_status)
+        .bind(command.next_attempt_at)
+        .bind(command.last_attempt_at)
+        .bind(command.provider_observed_at)
+        .bind(command.reconciled_at)
+        .bind(command.dead_lettered_at)
         .bind(command.created_at)
         .bind(command.completed_at)
         .bind(command.created_at)
@@ -4214,12 +4248,15 @@ async fn mirror_canonical_provider_command_for_pool(
                 provider_conversation_id, provider_message_id, target_ref, payload,
                 capability_state, action_class, confirmation_decision, status,
                 retry_count, max_retries, last_error, result_payload, audit_metadata,
-                actor_id, happened_at, completed_at, created_at, updated_at
+                provider_state, reconciliation_status, next_attempt_at, last_attempt_at,
+                provider_observed_at, reconciled_at, dead_lettered_at, actor_id,
+                happened_at, completed_at, created_at, updated_at
             )
             VALUES (
                 $1, $2, 'whatsapp', $3, $4, $5, $6, $7, $8,
                 $9, $10, $11, $12, $13, $14, $15, $16, $17,
-                'hermes-frontend', $18, $19, $20, $21
+                $18, $19, $20, $21, $22, $23, $24, 'hermes-frontend',
+                $25, $26, $27, $28
             )
             ON CONFLICT (account_id, idempotency_key)
             DO UPDATE SET
@@ -4237,6 +4274,13 @@ async fn mirror_canonical_provider_command_for_pool(
                 last_error = EXCLUDED.last_error,
                 result_payload = EXCLUDED.result_payload,
                 audit_metadata = EXCLUDED.audit_metadata,
+                provider_state = EXCLUDED.provider_state,
+                reconciliation_status = EXCLUDED.reconciliation_status,
+                next_attempt_at = EXCLUDED.next_attempt_at,
+                last_attempt_at = EXCLUDED.last_attempt_at,
+                provider_observed_at = EXCLUDED.provider_observed_at,
+                reconciled_at = EXCLUDED.reconciled_at,
+                dead_lettered_at = EXCLUDED.dead_lettered_at,
                 completed_at = EXCLUDED.completed_at,
                 updated_at = EXCLUDED.updated_at
             "#,
@@ -4258,6 +4302,13 @@ async fn mirror_canonical_provider_command_for_pool(
     .bind(&command.last_error)
     .bind(&command.result_payload)
     .bind(&command.audit_metadata)
+    .bind(&command.provider_state)
+    .bind(&command.reconciliation_status)
+    .bind(command.next_attempt_at)
+    .bind(command.last_attempt_at)
+    .bind(command.provider_observed_at)
+    .bind(command.reconciled_at)
+    .bind(command.dead_lettered_at)
     .bind(command.created_at)
     .bind(command.completed_at)
     .bind(command.created_at)
@@ -4570,11 +4621,17 @@ pub(crate) async fn claim_due_live_commands_for_execution(
               AND (command.next_attempt_at IS NULL OR command.next_attempt_at <= $1)
               AND command.confirmation_decision IN ('confirmed', 'not_required')
               AND command.capability_state IN ('available', 'degraded')
-              AND COALESCE(command.audit_metadata->>'session_restore_available', 'false') = 'true'
+              AND (
+                    COALESCE(command.audit_metadata->>'session_restore_available', 'false') = 'true'
+                 OR command.result_payload ? 'manual_retry_at'
+              )
               AND account.provider_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
-              AND COALESCE(account.config->>'runtime', '') NOT IN ('', 'fixture', 'live_blocked')
-              AND COALESCE(account.config->>'lifecycle_state', '') IN (
-                  'linked', 'available', 'syncing', 'degraded'
+              AND COALESCE(account.config->>'runtime', '') NOT IN ('', 'fixture')
+              AND (
+                    COALESCE(account.config->>'lifecycle_state', '') IN (
+                        'linked', 'available', 'syncing', 'degraded'
+                    )
+                 OR command.result_payload ? 'manual_retry_at'
               )
               AND ($4::text IS NULL OR command.account_id = $4)
               AND command.command_kind IN (
@@ -5787,12 +5844,7 @@ fn ensure_provider_command_supported(
     provider_shape: WhatsAppProviderRuntimeShape,
     command_kind: &str,
 ) -> Result<(), WhatsappWebError> {
-    if provider_shape == WhatsAppProviderRuntimeShape::BusinessCloud
-        && !matches!(
-            command_kind,
-            "send_text" | "send_template" | "send_media" | "send_voice_note"
-        )
-    {
+    if provider_shape == WhatsAppProviderRuntimeShape::BusinessCloud {
         return Err(WhatsappWebError::InvalidRequest(format!(
             "WhatsApp provider shape `{}` does not support personal command `{command_kind}`",
             provider_shape.as_str()

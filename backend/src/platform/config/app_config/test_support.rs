@@ -9,6 +9,9 @@ impl AppConfig {
     pub fn test_with_api_secret(api_secret: impl Into<String>) -> Self {
         Self {
             local_api_secret: Some(api_secret.into()),
+            zoom_token_maintenance_scheduler_enabled: false,
+            zoom_recording_sync_scheduler_enabled: false,
+            zoom_retention_cleanup_scheduler_enabled: false,
             ..Self::default()
         }
     }

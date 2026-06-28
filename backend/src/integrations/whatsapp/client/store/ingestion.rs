@@ -19,12 +19,11 @@ use crate::integrations::whatsapp::client::models::{
     NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
     NewWhatsappWebPresence, NewWhatsappWebReaction, NewWhatsappWebReceipt,
     NewWhatsappWebRuntimeEvent, NewWhatsappWebStatus, NewWhatsappWebStatusDelete,
-    NewWhatsappWebStatusView, WhatsappWebLinkState, WhatsappWebObservedCall,
-    WhatsappWebObservedDialog, WhatsappWebObservedMedia, WhatsappWebObservedMessage,
-    WhatsappWebObservedMessageDelete, WhatsappWebObservedMessageUpdate,
-    WhatsappWebObservedParticipant, WhatsappWebObservedPresence, WhatsappWebObservedReaction,
-    WhatsappWebObservedReceipt, WhatsappWebObservedRuntimeEvent, WhatsappWebObservedStatus,
-    WhatsappWebObservedStatusDelete, WhatsappWebObservedStatusView,
+    NewWhatsappWebStatusView, WhatsappWebObservedCall, WhatsappWebObservedDialog,
+    WhatsappWebObservedMedia, WhatsappWebObservedMessage, WhatsappWebObservedMessageDelete,
+    WhatsappWebObservedMessageUpdate, WhatsappWebObservedParticipant, WhatsappWebObservedPresence,
+    WhatsappWebObservedReaction, WhatsappWebObservedReceipt, WhatsappWebObservedRuntimeEvent,
+    WhatsappWebObservedStatus, WhatsappWebObservedStatusDelete, WhatsappWebObservedStatusView,
 };
 
 impl WhatsappWebStore {
@@ -62,12 +61,6 @@ impl WhatsappWebStore {
                     message.account_id
                 ))
             })?;
-        if session.link_state == WhatsappWebLinkState::Blocked.as_str() {
-            return Err(WhatsappWebError::InvalidRequest(
-                "blocked WhatsApp Web sessions cannot ingest fixture messages".to_owned(),
-            ));
-        }
-
         let raw_record_id = whatsapp_web_raw_record_id(
             &message.account_id,
             WHATSAPP_WEB_MESSAGE_RECORD_KIND,
@@ -425,6 +418,7 @@ impl WhatsappWebStore {
         participant.validate()?;
         let context = self.fixture_ingest_context(&participant.account_id).await?;
         let provider_record_id = participant.provider_record_id();
+        let provider_member_id = participant.effective_provider_member_id();
         let raw_record_id = whatsapp_web_raw_record_id(
             &participant.account_id,
             WHATSAPP_WEB_PARTICIPANT_RECORD_KIND,
@@ -441,7 +435,7 @@ impl WhatsappWebStore {
                 "provider_chat_id": participant.provider_chat_id,
                 "chat_title": participant.chat_title,
                 "chat_kind": participant.chat_kind,
-                "provider_member_id": participant.provider_member_id,
+                "provider_member_id": provider_member_id,
                 "provider_identity_id": participant.provider_identity_id,
                 "identity_kind": participant.identity_kind,
                 "display_name": participant.display_name,
@@ -698,11 +692,6 @@ impl WhatsappWebStore {
                     "WhatsApp Web account `{account_id}` has no session metadata"
                 ))
             })?;
-        if session.link_state == WhatsappWebLinkState::Blocked.as_str() {
-            return Err(WhatsappWebError::InvalidRequest(
-                "blocked WhatsApp Web sessions cannot ingest fixture events".to_owned(),
-            ));
-        }
         Ok(FixtureIngestContext {
             provider_kind: provider_account.provider_kind.as_str().to_owned(),
             runtime: session.companion_runtime,

@@ -1,0 +1,15 @@
+export const zoomQueryKeys = {
+  accounts: ['integrations', 'zoom', 'accounts'] as const,
+  capabilities: ['integrations', 'zoom', 'capabilities'] as const,
+  oauth: ['integrations', 'zoom', 'oauth'] as const,
+  runtimeStatus: ['integrations', 'zoom', 'runtime', 'status'] as const,
+  webhookSubscriptions: ['integrations', 'zoom', 'webhook-subscriptions'] as const,
+  providerCalls: ['integrations', 'zoom', 'provider-calls'] as const,
+  callTranscript: ['integrations', 'zoom', 'provider-call-transcript'] as const,
+  recordingImports: ['integrations', 'zoom', 'recording-imports'] as const,
+  auditEvents: ['integrations', 'zoom', 'audit-events'] as const,
+  meetingsBridge: ['integrations', 'zoom', 'runtime-bridge', 'meetings'] as const,
+  recordingsBridge: ['integrations', 'zoom', 'runtime-bridge', 'recordings'] as const,
+  transcriptsBridge: ['integrations', 'zoom', 'runtime-bridge', 'transcripts'] as const,
+  transcriptFilesBridge: ['integrations', 'zoom', 'runtime-bridge', 'transcript-files'] as const,
+}

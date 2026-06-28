@@ -36,6 +36,7 @@ pub use self::service::{
     SIGNAL_HUB_RAW_SIGNAL_CONSUMER, SignalHubSignalService, SignalProcessingOutcome,
     process_signal_hub_raw_event, signal_hub_raw_dispatcher_allows_processing,
 };
+pub use self::store::SignalHubStore as SignalHubPort;
 pub(crate) use self::store::event_type_pattern_matches;
 pub use self::store::{
     FixtureRestoreReport, SignalCapability, SignalCapabilityUpsert, SignalConnection,

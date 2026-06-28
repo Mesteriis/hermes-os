@@ -1441,8 +1441,16 @@ async fn execute_claimed_command(
                         .and_then(Value::as_str)
                         .unwrap_or("private")
                         .to_owned(),
-                    is_archived: matches!(command.command_kind.as_str(), "archive"),
-                    is_pinned: matches!(command.command_kind.as_str(), "pin"),
+                    is_archived: match command.command_kind.as_str() {
+                        "archive" => Some(true),
+                        "unarchive" => Some(false),
+                        _ => None,
+                    },
+                    is_pinned: match command.command_kind.as_str() {
+                        "pin" => Some(true),
+                        "unpin" => Some(false),
+                        _ => None,
+                    },
                     is_muted: match command.command_kind.as_str() {
                         "mute" => Some(true),
                         "unmute" => Some(false),

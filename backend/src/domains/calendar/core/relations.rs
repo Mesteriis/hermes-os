@@ -86,6 +86,12 @@ impl EventRelationStore {
         source: &str,
         observation_id: Option<&str>,
     ) -> Result<EventRelation, CalendarCoreError> {
+        if let Some(existing) = self
+            .get_by_identity(event_id, entity_type, entity_id, relation_type)
+            .await?
+        {
+            return Ok(existing);
+        }
         let row = sqlx::query("INSERT INTO event_relations (event_id, entity_type, entity_id, relation_type, source) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id::text, event_id, entity_type, entity_id, relation_type, source, confidence, created_at")
             .bind(event_id).bind(entity_type).bind(entity_id).bind(relation_type).bind(source).fetch_one(&self.pool).await?;
         let relation = EventRelation {
@@ -114,5 +120,44 @@ impl EventRelationStore {
             .await?;
         }
         Ok(relation)
+    }
+
+    async fn get_by_identity(
+        &self,
+        event_id: &str,
+        entity_type: &str,
+        entity_id: &str,
+        relation_type: &str,
+    ) -> Result<Option<EventRelation>, CalendarCoreError> {
+        let row = sqlx::query(
+            "SELECT id::text, event_id, entity_type, entity_id, relation_type, source, confidence, created_at
+             FROM event_relations
+             WHERE event_id = $1
+               AND entity_type = $2
+               AND entity_id = $3
+               AND relation_type = $4
+             ORDER BY created_at ASC
+             LIMIT 1",
+        )
+        .bind(event_id)
+        .bind(entity_type)
+        .bind(entity_id)
+        .bind(relation_type)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|r| {
+            Ok(EventRelation {
+                id: r.try_get("id")?,
+                event_id: r.try_get("event_id")?,
+                entity_type: r.try_get("entity_type")?,
+                entity_id: r.try_get("entity_id")?,
+                relation_type: r.try_get("relation_type")?,
+                source: r.try_get("source")?,
+                confidence: f64::from(r.try_get::<f32, _>("confidence")?),
+                created_at: r.try_get("created_at")?,
+            })
+        })
+        .transpose()
     }
 }

@@ -601,7 +601,7 @@ fn whatsapp_business_cloud_executor_is_smoke_gated_and_vault_token_only() {
         read(root.join("backend/src/application/whatsapp_command_executor.rs"));
     let bootstrap_source = read(root.join("backend/src/application/bootstrap.rs"));
     let capabilities_source =
-        read(root.join("backend/src/app/api_support/messaging_integrations.rs"));
+        read(root.join("backend/src/app/api_support/whatsapp_capability_catalog.rs"));
 
     assert!(
         contracts_source.contains("struct WhatsAppProviderApiAccessToken")

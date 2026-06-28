@@ -5,6 +5,7 @@ use crate::platform::secrets::ResolvedSecret;
 
 use super::super::errors::ConfigError;
 use super::super::google::GoogleOAuthClientConfig;
+use super::super::parsing::parse_bool_env;
 use super::AppConfig;
 
 pub(super) fn apply_bundled_google_oauth_client(config: &mut AppConfig) -> Result<(), ConfigError> {
@@ -54,6 +55,22 @@ pub(super) fn apply_provider_env(
         }
         "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH" => {
             config.google_oauth_client = Some(google_oauth_client_from_path(value)?);
+        }
+        "HERMES_ZOOM_TOKEN_MAINTENANCE_SCHEDULER_ENABLED" => {
+            config.zoom_token_maintenance_scheduler_enabled = parse_bool_env(
+                "HERMES_ZOOM_TOKEN_MAINTENANCE_SCHEDULER_ENABLED",
+                value.trim(),
+            )?;
+        }
+        "HERMES_ZOOM_RECORDING_SYNC_SCHEDULER_ENABLED" => {
+            config.zoom_recording_sync_scheduler_enabled =
+                parse_bool_env("HERMES_ZOOM_RECORDING_SYNC_SCHEDULER_ENABLED", value.trim())?;
+        }
+        "HERMES_ZOOM_RETENTION_CLEANUP_SCHEDULER_ENABLED" => {
+            config.zoom_retention_cleanup_scheduler_enabled = parse_bool_env(
+                "HERMES_ZOOM_RETENTION_CLEANUP_SCHEDULER_ENABLED",
+                value.trim(),
+            )?;
         }
         _ => return Ok(false),
     }

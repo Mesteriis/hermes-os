@@ -107,7 +107,14 @@ impl PersonIdentityCandidatePayload {
                 format!("{PERSON_IDENTITY_ID_PREFIX}merge_persons:{left}:{right}")
             }
             PersonIdentityCandidateKind::AttachEmailAddress => {
-                format!("{PERSON_IDENTITY_ID_PREFIX}attach_email_address:{left}:{right}")
+                let email = self
+                    .email_address
+                    .clone()
+                    .unwrap_or_else(|| String::from("missing"));
+                format!(
+                    "{PERSON_IDENTITY_ID_PREFIX}attach_email_address:{left}:{}:{email}",
+                    email.len()
+                )
             }
             PersonIdentityCandidateKind::SplitPerson => {
                 format!("{PERSON_IDENTITY_ID_PREFIX}split_person:{left}:{right}")

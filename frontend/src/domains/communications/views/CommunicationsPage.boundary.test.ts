@@ -24,6 +24,7 @@ describe('CommunicationsPage folder management integration', () => {
 
 		expect(source).toContain('useCommunicationsPageController')
 		expect(source).toContain("../../../shared/mailSetup/AccountSetupModal.vue")
+		expect(source).toContain("import CommunicationsCallsPanel from '../components/CommunicationsCallsPanel.vue'")
 		expect(source).toContain('@generate-ai-reply="handleGenerateAiReply"')
 		expect(source).toContain('@apply-ai-reply="handleApplyAiReply"')
 		expect(source).toContain('@review-security="handleReviewSecurity"')
@@ -73,6 +74,19 @@ describe('CommunicationsPage folder management integration', () => {
 		expect(controllerSource).not.toContain("from '../components/")
 		expect(controllerSource).not.toContain('fetch(')
 		expect(controllerSource).not.toContain('ApiClient')
+	})
+
+	it('routes provider-neutral calls and meetings sections into dedicated communication surfaces', () => {
+		const source = readFileSync(
+			new URL('./CommunicationsPage.vue', import.meta.url),
+			'utf8'
+		)
+
+		expect(source).toContain("v-else-if=\"nav.activeCommunicationSection === 'calls'\"")
+		expect(source).toContain("v-else-if=\"nav.activeCommunicationSection === 'meetings'\"")
+		expect(source).toContain('<CommunicationsCallsPanel')
+		expect(source).toContain('mode="calls"')
+		expect(source).toContain('mode="meetings"')
 	})
 
 	it('keeps selected-message side-effect orchestration in a focused controller helper', () => {

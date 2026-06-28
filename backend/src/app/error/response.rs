@@ -110,6 +110,7 @@ fn parts(error: ApiError) -> ErrorParts {
         ApiError::AiControlCenter(error) => ai::control_center_error_parts(error),
         ApiError::Telegram(error) => integrations::telegram_error_parts(error),
         ApiError::WhatsappWeb(error) => integrations::whatsapp_web_error_parts(error),
+        ApiError::Zoom(error) => integrations::zoom_error_parts(error),
         ApiError::Automation(error) => integrations::automation_error_parts(error),
         ApiError::Call(error) => integrations::call_error_parts(error),
     }

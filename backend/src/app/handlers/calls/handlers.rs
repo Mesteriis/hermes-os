@@ -8,14 +8,14 @@ use crate::app::api_support::{
 };
 use crate::app::{ApiError, AppState};
 use crate::platform::calls::{
-    CallTranscript, FixtureSpeechToTextProvider, NewCallTranscript, SpeechToTextProvider,
-    TelegramCall, TranscriptStatus,
+    CallTranscript, FixtureSpeechToTextProvider, NewCallTranscript, ProviderCall,
+    SpeechToTextProvider, TranscriptStatus,
 };
 
 pub(crate) async fn post_call(
     State(state): State<AppState>,
     Json(request): Json<CallApiRequest>,
-) -> Result<Json<TelegramCall>, ApiError> {
+) -> Result<Json<ProviderCall>, ApiError> {
     Ok(Json(
         call_intelligence_store(&state)?
             .upsert_call(&request.into_call())
@@ -28,7 +28,12 @@ pub(crate) async fn get_calls(
     Query(query): Query<TelegramListQuery>,
 ) -> Result<Json<CallListResponse>, ApiError> {
     let items = call_intelligence_store(&state)?
-        .list_calls(query.account_id.as_deref(), query.limit.unwrap_or(50))
+        .list_calls(
+            query.account_id.as_deref(),
+            query.provider_chat_id.as_deref(),
+            query.provider.as_deref(),
+            query.limit.unwrap_or(50),
+        )
         .await?;
 
     Ok(Json(CallListResponse { items }))

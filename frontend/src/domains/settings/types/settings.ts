@@ -16,12 +16,16 @@ export {
 export interface ProviderAccount {
   account_id: string
   provider_kind: 'gmail' | 'icloud' | 'imap' | string
-  email: string
-  label: string
-  is_active: boolean
-  is_authenticated: boolean
-  last_sync_at: string | null
+  display_name: string
+  external_account_id: string
+  config: Record<string, unknown>
   created_at: string
+  updated_at: string
+  email?: string | null
+  label?: string | null
+  is_active?: boolean
+  is_authenticated?: boolean
+  last_sync_at?: string | null
 }
 
 export interface ProviderAccountListResponse {

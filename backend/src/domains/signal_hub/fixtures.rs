@@ -114,7 +114,7 @@ const DEVELOPMENT_PROFILE_POLICIES: [SystemProfilePolicyFixture; 2] = [
     },
 ];
 
-const TESTING_PROFILE_POLICIES: [SystemProfilePolicyFixture; 11] = [
+const TESTING_PROFILE_POLICIES: [SystemProfilePolicyFixture; 12] = [
     SystemProfilePolicyFixture {
         scope: SignalPolicyScope::Source,
         source_code: Some("ai"),
@@ -192,9 +192,16 @@ const TESTING_PROFILE_POLICIES: [SystemProfilePolicyFixture; 11] = [
         mode: SignalPolicyMode::Muted,
         reason: "testing profile mutes WhatsApp signals",
     },
+    SystemProfilePolicyFixture {
+        scope: SignalPolicyScope::Source,
+        source_code: Some("zoom"),
+        event_pattern: None,
+        mode: SignalPolicyMode::Muted,
+        reason: "testing profile mutes Zoom signals",
+    },
 ];
 
-const MAINTENANCE_PROFILE_POLICIES: [SystemProfilePolicyFixture; 3] = [
+const MAINTENANCE_PROFILE_POLICIES: [SystemProfilePolicyFixture; 4] = [
     SystemProfilePolicyFixture {
         scope: SignalPolicyScope::Source,
         source_code: Some("mail"),
@@ -215,6 +222,13 @@ const MAINTENANCE_PROFILE_POLICIES: [SystemProfilePolicyFixture; 3] = [
         event_pattern: None,
         mode: SignalPolicyMode::Paused,
         reason: "maintenance profile pauses WhatsApp capture",
+    },
+    SystemProfilePolicyFixture {
+        scope: SignalPolicyScope::Source,
+        source_code: Some("zoom"),
+        event_pattern: None,
+        mode: SignalPolicyMode::Paused,
+        reason: "maintenance profile pauses Zoom capture",
     },
 ];
 
@@ -270,6 +284,7 @@ mod tests {
                 "mail",
                 "telegram",
                 "whatsapp",
+                "zoom",
                 "github",
                 "browser",
                 "rss",

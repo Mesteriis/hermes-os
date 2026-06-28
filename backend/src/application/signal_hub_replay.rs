@@ -23,7 +23,8 @@ use crate::workflows::project_link_review_effects::PROJECT_LINK_REVIEW_EVENT_TYP
 
 use super::{
     PERSON_DERIVED_EVIDENCE_CONSUMER, PROJECT_LINK_REVIEW_EFFECTS_CONSUMER,
-    project_link_review_effect_event, project_person_derived_evidence_event,
+    ZOOM_CALENDAR_MATCHING_CONSUMER, project_link_review_effect_event,
+    project_person_derived_evidence_event, project_zoom_calendar_matching_event,
 };
 
 const DEFAULT_REPLAY_BATCH_SIZE: u32 = 500;
@@ -31,6 +32,7 @@ const COMMUNICATION_MESSAGES_PROJECTION: &str = "communication_messages";
 const PERSON_DERIVED_EVIDENCE_PROJECTION: &str = "person_derived_evidence";
 const PROJECT_LINK_REVIEW_EFFECTS_PROJECTION: &str = "project_link_review_effects";
 const TIMELINE_EVENT_LOG_PROJECTION: &str = "timeline_event_log";
+const ZOOM_CALENDAR_MATCHING_PROJECTION: &str = "zoom_calendar_matching";
 const TIMELINE_EVENT_LOG_CURSOR: &str = "signal_hub.timeline_event_log";
 
 #[derive(Clone)]
@@ -185,6 +187,10 @@ impl SignalHubReplayService {
             }
             PROJECT_LINK_REVIEW_EFFECTS_PROJECTION => {
                 self.rebuild_project_link_review_effects_projection(request)
+                    .await
+            }
+            ZOOM_CALENDAR_MATCHING_PROJECTION => {
+                self.rebuild_zoom_calendar_matching_projection(request)
                     .await
             }
             TIMELINE_EVENT_LOG_PROJECTION => self.rebuild_timeline_projection(request).await,
@@ -636,6 +642,85 @@ impl SignalHubReplayService {
         Ok(u32::try_from(replay_events.len()).unwrap_or(u32::MAX))
     }
 
+    async fn rebuild_zoom_calendar_matching_projection(
+        &self,
+        request: &SignalReplayRequest,
+    ) -> Result<u32, SignalHubError> {
+        let replay_events = self
+            .list_matching_projection_events(request)
+            .await?
+            .into_iter()
+            .filter(|event| {
+                supports_zoom_calendar_matching_projection_event(&event.event.event_type)
+            })
+            .collect::<Vec<_>>();
+        let Some(first_position) = replay_events.first().map(|event| event.position) else {
+            return Ok(0);
+        };
+        let last_position = replay_events
+            .last()
+            .map(|event| event.position)
+            .unwrap_or(first_position);
+        let positions: Vec<i64> = replay_events.iter().map(|event| event.position).collect();
+        let consumer_store = EventConsumerStore::new(self.event_store.pool().clone());
+        let cleared_processed = consumer_store
+            .clear_processed_for_positions(ZOOM_CALENDAR_MATCHING_CONSUMER, &positions)
+            .await?;
+        consumer_store
+            .clear_failures_for_positions(ZOOM_CALENDAR_MATCHING_CONSUMER, &positions)
+            .await?;
+        consumer_store
+            .rewind_position(
+                ZOOM_CALENDAR_MATCHING_CONSUMER,
+                first_position.saturating_sub(1),
+            )
+            .await?;
+
+        for replay_event in &replay_events {
+            project_zoom_calendar_matching_event(
+                self.event_store.pool().clone(),
+                replay_event.clone(),
+            )
+            .await
+            .map_err(|error| {
+                SignalHubError::InvalidReplayRequest(format!(
+                    "zoom_calendar_matching projection replay failed: {error}"
+                ))
+            })?;
+            consumer_store
+                .record_processed(ZOOM_CALENDAR_MATCHING_CONSUMER, replay_event)
+                .await?;
+            consumer_store
+                .mark_dead_letter_replayed_for_event(
+                    ZOOM_CALENDAR_MATCHING_CONSUMER,
+                    replay_event.position,
+                )
+                .await?;
+            consumer_store
+                .clear_failure(ZOOM_CALENDAR_MATCHING_CONSUMER, replay_event.position)
+                .await?;
+            consumer_store
+                .save_position(ZOOM_CALENDAR_MATCHING_CONSUMER, replay_event.position)
+                .await?;
+        }
+
+        self.append_projection_lifecycle_event(
+            "calendar.zoom_matching.updated",
+            request,
+            json!({
+                "target_projection": ZOOM_CALENDAR_MATCHING_PROJECTION,
+                "consumer_name": ZOOM_CALENDAR_MATCHING_CONSUMER,
+                "from_position": first_position,
+                "to_position": last_position,
+                "replayed_count": replay_events.len(),
+                "cleared_processed_count": cleared_processed,
+            }),
+        )
+        .await?;
+
+        Ok(u32::try_from(replay_events.len()).unwrap_or(u32::MAX))
+    }
+
     async fn prepare_consumer_replay(
         &self,
         consumer_name: &str,
@@ -706,6 +791,10 @@ fn supports_person_derived_evidence_projection_event(event_type: &str) -> bool {
 
 fn supports_project_link_review_effects_projection_event(event_type: &str) -> bool {
     event_type == PROJECT_LINK_REVIEW_EVENT_TYPE
+}
+
+fn supports_zoom_calendar_matching_projection_event(event_type: &str) -> bool {
+    event_type == crate::platform::events::bus::zoom_event_types::MEETING_OBSERVED
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -80,6 +80,18 @@ impl AppConfig {
         self.google_oauth_client.as_ref()
     }
 
+    pub fn zoom_token_maintenance_scheduler_enabled(&self) -> bool {
+        self.zoom_token_maintenance_scheduler_enabled
+    }
+
+    pub fn zoom_recording_sync_scheduler_enabled(&self) -> bool {
+        self.zoom_recording_sync_scheduler_enabled
+    }
+
+    pub fn zoom_retention_cleanup_scheduler_enabled(&self) -> bool {
+        self.zoom_retention_cleanup_scheduler_enabled
+    }
+
     pub fn ai_provider(&self) -> AiRuntimeProvider {
         self.ai_provider
     }

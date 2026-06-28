@@ -207,6 +207,9 @@ fn provider_signal_source_code(provider_kind: CommunicationProviderKind) -> &'st
         }
         CommunicationProviderKind::WhatsappWeb
         | CommunicationProviderKind::WhatsappBusinessCloud => "whatsapp",
+        CommunicationProviderKind::ZoomUser | CommunicationProviderKind::ZoomServerToServer => {
+            "zoom"
+        }
     }
 }
 
@@ -348,6 +351,17 @@ fn provider_account_signal_status(account: &ProviderAccount) -> &'static str {
             match account.config.get("runtime").and_then(Value::as_str) {
                 Some("blocked") | Some("live_blocked") => "awaiting_user_action",
                 Some("manual_webview") => "connecting",
+                _ => "connected",
+            }
+        }
+        CommunicationProviderKind::ZoomUser | CommunicationProviderKind::ZoomServerToServer => {
+            match account
+                .config
+                .get("lifecycle_state")
+                .and_then(Value::as_str)
+            {
+                Some("removed") => "removed",
+                Some("blocked") => "awaiting_user_action",
                 _ => "connected",
             }
         }

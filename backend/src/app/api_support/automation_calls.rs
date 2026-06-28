@@ -81,8 +81,8 @@ pub(crate) struct CallApiRequest {
 }
 
 impl CallApiRequest {
-    pub(crate) fn into_call(self) -> NewTelegramCall {
-        NewTelegramCall {
+    pub(crate) fn into_call(self) -> NewProviderCall {
+        NewProviderCall {
             call_id: self.call_id,
             account_id: self.account_id,
             provider_call_id: self.provider_call_id,
@@ -99,7 +99,7 @@ impl CallApiRequest {
 
 #[derive(Serialize)]
 pub(crate) struct CallListResponse {
-    pub(crate) items: Vec<TelegramCall>,
+    pub(crate) items: Vec<ProviderCall>,
 }
 
 #[derive(Deserialize)]

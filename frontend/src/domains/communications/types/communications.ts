@@ -227,6 +227,45 @@ export type ThreadListResponse = {
 }
 export type ThreadMessagesResponse = { items: ThreadMessage[] }
 
+export type ProviderCall = {
+  call_id: string
+  account_id: string
+  provider_call_id: string
+  provider_chat_id: string
+  direction: string
+  call_state: string
+  started_at: string | null
+  ended_at: string | null
+  transcription_policy_id: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export type ProviderCallListResponse = {
+  items: ProviderCall[]
+}
+
+export type ProviderCallTranscript = {
+  transcript_id: string
+  call_id: string
+  account_id: string
+  provider_chat_id: string
+  transcript_status: string
+  stt_provider: string
+  source_audio_ref: string | null
+  language_code: string | null
+  transcript_text: string
+  segments: unknown
+  provenance: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export type ProviderCallTranscriptResponse = {
+  transcript: ProviderCallTranscript | null
+}
+
 export type MessageAnalyzeResponse = {
   message_id: string
   analyzed: boolean

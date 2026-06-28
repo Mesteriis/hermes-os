@@ -223,6 +223,34 @@ impl CommunicationProviderAccountStore {
         .await
     }
 
+    pub async fn update_whatsapp_lifecycle_state(
+        &self,
+        account_id: &str,
+        lifecycle_state: &str,
+    ) -> Result<(), CommunicationIngestionError> {
+        validate_non_empty_field("account_id", account_id)?;
+        validate_non_empty_field("lifecycle_state", lifecycle_state)?;
+        sqlx::query(
+            r#"
+            UPDATE communication_provider_accounts
+            SET config = jsonb_set(
+                    COALESCE(config, '{}'::jsonb),
+                    '{lifecycle_state}',
+                    to_jsonb($2::text),
+                    true
+                ),
+                updated_at = now()
+            WHERE account_id = $1
+              AND provider_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
+            "#,
+        )
+        .bind(account_id)
+        .bind(lifecycle_state)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn mark_logged_out(
         &self,
         account_id: &str,

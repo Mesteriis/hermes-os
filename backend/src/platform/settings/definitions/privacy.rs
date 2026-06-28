@@ -1,0 +1,72 @@
+use serde_json::json;
+
+use super::super::models::{DeclaredApplicationSetting, SettingValueKind};
+
+pub(super) fn declared_settings() -> Vec<DeclaredApplicationSetting> {
+    vec![
+        DeclaredApplicationSetting {
+            setting_key: "privacy.zoom_remote_transcript_download_enabled",
+            category: "privacy",
+            value_kind: SettingValueKind::Boolean,
+            default_value: json!(false),
+            label: "Zoom remote transcript downloads",
+            description: "Allow Hermes to fetch transcript-like text files directly from Zoom recording URLs during webhook processing and manual provider sync.",
+            metadata: json!({
+                "ui_control": "checkbox",
+                "stores_private_content": false,
+                "scope": "zoom",
+                "policy_kind": "owner_visible_opt_in",
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
+            setting_key: "privacy.zoom_remote_recording_download_enabled",
+            category: "privacy",
+            value_kind: SettingValueKind::Boolean,
+            default_value: json!(false),
+            label: "Zoom remote recording downloads",
+            description: "Allow Hermes to fetch non-transcript Zoom recording files directly from Zoom recording URLs during manual provider sync and scheduled recording sync.",
+            metadata: json!({
+                "ui_control": "checkbox",
+                "stores_private_content": true,
+                "scope": "zoom",
+                "policy_kind": "owner_visible_opt_in",
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
+            setting_key: "privacy.zoom_recording_import_retention_days",
+            category: "privacy",
+            value_kind: SettingValueKind::Integer,
+            default_value: json!(0),
+            label: "Zoom recording import retention (days)",
+            description: "Owner-visible retention policy for imported Zoom recording blobs. Set to 0 to retain local imports until explicit removal.",
+            metadata: json!({
+                "ui_control": "number",
+                "stores_private_content": true,
+                "scope": "zoom",
+                "policy_kind": "owner_visible_retention",
+                "min": 0,
+                "max": 3650,
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
+            setting_key: "privacy.zoom_transcript_retention_days",
+            category: "privacy",
+            value_kind: SettingValueKind::Integer,
+            default_value: json!(0),
+            label: "Zoom transcript retention (days)",
+            description: "Owner-visible retention policy for Zoom transcript evidence imported or observed by Hermes. Set to 0 to retain transcript evidence until explicit review or later manual cleanup.",
+            metadata: json!({
+                "ui_control": "number",
+                "stores_private_content": true,
+                "scope": "zoom",
+                "policy_kind": "owner_visible_retention",
+                "min": 0,
+                "max": 3650,
+            }),
+            is_editable: true,
+        },
+    ]
+}

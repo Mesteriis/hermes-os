@@ -33,22 +33,24 @@ use crate::application::provider_runtime_contracts::{
     WhatsAppCredentialBinding, WhatsAppDeleteRequest, WhatsAppEditRequest, WhatsAppForwardRequest,
     WhatsAppMediaDownloadRequest, WhatsAppMediaUploadRequest, WhatsAppPairCodeSession,
     WhatsAppPairCodeStartRequest, WhatsAppProviderCommand, WhatsAppProviderCommandListResponse,
-    WhatsAppProviderCommandResponse, WhatsAppQrLinkSession, WhatsAppQrLinkStartRequest,
-    WhatsAppReactionRequest, WhatsAppReplyRequest, WhatsAppRuntimeHealth,
-    WhatsAppRuntimeRelinkRequest, WhatsAppRuntimeRemoveRequest, WhatsAppRuntimeRemoveResponse,
-    WhatsAppRuntimeRevokeRequest, WhatsAppRuntimeStartRequest, WhatsAppRuntimeStatus,
-    WhatsAppRuntimeStopRequest, WhatsAppStatusPublishRequest, WhatsAppTextSendRequest,
-    WhatsAppVoiceNoteSendRequest, WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupRequest,
-    WhatsappWebAccountSetupResponse, WhatsappWebCallIngestResult, WhatsappWebDeliveryState,
-    WhatsappWebDialogIngestResult, WhatsappWebError, WhatsappWebMediaIngestResult,
-    WhatsappWebMessageDeleteIngestResult, WhatsappWebMessageIngestResult,
-    WhatsappWebMessageUpdateIngestResult, WhatsappWebParticipantIngestResult,
-    WhatsappWebPresenceIngestResult, WhatsappWebReactionIngestResult,
-    WhatsappWebReceiptIngestResult, WhatsappWebRuntimeEventIngestResult,
-    WhatsappWebStatusDeleteIngestResult, WhatsappWebStatusIngestResult,
-    WhatsappWebStatusViewIngestResult, whatsapp_business_cloud_access_token_secret_ref,
-    whatsapp_business_cloud_app_secret_ref, whatsapp_business_cloud_webhook_verify_token_ref,
+    WhatsAppProviderCommandResponse, WhatsAppProviderRuntimeShape, WhatsAppQrLinkSession,
+    WhatsAppQrLinkStartRequest, WhatsAppReactionRequest, WhatsAppReplyRequest,
+    WhatsAppRuntimeHealth, WhatsAppRuntimeRelinkRequest, WhatsAppRuntimeRemoveRequest,
+    WhatsAppRuntimeRemoveResponse, WhatsAppRuntimeRevokeRequest, WhatsAppRuntimeStartRequest,
+    WhatsAppRuntimeStatus, WhatsAppRuntimeStopRequest, WhatsAppStatusPublishRequest,
+    WhatsAppTextSendRequest, WhatsAppVoiceNoteSendRequest, WhatsappLiveAccountSetupRequest,
+    WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse, WhatsappWebCallIngestResult,
+    WhatsappWebDeliveryState, WhatsappWebDialogIngestResult, WhatsappWebError,
+    WhatsappWebMediaIngestResult, WhatsappWebMessageDeleteIngestResult,
+    WhatsappWebMessageIngestResult, WhatsappWebMessageUpdateIngestResult,
+    WhatsappWebParticipantIngestResult, WhatsappWebPresenceIngestResult,
+    WhatsappWebReactionIngestResult, WhatsappWebReceiptIngestResult,
+    WhatsappWebRuntimeEventIngestResult, WhatsappWebStatusDeleteIngestResult,
+    WhatsappWebStatusIngestResult, WhatsappWebStatusViewIngestResult,
+    whatsapp_business_cloud_access_token_secret_ref, whatsapp_business_cloud_app_secret_ref,
+    whatsapp_business_cloud_webhook_verify_token_ref,
 };
+use crate::domains::communications::messages::ProviderChannelMessageStore;
 use crate::domains::communications::storage::AttachmentSafetyScanStatus;
 use crate::platform::communications::{
     NewProviderAccountSecretBinding, ProviderAccount, ProviderAccountSecretPurpose,
@@ -582,10 +584,10 @@ struct UploadAttachmentRef {
 }
 
 pub(crate) async fn get_whatsapp_capabilities(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
 ) -> Result<Json<WhatsappCapabilitiesResponse>, ApiError> {
     Ok(Json(WhatsappCapabilitiesResponse::current(
-        whatsapp_provider_runtime_service(&state)?.provider_shape(),
+        WhatsAppProviderRuntimeShape::WebCompanion,
     )))
 }
 
@@ -948,11 +950,14 @@ pub(crate) async fn post_whatsapp_command_forward(
         .filter(|value| !value.is_empty())
         .is_none()
     {
-        let message = message_store(&state)?
-            .message(&message_id)
+        request.text = whatsapp_forward_source_body(&state, &request.account_id, &message_id)
             .await?
-            .ok_or(ApiError::CommunicationMessageNotFound)?;
-        request.text = Some(message.body_text);
+            .or(whatsapp_forward_source_body(
+                &state,
+                &request.account_id,
+                &request.from_provider_message_id,
+            )
+            .await?);
     }
     let response = whatsapp_provider_runtime_service(&state)?
         .request_forward(
@@ -963,6 +968,33 @@ pub(crate) async fn post_whatsapp_command_forward(
         .await?;
     publish_whatsapp_command_event(&state, &response).await?;
     Ok(Json(response))
+}
+
+async fn whatsapp_forward_source_body(
+    state: &AppState,
+    account_id: &str,
+    message_id_or_provider_id: &str,
+) -> Result<Option<String>, ApiError> {
+    if let Some(message) = message_store(state)?
+        .message(message_id_or_provider_id)
+        .await?
+    {
+        return Ok(Some(message.body_text));
+    }
+
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?;
+    let message = ProviderChannelMessageStore::new(pool.clone())
+        .message_by_provider_record_id(
+            account_id,
+            message_id_or_provider_id,
+            &["whatsapp_web", "whatsapp_business_cloud"],
+        )
+        .await
+        .map_err(WhatsappWebError::from)?;
+    Ok(message.map(|message| message.body_text))
 }
 
 pub(crate) async fn post_whatsapp_command_edit(
@@ -1532,7 +1564,7 @@ pub(crate) async fn post_whatsapp_sync_history(
     )
     .await?;
     let runtime_kind = current_whatsapp_runtime_kind(&state, &account_id).await?;
-    let items = match whatsapp_provider_runtime_service(&state)?
+    let mut items = match whatsapp_provider_runtime_service(&state)?
         .recent_messages(Some(&account_id), Some(&provider_chat_id), limit)
         .await
     {
@@ -1566,6 +1598,9 @@ pub(crate) async fn post_whatsapp_sync_history(
             return Err(error.into());
         }
     };
+    for item in &mut items {
+        item.provider_chat_id = Some(provider_chat_id.clone());
+    }
     let response = WhatsAppHistorySyncResponse {
         account_id: account_id.clone(),
         provider_chat_id: provider_chat_id.clone(),
@@ -1791,7 +1826,7 @@ pub(crate) async fn post_whatsapp_sync_statuses(
     )
     .await?;
     let runtime_kind = current_whatsapp_runtime_kind(&state, &account_id).await?;
-    let items = match whatsapp_provider_runtime_service(&state)?
+    let mut items = match whatsapp_provider_runtime_service(&state)?
         .recent_messages(Some(&account_id), Some(&provider_chat_id), limit)
         .await
     {
@@ -1825,6 +1860,9 @@ pub(crate) async fn post_whatsapp_sync_statuses(
             return Err(error.into());
         }
     };
+    for item in &mut items {
+        item.provider_chat_id = Some(provider_chat_id.clone());
+    }
     let response = WhatsAppStatusSyncResponse {
         account_id: account_id.clone(),
         provider_chat_id: provider_chat_id.clone(),
@@ -3203,7 +3241,37 @@ pub(crate) async fn post_whatsapp_fixture_runtime_event(
         request.observed_at,
     )
     .await?;
+    project_runtime_bridge_lifecycle_state(&state, &request).await?;
     Ok(Json(result))
+}
+
+async fn project_runtime_bridge_lifecycle_state(
+    state: &AppState,
+    request: &NewWhatsappWebRuntimeEvent,
+) -> Result<(), ApiError> {
+    let Some(lifecycle_state) = request.effective_lifecycle_state() else {
+        return Ok(());
+    };
+    if !matches!(
+        lifecycle_state,
+        "linked"
+            | "available"
+            | "syncing"
+            | "degraded"
+            | "blocked"
+            | "revoked"
+            | "removed"
+            | "qr_pending"
+            | "pair_code_pending"
+            | "created"
+    ) {
+        return Ok(());
+    }
+    communication_provider_account_store(state)?
+        .update_whatsapp_lifecycle_state(&request.account_id, lifecycle_state)
+        .await
+        .map_err(|error| WhatsappWebError::ProviderAccountStore(error.to_string()))?;
+    Ok(())
 }
 
 pub(crate) async fn post_whatsapp_fixture_dialog(
@@ -3259,13 +3327,14 @@ pub(crate) async fn post_whatsapp_fixture_participant(
     let result = whatsapp_fixture_ingest_service(&state)?
         .ingest_participant(&request)
         .await?;
+    let provider_member_id = request.effective_provider_member_id();
     publish_whatsapp_projection_event(
         &state,
         whatsapp_event_types::PARTICIPANT_CHANGED,
         "whatsapp_participant",
         &result.participant_id,
         Some(&request.provider_chat_id),
-        Some(&request.provider_member_id),
+        Some(provider_member_id),
         json!({
             "account_id": request.account_id,
             "conversation_id": result.conversation_id,
@@ -3273,7 +3342,7 @@ pub(crate) async fn post_whatsapp_fixture_participant(
             "identity_id": result.identity_id,
             "raw_record_id": result.raw_record_id,
             "provider_chat_id": request.provider_chat_id,
-            "provider_member_id": request.provider_member_id,
+            "provider_member_id": provider_member_id,
             "provider_identity_id": request.provider_identity_id,
             "display_name": request.display_name,
             "role": result.current_role,
@@ -4727,6 +4796,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_runtime_event(
         request.observed_at,
     )
     .await?;
+    project_runtime_bridge_lifecycle_state(&state, &request).await?;
     Ok(Json(result))
 }
 
@@ -4781,13 +4851,14 @@ pub(crate) async fn post_whatsapp_runtime_bridge_participant(
     let result = whatsapp_fixture_ingest_service(&state)?
         .ingest_runtime_bridge_participant(&request)
         .await?;
+    let provider_member_id = request.effective_provider_member_id();
     publish_whatsapp_projection_event(
         &state,
         whatsapp_event_types::PARTICIPANT_CHANGED,
         "whatsapp_participant",
         &result.participant_id,
         Some(&request.provider_chat_id),
-        Some(&request.provider_member_id),
+        Some(provider_member_id),
         json!({
             "account_id": request.account_id,
             "conversation_id": result.conversation_id,
@@ -4795,7 +4866,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_participant(
             "identity_id": result.identity_id,
             "raw_record_id": result.raw_record_id,
             "provider_chat_id": request.provider_chat_id,
-            "provider_member_id": request.provider_member_id,
+            "provider_member_id": provider_member_id,
             "provider_identity_id": request.provider_identity_id,
             "display_name": request.display_name,
             "role": result.current_role,
@@ -4920,6 +4991,12 @@ async fn publish_whatsapp_sync_event(
     payload: serde_json::Value,
 ) -> Result<(), ApiError> {
     let now = Utc::now();
+    let scope = payload
+        .get("scope")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("unknown");
+    let source_id = format!("{subject_id}:{scope}");
     let event = NewEventEnvelope::builder(
         whatsapp_event_id("sync", subject_id, now),
         event_type.to_owned(),
@@ -4929,7 +5006,7 @@ async fn publish_whatsapp_sync_event(
             "account_id": account_id,
             "actor_id": AUDIT_ACTOR_ID,
             "kind": "whatsapp_sync_requests",
-            "source_id": subject_id,
+            "source_id": source_id,
         }),
         json!({
             "id": subject_id,
@@ -5182,7 +5259,7 @@ async fn capture_whatsapp_runtime_lifecycle_signal(
         .capture_runtime_lifecycle_event(
             &status.account_id,
             &provider_event_id,
-            "runtime.status_changed",
+            source,
             Some(&status.status),
             Some(&status.status),
             Some(
@@ -5780,10 +5857,7 @@ async fn list_whatsapp_sync_members(
                     .try_get("display_name")
                     .map_err(WhatsappWebError::from)?,
                 role: row.try_get("role").map_err(WhatsappWebError::from)?,
-                status: participant_metadata
-                    .get("status")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
+                status: Some("active".to_owned()),
                 identity_kind: row
                     .try_get("identity_kind")
                     .map_err(WhatsappWebError::from)?,
@@ -5818,20 +5892,22 @@ async fn list_whatsapp_sync_presence(
     let rows = sqlx::query(
         r#"
         SELECT
-            identity_id,
-            account_id,
-            channel_kind,
-            provider_identity_id,
-            identity_kind,
-            display_name,
-            address,
-            metadata
-        FROM communication_identities
-        WHERE account_id = $1
-          AND channel_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
-          AND metadata ? 'presence_state'
-          AND ($2::text IS NULL OR metadata->>'presence_provider_chat_id' = $2)
-        ORDER BY COALESCE(metadata->>'presence_observed_at', '') DESC, identity_id ASC
+            identity.identity_id,
+            identity.account_id,
+            channel.channel_kind,
+            identity.provider_identity_id,
+            identity.identity_kind,
+            identity.display_name,
+            identity.address,
+            identity.metadata
+        FROM communication_identities identity
+        JOIN communication_channels channel
+          ON channel.channel_id = identity.channel_id
+        WHERE identity.account_id = $1
+          AND channel.channel_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
+          AND identity.metadata ? 'presence_state'
+          AND ($2::text IS NULL OR identity.metadata->>'presence_provider_chat_id' = $2)
+        ORDER BY COALESCE(identity.metadata->>'presence_observed_at', '') DESC, identity.identity_id ASC
         LIMIT $3
         "#,
     )
@@ -5972,7 +6048,7 @@ async fn list_whatsapp_sync_contacts(
         SELECT
             identity.identity_id,
             identity.account_id,
-            identity.channel_kind,
+            channel.channel_kind,
             identity.provider_identity_id,
             identity.identity_kind,
             identity.display_name,
@@ -5981,6 +6057,8 @@ async fn list_whatsapp_sync_contacts(
             whatsapp_trace.metadata AS whatsapp_trace_metadata,
             phone_trace.metadata AS phone_trace_metadata
         FROM communication_identities identity
+        JOIN communication_channels channel
+          ON channel.channel_id = identity.channel_id
         LEFT JOIN person_identities whatsapp_trace
           ON whatsapp_trace.source = 'communication_projection'
          AND whatsapp_trace.status = 'active'
@@ -5992,7 +6070,7 @@ async fn list_whatsapp_sync_contacts(
          AND phone_trace.identity_type = 'phone'
          AND phone_trace.identity_value = identity.address
         WHERE identity.account_id = $1
-          AND identity.channel_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
+          AND channel.channel_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
         ORDER BY identity.updated_at DESC, identity.identity_id ASC
         LIMIT $2
         "#,
@@ -6083,7 +6161,7 @@ async fn list_whatsapp_sync_media(
             a.raw_record_id,
             m.account_id,
             m.channel_kind,
-            c.provider_conversation_id,
+            COALESCE(c.provider_conversation_id, m.conversation_id) AS provider_conversation_id,
             m.provider_record_id,
             a.provider_attachment_id,
             a.filename,
@@ -6101,11 +6179,13 @@ async fn list_whatsapp_sync_media(
         FROM communication_attachments a
         JOIN communication_messages m ON m.message_id = a.message_id
         JOIN communication_mail_blobs b ON b.blob_id = a.blob_id
-        LEFT JOIN communication_conversations c ON c.conversation_id = m.conversation_id
+        LEFT JOIN communication_conversations c
+          ON c.conversation_id = m.conversation_id
+          OR c.provider_conversation_id = m.conversation_id
         WHERE m.account_id = $1
           AND m.local_state = 'active'
           AND m.channel_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
-          AND ($2::text IS NULL OR c.provider_conversation_id = $2)
+          AND ($2::text IS NULL OR COALESCE(c.provider_conversation_id, m.conversation_id) = $2)
           AND ($3::text IS NULL OR a.content_type ILIKE $3 || '%')
         ORDER BY COALESCE(m.occurred_at, m.projected_at) DESC, a.created_at DESC, a.attachment_id ASC
         LIMIT $4

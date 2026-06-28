@@ -30,6 +30,12 @@ pub(crate) fn whatsapp_secret_reference_store(
     Ok(SecretReferenceStore::new(database_pool(state)?))
 }
 
+pub(crate) fn zoom_secret_reference_store(
+    state: &AppState,
+) -> Result<SecretReferenceStore, ApiError> {
+    Ok(SecretReferenceStore::new(database_pool(state)?))
+}
+
 pub(crate) fn telegram_runtime_use_case_context(
     state: &AppState,
 ) -> Result<crate::application::telegram_runtime::TelegramRuntimeUseCaseContext<'_>, ApiError> {
@@ -103,6 +109,15 @@ pub(crate) fn whatsapp_provider_runtime_service(
 ) -> Result<crate::application::WhatsappProviderRuntimeApplicationService, ApiError> {
     Ok(crate::application::whatsapp_provider_runtime_service(
         database_pool(state)?,
+    ))
+}
+
+pub(crate) fn zoom_provider_runtime_service(
+    state: &AppState,
+) -> Result<crate::application::ZoomProviderRuntimeApplicationService, ApiError> {
+    Ok(crate::application::zoom_provider_runtime_service(
+        database_pool(state)?,
+        state.event_bus.clone(),
     ))
 }
 

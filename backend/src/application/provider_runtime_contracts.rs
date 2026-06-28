@@ -82,6 +82,26 @@ pub(crate) use crate::integrations::whatsapp::runtime::{
     whatsapp_business_cloud_runtime, whatsapp_business_cloud_webhook_verify_token_ref,
     whatsapp_native_md_runtime, whatsapp_provider_runtime_mux, whatsapp_web_companion_runtime,
 };
+pub(crate) use crate::integrations::zoom::client::ZoomStore as ZoomProviderRuntimeStore;
+pub(crate) use crate::integrations::zoom::client::{
+    ZoomAccount, ZoomAccountListResponse, ZoomAccountSetupRequest, ZoomAccountSetupResponse,
+    ZoomAuditEventResponse, ZoomAuthorizationResult, ZoomError, ZoomLiveAccountSetupRequest,
+    ZoomMeetingIngestResult, ZoomMeetingObservationRequest, ZoomOAuthCompleteRequest,
+    ZoomOAuthPendingGrant, ZoomOAuthStartRequest, ZoomOAuthStartResponse,
+    ZoomRecordingImportAuditResponse, ZoomRecordingImportRemoveRequest,
+    ZoomRecordingImportRemoveResponse, ZoomRecordingIngestResult,
+    ZoomRecordingMediaDownloadRequest, ZoomRecordingMediaImportResult,
+    ZoomRecordingObservationRequest, ZoomRecordingSyncRequest, ZoomRecordingSyncResult,
+    ZoomRetentionCleanupItem, ZoomRetentionCleanupRequest, ZoomRetentionCleanupResponse,
+    ZoomRuntimeRemoveRequest, ZoomRuntimeRemoveResponse, ZoomRuntimeStartRequest,
+    ZoomRuntimeStatus, ZoomRuntimeStopRequest, ZoomServerToServerAuthorizeRequest,
+    ZoomTokenMaintenanceRequest, ZoomTokenMaintenanceResult, ZoomTokenRefreshRequest,
+    ZoomTokenRefreshResult, ZoomTranscriptFileImportRequest, ZoomTranscriptFileImportResult,
+    ZoomTranscriptIngestResult, ZoomTranscriptObservationRequest, ZoomWebhookSubscription,
+    ZoomWebhookSubscriptionReconcileRequest, ZoomWebhookSubscriptionReconcileResult,
+    ZoomWebhookSubscriptionRemoveRequest, ZoomWebhookSubscriptionRemoveResult,
+    ZoomWebhookSubscriptionStatusRequest, ZoomWebhookSubscriptionStatusResult,
+};
 
 pub(crate) type WhatsAppProviderRuntimeRef = Arc<dyn WhatsAppProviderRuntime>;
 
@@ -153,5 +173,30 @@ pub(crate) fn whatsapp_provider_runtime(pool: PgPool) -> WhatsAppProviderRuntime
         web_companion_runtime,
         native_md_runtime,
         business_cloud_runtime,
+    )
+}
+
+pub(crate) fn zoom_provider_runtime_store(
+    pool: PgPool,
+    event_bus: crate::platform::events::EventBus,
+) -> ZoomProviderRuntimeStore {
+    ZoomProviderRuntimeStore::new(
+        pool.clone(),
+        Arc::new(
+            crate::domains::communications::core::CommunicationProviderAccountStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            crate::domains::communications::storage::CommunicationStorageStore::new(pool.clone()),
+        ),
+        crate::platform::calls::CallIntelligenceStore::new(pool.clone()),
+        crate::platform::events::EventStore::new(pool),
+        event_bus,
     )
 }

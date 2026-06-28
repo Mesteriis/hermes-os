@@ -1,5 +1,6 @@
 mod ai;
 mod frontend;
+mod privacy;
 mod server;
 #[cfg(test)]
 mod tests;
@@ -24,6 +25,7 @@ pub(crate) fn declared_application_settings() -> Vec<DeclaredApplicationSetting>
     let mut settings = Vec::new();
     settings.extend(server::declared_settings());
     settings.extend(frontend::declared_settings());
+    settings.extend(privacy::declared_settings());
     settings.extend(ai::declared_settings());
     settings.extend(ui::declared_settings());
     settings

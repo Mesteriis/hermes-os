@@ -130,10 +130,21 @@ impl ProviderChannelMessageStore {
                 sender_display_name,
                 delivery_state,
                 message_metadata
-            FROM communication_messages
-            WHERE channel_kind = ANY($1)
-              AND ($2::text IS NULL OR account_id = $2)
-              AND ($3::text IS NULL OR conversation_id = $3)
+            FROM communication_messages message
+            WHERE message.channel_kind = ANY($1)
+              AND ($2::text IS NULL OR message.account_id = $2)
+              AND (
+                  $3::text IS NULL
+                  OR message.conversation_id = $3
+                  OR EXISTS (
+                      SELECT 1
+                      FROM communication_conversations conversation
+                      WHERE conversation.conversation_id = message.conversation_id
+                        AND conversation.account_id = message.account_id
+                        AND conversation.provider_conversation_id = $3
+                        AND conversation.channel_kind = ANY($1)
+                  )
+              )
             ORDER BY COALESCE(occurred_at, projected_at) DESC, message_id ASC
             LIMIT $4
             "#,

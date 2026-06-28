@@ -8,6 +8,7 @@ import CommunicationsRailPane from '../components/CommunicationsRailPane.vue'
 import CommunicationsWorkbench from '../components/CommunicationsWorkbench.vue'
 import ComposeDrawer from '../components/ComposeDrawer.vue'
 import CommunicationFolderStrip from '../components/CommunicationFolderStrip.vue'
+import CommunicationsCallsPanel from '../components/CommunicationsCallsPanel.vue'
 import OutboxStatusStrip from '../components/OutboxStatusStrip.vue'
 import SavedSearchStrip from '../components/SavedSearchStrip.vue'
 import TelegramCommunicationsPanel from '../providers/telegram/views/TelegramCommunicationsPanel.vue'
@@ -121,6 +122,14 @@ const {
   <section class="communications-page">
     <TelegramCommunicationsPanel v-if="nav.activeCommunicationSection === 'telegram'" />
     <WhatsAppCommunicationsPanel v-else-if="nav.activeCommunicationSection === 'whatsapp'" />
+    <CommunicationsCallsPanel
+      v-else-if="nav.activeCommunicationSection === 'calls'"
+      mode="calls"
+    />
+    <CommunicationsCallsPanel
+      v-else-if="nav.activeCommunicationSection === 'meetings'"
+      mode="meetings"
+    />
     <template v-else>
     <CommunicationsActionBar
       :search-query="store.messageSearchQuery"

@@ -1032,7 +1032,7 @@ async fn whatsapp_authorized_session_material_is_stored_in_host_vault_against_po
     assert_eq!(remove_body["account_id"], json!(account_id));
     assert_eq!(remove_body["provider_kind"], json!("whatsapp_web"));
     assert_eq!(remove_body["removed"], json!(true));
-    assert_json_array_contains(&remove_body["unbound_secret_refs"], &secret_ref);
+    assert_eq!(remove_body["unbound_secret_refs"], json!([]));
 
     let removed_account = CommunicationIngestionStore::new(pool.clone())
         .provider_account(&account_id)
@@ -3360,7 +3360,7 @@ async fn whatsapp_runtime_bridge_lifecycle_events_record_live_observed_source_in
         WHERE record_kind = 'whatsapp_web_runtime_event'
           AND account_id = $1
           AND payload->>'runtime_event_kind' = 'media.download.progress'
-        ORDER BY created_at DESC
+        ORDER BY captured_at DESC
         LIMIT 1
         "#,
     )
@@ -3380,7 +3380,7 @@ async fn whatsapp_runtime_bridge_lifecycle_events_record_live_observed_source_in
         WHERE record_kind = 'whatsapp_web_runtime_event'
           AND account_id = $1
           AND payload->>'runtime_event_kind' = 'sync.history.progress'
-        ORDER BY created_at DESC
+        ORDER BY captured_at DESC
         LIMIT 1
         "#,
     )
@@ -3751,13 +3751,13 @@ async fn whatsapp_runtime_bridge_command_failed_reschedules_live_command() {
             command_id, account_id, command_kind, idempotency_key,
             provider_chat_id, capability_state, action_class, confirmation_decision,
             status, retry_count, max_retries, payload, target_ref, result_payload,
-            audit_metadata, provider_state, reconciliation_status, created_at, updated_at,
+            audit_metadata, actor_id, provider_state, reconciliation_status, created_at, updated_at,
             last_attempt_at, locked_at, locked_by
         ) VALUES (
             $1, $2, 'send_text', $3,
             $4, 'available', 'provider_write', 'confirmed',
             'executing', 1, 3, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
-            '{}'::jsonb, '{}'::jsonb, 'awaiting_provider', NOW(), NOW(),
+            '{}'::jsonb, 'hermes-frontend', '{}'::jsonb, 'awaiting_provider', NOW(), NOW(),
             NOW(), NOW(), 'whatsapp-runtime-bridge-worker'
         )
         "#,
@@ -3915,13 +3915,13 @@ async fn whatsapp_runtime_bridge_claim_recovers_only_live_stale_commands_for_req
                 command_id, account_id, command_kind, idempotency_key,
                 provider_chat_id, capability_state, action_class, confirmation_decision,
                 status, retry_count, max_retries, payload, target_ref, result_payload,
-                audit_metadata, provider_state, reconciliation_status, created_at, updated_at,
+                audit_metadata, actor_id, provider_state, reconciliation_status, created_at, updated_at,
                 last_attempt_at, locked_at, locked_by
             ) VALUES (
                 $1, $2, 'send_text', $3,
                 $4, 'available', 'provider_write', 'confirmed',
                 'executing', 1, 3, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
-                '{}'::jsonb, '{}'::jsonb, 'awaiting_provider', NOW(), NOW(),
+                '{}'::jsonb, 'hermes-frontend', '{}'::jsonb, 'awaiting_provider', NOW(), NOW(),
                 NOW() - INTERVAL '5 minutes', NOW() - INTERVAL '5 minutes', 'whatsapp-worker-test'
             )
             "#,
@@ -14988,7 +14988,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_send_med
         .fetch_all(&pool)
         .await
         .expect("accepted whatsapp upload runtime-event kinds");
-        if kinds.len() == 3 {
+        if kinds.len() == 5 {
             break kinds;
         }
         assert!(
@@ -15000,6 +15000,8 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_send_med
     assert_eq!(
         accepted_runtime_event_kinds,
         vec![
+            "media.upload.requested",
+            "media.upload.failed",
             "media.upload.started",
             "media.upload.progress",
             "media.upload.completed",
@@ -15842,10 +15844,12 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_join_and
     loop {
         let state: Option<String> = sqlx::query_scalar(
             r#"
-            SELECT metadata->>'status'
-            FROM communication_conversation_participants
-            WHERE account_id = $1
-              AND provider_member_id = $2
+            SELECT participant.metadata->>'status'
+            FROM communication_conversation_participants participant
+            JOIN communication_conversations conversation
+              ON conversation.conversation_id = participant.conversation_id
+            WHERE conversation.account_id = $1
+              AND participant.metadata->>'provider_member_id' = $2
             "#,
         )
         .bind(&account_id)
@@ -15871,7 +15875,8 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_join_and
                 "command_id": leave_command_id,
                 "idempotency_key": format!("leave:{suffix}"),
                 "account_id": account_id,
-                "provider_chat_id": provider_chat_id
+                "provider_chat_id": provider_chat_id,
+                "confirmation_decision": "confirmed"
             }),
             LOCAL_API_TOKEN,
         ))
@@ -15894,10 +15899,12 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_join_and
     loop {
         let state: Option<String> = sqlx::query_scalar(
             r#"
-            SELECT metadata->>'status'
-            FROM communication_conversation_participants
-            WHERE account_id = $1
-              AND provider_member_id = $2
+            SELECT participant.metadata->>'status'
+            FROM communication_conversation_participants participant
+            JOIN communication_conversations conversation
+              ON conversation.conversation_id = participant.conversation_id
+            WHERE conversation.account_id = $1
+              AND participant.metadata->>'provider_member_id' = $2
             "#,
         )
         .bind(&account_id)

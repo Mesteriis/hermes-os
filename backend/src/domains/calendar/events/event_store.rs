@@ -301,6 +301,51 @@ impl CalendarEventStore {
             .map_err(CalendarError::from)
     }
 
+    pub async fn find_zoom_conference_match(
+        &self,
+        join_url: Option<&str>,
+        meeting_id: &str,
+        started_at: Option<DateTime<Utc>>,
+        ended_at: Option<DateTime<Utc>>,
+    ) -> Result<Option<CalendarEvent>, CalendarError> {
+        let meeting_id = meeting_id.trim();
+        if meeting_id.is_empty() {
+            return Ok(None);
+        }
+        let join_url = join_url
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+        let like_pattern = format!("%{meeting_id}%");
+        let window_start = started_at.or(ended_at);
+        let window_end = ended_at.or(started_at);
+        let rows = sqlx::query(&format!(
+            "SELECT {CALENDAR_EVENT_COLUMNS}
+                 FROM calendar_events
+                 WHERE conference_provider = 'zoom'
+                   AND (
+                        ($1::text IS NOT NULL AND conference_url = $1)
+                        OR conference_url ILIKE $2
+                   )
+                   AND ($3::timestamptz IS NULL OR end_at >= $3)
+                   AND ($4::timestamptz IS NULL OR start_at <= $4)
+                 ORDER BY
+                   CASE WHEN $1::text IS NOT NULL AND conference_url = $1 THEN 0 ELSE 1 END,
+                   start_at ASC
+                 LIMIT 1"
+        ))
+        .bind(join_url.as_deref())
+        .bind(&like_pattern)
+        .bind(window_start)
+        .bind(window_end)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        rows.map(row_to_event)
+            .transpose()
+            .map_err(CalendarError::from)
+    }
+
     pub async fn update(
         &self,
         event_id: &str,

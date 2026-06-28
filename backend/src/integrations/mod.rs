@@ -4,3 +4,4 @@ pub mod ollama;
 pub mod omniroute;
 pub mod telegram;
 pub mod whatsapp;
+pub mod zoom;

@@ -14,6 +14,8 @@ pub(crate) mod telegram_capability_catalog;
 pub(crate) mod telegram_capability_catalog_extended;
 pub(crate) mod telegram_capability_catalog_foundation;
 pub(crate) mod telegram_capability_catalog_messages;
+pub(crate) mod whatsapp_capabilities;
+pub(crate) mod whatsapp_capability_catalog;
 
 pub(crate) use automation_calls::*;
 pub(crate) use communications::*;
@@ -25,6 +27,7 @@ pub(crate) use review_commands::*;
 pub(crate) use review_lists::*;
 pub(crate) use stores::*;
 pub(crate) use telegram_capabilities::*;
+pub(crate) use whatsapp_capabilities::*;
 
 use std::io;
 
@@ -62,8 +65,8 @@ use crate::engines::automation::{
 use crate::platform::audit::{ApiAuditError, ApiAuditLog, ApiAuditRecord, NewApiAuditRecord};
 use crate::platform::calls::{
     CallDirection, CallError, CallIntelligenceStore, CallState, CallTranscript,
-    FixtureSpeechToTextProvider, NewCallTranscript, NewTelegramCall, SpeechToTextProvider,
-    TelegramCall, TranscriptStatus,
+    FixtureSpeechToTextProvider, NewCallTranscript, NewProviderCall, ProviderCall,
+    SpeechToTextProvider, TranscriptStatus,
 };
 use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
 use crate::platform::config::{AiRuntimeProvider, AppConfig};

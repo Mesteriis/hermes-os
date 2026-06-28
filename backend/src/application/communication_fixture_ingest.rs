@@ -653,6 +653,13 @@ impl WhatsappFixtureIngestApplicationService {
                 request.provider_message_id
             ))
         })?;
+        self.publish_whatsapp_command_reconciled_events(
+            self.runtime
+                .reconcile_fixture_receipt_commands(request)
+                .await?,
+            "provider_observation_consumer",
+        )
+        .await?;
 
         Ok(WhatsappWebReceiptIngestResult {
             raw_record_id: stored_raw.raw_record_id,
@@ -703,12 +710,14 @@ impl WhatsappFixtureIngestApplicationService {
                 ))
             })?;
         let storage = CommunicationStorageStore::new(self.pool.clone());
+        let storage_kind = normalized_whatsapp_media_storage_kind(&request.storage_kind);
+        let sha256 = normalized_whatsapp_media_sha256(&request.sha256);
         let blob = storage
             .upsert_blob(
                 &NewCommunicationBlob::new(
-                    &request.storage_kind,
+                    &storage_kind,
                     &request.storage_path,
-                    &request.sha256,
+                    &sha256,
                     request.size_bytes,
                 )
                 .content_type(&request.content_type),
@@ -721,7 +730,7 @@ impl WhatsappFixtureIngestApplicationService {
             &request.provider_attachment_id,
             &request.content_type,
             request.size_bytes,
-            &request.sha256,
+            &sha256,
         );
         if let Some(filename) = request.filename.as_deref() {
             attachment = attachment.filename(filename);
@@ -1433,8 +1442,8 @@ impl WhatsappFixtureIngestApplicationService {
                 &request.provider_chat_id,
                 &request.chat_title,
                 &request.chat_kind,
-                Some(request.is_archived),
-                Some(request.is_pinned),
+                request.is_archived,
+                request.is_pinned,
                 request.is_muted,
                 request.is_unread,
                 request.unread_count,
@@ -1505,13 +1514,18 @@ impl WhatsappFixtureIngestApplicationService {
             annotate_whatsapp_raw_observed_source(&observed.raw, reconciliation_source)?;
         let stored_raw = self.record_and_accept_whatsapp_raw(&observed_raw).await?;
         let channel_id = self.ensure_whatsapp_channel(&request.account_id).await?;
+        let conversation_id =
+            whatsapp_conversation_id(&request.account_id, &request.provider_chat_id);
+        let previous_last_message_at = self
+            .whatsapp_conversation_last_message_at(&conversation_id)
+            .await?;
         let conversation_id = self
             .upsert_whatsapp_conversation(
                 &request.account_id,
                 &channel_id,
                 &request.provider_chat_id,
-                &request.chat_title,
-                &request.chat_kind,
+                request.effective_chat_title(),
+                request.effective_chat_kind(),
                 None,
                 None,
                 None,
@@ -1530,6 +1544,12 @@ impl WhatsappFixtureIngestApplicationService {
                 &stored_raw,
             )
             .await?;
+        self.restore_whatsapp_conversation_last_message_at(
+            &request.account_id,
+            &conversation_id,
+            previous_last_message_at,
+        )
+        .await?;
         let identity_id = self
             .upsert_whatsapp_identity(&request.account_id, &channel_id, request, &stored_raw)
             .await?;
@@ -1567,6 +1587,46 @@ impl WhatsappFixtureIngestApplicationService {
             role_changed: participant_upsert.role_changed,
             membership_changed: participant_upsert.membership_changed,
         })
+    }
+
+    async fn whatsapp_conversation_last_message_at(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<Option<chrono::DateTime<chrono::Utc>>>, CommunicationFixtureIngestError>
+    {
+        let last_message_at = sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
+            "SELECT last_message_at FROM communication_conversations WHERE conversation_id = $1",
+        )
+        .bind(conversation_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(last_message_at)
+    }
+
+    async fn restore_whatsapp_conversation_last_message_at(
+        &self,
+        account_id: &str,
+        conversation_id: &str,
+        previous_last_message_at: Option<Option<chrono::DateTime<chrono::Utc>>>,
+    ) -> Result<(), CommunicationFixtureIngestError> {
+        let Some(previous_last_message_at) = previous_last_message_at else {
+            return Ok(());
+        };
+        sqlx::query(
+            r#"
+            UPDATE communication_conversations conversation
+            SET last_message_at = $3,
+                updated_at = now()
+            WHERE conversation.conversation_id = $2
+              AND conversation.account_id = $1
+            "#,
+        )
+        .bind(account_id)
+        .bind(conversation_id)
+        .bind(previous_last_message_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     async fn project_whatsapp_message_refs(
@@ -2367,7 +2427,7 @@ impl WhatsappFixtureIngestApplicationService {
                 "provider": account_context.provider_kind,
                 "account_id": request.account_id,
                 "provider_chat_id": request.provider_chat_id,
-                "provider_member_id": request.provider_member_id,
+                "provider_member_id": request.effective_provider_member_id(),
                 "provider_identity_id": request.provider_identity_id,
                 "identity_kind": request.identity_kind,
                 "display_name": request.display_name,
@@ -2400,7 +2460,9 @@ impl WhatsappFixtureIngestApplicationService {
         .await?;
         let trace_value = format!(
             "whatsapp_participant:v1:{}:{}:{}",
-            request.account_id, request.provider_chat_id, request.provider_member_id
+            request.account_id,
+            request.provider_chat_id,
+            request.effective_provider_member_id()
         );
         self.upsert_person_identity_trace_with_metadata(
             "message_participant",
@@ -2556,8 +2618,9 @@ impl WhatsappFixtureIngestApplicationService {
         let account_context = self
             .whatsapp_account_projection_context(&request.account_id)
             .await?;
+        let provider_member_id = request.effective_provider_member_id();
         let participant_id =
-            whatsapp_conversation_participant_id(conversation_id, &request.provider_member_id);
+            whatsapp_conversation_participant_id(conversation_id, provider_member_id);
         let previous_row = sqlx::query(
             r#"
             SELECT role, metadata
@@ -2589,7 +2652,7 @@ impl WhatsappFixtureIngestApplicationService {
             .is_some_and(|previous| previous != request.status);
         let mut metadata = json!({
             "provider": account_context.provider_kind,
-            "provider_member_id": request.provider_member_id,
+            "provider_member_id": provider_member_id,
             "push_name": request.push_name,
             "business_profile": request.business_profile,
             "profile_photo_ref": request.profile_photo_ref,
@@ -2913,6 +2976,22 @@ fn merged_identity_display_name_metadata(
     merged["display_name_history"] = Value::Array(history);
     merged["display_name_observed_at"] = json!(observed_at);
     Ok(merged)
+}
+
+fn normalized_whatsapp_media_storage_kind(storage_kind: &str) -> String {
+    match storage_kind.trim() {
+        "local_blob" => "local_fs".to_owned(),
+        value => value.to_owned(),
+    }
+}
+
+fn normalized_whatsapp_media_sha256(sha256: &str) -> String {
+    let value = sha256.trim();
+    if value.starts_with("sha256:") {
+        value.to_owned()
+    } else {
+        format!("sha256:{value}")
+    }
 }
 
 fn whatsapp_call_direction(value: &str) -> Result<CallDirection, CommunicationFixtureIngestError> {

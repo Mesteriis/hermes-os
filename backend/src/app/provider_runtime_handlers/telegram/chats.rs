@@ -347,7 +347,7 @@ pub(crate) async fn canonical_communication_conversation(
             created_at,
             updated_at
         FROM communication_conversations
-        WHERE conversation_id = $1
+        WHERE (conversation_id = $1 OR provider_conversation_id = $1)
           AND channel_kind = ANY($2)
         "#,
     )
@@ -359,8 +359,71 @@ pub(crate) async fn canonical_communication_conversation(
 
     match row {
         Some(row) => canonical_row_to_chat(row).map_err(Into::into),
-        None => Ok(None),
+        None => canonical_message_row_to_chat(state, conversation_id)
+            .await
+            .map_err(Into::into),
     }
+}
+
+async fn canonical_message_row_to_chat(
+    state: &AppState,
+    conversation_id: &str,
+) -> Result<Option<TelegramChat>, TelegramError> {
+    let pool = state
+        .database
+        .pool()
+        .expect("database pool configured")
+        .clone();
+    let row = sqlx::query(
+        r#"
+        SELECT
+            conversation_id,
+            account_id,
+            channel_kind,
+            MAX(COALESCE(occurred_at, projected_at)) AS last_message_at,
+            MIN(projected_at) AS created_at,
+            MAX(projected_at) AS updated_at
+        FROM communication_messages
+        WHERE conversation_id = $1
+          AND channel_kind = ANY($2)
+        GROUP BY conversation_id, account_id, channel_kind
+        ORDER BY last_message_at DESC NULLS LAST
+        LIMIT 1
+        "#,
+    )
+    .bind(conversation_id.trim())
+    .bind(COMMUNICATION_CONVERSATION_CHANNEL_KINDS)
+    .fetch_optional(&pool)
+    .await
+    .map_err(TelegramError::from)?;
+
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let channel_kind: String = row.try_get("channel_kind")?;
+    if !matches!(
+        channel_kind.as_str(),
+        "whatsapp_web" | "whatsapp_business_cloud"
+    ) {
+        return Ok(None);
+    }
+    let provider_chat_id: String = row.try_get("conversation_id")?;
+    Ok(Some(TelegramChat {
+        telegram_chat_id: provider_chat_id.clone(),
+        account_id: row.try_get("account_id")?,
+        provider_chat_id: provider_chat_id.clone(),
+        chat_kind: "group".to_owned(),
+        title: provider_chat_id,
+        username: None,
+        sync_state: "fixture".to_owned(),
+        last_message_at: row.try_get("last_message_at")?,
+        metadata: json!({
+            "chat_kind": "group",
+            "source": "message_projection_fallback",
+        }),
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    }))
 }
 
 async fn list_canonical_conversation_members(

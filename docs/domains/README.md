@@ -37,15 +37,16 @@ needs a projection.
 | Agents | [Agents](agents.md) | partially implemented through AI runtime/control surfaces |
 | Notes | [Notes](notes.md) | not a first-class domain; treated as document-like artifacts |
 
-## Channel Capability Specs
+## Channel And Provider Capability Specs
 
-Channel capability specs document provider-specific behavior without promoting a
-provider into a standalone Hermes domain.
+Channel and provider capability specs document provider-specific behavior
+without promoting a provider into a standalone Hermes domain.
 
-| Channel | Spec | Status |
+| Provider | Spec | Status |
 |---|---|---|
 | Telegram | [Telegram Channel Capability Spec](../telegram/README.md) | target production capability matrix with current implementation baseline |
 | Mail | [Email Channel Capability Spec](../mail/README.md) | implemented email channel framing and current API/status docs |
+| Zoom | [Zoom Provider Stage](../zoom/README.md) | provider foundation implemented; not a Hermes domain |
 | Signal Hub | [Signal Hub](../signal-hub/README.md) | system source-control plane, not a provider channel |
 
 ## Engine Documents

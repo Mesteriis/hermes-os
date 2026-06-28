@@ -12,3 +12,6 @@ pub mod review_promotion;
 pub mod task_creation;
 pub mod telegram_media_storage;
 pub mod workflow_action_person_projection;
+pub mod zoom_calendar_matching;
+pub mod zoom_participant_identity;
+pub mod zoom_signal_detection;

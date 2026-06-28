@@ -567,7 +567,7 @@ mod tests {
         hermes_addr: SocketAddr,
         account_id: Option<&str>,
     ) -> (SocketAddr, JoinHandle<()>) {
-        const TEST_HERMES_SHARED_KEY: &str = concat!("edge", "-", "auth");
+        const TEST_HERMES_SHARED_KEY: &str = concat!("edge", "-", "secret");
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .expect("edge proxy test listener should bind");

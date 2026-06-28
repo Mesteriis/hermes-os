@@ -50,6 +50,15 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             pool: state.database.pool().cloned(),
             database_url: state.database.database_url().map(ToOwned::to_owned),
             nats_server_url,
+            zoom_token_maintenance_scheduler_enabled: state
+                .config
+                .zoom_token_maintenance_scheduler_enabled(),
+            zoom_recording_sync_scheduler_enabled: state
+                .config
+                .zoom_recording_sync_scheduler_enabled(),
+            zoom_retention_cleanup_scheduler_enabled: state
+                .config
+                .zoom_retention_cleanup_scheduler_enabled(),
             vault: state.vault.clone(),
             telegram_runtime: state.telegram_runtime.clone(),
             event_bus: state.event_bus.clone(),

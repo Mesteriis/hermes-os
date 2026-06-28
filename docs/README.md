@@ -73,6 +73,7 @@ Canonical domain specs live under [Domain Catalog](domains/README.md).
 - [Signal Hub](domains/signal-hub.md), [Signal Hub Folder](signal-hub/README.md)
 - [Communications](domains/communications.md)
 - [Telegram Channel Capability Spec](telegram/README.md)
+- [Zoom Provider Stage](zoom/README.md)
 - [Personas / Persona Intelligence](persons/README.md)
 - [Organizations](domains/organizations.md)
 - [Projects](domains/projects.md)
@@ -141,6 +142,7 @@ Important current examples:
 - ADR-0091 - Telegram production client capability model.
 - ADR-0095 - event-driven domain communication and DLQ.
 - ADR-0099 - Signal Hub event platform.
+- ADR-0102 - accepted Zoom provider runtime boundary.
 
 ## Implementation Status Documents
 

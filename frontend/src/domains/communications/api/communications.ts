@@ -70,6 +70,10 @@ export {
   translateThread
 } from './threadApi'
 export {
+  fetchProviderCalls,
+  fetchProviderCallTranscript
+} from './callApi'
+export {
   fetchCommunicationMessagesConnect,
   fetchCommunicationMessageConnect,
   fetchCommunicationThreadsConnect,

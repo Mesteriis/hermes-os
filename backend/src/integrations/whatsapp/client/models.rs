@@ -608,8 +608,8 @@ pub struct NewWhatsappWebDialog {
     pub provider_chat_id: String,
     pub chat_title: String,
     pub chat_kind: String,
-    pub is_archived: bool,
-    pub is_pinned: bool,
+    pub is_archived: Option<bool>,
+    pub is_pinned: Option<bool>,
     pub is_muted: Option<bool>,
     pub is_unread: Option<bool>,
     pub unread_count: Option<i64>,
@@ -655,12 +655,16 @@ impl NewWhatsappWebDialog {
             &self.provider_chat_id,
             &self.chat_kind,
             &self.chat_title,
-            if self.is_archived {
-                "archived"
-            } else {
-                "active"
+            match self.is_archived {
+                Some(true) => "archived",
+                Some(false) => "active",
+                None => "archive_unknown",
             },
-            if self.is_pinned { "pinned" } else { "unpinned" },
+            match self.is_pinned {
+                Some(true) => "pinned",
+                Some(false) => "unpinned",
+                None => "pin_unknown",
+            },
             match self.is_muted {
                 Some(true) => "muted",
                 Some(false) => "unmuted",
@@ -707,8 +711,11 @@ impl NewWhatsappWebDialog {
 pub struct NewWhatsappWebParticipant {
     pub account_id: String,
     pub provider_chat_id: String,
+    #[serde(default)]
     pub chat_title: String,
+    #[serde(default = "default_chat_kind")]
     pub chat_kind: String,
+    #[serde(default)]
     pub provider_member_id: String,
     pub provider_identity_id: String,
     pub identity_kind: String,
@@ -721,8 +728,11 @@ pub struct NewWhatsappWebParticipant {
     pub profile_photo_ref: Value,
     pub role: String,
     pub status: String,
+    #[serde(default)]
     pub is_self: bool,
+    #[serde(default)]
     pub is_admin: bool,
+    #[serde(default)]
     pub is_owner: bool,
     pub import_batch_id: String,
     pub observed_at: DateTime<Utc>,
@@ -732,10 +742,10 @@ impl NewWhatsappWebParticipant {
     pub(crate) fn validate(&self) -> Result<(), WhatsappWebError> {
         validate_non_empty("account_id", &self.account_id)?;
         validate_non_empty("provider_chat_id", &self.provider_chat_id)?;
-        validate_non_empty("chat_title", &self.chat_title)?;
-        validate_non_empty("chat_kind", &self.chat_kind)?;
-        validate_non_empty("provider_member_id", &self.provider_member_id)?;
+        validate_non_empty("chat_title", self.effective_chat_title())?;
+        validate_non_empty("chat_kind", self.effective_chat_kind())?;
         validate_non_empty("provider_identity_id", &self.provider_identity_id)?;
+        validate_non_empty("provider_member_id", self.effective_provider_member_id())?;
         validate_non_empty("identity_kind", &self.identity_kind)?;
         validate_non_empty("display_name", &self.display_name)?;
         validate_optional_non_empty("push_name", self.push_name.as_deref())?;
@@ -751,7 +761,7 @@ impl NewWhatsappWebParticipant {
         format!(
             "{}:{}:{}:{}",
             self.provider_chat_id.trim(),
-            self.provider_member_id.trim(),
+            self.effective_provider_member_id(),
             self.role.trim(),
             self.status.trim()
         )
@@ -761,7 +771,7 @@ impl NewWhatsappWebParticipant {
         stable_source_fingerprint(&[
             &self.account_id,
             &self.provider_chat_id,
-            &self.provider_member_id,
+            self.effective_provider_member_id(),
             &self.provider_identity_id,
             &self.role,
             &self.status,
@@ -769,6 +779,33 @@ impl NewWhatsappWebParticipant {
             &self.business_profile.to_string(),
             &self.profile_photo_ref.to_string(),
         ])
+    }
+
+    pub(crate) fn effective_provider_member_id(&self) -> &str {
+        let provider_member_id = self.provider_member_id.trim();
+        if provider_member_id.is_empty() {
+            self.provider_identity_id.trim()
+        } else {
+            provider_member_id
+        }
+    }
+
+    pub(crate) fn effective_chat_title(&self) -> &str {
+        let chat_title = self.chat_title.trim();
+        if chat_title.is_empty() {
+            self.provider_chat_id.trim()
+        } else {
+            chat_title
+        }
+    }
+
+    pub(crate) fn effective_chat_kind(&self) -> &str {
+        let chat_kind = self.chat_kind.trim();
+        if chat_kind.is_empty() {
+            "group"
+        } else {
+            chat_kind
+        }
     }
 }
 
@@ -920,6 +957,10 @@ fn stable_source_fingerprint(parts: &[&str]) -> String {
 
 fn default_json_object() -> Value {
     Value::Object(Default::default())
+}
+
+fn default_chat_kind() -> String {
+    "group".to_owned()
 }
 
 fn validate_optional_non_empty(

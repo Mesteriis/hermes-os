@@ -53,7 +53,7 @@ async fn signal_hub_restores_canonical_sources_idempotently() {
         .await
         .expect("second fixture restore");
 
-    assert_eq!(first.sources_created, 13);
+    assert_eq!(first.sources_created, 14);
     assert_eq!(first.profiles_created, 4);
     assert_eq!(second.sources_created, 0);
     assert_eq!(second.sources_repaired, 0);
@@ -79,6 +79,7 @@ async fn signal_hub_restores_canonical_sources_idempotently() {
             "telegram",
             "voice",
             "whatsapp",
+            "zoom",
         ]
     );
 

@@ -9,8 +9,14 @@ pub enum StorageError {
     Connect(#[from] sqlx::Error),
 
     #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
     EventStore(#[from] EventStoreError),
 
     #[error(transparent)]
     Settings(#[from] SettingsError),
+
+    #[error("{0}")]
+    Invalid(String),
 }

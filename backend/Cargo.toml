@@ -49,6 +49,10 @@ path = "src/bin/hermes_document_process.rs"
 name = "hermes-whatsapp-business-cloud-edge-proxy"
 path = "src/bin/hermes_whatsapp_business_cloud_edge_proxy.rs"
 
+[[bin]]
+name = "hermes-zoom-edge-proxy"
+path = "src/bin/hermes_zoom_edge_proxy.rs"
+
 [dependencies]
 aes-gcm = "0.10"
 argon2 = "0.5"

@@ -133,6 +133,20 @@ pub mod whatsapp_event_types {
     pub const MEDIA_UPLOAD_FAILED: &str = "whatsapp.media.upload.failed";
 }
 
+pub mod zoom_event_types {
+    pub const AUTHORIZATION_COMPLETED: &str = "zoom.authorization.completed";
+    pub const RUNTIME_STATUS_CHANGED: &str = "zoom.runtime.status_changed";
+    pub const TOKEN_REFRESHED: &str = "zoom.token.refreshed";
+    pub const TOKEN_REFRESH_SKIPPED: &str = "zoom.token.refresh.skipped";
+    pub const TOKEN_REFRESH_FAILED: &str = "zoom.token.refresh.failed";
+    pub const MEETING_OBSERVED: &str = "zoom.meeting.observed";
+    pub const RECORDING_OBSERVED: &str = "zoom.recording.observed";
+    pub const TRANSCRIPT_OBSERVED: &str = "zoom.transcript.observed";
+    pub const TRANSCRIPT_REMOVED: &str = "zoom.transcript.removed";
+    pub const RECORDING_IMPORT_REMOVED: &str = "zoom.recording.import.removed";
+    pub const RETENTION_CLEANUP_COMPLETED: &str = "zoom.retention.cleanup.completed";
+}
+
 /// Sanitize an event payload to never include secrets or raw message bodies.
 pub fn sanitize_event_payload(mut payload: Value) -> Value {
     if let Some(obj) = payload.as_object_mut() {

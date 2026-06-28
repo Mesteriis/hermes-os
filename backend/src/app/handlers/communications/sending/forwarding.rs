@@ -222,7 +222,7 @@ fn whatsapp_command_response_to_communication_response(
         } else {
             "whatsapp_web"
         },
-        status: response.status.clone(),
+        status: "queued".to_owned(),
         command_id: response.command_id.clone(),
         provider: "whatsapp",
     }

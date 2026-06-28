@@ -792,7 +792,7 @@ fn whatsapp_command_response_to_communication_response(
         } else {
             "whatsapp_web"
         },
-        status: response.status.clone(),
+        status: "queued".to_owned(),
         command_id: response.command_id.clone(),
         provider: "whatsapp",
     }
@@ -809,7 +809,7 @@ fn whatsapp_command_response_to_lifecycle_response(
         account_id: response.account_id.clone(),
         provider_chat_id: response.provider_chat_id.clone(),
         provider_message_id: response.provider_message_id.clone().unwrap_or_default(),
-        status: response.status.clone(),
+        status: "queued".to_owned(),
         timestamp: response.updated_at,
         version_number: None,
         tombstone_id: None,
@@ -843,7 +843,7 @@ fn whatsapp_conversation_command_response_to_communication_response(
             "whatsapp_web".to_owned()
         },
         action: action.to_owned(),
-        status: response.status.clone(),
+        status: "queued".to_owned(),
         command_id: response.command_id.clone(),
         provider: "whatsapp",
         active,

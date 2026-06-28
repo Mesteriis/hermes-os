@@ -141,10 +141,16 @@ impl CallIntelligenceStore {
     pub async fn list_calls(
         &self,
         account_id: Option<&str>,
+        provider_chat_id: Option<&str>,
+        provider: Option<&str>,
         limit: i64,
     ) -> Result<Vec<TelegramCall>, CallError> {
         let limit = validate_limit(limit)?;
         let account_id = account_id.map(str::trim).filter(|value| !value.is_empty());
+        let provider_chat_id = provider_chat_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let provider = provider.map(str::trim).filter(|value| !value.is_empty());
         let rows = sqlx::query(
             r#"
             SELECT
@@ -162,11 +168,15 @@ impl CallIntelligenceStore {
                 updated_at
             FROM telegram_calls
             WHERE ($1::text IS NULL OR account_id = $1)
+              AND ($2::text IS NULL OR provider_chat_id = $2)
+              AND ($3::text IS NULL OR metadata ->> 'provider' = $3)
             ORDER BY COALESCE(started_at, created_at) DESC, call_id ASC
-            LIMIT $2
+            LIMIT $4
             "#,
         )
         .bind(account_id)
+        .bind(provider_chat_id)
+        .bind(provider)
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
@@ -202,6 +212,83 @@ impl CallIntelligenceStore {
             "#,
         )
         .bind(call_id.trim())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_transcript).transpose()
+    }
+
+    pub async fn list_expired_transcripts(
+        &self,
+        account_id: &str,
+        provider: &str,
+        limit: i64,
+    ) -> Result<Vec<CallTranscript>, CallError> {
+        validate_non_empty("account_id", account_id)?;
+        validate_non_empty("provider", provider)?;
+        let limit = validate_limit(limit.clamp(1, 500))?;
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                transcript.transcript_id,
+                transcript.call_id,
+                transcript.account_id,
+                transcript.provider_chat_id,
+                transcript.transcript_status,
+                transcript.stt_provider,
+                transcript.source_audio_ref,
+                transcript.language_code,
+                transcript.transcript_text,
+                transcript.segments,
+                transcript.provenance,
+                transcript.created_at,
+                transcript.updated_at
+            FROM call_transcripts transcript
+            JOIN telegram_calls call_evidence ON call_evidence.call_id = transcript.call_id
+            WHERE transcript.account_id = $1
+              AND call_evidence.metadata ->> 'provider' = $2
+              AND NULLIF(transcript.provenance -> 'retention_policy' ->> 'expires_at', '') IS NOT NULL
+              AND (transcript.provenance -> 'retention_policy' ->> 'expires_at')::timestamptz <= now()
+            ORDER BY (transcript.provenance -> 'retention_policy' ->> 'expires_at')::timestamptz ASC,
+                     transcript.created_at ASC
+            LIMIT $3
+            "#,
+        )
+        .bind(account_id.trim())
+        .bind(provider.trim())
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_transcript).collect()
+    }
+
+    pub async fn remove_transcript(
+        &self,
+        transcript_id: &str,
+    ) -> Result<Option<CallTranscript>, CallError> {
+        validate_non_empty("transcript_id", transcript_id)?;
+        let row = sqlx::query(
+            r#"
+            DELETE FROM call_transcripts
+            WHERE transcript_id = $1
+            RETURNING
+                transcript_id,
+                call_id,
+                account_id,
+                provider_chat_id,
+                transcript_status,
+                stt_provider,
+                source_audio_ref,
+                language_code,
+                transcript_text,
+                segments,
+                provenance,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(transcript_id.trim())
         .fetch_optional(&self.pool)
         .await?;
 

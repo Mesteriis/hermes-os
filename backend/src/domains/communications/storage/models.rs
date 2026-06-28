@@ -231,6 +231,12 @@ pub struct ImportedCommunicationAttachment {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct ImportedCommunicationAttachmentRemovalResult {
+    pub imported_attachment: ImportedCommunicationAttachment,
+    pub blob_metadata_removed: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct NewCommunicationAttachment {
     pub message_id: String,
     pub raw_record_id: String,

@@ -13,6 +13,7 @@ import { applyTelegramParticipantRealtimePatch } from '../../domains/communicati
 import { applyTelegramRealtimePatch } from '../../domains/communications/queries/realtimeTelegramPatches'
 import { applyTelegramCommandRealtimePatch } from '../../integrations/telegram/queries/realtimeTelegramCommandPatches'
 import { applyWhatsAppRuntimeRealtimePatch } from '../../integrations/whatsapp/queries/realtimeWhatsAppRuntimePatches'
+import { zoomQueryKeys } from '../../integrations/zoom/queries/zoomQueryKeys'
 
 export type RealtimeClient = {
 	connect: () => void
@@ -93,6 +94,17 @@ const WHATSAPP_QUERY_KEYS: readonly (readonly unknown[])[] = [
 	['communications', 'whatsapp', 'conversation-detail'],
 	['communications', 'whatsapp', 'chat-members'],
 	['communications', 'whatsapp', 'messages']
+]
+
+const ZOOM_QUERY_KEYS: readonly (readonly unknown[])[] = [
+	zoomQueryKeys.accounts,
+	zoomQueryKeys.capabilities,
+	zoomQueryKeys.runtimeStatus,
+	zoomQueryKeys.webhookSubscriptions,
+	zoomQueryKeys.providerCalls,
+	zoomQueryKeys.callTranscript,
+	zoomQueryKeys.recordingImports,
+	zoomQueryKeys.auditEvents
 ]
 
 const SIGNAL_HUB_QUERY_KEYS: readonly (readonly unknown[])[] = [
@@ -285,6 +297,7 @@ function laggedRealtimeQueryKeys(): readonly (readonly unknown[])[] {
 		...MAIL_RUNTIME_QUERY_KEYS,
 		...TELEGRAM_QUERY_KEYS,
 		...WHATSAPP_QUERY_KEYS,
+		...ZOOM_QUERY_KEYS,
 		...SIGNAL_HUB_QUERY_KEYS
 	]
 }
@@ -368,6 +381,9 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 	}
 	if (eventType.startsWith('telegram.')) {
 		return TELEGRAM_QUERY_KEYS
+	}
+	if (eventType.startsWith('zoom.')) {
+		return ZOOM_QUERY_KEYS
 	}
 	if (eventType.startsWith('whatsapp.sync.')) {
 		return [

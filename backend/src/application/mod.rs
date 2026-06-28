@@ -24,6 +24,9 @@ pub(crate) mod whatsapp_provider_observation_reconciliation;
 pub(crate) mod whatsapp_runtime_event_projection;
 pub(crate) mod whatsapp_runtime_signal_ingest;
 pub(crate) mod workflow_action_person_projection;
+pub(crate) mod zoom_calendar_matching;
+pub(crate) mod zoom_participant_identity;
+pub(crate) mod zoom_signal_detection;
 
 pub(crate) use ai_signal_dispatch::*;
 pub(crate) use bootstrap::*;
@@ -51,3 +54,6 @@ pub(crate) use whatsapp_provider_observation_reconciliation::*;
 pub(crate) use whatsapp_runtime_event_projection::*;
 pub(crate) use whatsapp_runtime_signal_ingest::*;
 pub(crate) use workflow_action_person_projection::*;
+pub(crate) use zoom_calendar_matching::*;
+pub(crate) use zoom_participant_identity::*;
+pub(crate) use zoom_signal_detection::*;

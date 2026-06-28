@@ -1,4 +1,5 @@
 export * from './mailActionQueries'
+export * from './callQueries'
 export * from './mailCoreQueries'
 export * from './mailOperationQueries'
 export * from './mailWorkspaceQueries'

@@ -21,6 +21,12 @@ static WHATSAPP_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
+static ZOOM_TOKEN_MAINTENANCE_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static ZOOM_RECORDING_SYNC_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static ZOOM_RETENTION_CLEANUP_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 static WHATSAPP_RUNTIME_EVENT_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_DATABASES: LazyLock<Mutex<HashSet<String>>> =
@@ -28,6 +34,12 @@ static WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_DATABASES: LazyLock<Mutex<Ha
 static COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static PERSON_DERIVED_EVIDENCE_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static ZOOM_SIGNAL_DETECTION_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static ZOOM_CALENDAR_MATCHING_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static ZOOM_PARTICIPANT_IDENTITY_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static PERSON_IDENTITY_REVIEW_INBOX_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -52,12 +64,24 @@ const WHATSAPP_NATIVE_MD_STARTUP_RESTORE_ALIAS_CONFIG_KEY: &str =
 const WHATSAPP_NATIVE_MD_RUNTIME_FEATURE_DISABLED_BLOCKER: &str =
     "whatsapp_native_md_runtime_feature_disabled";
 const WHATSAPP_STARTUP_RESTORE_FAILED_BLOCKER: &str = "whatsapp_startup_restore_failed";
+const ZOOM_TOKEN_MAINTENANCE_RUNTIME: &str = "zoom_token_maintenance";
+const ZOOM_TOKEN_MAINTENANCE_TICK_SECONDS: u64 = 60;
+const ZOOM_TOKEN_MAINTENANCE_REFRESH_EXPIRING_WITHIN_SECONDS: i64 = 300;
+const ZOOM_RECORDING_SYNC_RUNTIME: &str = "zoom_recording_sync";
+const ZOOM_RECORDING_SYNC_TICK_SECONDS: u64 = 300;
+const ZOOM_RECORDING_SYNC_LOOKBACK_DAYS: i64 = 7;
+const ZOOM_RETENTION_CLEANUP_RUNTIME: &str = "zoom_retention_cleanup";
+const ZOOM_RETENTION_CLEANUP_TICK_SECONDS: u64 = 3600;
+const ZOOM_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT: i64 = 100;
 const WHATSAPP_RUNTIME_EVENT_CONSUMER_RUNTIME: &str = "whatsapp_runtime_event_projection";
 const WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME: &str =
     "whatsapp_provider_observation_reconciliation";
 const COMMUNICATION_PROVIDER_OBSERVATION_RUNTIME: &str =
     "communication_provider_observation_projection";
 const PERSON_DERIVED_EVIDENCE_RUNTIME: &str = "person_derived_evidence";
+const ZOOM_SIGNAL_DETECTION_RUNTIME: &str = "zoom_signal_detection";
+const ZOOM_CALENDAR_MATCHING_RUNTIME: &str = "zoom_calendar_matching";
+const ZOOM_PARTICIPANT_IDENTITY_RUNTIME: &str = "zoom_participant_identity";
 const PERSON_IDENTITY_REVIEW_INBOX_RUNTIME: &str = "person_identity_review_inbox";
 const PROJECT_LINK_REVIEW_EFFECTS_RUNTIME: &str = "project_link_review_effects";
 const SIGNAL_HUB_RAW_SIGNAL_RUNTIME: &str = "signal_hub_raw_signal_dispatcher";
@@ -69,6 +93,9 @@ pub(crate) struct ApplicationBootstrapContext {
     pub(crate) pool: Option<PgPool>,
     pub(crate) database_url: Option<String>,
     pub(crate) nats_server_url: Option<String>,
+    pub(crate) zoom_token_maintenance_scheduler_enabled: bool,
+    pub(crate) zoom_recording_sync_scheduler_enabled: bool,
+    pub(crate) zoom_retention_cleanup_scheduler_enabled: bool,
     pub(crate) vault: HostVault,
     pub(crate) telegram_runtime: TelegramRuntimeManager,
     pub(crate) event_bus: EventBus,
@@ -80,10 +107,16 @@ pub(crate) fn start_background_services(context: ApplicationBootstrapContext) {
     start_telegram_command_executor(context.clone());
     start_whatsapp_command_executor(context.clone());
     start_whatsapp_runtime_restore_reconciliation(context.clone());
+    start_zoom_token_maintenance(context.clone());
+    start_zoom_recording_sync(context.clone());
+    start_zoom_retention_cleanup(context.clone());
     start_whatsapp_runtime_event_projection(context.clone());
     start_whatsapp_provider_observation_reconciliation(context.clone());
     start_communication_provider_observation_projection(context.clone());
     start_person_derived_evidence_projection(context.clone());
+    start_zoom_signal_detection_projection(context.clone());
+    start_zoom_calendar_matching_projection(context.clone());
+    start_zoom_participant_identity_projection(context.clone());
     start_person_identity_review_inbox_projection(context.clone());
     start_project_link_review_effects_projection(context.clone());
     start_signal_hub_raw_signal_dispatcher(context.clone());
@@ -403,6 +436,205 @@ fn start_whatsapp_runtime_restore_reconciliation(context: ApplicationBootstrapCo
     });
 }
 
+fn start_zoom_token_maintenance(context: ApplicationBootstrapContext) {
+    if !context.zoom_token_maintenance_scheduler_enabled {
+        return;
+    }
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_zoom_token_maintenance_scheduler(&database_url) {
+        return;
+    }
+    let vault = context.vault;
+    let event_bus = context.event_bus;
+
+    tokio::spawn(async move {
+        let mut tick =
+            tokio::time::interval(Duration::from_secs(ZOOM_TOKEN_MAINTENANCE_TICK_SECONDS));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "zoom",
+                ZOOM_TOKEN_MAINTENANCE_RUNTIME,
+                json!({
+                    "label": "Zoom token maintenance",
+                    "scope": "scheduler",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            if !host_vault_is_unlocked(&vault) {
+                continue;
+            }
+            match run_zoom_token_maintenance_once(&pool, &vault, &event_bus).await {
+                Ok(result)
+                    if result.checked_count > 0
+                        || result.refreshed_count > 0
+                        || result.failed_count > 0 =>
+                {
+                    tracing::info!(
+                        checked = result.checked_count,
+                        refreshed = result.refreshed_count,
+                        skipped = result.skipped_count,
+                        failed = result.failed_count,
+                        refresh_expiring_within_seconds = result.refresh_expiring_within_seconds,
+                        "zoom token maintenance scheduler tick completed"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        "zoom token maintenance scheduler tick failed"
+                    );
+                }
+            }
+        }
+    });
+}
+
+fn start_zoom_recording_sync(context: ApplicationBootstrapContext) {
+    if !context.zoom_recording_sync_scheduler_enabled {
+        return;
+    }
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_zoom_recording_sync_scheduler(&database_url) {
+        return;
+    }
+    let vault = context.vault;
+    let event_bus = context.event_bus;
+
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(ZOOM_RECORDING_SYNC_TICK_SECONDS));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "zoom",
+                ZOOM_RECORDING_SYNC_RUNTIME,
+                json!({
+                    "label": "Zoom recording sync",
+                    "scope": "scheduler",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            if !host_vault_is_unlocked(&vault) {
+                continue;
+            }
+            match run_zoom_recording_sync_once(&pool, &vault, &event_bus).await {
+                Ok(result)
+                    if result.accounts_checked > 0
+                        || result.accounts_synced > 0
+                        || result.failed_count > 0
+                        || result.meetings_recorded > 0
+                        || result.recordings_recorded > 0
+                        || result.media_downloads_recorded > 0
+                        || result.transcripts_recorded > 0 =>
+                {
+                    tracing::info!(
+                        accounts_checked = result.accounts_checked,
+                        accounts_synced = result.accounts_synced,
+                        accounts_skipped = result.accounts_skipped,
+                        failed = result.failed_count,
+                        meetings_recorded = result.meetings_recorded,
+                        recordings_recorded = result.recordings_recorded,
+                        media_downloads_recorded = result.media_downloads_recorded,
+                        transcripts_recorded = result.transcripts_recorded,
+                        lookback_days = result.lookback_days,
+                        "zoom recording sync scheduler tick completed"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(error = %error, "zoom recording sync scheduler tick failed");
+                }
+            }
+        }
+    });
+}
+
+fn start_zoom_retention_cleanup(context: ApplicationBootstrapContext) {
+    if !context.zoom_retention_cleanup_scheduler_enabled {
+        return;
+    }
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_zoom_retention_cleanup_scheduler(&database_url) {
+        return;
+    }
+    let event_bus = context.event_bus;
+
+    tokio::spawn(async move {
+        let mut tick =
+            tokio::time::interval(Duration::from_secs(ZOOM_RETENTION_CLEANUP_TICK_SECONDS));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "zoom",
+                ZOOM_RETENTION_CLEANUP_RUNTIME,
+                json!({
+                    "label": "Zoom retention cleanup",
+                    "scope": "scheduler",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            match run_zoom_retention_cleanup_once(&pool, &event_bus).await {
+                Ok(result)
+                    if result.accounts_checked > 0
+                        || result.accounts_cleaned > 0
+                        || result.recordings_removed > 0
+                        || result.transcripts_removed > 0 =>
+                {
+                    tracing::info!(
+                        accounts_checked = result.accounts_checked,
+                        accounts_cleaned = result.accounts_cleaned,
+                        recordings_removed = result.recordings_removed,
+                        transcripts_removed = result.transcripts_removed,
+                        limit_per_account = result.limit_per_account,
+                        "zoom retention cleanup scheduler tick completed"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        "zoom retention cleanup scheduler tick failed"
+                    );
+                }
+            }
+        }
+    });
+}
+
 fn start_whatsapp_runtime_event_projection(context: ApplicationBootstrapContext) {
     let Some(pool) = context.pool else {
         return;
@@ -641,6 +873,116 @@ fn start_person_derived_evidence_projection(context: ApplicationBootstrapContext
     });
 }
 
+fn start_zoom_calendar_matching_projection(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_zoom_calendar_matching_consumer(&database_url) {
+        return;
+    }
+
+    tokio::spawn(async move {
+        let runner = crate::platform::events::EventConsumerRunner::new(
+            pool.clone(),
+            crate::platform::events::EventConsumerConfig::new(
+                crate::application::ZOOM_CALENDAR_MATCHING_CONSUMER,
+            ),
+        );
+        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "zoom",
+                ZOOM_CALENDAR_MATCHING_RUNTIME,
+                json!({
+                    "label": "Zoom calendar matching consumer",
+                    "scope": "consumer",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            let handler_pool = pool.clone();
+            if let Err(error) = runner
+                .process_next_batch(|event| {
+                    crate::application::project_zoom_calendar_matching_event(
+                        handler_pool.clone(),
+                        event,
+                    )
+                })
+                .await
+            {
+                tracing::warn!(
+                    error = %error,
+                    "zoom calendar matching projection consumer tick failed"
+                );
+            }
+        }
+    });
+}
+
+fn start_zoom_signal_detection_projection(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_zoom_signal_detection_consumer(&database_url) {
+        return;
+    }
+
+    tokio::spawn(async move {
+        let runner = crate::platform::events::EventConsumerRunner::new(
+            pool.clone(),
+            crate::platform::events::EventConsumerConfig::new(
+                crate::application::ZOOM_SIGNAL_DETECTION_CONSUMER,
+            ),
+        );
+        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "zoom",
+                ZOOM_SIGNAL_DETECTION_RUNTIME,
+                json!({
+                    "label": "Zoom signal detection consumer",
+                    "scope": "consumer",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            let handler_pool = pool.clone();
+            if let Err(error) = runner
+                .process_next_batch(|event| {
+                    crate::application::project_zoom_signal_detection_event(
+                        handler_pool.clone(),
+                        event,
+                    )
+                })
+                .await
+            {
+                tracing::warn!(
+                    error = %error,
+                    "zoom signal detection projection consumer tick failed"
+                );
+            }
+        }
+    });
+}
+
 fn start_person_identity_review_inbox_projection(context: ApplicationBootstrapContext) {
     let Some(pool) = context.pool else {
         return;
@@ -690,6 +1032,61 @@ fn start_person_identity_review_inbox_projection(context: ApplicationBootstrapCo
                 tracing::warn!(
                     error = %error,
                     "person identity review inbox projection consumer tick failed"
+                );
+            }
+        }
+    });
+}
+
+fn start_zoom_participant_identity_projection(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_zoom_participant_identity_consumer(&database_url) {
+        return;
+    }
+
+    tokio::spawn(async move {
+        let runner = crate::platform::events::EventConsumerRunner::new(
+            pool.clone(),
+            crate::platform::events::EventConsumerConfig::new(
+                crate::application::ZOOM_PARTICIPANT_IDENTITY_CONSUMER,
+            ),
+        );
+        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "zoom",
+                ZOOM_PARTICIPANT_IDENTITY_RUNTIME,
+                json!({
+                    "label": "Zoom participant identity consumer",
+                    "scope": "consumer",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            let handler_pool = pool.clone();
+            if let Err(error) = runner
+                .process_next_batch(|event| {
+                    crate::application::project_zoom_participant_identity_event(
+                        handler_pool.clone(),
+                        event,
+                    )
+                })
+                .await
+            {
+                tracing::warn!(
+                    error = %error,
+                    "zoom participant identity projection consumer tick failed"
                 );
             }
         }
@@ -1023,6 +1420,45 @@ fn register_person_derived_evidence_consumer(database_url: &str) -> bool {
     }
 }
 
+fn register_zoom_signal_detection_consumer(database_url: &str) -> bool {
+    match ZOOM_SIGNAL_DETECTION_CONSUMER_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "zoom signal detection consumer registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn register_zoom_calendar_matching_consumer(database_url: &str) -> bool {
+    match ZOOM_CALENDAR_MATCHING_CONSUMER_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "zoom calendar matching consumer registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn register_zoom_participant_identity_consumer(database_url: &str) -> bool {
+    match ZOOM_PARTICIPANT_IDENTITY_CONSUMER_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "zoom participant identity consumer registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
 fn register_person_identity_review_inbox_consumer(database_url: &str) -> bool {
     match PERSON_IDENTITY_REVIEW_INBOX_CONSUMER_DATABASES.lock() {
         Ok(mut databases) => databases.insert(database_url.to_owned()),
@@ -1114,13 +1550,52 @@ fn register_mail_outbox_delivery_scheduler(database_url: &str) -> bool {
     }
 }
 
+fn register_zoom_token_maintenance_scheduler(database_url: &str) -> bool {
+    match ZOOM_TOKEN_MAINTENANCE_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "zoom token maintenance scheduler registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn register_zoom_recording_sync_scheduler(database_url: &str) -> bool {
+    match ZOOM_RECORDING_SYNC_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "zoom recording sync scheduler registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn register_zoom_retention_cleanup_scheduler(database_url: &str) -> bool {
+    match ZOOM_RETENTION_CLEANUP_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "zoom retention cleanup scheduler registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
 fn host_vault_is_unlocked(vault: &HostVault) -> bool {
     match vault.status() {
         Ok(status) => status.state == VaultMode::Unlocked,
         Err(error) => {
             tracing::warn!(
                 error = %error,
-                "mail outbox delivery scheduler could not read host vault status"
+                "background scheduler could not read host vault status"
             );
             false
         }
@@ -1163,6 +1638,196 @@ async fn runtime_allows_processing(
             true
         }
     }
+}
+
+async fn run_zoom_token_maintenance_once(
+    pool: &PgPool,
+    vault: &HostVault,
+    event_bus: &EventBus,
+) -> Result<crate::application::provider_runtime_contracts::ZoomTokenMaintenanceResult, String> {
+    let secret_store = crate::platform::secrets::SecretReferenceStore::new(pool.clone());
+    let service =
+        crate::application::zoom_provider_runtime_service(pool.clone(), event_bus.clone());
+    let request = crate::application::provider_runtime_contracts::ZoomTokenMaintenanceRequest {
+        account_id: None,
+        force: false,
+        refresh_expiring_within_seconds: Some(
+            ZOOM_TOKEN_MAINTENANCE_REFRESH_EXPIRING_WITHIN_SECONDS,
+        ),
+    };
+    service
+        .maintain_tokens(&secret_store, vault, &request)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+struct ZoomRecordingSyncSchedulerResult {
+    accounts_checked: usize,
+    accounts_synced: usize,
+    accounts_skipped: usize,
+    failed_count: usize,
+    meetings_recorded: usize,
+    recordings_recorded: usize,
+    media_downloads_recorded: usize,
+    transcripts_recorded: usize,
+    lookback_days: i64,
+}
+
+struct ZoomRetentionCleanupSchedulerResult {
+    accounts_checked: usize,
+    accounts_cleaned: usize,
+    recordings_removed: usize,
+    transcripts_removed: usize,
+    limit_per_account: i64,
+}
+
+async fn run_zoom_recording_sync_once(
+    pool: &PgPool,
+    vault: &HostVault,
+    event_bus: &EventBus,
+) -> Result<ZoomRecordingSyncSchedulerResult, String> {
+    let settings = crate::platform::settings::ApplicationSettingsStore::new(pool.clone());
+    let allow_remote_transcript_downloads = settings
+        .setting("privacy.zoom_remote_transcript_download_enabled")
+        .await
+        .map_err(|error| error.to_string())?
+        .and_then(|setting| setting.value.as_bool())
+        .unwrap_or(false);
+    let allow_remote_recording_downloads = settings
+        .setting("privacy.zoom_remote_recording_download_enabled")
+        .await
+        .map_err(|error| error.to_string())?
+        .and_then(|setting| setting.value.as_bool())
+        .unwrap_or(false);
+
+    let secret_store = crate::platform::secrets::SecretReferenceStore::new(pool.clone());
+    let service =
+        crate::application::zoom_provider_runtime_service(pool.clone(), event_bus.clone());
+    let accounts = service
+        .list_accounts(false)
+        .await
+        .map_err(|error| error.to_string())?
+        .items;
+    let today = Utc::now().date_naive();
+    let from = (today - chrono::TimeDelta::days(ZOOM_RECORDING_SYNC_LOOKBACK_DAYS))
+        .format("%Y-%m-%d")
+        .to_string();
+    let to = today.format("%Y-%m-%d").to_string();
+    let mut result = ZoomRecordingSyncSchedulerResult {
+        accounts_checked: 0,
+        accounts_synced: 0,
+        accounts_skipped: 0,
+        failed_count: 0,
+        meetings_recorded: 0,
+        recordings_recorded: 0,
+        media_downloads_recorded: 0,
+        transcripts_recorded: 0,
+        lookback_days: ZOOM_RECORDING_SYNC_LOOKBACK_DAYS,
+    };
+
+    for account in accounts {
+        if !account.provider_kind.starts_with("zoom_") {
+            continue;
+        }
+        result.accounts_checked += 1;
+        let status = service
+            .runtime_status(&account.account_id)
+            .await
+            .map_err(|error| error.to_string())?;
+        if !should_run_zoom_recording_sync(&status) {
+            result.accounts_skipped += 1;
+            continue;
+        }
+        let request = crate::application::provider_runtime_contracts::ZoomRecordingSyncRequest {
+            account_id: account.account_id.clone(),
+            user_id: None,
+            from: from.clone(),
+            to: to.clone(),
+            page_size: Some(
+                crate::integrations::zoom::client::ZOOM_PROVIDER_SYNC_DEFAULT_PAGE_SIZE,
+            ),
+            max_meetings: Some(
+                crate::integrations::zoom::client::ZOOM_PROVIDER_SYNC_DEFAULT_MAX_MEETINGS,
+            ),
+            api_base_url: None,
+        };
+        match service
+            .sync_recordings(
+                &secret_store,
+                vault,
+                &request,
+                allow_remote_recording_downloads,
+                allow_remote_transcript_downloads,
+            )
+            .await
+        {
+            Ok(sync) => {
+                result.accounts_synced += 1;
+                result.meetings_recorded += sync.meetings_recorded;
+                result.recordings_recorded += sync.recordings_recorded;
+                result.media_downloads_recorded += sync.media_downloads_recorded;
+                result.transcripts_recorded += sync.transcripts_recorded;
+                if !sync.failures.is_empty() {
+                    result.failed_count += 1;
+                }
+            }
+            Err(error) => {
+                result.failed_count += 1;
+                tracing::warn!(
+                    error = %error,
+                    account_id = %account.account_id,
+                    "zoom recording sync failed for authorized runtime account"
+                );
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+async fn run_zoom_retention_cleanup_once(
+    pool: &PgPool,
+    event_bus: &EventBus,
+) -> Result<ZoomRetentionCleanupSchedulerResult, String> {
+    let service =
+        crate::application::zoom_provider_runtime_service(pool.clone(), event_bus.clone());
+    let accounts = service
+        .list_accounts(false)
+        .await
+        .map_err(|error| error.to_string())?
+        .items;
+    let mut result = ZoomRetentionCleanupSchedulerResult {
+        accounts_checked: 0,
+        accounts_cleaned: 0,
+        recordings_removed: 0,
+        transcripts_removed: 0,
+        limit_per_account: ZOOM_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT,
+    };
+
+    for account in accounts {
+        if !account.provider_kind.starts_with("zoom_") {
+            continue;
+        }
+        result.accounts_checked += 1;
+        let response = service
+            .cleanup_retention(
+                &account.account_id,
+                &crate::application::provider_runtime_contracts::ZoomRetentionCleanupRequest {
+                    remove_recordings: true,
+                    remove_transcripts: true,
+                    limit: ZOOM_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT,
+                },
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+        if response.recordings_removed > 0 || response.transcripts_removed > 0 {
+            result.accounts_cleaned += 1;
+        }
+        result.recordings_removed += response.recordings_removed;
+        result.transcripts_removed += response.transcripts_removed;
+    }
+
+    Ok(result)
 }
 
 async fn reconcile_whatsapp_runtime_restore_once(
@@ -1329,6 +1994,17 @@ fn should_reconcile_whatsapp_runtime_restore(
     status: &crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus,
 ) -> bool {
     status.session_restore_available || matches!(status.status.as_str(), "available" | "linked")
+}
+
+fn should_run_zoom_recording_sync(
+    status: &crate::application::provider_runtime_contracts::ZoomRuntimeStatus,
+) -> bool {
+    status.live_runtime_available
+        && matches!(status.status.as_str(), "running" | "degraded")
+        && !status
+            .runtime_blockers
+            .iter()
+            .any(|blocker| blocker == "zoom_token_rotation_required")
 }
 
 fn whatsapp_runtime_snapshot_changed(
@@ -1579,5 +2255,71 @@ mod tests {
 
         assert!(register_signal_replay_dispatcher(&database_url));
         assert!(!register_signal_replay_dispatcher(&database_url));
+    }
+
+    #[test]
+    fn zoom_token_maintenance_scheduler_registration_is_once_per_database_url() {
+        let database_url = format!(
+            "postgres://zoom-token-maintenance-test/{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+
+        assert!(register_zoom_token_maintenance_scheduler(&database_url));
+        assert!(!register_zoom_token_maintenance_scheduler(&database_url));
+    }
+
+    #[test]
+    fn zoom_recording_sync_scheduler_registration_is_once_per_database_url() {
+        let database_url = format!(
+            "postgres://zoom-recording-sync-test/{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+
+        assert!(register_zoom_recording_sync_scheduler(&database_url));
+        assert!(!register_zoom_recording_sync_scheduler(&database_url));
+    }
+
+    #[test]
+    fn zoom_retention_cleanup_scheduler_registration_is_once_per_database_url() {
+        let database_url = format!(
+            "postgres://zoom-retention-cleanup-test/{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+
+        assert!(register_zoom_retention_cleanup_scheduler(&database_url));
+        assert!(!register_zoom_retention_cleanup_scheduler(&database_url));
+    }
+
+    #[test]
+    fn zoom_calendar_matching_consumer_registration_is_once_per_database_url() {
+        let database_url = format!(
+            "postgres://zoom-calendar-matching-test/{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+
+        assert!(register_zoom_calendar_matching_consumer(&database_url));
+        assert!(!register_zoom_calendar_matching_consumer(&database_url));
+    }
+
+    #[test]
+    fn zoom_signal_detection_consumer_registration_is_once_per_database_url() {
+        let database_url = format!(
+            "postgres://zoom-signal-detection-test/{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+
+        assert!(register_zoom_signal_detection_consumer(&database_url));
+        assert!(!register_zoom_signal_detection_consumer(&database_url));
+    }
+
+    #[test]
+    fn zoom_participant_identity_consumer_registration_is_once_per_database_url() {
+        let database_url = format!(
+            "postgres://zoom-participant-identity-test/{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+
+        assert!(register_zoom_participant_identity_consumer(&database_url));
+        assert!(!register_zoom_participant_identity_consumer(&database_url));
     }
 }

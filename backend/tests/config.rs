@@ -17,6 +17,9 @@ fn default_config_binds_to_localhost_without_database_url() {
     assert_eq!(config.secret_vault_path(), None);
     assert_eq!(config.secret_vault_key(), None);
     assert_eq!(config.tdjson_path(), None);
+    assert!(config.zoom_token_maintenance_scheduler_enabled());
+    assert!(config.zoom_recording_sync_scheduler_enabled());
+    assert!(config.zoom_retention_cleanup_scheduler_enabled());
 }
 
 #[test]
@@ -160,6 +163,32 @@ fn config_from_pairs_accepts_telegram_app_credentials() {
         ),
         "ResolvedSecret { value: \"<redacted>\" }"
     );
+}
+
+#[test]
+fn config_from_pairs_accepts_zoom_token_maintenance_scheduler_toggle() {
+    let config =
+        AppConfig::from_pairs([("HERMES_ZOOM_TOKEN_MAINTENANCE_SCHEDULER_ENABLED", "false")])
+            .expect("valid Zoom token maintenance scheduler config");
+
+    assert!(!config.zoom_token_maintenance_scheduler_enabled());
+}
+
+#[test]
+fn config_from_pairs_accepts_zoom_recording_sync_scheduler_toggle() {
+    let config = AppConfig::from_pairs([("HERMES_ZOOM_RECORDING_SYNC_SCHEDULER_ENABLED", "false")])
+        .expect("valid Zoom recording sync scheduler config");
+
+    assert!(!config.zoom_recording_sync_scheduler_enabled());
+}
+
+#[test]
+fn config_from_pairs_accepts_zoom_retention_cleanup_scheduler_toggle() {
+    let config =
+        AppConfig::from_pairs([("HERMES_ZOOM_RETENTION_CLEANUP_SCHEDULER_ENABLED", "false")])
+            .expect("valid Zoom retention cleanup scheduler config");
+
+    assert!(!config.zoom_retention_cleanup_scheduler_enabled());
 }
 
 #[test]

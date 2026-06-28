@@ -1,10 +1,18 @@
 use super::errors::CommunicationStorageError;
 use super::ids::communication_attachment_import_id;
-use super::models::{ImportedCommunicationAttachment, NewCommunicationAttachmentImport};
+use super::models::{
+    ImportedCommunicationAttachment, ImportedCommunicationAttachmentRemovalResult,
+    NewCommunicationAttachmentImport,
+};
 use super::rows::{row_to_imported_attachment, row_to_mail_blob};
 use super::store::CommunicationStorageStore;
 use super::validation::validate_non_empty;
 use crate::domains::communications::evidence::link_mail_entity_in_transaction;
+use crate::platform::storage::{
+    ImportedAttachmentRecord, ImportedAttachmentRemovalResult, ImportedAttachmentStoragePort,
+    ImportedAttachmentUpsert, LocalBlobRecord, SafetyScanReport, SafetyScanStatus, StorageError,
+    StoredBlobRecord,
+};
 
 impl CommunicationStorageStore {
     pub async fn upsert_imported_attachment(
@@ -102,6 +110,105 @@ impl CommunicationStorageStore {
         row.map(row_to_imported_attachment).transpose()
     }
 
+    pub async fn list_imported_attachments(
+        &self,
+        account_id: &str,
+        source_kind: &str,
+        limit: i64,
+    ) -> Result<Vec<ImportedCommunicationAttachment>, CommunicationStorageError> {
+        let account_id = validate_non_empty("account_id", account_id)?;
+        let source_kind = validate_non_empty("source_kind", source_kind)?;
+        let limit = limit.clamp(1, 100);
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                i.attachment_id,
+                i.account_id,
+                i.channel_kind,
+                i.blob_id,
+                i.filename,
+                i.content_type,
+                i.size_bytes,
+                i.sha256,
+                i.source_kind,
+                i.imported_by,
+                i.scan_status,
+                i.scan_engine,
+                i.scan_checked_at,
+                i.scan_summary,
+                i.scan_metadata,
+                i.metadata,
+                b.storage_kind AS blob_storage_kind,
+                b.storage_path AS blob_storage_path,
+                i.created_at,
+                i.updated_at
+            FROM communication_attachment_imports i
+            JOIN communication_mail_blobs b ON b.blob_id = i.blob_id
+            WHERE i.account_id = $1
+              AND i.source_kind = $2
+            ORDER BY i.created_at DESC
+            LIMIT $3
+            "#,
+        )
+        .bind(account_id)
+        .bind(source_kind)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(row_to_imported_attachment).collect()
+    }
+
+    pub async fn list_expired_imported_attachments(
+        &self,
+        account_id: &str,
+        source_kind: &str,
+        limit: i64,
+    ) -> Result<Vec<ImportedCommunicationAttachment>, CommunicationStorageError> {
+        let account_id = validate_non_empty("account_id", account_id)?;
+        let source_kind = validate_non_empty("source_kind", source_kind)?;
+        let limit = limit.clamp(1, 500);
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                i.attachment_id,
+                i.account_id,
+                i.channel_kind,
+                i.blob_id,
+                i.filename,
+                i.content_type,
+                i.size_bytes,
+                i.sha256,
+                i.source_kind,
+                i.imported_by,
+                i.scan_status,
+                i.scan_engine,
+                i.scan_checked_at,
+                i.scan_summary,
+                i.scan_metadata,
+                i.metadata,
+                b.storage_kind AS blob_storage_kind,
+                b.storage_path AS blob_storage_path,
+                i.created_at,
+                i.updated_at
+            FROM communication_attachment_imports i
+            JOIN communication_mail_blobs b ON b.blob_id = i.blob_id
+            WHERE i.account_id = $1
+              AND i.source_kind = $2
+              AND NULLIF(i.metadata -> 'retention_policy' ->> 'expires_at', '') IS NOT NULL
+              AND (i.metadata -> 'retention_policy' ->> 'expires_at')::timestamptz <= now()
+            ORDER BY (i.metadata -> 'retention_policy' ->> 'expires_at')::timestamptz ASC,
+                     i.created_at ASC
+            LIMIT $3
+            "#,
+        )
+        .bind(account_id)
+        .bind(source_kind)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(row_to_imported_attachment).collect()
+    }
+
     pub async fn blob_by_id(
         &self,
         blob_id: &str,
@@ -126,6 +233,86 @@ impl CommunicationStorageStore {
         .await?;
 
         row.map(row_to_mail_blob).transpose()
+    }
+
+    pub async fn remove_imported_attachment(
+        &self,
+        attachment_id: &str,
+        account_id: &str,
+        source_kind: &str,
+    ) -> Result<Option<ImportedCommunicationAttachmentRemovalResult>, CommunicationStorageError>
+    {
+        let attachment_id = validate_non_empty("attachment_id", attachment_id)?;
+        let account_id = validate_non_empty("account_id", account_id)?;
+        let source_kind = validate_non_empty("source_kind", source_kind)?;
+        let mut transaction = self.pool.begin().await?;
+        let sql = imported_attachment_select_sql(
+            "i.attachment_id = $1 AND i.account_id = $2 AND i.source_kind = $3",
+        );
+        let imported = sqlx::query(&sql)
+            .bind(&attachment_id)
+            .bind(&account_id)
+            .bind(&source_kind)
+            .fetch_optional(&mut *transaction)
+            .await?
+            .map(row_to_imported_attachment)
+            .transpose()?;
+        let Some(imported_attachment) = imported else {
+            transaction.commit().await?;
+            return Ok(None);
+        };
+
+        sqlx::query(
+            r#"
+            DELETE FROM communication_attachment_imports
+            WHERE attachment_id = $1
+              AND account_id = $2
+              AND source_kind = $3
+            "#,
+        )
+        .bind(&attachment_id)
+        .bind(&account_id)
+        .bind(&source_kind)
+        .execute(&mut *transaction)
+        .await?;
+
+        let blob_still_referenced = sqlx::query_scalar::<_, bool>(
+            r#"
+            SELECT EXISTS(
+                SELECT 1
+                FROM communication_attachment_imports
+                WHERE blob_id = $1
+            ) OR EXISTS(
+                SELECT 1
+                FROM communication_attachments
+                WHERE blob_id = $1
+            )
+            "#,
+        )
+        .bind(&imported_attachment.blob_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+
+        let blob_metadata_removed = if blob_still_referenced {
+            false
+        } else {
+            sqlx::query(
+                r#"
+                DELETE FROM communication_mail_blobs
+                WHERE blob_id = $1
+                "#,
+            )
+            .bind(&imported_attachment.blob_id)
+            .execute(&mut *transaction)
+            .await?;
+            true
+        };
+
+        transaction.commit().await?;
+        Ok(Some(ImportedCommunicationAttachmentRemovalResult {
+            imported_attachment,
+            blob_metadata_removed,
+        }))
     }
 }
 
@@ -174,6 +361,221 @@ fn imported_attachment_upsert_sql() -> &'static str {
         metadata = EXCLUDED.metadata,
         updated_at = now()
     "#
+}
+
+impl ImportedAttachmentStoragePort for CommunicationStorageStore {
+    fn upsert_blob_record<'a>(
+        &'a self,
+        blob: &'a LocalBlobRecord,
+        content_type: &'a str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<StoredBlobRecord, StorageError>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let stored = self
+                .upsert_blob(
+                    &super::models::NewCommunicationBlob::new(
+                        &blob.storage_kind,
+                        &blob.storage_path,
+                        &blob.sha256,
+                        blob.size_bytes,
+                    )
+                    .content_type(content_type),
+                )
+                .await
+                .map_err(storage_error_from_communication)?;
+            Ok(StoredBlobRecord {
+                blob_id: stored.blob_id,
+            })
+        })
+    }
+
+    fn upsert_imported_attachment_record<'a>(
+        &'a self,
+        import: &'a ImportedAttachmentUpsert,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<ImportedAttachmentRecord, StorageError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let mut upsert = NewCommunicationAttachmentImport::new(
+                &import.attachment_id,
+                &import.blob_id,
+                &import.content_type,
+                import.size_bytes,
+                &import.sha256,
+                &import.imported_by,
+            )
+            .account_id(import.account_id.clone())
+            .channel_kind(import.channel_kind.clone())
+            .source_kind(import.source_kind.clone())
+            .scan_report(scan_report_to_domain(&import.scan_report)?)
+            .metadata(import.metadata.clone());
+            if let Some(filename) = &import.filename {
+                upsert = upsert.filename(filename.clone());
+            }
+            let stored = self
+                .upsert_imported_attachment(&upsert)
+                .await
+                .map_err(storage_error_from_communication)?;
+            imported_attachment_to_platform(stored)
+        })
+    }
+
+    fn list_imported_attachment_records<'a>(
+        &'a self,
+        account_id: &'a str,
+        source_kind: &'a str,
+        limit: i64,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Vec<ImportedAttachmentRecord>, StorageError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let items = self
+                .list_imported_attachments(account_id, source_kind, limit)
+                .await
+                .map_err(storage_error_from_communication)?;
+            items
+                .into_iter()
+                .map(imported_attachment_to_platform)
+                .collect()
+        })
+    }
+
+    fn list_expired_imported_attachment_records<'a>(
+        &'a self,
+        account_id: &'a str,
+        source_kind: &'a str,
+        limit: i64,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Vec<ImportedAttachmentRecord>, StorageError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let items = self
+                .list_expired_imported_attachments(account_id, source_kind, limit)
+                .await
+                .map_err(storage_error_from_communication)?;
+            items
+                .into_iter()
+                .map(imported_attachment_to_platform)
+                .collect()
+        })
+    }
+
+    fn remove_imported_attachment_record<'a>(
+        &'a self,
+        attachment_id: &'a str,
+        account_id: &'a str,
+        source_kind: &'a str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<Option<ImportedAttachmentRemovalResult>, StorageError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let removed = self
+                .remove_imported_attachment(attachment_id, account_id, source_kind)
+                .await
+                .map_err(storage_error_from_communication)?;
+            removed
+                .map(|item| {
+                    Ok(ImportedAttachmentRemovalResult {
+                        imported_attachment: imported_attachment_to_platform(
+                            item.imported_attachment,
+                        )?,
+                        blob_metadata_removed: item.blob_metadata_removed,
+                    })
+                })
+                .transpose()
+        })
+    }
+}
+
+fn storage_error_from_communication(error: CommunicationStorageError) -> StorageError {
+    match error {
+        CommunicationStorageError::Sqlx(err) => StorageError::Connect(err),
+        CommunicationStorageError::ObservationStore(err) => StorageError::Invalid(err.to_string()),
+        CommunicationStorageError::Io(err) => StorageError::Io(err),
+        other => StorageError::Invalid(other.to_string()),
+    }
+}
+
+fn scan_status_to_domain(status: SafetyScanStatus) -> super::scanner::AttachmentSafetyScanStatus {
+    match status {
+        SafetyScanStatus::NotScanned => super::scanner::AttachmentSafetyScanStatus::NotScanned,
+        SafetyScanStatus::Clean => super::scanner::AttachmentSafetyScanStatus::Clean,
+        SafetyScanStatus::Suspicious => super::scanner::AttachmentSafetyScanStatus::Suspicious,
+        SafetyScanStatus::Malicious => super::scanner::AttachmentSafetyScanStatus::Malicious,
+        SafetyScanStatus::Failed => super::scanner::AttachmentSafetyScanStatus::Failed,
+    }
+}
+
+fn scan_status_to_platform(status: super::scanner::AttachmentSafetyScanStatus) -> SafetyScanStatus {
+    match status {
+        super::scanner::AttachmentSafetyScanStatus::NotScanned => SafetyScanStatus::NotScanned,
+        super::scanner::AttachmentSafetyScanStatus::Clean => SafetyScanStatus::Clean,
+        super::scanner::AttachmentSafetyScanStatus::Suspicious => SafetyScanStatus::Suspicious,
+        super::scanner::AttachmentSafetyScanStatus::Malicious => SafetyScanStatus::Malicious,
+        super::scanner::AttachmentSafetyScanStatus::Failed => SafetyScanStatus::Failed,
+    }
+}
+
+fn scan_report_to_domain(
+    report: &SafetyScanReport,
+) -> Result<super::scanner::AttachmentSafetyScanReport, StorageError> {
+    if !report.metadata.is_object() {
+        return Err(StorageError::Invalid(
+            "scan_metadata must be a JSON object".to_owned(),
+        ));
+    }
+    Ok(super::scanner::AttachmentSafetyScanReport {
+        status: scan_status_to_domain(report.status),
+        engine: report.engine.clone(),
+        checked_at: report.checked_at,
+        summary: report.summary.clone(),
+        metadata: report.metadata.clone(),
+    })
+}
+
+fn imported_attachment_to_platform(
+    item: ImportedCommunicationAttachment,
+) -> Result<ImportedAttachmentRecord, StorageError> {
+    Ok(ImportedAttachmentRecord {
+        attachment_id: item.attachment_id,
+        account_id: item.account_id,
+        channel_kind: item.channel_kind,
+        blob_id: item.blob_id,
+        filename: item.filename,
+        content_type: item.content_type,
+        size_bytes: item.size_bytes,
+        sha256: item.sha256,
+        source_kind: item.source_kind,
+        imported_by: item.imported_by,
+        scan_status: scan_status_to_platform(item.scan_status),
+        scan_engine: item.scan_engine,
+        scan_checked_at: item.scan_checked_at,
+        scan_summary: item.scan_summary,
+        scan_metadata: item.scan_metadata,
+        metadata: item.metadata,
+        storage_kind: item.storage_kind,
+        storage_path: item.storage_path,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+    })
 }
 
 fn imported_attachment_select_sql(predicate: &str) -> String {

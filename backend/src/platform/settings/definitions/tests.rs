@@ -73,3 +73,78 @@ fn frontend_ui_state_rejects_oversized_snapshots() {
 
     assert!(matches!(error, SettingsError::InvalidValue(_)));
 }
+
+#[test]
+fn zoom_remote_transcript_download_setting_is_declared_as_opt_in_boolean() {
+    let setting = declared_setting("privacy.zoom_remote_transcript_download_enabled")
+        .expect("zoom transcript download policy setting");
+
+    assert_eq!(setting.category, "privacy");
+    assert_eq!(setting.value_kind, SettingValueKind::Boolean);
+    assert!(setting.is_editable);
+    assert_eq!(setting.default_value, json!(false));
+    assert_eq!(setting.metadata["ui_control"], json!("checkbox"));
+    assert_eq!(setting.metadata["scope"], json!("zoom"));
+    assert_eq!(
+        setting.metadata["policy_kind"],
+        json!("owner_visible_opt_in")
+    );
+}
+
+#[test]
+fn zoom_remote_recording_download_setting_is_declared_as_opt_in_boolean() {
+    let setting = declared_setting("privacy.zoom_remote_recording_download_enabled")
+        .expect("zoom recording download policy setting");
+
+    assert_eq!(setting.category, "privacy");
+    assert_eq!(setting.value_kind, SettingValueKind::Boolean);
+    assert!(setting.is_editable);
+    assert_eq!(setting.default_value, json!(false));
+    assert_eq!(setting.metadata["ui_control"], json!("checkbox"));
+    assert_eq!(setting.metadata["scope"], json!("zoom"));
+    assert_eq!(
+        setting.metadata["policy_kind"],
+        json!("owner_visible_opt_in")
+    );
+    assert_eq!(setting.metadata["stores_private_content"], json!(true));
+}
+
+#[test]
+fn zoom_recording_import_retention_setting_is_declared_as_editable_integer() {
+    let setting = declared_setting("privacy.zoom_recording_import_retention_days")
+        .expect("zoom recording import retention setting");
+
+    assert_eq!(setting.category, "privacy");
+    assert_eq!(setting.value_kind, SettingValueKind::Integer);
+    assert!(setting.is_editable);
+    assert_eq!(setting.default_value, json!(0));
+    assert_eq!(setting.metadata["ui_control"], json!("number"));
+    assert_eq!(setting.metadata["scope"], json!("zoom"));
+    assert_eq!(
+        setting.metadata["policy_kind"],
+        json!("owner_visible_retention")
+    );
+    assert_eq!(setting.metadata["min"], json!(0));
+    assert_eq!(setting.metadata["max"], json!(3650));
+    assert_eq!(setting.metadata["stores_private_content"], json!(true));
+}
+
+#[test]
+fn zoom_transcript_retention_setting_is_declared_as_editable_integer() {
+    let setting = declared_setting("privacy.zoom_transcript_retention_days")
+        .expect("zoom transcript retention setting");
+
+    assert_eq!(setting.category, "privacy");
+    assert_eq!(setting.value_kind, SettingValueKind::Integer);
+    assert!(setting.is_editable);
+    assert_eq!(setting.default_value, json!(0));
+    assert_eq!(setting.metadata["ui_control"], json!("number"));
+    assert_eq!(setting.metadata["scope"], json!("zoom"));
+    assert_eq!(
+        setting.metadata["policy_kind"],
+        json!("owner_visible_retention")
+    );
+    assert_eq!(setting.metadata["min"], json!(0));
+    assert_eq!(setting.metadata["max"], json!(3650));
+    assert_eq!(setting.metadata["stores_private_content"], json!(true));
+}

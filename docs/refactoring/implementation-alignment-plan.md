@@ -72,6 +72,11 @@ implementation evidence:
 - Provider runtime/setup/account-control APIs now live under
   `/api/v1/integrations/*`, while product/business Communications read/write
   APIs remain under `/api/v1/communications/*`.
+- `docs/zoom/` and ADR-0102 now document the Zoom provider foundation. The
+  current checkout contains `backend/src/integrations/zoom`,
+  `frontend/src/integrations/zoom`, migration `0160` and
+  `/api/v1/integrations/zoom/*` routes; ADR-0102 is accepted after the full
+  backend/frontend validation gate passed.
 - Vault ownership is now constrained to host vault lifecycle, encrypted secret
   payload storage, secret references, resolver contracts and provider session
   secret storage. Domain-owned provider account/account-binding stores live

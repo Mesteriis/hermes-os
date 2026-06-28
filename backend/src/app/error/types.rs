@@ -2,7 +2,7 @@ use std::io;
 
 use crate::ai::control_center::AiControlCenterError;
 use crate::ai::core::AiError;
-use crate::application::provider_runtime_contracts::{TelegramError, WhatsappWebError};
+use crate::application::provider_runtime_contracts::{TelegramError, WhatsappWebError, ZoomError};
 use crate::application::review_promotion::ReviewPromotionError;
 use crate::domains::calendar::events::CalendarError;
 use crate::domains::communications::core::CommunicationIngestionError;
@@ -79,6 +79,7 @@ pub enum ApiError {
     AiControlCenter(AiControlCenterError),
     Telegram(TelegramError),
     WhatsappWeb(WhatsappWebError),
+    Zoom(ZoomError),
     Automation(AutomationError),
     Call(CallError),
     ProjectLinkTargetNotFound,

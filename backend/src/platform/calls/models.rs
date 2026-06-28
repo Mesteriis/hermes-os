@@ -46,6 +46,9 @@ pub struct TelegramCall {
     pub updated_at: DateTime<Utc>,
 }
 
+pub type NewProviderCall = NewTelegramCall;
+pub type ProviderCall = TelegramCall;
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CallDirection {

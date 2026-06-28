@@ -1313,7 +1313,7 @@ async fn seed_connectrpc_attachment(
                 message_id,
                 raw_record_id,
                 blob.blob_id,
-                "part-connectrpc-attachment",
+                format!("part-connectrpc-attachment-{filename}"),
                 content_type,
                 local_blob.size_bytes,
                 local_blob.sha256,
