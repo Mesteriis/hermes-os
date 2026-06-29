@@ -1,0 +1,126 @@
+---
+chunk_id: 128-other-frontend-part-001
+batch_id: batch-20260628T214902
+group: frontend
+role: other
+source_status: pending
+source_count: 14
+generated_by: code-wiki-ru
+---
+
+# 128-other-frontend-part-001 — frontend/other
+
+- Target index: [[components/frontend]]
+- Batch: `batch-20260628T214902`
+- Source files: `14`
+
+## Резюме
+
+Чанк содержит только один текстовый исходный файл (`frontend/index.html`) и набор бинарных ресурсов (PNG) без текстового наполнения. Wiki-страница `components/frontend.md` в текущем виде отсутствует или не подтверждена. Предлагается создать минимальную страницу, документирующую входную точку HTML, известные статические ресурсы и их параметры, строго на основе предоставленного контекста. Детали сборки, структуры `/src`, используемого фреймворка и назначения ресурсов не могут быть подтверждены этим чанком.
+
+## Предложенные страницы
+
+- `components/frontend.md`
+
+```markdown
+# Frontend
+
+## Обзор
+
+Фронтенд-часть проекта Hermes Hub. На основании доступного контекста подтверждены только входной HTML-файл и набор статических ресурсов. Язык интерфейса — русский (`lang="ru"`). Сборка, фреймворк и структура каталогов за пределами `frontend/` не подтверждены данным чанком.
+
+## Входная точка (index.html)
+
+Файл: `frontend/index.html`
+
+- DOCTYPE HTML5.
+- Язык страницы: `ru`.
+- Кодировка: UTF-8.
+- Иконка сайта: `/favicon.svg` (SVG).
+- Viewport: `width=device-width, initial-scale=1.0`.
+- Заголовок (`<title>`): `Hermes Hub`.
+- Корневой элемент приложения: `<div id="app"></div>`.
+- JavaScript-модуль, точка входа логики: `/src/main.ts`.
+
+## Статические ресурсы
+
+Ресурсы расположены в `frontend/public/assets/`. Все перечисленные файлы существуют в указанных путях; их содержимое (бинарные данные) не включено в контекст.
+
+### Иконки (hermes-icon-*.png)
+
+| Файл | Размер (байт) |
+|------|---------------|
+| `hermes-icon-16.png` | 722 |
+| `hermes-icon-32.png` | 1823 |
+| `hermes-icon-48.png` | 3221 |
+| `hermes-icon-64.png` | 4650 |
+| `hermes-icon-128.png` | 11624 |
+| `hermes-icon-180.png` | 18860 |
+| `hermes-icon-192.png` | 20556 |
+| `hermes-icon-256.png` | 32527 |
+| `hermes-icon-512.png` | 106906 |
+
+Назначение набора иконок (PWA-манифест, фавиконки и т.п.) контекстом не подтверждено.
+
+### Логотипы
+
+- `hermes-logo.png` — 1 560 669 байт.
+- `hermes-logo-mark.png` — 106 906 байт.
+
+### Аватар
+
+- `hermes-reference-avatar.png` — 5 808 байт.
+
+### Фоны
+
+- `shell-backgrounds/data-stream.png` — 1 747 967 байт.
+
+Семантика и сценарии использования каждого ресурса контекстом не определены.
+
+## Сборка
+
+Файлы конфигурации сборки (Vite, Webpack, иное) в предоставленном чанке отсутствуют. Информация о процессе сборки не может быть приведена.
+```
+
+## Покрытие источников
+
+- **`frontend/index.html`**
+  - Входная точка приложения, язык `ru`, кодировка, favicon `/favicon.svg`, viewport, заголовок «Hermes Hub», контейнер `<div id="app">`, подключение модуля `/src/main.ts`.
+
+- **`frontend/public/assets/hermes-icon-16.png`**, **`hermes-icon-32.png`**, **`hermes-icon-48.png`**, **`hermes-icon-64.png`**, **`hermes-icon-128.png`**, **`hermes-icon-180.png`**, **`hermes-icon-192.png`**, **`hermes-icon-256.png`**, **`hermes-icon-512.png`**
+  - Факт наличия файла по указанному пути, размер в байтах. Включены в таблицу иконок страницы.
+
+- **`frontend/public/assets/hermes-logo-mark.png`**
+  - Факт наличия, размер 106 906 байт.
+
+- **`frontend/public/assets/hermes-logo.png`**
+  - Факт наличия, размер 1 560 669 байт.
+
+- **`frontend/public/assets/hermes-reference-avatar.png`**
+  - Факт наличия, размер 5 808 байт.
+
+- **`frontend/public/assets/shell-backgrounds/data-stream.png`**
+  - Факт наличия, размер 1 747 967 байт.
+
+Для всех бинарных файлов покрыты только метаданные (путь, размер). Содержимое изображений не покрыто, так как бинарные данные были опущены.
+
+## Исходные файлы
+
+- [`frontend/index.html`](../../../../frontend/index.html)
+- [`frontend/public/assets/hermes-icon-128.png`](../../../../frontend/public/assets/hermes-icon-128.png)
+- [`frontend/public/assets/hermes-icon-16.png`](../../../../frontend/public/assets/hermes-icon-16.png)
+- [`frontend/public/assets/hermes-icon-180.png`](../../../../frontend/public/assets/hermes-icon-180.png)
+- [`frontend/public/assets/hermes-icon-192.png`](../../../../frontend/public/assets/hermes-icon-192.png)
+- [`frontend/public/assets/hermes-icon-256.png`](../../../../frontend/public/assets/hermes-icon-256.png)
+- [`frontend/public/assets/hermes-icon-32.png`](../../../../frontend/public/assets/hermes-icon-32.png)
+- [`frontend/public/assets/hermes-icon-48.png`](../../../../frontend/public/assets/hermes-icon-48.png)
+- [`frontend/public/assets/hermes-icon-512.png`](../../../../frontend/public/assets/hermes-icon-512.png)
+- [`frontend/public/assets/hermes-icon-64.png`](../../../../frontend/public/assets/hermes-icon-64.png)
+- [`frontend/public/assets/hermes-logo-mark.png`](../../../../frontend/public/assets/hermes-logo-mark.png)
+- [`frontend/public/assets/hermes-logo.png`](../../../../frontend/public/assets/hermes-logo.png)
+- [`frontend/public/assets/hermes-reference-avatar.png`](../../../../frontend/public/assets/hermes-reference-avatar.png)
+- [`frontend/public/assets/shell-backgrounds/data-stream.png`](../../../../frontend/public/assets/shell-backgrounds/data-stream.png)
+
+## Кандидаты на drift
+
+Из предоставленного контекста расхождения кода, документации и ADR не видны. Чанк содержит лишь начальный срез фронтенда, поэтому оценить целостность или актуальность проектной документации невозможно.

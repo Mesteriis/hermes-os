@@ -1,0 +1,74 @@
+---
+chunk_id: 124-adr-docs-part-005
+batch_id: batch-20260628T214902
+group: docs
+role: adr
+source_status: pending
+source_count: 6
+generated_by: code-wiki-ru
+---
+
+# 124-adr-docs-part-005 — docs/adr
+
+- Target index: [[decisions/adr-index]]
+- Batch: `batch-20260628T214902`
+- Source files: `6`
+
+## Резюме
+
+Необходимо дополнить русскую Obsidian wiki страницу `decisions/adr-index.md` последними архитектурными решениями (ADR) из предоставленного контекста: ADR-0100, ADR-0101 (частично, из-за усечения), ADR-0102, ADR-0104 и ADR Architecture Communication Contract. Это обеспечит русскоязычный индекс принятых и предложенных архитектурных решений, связывая их с соответствующими страницами wiki и описывая ключевые положения на русском языке.
+
+## Предложенные страницы
+
+`decisions/adr-index.md`
+
+```markdown
+# Индекс архитектурных решений (ADR)
+
+В этом индексе собраны архитектурные решения, контекст которых был предоставлен для обновления русской wiki. Полный перечень ADR см. в [README англоязычного репозитория](../adr/README.md) (не встроен в данный контекст).
+
+## Статусы
+
+- **Proposed** — предложено как направление, ожидается проверка реализацией.
+- **Accepted** — принято и проверено реализацией.
+- **Temporary** — временное решение с ограниченным сроком.
+- **Superseded** — заменено более поздним ADR.
+
+## Решения
+
+### Архетип коммуникации
+
+- **``ADR Architecture Communication Contract``** (Принято, 2026-06-20) — устанавливает единый контракт взаимодействия компонентов Hermes. Определяет типы взаимодействия (`direct_call`, `command_port`, `query_port`, `event`, `projection`, `runtime_integration_api`) и правила импорта для backend- и frontend-слоёв. Заменяет ADR-0073 и ADR-0095. Валидируется через `make architecture-check` на основе `scripts/architecture-contract.json`.
+
+### Поставщики и рантаймы
+
+- **``ADR-0100 Trace-First Event Observability``** (Принято, 2026-06-24) — вводит трассировочную семантику: каждое каноническое событие является span-ом, `event_log` — каноническое хранилище трейсов. Поля `event_id` (span), `correlation_id` (trace) и `causation_id` (parent span) обеспечивают причинно-следственную реконструкцию без внешних телеметрических серверов. Уточняет ADR-0001, 0012, 0014, 0018, 0034, 0095, 0097, 0098, 0099.
+
+- **``ADR-0101 WhatsApp Provider Runtime Selection``** (Принято, 2026-06-24; принято 2026-06-26) — определяет multi-provider границу для WhatsApp: формы провайдеров `whatsapp_web_companion`, `whatsapp_native_md`, `whatsapp_business_cloud`. В качестве основного нативного провайдера выбран `wa-rs` (feature-flagged, отключён по умолчанию). `whatsapp_web_companion` остаётся заблокированным до прохождения smoke-тестов. Устанавливает требования: изоляция под `backend/src/integrations/whatsapp/runtime/native_md`, отсутствие секретов в БД/событиях/логах, хранение сессий в HostVault, явный opt-in.
+
+- **``ADR-0102 Zoom Provider Runtime Boundary``** (Принято, 2026-06-27) — размещает Zoom под `integrations/zoom` как провайдера, а не домен продукта. Разрешает управление учётными данными OAuth через HostVault, приём наблюдений встреч/записей/транскрипций, эмиссию `zoom.*` событий. Запрещает прямую мутацию бизнес-доменов и хранение сырых секретов. Определяет контракт событий из 11 типов.
+
+- **``ADR-0104 Yandex Telemost Provider Runtime Boundary``** (Предложено, 2026-06-28) — добавляет Яндекс Телемост как провайдера с видом `yandex_telemost_user`, OAuth-токены хранятся только в HostVault. Настольный компаньон открывает WebView; скрытая запись запрещена. Извлечение говорящего из DOM только как подсказка (`truth_status = hint_not_truth`), не истина.
+```
+
+## Покрытие источников
+
+- **`docs/adr/ADR-0100-trace-first-event-observability.md`** — использованы: статус, дата, семантика полей `event_id`/`correlation_id`/`causation_id`, назначение `event_log` как канонического хранилища трейсов, правила для корневых и производных событий, список уточняемых ADR.
+- **`docs/adr/ADR-0101-whatsapp-provider-runtime-selection.md`** (усечён до 12000 символов) — использованы: название, статус, даты, формы провайдеров (`whatsapp_web_companion`, `whatsapp_native_md`, `whatsapp_business_cloud`), выбор `wa-rs` как feature-flagged нативного кандидата, условия блокировки `whatsapp_web_companion`, требования к изоляции и хранению сессий.
+- **`docs/adr/ADR-0102-zoom-provider-runtime-boundary.md`** — использованы: размещение под `integrations/zoom`, запрет становиться `domains/zoom`, разрешённые действия с OAuth и событиями, контракт событий, ссылки на проверки.
+- **`docs/adr/ADR-0104-yandex-telemost-provider-runtime-boundary.md`** — использованы: вид провайдера, секретная цель OAuth, запрет скрытой записи, статус подсказок (`hint_not_truth`), отклонённые альтернативы.
+- **`docs/adr/ADR-architecture-communication-contract.md`** — использованы: виды взаимодействий, правила импорта для слоёв, замещение ADR-0073/0095, механизм валидации (`make architecture-check`, `scripts/architecture-contract.json`).
+- **`docs/adr/README.md`** — использованы: словарь статусов ADR и пример структуры индекса (не полностью перенесён из-за отсутствия контекста ранних ADR).
+
+## Исходные файлы
+
+- [`docs/adr/ADR-0100-trace-first-event-observability.md`](../../../adr/ADR-0100-trace-first-event-observability.md)
+- [`docs/adr/ADR-0101-whatsapp-provider-runtime-selection.md`](../../../adr/ADR-0101-whatsapp-provider-runtime-selection.md)
+- [`docs/adr/ADR-0102-zoom-provider-runtime-boundary.md`](../../../adr/ADR-0102-zoom-provider-runtime-boundary.md)
+- [`docs/adr/ADR-0104-yandex-telemost-provider-runtime-boundary.md`](../../../adr/ADR-0104-yandex-telemost-provider-runtime-boundary.md)
+- [`docs/adr/ADR-architecture-communication-contract.md`](../../../adr/ADR-architecture-communication-contract.md)
+- [`docs/adr/README.md`](../../../adr/README.md)
+
+## Кандидаты на drift
+
+Противоречий между предоставленными ADR, а также расхождений с кодом или документацией, из данного контекста не выявлено. ADR-0100 ссылается на ряд уточняемых решений (ADR-0001, 0012 и др.), которые не встроены в контекст, поэтому возможный drift по ним не может быть подтверждён или опровергнут.

@@ -1,0 +1,90 @@
+---
+chunk_id: 130-other-frontend-part-003
+batch_id: batch-20260628T214902
+group: frontend
+role: other
+source_status: pending
+source_count: 14
+generated_by: code-wiki-ru
+---
+
+# 130-other-frontend-part-003 — frontend/other
+
+- Target index: [[components/frontend]]
+- Batch: `batch-20260628T214902`
+- Source files: `14`
+
+## Резюме
+
+Предоставленный контекст содержит только бинарные файлы иконок Tauri из каталога `frontend/src-tauri/icons/`. Текстовое содержимое отсутствует, поведенческих фактов извлечь невозможно. Страница `components/frontend.md` должна быть обновлена (или создана) с перечислением этих ресурсов — путей, размеров и пометкой о бинарном характере. Более глубокий смысл, назначение и использование иконок данным контекстом не подтверждаются.
+
+## Предложенные страницы
+
+#### `components/frontend.md`
+
+```markdown
+# Frontend
+
+## Иконки Tauri
+
+В исходниках `frontend/src-tauri/icons/` находятся следующие бинарные ресурсы:
+
+| Файл | Размер (байт) |
+|------|---------------|
+| `128x128@2x.png` | 32527 |
+| `32x32.png` | 1823 |
+| `Square107x107Logo.png` | 8925 |
+| `Square142x142Logo.png` | 13632 |
+| `Square150x150Logo.png` | 14518 |
+| `Square284x284Logo.png` | 38596 |
+| `Square30x30Logo.png` | 1683 |
+| `Square310x310Logo.png` | 44550 |
+| `Square44x44Logo.png` | 2879 |
+| `Square71x71Logo.png` | 5332 |
+| `Square89x89Logo.png` | 6934 |
+| `StoreLogo.png` | 3356 |
+| `icon.icns` | 2121887 |
+| `icon.ico` | 56039 |
+
+Содержимое файлов бинарное; в данном контексте не включено. Поведенческие детали, сценарии использования и пайплайны сборки этими исходными данными не подтверждаются.
+```
+
+## Покрытие источников
+
+- `frontend/src-tauri/icons/128x128@2x.png` — задокументировано имя файла и размер (32527 байт).
+- `frontend/src-tauri/icons/32x32.png` — задокументировано имя файла и размер (1823 байт).
+- `frontend/src-tauri/icons/Square107x107Logo.png` — задокументировано имя файла и размер (8925 байт).
+- `frontend/src-tauri/icons/Square142x142Logo.png` — задокументировано имя файла и размер (13632 байт).
+- `frontend/src-tauri/icons/Square150x150Logo.png` — задокументировано имя файла и размер (14518 байт).
+- `frontend/src-tauri/icons/Square284x284Logo.png` — задокументировано имя файла и размер (38596 байт).
+- `frontend/src-tauri/icons/Square30x30Logo.png` — задокументировано имя файла и размер (1683 байт).
+- `frontend/src-tauri/icons/Square310x310Logo.png` — задокументировано имя файла и размер (44550 байт).
+- `frontend/src-tauri/icons/Square44x44Logo.png` — задокументировано имя файла и размер (2879 байт).
+- `frontend/src-tauri/icons/Square71x71Logo.png` — задокументировано имя файла и размер (5332 байт).
+- `frontend/src-tauri/icons/Square89x89Logo.png` — задокументировано имя файла и размер (6934 байт).
+- `frontend/src-tauri/icons/StoreLogo.png` — задокументировано имя файла и размер (3356 байт).
+- `frontend/src-tauri/icons/icon.icns` — задокументировано имя файла и размер (2121887 байт).
+- `frontend/src-tauri/icons/icon.ico` — задокументировано имя файла и размер (56039 байт).
+
+Все перечисленные факты покрыты предложенной страницей в виде таблицы.
+
+## Исходные файлы
+
+- [`frontend/src-tauri/icons/128x128@2x.png`](../../../../frontend/src-tauri/icons/128x128@2x.png)
+- [`frontend/src-tauri/icons/32x32.png`](../../../../frontend/src-tauri/icons/32x32.png)
+- [`frontend/src-tauri/icons/Square107x107Logo.png`](../../../../frontend/src-tauri/icons/Square107x107Logo.png)
+- [`frontend/src-tauri/icons/Square142x142Logo.png`](../../../../frontend/src-tauri/icons/Square142x142Logo.png)
+- [`frontend/src-tauri/icons/Square150x150Logo.png`](../../../../frontend/src-tauri/icons/Square150x150Logo.png)
+- [`frontend/src-tauri/icons/Square284x284Logo.png`](../../../../frontend/src-tauri/icons/Square284x284Logo.png)
+- [`frontend/src-tauri/icons/Square30x30Logo.png`](../../../../frontend/src-tauri/icons/Square30x30Logo.png)
+- [`frontend/src-tauri/icons/Square310x310Logo.png`](../../../../frontend/src-tauri/icons/Square310x310Logo.png)
+- [`frontend/src-tauri/icons/Square44x44Logo.png`](../../../../frontend/src-tauri/icons/Square44x44Logo.png)
+- [`frontend/src-tauri/icons/Square71x71Logo.png`](../../../../frontend/src-tauri/icons/Square71x71Logo.png)
+- [`frontend/src-tauri/icons/Square89x89Logo.png`](../../../../frontend/src-tauri/icons/Square89x89Logo.png)
+- [`frontend/src-tauri/icons/StoreLogo.png`](../../../../frontend/src-tauri/icons/StoreLogo.png)
+- [`frontend/src-tauri/icons/icon.icns`](../../../../frontend/src-tauri/icons/icon.icns)
+- [`frontend/src-tauri/icons/icon.ico`](../../../../frontend/src-tauri/icons/icon.ico)
+
+## Кандидаты на drift
+
+Из предоставленного контекста (только бинарные файлы иконок) расхождения кода, документации или ADR не видны. Текущее состояние wiki-страницы `components/frontend.md` не встроено в данный чанк, поэтому факт расхождения не может быть ни подтверждён, ни опровергнут.

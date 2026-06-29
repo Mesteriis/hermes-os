@@ -1,0 +1,54 @@
+---
+chunk_id: 001-config-cargo
+batch_id: batch-20260628T214902
+group: .cargo
+role: config
+source_status: pending
+source_count: 1
+generated_by: code-wiki-ru
+---
+
+# 001-config-cargo — .cargo/config
+
+- Target index: [[operations/configuration]]
+- Batch: `batch-20260628T214902`
+- Source files: `1`
+
+## Резюме
+
+В русскую Obsidian wiki необходимо добавить страницу `operations/configuration.md`, документирующую псевдонимы Cargo из файла `.cargo/config.toml`. Причина: предоставить инженерам актуальный перечень полезных команд для запуска тестов и анализа покрытия, определённых на уровне репозитория. Текущее содержимое wiki-страницы не встроено в контекст, поэтому предложение является новым разделом.
+
+## Предложенные страницы
+
+- `operations/configuration.md`
+
+```markdown
+# Конфигурация
+
+## Псевдонимы Cargo (`.cargo/config.toml`)
+
+Корневой файл `.cargo/config.toml` определяет несколько команд-псевдонимов для `cargo`. Они упрощают запуск тестов и сбор покрытия кода с помощью `cargo nextest` и `cargo llvm-cov`.
+
+| Псевдоним | Фактическая команда |
+|---|---|
+| `cargo hermes-nextest` | `nextest run --manifest-path backend/Cargo.toml` |
+| `cargo hermes-nextest-ci` | `nextest run --manifest-path backend/Cargo.toml --profile ci` |
+| `cargo hermes-nextest-integration` | `nextest run --manifest-path backend/Cargo.toml --profile integration --tests` |
+| `cargo hermes-llvm-cov` | `llvm-cov --manifest-path backend/Cargo.toml` |
+
+Эти псевдонимы используют `--manifest-path backend/Cargo.toml`, поэтому их необходимо выполнять из корня репозитория.
+```
+
+## Покрытие источников
+
+| Файл | Использованные факты |
+|---|---|
+| `.cargo/config.toml` | Все четыре псевдонима и их точные значения: `hermes-nextest`, `hermes-nextest-ci`, `hermes-nextest-integration`, `hermes-llvm-cov`. |
+
+## Исходные файлы
+
+- [`.cargo/config.toml`](../../../../.cargo/config.toml)
+
+## Кандидаты на drift
+
+Нет видимых расхождений в рамках данного чанка, так как существующее содержимое `operations/configuration.md` не встроено в контекст и не может быть сопоставлено с исходным файлом.
