@@ -86,7 +86,7 @@ impl ReviewPromotionService {
         review_item_id: &str,
         target: ReviewPromotionTarget,
     ) -> Result<ReviewItem, ReviewPromotionError> {
-        self.promote_with_observation(review_item_id, target, None, None)
+        self.promote_with_observation(review_item_id, target, None, None, None, None)
             .await
     }
 
@@ -96,13 +96,22 @@ impl ReviewPromotionService {
         target: ReviewPromotionTarget,
         observation_id: Option<&str>,
         metadata: Option<Value>,
+        causation_id: Option<&str>,
+        correlation_id: Option<&str>,
     ) -> Result<ReviewItem, ReviewPromotionError> {
         let review_store = ReviewInboxPort::new(self.pool.clone());
         let item = review_store.get(review_item_id).await?;
         let evidence = review_store.list_evidence(review_item_id).await?;
         let resolved_target = self.materialize_target(&item, &target, &evidence).await?;
         Ok(review_store
-            .promote_with_observation(review_item_id, resolved_target, observation_id, metadata)
+            .promote_with_observation(
+                review_item_id,
+                resolved_target,
+                observation_id,
+                metadata,
+                causation_id,
+                correlation_id,
+            )
             .await?)
     }
 

@@ -17,6 +17,7 @@ Current backend files:
 
 - `backend/src/engines/context_packs/mod.rs`;
 - `backend/src/engines/context_packs/models.rs`;
+- `backend/src/engines/context_packs/review.rs`;
 - `backend/src/engines/context_packs/store.rs`.
 
 Current model kinds include:
@@ -25,15 +26,16 @@ Current model kinds include:
 - meeting;
 - task;
 - calendar;
-- project.
+- project;
+- review.
 
 Current source kinds include observations, domain entities, knowledge,
 relationships, decisions, tasks, obligations, documents, calendar events and
-projects.
+projects. Review Context Packs also use `review_item` source links for their
+subject Review item.
 
 ## Boundary Rule
 
 Context Packs may persist rebuildable content and source links in
 `context_packs` and `context_pack_sources`. They must not become the canonical
 owner of memory, domain truth, provider records or accepted review outcomes.
-

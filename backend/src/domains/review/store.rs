@@ -95,8 +95,14 @@ impl ReviewInboxStore {
         validate_non_empty("review_item_id", review_item_id)?;
 
         let mut transaction = self.pool.begin().await?;
-        let item = Self::transition_status_in_transaction(&mut transaction, review_item_id, status)
-            .await?;
+        let item = Self::transition_status_in_transaction_with_observation(
+            &mut transaction,
+            review_item_id,
+            status,
+            observation_id,
+            None,
+        )
+        .await?;
         materialize_review_transition_link_in_transaction(
             &mut transaction,
             observation_id,
@@ -117,7 +123,7 @@ impl ReviewInboxStore {
         review_item_id: &str,
         target: ReviewPromotionTarget,
     ) -> Result<ReviewItem, ReviewInboxError> {
-        self.promote_with_observation(review_item_id, target, None, None)
+        self.promote_with_observation(review_item_id, target, None, None, None, None)
             .await
     }
 
@@ -127,12 +133,31 @@ impl ReviewInboxStore {
         target: ReviewPromotionTarget,
         observation_id: Option<&str>,
         metadata: Option<Value>,
+        causation_id: Option<&str>,
+        correlation_id: Option<&str>,
     ) -> Result<ReviewItem, ReviewInboxError> {
         validate_non_empty("review_item_id", review_item_id)?;
         target.validate()?;
 
         let mut transaction = self.pool.begin().await?;
-        let item = Self::promote_in_transaction(&mut transaction, review_item_id, target).await?;
+        let correlation_id = match correlation_id {
+            Some(value) => Some(value.to_owned()),
+            None => Some(
+                Self::review_item_trace_id_in_transaction(&mut transaction, review_item_id).await?,
+            ),
+        };
+        let causation_id = causation_id
+            .or(observation_id)
+            .map(std::string::ToString::to_string);
+
+        let item = Self::promote_in_transaction_with_observation(
+            &mut transaction,
+            review_item_id,
+            target,
+            causation_id.as_deref(),
+            correlation_id.as_deref(),
+        )
+        .await?;
         materialize_review_transition_link_in_transaction(
             &mut transaction,
             observation_id,
@@ -240,8 +265,25 @@ impl ReviewInboxStore {
         review_item_id: &str,
         status: ReviewItemStatus,
     ) -> Result<ReviewItem, ReviewInboxError> {
+        Self::transition_status_in_transaction_with_observation(
+            transaction,
+            review_item_id,
+            status,
+            None,
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn transition_status_in_transaction_with_observation(
+        transaction: &mut Transaction<'_, Postgres>,
+        review_item_id: &str,
+        status: ReviewItemStatus,
+        causation_id: Option<&str>,
+        correlation_id: Option<&str>,
+    ) -> Result<ReviewItem, ReviewInboxError> {
         let item = Self::set_status_in_transaction(transaction, review_item_id, status).await?;
-        append_review_status_event(transaction, &item).await?;
+        append_review_status_event(transaction, &item, causation_id, correlation_id).await?;
         Ok(item)
     }
 
@@ -249,6 +291,23 @@ impl ReviewInboxStore {
         transaction: &mut Transaction<'_, Postgres>,
         review_item_id: &str,
         target: ReviewPromotionTarget,
+    ) -> Result<ReviewItem, ReviewInboxError> {
+        Self::promote_in_transaction_with_observation(
+            transaction,
+            review_item_id,
+            target,
+            None,
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn promote_in_transaction_with_observation(
+        transaction: &mut Transaction<'_, Postgres>,
+        review_item_id: &str,
+        target: ReviewPromotionTarget,
+        causation_id: Option<&str>,
+        correlation_id: Option<&str>,
     ) -> Result<ReviewItem, ReviewInboxError> {
         validate_non_empty("review_item_id", review_item_id)?;
         target.validate()?;
@@ -275,8 +334,28 @@ impl ReviewInboxStore {
             .map(row_to_review_item)
             .transpose()?
             .ok_or_else(|| ReviewInboxError::ReviewItemNotFound(review_item_id.to_owned()))?;
-        append_review_status_event(transaction, &item).await?;
+        append_review_status_event(transaction, &item, causation_id, correlation_id).await?;
         Ok(item)
+    }
+
+    async fn review_item_trace_id_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        review_item_id: &str,
+    ) -> Result<String, ReviewInboxError> {
+        let trace_id = sqlx::query_scalar::<_, String>(
+            r#"
+            SELECT COALESCE(correlation_id, event_id)
+            FROM event_log
+            WHERE subject ->> 'review_item_id' = $1
+            ORDER BY position ASC
+            LIMIT 1
+            "#,
+        )
+        .bind(review_item_id)
+        .fetch_optional(&mut **transaction)
+        .await?;
+
+        Ok(trace_id.unwrap_or_else(|| review_item_id.to_owned()))
     }
 
     pub(crate) async fn find_latest_by_kind_and_metadata_in_transaction(
@@ -600,11 +679,13 @@ async fn append_review_available_event(
 async fn append_review_status_event(
     transaction: &mut Transaction<'_, Postgres>,
     item: &ReviewItem,
+    causation_id: Option<&str>,
+    correlation_id: Option<&str>,
 ) -> Result<(), ReviewInboxError> {
     let Some(event_type) = review_status_event_type(item.status) else {
         return Ok(());
     };
-    let event = NewEventEnvelope::builder(
+    let mut builder = NewEventEnvelope::builder(
         format!(
             "event:v1:{}:{}",
             event_type.replace('.', "-"),
@@ -629,8 +710,15 @@ async fn append_review_status_event(
     }))
     .provenance(json!({
         "review_inbox": true
-    }))
-    .build()?;
+    }));
+    if let Some(causation_id) = causation_id {
+        builder = builder.causation_id(causation_id);
+    }
+    if let Some(correlation_id) = correlation_id {
+        builder = builder.correlation_id(correlation_id);
+    }
+
+    let event = builder.build()?;
 
     append_event_idempotently(transaction, &event).await?;
     Ok(())

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type {
+	AttentionCard,
 	Relationship,
 	Decision,
 	Obligation,
@@ -19,6 +20,7 @@ import {
 	reviewContradiction
 } from '../api/workspace'
 import {
+	fetchReviewAttentionCards,
 	fetchReviewItems,
 	approveReviewItem,
 	dismissReviewItem,
@@ -33,6 +35,7 @@ export const useReviewStore = defineStore('review', () => {
 	const obligations = ref<Obligation[]>([])
 	const contradictions = ref<ContradictionObservation[]>([])
 	const reviewItems = ref<ReviewItem[]>([])
+	const attentionCards = ref<AttentionCard[]>([])
 	const error = ref('')
 	const reviewingItemKey = ref<string | null>(null)
 
@@ -52,6 +55,7 @@ export const useReviewStore = defineStore('review', () => {
 		contradictions.value.filter((c) => c.review_state === 'suggested').length
 	)
 	const reviewItemsCount = computed(() => reviewItems.value.filter((r) => r.status === 'new' || r.status === 'in_review').length)
+	const attentionCardsCount = computed(() => attentionCards.value.length)
 
 	const totalSuggestedCount = computed(() =>
 		relationsSuggestedCount.value +
@@ -98,10 +102,20 @@ export const useReviewStore = defineStore('review', () => {
 		} catch (e) {
 			errors.push(`Review inbox: ${e instanceof Error ? e.message : 'Unknown error'}`)
 		}
+		try {
+			await refreshAttentionCards()
+		} catch (e) {
+			errors.push(`Attention: ${e instanceof Error ? e.message : 'Unknown error'}`)
+		}
 
 		if (errors.length > 0) {
 			error.value = errors.join(' · ')
 		}
+	}
+
+	async function refreshAttentionCards() {
+		const attentionRes = await fetchReviewAttentionCards({ status: 'active', limit: 50 })
+		attentionCards.value = attentionRes.cards || []
 	}
 
 	async function reviewItem(action: ReviewWorkspaceItemAction): Promise<string> {
@@ -158,21 +172,25 @@ export const useReviewStore = defineStore('review', () => {
 						const updated = await dismissReviewItem(action.item.review_item_id)
 						updateReviewItem(updated)
 					}
+					await refreshAttentionCards()
 					break
 				}
 				case 'review_item_archive': {
 					const updated = await archiveReviewItem(action.item.review_item_id)
 					updateReviewItem(updated)
+					await refreshAttentionCards()
 					break
 				}
 				case 'review_item_take': {
 					const updated = await takeReviewItem(action.item.review_item_id)
 					updateReviewItem(updated)
+					await refreshAttentionCards()
 					break
 				}
 				case 'review_item_promote': {
 					const updated = await promoteReviewItem(action.item.review_item_id, action.promotion)
 					updateReviewItem(updated)
+					await refreshAttentionCards()
 					break
 				}
 			}
@@ -196,7 +214,9 @@ export const useReviewStore = defineStore('review', () => {
 		obligations,
 		contradictions,
 		reviewItems,
+		attentionCards,
 		reviewItemsCount,
+		attentionCardsCount,
 		error,
 		reviewingItemKey,
 		relationsSuggestedCount,

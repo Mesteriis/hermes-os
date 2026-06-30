@@ -1,5 +1,6 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
 import type {
+	AttentionCardsResponse,
 	ReviewItem,
 	ReviewItemsResponse,
 	ReviewItemPromotionRequest
@@ -16,6 +17,20 @@ export async function fetchReviewItems(params: { status?: string; limit?: number
 	return ApiClient.instance.get<ReviewItemsResponse>(
 		`/api/v1/review/items?${search.toString()}`,
 		'Review items request failed'
+	)
+}
+
+export async function fetchReviewAttentionCards(params: { status?: string; limit?: number } = {}): Promise<AttentionCardsResponse> {
+	const search = new URLSearchParams()
+	if (params.status) {
+		search.set('status', params.status)
+	}
+	if (params.limit) {
+		search.set('limit', String(Math.trunc(params.limit)))
+	}
+	return ApiClient.instance.get<AttentionCardsResponse>(
+		`/api/v1/review/attention-cards?${search.toString()}`,
+		'Review attention cards request failed'
 	)
 }
 

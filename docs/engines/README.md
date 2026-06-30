@@ -37,6 +37,7 @@ An engine must not:
 | Risk Engine | [Risk Engine](risk/README.md) |
 | Consistency / Contradiction Engine | [Consistency / Contradiction Engine](consistency/README.md) |
 | Automation Engine | [Automation Engine](automation/README.md) |
+| Attention Engine | [Attention Engine](attention/README.md) |
 | Context Packs Engine | [Context Packs Engine](context-packs/README.md) |
 | Identity Resolution Engine | [Identity Resolution Engine](identity-resolution/README.md) |
 | Relationship Candidate Engine | [Relationship Candidate Engine](relationships/README.md) |
@@ -55,6 +56,7 @@ implementation needs that detail.
 The current repository contains dedicated baseline modules for:
 
 - `backend/src/engines/automation.rs` and `backend/src/engines/automation/`;
+- `backend/src/engines/attention/`;
 - `backend/src/engines/call_intelligence/`;
 - `backend/src/engines/search.rs`;
 - `backend/src/engines/consistency.rs`;

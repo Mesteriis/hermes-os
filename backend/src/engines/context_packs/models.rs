@@ -12,6 +12,7 @@ pub enum ContextPackKind {
     Task,
     Calendar,
     Project,
+    Review,
 }
 
 impl ContextPackKind {
@@ -22,6 +23,7 @@ impl ContextPackKind {
             Self::Task => "task",
             Self::Calendar => "calendar",
             Self::Project => "project",
+            Self::Review => "review",
         }
     }
 
@@ -32,6 +34,7 @@ impl ContextPackKind {
             "task" => Ok(Self::Task),
             "calendar" => Ok(Self::Calendar),
             "project" => Ok(Self::Project),
+            "review" => Ok(Self::Review),
             unknown => Err(ContextPackStoreError::UnknownContextPackKind(
                 unknown.to_owned(),
             )),
@@ -52,6 +55,7 @@ pub enum ContextPackSourceKind {
     Document,
     CalendarEvent,
     Project,
+    ReviewItem,
 }
 
 impl ContextPackSourceKind {
@@ -67,6 +71,7 @@ impl ContextPackSourceKind {
             Self::Document => "document",
             Self::CalendarEvent => "calendar_event",
             Self::Project => "project",
+            Self::ReviewItem => "review_item",
         }
     }
 
@@ -82,6 +87,7 @@ impl ContextPackSourceKind {
             "document" => Ok(Self::Document),
             "calendar_event" => Ok(Self::CalendarEvent),
             "project" => Ok(Self::Project),
+            "review_item" => Ok(Self::ReviewItem),
             unknown => Err(ContextPackStoreError::UnknownContextPackSourceKind(
                 unknown.to_owned(),
             )),
