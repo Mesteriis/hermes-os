@@ -26,19 +26,3 @@ const classes = computed(() => [
   />
 </template>
 
-<style scoped>
-.hermes-separator {
-  flex-shrink: 0;
-  background: var(--hh-border);
-}
-
-.hermes-separator--horizontal {
-  height: 1px;
-  width: 100%;
-}
-
-.hermes-separator--vertical {
-  width: 1px;
-  height: 100%;
-}
-</style>

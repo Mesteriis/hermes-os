@@ -1,40 +1,21 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
-import { useNavigationStore } from '../../shared/stores/navigation'
-import { useNotificationsStore } from '../../shared/stores/notifications'
-import { useRealtimeStatusStore } from '../../shared/stores/realtimeStatus'
-import { useI18n } from '../../platform/i18n'
+import { useTopbarSurface } from '../queries/useTopbarSurface'
 
-const nav = useNavigationStore()
-const notifications = useNotificationsStore()
-const realtimeStatus = useRealtimeStatusStore()
-const { t, setLocale, locale } = useI18n()
-
-const realtimeStatusIcon = computed<string>(() => {
-  if (realtimeStatus.realtimeStatusTone === 'success') return 'tabler:cloud-check'
-  if (realtimeStatus.realtimeStatusTone === 'danger') return 'tabler:cloud-off'
-  if (realtimeStatus.isRealtimeDegraded) return 'tabler:cloud-exclamation'
-  return 'tabler:cloud-up'
-})
-
-function toggleNotifications(): void {
-  notifications.toggleNotificationsDrawer()
-}
-
-function toggleMenu(): void {
-  nav.toggleUserMenu()
-}
-
-function toggleLocale(): void {
-  setLocale(locale.value === 'ru' ? 'en' : 'ru')
-}
-
-function exitApplication(): void {
-  // In Tauri this would call window.close()
-  // In browser, just a placeholder
-  window.close()
-}
+const {
+  exitApplication,
+  locale,
+  localeToggleLabel,
+  nav,
+  notificationBadgeLabel,
+  notifications,
+  realtimeStatus,
+  realtimeStatusIcon,
+  t,
+  toggleLocale,
+  toggleMenu,
+  toggleNotifications
+} = useTopbarSurface()
 </script>
 
 <template>
@@ -70,7 +51,7 @@ function exitApplication(): void {
           v-if="notifications.notificationCount > 0"
           class="topbar-badge"
         >
-          {{ notifications.notificationCount > 9 ? '9+' : notifications.notificationCount }}
+          {{ notificationBadgeLabel }}
         </span>
       </button>
 
@@ -88,7 +69,7 @@ function exitApplication(): void {
         <div v-if="nav.isUserMenuOpen" class="topbar-dropdown" @mouseleave="nav.closeUserMenu()">
           <button class="topbar-dropdown-item" @click="toggleLocale">
             <Icon icon="tabler:language" class="topbar-dropdown-icon" />
-            <span>{{ locale === 'ru' ? 'English' : 'Русский' }}</span>
+            <span>{{ localeToggleLabel }}</span>
           </button>
 
           <div class="topbar-dropdown-separator" />
@@ -103,253 +84,3 @@ function exitApplication(): void {
   </header>
 </template>
 
-<style scoped>
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.75rem;
-  height: 3.5rem;
-  margin-top: var(--hh-shell-topbar-offset);
-  padding: 0 0.875rem;
-  background: rgba(5, 22, 25, var(--hh-panel-alpha));
-  border: 1px solid var(--hh-border);
-  border-radius: var(--hh-radius-md);
-  box-shadow: var(--hh-shadow-panel);
-  backdrop-filter: blur(var(--hh-panel-blur));
-  flex-shrink: 0;
-}
-
-.topbar-slot-shell {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-}
-
-.topbar-slot {
-  display: flex;
-  align-items: stretch;
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-}
-
-.topbar-slot:has(> *) + .topbar-slot-fallback {
-  display: none;
-}
-
-.topbar-slot-fallback {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  justify-content: center;
-  min-width: 0;
-}
-
-.topbar-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--hh-text-primary);
-  margin: 0;
-  line-height: 1.2;
-}
-
-.topbar-subtitle {
-  font-size: 0.75rem;
-  color: var(--hh-text-muted);
-  margin: 0;
-}
-
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
-.topbar-realtime-status {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  max-width: 11rem;
-  height: 2.25rem;
-  padding: 0 0.625rem;
-  border: 1px solid var(--hh-border);
-  border-radius: 0.375rem;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--hh-text-secondary);
-  backdrop-filter: blur(var(--hh-panel-blur));
-}
-
-.topbar-realtime-dot {
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 999px;
-  background: var(--hh-text-muted);
-  box-shadow: 0 0 0 0.1875rem rgba(255, 255, 255, 0.05);
-  flex-shrink: 0;
-}
-
-.topbar-realtime-icon {
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
-}
-
-.topbar-realtime-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.topbar-realtime-status.success {
-  border-color: color-mix(in srgb, var(--hh-status-success, #22c55e) 36%, transparent);
-  color: var(--hh-status-success-text, #16a34a);
-}
-
-.topbar-realtime-status.success .topbar-realtime-dot {
-  background: var(--hh-status-success, #22c55e);
-}
-
-.topbar-realtime-status.warning {
-  border-color: color-mix(in srgb, var(--hh-status-warning, #f59e0b) 36%, transparent);
-  color: var(--hh-status-warning-text, #d97706);
-}
-
-.topbar-realtime-status.warning .topbar-realtime-dot {
-  background: var(--hh-status-warning, #f59e0b);
-}
-
-.topbar-realtime-status.danger {
-  border-color: color-mix(in srgb, var(--hh-status-danger, #ef4444) 36%, transparent);
-  color: var(--hh-status-danger-text, #ef4444);
-}
-
-.topbar-realtime-status.danger .topbar-realtime-dot {
-  background: var(--hh-status-danger, #ef4444);
-}
-
-.topbar-action-btn {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 0.375rem;
-  border: none;
-  background: transparent;
-  color: var(--hh-text-secondary);
-  cursor: pointer;
-  transition: all 150ms ease;
-}
-
-.topbar-action-btn:hover {
-  background: var(--hh-hover-bg);
-  color: var(--hh-text-primary);
-}
-
-.topbar-action-btn.active {
-  background: var(--hh-active-bg);
-  color: var(--hh-accent);
-}
-
-.topbar-action-icon {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-
-.topbar-badge {
-  position: absolute;
-  top: 0.25rem;
-  right: 0.25rem;
-  min-width: 1rem;
-  height: 1rem;
-  padding: 0 0.25rem;
-  font-size: 0.625rem;
-  font-weight: 700;
-  line-height: 1rem;
-  text-align: center;
-  border-radius: 0.5rem;
-  background: var(--hh-accent);
-  color: var(--hh-bg);
-}
-
-.topbar-menu-wrapper {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.topbar-dropdown {
-  position: absolute;
-  right: 0;
-  top: 100%;
-  margin-top: 0.25rem;
-  width: 200px;
-  background: var(--hh-panel-bg);
-  border: 1px solid var(--hh-border);
-  border-radius: 0.5rem;
-  padding: 0.25rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  z-index: 100;
-}
-
-.topbar-dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: none;
-  border-radius: 0.25rem;
-  background: transparent;
-  color: var(--hh-text-secondary);
-  cursor: pointer;
-  font-size: 0.8125rem;
-  text-align: left;
-  transition: all 150ms ease;
-}
-
-.topbar-dropdown-item:hover {
-  background: var(--hh-hover-bg);
-  color: var(--hh-text-primary);
-}
-
-.topbar-dropdown-item.active {
-  color: var(--hh-accent);
-}
-
-.topbar-dropdown-item.topbar-dropdown-exit:hover {
-  color: var(--hh-danger, #ef4444);
-}
-
-.topbar-dropdown-icon {
-  width: 1.125rem;
-  height: 1.125rem;
-  flex-shrink: 0;
-}
-
-.topbar-dropdown-separator {
-  height: 1px;
-  background: var(--hh-border);
-  margin: 0.25rem 0.5rem;
-}
-
-@media (max-width: 900px) {
-  .topbar-realtime-status {
-    width: 2.25rem;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .topbar-realtime-label,
-  .topbar-realtime-dot {
-    display: none;
-  }
-}
-</style>

@@ -34,7 +34,7 @@ describe('telegram dialog action API', () => {
 
   it('posts runtime restart requests for a selected telegram account', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
-      new Response(JSON.stringify({ account_id: 'acc-1', runtime_kind: 'fixture', status: 'running', blockers: [] }), {
+      new Response(JSON.stringify({ account_id: 'acc-1', runtime_kind: 'synthetic', status: 'running', blockers: [] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -51,7 +51,7 @@ describe('telegram dialog action API', () => {
 
   it('posts runtime stop requests for a selected telegram account', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
-      new Response(JSON.stringify({ account_id: 'acc-1', runtime_kind: 'fixture', status: 'stopped', blockers: [] }), {
+      new Response(JSON.stringify({ account_id: 'acc-1', runtime_kind: 'synthetic', status: 'stopped', blockers: [] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -105,7 +105,7 @@ describe('telegram dialog action API', () => {
 
   it('loads account-scoped capability routes for a selected telegram account', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
-      new Response(JSON.stringify({ version: '2.0', runtime_mode: 'fixture', capabilities: [] }), {
+      new Response(JSON.stringify({ version: '2.0', runtime_mode: 'synthetic', capabilities: [] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -129,7 +129,7 @@ describe('telegram dialog action API', () => {
         })
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ transcript: { transcript_id: 'tx-1', call_id: 'call-1', account_id: 'acc-1', provider_chat_id: 'chat-1', transcript_status: 'succeeded', stt_provider: 'fixture-stt', source_audio_ref: 'audio.wav', language_code: 'en', transcript_text: 'Follow up on the Telegram call.', segments: [], provenance: {}, created_at: '2026-06-06T12:21:00Z', updated_at: '2026-06-06T12:21:00Z' } }), {
+        new Response(JSON.stringify({ transcript: { transcript_id: 'tx-1', call_id: 'call-1', account_id: 'acc-1', provider_chat_id: 'chat-1', transcript_status: 'succeeded', stt_provider: 'synthetic-stt', source_audio_ref: 'audio.wav', language_code: 'en', transcript_text: 'Follow up on the Telegram call.', segments: [], provenance: {}, created_at: '2026-06-06T12:21:00Z', updated_at: '2026-06-06T12:21:00Z' } }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })

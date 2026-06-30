@@ -1,7 +1,6 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
 import type {
   ZoomAccountListResponse,
-  ZoomAccountSetupRequest,
   ZoomAccountSetupResponse,
   ZoomAuthorizationResult,
   ZoomAuditEventResponse,
@@ -58,16 +57,6 @@ export async function fetchZoomAccounts(includeRemoved = false): Promise<ZoomAcc
   return ApiClient.instance.get<ZoomAccountListResponse>(
     `/api/v1/integrations/zoom/accounts${suffix}`,
     'Zoom accounts request failed'
-  )
-}
-
-export async function setupZoomFixtureAccount(
-  request: ZoomAccountSetupRequest
-): Promise<ZoomAccountSetupResponse> {
-  return ApiClient.instance.post<ZoomAccountSetupResponse>(
-    '/api/v1/integrations/zoom/fixtures/accounts',
-    request,
-    'Zoom fixture account setup failed'
   )
 }
 

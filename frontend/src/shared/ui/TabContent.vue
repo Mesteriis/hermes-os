@@ -23,14 +23,3 @@ const classes = computed(() => ['hermes-tab-content', props.class])
   </TabsContent>
 </template>
 
-<style scoped>
-.hermes-tab-content {
-  outline: none;
-}
-
-.hermes-tab-content:focus-visible {
-  outline: 2px solid var(--hh-focus-ring);
-  outline-offset: 2px;
-  border-radius: var(--hh-radius-sm);
-}
-</style>

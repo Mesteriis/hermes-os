@@ -246,6 +246,47 @@ export const useSidebarStore = defineStore('sidebar', () => {
     return effectiveSidebarSettings.value.hiddenItemIds
   })
 
+  const sidebarItemLabels = computed<Record<SidebarItemId, { label: string; icon: string }>>(() => {
+    const labels = {} as Record<SidebarItemId, { label: string; icon: string }>
+    const itemIds = new Set<SidebarItemId>([
+      ...effectiveSidebarSettings.value.hiddenItemIds,
+      ...effectiveSidebarSettings.value.groups.flatMap((group) => group.itemIds),
+      ...sidebarRootEntries.value.flatMap((entry) => (entry.kind === 'item' ? [entry.item.itemId] : [])),
+    ])
+
+    for (const itemId of itemIds) {
+      const item = sidebarConfigItem(itemId)
+      if (item) {
+        labels[itemId] = {
+          label: item.label,
+          icon: item.icon,
+        }
+      }
+    }
+
+    return labels
+  })
+
+  const sidebarGroupOptions = computed(() =>
+    effectiveSidebarSettings.value.groups.map((group, index) => ({
+      value: group.id,
+      label: group.label || (group.id === 'communications' ? 'Communications' : `Group ${index + 1}`),
+    }))
+  )
+
+  const sidebarSettingValue = computed(() => ({
+    schemaVersion: effectiveSidebarSettings.value.schemaVersion,
+    rootItemIds: [...effectiveSidebarSettings.value.rootItemIds],
+    groups: effectiveSidebarSettings.value.groups.map((group) => ({
+      id: group.id,
+      label: group.label,
+      icon: group.icon,
+      itemIds: [...group.itemIds],
+      separatorBeforeItemIds: [...group.separatorBeforeItemIds],
+    })),
+    hiddenItemIds: [...effectiveSidebarSettings.value.hiddenItemIds],
+  }))
+
   function setSidebarSettings(settings: SidebarSettings): void {
     sidebarSettings.value = settings
   }
@@ -278,14 +319,23 @@ export const useSidebarStore = defineStore('sidebar', () => {
     return label.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '')
   }
 
-  function addSidebarGroup(): void {
+  function sidebarRootIndexForGroup(groupId: string): number {
+    const normalized = sidebarGroupIdFromLabel(groupId)
+    return effectiveSidebarSettings.value.rootItemIds.indexOf(`group:${normalized}`)
+  }
+
+  function addSidebarGroup(label = ''): void {
     updateSidebarDraft((draft) => {
       const groupCount = draft.groups.filter((g) => g.id.startsWith('group-')).length + 1
-      const label = `Group ${groupCount}`
-      const id = `group-${groupCount}`
+      const fallbackLabel = `Group ${groupCount}`
+      const nextLabel = label.trim() || fallbackLabel
+      const normalizedLabel = normalizeGroupId(nextLabel)
+      const id = normalizedLabel && !draft.groups.some((group) => normalizeGroupId(group.id) === normalizedLabel)
+        ? normalizedLabel
+        : `group-${groupCount}`
       return {
         ...draft,
-        groups: [...draft.groups, { id, label, icon: 'tabler:folder', itemIds: [], separatorBeforeItemIds: [] }],
+        groups: [...draft.groups, { id, label: nextLabel, icon: 'tabler:folder', itemIds: [], separatorBeforeItemIds: [] }],
         rootItemIds: [...draft.rootItemIds, `group:${id}`]
       }
     })
@@ -431,12 +481,16 @@ export const useSidebarStore = defineStore('sidebar', () => {
     effectiveSidebarSettings,
     sidebarRootEntries,
     sidebarHiddenNavItems,
+    sidebarItemLabels,
+    sidebarGroupOptions,
+    sidebarSettingValue,
     setSidebarSettings,
     updateSidebarDraft,
     resetSidebarSettingsToDefault,
     cancelSidebarSettingsEditing,
     sidebarConfigItem,
     sidebarGroupIdFromLabel,
+    sidebarRootIndexForGroup,
     addSidebarGroup,
     removeSidebarGroup,
     moveSidebarGroup,

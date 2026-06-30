@@ -9,7 +9,7 @@ describe('telegram members sync realtime handling', () => {
       provider_kind: 'telegram_user',
       runtime_kind: 'tdlib_qr_authorized',
       status: 'idle',
-      fixture_runtime: false,
+      synthetic_runtime: false,
       tdjson_runtime_available: true,
       telegram_app_credentials_configured: true,
       live_send_available: true,

@@ -17,12 +17,8 @@ import type {
   TelegramChatSyncResponse,
   TelegramHistorySyncRequest,
   TelegramHistorySyncResponse,
-  TelegramQrLoginStatusResponse,
-  TelegramQrLoginStartRequest,
-  TelegramQrLoginPasswordRequest,
   TelegramAccountSetupResponse,
   TelegramSendDryRunResponse,
-  TelegramMessageIngestResponse,
   TelegramMediaDownloadRequest,
   TelegramMediaDownloadResponse,
   TelegramRuntimeRestartRequest,
@@ -324,62 +320,6 @@ export async function sendTelegramDryRun(request: {
     '/api/v1/policies/telegram-send/dry-run',
     request,
     'Telegram send dry-run failed'
-  )
-}
-
-export async function ingestTelegramFixtureMessage(request: {
-  account_id: string
-  provider_chat_id: string
-  provider_message_id: string
-  chat_kind: string
-  chat_title: string
-  sender_id: string
-  sender_display_name: string
-  text: string
-  import_batch_id: string
-  occurred_at: string
-  delivery_state: string
-}): Promise<TelegramMessageIngestResponse> {
-  return ApiClient.instance.post<TelegramMessageIngestResponse>(
-    '/api/v1/integrations/telegram/fixtures/messages',
-    request,
-    'Telegram fixture message ingest failed'
-  )
-}
-
-// --- QR Login ---
-export async function startTelegramQrLogin(
-  request: TelegramQrLoginStartRequest
-): Promise<TelegramQrLoginStatusResponse> {
-  return ApiClient.instance.post<TelegramQrLoginStatusResponse>(
-    '/api/v1/integrations/telegram/login/qr/start',
-    request,
-    'Telegram QR login start failed'
-  )
-}
-
-export async function getTelegramQrLoginStatus(setupId: string): Promise<TelegramQrLoginStatusResponse> {
-  return ApiClient.instance.get<TelegramQrLoginStatusResponse>(
-    `/api/v1/integrations/telegram/login/qr/${encodeURIComponent(setupId)}`,
-    'Telegram QR login status request failed'
-  )
-}
-
-export async function cancelTelegramQrLogin(setupId: string): Promise<{ setup_id: string; cancelled: boolean }> {
-  return ApiClient.instance.delete<{ setup_id: string; cancelled: boolean }>(
-    `/api/v1/integrations/telegram/login/qr/${encodeURIComponent(setupId)}`,
-    'Telegram QR login cancel failed'
-  )
-}
-
-export async function submitTelegramQrPassword(
-  setupId: string,
-  request: TelegramQrLoginPasswordRequest
-): Promise<TelegramQrLoginStatusResponse> {
-  return ApiClient.instance.post<TelegramQrLoginStatusResponse>(
-    `/api/v1/integrations/telegram/login/qr/${encodeURIComponent(setupId)}/password`,
-    request,
-    'Telegram QR password submit failed'
   )
 }
 

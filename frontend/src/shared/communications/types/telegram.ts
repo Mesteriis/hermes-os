@@ -61,7 +61,6 @@ export type TelegramCapabilitiesResponse = {
   account_scope?: TelegramCapabilityAccountScope | null
   telegram_app_credentials_configured: boolean
   tdjson_runtime_available: boolean
-  qr_login_ready: boolean
   bot_runtime_available: boolean
   capabilities: TelegramOperationCapability[]
   planned_features: string[]
@@ -74,7 +73,6 @@ export type TelegramRuntimeStatus = {
   provider_kind: TelegramProviderKind
   runtime_kind: string
   status: 'stopped' | 'running' | 'blocked' | 'degraded' | 'error' | string
-  fixture_runtime: boolean
   tdjson_path: string | null
   tdjson_runtime_available: boolean
   tdjson_probe_error: string | null
@@ -100,7 +98,7 @@ export type TelegramRuntimeStatus = {
 
 // --- Chats ---
 export type TelegramChatKind = 'private' | 'group' | 'channel' | 'bot'
-export type TelegramChatSyncState = 'fixture' | 'syncing' | 'synced' | 'degraded' | 'error'
+export type TelegramChatSyncState = 'syncing' | 'synced' | 'degraded' | 'error' | (string & {})
 
 export type TelegramChat = {
   telegram_chat_id: string
@@ -234,31 +232,6 @@ export type TelegramHistorySyncResponse = {
   items: TelegramMessage[]
 }
 
-// --- QR login ---
-export type TelegramQrLoginStatus =
-  | 'waiting_qr_scan'
-  | 'waiting_password'
-  | 'ready'
-  | 'expired'
-  | 'failed'
-  | 'runtime_unavailable'
-
-export type TelegramQrLoginStatusResponse = {
-  setup_id: string
-  account_id: string
-  status: TelegramQrLoginStatus
-  qr_link: string | null
-  qr_svg: string | null
-  telegram_user_id: string | null
-  telegram_username: string | null
-  suggested_account_id: string | null
-  suggested_display_name: string | null
-  suggested_external_account_id: string | null
-  expires_at: string | null
-  poll_after_ms: number
-  message: string | null
-}
-
 // --- UI types ---
 export type TelegramChatFilter = 'all' | 'unread' | 'mentions' | 'pinned' | 'projects' | 'bots' | 'archived'
 export type TelegramThreadTab = 'messages' | 'files' | 'links' | 'voice' | 'topics' | 'pinned' | 'timeline'
@@ -308,21 +281,6 @@ export type TelegramRuntimeStopRequest = {
 
 export type TelegramRuntimeRestartRequest = {
   account_id: string
-}
-
-export type TelegramQrLoginStartRequest = {
-  account_id: string
-  display_name: string
-  external_account_id: string
-  api_id?: number
-  api_hash?: string
-  session_encryption_key?: string
-  tdlib_data_path?: string
-  transcription_enabled: boolean
-}
-
-export type TelegramQrLoginPasswordRequest = {
-  password: string
 }
 
 export type TelegramMediaDownloadRequest = {

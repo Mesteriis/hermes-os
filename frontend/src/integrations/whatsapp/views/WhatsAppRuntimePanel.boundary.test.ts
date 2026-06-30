@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 function readSource(relativePath: string): string {
@@ -6,61 +6,100 @@ function readSource(relativePath: string): string {
 }
 
 describe('WhatsAppRuntimePanel boundary', () => {
-  it('surfaces projected sync snapshots for chats, history, members, presence, calls and media through query wiring', () => {
-    const source = readSource('./WhatsAppRuntimePanel.vue')
-    const snapshotsSource = readSource('../components/WhatsAppRuntimeSnapshots.vue')
+  it('preserves projected sync snapshot orchestration after removing the runtime panel Vue layer', () => {
+    const surfaceSource = readSource('../queries/useWhatsappRuntimePanelSurface.ts')
+    const presentationSource = readSource('../queries/useWhatsappRuntimePresentation.ts')
 
-    expect(source).toContain('useWhatsappSyncChatsQuery')
-    expect(source).toContain('useWhatsappSyncHistoryQuery')
-    expect(source).toContain('useWhatsappSyncMembersQuery')
-    expect(source).toContain('useWhatsappSyncPresenceQuery(selectedAccountId, selectedSyncChatIdResolved, 8)')
-    expect(source).toContain('useWhatsappSyncCallsQuery(selectedAccountId, selectedSyncChatIdResolved, 8)')
-    expect(source).toContain('useWhatsappSyncMediaQuery(selectedAccountId, selectedSyncChatIdResolved, 8)')
-    expect(snapshotsSource).toContain("Chats")
-    expect(snapshotsSource).toContain("History")
-    expect(snapshotsSource).toContain("Members")
-    expect(snapshotsSource).toContain("Select a synced chat to inspect recent history.")
-    expect(snapshotsSource).toContain("Select a synced chat to inspect roster members.")
-    expect(snapshotsSource).toContain("No projected presence for the selected synced chat yet.")
-    expect(snapshotsSource).toContain("No projected calls for the selected synced chat yet.")
-    expect(snapshotsSource).toContain("No projected media for the selected synced chat yet.")
-    expect(source).toContain('selectedSyncChatId')
-    expect(snapshotsSource).toContain('snapshot-select')
+    expect(existsSync(new URL('./WhatsAppRuntimePanel.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../components/WhatsAppRuntimeAccountList.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../components/WhatsAppRuntimeCapabilities.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../components/WhatsAppRuntimeCommandAudit.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../components/WhatsAppRuntimeControl.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../components/WhatsAppRuntimeLinking.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../components/WhatsAppRuntimeSnapshots.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../components/WhatsAppSessionList.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../components/WhatsAppStatusMessages.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../components/WhatsAppRail.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('./WhatsAppRuntimePanel.helpers.ts', import.meta.url))).toBe(false)
+
+    expect(surfaceSource).toContain('useWhatsappSyncChatsQuery')
+    expect(surfaceSource).toContain('useWhatsappSyncHistoryQuery')
+    expect(surfaceSource).toContain('useWhatsappSyncMembersQuery')
+    expect(surfaceSource).toContain('useWhatsappSyncPresenceQuery(selectedAccountId, selectedSyncChatIdResolved, 8)')
+    expect(surfaceSource).toContain('useWhatsappSyncCallsQuery(selectedAccountId, selectedSyncChatIdResolved, 8)')
+    expect(surfaceSource).toContain('useWhatsappSyncMediaQuery(selectedAccountId, selectedSyncChatIdResolved, 8)')
+    expect(surfaceSource).toContain('selectedSyncChatId')
+    expect(surfaceSource).toContain('statusPublishText')
+    expect(surfaceSource).toContain('publishStatus')
+    expect(surfaceSource).toContain('selectWhatsappSession')
+    expect(surfaceSource).not.toContain('.vue')
+
+    expect(presentationSource).toContain('chatLabel')
+    expect(presentationSource).toContain('chatMeta')
+    expect(presentationSource).toContain('historyLabel')
+    expect(presentationSource).toContain('statusPreview')
+    expect(presentationSource).toContain('presenceLabel')
+    expect(presentationSource).toContain('callLabel')
+    expect(presentationSource).toContain('contactLabel')
+    expect(presentationSource).toContain('mediaLabel')
+    expect(presentationSource).toContain('memberLabel')
+    expect(presentationSource).toContain('snapshotTimestamp')
+    expect(presentationSource).not.toContain('.vue')
   })
 
   it('exposes rotate as an owner-visible runtime lifecycle control', () => {
-    const source = readSource('./WhatsAppRuntimePanel.vue')
-    const controlSource = readSource('../components/WhatsAppRuntimeControl.vue')
+    const surfaceSource = readSource('../queries/useWhatsappRuntimePanelSurface.ts')
 
-    expect(source).toContain('useRotateWhatsappRuntimeMutation')
-    expect(controlSource).toContain("emit('set-runtime-state', 'rotate')")
-    expect(controlSource).toContain("Rotate")
+    expect(surfaceSource).toContain('useRotateWhatsappRuntimeMutation')
+    expect(surfaceSource).toContain("async function setRuntimeState(action: 'start' | 'stop' | 'revoke' | 'relink' | 'rotate' | 'remove')")
+    expect(surfaceSource).toContain("} else if (action === 'rotate') {")
   })
 
-  it('exposes the owner-visible WebView companion action through the typed Tauri bridge only', () => {
-    const source = readSource('./WhatsAppRuntimePanel.vue')
-    const controlSource = readSource('../components/WhatsAppRuntimeControl.vue')
+  it('exposes the owner-visible WebView companion action through the typed mutation surface only', () => {
+    const surfaceSource = readSource('../queries/useWhatsappRuntimePanelSurface.ts')
 
-    expect(source).toContain("import { openWhatsappWebCompanion } from '../api/whatsappCompanion'")
-    expect(source).toContain('async function openVisibleWebCompanion()')
-    expect(source).toContain("selectedRuntimeProviderShape.value === 'whatsapp_web_companion'")
-    expect(source).toContain("openWhatsappWebCompanion(accountId)")
-    expect(controlSource).toContain("Open Companion")
-    expect(controlSource).toContain('companionOpenManifest.event_extractor.relay_channel')
-    expect(source).not.toContain('window.fetch')
-    expect(source).not.toContain('globalThis.fetch')
-    expect(source).not.toContain('/api/v1/integrations/whatsapp/runtime-bridge')
-    expect(source).not.toContain('ApiClient')
+    expect(surfaceSource).toContain('useOpenWhatsappWebCompanionMutation')
+    expect(surfaceSource).toContain('async function openVisibleWebCompanion()')
+    expect(surfaceSource).toContain("selectedRuntimeProviderShape.value === 'whatsapp_web_companion'")
+    expect(surfaceSource).toContain('openCompanionMutation.mutateAsync')
+    expect(surfaceSource).toContain('openCompanionMutation.isPending.value')
+    expect(surfaceSource).toContain('companionOpenManifest.value = manifest')
+    expect(surfaceSource).toContain('Visible WhatsApp companion')
+    expect(surfaceSource).not.toContain('window.fetch')
+    expect(surfaceSource).not.toContain('globalThis.fetch')
+    expect(surfaceSource).not.toContain('/api/v1/integrations/whatsapp/runtime-bridge')
+    expect(surfaceSource).not.toContain('ApiClient')
   })
 
-  it('renders nested runtime health diagnostics from backend checks', () => {
-    const source = readSource('./WhatsAppRuntimePanel.vue')
-    const controlSource = readSource('../components/WhatsAppRuntimeControl.vue')
+  it('does not leave manual provisioning primitives in the runtime surface artifacts', () => {
+    const surfaceSource = readSource('../queries/useWhatsappRuntimePanelSurface.ts')
 
-    expect(source).toContain('runtimeHealthChecks')
-    expect(controlSource).toContain('Health diagnostics')
-    expect(controlSource).toContain('runtimeHealthCheckStatus')
-    expect(controlSource).toContain('runtimeHealthCheckDetail')
-    expect(controlSource).toContain('runtimeHealth?.checked_at')
+    expect(surfaceSource).not.toContain('useSetupWhatsappLiveAccountMutation')
+    expect(surfaceSource).not.toContain('useStartWhatsappQrLinkMutation')
+    expect(surfaceSource).not.toContain('useStartWhatsappPairCodeLinkMutation')
+    expect(surfaceSource).not.toContain('manual_dead_letter_from_runtime_panel')
+  })
+
+  it('keeps QR-based capability label filtering out of the preserved runtime artifacts', () => {
+    const surfaceSource = readSource('../queries/useWhatsappRuntimePanelSurface.ts')
+
+    expect(surfaceSource).not.toContain('auth.qr_link_start')
+    expect(surfaceSource).not.toContain('auth.pair_code_link_start')
+  })
+
+  it('preserves nested runtime health and command presentation helpers in TS', () => {
+    const surfaceSource = readSource('../queries/useWhatsappRuntimePanelSurface.ts')
+    const presentationSource = readSource('../queries/useWhatsappRuntimePresentation.ts')
+
+    expect(surfaceSource).toContain('runtimeHealthChecks')
+    expect(surfaceSource).toContain('providerCommands')
+    expect(surfaceSource).toContain('retryCommand')
+    expect(surfaceSource).toContain('deadLetterCommand')
+    expect(presentationSource).toContain('runtimeHealthCheckStatus')
+    expect(presentationSource).toContain('runtimeHealthCheckDetail')
+    expect(presentationSource).toContain('commandStatusTone')
+    expect(presentationSource).toContain('canRetryCommand')
+    expect(presentationSource).toContain('canDeadLetterCommand')
+    expect(presentationSource).toContain('providerTargetLabel')
   })
 })

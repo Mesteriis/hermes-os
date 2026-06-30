@@ -14,11 +14,3 @@ const classes = computed(() => ['hermes-card-description', props.class])
   </p>
 </template>
 
-<style scoped>
-.hermes-card-description {
-  font-size: 0.8125rem;
-  color: var(--hh-text-muted);
-  margin: 0;
-  line-height: 1.4;
-}
-</style>

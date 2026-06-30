@@ -2,9 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import {
   authorizeZoomServerToServer,
-  bridgeZoomMeeting,
-  bridgeZoomRecording,
-  bridgeZoomTranscript,
   cleanupZoomRetention,
   completeZoomOAuth,
   fetchZoomCallTranscript,
@@ -16,13 +13,11 @@ import {
   fetchZoomProviderCalls,
   fetchZoomRuntimeStatus,
   fetchZoomWebhookSubscriptionStatus,
-  importZoomTranscriptFile,
   maintainZoomTokens,
   reconcileZoomWebhookSubscription,
   refreshZoomToken,
   removeZoomRuntime,
   removeZoomWebhookSubscription,
-  setupZoomFixtureAccount,
   setupZoomLiveAccount,
   syncZoomRecordings,
   startZoomOAuth,
@@ -31,24 +26,19 @@ import {
 } from '../api/zoom'
 import type {
   ZoomAccount,
-  ZoomAccountSetupRequest,
   ZoomAccountSetupResponse,
   ZoomAuditEventItem,
   ZoomAuthorizationResult,
   ZoomCallTranscript,
   ZoomCapabilitiesResponse,
   ZoomLiveAccountSetupRequest,
-  ZoomMeetingIngestResult,
-  ZoomMeetingObservationRequest,
   ZoomOAuthCompleteRequest,
   ZoomOAuthStartRequest,
   ZoomOAuthStartResponse,
   ZoomProviderCall,
-  ZoomRecordingIngestResult,
   ZoomRecordingImportAuditItem,
   ZoomRecordingImportRemoveRequest,
   ZoomRecordingImportRemoveResponse,
-  ZoomRecordingObservationRequest,
   ZoomRecordingSyncRequest,
   ZoomRecordingSyncResult,
   ZoomRetentionCleanupRequest,
@@ -63,16 +53,13 @@ import type {
   ZoomTokenMaintenanceResult,
   ZoomTokenRefreshRequest,
   ZoomTokenRefreshResult,
-  ZoomTranscriptFileImportRequest,
-  ZoomTranscriptFileImportResult,
-  ZoomTranscriptIngestResult,
-  ZoomTranscriptObservationRequest,
   ZoomWebhookSubscriptionReconcileRequest,
   ZoomWebhookSubscriptionReconcileResult,
   ZoomWebhookSubscriptionRemoveRequest,
   ZoomWebhookSubscriptionRemoveResult,
   ZoomWebhookSubscriptionStatusResult,
 } from '../types/zoom'
+import { settingsKeys } from '../../../shared/zoom/settingsBridge'
 import { zoomQueryKeys } from './zoomQueryKeys'
 
 export function useZoomCapabilitiesQuery() {
@@ -244,6 +231,7 @@ function invalidateZoomRuntime(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: zoomQueryKeys.capabilities })
   queryClient.invalidateQueries({ queryKey: zoomQueryKeys.runtimeStatus })
   queryClient.invalidateQueries({ queryKey: zoomQueryKeys.webhookSubscriptions })
+  queryClient.invalidateQueries({ queryKey: settingsKeys.workspace() })
 }
 
 function invalidateZoomDerived(queryClient: ReturnType<typeof useQueryClient>) {
@@ -251,14 +239,7 @@ function invalidateZoomDerived(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: zoomQueryKeys.callTranscript })
   queryClient.invalidateQueries({ queryKey: zoomQueryKeys.recordingImports })
   queryClient.invalidateQueries({ queryKey: zoomQueryKeys.auditEvents })
-}
-
-export function useSetupZoomFixtureAccountMutation() {
-  const queryClient = useQueryClient()
-  return useMutation<ZoomAccountSetupResponse, Error, ZoomAccountSetupRequest>({
-    mutationFn: setupZoomFixtureAccount,
-    onSuccess: () => invalidateZoomRuntime(queryClient),
-  })
+  queryClient.invalidateQueries({ queryKey: settingsKeys.workspace() })
 }
 
 export function useSetupZoomLiveAccountMutation() {
@@ -354,50 +335,6 @@ export function useRemoveZoomRuntimeMutation() {
   return useMutation<ZoomRuntimeRemoveResponse, Error, ZoomRuntimeRemoveRequest>({
     mutationFn: removeZoomRuntime,
     onSuccess: () => invalidateZoomRuntime(queryClient),
-  })
-}
-
-export function useBridgeZoomMeetingMutation() {
-  const queryClient = useQueryClient()
-  return useMutation<ZoomMeetingIngestResult, Error, ZoomMeetingObservationRequest>({
-    mutationFn: bridgeZoomMeeting,
-    onSuccess: () => {
-      invalidateZoomRuntime(queryClient)
-      invalidateZoomDerived(queryClient)
-    },
-  })
-}
-
-export function useBridgeZoomRecordingMutation() {
-  const queryClient = useQueryClient()
-  return useMutation<ZoomRecordingIngestResult, Error, ZoomRecordingObservationRequest>({
-    mutationFn: bridgeZoomRecording,
-    onSuccess: () => {
-      invalidateZoomRuntime(queryClient)
-      invalidateZoomDerived(queryClient)
-    },
-  })
-}
-
-export function useBridgeZoomTranscriptMutation() {
-  const queryClient = useQueryClient()
-  return useMutation<ZoomTranscriptIngestResult, Error, ZoomTranscriptObservationRequest>({
-    mutationFn: bridgeZoomTranscript,
-    onSuccess: () => {
-      invalidateZoomRuntime(queryClient)
-      invalidateZoomDerived(queryClient)
-    },
-  })
-}
-
-export function useImportZoomTranscriptFileMutation() {
-  const queryClient = useQueryClient()
-  return useMutation<ZoomTranscriptFileImportResult, Error, ZoomTranscriptFileImportRequest>({
-    mutationFn: importZoomTranscriptFile,
-    onSuccess: () => {
-      invalidateZoomRuntime(queryClient)
-      invalidateZoomDerived(queryClient)
-    },
   })
 }
 

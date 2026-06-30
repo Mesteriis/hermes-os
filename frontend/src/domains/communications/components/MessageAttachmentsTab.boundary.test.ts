@@ -1,35 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 describe('MessageAttachmentsTab boundary', () => {
-  it('uses TanStack Query archive inspection wiring without direct component fetch', () => {
-    const source = readFileSync(
-      new URL('./MessageAttachmentsTab.vue', import.meta.url),
+  it('preserves attachment preview, translation, and archive inspection contracts after removing the attachments tab render layer', () => {
+    const workspaceQuerySource = readFileSync(
+      new URL('../queries/mailWorkspaceQueries.ts', import.meta.url),
       'utf8'
     )
+    const attachmentSource = readFileSync(new URL('./attachmentTable.ts', import.meta.url), 'utf8')
 
-    expect(source).toContain('useAttachmentArchiveInspectionQuery')
-    expect(source).toContain('useAttachmentPreviewQuery')
-    expect(source).toContain('useTranslateAttachmentMutation')
-    expect(source).toContain('attachmentTranslationTarget')
-    expect(source).toContain('attachmentTranslationResult')
-    expect(source).toContain('attachmentTranslationError')
-    expect(source).toContain('translateSelectedAttachment')
-    expect(source).toContain('source_text: preview.text')
-    expect(source).toContain('attachment-translation-panel')
-    expect(source).toContain('Attachment translation')
-    expect(source).toContain('isInspectableArchiveAttachment')
-    expect(source).toContain('isPreviewableImageAttachment')
-    expect(source).toContain('isPreviewablePdfAttachment')
-    expect(source).toContain('isPreviewableAttachment')
-    expect(source).toContain('Inspect archive')
-    expect(source).toContain('Attachment preview')
-    expect(source).toContain('attachment-preview-image')
-    expect(source).toContain('attachment-preview-media')
-    expect(source).toContain('attachment-preview-document')
-    expect(source).toContain("attachmentPreview.preview_kind === 'pdf'")
-    expect(source).toContain('attachmentPreview.data_url')
-    expect(source).not.toContain('../api/communications')
-    expect(source).not.toMatch(/\bfetch\s*\(/)
+    expect(existsSync(new URL('./MessageAttachmentsTab.vue', import.meta.url))).toBe(false)
+    expect(workspaceQuerySource).toContain('export function useAttachmentArchiveInspectionQuery')
+    expect(workspaceQuerySource).toContain('export function useAttachmentPreviewQuery')
+    expect(workspaceQuerySource).toContain('export function useTranslateAttachmentMutation()')
+    expect(attachmentSource).toContain('isInspectableArchiveAttachment')
+    expect(attachmentSource).toContain('isPreviewableImageAttachment')
+    expect(attachmentSource).toContain('isPreviewablePdfAttachment')
+    expect(attachmentSource).toContain('isPreviewableAttachment')
   })
 })

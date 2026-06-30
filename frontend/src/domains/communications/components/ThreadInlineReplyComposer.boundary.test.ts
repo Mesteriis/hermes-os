@@ -1,29 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 describe('ThreadInlineReplyComposer boundary', () => {
-  it('owns inline reply editing and send review without API or cache logic', () => {
-    const source = readFileSync(
-      new URL('./ThreadInlineReplyComposer.vue', import.meta.url),
+  it('preserves thread reply orchestration after removing the inline reply composer render layer', () => {
+    const surfaceSource = readFileSync(
+      new URL('../queries/useCommunicationsPageSurface.ts', import.meta.url),
       'utf8'
     )
 
-    expect(source).toContain('message: ThreadMessage')
-    expect(source).toContain('bodyHtml: string')
-    expect(source).toContain('isSendingReply: boolean')
-    expect(source).toContain('RichComposeEditor')
-    expect(source).toContain('reviewingReply')
-    expect(source).toContain('update:bodyHtml')
-    expect(source).toContain('saveDraft: []')
-    expect(source).toContain('continueInCompose: []')
-    expect(source).toContain('send: []')
-    expect(source).toContain('Review reply before sending')
-    expect(source).toContain('Immediate provider send')
-    expect(source).toContain("{{ isSendingReply ? 'Sending...' : 'Send' }}")
-    expect(source).toContain('replyReviewRecipient')
-    expect(source).toContain('replyReviewSubject')
-    expect(source).not.toContain('fetch(')
-    expect(source).not.toContain('ApiClient')
-    expect(source).not.toContain('useQuery')
+    expect(existsSync(new URL('./ThreadInlineReplyComposer.vue', import.meta.url))).toBe(false)
+    expect(surfaceSource).toContain('handleReplyToThreadMessage')
+    expect(surfaceSource).toContain('handleSaveThreadReplyDraft')
+    expect(surfaceSource).toContain('handleSendThreadReply')
+    expect(surfaceSource).toContain('isThreadReplySending')
   })
 })

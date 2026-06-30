@@ -7,11 +7,9 @@ import {
   createSignalHubConnection,
   disableSignalHubSignals,
   disableSignalHubSource,
-  emitSignalHubFixtureSignal,
   enableSignalHubSignals,
   enableSignalHubSource,
   fetchSignalHubCapabilities,
-  fetchSignalHubFixtureSources,
   fetchSignalHubProfiles,
   fetchSignalHubConnections,
   fetchSignalHubHealth,
@@ -24,7 +22,6 @@ import {
   fetchSignalHubSources,
   removeSignalHubConnection,
   removeSignalHubProfile,
-  restoreSignalHubSystemFixture,
   runSignalHubHealthCheck,
   unmuteSignalHubSignals,
   updateSignalHubConnection,
@@ -41,8 +38,7 @@ export const signalHubKeys = {
   health: () => [...signalHubKeys.all, 'health'] as const,
   replay: () => [...signalHubKeys.all, 'replay'] as const,
   policies: () => [...signalHubKeys.all, 'policies'] as const,
-  profiles: () => [...signalHubKeys.all, 'profiles'] as const,
-  fixture: () => [...signalHubKeys.all, 'fixture'] as const
+  profiles: () => [...signalHubKeys.all, 'profiles'] as const
 }
 
 export function useSignalHubSourcesQuery() {
@@ -56,35 +52,6 @@ export function useSignalHubCapabilitiesQuery() {
   return useQuery({
     queryKey: signalHubKeys.capabilities(),
     queryFn: fetchSignalHubCapabilities
-  })
-}
-
-export function useRestoreSignalHubFixtureMutation() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: restoreSignalHubSystemFixture,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: signalHubKeys.all })
-    }
-  })
-}
-
-export function useSignalHubFixtureSourcesQuery() {
-  return useQuery({
-    queryKey: signalHubKeys.fixture(),
-    queryFn: fetchSignalHubFixtureSources
-  })
-}
-
-export function useEmitSignalHubFixtureMutation() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: emitSignalHubFixtureSignal,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: signalHubKeys.all })
-    }
   })
 }
 

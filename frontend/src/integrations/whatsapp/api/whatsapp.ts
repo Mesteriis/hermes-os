@@ -9,19 +9,12 @@ import type {
   WhatsAppMembersSyncResponse,
   WhatsAppPresenceSyncResponse,
   WhatsAppStatusSyncResponse,
-  WhatsappLiveAccountSetupRequest,
   WhatsAppProviderCommand,
   WhatsAppProviderCommandListResponse,
-  WhatsAppPairCodeSession,
-  WhatsAppQrLinkSession,
   WhatsAppRuntimeHealth,
   WhatsAppRuntimeRemoveResponse,
   WhatsAppRuntimeStatus,
   WhatsappWebSessionListResponse,
-  WhatsappWebAccountSetupRequest,
-  WhatsappWebAccountSetupResponse,
-  WhatsappWebFixtureMessageRequest,
-  WhatsappWebMessageIngestResponse,
   WhatsappWebSession,
 } from '../types/whatsapp'
 
@@ -144,27 +137,6 @@ export async function removeWhatsappRuntime(request: {
     '/api/v1/integrations/whatsapp/runtime/remove',
     request,
     'WhatsApp runtime remove failed'
-  )
-}
-
-export async function startWhatsappQrLink(request: {
-  account_id: string
-}): Promise<WhatsAppQrLinkSession> {
-  return ApiClient.instance.post<WhatsAppQrLinkSession>(
-    '/api/v1/integrations/whatsapp/login/qr/start',
-    request,
-    'WhatsApp QR link start failed'
-  )
-}
-
-export async function startWhatsappPairCodeLink(request: {
-  account_id: string
-  phone_number: string
-}): Promise<WhatsAppPairCodeSession> {
-  return ApiClient.instance.post<WhatsAppPairCodeSession>(
-    '/api/v1/integrations/whatsapp/login/pair-code/start',
-    request,
-    'WhatsApp pair-code link start failed'
   )
 }
 
@@ -322,38 +294,6 @@ export async function deadLetterWhatsappProviderCommand(params: {
   )
 }
 
-// --- Account setup ---
-export async function setupWhatsappWebFixtureAccount(
-  request: WhatsappWebAccountSetupRequest
-): Promise<WhatsappWebAccountSetupResponse> {
-  return ApiClient.instance.post<WhatsappWebAccountSetupResponse>(
-    '/api/v1/integrations/whatsapp/fixtures/accounts',
-    request,
-    'WhatsApp Web account setup request failed'
-  )
-}
-
-export async function setupWhatsappLiveAccount(
-  request: WhatsappLiveAccountSetupRequest
-): Promise<WhatsappWebAccountSetupResponse> {
-  return ApiClient.instance.post<WhatsappWebAccountSetupResponse>(
-    '/api/v1/integrations/whatsapp/accounts',
-    request,
-    'WhatsApp live account setup request failed'
-  )
-}
-
-// --- Fixture message ingest ---
-export async function ingestWhatsappWebFixtureMessage(
-  request: WhatsappWebFixtureMessageRequest
-): Promise<WhatsappWebMessageIngestResponse> {
-  return ApiClient.instance.post<WhatsappWebMessageIngestResponse>(
-    '/api/v1/integrations/whatsapp/fixtures/messages',
-    request,
-    'WhatsApp Web fixture message request failed'
-  )
-}
-
 export async function loadWhatsappWebWorkspace(
   selectedSessionId: string
 ): Promise<{
@@ -386,97 +326,6 @@ export async function loadWhatsappWebWorkspace(
       sessions: [],
       selectedSessionId,
       error: error instanceof Error ? error.message : 'Unknown WhatsApp Web workspace error'
-    }
-  }
-}
-
-export async function setupWhatsappWebFixture(params: {
-  account_id: string
-  display_name: string
-  external_account_id: string
-  device_name: string
-  local_state_path: string
-}): Promise<{
-  message: string
-  error: string
-  sessionId: string
-  accountId: string
-  providerKind: string
-}> {
-  try {
-    const result = await setupWhatsappWebFixtureAccount({
-      account_id: params.account_id,
-      provider_kind: 'whatsapp_web',
-      display_name: params.display_name,
-      external_account_id: params.external_account_id,
-      device_name: params.device_name,
-      local_state_path: params.local_state_path
-    })
-    const providerKindLabel = result.provider_kind
-      .split('_')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ')
-    return {
-      message: `${providerKindLabel} account ${result.account_id} saved`,
-      error: '',
-      sessionId: result.session.session_id,
-      accountId: result.account_id,
-      providerKind: result.provider_kind
-    }
-  } catch (error) {
-    return {
-      message: '',
-      error: error instanceof Error ? error.message : 'WhatsApp Web fixture setup failed',
-      sessionId: '',
-      accountId: params.account_id,
-      providerKind: 'whatsapp_web'
-    }
-  }
-}
-
-export async function ingestWhatsappWebMessageFixture(params: {
-  account_id: string
-  provider_chat_id: string
-  provider_message_id: string
-  chat_title: string
-  sender_id: string
-  sender_display_name: string
-  text: string
-  import_batch_id: string
-  occurred_at: string
-  delivery_state: string
-}): Promise<{
-  message: string
-  error: string
-  nextProviderMessageId: string
-  nextOccurredAt: string
-}> {
-  try {
-    const providerMessageId = params.provider_message_id.trim() || `wa-fixture-msg-${crypto.randomUUID()}`
-    const result = await ingestWhatsappWebFixtureMessage({
-      account_id: params.account_id,
-      provider_chat_id: params.provider_chat_id,
-      provider_message_id: providerMessageId,
-      chat_title: params.chat_title,
-      sender_id: params.sender_id,
-      sender_display_name: params.sender_display_name,
-      text: params.text,
-      import_batch_id: params.import_batch_id,
-      occurred_at: params.occurred_at || new Date().toISOString(),
-      delivery_state: params.delivery_state as 'received' | 'sent' | 'send_dry_run' | 'send_blocked'
-    })
-    return {
-      message: `WhatsApp Web message ${result.message_id} projected`,
-      error: '',
-      nextProviderMessageId: `wa-fixture-msg-${crypto.randomUUID()}`,
-      nextOccurredAt: new Date().toISOString()
-    }
-  } catch (error) {
-    return {
-      message: '',
-      error: error instanceof Error ? error.message : 'WhatsApp Web fixture ingest failed',
-      nextProviderMessageId: params.provider_message_id,
-      nextOccurredAt: params.occurred_at
     }
   }
 }

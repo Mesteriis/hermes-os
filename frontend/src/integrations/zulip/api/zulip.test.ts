@@ -47,7 +47,7 @@ describe('zulip integration API', () => {
         idempotency_key: 'stream-key',
         status: 'pending',
         reconciliation_status: 'not_observed',
-        provider_conversation_id: 'Hermes Lab/Tasks',
+        provider_conversation_id: 'Hermes Ops/Tasks',
         payload: {},
       }))
       .mockResolvedValueOnce(ok({
@@ -82,7 +82,7 @@ describe('zulip integration API', () => {
       api_key: 'provider-token-from-user',
     })
     await enqueueZulipStreamUploadCommand('zulip-live-1', {
-      stream: 'Hermes Lab',
+      stream: 'Hermes Ops',
       topic: 'Tasks',
       content: 'Traceable message',
       attachment_id: 'attachment-1',
@@ -116,7 +116,7 @@ describe('zulip integration API', () => {
       api_key: 'provider-token-from-user',
     })
     expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({
-      stream: 'Hermes Lab',
+      stream: 'Hermes Ops',
       topic: 'Tasks',
       content: 'Traceable message',
       attachment_id: 'attachment-1',

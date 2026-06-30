@@ -1,10 +1,21 @@
-import { useQuery } from '@tanstack/vue-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import {
+  deleteMailAccount,
+  exportMailAccountSettings,
   fetchApplicationSettings,
   fetchProviderAccounts,
-  fetchCalendarAccounts
+  fetchCalendarAccounts,
+  logoutMailAccount,
 } from '../api/settings'
-import type { ApplicationSetting } from '../types/settings'
+import {
+  saveApplicationSetting,
+  type ApplicationSetting,
+  type ApplicationSettingValue
+} from '../../../platform/settings/applicationSettingsClient'
+import {
+  FRONTEND_LOCALE_SETTING_KEY,
+  FRONTEND_SIDEBAR_SETTING_KEY,
+} from '../types/settings'
 
 export const settingsKeys = {
   all: ['settings'] as const,
@@ -70,4 +81,71 @@ export function groupSettingsByCategory(
     groups[cat].push(setting)
   }
   return groups
+}
+
+export function useSaveApplicationSettingMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ settingKey, value }: { settingKey: string; value: ApplicationSettingValue }) =>
+      saveApplicationSetting(settingKey, value),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: settingsKeys.application() })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.workspace() })
+    },
+  })
+}
+
+export function useSaveFrontendLocaleMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (value: string) => saveApplicationSetting(FRONTEND_LOCALE_SETTING_KEY, value),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: settingsKeys.application() })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.workspace() })
+    },
+  })
+}
+
+export function useSaveFrontendSidebarMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (value: ApplicationSettingValue) => saveApplicationSetting(FRONTEND_SIDEBAR_SETTING_KEY, value),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: settingsKeys.application() })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.workspace() })
+    },
+  })
+}
+
+export function useExportMailAccountSettingsMutation() {
+  return useMutation({
+    mutationFn: (accountId: string) => exportMailAccountSettings(accountId),
+  })
+}
+
+export function useLogoutMailAccountMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (accountId: string) => logoutMailAccount(accountId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: settingsKeys.providerAccounts() })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.workspace() })
+    },
+  })
+}
+
+export function useDeleteMailAccountMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (accountId: string) => deleteMailAccount(accountId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: settingsKeys.providerAccounts() })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.workspace() })
+    },
+  })
 }

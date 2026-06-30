@@ -1,45 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 describe('CommunicationViewer boundary', () => {
-  it('passes bilingual reply send events from MessageBodyTab', () => {
-    const source = readFileSync(new URL('./CommunicationViewer.vue', import.meta.url), 'utf8')
+  it('preserves AI state query and transition contracts after removing the viewer render layer', () => {
+    const coreQuerySource = readFileSync(
+      new URL('../queries/mailCoreQueries.ts', import.meta.url),
+      'utf8'
+    )
+    const operationQuerySource = readFileSync(
+      new URL('../queries/mailOperationQueries.ts', import.meta.url),
+      'utf8'
+    )
 
-    expect(source).toContain('send-bilingual-reply')
-    expect(source).toContain('MessageBodyTab')
-    expect(source).toContain('@send-bilingual-reply')
-    expect(source).toContain('useMessageAiStateQuery')
-    expect(source).toContain('useUpdateMessageAiStateMutation')
-    expect(source).toContain('currentAiState')
-    expect(source).toContain('transitionAiState')
-    expect(source).toContain('exportMessage')
-    expect(source).toContain('@export-message')
-    expect(source).toContain('markMessageRead')
-    expect(source).toContain('markMessageUnread')
-    expect(source).toContain('deleteFromProvider')
-    expect(source).toContain('@mark-message-read')
-    expect(source).toContain('@mark-message-unread')
-    expect(source).toContain('@delete-from-provider')
-    expect(source).toContain('addLabel')
-    expect(source).toContain('removeLabel')
-    expect(source).toContain('snoozeMessage')
-    expect(source).toContain('replyAll')
-    expect(source).toContain('forwardMessage')
-    expect(source).toContain('redirectMessage')
-    expect(source).toContain('@add-label')
-    expect(source).toContain('@remove-label')
-    expect(source).toContain('@snooze-message')
-    expect(source).toContain('@reply-all')
-    expect(source).toContain('@forward-message')
-    expect(source).toContain('@redirect-message')
-    expect(source).toContain('ai-state-panel')
-    expect(source).toContain('AI state')
-    expect(source).toContain("aiState === 'REVIEW_REQUIRED'")
-    expect(source).toContain("review_reason: 'Manual review requested from Mail UI'")
-    expect(source).toContain("aiState === 'FAILED'")
-    expect(source).toContain("last_error: 'Manual failure recorded from Mail UI'")
-    expect(source).toContain("transitionAiState('FAILED')")
-    expect(source).not.toContain('fetch(')
-    expect(source).not.toContain('ApiClient')
+    expect(existsSync(new URL('./CommunicationViewer.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('./MessageHeadersTab.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('./MessageTimelineTab.vue', import.meta.url))).toBe(false)
+    expect(coreQuerySource).toContain('export function useMessageAiStateQuery')
+    expect(operationQuerySource).toContain('export function useUpdateMessageAiStateMutation')
+    expect(operationQuerySource).toContain("queryClient.setQueryData(['communications-ai-state', record.message_id], record)")
+    expect(operationQuerySource).toContain("queryClient.invalidateQueries({ queryKey: ['communications-ai-state', record.message_id] })")
+    expect(operationQuerySource).toContain("queryClient.invalidateQueries({ queryKey: ['communications-message', record.message_id] })")
   })
 })

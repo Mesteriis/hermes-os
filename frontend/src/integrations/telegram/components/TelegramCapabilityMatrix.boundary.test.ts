@@ -1,18 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 describe('TelegramCapabilityMatrix boundary', () => {
-  it('loads account-scoped capabilities through the query layer', () => {
-    const source = readFileSync(new URL('./TelegramCapabilityMatrix.vue', import.meta.url), 'utf8')
+  it('removes the capability matrix Vue layer while preserving account capability queries in TS', () => {
+    const querySource = readFileSync(new URL('../queries/useTelegramQuery.ts', import.meta.url), 'utf8')
+    const apiSource = readFileSync(new URL('../api/telegram.ts', import.meta.url), 'utf8')
 
-    expect(source).toContain('useTelegramAccountCapabilitiesQuery')
-    expect(source).toContain('planned_features')
-    expect(source).toContain('unsupported_features')
-    expect(source).toContain('capability.operation')
-    expect(source).toContain('capability.status')
-    expect(source).toContain("t('Capabilities')")
-    expect(source).toContain('confirmation_required')
-    expect(source).toContain('closure_gate')
-    expect(source).not.toContain('fetch(')
+    expect(existsSync(new URL('./TelegramCapabilityMatrix.vue', import.meta.url))).toBe(false)
+    expect(querySource).toContain('useTelegramAccountCapabilitiesQuery')
+    expect(querySource).toContain('fetchTelegramAccountCapabilities')
+    expect(querySource).toContain('telegramQueryKeys.accountCapabilities')
+    expect(apiSource).toContain('fetchTelegramAccountCapabilities')
+    expect(querySource).not.toContain('fetch(')
   })
 })

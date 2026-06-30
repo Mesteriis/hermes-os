@@ -262,7 +262,6 @@ function patchRuntimeStatus(
 			provider_shape: stringValue(payload.provider_shape) ?? status.provider_shape,
 			runtime_kind: stringValue(payload.runtime_kind) ?? status.runtime_kind,
 			status: nextStatus,
-			fixture_runtime: booleanValue(payload.fixture_runtime) ?? status.fixture_runtime,
 			live_runtime_available:
 				booleanValue(payload.live_runtime_available) ?? status.live_runtime_available,
 			live_send_available:
@@ -367,7 +366,6 @@ function patchCommandList(
 function linkStateValue(value: unknown): WhatsappWebSession['link_state'] | null {
 	const normalized = stringValue(value)
 	if (
-		normalized === 'fixture' ||
 		normalized === 'qr_pending' ||
 		normalized === 'pair_code_pending' ||
 		normalized === 'link_required' ||

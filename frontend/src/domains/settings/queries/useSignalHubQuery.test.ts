@@ -11,6 +11,5 @@ describe('Signal Hub query keys', () => {
     expect(signalHubKeys.replay()).toEqual(['signal-hub', 'replay'])
     expect(signalHubKeys.policies()).toEqual(['signal-hub', 'policies'])
     expect(signalHubKeys.profiles()).toEqual(['signal-hub', 'profiles'])
-    expect(signalHubKeys.fixture()).toEqual(['signal-hub', 'fixture'])
   })
 })

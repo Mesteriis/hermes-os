@@ -66,7 +66,6 @@ export type WhatsAppRuntimeStatus = {
   provider_shape: string
   runtime_kind: string
   status: string
-  fixture_runtime: boolean
   live_runtime_available: boolean
   live_send_available: boolean
   qr_pairing_available: boolean
@@ -408,45 +407,13 @@ export type WhatsAppLifecycleResponse = {
   tombstone_id: string | null
 }
 
-export type WhatsAppQrLinkSession = {
-  account_id: string
-  provider_shape: string
-  runtime_kind: string
-  status: string
-  setup_id: string
-  qr_svg: string | null
-  expires_at: string | null
-  runtime_blockers: string[]
-}
-
-export type WhatsAppPairCodeSession = {
-  account_id: string
-  provider_shape: string
-  runtime_kind: string
-  status: string
-  setup_id: string
-  phone_number: string
-  pair_code: string | null
-  expires_at: string | null
-  runtime_blockers: string[]
-}
-
 // --- Sessions ---
 export type WhatsappWebSession = {
   session_id: string
   account_id: string
   device_name: string
-  companion_runtime: 'fixture' | 'manual_webview' | 'blocked'
-  link_state:
-    | 'fixture'
-    | 'qr_pending'
-    | 'pair_code_pending'
-    | 'link_required'
-    | 'linked'
-    | 'degraded'
-    | 'revoked'
-    | 'removed'
-    | 'blocked'
+  companion_runtime: string
+  link_state: string
   local_state_path: string
   last_sync_at: string | null
   metadata: Record<string, unknown>
@@ -510,48 +477,3 @@ export type WhatsappWebMediaSearchResponse = {
 }
 
 // --- Account setup ---
-export type WhatsappWebAccountSetupRequest = {
-  account_id: string
-  provider_kind: WhatsappWebProviderKind
-  display_name: string
-  external_account_id: string
-  device_name: string
-  local_state_path: string
-}
-
-export type WhatsappWebAccountSetupResponse = {
-  account_id: string
-  provider_kind: WhatsappWebProviderKind
-  runtime: string
-  session: WhatsappWebSession
-}
-
-export type WhatsappLiveAccountSetupRequest = {
-  account_id: string
-  provider_kind: WhatsappWebProviderKind
-  provider_shape: WhatsappProviderShape
-  display_name: string
-  external_account_id: string
-  device_name?: string
-  local_state_path?: string
-  api_access_token?: string
-}
-
-// --- Fixture ---
-export type WhatsappWebFixtureMessageRequest = {
-  account_id: string
-  provider_chat_id: string
-  provider_message_id: string
-  chat_title: string
-  sender_id: string
-  sender_display_name: string
-  text: string
-  import_batch_id: string
-  occurred_at: string
-  delivery_state: 'received' | 'sent' | 'send_dry_run' | 'send_blocked'
-}
-
-export type WhatsappWebMessageIngestResponse = {
-  raw_record_id: string
-  message_id: string
-}

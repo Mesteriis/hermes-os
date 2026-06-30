@@ -498,3 +498,11 @@ export function formatRelativeTime(dateStr: string): string {
   const d = new Date(dateStr)
   return formatDistanceToNow(d, { addSuffix: true })
 }
+
+export {
+  aiSummaryContractFromMetadata,
+  communicationExtractionSectionsFromInsight,
+  communicationKnowledgeSectionsFromSummaryContract,
+  communicationMessageLabelsFromMetadata,
+  communicationMessageSnoozeUntilFromMetadata,
+} from '../helpers/communicationPageModels'

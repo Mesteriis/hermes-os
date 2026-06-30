@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   duration?: number
   mode?: 'in-out' | 'out-in'
   appear?: boolean
@@ -10,8 +8,6 @@ const props = withDefaults(defineProps<{
   mode: 'out-in',
   appear: false
 })
-
-const cssDuration = computed(() => `${props.duration}ms`)
 </script>
 
 <template>
@@ -23,15 +19,3 @@ const cssDuration = computed(() => `${props.duration}ms`)
     <slot />
   </Transition>
 </template>
-
-<style scoped>
-.hermes-fade-enter-active,
-.hermes-fade-leave-active {
-  transition: opacity v-bind(cssDuration) ease;
-}
-
-.hermes-fade-enter-from,
-.hermes-fade-leave-to {
-  opacity: 0;
-}
-</style>
