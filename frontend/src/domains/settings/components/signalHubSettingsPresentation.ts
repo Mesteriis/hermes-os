@@ -48,7 +48,6 @@ export function sourceIcon(source: SignalHubSource): string {
     browser: 'tabler:browser',
     calendar: 'tabler:calendar',
     filesystem: 'tabler:folder',
-    fixture: 'tabler:test-pipe',
     github: 'tabler:brand-github',
     home_assistant: 'tabler:home-cog',
     ai: 'tabler:sparkles',

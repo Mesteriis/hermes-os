@@ -1,22 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 describe('ThreadAttachmentInsightPanel boundaries', () => {
-  it('uses attachment preview and archive inspection query hooks without direct API calls', () => {
-    const source = readFileSync(new URL('./ThreadAttachmentInsightPanel.vue', import.meta.url), 'utf8')
+  it('preserves attachment inspection query hooks and preview helpers after removing the thread attachment panel', () => {
+    const workspaceQuerySource = readFileSync(
+      new URL('../queries/mailWorkspaceQueries.ts', import.meta.url),
+      'utf8'
+    )
+    const attachmentSource = readFileSync(new URL('./attachmentTable.ts', import.meta.url), 'utf8')
 
-    expect(source).toContain('useAttachmentArchiveInspectionQuery')
-    expect(source).toContain('useAttachmentPreviewQuery')
-    expect(source).toContain('useTranslateAttachmentMutation')
-    expect(source).toContain('isPreviewableAttachment')
-    expect(source).toContain('isInspectableArchiveAttachment')
-    expect(source).toContain('isPreviewableImageAttachment')
-    expect(source).toContain('Translate preview')
-    expect(source).toContain('Inspect archive')
-    expect(source).toContain('Attachment preview')
-    expect(source).toContain('Archive inspection')
-    expect(source).toContain('Thread attachment translation')
-    expect(source).not.toContain('../api/')
-    expect(source).not.toContain('ApiClient')
+    expect(existsSync(new URL('./ThreadAttachmentInsightPanel.vue', import.meta.url))).toBe(false)
+    expect(workspaceQuerySource).toContain('export function useAttachmentArchiveInspectionQuery')
+    expect(workspaceQuerySource).toContain('export function useAttachmentPreviewQuery')
+    expect(workspaceQuerySource).toContain('export function useTranslateAttachmentMutation()')
+    expect(attachmentSource).toContain('isPreviewableAttachment')
+    expect(attachmentSource).toContain('isInspectableArchiveAttachment')
+    expect(attachmentSource).toContain('isPreviewableImageAttachment')
   })
 })

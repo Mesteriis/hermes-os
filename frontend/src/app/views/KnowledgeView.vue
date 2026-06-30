@@ -1,7 +1,20 @@
 <script setup lang="ts">
-import KnowledgePage from '../../domains/knowledge/views/KnowledgePage.vue'
+import { useI18n } from '../../platform/i18n'
+
+const { t } = useI18n()
 </script>
 
 <template>
-  <KnowledgePage />
+  <section class="panel settings-list-panel settings-primary-pane">
+    <header class="panel-title-row">
+      <div>
+        <h2>{{ t('Knowledge Graph') }}</h2>
+        <p>{{ t('Knowledge UI removed after logic extraction. Rebuild pending new design language.') }}</p>
+      </div>
+    </header>
+    <div class="empty-panel fill">
+      <strong>{{ t('Knowledge logic is preserved') }}</strong>
+      <span>{{ t('Graph summary sync, search orchestration and contradiction review state remain in the extracted surface. This screen stays empty until the new knowledge UI is rebuilt.') }}</span>
+    </div>
+  </section>
 </template>

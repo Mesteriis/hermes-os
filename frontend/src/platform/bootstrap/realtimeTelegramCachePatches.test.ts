@@ -490,9 +490,9 @@ describe('telegram realtime cache patch handling', () => {
     const runtimeStatus = {
       account_id: 'account-1',
       provider_kind: 'telegram_user',
-      runtime_kind: 'fixture',
+      runtime_kind: 'synthetic',
       status: 'running',
-      fixture_runtime: true,
+      synthetic_runtime: true,
       tdjson_runtime_available: false,
       telegram_app_credentials_configured: false,
       live_send_available: false,
@@ -549,9 +549,9 @@ describe('telegram realtime cache patch handling', () => {
     const runtimeStatus = {
       account_id: 'account-1',
       provider_kind: 'telegram_user',
-      runtime_kind: 'fixture',
+      runtime_kind: 'synthetic',
       status: 'running',
-      fixture_runtime: true,
+      synthetic_runtime: true,
       tdjson_runtime_available: false,
       telegram_app_credentials_configured: false,
       live_send_available: false,

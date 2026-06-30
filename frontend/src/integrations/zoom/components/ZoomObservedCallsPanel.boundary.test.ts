@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 describe('ZoomObservedCallsPanel boundary', () => {
-  it('loads projected call and transcript evidence through the query layer', () => {
-    const source = readFileSync(new URL('./ZoomObservedCallsPanel.vue', import.meta.url), 'utf8')
+  it('preserves call evidence helpers after removing the observed calls Vue panel', () => {
+    const runtimeQuerySource = readFileSync(
+      new URL('../queries/useZoomRuntimeQuery.ts', import.meta.url),
+      'utf8'
+    )
+    const helperSource = readFileSync(new URL('./zoomEvidence.ts', import.meta.url), 'utf8')
 
-    expect(source).toContain('useZoomProviderCallsQuery')
-    expect(source).toContain('useZoomCallTranscriptQuery')
-    expect(source).toContain('extractZoomRecordingRefs')
-    expect(source).toContain('formatZoomTranscriptProvenance')
-    expect(source).toContain("t('Observed calls')")
-    expect(source).toContain("t('Transcript evidence')")
-    expect(source).toContain("t('Recording references')")
-    expect(source).toContain("t('Transcript provenance')")
-    expect(source).not.toContain('fetch(')
+    expect(existsSync(new URL('./ZoomObservedCallsPanel.vue', import.meta.url))).toBe(false)
+    expect(runtimeQuerySource).toContain('useZoomProviderCallsQuery')
+    expect(runtimeQuerySource).toContain('useZoomCallTranscriptQuery')
+    expect(helperSource).toContain('extractZoomRecordingRefs')
+    expect(helperSource).toContain('formatZoomTranscriptProvenance')
+    expect(helperSource).not.toContain('.vue')
   })
 })

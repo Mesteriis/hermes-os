@@ -1,19 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 describe('TelegramAccountManager boundary', () => {
-  it('uses vee-validate form state together with account lifecycle query mutations', () => {
-    const source = readFileSync(new URL('./TelegramAccountManager.vue', import.meta.url), 'utf8')
+  it('removes the account manager Vue layer while preserving account lifecycle mutations in TS', () => {
+    const querySource = readFileSync(new URL('../queries/useTelegramQuery.ts', import.meta.url), 'utf8')
+    const mutationsSource = readFileSync(new URL('../queries/useTelegramMutations.ts', import.meta.url), 'utf8')
 
-    expect(source).toContain("from 'vee-validate'")
-    expect(source).toContain('useTelegramAccountsQuery')
-    expect(source).toContain('useSetupTelegramAccountMutation')
-    expect(source).toContain('useLogoutTelegramAccountMutation')
-    expect(source).toContain('useRemoveTelegramAccountMutation')
-    expect(source).toContain('telegramAccountSetupSchema')
-    expect(source).toContain('TelegramCapabilityMatrix')
-    expect(source).toContain('TelegramQrLoginPanel')
-    expect(source).toContain('setFieldValue')
-    expect(source).toContain('props.selectedAccountId')
+    expect(existsSync(new URL('./TelegramAccountManager.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('./TelegramQrLoginPanel.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('../queries/useTelegramQrLoginQuery.ts', import.meta.url))).toBe(false)
+
+    expect(querySource).toContain('useTelegramAccountsQuery')
+    expect(mutationsSource).toContain('useLogoutTelegramAccountMutation')
+    expect(mutationsSource).toContain('useRemoveTelegramAccountMutation')
+    expect(mutationsSource).not.toContain('useStartTelegramQrLoginMutation')
+    expect(mutationsSource).not.toContain('useSubmitTelegramQrPasswordMutation')
+    expect(mutationsSource).not.toContain('useCancelTelegramQrLoginMutation')
   })
 })

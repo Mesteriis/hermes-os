@@ -1,46 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 describe('MessageBodyTab bilingual reply boundary', () => {
-  it('mounts the bilingual reply review panel without direct API access', () => {
-    const source = readFileSync(
-      new URL('./MessageBodyTab.vue', import.meta.url),
+  it('preserves bilingual reply, summary-contract, and local intelligence helpers after removing the message body render layer', () => {
+    const pageModelSource = readFileSync(
+      new URL('../helpers/communicationPageModels.ts', import.meta.url),
+      'utf8'
+    )
+    const actionQuerySource = readFileSync(
+      new URL('../queries/mailActionQueries.ts', import.meta.url),
+      'utf8'
+    )
+    const operationQuerySource = readFileSync(
+      new URL('../queries/mailOperationQueries.ts', import.meta.url),
       'utf8'
     )
 
-    expect(source).toContain('./BilingualReplyPanel.vue')
-    expect(source).toContain('isBilingualReplyOpen')
-    expect(source).toContain('<BilingualReplyPanel')
-    expect(source).toContain('sendBilingualReply')
-    expect(source).toContain('messageId')
-    expect(source).toContain('aiSummaryContractFromMetadata')
-    expect(source).toContain('summaryContract')
-    expect(source).toContain('ai-summary-contract')
-    expect(source).toContain('Key points')
-    expect(source).toContain('Action items')
-    expect(source).toContain('Risks')
-    expect(source).toContain('Deadlines')
-    expect(source).toContain('communicationExtractionSectionsFromInsight')
-    expect(source).toContain('communicationKnowledgeSectionsFromSummaryContract')
-    expect(source).toContain('extractionSections')
-    expect(source).toContain('knowledgeSections')
-    expect(source).toContain('extraction-review')
-    expect(source).toContain('Extraction Review')
-    expect(source).toContain('knowledge-review')
-    expect(source).toContain('Knowledge Review')
-    expect(source).toContain('generateAiReply')
-    expect(source).toContain('applyAiReply')
-    expect(source).toContain('reviewSecurity')
-    expect(source).toContain('reviewRecipients')
-    expect(source).toContain('MessageAiReplyPanel')
-    expect(source).toContain('MessageTrustReviewPanel')
-    expect(source).toContain('MessageLocalIntelligencePanel')
-    expect(source).toContain('remoteImageUrls')
-    expect(source).toContain('shouldLoadRemoteImages')
-    expect(source).toContain('remoteImageProxyUrl')
-    expect(source).toContain('Remote images blocked')
-    expect(source).toContain('/remote-image?url=')
-    expect(source).not.toContain('../api/')
-    expect(source).not.toContain('fetch(')
+    expect(existsSync(new URL('./MessageBodyTab.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('./BilingualReplyPanel.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('./MessageAiReplyPanel.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('./MessageLocalIntelligencePanel.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('./MessageTrustReviewPanel.vue', import.meta.url))).toBe(false)
+    expect(pageModelSource).toContain('aiSummaryContractFromMetadata')
+    expect(pageModelSource).toContain('communicationExtractionSectionsFromInsight')
+    expect(pageModelSource).toContain('communicationKnowledgeSectionsFromSummaryContract')
+    expect(actionQuerySource).toContain('export function useGenerateAiReplyVariantsMutation()')
+    expect(actionQuerySource).toContain('export function useExplainMessageMutation()')
+    expect(actionQuerySource).toContain('export function useDetectMessageLanguageMutation()')
+    expect(operationQuerySource).toContain('export function usePrepareBilingualReplyFlowMutation()')
   })
 })

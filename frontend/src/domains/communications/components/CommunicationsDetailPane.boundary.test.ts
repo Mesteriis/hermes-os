@@ -1,52 +1,29 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 describe('CommunicationsDetailPane boundary', () => {
-  it('forwards bilingual reply send events from the mail viewer', () => {
-    const source = readFileSync(
-      new URL('./CommunicationsDetailPane.vue', import.meta.url),
+  it('preserves message and thread selection orchestration after removing the detail pane render layer', () => {
+    const surfaceSource = readFileSync(
+      new URL('../queries/useCommunicationsPageSurface.ts', import.meta.url),
       'utf8'
     )
 
-    expect(source).toContain('sendBilingualReply')
-    expect(source).toContain('exportMessage')
-    expect(source).toContain('addLabel')
-    expect(source).toContain('removeLabel')
-    expect(source).toContain('snoozeMessage')
-    expect(source).toContain('replyAll')
-    expect(source).toContain('forwardMessage')
-    expect(source).toContain('redirectMessage')
-    expect(source).toContain('markMessageRead')
-    expect(source).toContain('markMessageUnread')
-    expect(source).toContain('deleteFromProvider')
-    expect(source).toContain('CommunicationViewer')
-    expect(source).toContain('@send-bilingual-reply')
-    expect(source).toContain('@export-message')
-    expect(source).toContain('@add-label')
-    expect(source).toContain('@remove-label')
-    expect(source).toContain('@snooze-message')
-    expect(source).toContain('@mark-message-read')
-    expect(source).toContain('@mark-message-unread')
-    expect(source).toContain('@delete-from-provider')
-    expect(source).toContain('@reply-all')
-    expect(source).toContain('@forward-message')
-    expect(source).toContain('@redirect-message')
-  })
-
-  it('renders selected threads through the conversation timeline instead of the single-message viewer', () => {
-    const source = readFileSync(
-      new URL('./CommunicationsDetailPane.vue', import.meta.url),
-      'utf8'
-    )
-
-    expect(source).toContain('ThreadConversationView')
-    expect(source).toContain('selectedThread')
-    expect(source).toContain('threadMessages')
-    expect(source).toContain('isThreadReplySending')
-    expect(source).toContain(':is-sending-reply="isThreadReplySending"')
-    expect(source).toContain('@open-message')
-    expect(source).toContain('@reply-to-message')
-    expect(source).toContain('@save-reply-draft')
-    expect(source).toContain('@send-reply')
+    expect(existsSync(new URL('./CommunicationsDetailPane.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('./CommunicationViewer.vue', import.meta.url))).toBe(false)
+    expect(existsSync(new URL('./ThreadConversationView.vue', import.meta.url))).toBe(false)
+    expect(surfaceSource).toContain('selectedThreadMessages')
+    expect(surfaceSource).toContain('selectedThreadErrorMessage')
+    expect(surfaceSource).toContain('handleSelectThread')
+    expect(surfaceSource).toContain('handleOpenThreadMessage')
+    expect(surfaceSource).toContain('handleReplyToThreadMessage')
+    expect(surfaceSource).toContain('handleSaveThreadReplyDraft')
+    expect(surfaceSource).toContain('handleSendThreadReply')
+    expect(surfaceSource).toContain('isThreadReplySending')
+    expect(surfaceSource).toContain('handleDeleteFromProvider')
+    expect(surfaceSource).toContain('handleMarkMessageRead')
+    expect(surfaceSource).toContain('handleMarkMessageUnread')
+    expect(surfaceSource).toContain('handleForwardMessage')
+    expect(surfaceSource).toContain('handleRedirectMessage')
+    expect(surfaceSource).toContain('handleReplyAll')
   })
 })

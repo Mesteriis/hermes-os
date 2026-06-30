@@ -1,4 +1,4 @@
-export type ZoomAuthShape = 'fixture' | 'oauth_user' | 'server_to_server'
+export type ZoomAuthShape = 'oauth_user' | 'server_to_server'
 
 export interface ZoomAccountSetupRequest {
   account_id: string
@@ -9,7 +9,7 @@ export interface ZoomAccountSetupRequest {
 }
 
 export interface ZoomLiveAccountSetupRequest extends ZoomAccountSetupRequest {
-  auth_shape?: Exclude<ZoomAuthShape, 'fixture'>
+  auth_shape?: ZoomAuthShape
   client_id: string
   token_secret_ref?: string | null
   client_secret_ref?: string | null

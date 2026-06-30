@@ -3,7 +3,6 @@ import {
   addTelegramChatToFolder,
   archiveTelegramChat,
   downloadTelegramMedia,
-  ingestTelegramFixtureMessage,
   logoutTelegramAccount,
   markTelegramChatRead,
   markTelegramChatUnread,
@@ -80,17 +79,6 @@ export function useSyncTelegramHistoryMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (request: TelegramHistorySyncRequest) => syncTelegramHistory(request),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
-    },
-  })
-}
-
-export function useIngestTelegramFixtureMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (request: Parameters<typeof ingestTelegramFixtureMessage>[0]) =>
-      ingestTelegramFixtureMessage(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
     },

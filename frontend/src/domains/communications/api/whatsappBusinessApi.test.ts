@@ -154,7 +154,7 @@ describe('WhatsApp business API', () => {
               ai_category: null,
               ai_summary: null,
               ai_summary_generated_at: null,
-              message_metadata: { source: 'fixture' },
+              message_metadata: { source: 'synthetic' },
               attachment_count: 0,
               local_state: 'active',
               local_state_changed_at: null,
@@ -185,7 +185,7 @@ describe('WhatsApp business API', () => {
         projected_at: '2026-06-20T11:00:01Z',
         channel_kind: 'whatsapp_web',
         delivery_state: 'received',
-        metadata: { source: 'fixture' },
+        metadata: { source: 'synthetic' },
       },
     ])
     const [url] = fetchMock.mock.calls[0]

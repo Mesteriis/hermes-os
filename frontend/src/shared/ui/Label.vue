@@ -15,11 +15,3 @@ const classes = computed(() => ['hermes-label', props.class])
   </label>
 </template>
 
-<style scoped>
-.hermes-label {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--hh-text-primary);
-  line-height: 1.2;
-}
-</style>

@@ -1,40 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 describe('MessageRelatedTab export boundary', () => {
-  it('offers every message export API format without direct API access', () => {
-    const source = readFileSync(new URL('./MessageRelatedTab.vue', import.meta.url), 'utf8')
+  it('preserves related-message metadata helpers and action handlers after removing the related tab render layer', () => {
+    const pageModelSource = readFileSync(
+      new URL('../helpers/communicationPageModels.ts', import.meta.url),
+      'utf8'
+    )
+    const surfaceSource = readFileSync(
+      new URL('../queries/useCommunicationsPageSurface.ts', import.meta.url),
+      'utf8'
+    )
 
-    expect(source).toContain('exportMessage')
-    expect(source).toContain("'md'")
-    expect(source).toContain("'eml'")
-    expect(source).toContain("'json'")
-    expect(source).toContain('Markdown')
-    expect(source).toContain('EML')
-    expect(source).toContain('JSON')
-    expect(source).toContain('communicationMessageLabelsFromMetadata')
-    expect(source).toContain('communicationMessageSnoozeUntilFromMetadata')
-    expect(source).toContain('replyAll')
-    expect(source).toContain('forwardMessage')
-    expect(source).toContain('redirectMessage')
-    expect(source).toContain('markMessageRead')
-    expect(source).toContain('markMessageUnread')
-    expect(source).toContain('deleteFromProvider')
-    expect(source).toContain('redirectRecipientsText')
-    expect(source).toContain('Reply All')
-    expect(source).toContain('Forward')
-    expect(source).toContain('Redirect')
-    expect(source).toContain('Read / Delete')
-    expect(source).toContain("emit('markMessageRead')")
-    expect(source).toContain("emit('markMessageUnread')")
-    expect(source).toContain("emit('deleteFromProvider')")
-    expect(source).toContain('addLabel')
-    expect(source).toContain('removeLabel')
-    expect(source).toContain('snoozeMessage')
-    expect(source).toContain('Snooze')
-    expect(source).toContain('Follow up')
-    expect(source).not.toContain('../api/')
-    expect(source).not.toMatch(/\bfetch\s*\(/)
-    expect(source).not.toContain('ApiClient')
+    expect(existsSync(new URL('./MessageRelatedTab.vue', import.meta.url))).toBe(false)
+    expect(pageModelSource).toContain('communicationMessageLabelsFromMetadata')
+    expect(pageModelSource).toContain('communicationMessageSnoozeUntilFromMetadata')
+    expect(surfaceSource).toContain('handleReplyAll')
+    expect(surfaceSource).toContain('handleForwardMessage')
+    expect(surfaceSource).toContain('handleRedirectMessage')
+    expect(surfaceSource).toContain('handleMarkMessageRead')
+    expect(surfaceSource).toContain('handleMarkMessageUnread')
+    expect(surfaceSource).toContain('handleDeleteFromProvider')
   })
 })

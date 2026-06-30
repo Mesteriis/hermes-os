@@ -1,7 +1,20 @@
 <script setup lang="ts">
-import PersonsPage from '../../domains/personas/views/PersonsPage.vue'
+import { useI18n } from '../../platform/i18n'
+
+const { t } = useI18n()
 </script>
 
 <template>
-  <PersonsPage />
+  <section class="panel settings-list-panel settings-primary-pane">
+    <header class="panel-title-row">
+      <div>
+        <h2>{{ t('Persons') }}</h2>
+        <p>{{ t('Persons UI removed after logic extraction. Rebuild pending new design language.') }}</p>
+      </div>
+    </header>
+    <div class="empty-panel fill">
+      <strong>{{ t('Persons logic is preserved') }}</strong>
+      <span>{{ t('Person queries, identity review orchestration and relationship review state remain in the extracted surface. This screen stays empty until the new persons UI is rebuilt.') }}</span>
+    </div>
+  </section>
 </template>

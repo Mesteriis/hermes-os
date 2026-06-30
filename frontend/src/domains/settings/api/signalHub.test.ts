@@ -10,10 +10,8 @@ import {
   createSignalHubConnection,
   disableSignalHubSignals,
   disableSignalHubSource,
-  emitSignalHubFixtureSignal,
   enableSignalHubSignals,
   enableSignalHubSource,
-  fetchSignalHubFixtureSources,
   fetchSignalHubProfiles,
   fetchSignalHubConnections,
   fetchSignalHubHealth,
@@ -26,7 +24,6 @@ import {
   removeSignalHubConnection,
   removeSignalHubProfile,
   resumeSignalHubSignals,
-  restoreSignalHubSystemFixture,
   runSignalHubHealthCheck,
   unmuteSignalHubSignals,
   updateSignalHubConnection,
@@ -197,57 +194,6 @@ describe('Signal Hub settings API', () => {
       scope: 'event_pattern',
       eventPattern: 'signal.raw.telegram.*'
     })
-  })
-
-  it('restores the system fixture through the Signal Hub recovery endpoint', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ sourcesCreated: 13, sourcesRepaired: 0, profilesCreated: 4, profilesRepaired: 0 }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    )
-    vi.stubGlobal('fetch', fetchMock)
-
-    const report = await restoreSignalHubSystemFixture()
-
-    expect(report.sources_created).toBe(13)
-    expect(report.profiles_created).toBe(4)
-    expect(fetchMock).toHaveBeenCalledOnce()
-    const [url, options] = fetchMock.mock.calls[0]
-    expect(url).toBe('http://127.0.0.1:8080/hermes.signal_hub.v1.SignalHubService/RestoreSystemFixture')
-    expect(options.method).toBe('POST')
-  })
-
-  it('lists Signal Hub fixture sources through ConnectRPC', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({
-        items: [{
-          fixtureId: 'fixture_basic_message',
-          sourceCode: 'fixture',
-          eventType: 'signal.raw.fixture.message.observed',
-          correlationId: 'fixture-basic-message',
-          occurredAt: '2026-01-01T00:00:00Z',
-          summary: 'Fixture message'
-        }]
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    )
-    vi.stubGlobal('fetch', fetchMock)
-
-    const response = await fetchSignalHubFixtureSources()
-
-    expect(response.items).toEqual([{
-      fixture_id: 'fixture_basic_message',
-      source_code: 'fixture',
-      event_type: 'signal.raw.fixture.message.observed',
-      correlation_id: 'fixture-basic-message',
-      occurred_at: '2026-01-01T00:00:00Z',
-      summary: 'Fixture message'
-    }])
-    expect(fetchMock).toHaveBeenCalledOnce()
-    expect(fetchMock.mock.calls[0][0]).toBe('http://127.0.0.1:8080/hermes.signal_hub.v1.SignalHubService/ListFixtureSources')
   })
 
   it('creates, updates, applies and removes Signal Hub custom profiles through ConnectRPC', async () => {
@@ -622,7 +568,7 @@ describe('Signal Hub settings API', () => {
                 id: 'profile-testing',
                 code: 'testing',
                 displayName: 'Testing',
-                description: 'Real sources muted; fixture enabled.',
+                description: 'Real sources muted; synthetic source enabled.',
                 policyCount: 11,
                 isSystem: true,
                 isActive: false,
@@ -644,7 +590,7 @@ describe('Signal Hub settings API', () => {
               id: 'profile-testing',
               code: 'testing',
               displayName: 'Testing',
-              description: 'Real sources muted; fixture enabled.',
+              description: 'Real sources muted; synthetic source enabled.',
               policyCount: 11,
               isSystem: true,
               isActive: true,
@@ -674,39 +620,6 @@ describe('Signal Hub settings API', () => {
     )
     expect(JSON.parse(decodeBody(fetchMock.mock.calls[1][1].body))).toMatchObject({
       code: 'testing'
-    })
-  })
-
-  it('emits Signal Hub fixture signals through ConnectRPC', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          fixtureId: 'fixture_basic_message',
-          rawEventId: 'evt_signal_fixture_1',
-          eventType: 'signal.raw.fixture.message.observed',
-          sourceCode: 'fixture',
-          correlationId: 'fixture-basic-message'
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      )
-    )
-    vi.stubGlobal('fetch', fetchMock)
-
-    const result = await emitSignalHubFixtureSignal('fixture_basic_message')
-
-    expect(result.fixture_id).toBe('fixture_basic_message')
-    expect(result.source_code).toBe('fixture')
-    expect(fetchMock).toHaveBeenCalledOnce()
-    const [url, options] = fetchMock.mock.calls[0]
-    expect(url).toBe(
-      'http://127.0.0.1:8080/hermes.signal_hub.v1.SignalHubService/EmitFixtureSignal'
-    )
-    expect(options.method).toBe('POST')
-    expect(JSON.parse(decodeBody(options.body))).toMatchObject({
-      fixtureId: 'fixture_basic_message'
     })
   })
 
@@ -855,7 +768,7 @@ describe('Signal Hub settings API', () => {
     await updateSignalHubConnection('conn-1', {
       status: 'paused',
       profile: 'maintenance',
-      settings: { account_id: 'telegram-main', provider_kind: 'telegram_user', runtime: 'fixture' }
+      settings: { account_id: 'telegram-main', provider_kind: 'telegram_user', runtime: 'synthetic' }
     })
     await removeSignalHubConnection('conn-1')
 
@@ -873,7 +786,7 @@ describe('Signal Hub settings API', () => {
       id: 'conn-1',
       status: 'paused',
       profile: 'maintenance',
-      settingsJson: '{"account_id":"telegram-main","provider_kind":"telegram_user","runtime":"fixture"}'
+      settingsJson: '{"account_id":"telegram-main","provider_kind":"telegram_user","runtime":"synthetic"}'
     })
     expect(fetchMock.mock.calls[2][0]).toBe('http://127.0.0.1:8080/hermes.signal_hub.v1.SignalHubService/RemoveConnection')
     expect(fetchMock.mock.calls[2][1].method).toBe('POST')

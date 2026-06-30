@@ -1,65 +1,56 @@
 <script setup lang="ts">
 import { useI18n } from '../../../platform/i18n'
-import { useSettingsStore } from '../stores/settings'
-import { useApplicationSettingsQuery } from '../queries/useSettingsQuery'
 import Icon from '../../../shared/ui/Icon.vue'
-import type { SettingsSection } from '../stores/settings'
-
-import AppearanceSettings from '../components/AppearanceSettings.vue'
-import LanguageSettings from '../components/LanguageSettings.vue'
-import ApplicationSettings from '../components/ApplicationSettings.vue'
-import SidebarSettings from '../components/SidebarSettings.vue'
-import IntegrationsSettings from '../components/IntegrationsSettings.vue'
-import SignalHubSettings from '../components/SignalHubSettings.vue'
-import AISettingsControlCenter from '../components/AISettingsControlCenter.vue'
+import { useSettingsPageSurface } from '../queries/useSettingsPageSurface'
 
 const { t } = useI18n()
-const store = useSettingsStore()
-const { data: appSettingsData } = useApplicationSettingsQuery()
-
-const settingsTreeGroups: Array<{ label: string; items: Array<{ id: SettingsSection; label: string; icon: string }> }> = [
-  {
-    label: 'General',
-    items: [
-      { id: 'application', label: 'Application', icon: 'tabler:adjustments-horizontal' },
-      { id: 'language', label: 'Language', icon: 'tabler:language' }
-    ]
-  },
-  {
-    label: 'Interface',
-    items: [
-      { id: 'appearance', label: 'Appearance', icon: 'tabler:palette' },
-      { id: 'sidebar', label: 'Sidebar', icon: 'tabler:layout-sidebar' }
-    ]
-  },
-  {
-    label: 'Sources',
-    items: [
-      { id: 'integrations', label: 'Integrations', icon: 'tabler:plug-connected' },
-      { id: 'signal-hub', label: 'Signal Hub', icon: 'tabler:database-import' }
-    ]
-  },
-  {
-    label: 'AI',
-    items: [
-      { id: 'ai', label: 'AI Control Center', icon: 'tabler:sparkles' }
-    ]
-  }
-]
-
-/** Number of provider accounts for the integrations badge */
-const integrationCount = appSettingsData.value?.items?.length ?? 0
+const {
+  realtimeStatus,
+  settingsOverviewCards,
+  settingsTreeGroups,
+  selectedTreeItem,
+  store,
+} = useSettingsPageSurface()
 </script>
 
 <template>
   <div class="settings-page">
-    <!-- Action messages -->
     <div v-if="store.actionMessage" class="setup-state success">{{ store.actionMessage }}</div>
     <div v-if="store.errorMessage" class="inline-error">{{ store.errorMessage }}</div>
 
+    <section class="settings-console-overview" :aria-label="t('Settings overview')">
+      <article
+        v-for="card in settingsOverviewCards"
+        :key="card.id"
+        class="settings-overview-card"
+        :class="`tone-${card.tone}`"
+      >
+        <span class="settings-overview-icon">
+          <Icon :icon="card.icon" />
+        </span>
+        <div class="settings-overview-copy">
+          <span>{{ t(card.label) }}</span>
+          <strong>{{ card.value }}</strong>
+          <small>{{ card.detail }}</small>
+        </div>
+        <button
+          v-if="card.id === 'realtime' && realtimeStatus.canTriggerReconnect"
+          type="button"
+          class="settings-overview-action"
+          @click="realtimeStatus.requestReconnect()"
+        >
+          {{ t('Reconnect') }}
+        </button>
+      </article>
+    </section>
+
     <div class="settings-workbench">
-      <!-- Navigation Tree -->
       <nav class="settings-tree" :aria-label="t('Settings sections')">
+        <header class="settings-tree-header">
+          <span>{{ t('Control Center') }}</span>
+          <strong>{{ t('Local-first system settings') }}</strong>
+        </header>
+
         <section
           v-for="group in settingsTreeGroups"
           :key="group.label"
@@ -74,157 +65,131 @@ const integrationCount = appSettingsData.value?.items?.length ?? 0
             @click="store.selectSection(item.id)"
           >
             <Icon class="tree-icon" :icon="item.icon" />
-            <span>{{ t(item.label) }}</span>
-            <em v-if="item.id === 'integrations'">{{ integrationCount }}</em>
+            <span class="settings-tree-copy">
+              <strong>{{ t(item.label) }}</strong>
+              <small>{{ t(item.description) }}</small>
+            </span>
+            <em v-if="item.meta">{{ item.meta }}</em>
           </button>
         </section>
       </nav>
 
-      <!-- Content area -->
       <div class="settings-workbench-content">
-        <AppearanceSettings v-if="store.selectedSection === 'appearance'" />
-        <LanguageSettings v-else-if="store.selectedSection === 'language'" />
-        <ApplicationSettings v-else-if="store.selectedSection === 'application'" />
-        <SidebarSettings v-else-if="store.selectedSection === 'sidebar'" />
-        <IntegrationsSettings v-else-if="store.selectedSection === 'integrations'" />
-        <SignalHubSettings v-else-if="store.selectedSection === 'signal-hub'" />
-        <AISettingsControlCenter v-else-if="store.selectedSection === 'ai'" />
+        <header v-if="selectedTreeItem" class="settings-section-header">
+          <div>
+            <span>{{ t('Settings') }}</span>
+            <h2>{{ t(selectedTreeItem.label) }}</h2>
+            <p>{{ t(selectedTreeItem.description) }}</p>
+          </div>
+        </header>
+
+        <section
+          v-if="store.selectedSection === 'appearance'"
+          class="panel settings-list-panel settings-primary-pane settings-placeholder-panel"
+        >
+          <header class="panel-title-row">
+            <div>
+              <h2>{{ t('Appearance') }}</h2>
+              <p>{{ t('Appearance UI removed after logic extraction. Rebuild pending new design language.') }}</p>
+            </div>
+          </header>
+          <div class="settings-placeholder-copy">
+            <strong>{{ t('Appearance logic is preserved') }}</strong>
+            <p>{{ t('Theme persistence, preview state and shell preference flows now live outside Vue components. This section stays intentionally empty until the new render layer is rebuilt.') }}</p>
+          </div>
+        </section>
+        <section
+          v-else-if="store.selectedSection === 'language'"
+          class="panel settings-list-panel settings-primary-pane settings-placeholder-panel"
+        >
+          <header class="panel-title-row">
+            <div>
+              <h2>{{ t('Language') }}</h2>
+              <p>{{ t('Language UI removed after logic extraction. Rebuild pending new design language.') }}</p>
+            </div>
+          </header>
+          <div class="settings-placeholder-copy">
+            <strong>{{ t('Language logic is preserved') }}</strong>
+            <p>{{ t('Locale switching and persistence now live in a dedicated settings surface. This section stays intentionally empty until the new render layer is rebuilt.') }}</p>
+          </div>
+        </section>
+        <section
+          v-else-if="store.selectedSection === 'application'"
+          class="panel settings-list-panel settings-primary-pane settings-placeholder-panel"
+        >
+          <header class="panel-title-row">
+            <div>
+              <h2>{{ t('Application Settings') }}</h2>
+              <p>{{ t('Application settings UI removed after logic extraction. Rebuild pending new design language.') }}</p>
+            </div>
+          </header>
+          <div class="settings-placeholder-copy">
+            <strong>{{ t('Application settings logic is preserved') }}</strong>
+            <p>{{ t('Settings registry, draft coercion and save orchestration now live in a dedicated TypeScript surface. This section stays intentionally empty until the new render layer is rebuilt.') }}</p>
+          </div>
+        </section>
+        <section
+          v-else-if="store.selectedSection === 'sidebar'"
+          class="panel settings-list-panel settings-primary-pane settings-placeholder-panel"
+        >
+          <header class="panel-title-row">
+            <div>
+              <h2>{{ t('Sidebar') }}</h2>
+              <p>{{ t('Sidebar UI removed after logic extraction. Rebuild pending new design language.') }}</p>
+            </div>
+          </header>
+          <div class="settings-placeholder-copy">
+            <strong>{{ t('Sidebar logic is preserved') }}</strong>
+            <p>{{ t('Sidebar grouping, hidden-state rules and persistence now live outside Vue components. This section stays intentionally empty until the new render layer is rebuilt.') }}</p>
+          </div>
+        </section>
+        <section
+          v-else-if="store.selectedSection === 'integrations'"
+          class="panel settings-list-panel settings-primary-pane settings-placeholder-panel"
+        >
+          <header class="panel-title-row">
+            <div>
+              <h2>{{ t('Integrations') }}</h2>
+              <p>{{ t('Component removed after logic extraction. Rebuild will land in the next UI pass.') }}</p>
+            </div>
+          </header>
+          <div class="settings-placeholder-copy">
+            <strong>{{ t('Integration logic is preserved') }}</strong>
+            <p>{{ t('Provider queries, connection routing and wizard state now live outside Vue components. This screen stays intentionally empty until the new render layer is rebuilt.') }}</p>
+          </div>
+        </section>
+        <section
+          v-else-if="store.selectedSection === 'signal-hub'"
+          class="panel settings-list-panel settings-primary-pane settings-placeholder-panel"
+        >
+          <header class="panel-title-row">
+            <div>
+              <h2>{{ t('Signal Hub') }}</h2>
+              <p>{{ t('Signal Hub UI removed after logic extraction. Rebuild pending new design language.') }}</p>
+            </div>
+          </header>
+          <div class="settings-placeholder-copy">
+            <strong>{{ t('Signal Hub logic is preserved') }}</strong>
+            <p>{{ t('Profiles, replay workflows, runtime controls and health diagnostics now live in TypeScript surfaces. This section stays intentionally empty until the new render layer is rebuilt.') }}</p>
+          </div>
+        </section>
+        <section
+          v-else-if="store.selectedSection === 'ai'"
+          class="panel settings-list-panel settings-primary-pane settings-placeholder-panel"
+        >
+          <header class="panel-title-row">
+            <div>
+              <h2>{{ t('AI Control Center') }}</h2>
+              <p>{{ t('AI settings UI removed after logic extraction. Rebuild pending new design language.') }}</p>
+            </div>
+          </header>
+          <div class="settings-placeholder-copy">
+            <strong>{{ t('Legacy AI control center removed') }}</strong>
+            <p>{{ t('The previous AI control center was only a static placeholder. It has been removed so the next render layer can start clean.') }}</p>
+          </div>
+        </section>
       </div>
     </div>
   </div>
 </template>
 
-<style scoped>
-.settings-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--hh-layout-gap);
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.settings-workbench {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: var(--hh-layout-gap);
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  overflow: hidden;
-}
-
-/* Navigation tree */
-.settings-tree {
-  display: grid;
-  align-content: start;
-  gap: 14px;
-  min-width: 0;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  border: 1px solid var(--hh-border-muted);
-  border-radius: var(--hh-radius-md);
-  background: rgba(4, 18, 20, var(--hh-panel-alpha));
-  backdrop-filter: blur(var(--hh-panel-blur));
-  box-shadow: var(--hh-shadow-panel);
-  padding: 12px 8px;
-}
-
-.settings-tree-group {
-  display: grid;
-  gap: 5px;
-}
-
-.settings-tree-group h2 {
-  margin: 0;
-  color: var(--hh-text-muted);
-  font-size: 10px;
-  font-weight: 760;
-  text-transform: uppercase;
-  padding: 0 8px;
-}
-
-.settings-tree button {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  border: 1px solid transparent;
-  border-radius: var(--hh-radius-control);
-  background: transparent;
-  color: var(--hh-text-secondary);
-  font-size: 12px;
-  font-weight: 650;
-  padding: 0 8px;
-  text-align: left;
-  cursor: pointer;
-  transition: all 100ms ease;
-}
-
-.settings-tree button:hover,
-.settings-tree button:focus-visible {
-  border-color: var(--hh-border-accent-soft, var(--hh-accent));
-  background: rgba(45, 240, 206, 0.06);
-}
-
-.settings-tree button.active {
-  border-color: var(--hh-border-accent, var(--hh-accent));
-  background: color-mix(in srgb, var(--hh-accent) 10%, transparent);
-  color: var(--hh-accent);
-}
-
-.settings-tree button span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-tree button em {
-  color: var(--hh-text-muted);
-  font-size: 10px;
-  font-style: normal;
-}
-
-.tree-icon {
-  width: 14px;
-  height: 14px;
-  color: currentColor;
-}
-
-/* Content */
-.settings-workbench-content {
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-/* Messages */
-.setup-state.success {
-  padding: 8px 12px;
-  background: color-mix(in srgb, var(--hh-status-success, #22c55e) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--hh-status-success) 30%, transparent);
-  border-radius: var(--hh-radius-sm);
-  color: var(--hh-status-success, #22c55e);
-  font-size: 12px;
-}
-
-.inline-error {
-  padding: 8px 12px;
-  background: color-mix(in srgb, var(--hh-status-danger) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--hh-status-danger) 30%, transparent);
-  border-radius: var(--hh-radius-sm);
-  color: var(--hh-status-danger);
-  font-size: 12px;
-}
-
-/* Responsive */
-@media (max-width: 900px) {
-  .settings-workbench {
-    grid-template-columns: 180px minmax(0, 1fr);
-  }
-}
-</style>

@@ -19,12 +19,10 @@ import {
   rotateWhatsappRuntime,
   removeWhatsappRuntime,
   revokeWhatsappRuntime,
-  setupWhatsappLiveAccount,
-  startWhatsappPairCodeLink,
-  startWhatsappQrLink,
   startWhatsappRuntime,
   stopWhatsappRuntime,
 } from '../api/whatsapp'
+import { openWhatsappWebCompanion } from '../api/whatsappCompanion'
 import type {
   WhatsAppCallSyncItem,
   WhatsAppChatSyncItem,
@@ -32,16 +30,13 @@ import type {
   WhatsAppMediaSyncItem,
   WhatsAppMembersSyncItem,
   WhatsAppProviderCommand,
-  WhatsAppPairCodeSession,
   WhatsAppPresenceSyncItem,
   WhatsappWebMessage,
   WhatsAppProviderCommandListResponse,
-  WhatsAppQrLinkSession,
+  WhatsAppWebCompanionManifest,
   WhatsAppRuntimeHealth,
   WhatsAppRuntimeRemoveResponse,
   WhatsAppRuntimeStatus,
-  WhatsappLiveAccountSetupRequest,
-  WhatsappWebAccountSetupResponse,
 } from '../types/whatsapp'
 import { whatsappQueryKeys } from './whatsappQueryKeys'
 
@@ -141,30 +136,6 @@ export function useRemoveWhatsappRuntimeMutation() {
   const queryClient = useQueryClient()
   return useMutation<WhatsAppRuntimeRemoveResponse, Error, { account_id: string }>({
     mutationFn: (request) => removeWhatsappRuntime(request),
-    onSuccess: () => invalidateWhatsappRuntime(queryClient),
-  })
-}
-
-export function useStartWhatsappQrLinkMutation() {
-  const queryClient = useQueryClient()
-  return useMutation<WhatsAppQrLinkSession, Error, { account_id: string }>({
-    mutationFn: (request) => startWhatsappQrLink(request),
-    onSuccess: () => invalidateWhatsappRuntime(queryClient),
-  })
-}
-
-export function useStartWhatsappPairCodeLinkMutation() {
-  const queryClient = useQueryClient()
-  return useMutation<WhatsAppPairCodeSession, Error, { account_id: string; phone_number: string }>({
-    mutationFn: (request) => startWhatsappPairCodeLink(request),
-    onSuccess: () => invalidateWhatsappRuntime(queryClient),
-  })
-}
-
-export function useSetupWhatsappLiveAccountMutation() {
-  const queryClient = useQueryClient()
-  return useMutation<WhatsappWebAccountSetupResponse, Error, WhatsappLiveAccountSetupRequest>({
-    mutationFn: (request) => setupWhatsappLiveAccount(request),
     onSuccess: () => invalidateWhatsappRuntime(queryClient),
   })
 }
@@ -421,6 +392,15 @@ export function usePublishWhatsappStatusMutation() {
     { account_id: string; idempotency_key: string; text: string; command_id?: string }
   >({
     mutationFn: (request) => publishWhatsappStatus(request),
+    onSuccess: () => invalidateWhatsappRuntime(queryClient),
+  })
+}
+
+export function useOpenWhatsappWebCompanionMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation<WhatsAppWebCompanionManifest, Error, { account_id: string }>({
+    mutationFn: ({ account_id }) => openWhatsappWebCompanion(account_id),
     onSuccess: () => invalidateWhatsappRuntime(queryClient),
   })
 }

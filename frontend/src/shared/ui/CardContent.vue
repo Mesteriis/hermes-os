@@ -14,8 +14,3 @@ const classes = computed(() => ['hermes-card-content', props.class])
   </div>
 </template>
 
-<style scoped>
-.hermes-card-content {
-  padding: 1.25rem;
-}
-</style>

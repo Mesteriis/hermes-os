@@ -8,9 +8,8 @@ describe('telegramRuntimeCommandTarget', () => {
       telegramRuntimeCommandTarget({
         account_id: 'account-1',
         provider_kind: 'telegram_user',
-        runtime_kind: 'fixture',
+        runtime_kind: 'tdlib',
         status: 'running',
-        fixture_runtime: true,
         tdjson_path: null,
         tdjson_runtime_available: false,
         tdjson_probe_error: null,
@@ -33,9 +32,8 @@ describe('telegramRuntimeCommandTarget', () => {
       telegramRuntimeCommandTarget({
         account_id: 'account-1',
         provider_kind: 'telegram_user',
-        runtime_kind: 'fixture',
+        runtime_kind: 'tdlib',
         status: 'running',
-        fixture_runtime: true,
         tdjson_path: null,
         tdjson_runtime_available: false,
         tdjson_probe_error: null,

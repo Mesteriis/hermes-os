@@ -35,19 +35,6 @@ export interface SignalHubCapabilitiesResponse {
   items: SignalHubCapability[]
 }
 
-export interface SignalHubFixtureSource {
-  fixture_id: string
-  source_code: string
-  event_type: string
-  correlation_id: string | null
-  occurred_at: string
-  summary: string
-}
-
-export interface SignalHubFixtureSourcesResponse {
-  items: SignalHubFixtureSource[]
-}
-
 export interface SignalHubConnection {
   id: string
   source_code: string
@@ -171,21 +158,6 @@ export interface SignalHubReplayRequestCreateRequest {
   metadata?: Record<string, unknown>
 }
 
-export interface SignalHubFixtureRestoreReport {
-  sources_created: number
-  sources_repaired: number
-  profiles_created: number
-  profiles_repaired: number
-}
-
-export interface SignalHubFixtureEmission {
-  fixture_id: string
-  raw_event_id: string
-  event_type: string
-  source_code: string
-  correlation_id: string | null
-}
-
 export interface SignalHubProfile {
   id: string
   code: string
@@ -238,7 +210,7 @@ export type SignalHubPolicyMode =
   | 'muted'
   | 'paused'
   | 'replay_only'
-  | 'fixture_only'
+  | (string & {})
 
 export interface SignalHubPolicy {
   scope: SignalHubPolicyScope

@@ -9,9 +9,6 @@ import type {
   SignalHubControlRequest,
   SignalHubControlResponse,
   SignalHubCreatePolicyResponse,
-  SignalHubFixtureEmission,
-  SignalHubFixtureSourcesResponse,
-  SignalHubFixtureRestoreReport,
   SignalHubHealthResponse,
   SignalHubHealthCheckRequest,
   SignalHubPoliciesResponse,
@@ -80,30 +77,6 @@ export async function fetchSignalHubCapabilities(): Promise<SignalHubCapabilitie
   }
 }
 
-export async function fetchSignalHubFixtureSources(): Promise<SignalHubFixtureSourcesResponse> {
-  const response = await getSignalHubConnectClient().listFixtureSources({})
-  return {
-    items: response.items.map((item) => ({
-      fixture_id: item.fixtureId,
-      source_code: item.sourceCode,
-      event_type: item.eventType,
-      correlation_id: item.correlationId ?? null,
-      occurred_at: item.occurredAt,
-      summary: item.summary
-    }))
-  }
-}
-
-export async function restoreSignalHubSystemFixture(): Promise<SignalHubFixtureRestoreReport> {
-  const response = await getSignalHubConnectClient().restoreSystemFixture({})
-  return {
-    sources_created: response.sourcesCreated,
-    sources_repaired: response.sourcesRepaired,
-    profiles_created: response.profilesCreated,
-    profiles_repaired: response.profilesRepaired
-  }
-}
-
 export async function fetchSignalHubProfiles(): Promise<SignalHubProfilesResponse> {
   const response = await getSignalHubConnectClient().listProfiles({})
   return {
@@ -149,21 +122,6 @@ export async function applySignalHubProfile(profileCode: string): Promise<Signal
     code: profileCode
   })
   return mapProfile(response.item, profileCode)
-}
-
-export async function emitSignalHubFixtureSignal(
-  fixtureId: string
-): Promise<SignalHubFixtureEmission> {
-  const response = await getSignalHubConnectClient().emitFixtureSignal({
-    fixtureId
-  })
-  return {
-    fixture_id: response.fixtureId,
-    raw_event_id: response.rawEventId,
-    event_type: response.eventType,
-    source_code: response.sourceCode,
-    correlation_id: response.correlationId ?? null
-  }
 }
 
 export async function fetchSignalHubConnections(): Promise<SignalHubConnectionsResponse> {
