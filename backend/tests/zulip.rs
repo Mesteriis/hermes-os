@@ -2143,6 +2143,199 @@ async fn zulip_message_can_feed_review_task_candidate_without_auto_creating_task
 }
 
 #[tokio::test]
+async fn zulip_message_drives_review_attention_card_and_context_pack_trace_chain() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let pool = ctx.pool().clone();
+    SignalHubStore::new(pool.clone())
+        .restore_system_sources()
+        .await
+        .expect("restore system sources");
+
+    CommunicationProviderAccountStore::new(pool.clone())
+        .upsert(&NewProviderAccount::new(
+            "zulip-review-scene-account",
+            CommunicationProviderKind::ZulipBot,
+            "Zulip Review Scene",
+            "zulip-review-scene-bot@example.test",
+        ))
+        .await
+        .expect("provider account");
+
+    let ingestion = CommunicationIngestionPort::new(pool.clone());
+    let mapping_context = ZulipEventMappingContext::new(
+        "zulip-review-scene-account",
+        "http://localhost:8080",
+        Utc::now(),
+    )
+    .with_import_batch_id("zulip-review-scene-batch")
+    .with_scenario_id("zulip-message-to-review-task-candidate");
+
+    let (_, accepted_event, projected) = record_dispatch_consume_zulip_event(
+        &pool,
+        &ingestion,
+        &mapping_context,
+        json!({
+            "id": 48,
+            "type": "message",
+            "message": {
+                "id": 7101,
+                "content": "Надо проверить резервные копии до пятницы.",
+                "sender_email": "bot@example.test",
+                "sender_full_name": "Hermes Bot",
+                "stream_id": 10,
+                "display_recipient": "Hermes Lab",
+                "topic": "Tasks"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(accepted_event.event_type, "signal.accepted.zulip.message");
+    assert!(!projected.observation_id.is_empty());
+    assert!(!projected.message_id.is_empty());
+
+    let refreshed = refresh_message_task_candidates_into_review(
+        &pool,
+        std::slice::from_ref(&projected.message_id),
+    )
+    .await
+    .expect("refresh Zulip task candidates into review");
+    assert_eq!(refreshed, 1);
+
+    let review_item_id = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT item.review_item_id
+        FROM review_items item
+        JOIN review_item_evidence evidence
+          ON evidence.review_item_id = item.review_item_id
+        WHERE evidence.observation_id = $1
+          AND item.item_kind = 'potential_task'
+          AND item.status = 'new'
+        LIMIT 1
+        "#,
+    )
+    .bind(&projected.observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("resolve Zulip review item id");
+
+    let app = {
+        let database = Database::connect(Some(&database_url))
+            .await
+            .expect("database connection");
+        build_router_with_database(
+            testkit::app::config_with_secret_and_database_url(
+                LOCAL_API_TOKEN,
+                database_url.as_str(),
+            ),
+            database,
+        )
+    };
+
+    let attention_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/review/attention-cards?status=active&limit=20")
+                .header("x-hermes-secret", LOCAL_API_TOKEN)
+                .body(Body::empty())
+                .expect("attention cards request"),
+        )
+        .await
+        .expect("attention cards response");
+    assert_eq!(attention_response.status(), StatusCode::OK);
+    let attention_body = response_json(attention_response).await;
+    let cards = attention_body["cards"]
+        .as_array()
+        .expect("attention cards array");
+    let target_card = cards
+        .iter()
+        .find(|card| {
+            card["review_item_ids"].as_array().is_some_and(|ids| {
+                ids.iter().any(|id| {
+                    id.as_str()
+                        .is_some_and(|value| value == review_item_id.as_str())
+                })
+            })
+        })
+        .expect("attention card for Zulip-driven item");
+    let attention_trace_id = target_card["trace_id"]
+        .as_str()
+        .expect("attention card trace id");
+    assert!(!attention_trace_id.is_empty());
+    let card_explainability = target_card["explainability"]["why_this_matters"]
+        .as_str()
+        .expect("attention explainability");
+    assert!(
+        card_explainability.contains("potential task"),
+        "explainability should describe item intent"
+    );
+
+    let context_pack_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/api/v1/review/items/{review_item_id}/context-pack"
+                ))
+                .header("x-hermes-secret", LOCAL_API_TOKEN)
+                .body(Body::empty())
+                .expect("review context-pack request"),
+        )
+        .await
+        .expect("review context-pack response");
+    assert_eq!(context_pack_response.status(), StatusCode::OK);
+    let context_pack = response_json(context_pack_response).await;
+    assert_eq!(context_pack["kind"], json!("review"));
+    assert_eq!(context_pack["subject_id"], json!(review_item_id));
+    let context_trace_id = context_pack["content"]["trace"]["trace_id"]
+        .as_str()
+        .expect("context pack trace id");
+    assert!(!context_trace_id.is_empty());
+    assert_eq!(
+        context_pack["content"]["review_item"]["review_item_id"],
+        json!(review_item_id)
+    );
+    assert!(
+        !context_pack["content"]["evidence"]
+            .as_array()
+            .expect("context pack evidence")
+            .is_empty()
+    );
+    assert_eq!(attention_trace_id, context_trace_id);
+
+    let communication_recorded_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM event_log
+        WHERE event_type = 'communication.message.recorded'
+          AND subject ->> 'message_id' = $1
+        "#,
+    )
+    .bind(&projected.message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("communication message recorded event count");
+    assert_eq!(communication_recorded_count, 1);
+
+    let review_event_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM event_log
+        WHERE event_type = 'review.item.available.v1'
+          AND subject ->> 'review_item_id' = $1
+        "#,
+    )
+    .bind(&review_item_id)
+    .fetch_one(&pool)
+    .await
+    .expect("review item available event count");
+    assert_eq!(review_event_count, 1);
+}
+
+#[tokio::test]
 async fn zulip_reaction_edit_delete_signals_materialize_canonical_state() {
     let ctx = TestContext::new().await;
     let pool = ctx.pool().clone();

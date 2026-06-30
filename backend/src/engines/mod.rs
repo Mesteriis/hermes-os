@@ -1,3 +1,4 @@
+pub mod attention;
 pub mod automation;
 pub mod call_intelligence;
 pub mod consistency;

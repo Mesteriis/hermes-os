@@ -8,7 +8,15 @@ use crate::app::{ApiError, AppState};
 use crate::application::review_promotion::ReviewPromotionService;
 use crate::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxService, ReviewInboxStore, ReviewItem,
-    ReviewItemKind, ReviewItemStatus, ReviewPromotionTarget,
+    ReviewItemEvidenceRecord, ReviewItemKind, ReviewItemStatus, ReviewPromotionTarget,
+};
+use crate::engines::attention::{
+    AttentionCandidate, AttentionCard, AttentionEngine, AttentionEvidenceRef,
+    AttentionRelatedEntity, AttentionSuggestedAction,
+};
+use crate::engines::context_packs::{
+    ContextPack, ContextPackStore, ReviewContextPackEvidence, ReviewContextPackInput,
+    ReviewContextPackItem, build_review_context_pack,
 };
 use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 
@@ -27,6 +35,11 @@ pub(crate) struct ReviewItemsQuery {
 #[derive(Debug, Serialize)]
 pub(crate) struct ReviewItemsResponse {
     items: Vec<ReviewItem>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ReviewAttentionCardsResponse {
+    cards: Vec<AttentionCard>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,16 +70,69 @@ pub(crate) async fn get_v1_review_items(
     State(state): State<AppState>,
     Query(query): Query<ReviewItemsQuery>,
 ) -> Result<Json<ReviewItemsResponse>, ApiError> {
-    let status = parse_status_filter(query.status.as_deref())?;
-    let limit = validate_limit(query.limit)?;
-    let items = match status {
-        ReviewItemsStatusFilter::Single(status) => {
-            review_store(&state)?.list_by_status(status, limit).await?
-        }
-        ReviewItemsStatusFilter::Active => review_store(&state)?.list_open(limit).await?,
-        ReviewItemsStatusFilter::All => review_store(&state)?.list_all(limit).await?,
-    };
+    let items = list_review_items_for_query(&state, query).await?;
     Ok(Json(ReviewItemsResponse { items }))
+}
+
+pub(crate) async fn get_v1_review_attention_cards(
+    State(state): State<AppState>,
+    Query(query): Query<ReviewItemsQuery>,
+) -> Result<Json<ReviewAttentionCardsResponse>, ApiError> {
+    let store = review_store(&state)?;
+    let items = list_review_items_for_query(&state, query).await?;
+    let mut candidates = Vec::with_capacity(items.len());
+
+    for item in items {
+        let evidence = store.list_evidence(&item.review_item_id).await?;
+        let trace_id = review_item_trace_id(&state, &item.review_item_id).await?;
+        candidates.push(attention_candidate_from_review_item(
+            &item, evidence, trace_id,
+        ));
+    }
+
+    let cards = AttentionEngine::build_cards(&candidates).map_err(|error| {
+        tracing::error!(error = %error, "review attention card generation failed");
+        ApiError::InvalidReviewQuery("review attention card generation failed")
+    })?;
+
+    Ok(Json(ReviewAttentionCardsResponse { cards }))
+}
+
+pub(crate) async fn get_v1_review_item_context_pack(
+    State(state): State<AppState>,
+    Path(review_item_id): Path<String>,
+) -> Result<Json<ContextPack>, ApiError> {
+    let store = review_store(&state)?;
+    let item = store.get(&review_item_id).await?;
+    let evidence = store.list_evidence(&review_item_id).await?;
+    let evidence = enrich_review_pack_evidence_with_observations(&state, evidence).await?;
+    let trace_id = review_item_trace_id(&state, &item.review_item_id).await?;
+    let input = review_context_pack_input(item, evidence, trace_id);
+    let result = build_review_context_pack(input).map_err(|error| {
+        tracing::error!(
+            error = %error,
+            review_item_id = %review_item_id,
+            "review context pack generation failed"
+        );
+        ApiError::InvalidReviewQuery("review context pack generation failed")
+    })?;
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    let stored = ContextPackStore::new(pool.clone())
+        .upsert_with_sources(&result.pack, &result.sources)
+        .await
+        .map_err(|error| {
+            tracing::error!(
+                error = %error,
+                review_item_id = %review_item_id,
+                "review context pack persistence failed"
+            );
+            ApiError::InvalidReviewQuery("review context pack generation failed")
+        })?;
+
+    Ok(Json(stored))
 }
 
 pub(crate) async fn post_v1_review_items(
@@ -188,6 +254,8 @@ pub(crate) async fn post_v1_review_item_promote(
                 "captured_by": "review_api.post_v1_review_item_promote",
                 "endpoint": "post_v1_review_item_promote",
             })),
+            None,
+            None,
         )
         .await?;
     Ok(Json(item))
@@ -225,6 +293,231 @@ fn review_store(state: &AppState) -> Result<ReviewInboxStore, ApiError> {
     Ok(crate::app::api_support::app_store::<ReviewInboxStore>(
         pool.clone(),
     ))
+}
+
+async fn list_review_items_for_query(
+    state: &AppState,
+    query: ReviewItemsQuery,
+) -> Result<Vec<ReviewItem>, ApiError> {
+    let status = parse_status_filter(query.status.as_deref())?;
+    let limit = validate_limit(query.limit)?;
+    let store = review_store(state)?;
+    let items = match status {
+        ReviewItemsStatusFilter::Single(status) => store.list_by_status(status, limit).await?,
+        ReviewItemsStatusFilter::Active => store.list_open(limit).await?,
+        ReviewItemsStatusFilter::All => store.list_all(limit).await?,
+    };
+    Ok(items)
+}
+
+async fn review_item_trace_id(state: &AppState, review_item_id: &str) -> Result<String, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    let trace_id = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT COALESCE(correlation_id, event_id)
+        FROM event_log
+        WHERE subject ->> 'review_item_id' = $1
+        ORDER BY position ASC
+        LIMIT 1
+        "#,
+    )
+    .bind(review_item_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| {
+        tracing::error!(error = %error, "review attention trace lookup failed");
+        ApiError::InvalidReviewQuery("review attention trace lookup failed")
+    })?;
+
+    Ok(trace_id.unwrap_or_else(|| review_item_id.to_owned()))
+}
+
+fn attention_candidate_from_review_item(
+    item: &ReviewItem,
+    evidence: Vec<ReviewItemEvidenceRecord>,
+    trace_id: String,
+) -> AttentionCandidate {
+    let evidence_count = evidence.len();
+    let mut candidate = AttentionCandidate::new(
+        item.review_item_id.clone(),
+        item.item_kind.as_str(),
+        item.title.clone(),
+        item.summary.clone(),
+        trace_id,
+    )
+    .status(item.status.as_str())
+    .confidence(item.confidence)
+    .evidence(attention_evidence_refs(evidence))
+    .related_entities(attention_related_entities(item))
+    .source_summary(format!(
+        "Review item has {evidence_count} canonical observation evidence reference(s)."
+    ))
+    .suggested_actions(attention_suggested_actions(item.status));
+
+    if let Some(group_key) = attention_group_key(&item.metadata) {
+        candidate = candidate.group_key(group_key);
+    }
+
+    candidate
+}
+
+fn attention_evidence_refs(evidence: Vec<ReviewItemEvidenceRecord>) -> Vec<AttentionEvidenceRef> {
+    evidence
+        .into_iter()
+        .map(|record| AttentionEvidenceRef::new(record.observation_id).role(record.evidence_role))
+        .collect()
+}
+
+fn attention_related_entities(item: &ReviewItem) -> Vec<AttentionRelatedEntity> {
+    let Some(entity_kind) = item.target_entity_kind.as_ref() else {
+        return Vec::new();
+    };
+    let Some(entity_id) = item.target_entity_id.as_ref() else {
+        return Vec::new();
+    };
+
+    let mut entity = AttentionRelatedEntity::new(entity_kind, entity_id);
+    if let Some(target_domain) = item.target_domain.as_ref() {
+        entity = entity.label(target_domain);
+    }
+    vec![entity]
+}
+
+fn attention_suggested_actions(status: ReviewItemStatus) -> Vec<AttentionSuggestedAction> {
+    match status {
+        ReviewItemStatus::New => vec![
+            AttentionSuggestedAction::new("take_review", "Take review"),
+            AttentionSuggestedAction::new("approve", "Approve"),
+            AttentionSuggestedAction::new("dismiss", "Dismiss"),
+        ],
+        ReviewItemStatus::InReview => vec![
+            AttentionSuggestedAction::new("approve", "Approve"),
+            AttentionSuggestedAction::new("dismiss", "Dismiss"),
+        ],
+        ReviewItemStatus::Approved => vec![
+            AttentionSuggestedAction::new("promote", "Promote"),
+            AttentionSuggestedAction::new("dismiss", "Dismiss"),
+        ],
+        ReviewItemStatus::Promoted | ReviewItemStatus::Dismissed | ReviewItemStatus::Archived => {
+            vec![AttentionSuggestedAction::new("archive", "Archive")]
+        }
+    }
+}
+
+fn attention_group_key(metadata: &Value) -> Option<String> {
+    metadata
+        .get("attention_group_key")
+        .or_else(|| metadata.get("group_key"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn review_context_pack_input(
+    item: ReviewItem,
+    evidence: Vec<ReviewItemEvidenceRecord>,
+    trace_id: String,
+) -> ReviewContextPackInput {
+    ReviewContextPackInput {
+        review_item: ReviewContextPackItem {
+            review_item_id: item.review_item_id,
+            item_kind: item.item_kind.as_str().to_owned(),
+            title: item.title,
+            summary: item.summary,
+            status: item.status.as_str().to_owned(),
+            target_domain: item.target_domain,
+            target_entity_kind: item.target_entity_kind,
+            target_entity_id: item.target_entity_id,
+            confidence: item.confidence,
+            metadata: item.metadata,
+            created_at: item.created_at,
+            updated_at: item.updated_at,
+        },
+        evidence: evidence
+            .into_iter()
+            .map(|record| ReviewContextPackEvidence {
+                observation_id: record.observation_id,
+                evidence_role: record.evidence_role,
+                metadata: record.metadata,
+            })
+            .collect(),
+        trace_id,
+    }
+}
+
+async fn enrich_review_pack_evidence_with_observations(
+    state: &AppState,
+    evidence: Vec<ReviewItemEvidenceRecord>,
+) -> Result<Vec<ReviewItemEvidenceRecord>, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    let observation_store = crate::app::api_support::app_store::<ObservationStore>(pool.clone());
+
+    let mut enriched = Vec::with_capacity(evidence.len());
+    for mut record in evidence {
+        match observation_store.get(&record.observation_id).await {
+            Ok(Some(observation)) => {
+                record.metadata = merge_observation_payload_into_evidence_metadata(
+                    &record.metadata,
+                    &observation.payload,
+                );
+            }
+            Ok(None) => {
+                // Keep legacy/embedded metadata when observation no longer exists in store.
+                // This is non-fatal because observation data is optional for pack generation.
+            }
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    review_item_observation_id = %record.observation_id,
+                    "failed to load observation for review context pack",
+                );
+            }
+        }
+
+        enriched.push(record);
+    }
+
+    Ok(enriched)
+}
+
+fn merge_observation_payload_into_evidence_metadata(metadata: &Value, payload: &Value) -> Value {
+    let mut merged = metadata.clone();
+    let Value::Object(merged_map) = &mut merged else {
+        return metadata.clone();
+    };
+
+    if let Value::Object(payload_map) = payload {
+        for key in [
+            "title",
+            "summary",
+            "body",
+            "text",
+            "message_id",
+            "subject",
+            "document_id",
+            "document_title",
+            "person_id",
+            "person_name",
+            "organization_id",
+            "organization_name",
+            "name",
+        ] {
+            if !merged_map.contains_key(key)
+                && let Some(value) = payload_map.get(key)
+            {
+                merged_map.insert(key.to_owned(), value.clone());
+            }
+        }
+    }
+
+    Value::Object(merged_map.clone())
 }
 
 fn parse_item_kind(value: &str) -> Result<ReviewItemKind, ApiError> {

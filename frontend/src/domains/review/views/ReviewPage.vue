@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useReviewStore } from '../stores/review'
+import AttentionCardsPanel from '../components/AttentionCardsPanel.vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import type {
 	Decision,
@@ -179,6 +180,8 @@ function reviewItemKindLabel(itemKind: ReviewItem['item_kind']): string {
         <span class="metric-label">Polygraph</span>
       </div>
     </div>
+
+    <AttentionCardsPanel :cards="store.attentionCards" />
 
     <!-- Review Board -->
     <div class="review-board">

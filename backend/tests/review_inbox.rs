@@ -315,6 +315,100 @@ async fn review_inbox_lifecycle_approves_promotes_dismisses_and_archives_against
 }
 
 #[tokio::test]
+async fn review_inbox_promotion_event_captures_trace_ids_against_postgres() {
+    let Some((pool, observation_store, review_store)) =
+        live_review_context("review promotion trace ids").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let source_observation_id = seed_manual_note(&observation_store, suffix).await;
+
+    let item = review_store
+        .create_with_evidence(
+            &NewReviewItem::new(
+                ReviewItemKind::PotentialDecision,
+                "Trace first",
+                "Promotion trace test should persist causation and correlation.",
+                0.77,
+            ),
+            &[NewReviewItemEvidence::new(source_observation_id)],
+        )
+        .await
+        .expect("create review item");
+
+    let transition_observation = observation_store
+        .capture(
+            &NewObservation::new(
+                "REVIEW_TRANSITION",
+                ObservationOriginKind::Manual,
+                Utc::now(),
+                json!({
+                    "review_item_id": item.review_item_id,
+                    "operation": "review_item_promote",
+                }),
+                format!("manual://review-item-promote-trace/{suffix}"),
+            )
+            .provenance(json!({
+                "source": "review_inbox.test",
+            })),
+        )
+        .await
+        .expect("capture review transition observation");
+
+    let promoted = review_store
+        .promote_with_observation(
+            &item.review_item_id,
+            ReviewPromotionTarget::new(
+                "decisions",
+                "decision",
+                format!("decision:v1:trace-{suffix}"),
+            ),
+            Some(&transition_observation.observation_id),
+            Some(json!({"source": "review_inbox.test"})),
+            Some(&transition_observation.observation_id),
+            Some("trace-correlation"),
+        )
+        .await
+        .expect("promote review item with trace ids");
+
+    assert_eq!(promoted.status, ReviewItemStatus::Promoted);
+
+    let event_row = sqlx::query(
+        r#"
+        SELECT causation_id, correlation_id
+        FROM event_log
+        WHERE event_type = 'review.item.promoted.v1'
+          AND subject ->> 'review_item_id' = $1
+        ORDER BY position DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&item.review_item_id)
+    .fetch_one(&pool)
+    .await
+    .expect("load promoted review event");
+
+    let causation: Option<String> = event_row
+        .try_get("causation_id")
+        .expect("promoted causation");
+    let correlation: Option<String> = event_row
+        .try_get("correlation_id")
+        .expect("promoted correlation");
+
+    assert_eq!(
+        causation.as_deref(),
+        Some(transition_observation.observation_id.as_str()),
+        "promote event should carry causation",
+    );
+    assert_eq!(
+        correlation.as_deref(),
+        Some("trace-correlation"),
+        "promote event should carry correlation",
+    );
+}
+
+#[tokio::test]
 async fn review_inbox_status_with_observation_materializes_transition_link_against_postgres() {
     let Some((pool, observation_store, review_store)) =
         live_review_context("review status observation link").await
@@ -448,6 +542,8 @@ async fn review_promotion_service_with_observation_materializes_review_item_tran
             Some(json!({
                 "source": "review_inbox.test",
             })),
+            None,
+            None,
         )
         .await
         .expect("promote review item");

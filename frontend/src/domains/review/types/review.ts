@@ -82,6 +82,58 @@ export interface ReviewItemsResponse {
 	items: ReviewItem[]
 }
 
+export type AttentionImportance = 'low' | 'medium' | 'high' | 'critical'
+
+export interface AttentionEvidenceRef {
+	observation_id: string
+	role: string
+}
+
+export interface AttentionRelatedEntity {
+	entity_kind: string
+	entity_id: string
+	label?: string | null
+}
+
+export interface AttentionSuggestedAction {
+	action_kind: string
+	label: string
+	target_domain?: string | null
+	target_entity_kind?: string | null
+}
+
+export interface AttentionConfidenceExplanation {
+	score: number
+	rationale: string
+}
+
+export interface AttentionExplainability {
+	why_this_matters: string
+	evidence: AttentionEvidenceRef[]
+	confidence: AttentionConfidenceExplanation
+	related_objects: AttentionRelatedEntity[]
+	suggested_actions: AttentionSuggestedAction[]
+}
+
+export interface AttentionCard {
+	id: string
+	title: string
+	summary: string
+	importance: AttentionImportance
+	confidence: number
+	evidence_count: number
+	related_entities: AttentionRelatedEntity[]
+	trace_id: string
+	review_item_ids: string[]
+	suggested_actions: AttentionSuggestedAction[]
+	source_summary: string
+	explainability: AttentionExplainability
+}
+
+export interface AttentionCardsResponse {
+	cards: AttentionCard[]
+}
+
 export interface ReviewItemPromotionRequest {
 	target_domain: string
 	target_entity_kind: string
