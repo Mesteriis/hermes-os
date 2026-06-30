@@ -133,6 +133,11 @@ pub mod whatsapp_event_types {
     pub const MEDIA_UPLOAD_FAILED: &str = "whatsapp.media.upload.failed";
 }
 
+pub mod zulip_event_types {
+    pub const COMMAND_STATUS_CHANGED: &str = "zulip.command.status_changed";
+    pub const COMMAND_RECONCILED: &str = "zulip.command.reconciled";
+}
+
 pub mod zoom_event_types {
     pub const AUTHORIZATION_COMPLETED: &str = "zoom.authorization.completed";
     pub const RUNTIME_STATUS_CHANGED: &str = "zoom.runtime.status_changed";

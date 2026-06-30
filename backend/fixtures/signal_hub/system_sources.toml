@@ -59,6 +59,18 @@ supports_pause = true
 supports_mute = true
 
 [[sources]]
+code = "zulip"
+display_name = "Zulip"
+category = "communications"
+source_kind = "provider"
+default_enabled = true
+supports_connections = true
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
 code = "zoom"
 display_name = "Zoom"
 category = "communications"

@@ -35,6 +35,7 @@ pub(super) fn raw_message_bytes(
         | EmailProviderKind::TelegramBot
         | EmailProviderKind::WhatsappWeb
         | EmailProviderKind::WhatsappBusinessCloud
+        | EmailProviderKind::ZulipBot
         | EmailProviderKind::ZoomUser
         | EmailProviderKind::ZoomServerToServer
         | EmailProviderKind::YandexTelemostUser => Err(

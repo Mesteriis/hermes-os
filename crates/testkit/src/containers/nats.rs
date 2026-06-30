@@ -3,6 +3,8 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use tokio::time::{Duration, Instant, sleep};
 
+use crate::containers::labels::{session_id_label_value, testkit_labels};
+
 const NATS_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const NATS_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(250);
 pub const SESSION_NATS_HOST_PORT_ENV: &str = "HERMES_TEST_NATS_HOST_PORT";
@@ -26,9 +28,14 @@ impl NatsContainer {
     }
 
     pub async fn start_owned() -> Self {
+        Self::start_owned_with_session(&session_id_label_value()).await
+    }
+
+    pub async fn start_owned_with_session(session_id: &str) -> Self {
         let container = GenericImage::new("nats", "2.11-alpine")
             .with_exposed_port(4222.tcp())
             .with_cmd(vec!["-js", "-sd", "/data"])
+            .with_labels(testkit_labels("nats", session_id))
             .start()
             .await
             .expect("failed to start NATS container");

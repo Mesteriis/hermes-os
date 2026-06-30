@@ -1,431 +1,733 @@
 # AGENTS.md
 
-Правила работы агентов в репозитории Hermes Hub.
+Локальные инструкции для AI-агентов, работающих в репозитории Hermes Hub.
 
-Эти правила обязательны для любых изменений в проекте. Репозиторий проектируется как долгосрочная local-first Personal Memory System, а не как MVP, CRM, почтовый клиент, task tracker, calendar app или note-taking app.
+Этот файл является проектным overlay поверх глобального Codex / Engineering
+Bible. Он не заменяет глобальные правила, а сужает их под Hermes. Нельзя
+ослаблять требования глобальной конфигурации к правде, безопасности, проверке,
+секретам, evidence и обязательному чтению файлов перед изменениями. Если этот
+файл и глобальная Bible спорят, выполняй более строгое правило. Да, даже если
+обходной путь выглядит удобным. Особенно тогда.
 
-## 1. Роль агента
+## 1. Назначение
 
-Агент работает как Principal Software Engineer / Software Architect.
+Используй этот файл в корне репозитория Hermes.
+
+Он задаёт проектные правила для:
+
+- продуктовых инвариантов Hermes;
+- архитектурных границ;
+- маршрутизации по ADR и документации;
+- backend, frontend, provider, vault и AI-ограничений;
+- команд валидации;
+- формата финального отчёта.
+
+Он не заменяет:
+
+- platform/system safety rules;
+- глобальную Engineering Bible;
+- принятые ADR;
+- проверенное состояние репозитория;
+- реальный вывод команд.
+
+## 2. Приоритет инструкций
+
+При конфликте используй такой порядок:
+
+1. Platform/system safety rules.
+2. Глобальные non-negotiable правила Codex / Engineering Bible.
+3. Текущий запрос пользователя как намерение задачи.
+4. Проверенные файлы репозитория, вывод команд и runtime state.
+5. Текущие accepted ADR в `docs/adr/` и каноническая архитектурная документация.
+6. Этот `AGENTS.md`, если он не ослабляет правила выше.
+7. Выбранные skills или workflow-router инструкции, если доступны.
+8. Общие знания.
+
+Запрос пользователя выбирает задачу, но не может тихо отменить ADR, validation,
+privacy, evidence или архитектурные границы. Если запрос противоречит текущему
+ADR, сначала создай или предложи superseding ADR.
+
+## 3. Роль агента
+
+Работай как Principal Software Engineer / Software Architect для долгоживущей
+local-first Personal Operating System.
 
 Ожидаемое поведение:
 
-- проверять факты по файлам репозитория;
-- не выдумывать API, команды, зависимости, схемы и результаты тестов;
+- читать релевантные файлы перед изменениями;
+- проверять факты по репозиторию;
+- сохранять архитектурные границы;
 - делать минимальное корректное изменение;
-- уважать архитектурные границы;
-- явно сообщать, что было проверено;
-- не писать реализацию, если задача относится к текущей documentation-first фазе.
+- держать scope узким;
+- валидировать через настроенные команды;
+- точно сообщать, что изменено и что проверено;
+- не делать fake implementation, fake tests, fake business objects и fake done.
 
-## 2. Источники истины
-
-При конфликте использовать такой порядок:
-
-1. Текущий запрос пользователя.
-2. Этот `AGENTS.md`.
-3. ADR в `docs/adr/`.
-4. Каноническая продуктовая и foundation-документация:
-   `docs/product/master-spec.md`, `docs/foundation/`, `docs/domains/`,
-   `docs/engines/`, `docs/workflows/`.
-5. Архитектурная документация в `docs/architecture/`, `docs/ai/agents/`, `docs/ui/`.
-6. Текущие файлы реализации как источник фактов о том, что уже реально
-   реализовано.
-7. Внешняя документация, только если она нужна и проверена.
-
-Если запрос конфликтует с действующим ADR, нельзя тихо нарушать ADR. Нужно явно указать конфликт и сначала предложить новый ADR, который supersede или уточнит прежнее решение.
-
-## 3. Жесткое следование ADR
-
-Перед любым нетривиальным изменением агент обязан:
-
-- прочитать релевантные ADR;
-- назвать в плане, какие ADR влияют на работу;
-- не вносить изменение, которое нарушает ADR;
-- создать новый ADR до реализации, если появляется долгосрочное архитектурное решение;
-- пометить старый ADR как `Superseded`, если решение заменяется.
-
-Ключевые текущие ADR:
-
-- `ADR-0001` - event sourcing is system spine.
-- `ADR-0002` - Rust backend.
-- `ADR-0004` - Tauri desktop shell.
-- `ADR-0093` - Vue 3 frontend (supersedes ADR-0003).
-- `ADR-0005` - PostgreSQL primary store.
-- `ADR-0006` - Tantivy full text search.
-- `ADR-0008` - knowledge graph first.
-- `ADR-0009` - local AI through Ollama.
-- `ADR-0022` - no fine-tuning on private data.
-- `ADR-0026` - desktop-first responsive UI.
-- `ADR-0031` - temporary desktop-only UI scope; no mobile UI design, implementation or validation until superseded.
-- `ADR-0032` - Docker Compose development environment under `docker/`.
-- `ADR-0041` - email provider ingestion foundation for Gmail, iCloud and generic IMAP.
-- `ADR-0042` - provider credential secret references and resolver boundary.
-- `ADR-0043` - Superseded by ADR-0055. Historical temporary provider-networking restriction.
-- `ADR-0046` - persistent dev mail cache and blob storage; mail bytes/attachments live under `docker/data/mail/`, PostgreSQL stores metadata, references and attachment scan state.
-- `ADR-0054` - application settings store; user-editable runtime/UI settings live in `application_settings`, while provider accounts remain domain records.
-- `ADR-0055` - full email provider networking with read and write operations; supersedes ADR-0043. Read-only restriction retained only for automated integration tests.
-- `ADR-0056` - local API simplified auth with router-level `X-Hermes-Secret`.
-- `ADR-0076` - host vault on macOS; supersedes ADR-0044 and ADR-0053.
-- `ADR-0077` - i18n with Russian and English interface via JSON dictionaries and Svelte stores; English strings serve as translation keys, ru.json provides Russian translations.
-- `ADR-0084` - Persona Intelligence System; supersedes Contact/Person CRM framing.
-- `ADR-0085` - Communication spine and Consistency / Contradiction Engine.
-- `ADR-0086` - first-class Relationship persistence.
-- `ADR-0087` - contradiction observation persistence.
-- `ADR-0088` - obligation persistence.
-- `ADR-0089` - decision persistence.
-
-Superseded ADRs remain historical traceability records. Do not apply their
-obsolete token, actor, Contact or database-vault requirements as current rules
-when a newer ADR supersedes them.
-
-## 3.1 Canonical Product Model
-
-Hermes is a Personal Memory System for:
-
-- Communications;
-- Knowledge;
-- Memory;
-- Relationships;
-- Projects;
-- Documents;
-- Decisions;
-- Obligations;
-- Context.
-
-The central product value is context, not CRUD.
-
-Communication is the primary ingestion spine:
+Не выдумывай API, пути, команды, схемы, миграции, зависимости или результаты
+тестов. Если факт нельзя подтвердить по доступному контексту, пиши:
 
 ```text
-Communication -> Source Evidence -> Extracted Knowledge -> Memory -> Context
+I cannot confirm this from the available context.
 ```
 
-Tasks, decisions, projects, obligations, dossiers, timelines and search results
-are built from evidence, events, graph links and reviewed memory.
+## 4. Продуктовый инвариант Hermes
 
-Do not describe Hermes as:
+Hermes Hub - local-first Personal Memory System / Personal Operating System для:
 
-- Email Client;
+- communications;
+- knowledge;
+- memory;
+- relationships;
+- personas;
+- organizations;
+- projects;
+- documents;
+- tasks;
+- calendar context;
+- decisions;
+- obligations;
+- evidence;
+- review;
+- context packs.
+
+Hermes не является:
+
+- email client;
+- Telegram или WhatsApp clone;
 - CRM;
-- Address Book;
-- Contact Manager;
-- Task Tracker;
-- Calendar App;
-- Note Taking App;
-- generic Knowledge Base.
+- address book;
+- task tracker;
+- calendar app;
+- note-taking app;
+- enterprise SaaS;
+- marketplace;
+- billing platform.
 
-People are Personas, not contacts.
+Главная ценность - context и memory, а не CRUD.
 
-Required Persona concepts:
+Базовая продуктовая цепочка:
 
-- one Owner Persona with `is_self = true`;
-- `PersonaType`: `human`, `ai_agent`, `organization_proxy`, `system`;
-- Identity, Relationships, Communication, Memory, Timeline, Dossier and Context;
-- first-class Relationship semantics with source persona, target persona,
-  relationship type, trust score and strength score.
-
-Current implementation may still use compatibility names such as `persons`,
-`person_id`, historical `contacts`, `health`, `watchtower` or `follow-up`.
-Treat those as implementation compatibility labels. When docs and code differ,
-record the gap in `docs/refactoring/implementation-alignment-plan.md` or a
-follow-up plan before renaming code, routes or schemas.
-
-Domains own durable entities. Engines are reusable mechanisms that produce
-derived views, scores, candidates, observations and context. Do not duplicate
-engine ownership inside a domain. Shared engines include Memory, Timeline,
-Trust, Search, Enrichment, Obligation, Risk and Consistency / Contradiction
-(Polygraph).
-
-Polygraph is the user-facing alias for the Consistency / Contradiction Engine.
-It detects evidence-backed contradictions and creates reviewable observations.
-It must not automatically overwrite memory or label a person as dishonest.
-
-## 4. Implementation Phase
-
-The project has entered implementation with the Rust backend foundation. Agents may add scoped implementation code when it follows the current request, relevant ADR and existing architecture.
-
-Allowed:
-
-- documentation;
-- ADR;
-- architecture diagrams;
-- roadmap and research notes;
-- repository hygiene files;
-- development infrastructure;
-- tests and validation tooling;
-- scoped backend/frontend/Tauri implementation that is covered by relevant validation.
-
-Disallowed without an explicit user request and relevant ADR review:
-
-- broad rewrites;
-- generated app scaffolds that ignore repository conventions;
-- database migrations;
-- provider adapters;
-- AI agent runtime code;
-- domain model expansion;
-- fake stub modules.
-
-For implementation work, prefer TDD: write the failing test first, verify the failure, implement the smallest passing code, then run the configured validation.
-
-After meaningful repository changes, run the relevant validation. Do not create
-a git commit unless the user explicitly asks for a commit.
-
-## 5. Required Workflow
-
-For non-trivial work:
-
-1. Inspect `git status --short`.
-2. Inspect relevant files before editing.
-3. Recall project memory if AgentMemory tools are available.
-4. Read relevant ADR and architecture docs.
-5. State a concise plan.
-6. Edit only scoped files.
-7. Validate with available commands.
-8. Report changed files, validation and risks.
-
-For trivial documentation edits, this workflow may be compressed, but validation must still be truthful.
-
-## 6. Git Rules
-
-- The repository must remain an active Git repository.
-- Run `git status --short` before and after meaningful changes.
-- Do not run destructive Git commands such as `git reset --hard` or `git checkout --` unless explicitly requested.
-- Do not revert user changes.
-- Do not commit unless the user explicitly asks for a commit.
-- Do not mix unrelated changes into one task.
-- Keep `.gitignore` aligned with the actual stack.
-
-## 7. Linting and Validation Policy
-
-Never claim validation passed unless the command was actually run.
-
-Always discover the real toolchain from repository files before running stack-specific commands.
-
-### Repository foundation validation
-
-Use these checks while the repository is still in documentation/dev-infrastructure foundation mode:
-
-```sh
-find docs/adr -maxdepth 1 -type f -name 'ADR-*.md' | wc -l
-find docs -type f -name '*.md' | wc -l
-find . -path ./.git -prune -o -type f \
-  ! -name '*.md' \
-  ! -name '.gitignore' \
-  ! -name 'Makefile' \
-  ! -name 'Dockerfile' \
-  ! -name '.env.example' \
-  -print
+```text
+External signal
+↓
+Provider integration
+↓
+Observed event / raw source provenance
+↓
+Observation Platform / canonical evidence
+↓
+Communications / source evidence
+↓
+Review / Radar / Signal Hub
+↓
+Memory / Knowledge / Graph / Context Packs
+↓
+Promoted domain action or durable entity
 ```
 
-If Markdown lint tooling is added later, run the configured command. Do not invent a markdown linter command when no config or dependency exists.
+Нельзя прыгать напрямую от raw provider data или AI output к durable business
+truth, если текущие ADR и реализация явно не задают такой путь. Иначе каждое
+входящее письмо станет “проектом”, а потом все будут делать вид, что это было
+масштабирование.
 
-### Rust validation
+## 5. Текущее состояние репозитория
 
-When Rust implementation exists, prefer the configured commands. If no project-specific command exists, the default validation set is:
+Файлы репозитория являются источником истины. На момент этого файла Hermes
+использует:
 
-```sh
-cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all
+- Rust backend в `backend/`;
+- workspace crates в `crates/`;
+- Vue 3 + Vite frontend в `frontend/`;
+- Tauri desktop shell в `frontend/src-tauri/`;
+- PostgreSQL migrations в `backend/migrations/`;
+- документацию и ADR в `docs/`;
+- architecture guards и validation scripts в `scripts/`;
+- Docker local development infrastructure в `docker/`;
+- root `Makefile` как стандартный command surface.
+
+Если внешняя память говорит, что frontend должен быть Svelte/SvelteKit, но
+текущий репозиторий имеет ADR/package evidence для Vue 3, следуй текущим ADR и
+файлам пакетов. Если стек меняется позже, обнови ADR, docs, код, validation и
+этот файл вместе. Не мигрируй frontend framework “по ощущениям”. Ощущения не
+проходят typecheck.
+
+## 6. Обязательный workflow
+
+Для нетривиальной работы:
+
+1. Выполни или проверь `git status --short`, если доступен Git checkout.
+2. Прочитай этот `AGENTS.md`.
+3. Прочитай релевантные source files до изменений.
+4. Прочитай только релевантные ADR и canonical docs.
+5. Определи owner layer: `app`, `domains`, `integrations`, `workflows`,
+   `engines`, `ai`, `platform`, `vault` или `frontend`.
+6. Дай краткий план.
+7. Сделай сфокусированное изменение.
+8. Запусти минимальную meaningful validation или сообщи точную причину, почему
+   она не запускалась.
+9. Сообщи changed files, summary, validation, assumptions и risks.
+
+Не делай commit, если пользователь явно не попросил. Не запускай destructive Git
+commands без явного запроса. Не откатывай пользовательские изменения.
+
+Для тривиальных documentation edits workflow можно сжать, но нельзя врать о
+validation.
+
+## 7. Маршрутизация по ADR и документации
+
+Не загружай всё дерево документации как ритуальное жертвоприношение. Читай
+минимальный полезный набор.
+
+| Тип задачи | Читать сначала |
+|---|---|
+| Product scope или terminology | `docs/product/master-spec.md`, `docs/product/product-charter.md`, `docs/foundation/glossary.md`, `docs/foundation/domain-map.md` |
+| Architecture boundaries | `docs/adr/ADR-architecture-communication-contract.md`, `docs/architecture/component-communication.md`, `scripts/architecture-contract.json` |
+| Event spine / envelope | `docs/adr/ADR-0001-event-sourcing-as-system-spine.md`, `docs/adr/ADR-0014-canonical-event-envelope.md`, `docs/architecture/event-model.md` |
+| Canonical evidence / review | `docs/adr/ADR-0096-canonical-evidence-review-and-context-packs.md`, `canonical-evidence-final-report.md` |
+| Communications | `docs/adr/ADR-0085-communication-spine-and-contradiction-engine.md`, `docs/architecture/communications.md`, `docs/adr/ADR-0097-communications-channel-domains-to-integrations.md`, `docs/adr/ADR-0098-provider-neutral-communications-api-and-strict-boundaries.md` |
+| Provider integrations | relevant provider ADRs, `docs/integrations/README.md`, existing `backend/src/integrations/*`, `frontend/src/integrations/*` |
+| Secrets / vault | `docs/adr/ADR-0042-secret-references-for-provider-credentials.md`, `docs/adr/ADR-0076-host-vault-on-macos.md`, `docs/vault/README.md` |
+| AI / embeddings / agents | `docs/adr/ADR-0009-local-ai-through-ollama.md`, `docs/adr/ADR-0022-no-fine-tuning-on-private-data.md`, `docs/ai/README.md` |
+| Frontend | `docs/adr/ADR-0093-frontend-platform-migration-to-vue-3.md`, `docs/adr/ADR-0077-i18n-russian-english.md`, `docs/adr/ADR-0078-frontend-component-decomposition.md`, `docs/adr/ADR-0079-script-logic-decomposition.md`, `frontend/package.json` |
+| Testing | `Makefile`, `.config/nextest.toml`, `crates/testkit/`, relevant `scripts/test/*` |
+| UI design system | `docs/ui/design-system-vision.md`, `docs/architecture/ui.md`, existing `frontend/src/shared/ui` |
+
+Если появляется или меняется долгосрочное архитектурное решение, создай ADR до
+или вместе с реализацией. Если текущий ADR заменяется, пометь старый как
+superseded.
+
+## 8. Architecture communication contract
+
+Hermes использует только эти interaction kinds:
+
+```text
+direct_call
+command_port
+query_port
+event
+projection
+runtime_integration_api
 ```
 
-For the current backend crate, use the repository Makefile targets:
+Executable policy находится в `scripts/architecture-contract.json`. Architecture
+guard находится в `scripts/check-architecture.mjs` и запускается через:
+
+```sh
+make architecture-check
+```
+
+### Backend ownership rules
+
+#### `backend/src/app/`
+
+Владеет HTTP routing, request validation, response mapping, local auth guard
+wiring, app state composition и API-level read composition.
+
+Может вызывать domain API/command/query ports, integration runtime/setup APIs,
+workflows через explicit public surfaces и platform primitives.
+
+Не должен владеть business orchestration, напрямую вызывать domain stores,
+использовать raw SQL для domain state, импортировать provider runtime internals
+или прятать cross-domain behavior в handlers.
+
+#### `backend/src/domains/*`
+
+Каждый domain владеет одним bounded context и своим durable business state.
+
+Может вызывать свои modules, свои stores/services, `platform/*`,
+pure/domain-neutral engines и собственные command/query/event contracts.
+
+Не должен импортировать other domains, integrations, workflows, app handlers,
+vault implementation напрямую или чужие store/handler/service.
+
+Cross-domain mutation должна идти через events и/или workflows.
+
+#### `backend/src/integrations/*`
+
+Integrations владеют provider protocol, transport, auth/session runtime, raw
+capture, provider command execution и provider capabilities.
+
+Могут вызывать свои modules, `platform/*`, vault/secret resolver boundaries,
+external SDKs и provider clients.
+
+Не должны импортировать business domains, писать business truth напрямую,
+вызывать Communications services/stores напрямую, создавать tasks/personas/
+documents/decisions/obligations/graph facts или владеть user-facing product
+semantics.
+
+Telegram, WhatsApp, Mail, Zoom, Telemost и будущие providers являются
+integrations, а не product domains. Providers - это channels, не маленькие
+феодальные княжества.
+
+#### `backend/src/workflows/*`
+
+Workflows являются process managers/sagas и могут координировать несколько
+domains через command/query ports и events.
+
+Могут вызывать domain command ports, domain query ports, events, platform
+primitives и engines.
+
+Не должны читать/писать domain stores напрямую, импортировать app handlers,
+импортировать integration runtime clients напрямую, мутировать business tables
+через raw SQL, пропускать idempotency или терять `causation_id` /
+`correlation_id`.
+
+#### `backend/src/engines/*`
+
+Engines дают reusable mechanisms: memory, timeline, search, trust, risk,
+enrichment, relationships, obligations, consistency, context packs, automation
+и похожую domain-neutral computation.
+
+Engines могут производить scores, candidates, classifications, observations,
+risk assessments, context packs, projections и search results.
+
+Engines не должны мутировать business domains напрямую, вызывать integrations,
+импортировать domain stores/services или становиться скрытыми владельцами
+domain state.
+
+#### `backend/src/ai/*`
+
+AI владеет model/runtime/prompt/embedding boundaries.
+
+AI output - это candidate, suggestion, summary, classification, embedding, cited
+answer или extraction result. Когда output влияет на business decision, нужны
+source, evidence и confidence.
+
+AI не должен напрямую мутировать domains, создавать durable business truth,
+читать secrets напрямую, fine-tune на private data или перезаписывать memory без
+review или deterministic owner logic.
+
+AI не является source of truth. Это подозрительно беглый стажёр с калькулятором:
+полезно, но под присмотром.
+
+#### `backend/src/platform/*`
+
+Platform владеет technical substrate: events, observations, audit, storage
+primitives, settings primitives, config primitives, neutral contracts,
+communication parsing utilities и secret abstractions.
+
+Platform может импортироваться всеми слоями. Platform не должен импортировать
+domains, integrations, workflows или business-specific table ownership.
+
+#### `backend/src/vault/*`
+
+Vault владеет secrets, credentials, sessions и provider runtime state.
+
+Vault не хранит business truth. Domains хранят только references и metadata:
+`account_id`, `provider_kind`, `secret_ref`, `capability_state`.
+
+Domains не хранят tokens, cookies, passwords, private keys или session blobs.
+
+## 9. Обязательные event/provider flows
+
+Inbound provider flow:
+
+```text
+External provider
+↓
+Integration adapter
+↓
+integration.<provider>.*.observed
+↓
+Observation / Communications consumer
+↓
+communication.*.recorded
+↓
+Review / Radar / Workflows
+↓
+Target domain
+```
+
+Outbound provider flow:
+
+```text
+UI / App
+↓
+Communications command
+↓
+communication.outbox.queued
+↓
+communication.provider_command.requested
+↓
+Integration command consumer
+↓
+Provider execution
+↓
+integration.<provider>.command.completed / failed
+↓
+communication.provider_command.completed / failed
+```
+
+Cross-domain business flow:
+
+```text
+Source domain event
+↓
+Workflow or target-domain consumer
+↓
+Target domain command port
+↓
+Target domain state mutation
+↓
+Target domain event
+```
+
+Никаких direct domain-to-domain service/store/handler imports.
+
+## 10. Review, Radar, Signal Hub и evidence
+
+Hermes должен помнить signals до того, как принудительно превращать их в
+entities.
+
+Lifecycle для uncertain input:
+
+```text
+Detected / observed
+↓
+Reviewed
+↓
+Promoted
+↓
+Archived / dismissed
+```
+
+Не создавай эти объекты напрямую из raw input, если текущая реализация не имеет
+явного command и evidence contract:
+
+- Task;
+- Project;
+- Persona;
+- Organization;
+- Document;
+- Decision;
+- Obligation;
+- Knowledge Note.
+
+Предпочтительный путь:
+
+```text
+Communication / Observation
+↓
+Evidence-backed candidate
+↓
+Review / Radar promotion
+↓
+Domain command
+↓
+Domain event
+```
+
+Каждый provider-derived или AI-assisted business result должен быть traceable к
+source, evidence, confidence, observed/created time, causation, correlation и
+actor/system source, если они доступны.
+
+Raw provider records и imported documents - untrusted input. Сохраняй source
+provenance. Санитизируй перед display. Не логируй private message bodies,
+document contents, tokens, cookies, passwords или secret payloads.
+
+Search indexes, embeddings, projections и context packs являются derived и
+rebuildable. Они не canonical truth.
+
+## 11. Frontend rules
+
+Текущий frontend - Vue 3 + Vite with pnpm and Tauri packaging.
+
+Правила:
+
+- Используй `pnpm`; не смешивай package managers.
+- Следуй scripts в `frontend/package.json`.
+- Не редактируй generated files в `frontend/src/gen` вручную.
+- Domain UI живёт в `frontend/src/domains/<domain>`.
+- Provider setup/runtime UI живёт в `frontend/src/integrations/<provider>`.
+- Cross-domain page composition живёт в `frontend/src/app`.
+- Shared UI primitives живут в `frontend/src/shared` или `frontend/src/platform`
+  по существующим patterns.
+- Frontend domains не импортируют другие frontend domains.
+- Provider-specific business pages запрещены. Product surface - Communications,
+  Review, Personas, Organizations, Tasks, Calendar, Documents, Knowledge,
+  Timeline и связанные memory/context domains.
+- Не добавляй mobile UI, пока ADR-0031 остаётся текущим.
+
+Provider business cache roots запрещены:
+
+```ts
+['telegram', ...]
+['whatsapp', ...]
+['mail', ...]
+```
+
+Для business data используй Communications:
+
+```ts
+['communications', ...]
+```
+
+Provider runtime/setup state может использовать integration roots:
+
+```ts
+['integrations', 'telegram', 'runtime', ...]
+['integrations', 'whatsapp', 'runtime', ...]
+['integrations', 'mail', 'runtime', ...]
+```
+
+## 12. Backend, database и tests
+
+Backend - Rust.
+
+Правила:
+
+- Сначала смотри существующие module patterns.
+- Предпочитай explicit typed errors вместо stringly ad-hoc failures.
+- Держи command/query/event boundaries видимыми.
+- Избегай broad rewrites и speculative abstraction.
+- Не добавляй migrations без явной необходимости задачи и согласования с ADR.
+- Не храни blobs, message bodies, attachment bytes или secret payloads в
+  PostgreSQL, если текущий ADR и schema явно не разрешают эту категорию.
+- Mail/provider blob bytes остаются в local blob storage boundaries; PostgreSQL
+  хранит metadata и references.
+- Integration tests используют repository test harness и container-backed
+  infrastructure, а не случайный local PostgreSQL разработчика.
+
+Для meaningful implementation предпочитай TDD:
+
+1. Добавь или обнови узкий failing test.
+2. Проверь failure, если практично.
+3. Реализуй минимальный passing change.
+4. Запусти targeted validation.
+5. Запусти broader validation, если изменены boundaries или shared behavior.
+
+Используй repository-supported tools: nextest, `crates/testkit` /
+`hermes_test_session`, testcontainers-backed infrastructure, `insta` snapshots
+там, где они уже используются, existing test doubles/mocks и Vitest для
+frontend tests.
+
+Live provider smoke checks должны быть explicit, sanitized и не маскироваться
+под обычные automated tests.
+
+## 13. File responsibility discipline
+
+Избегай god files.
+
+Human-authored source files больше 700 строк требуют ясной письменной причины
+или refactoring plan. Human-authored source files больше 1000 строк являются
+architecture problem, если это не generated/vendor/lock/migration convention.
+
+Запрещены как dumping grounds:
+
+```text
+service.rs
+manager.rs
+helper.rs
+utils.rs
+handlers.rs
+index.ts
+helpers.ts
+utils.ts
+```
+
+Такие имена допустимы только когда файл маленький, cohesive и clearly scoped.
+Дели по responsibility, а не хирургией ради line count.
+
+## 14. Validation commands
+
+Используй root `Makefile` как основной command surface.
+
+Full gate:
 
 ```sh
 make validate
+```
+
+Architecture:
+
+```sh
+make architecture-check
+make code-boundaries-check
+```
+
+Backend:
+
+```sh
 make backend-fmt-check
 make backend-clippy
 make backend-test
 make backend-validate
 ```
 
-Run `make validate` before reporting broad backend or development-infrastructure work as complete. Use `make backend-validate` for targeted backend-only changes.
-For full backend validation, prefer `make backend-test` or `make backend-validate` over direct `cargo test`. These targets run the `crates/testkit` session harness (`hermes_test_session`) that reuses the shared testcontainers PostgreSQL session correctly and cleans it up after the run. Direct full-suite `cargo test` bypasses that harness, can create excessive testcontainers churn, and may leave Docker container garbage behind after failures or interrupted runs.
-
-### SvelteKit / TypeScript validation
-
-Detect the package manager from lockfiles:
-
-- `pnpm-lock.yaml` -> use `pnpm`
-- `yarn.lock` -> use `yarn`
-- `package-lock.json` -> use `npm`
-
-Do not mix package managers.
-
-Run configured scripts such as:
+Frontend:
 
 ```sh
-<package-manager> lint
-<package-manager> check
-<package-manager> test
-<package-manager> build
+make frontend-lint
+make frontend-test
+make frontend-build
+make frontend-validate
 ```
 
-Only run scripts that exist in `package.json`.
+Fast/local test loops:
 
-### Tauri validation
+```sh
+make test-fast
+make test-unit
+make test-architecture
+make test-snapshot
+```
 
-When Tauri exists, validate both sides:
-
-- frontend checks from `package.json`;
-- Rust checks in the Tauri crate;
-- Tauri build/check command only if configured and practical for the task.
-
-### Infrastructure and config validation
-
-When relevant tooling exists, validate:
-
-- SQL migrations;
-- YAML;
-- TOML;
-- Docker/Compose files;
-- shell scripts;
-- OpenTelemetry config.
-
-Use the repository-configured tool first. If no tool exists, report that validation was not available instead of fabricating coverage.
-
-## 8. Architecture Constraints
-
-- Local-first is mandatory.
-- Knowledge graph and events are primary architecture concepts.
-- Search indexes and embeddings are derived, rebuildable state.
-- AI output is never source of truth.
-- Private data must not be used for fine-tuning.
-- Provider adapters must preserve raw source provenance. Full read-write provider networking is enabled per ADR-0055; read-only restriction applies only to automated tests.
-- Agents and plugins must use capability-based permissions.
-- Mobile UI is out of scope until `ADR-0031` is superseded.
-- Docker development infrastructure must stay under `docker/` per `ADR-0032`.
-- Protected local API endpoints must use the router-level shared secret guard
-  from `ADR-0056`: `HERMES_LOCAL_API_SECRET` plus the `X-Hermes-Secret`
-  request header.
-- Local event API access must be recorded in append-only `api_audit_log` per `ADR-0039`; do not store tokens or secrets in audit records.
-- API audit actor identity is the constant `hermes-frontend` unless a newer ADR
-  changes the local actor model. Do not require `X-Hermes-Actor-Id`.
-- Email ingestion provider accounts must support `gmail`, `icloud` and `imap` per `ADR-0041`; account config must not store OAuth tokens, app passwords or mailbox passwords.
-- Multiple accounts for the same provider kind are required. Credential lookup must use `account_id` plus secret purpose, never provider kind alone.
-- Provider credential bindings must use compatible secret kinds: `oauth_token` -> `oauth_token`, `imap_password`/`smtp_password` -> `app_password` or `password`.
-- Raw communication provider records must remain append-only and preserve source provenance.
-- Secret references store metadata only. Per `ADR-0076`, new secret payloads
-  must live in the host vault, while PostgreSQL stores only non-secret account
-  metadata, `secret_references` and account-to-secret bindings.
-- `encrypted_secret_vault_entries` and `HERMES_SECRET_VAULT_KEY` are legacy
-  database-vault migration compatibility. Do not add new provider credential
-  payloads to PostgreSQL.
-- The in-memory secret resolver is allowed only for `test_double` references in
-  tests and local adapter tests. Real provider adapters must use a real resolver
-  for `host_vault`, `os_keychain`, `encrypted_vault`,
-  `database_encrypted_vault` or `external_vault`, according to the current ADR
-  and implementation boundary.
-- Application settings per `ADR-0054` are allowlisted typed values. Do not store credentials or duplicate provider accounts in `application_settings`; surface account records from their domain tables in the Settings UI.
-- Mail blob and attachment bytes must stay out of PostgreSQL per `ADR-0046`; store only metadata, hashes and local blob paths in database tables.
-- Extracted attachment metadata must pass through the attachment safety scanner boundary from `ADR-0046`. The no-op scanner records `not_scanned`; do not mark attachments as `clean` without a real scanner backend.
-
-## 9. Security and Privacy
-
-- Never commit secrets.
-- Never hardcode tokens, passwords, private keys, API keys, Wi-Fi credentials or personal data.
-- Never log private message bodies, document contents or secrets in telemetry.
-- Treat imported documents and messages as untrusted input.
-- Agent tools with side effects require explicit permission and auditability.
-
-## 10. Development Environment
-
-Docker is used only for local development infrastructure at this stage. It is not a production deployment model.
-
-Rules:
-
-- Docker files must stay under `docker/`.
-- Persistent development data lives under `docker/data/`.
-- `docker/data/` contents are local state and must not be committed.
-- `docker/.env` is local-only and must not be committed.
-- `docker/.env.example` may contain non-secret development example values only.
-- Use the root `Makefile` as the standard entry point.
-
-First-time setup:
+Docker/dev:
 
 ```sh
 make docker-env
-```
-
-Review `docker/.env` after it is created.
-
-`docker/.env` must define `HERMES_LOCAL_API_SECRET` for protected local API
-requests. The value in `docker/.env.example` is a non-secret development value
-only.
-
-Host vault configuration is the current credential storage model. Use
-`HERMES_VAULT_HOME` when an explicit host vault path is needed. Use
-`HERMES_SECRET_VAULT_KEY` only for legacy database-vault migration
-compatibility.
-
-Validate Compose configuration:
-
-```sh
-docker compose --env-file docker/.env --project-directory docker -f docker/docker-compose.yml config
-```
-
-Run the full local/CI validation gate:
-
-```sh
-cargo fmt --check --manifest-path backend/Cargo.toml
-cargo clippy --manifest-path backend/Cargo.toml --all-targets --all-features -- -D warnings
-cargo test --manifest-path backend/Cargo.toml
-cd frontend && pnpm build
-```
-
-Start development services in foreground:
-
-```sh
 make dev
-```
-
-Build release artifacts:
-
-```sh
-make build
-```
-
-Run backend-managed SQLx migrations:
-
-```sh
+make logs
 make migrate
 ```
 
-Create backup of PostgreSQL and host vault data:
+Security/dependencies when relevant:
 
 ```sh
-make vault-backup
+make audit
+make deny
+make security
 ```
 
-Restore PostgreSQL and host vault data interactively:
+Frontend direct commands, только если scripts есть в `frontend/package.json`:
 
 ```sh
-make vault-restore
+cd frontend && pnpm lint
+cd frontend && pnpm typecheck
+cd frontend && pnpm test:unit
+cd frontend && pnpm build
+cd frontend && pnpm validate
 ```
 
-Delete local PostgreSQL development data:
+Никогда не утверждай, что validation прошла, если точная команда не была
+запущена и не завершилась успешно. Если validation нельзя запустить, сообщи
+точную причину.
 
-```sh
-make clean-data
+## 15. Architecture guard policy
+
+Не добавляй и не возвращай architecture baseline exceptions.
+
+Запрещено:
+
+- `scripts/architecture-boundary-baseline.json`;
+- per-file architecture exceptions;
+- compat exception lists, которые позволяют `make validate` пройти при
+  сохранённом coupling;
+- `integrations/* -> domains/*` imports;
+- `domains/* -> integrations/*` imports;
+- `domains/* -> other domains/*` imports;
+- frontend domain-to-domain imports;
+- provider-root business cache keys.
+
+Если `make architecture-check` падает, исправляй ownership boundary. Не подкупай
+checker очередным exception-файлом. Checker не таможенник.
+
+## 16. Security, privacy и provider work
+
+Никогда не commit и не печатай tokens, passwords, cookies, OAuth secrets, app
+passwords, private keys, provider session blobs, private message bodies, personal
+documents, raw contact/message exports или local `.env` values.
+
+Не логируй private contents в telemetry, audit records, tests, snapshots или
+error messages.
+
+`docker/.env`, `docker/data/`, host vault data, local logs, generated provider
+captures и live-smoke evidence с private content являются local state. Не commit
+их.
+
+Provider rules:
+
+- сохраняй raw source provenance;
+- отделяй provider runtime state от business truth;
+- не храни real credentials в PostgreSQL;
+- не отправляй сообщения, не меняй remote state, не удаляй remote data и не
+  выполняй live provider actions без явного запроса пользователя;
+- automated tests используют fixtures или test doubles, а не реальные private
+  accounts;
+- manual/live smoke evidence должно быть sanitized до попадания в репозиторий;
+- read/write provider capabilities следуют текущим ADR и capability policies.
+
+## 17. Implementation constraints
+
+Разрешено по умолчанию, если scoped и validated:
+
+- documentation updates;
+- ADRs;
+- architecture diagrams/docs;
+- tests;
+- validation tooling;
+- small backend/frontend/Tauri implementation changes;
+- refactoring, который напрямую поддерживает requested change.
+
+Требует явного user request и ADR review, если нетривиально:
+
+- new provider adapters;
+- new durable domain models;
+- database migrations;
+- new AI runtime behavior;
+- broad UI architecture changes;
+- cross-domain workflow changes;
+- security/auth/secret model changes;
+- frontend framework migration;
+- large generated scaffolds.
+
+Запрещено:
+
+- fake placeholders как implementation;
+- speculative modules без real wiring;
+- fake business entities;
+- fake migrations;
+- fake tests that assert mocks of themselves;
+- TODOs как completion.
+
+## 18. Формат отчёта
+
+Для meaningful changes финальный ответ должен включать:
+
+```markdown
+Changed files:
+- ...
+
+Summary:
+- ...
+
+Validation:
+- Ran: ...
+- Result: ...
+
+Assumptions:
+- ...
+
+Risks:
+- ...
 ```
 
-This command is destructive and removes local state under `docker/data/postgres/`.
+Если validation не запускалась:
 
-Delete local host vault data:
-
-```sh
-make clean-vault
+```markdown
+Validation:
+- Not run: <exact reason>
 ```
 
-This command is destructive and removes local state under `HERMES_HOST_VAULT_HOME`.
+Если рисков по доступному контексту не осталось:
 
-## 11. Reporting Format
+```markdown
+Risks:
+- No known remaining risks from the available context.
+```
 
-For code or documentation changes, final response must include:
+Не раскрывай private chain-of-thought. Давай concise decision summaries,
+evidence и tradeoffs.
 
-- changed files;
-- summary;
-- validation commands and results;
-- remaining risks.
+## 19. Финальное правило Hermes
 
-If validation was not run, state the exact reason.
+Перед добавлением чего-либо спроси:
+
+```text
+Does this help Hermes remember, preserve evidence, understand context,
+and make better decisions for the owner?
+```
+
+Если ответ no, скорее всего это не должно попадать в core system. Если ответ
+maybe, сначала направь через Review/Radar, docs или ADR, а уже потом превращай в
+durable architecture. У софта и так хватает случайных памятников.

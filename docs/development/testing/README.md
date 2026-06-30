@@ -10,6 +10,7 @@ Hermes uses a split test stack:
 - Post-run JUnit analysis prints a compact completed/passed/failed/flaky summary with an ASCII progress bar, so non-interactive Codex/CI output is not silent after a test set finishes.
 - Frontend unit tests stay on Vitest.
 - Architecture checks remain first-class and are part of the test taxonomy.
+- Hermes Lab is the proposed system-level harness for tracing real provider signals through Communications, Review, Timeline, Search and UI/debug surfaces.
 
 ## Command map
 
@@ -35,6 +36,55 @@ Hermes uses a split test stack:
 - `make cache-stats`
 - `make cache-reset`
 - `make test-performance-report`
+- `make testcontainers-clean`
+
+## Testcontainers cleanup
+
+`make backend-test`, `make test-integration` and related backend Make targets
+run through `crates/testkit`'s `hermes_test_session` wrapper. The wrapper starts
+session-scoped PostgreSQL/NATS containers, prints progress while long runs are
+active, labels Hermes-owned containers and removes the session containers on
+exit or shutdown signals.
+
+For manual cleanup of leaked Hermes testcontainers:
+
+```sh
+make testcontainers-clean
+```
+
+The cleanup command is restricted to Hermes testkit labels and legacy
+pgvector/NATS containers created by the repository testkit.
+
+Targeted `cargo test` runs outside `hermes_test_session` now use containers
+owned by the individual `TestContext`, so those containers are dropped when the
+test context exits.
+
+## Zulip live fixture
+
+`backend/tests/zulip_live.rs` is an ignored, opt-in live contract test for the
+Zulip reference provider. It starts a real Zulip Docker Compose stack through
+`testcontainers`, provisions a root realm, owner, bot, human user and stream,
+then exercises:
+
+- Zulip event queue registration and message observation;
+- stream and direct messages;
+- file upload/download;
+- reactions, edits and deletes;
+- Hermes raw signal dispatch, Communications projection and Review task
+  candidate creation from a real Zulip message event.
+
+Run it explicitly:
+
+```sh
+HERMES_ZULIP_TESTCONTAINERS=1 \
+HERMES_ZULIP_START_TIMEOUT_SECS=900 \
+cargo test --manifest-path backend/Cargo.toml --test zulip_live -- --ignored --nocapture
+```
+
+The fixture writes progress to stderr so first-boot image pulls and Zulip
+readiness are visible. Long-running Zulip Compose startup, realm provisioning
+and backend live-evidence commands also emit periodic heartbeat lines with
+elapsed time.
 
 ## Classification model
 
@@ -70,3 +120,5 @@ Current baseline and optimization notes live in:
 - [Nextest](./nextest.md)
 - [Security](./security.md)
 - [Snapshots](./snapshots.md)
+- [Hermes Lab](./hermes-lab.md)
+- [Communication Compliance Suite](./communication-compliance-suite.md)

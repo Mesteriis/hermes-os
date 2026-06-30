@@ -27,3 +27,4 @@ pub(super) use crate::app::handlers::telegram::*;
 pub(super) use crate::app::handlers::whatsapp::*;
 pub(super) use crate::app::handlers::yandex_telemost::*;
 pub(super) use crate::app::handlers::zoom::*;
+pub(super) use crate::app::handlers::zulip::*;

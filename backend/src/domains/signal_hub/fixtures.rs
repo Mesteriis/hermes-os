@@ -114,7 +114,7 @@ const DEVELOPMENT_PROFILE_POLICIES: [SystemProfilePolicyFixture; 2] = [
     },
 ];
 
-const TESTING_PROFILE_POLICIES: [SystemProfilePolicyFixture; 12] = [
+const TESTING_PROFILE_POLICIES: [SystemProfilePolicyFixture; 13] = [
     SystemProfilePolicyFixture {
         scope: SignalPolicyScope::Source,
         source_code: Some("ai"),
@@ -194,6 +194,13 @@ const TESTING_PROFILE_POLICIES: [SystemProfilePolicyFixture; 12] = [
     },
     SystemProfilePolicyFixture {
         scope: SignalPolicyScope::Source,
+        source_code: Some("zulip"),
+        event_pattern: None,
+        mode: SignalPolicyMode::Muted,
+        reason: "testing profile mutes Zulip signals",
+    },
+    SystemProfilePolicyFixture {
+        scope: SignalPolicyScope::Source,
         source_code: Some("zoom"),
         event_pattern: None,
         mode: SignalPolicyMode::Muted,
@@ -201,7 +208,7 @@ const TESTING_PROFILE_POLICIES: [SystemProfilePolicyFixture; 12] = [
     },
 ];
 
-const MAINTENANCE_PROFILE_POLICIES: [SystemProfilePolicyFixture; 4] = [
+const MAINTENANCE_PROFILE_POLICIES: [SystemProfilePolicyFixture; 5] = [
     SystemProfilePolicyFixture {
         scope: SignalPolicyScope::Source,
         source_code: Some("mail"),
@@ -222,6 +229,13 @@ const MAINTENANCE_PROFILE_POLICIES: [SystemProfilePolicyFixture; 4] = [
         event_pattern: None,
         mode: SignalPolicyMode::Paused,
         reason: "maintenance profile pauses WhatsApp capture",
+    },
+    SystemProfilePolicyFixture {
+        scope: SignalPolicyScope::Source,
+        source_code: Some("zulip"),
+        event_pattern: None,
+        mode: SignalPolicyMode::Paused,
+        reason: "maintenance profile pauses Zulip capture",
     },
     SystemProfilePolicyFixture {
         scope: SignalPolicyScope::Source,
@@ -284,6 +298,7 @@ mod tests {
                 "mail",
                 "telegram",
                 "whatsapp",
+                "zulip",
                 "zoom",
                 "github",
                 "browser",

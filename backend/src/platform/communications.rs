@@ -45,6 +45,7 @@ pub enum CommunicationProviderKind {
     TelegramBot,
     WhatsappWeb,
     WhatsappBusinessCloud,
+    ZulipBot,
     ZoomUser,
     ZoomServerToServer,
     YandexTelemostUser,
@@ -62,6 +63,7 @@ impl CommunicationProviderKind {
             Self::TelegramBot => "telegram_bot",
             Self::WhatsappWeb => "whatsapp_web",
             Self::WhatsappBusinessCloud => "whatsapp_business_cloud",
+            Self::ZulipBot => "zulip_bot",
             Self::ZoomUser => "zoom_user",
             Self::ZoomServerToServer => "zoom_server_to_server",
             Self::YandexTelemostUser => "yandex_telemost_user",
@@ -78,6 +80,10 @@ impl CommunicationProviderKind {
 
     pub fn is_whatsapp(self) -> bool {
         matches!(self, Self::WhatsappWeb | Self::WhatsappBusinessCloud)
+    }
+
+    pub fn is_zulip(self) -> bool {
+        matches!(self, Self::ZulipBot)
     }
 
     pub fn is_zoom(self) -> bool {
@@ -101,6 +107,7 @@ impl TryFrom<&str> for CommunicationProviderKind {
             "telegram_bot" => Ok(Self::TelegramBot),
             "whatsapp_web" => Ok(Self::WhatsappWeb),
             "whatsapp_business_cloud" => Ok(Self::WhatsappBusinessCloud),
+            "zulip_bot" => Ok(Self::ZulipBot),
             "zoom_user" => Ok(Self::ZoomUser),
             "zoom_server_to_server" => Ok(Self::ZoomServerToServer),
             "yandex_telemost_user" => Ok(Self::YandexTelemostUser),
@@ -529,6 +536,7 @@ pub enum ProviderAccountSecretPurpose {
     WhatsappBusinessCloudAccessToken,
     WhatsappBusinessCloudAppSecret,
     WhatsappBusinessCloudWebhookVerifyToken,
+    ZulipApiKey,
     ZoomOauthToken,
     ZoomClientSecret,
     ZoomWebhookSecret,
@@ -550,6 +558,7 @@ impl ProviderAccountSecretPurpose {
             Self::WhatsappBusinessCloudWebhookVerifyToken => {
                 "whatsapp_business_cloud_webhook_verify_token"
             }
+            Self::ZulipApiKey => "zulip_api_key",
             Self::ZoomOauthToken => "zoom_oauth_token",
             Self::ZoomClientSecret => "zoom_client_secret",
             Self::ZoomWebhookSecret => "zoom_webhook_secret",
@@ -570,6 +579,7 @@ impl ProviderAccountSecretPurpose {
             Self::WhatsappBusinessCloudAccessToken
             | Self::WhatsappBusinessCloudAppSecret
             | Self::WhatsappBusinessCloudWebhookVerifyToken
+            | Self::ZulipApiKey
             | Self::ZoomClientSecret
             | Self::ZoomWebhookSecret => secret_kind == SecretKind::ApiToken,
             Self::ZoomOauthToken | Self::YandexTelemostOauthToken => {
@@ -596,6 +606,7 @@ impl TryFrom<&str> for ProviderAccountSecretPurpose {
             "whatsapp_business_cloud_webhook_verify_token" => {
                 Ok(Self::WhatsappBusinessCloudWebhookVerifyToken)
             }
+            "zulip_api_key" => Ok(Self::ZulipApiKey),
             "zoom_oauth_token" => Ok(Self::ZoomOauthToken),
             "zoom_client_secret" => Ok(Self::ZoomClientSecret),
             "zoom_webhook_secret" => Ok(Self::ZoomWebhookSecret),

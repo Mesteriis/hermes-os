@@ -105,26 +105,35 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
     )
     .await;
 
+    let mut wipe = pool.begin().await.expect("begin metadata wipe");
+    sqlx::query(
+        "SELECT account_id FROM communication_provider_accounts WHERE account_id = $1 FOR UPDATE",
+    )
+    .bind(account_id)
+    .fetch_optional(&mut *wipe)
+    .await
+    .expect("lock provider account metadata");
     sqlx::query("DELETE FROM calendar_accounts WHERE account_id = $1")
         .bind(format!("icloud-calendar:{account_id}"))
-        .execute(&pool)
+        .execute(&mut *wipe)
         .await
         .expect("delete calendar metadata");
     sqlx::query("DELETE FROM communication_provider_account_secret_refs WHERE account_id = $1")
         .bind(account_id)
-        .execute(&pool)
+        .execute(&mut *wipe)
         .await
         .expect("delete secret binding");
     sqlx::query("DELETE FROM communication_provider_accounts WHERE account_id = $1")
         .bind(account_id)
-        .execute(&pool)
+        .execute(&mut *wipe)
         .await
         .expect("delete provider account");
     sqlx::query("DELETE FROM secret_references WHERE secret_ref = $1")
         .bind(secret_ref)
-        .execute(&pool)
+        .execute(&mut *wipe)
         .await
         .expect("delete secret reference");
+    wipe.commit().await.expect("commit metadata wipe");
 
     assert!(
         CommunicationIngestionStore::new(pool.clone())

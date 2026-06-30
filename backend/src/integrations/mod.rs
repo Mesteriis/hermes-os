@@ -6,3 +6,4 @@ pub mod telegram;
 pub mod whatsapp;
 pub mod yandex_telemost;
 pub mod zoom;
+pub mod zulip;

@@ -193,6 +193,7 @@ fn provider_config(provider_kind: EmailProviderKind) -> serde_json::Value {
         | EmailProviderKind::TelegramBot
         | EmailProviderKind::WhatsappWeb
         | EmailProviderKind::WhatsappBusinessCloud
+        | EmailProviderKind::ZulipBot
         | EmailProviderKind::ZoomUser
         | EmailProviderKind::ZoomServerToServer
         | EmailProviderKind::YandexTelemostUser => json!({}),
