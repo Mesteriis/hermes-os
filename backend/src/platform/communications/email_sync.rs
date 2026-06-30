@@ -29,6 +29,7 @@ pub fn plan_email_sync(account: &ProviderAccount) -> Result<EmailSyncPlan, Email
         | EmailProviderKind::TelegramBot
         | EmailProviderKind::WhatsappWeb
         | EmailProviderKind::WhatsappBusinessCloud
+        | EmailProviderKind::ZulipBot
         | EmailProviderKind::ZoomUser
         | EmailProviderKind::ZoomServerToServer
         | EmailProviderKind::YandexTelemostUser => Err(EmailSyncPlanError::InvalidProviderConfig {

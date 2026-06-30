@@ -17,12 +17,33 @@ BACKEND_E2E_TARGETS = $(shell node scripts/test/backend-test-targets.mjs targets
 BACKEND_INTEGRATION_TARGETS = $(shell node scripts/test/backend-test-targets.mjs targets integration)
 BACKEND_SNAPSHOT_TARGETS = $(shell node scripts/test/backend-test-targets.mjs targets snapshot)
 SCCACHE_BIN := $(shell command -v sccache 2>/dev/null)
+HERMES_LAB_PROVIDER = $(if $(PROVIDER),$(PROVIDER),zulip)
+HERMES_LAB_ACTION = $(if $(ACTION),$(ACTION),help)
+HERMES_LAB_EXTRA_ARGS =
+ifneq ($(strip $(EXECUTE)),)
+HERMES_LAB_EXTRA_ARGS += --execute
+endif
+ifneq ($(strip $(TESTCONTAINERS)),)
+HERMES_LAB_EXTRA_ARGS += --testcontainers
+endif
+ifneq ($(strip $(BACKEND)),)
+HERMES_LAB_EXTRA_ARGS += --backend-evidence
+endif
+ifneq ($(strip $(SCENARIO)),)
+HERMES_LAB_EXTRA_ARGS += --scenario "$(SCENARIO)"
+endif
+ifneq ($(strip $(REPORT_DIR)),)
+HERMES_LAB_EXTRA_ARGS += --report-dir "$(REPORT_DIR)"
+endif
+ifneq ($(strip $(REQUIRE_CLOSED)),)
+HERMES_LAB_EXTRA_ARGS += --require-closed
+endif
 
 ifneq ($(strip $(SCCACHE_BIN)),)
 export RUSTC_WRAPPER := $(SCCACHE_BIN)
 endif
 
-.PHONY: help docker-env dev logs build migrate validate lint-architecture lint-rust lint-frontend architecture-check code-boundaries-check backend-fmt-check backend-clippy backend-test backend-validate frontend-lint frontend-test frontend-build frontend-validate test test-fast test-ci test-unit test-integration test-e2e test-architecture test-snapshot snapshot-test snapshot-accept coverage coverage-html coverage-ci mutants audit deny security udeps watch-test watch-unit watch-integration cache-stats cache-reset test-performance-report whatsapp-live-smoke-readiness whatsapp-native-md-sdk-gap-readiness whatsapp-live-smoke-evidence whatsapp-live-smoke-collect-evidence whatsapp-domain-closure-audit whatsapp-domain-closure-gate whatsapp-business-cloud-edge-readiness whatsapp-business-cloud-edge-config whatsapp-business-cloud-edge-up whatsapp-business-cloud-edge-stop whatsapp-business-cloud-edge-logs vault-backup vault-restore clean clean-dev clean-validate clean-build clean-data clean-vault
+.PHONY: help docker-env dev logs build migrate validate lint-architecture lint-rust lint-frontend architecture-check code-boundaries-check backend-fmt-check backend-clippy backend-test backend-validate frontend-lint frontend-test frontend-build frontend-validate test test-fast test-ci test-unit test-integration test-e2e test-architecture test-snapshot snapshot-test snapshot-accept coverage coverage-html coverage-ci mutants audit deny security udeps watch-test watch-unit watch-integration cache-stats cache-reset test-performance-report testcontainers-clean hermes-lab whatsapp-live-smoke-readiness whatsapp-native-md-sdk-gap-readiness whatsapp-live-smoke-evidence whatsapp-live-smoke-collect-evidence whatsapp-domain-closure-audit whatsapp-domain-closure-gate whatsapp-business-cloud-edge-readiness whatsapp-business-cloud-edge-config whatsapp-business-cloud-edge-up whatsapp-business-cloud-edge-stop whatsapp-business-cloud-edge-logs vault-backup vault-restore clean clean-dev clean-validate clean-build clean-data clean-vault
 
 help:
 	@printf '%s\n' 'Hermes development commands:'
@@ -55,6 +76,12 @@ help:
 	@printf '%s\n' '  make cache-stats   Show sccache stats'
 	@printf '%s\n' '  make cache-reset   Reset sccache stats'
 	@printf '%s\n' '  make test-performance-report Rebuild reports from existing nextest JUnit XML files'
+	@printf '%s\n' '  make testcontainers-clean Remove Hermes-owned testcontainers'
+	@printf '%s\n' '  make hermes-lab ACTION=readiness PROVIDER=zulip Run Hermes Lab provider action'
+	@printf '%s\n' '  make hermes-lab ACTION=scenario PROVIDER=zulip EXECUTE=1 TESTCONTAINERS=1 Run scenario against local Zulip fixture'
+	@printf '%s\n' '  make hermes-lab ACTION=scenario PROVIDER=zulip EXECUTE=1 TESTCONTAINERS=1 BACKEND=1 Run provider scenario plus backend live evidence'
+	@printf '%s\n' '  make hermes-lab ACTION=compliance PROVIDER=zulip Generate Zulip Communication Compliance Suite report'
+	@printf '%s\n' '  make hermes-lab ACTION=compliance PROVIDER=zulip BACKEND=1 Run backend contract evidence before report'
 	@printf '%s\n' '  make whatsapp-live-smoke-readiness Run static WhatsApp live-smoke readiness checks'
 	@printf '%s\n' '  make whatsapp-native-md-sdk-gap-readiness Verify native MD wa-rs command gap inventory'
 	@printf '%s\n' '  make whatsapp-live-smoke-evidence Validate sanitized WhatsApp manual live-smoke evidence'
@@ -197,6 +224,12 @@ cache-reset:
 
 test-performance-report:
 	@./scripts/test/collect-performance-reports.sh
+
+testcontainers-clean:
+	@./scripts/test/clean-testcontainers.sh --all
+
+hermes-lab:
+	@node scripts/hermes-lab.mjs --provider "$(HERMES_LAB_PROVIDER)" $(HERMES_LAB_EXTRA_ARGS) "$(HERMES_LAB_ACTION)"
 
 whatsapp-live-smoke-readiness:
 	@node scripts/whatsapp-live-smoke-readiness.mjs

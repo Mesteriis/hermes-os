@@ -19,6 +19,7 @@ pub enum ProviderAccountSecretPurpose {
     WhatsappBusinessCloudAccessToken,
     WhatsappBusinessCloudAppSecret,
     WhatsappBusinessCloudWebhookVerifyToken,
+    ZulipApiKey,
     ZoomOauthToken,
     ZoomClientSecret,
     ZoomWebhookSecret,
@@ -40,6 +41,7 @@ impl ProviderAccountSecretPurpose {
             Self::WhatsappBusinessCloudWebhookVerifyToken => {
                 "whatsapp_business_cloud_webhook_verify_token"
             }
+            Self::ZulipApiKey => "zulip_api_key",
             Self::ZoomOauthToken => "zoom_oauth_token",
             Self::ZoomClientSecret => "zoom_client_secret",
             Self::ZoomWebhookSecret => "zoom_webhook_secret",
@@ -60,6 +62,7 @@ impl ProviderAccountSecretPurpose {
             Self::WhatsappBusinessCloudAccessToken
             | Self::WhatsappBusinessCloudAppSecret
             | Self::WhatsappBusinessCloudWebhookVerifyToken
+            | Self::ZulipApiKey
             | Self::ZoomClientSecret
             | Self::ZoomWebhookSecret => secret_kind == SecretKind::ApiToken,
             Self::ZoomOauthToken | Self::YandexTelemostOauthToken => {
@@ -86,6 +89,7 @@ impl TryFrom<&str> for ProviderAccountSecretPurpose {
             "whatsapp_business_cloud_webhook_verify_token" => {
                 Ok(Self::WhatsappBusinessCloudWebhookVerifyToken)
             }
+            "zulip_api_key" => Ok(Self::ZulipApiKey),
             "zoom_oauth_token" => Ok(Self::ZoomOauthToken),
             "zoom_client_secret" => Ok(Self::ZoomClientSecret),
             "zoom_webhook_secret" => Ok(Self::ZoomWebhookSecret),

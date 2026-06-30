@@ -30,6 +30,12 @@ pub(crate) fn whatsapp_secret_reference_store(
     Ok(SecretReferenceStore::new(database_pool(state)?))
 }
 
+pub(crate) fn zulip_secret_reference_store(
+    state: &AppState,
+) -> Result<SecretReferenceStore, ApiError> {
+    Ok(SecretReferenceStore::new(database_pool(state)?))
+}
+
 pub(crate) fn zoom_secret_reference_store(
     state: &AppState,
 ) -> Result<SecretReferenceStore, ApiError> {

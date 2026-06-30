@@ -30,6 +30,10 @@ pub(crate) mod yandex_telemost_calendar_matching;
 pub(crate) mod zoom_calendar_matching;
 pub(crate) mod zoom_participant_identity;
 pub(crate) mod zoom_signal_detection;
+pub mod zulip_attachment_download;
+pub mod zulip_command_executor;
+pub mod zulip_event_ingest;
+pub mod zulip_provider_observation_reconciliation;
 
 pub(crate) use ai_signal_dispatch::*;
 pub(crate) use bootstrap::*;
@@ -63,3 +67,7 @@ pub(crate) use yandex_telemost_calendar_matching::*;
 pub(crate) use zoom_calendar_matching::*;
 pub(crate) use zoom_participant_identity::*;
 pub(crate) use zoom_signal_detection::*;
+pub use zulip_attachment_download::*;
+pub use zulip_command_executor::*;
+pub use zulip_event_ingest::*;
+pub use zulip_provider_observation_reconciliation::*;

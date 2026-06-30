@@ -16,6 +16,7 @@ pub(super) fn parse_provider_kind(value: &str) -> Result<EmailProviderKind, DevE
         | EmailProviderKind::TelegramBot
         | EmailProviderKind::WhatsappWeb
         | EmailProviderKind::WhatsappBusinessCloud
+        | EmailProviderKind::ZulipBot
         | EmailProviderKind::ZoomUser
         | EmailProviderKind::ZoomServerToServer
         | EmailProviderKind::YandexTelemostUser => {
@@ -33,6 +34,7 @@ pub(super) fn default_host(provider_kind: EmailProviderKind) -> &'static str {
         | EmailProviderKind::TelegramBot
         | EmailProviderKind::WhatsappWeb
         | EmailProviderKind::WhatsappBusinessCloud
+        | EmailProviderKind::ZulipBot
         | EmailProviderKind::ZoomUser
         | EmailProviderKind::ZoomServerToServer
         | EmailProviderKind::YandexTelemostUser => "",

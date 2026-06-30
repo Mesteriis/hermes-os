@@ -53,3 +53,4 @@ ADR status vocabulary:
 
 - [ADR-0102 Zoom Provider Runtime Boundary](ADR-0102-zoom-provider-runtime-boundary.md)
 - [ADR-0104 Yandex Telemost Provider Runtime Boundary](ADR-0104-yandex-telemost-provider-runtime-boundary.md)
+- [ADR-0105 Zulip Reference Provider and Hermes Lab](ADR-0105-zulip-reference-provider-and-hermes-lab.md)

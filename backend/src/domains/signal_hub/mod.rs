@@ -12,6 +12,7 @@ mod service;
 mod store;
 mod telegram;
 mod whatsapp;
+mod zulip;
 
 pub use self::ai::dispatch_ai_helper_signal;
 pub use self::capabilities::SignalHubCapabilityService;
@@ -47,3 +48,4 @@ pub use self::store::{
 };
 pub use self::telegram::dispatch_telegram_raw_signal;
 pub use self::whatsapp::dispatch_whatsapp_raw_signal;
+pub use self::zulip::dispatch_zulip_raw_signal;

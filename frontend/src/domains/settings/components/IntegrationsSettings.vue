@@ -8,6 +8,7 @@ import type { ProviderAccount } from '../types/settings'
 import { useQueryClient } from '@tanstack/vue-query'
 import ZoomSettingsPanelShell from '../../../shared/zoom/ZoomSettingsPanelShell.vue'
 import YandexTelemostSettingsPanelShell from '../../../shared/yandexTelemost/YandexTelemostSettingsPanelShell.vue'
+import ZulipSettingsPanelShell from '../../../shared/zulip/ZulipSettingsPanelShell.vue'
 type MailProviderKind = 'gmail' | 'icloud' | 'imap'
 
 const { t } = useI18n()
@@ -38,15 +39,26 @@ function isYandexTelemostProvider(providerKind: string): boolean {
   return providerKind === 'yandex_telemost_user'
 }
 
+function isZulipProvider(providerKind: string): boolean {
+  return providerKind === 'zulip_bot'
+}
+
 const groups = computed(() => {
   const mail = accounts.value.filter((a) => isMailProvider(a.provider_kind))
   const zoom = accounts.value.filter((a) => isZoomProvider(a.provider_kind))
   const yandexTelemost = accounts.value.filter((a) => isYandexTelemostProvider(a.provider_kind))
-  const other = accounts.value.filter((a) => !isMailProvider(a.provider_kind) && !isZoomProvider(a.provider_kind) && !isYandexTelemostProvider(a.provider_kind))
+  const zulip = accounts.value.filter((a) => isZulipProvider(a.provider_kind))
+  const other = accounts.value.filter((a) =>
+    !isMailProvider(a.provider_kind)
+    && !isZoomProvider(a.provider_kind)
+    && !isYandexTelemostProvider(a.provider_kind)
+    && !isZulipProvider(a.provider_kind)
+  )
   const rows = []
   if (mail.length) rows.push({ label: t('Mail accounts'), items: mail })
   if (zoom.length) rows.push({ label: t('Zoom accounts'), items: zoom })
   if (yandexTelemost.length) rows.push({ label: t('Yandex Telemost accounts'), items: yandexTelemost })
+  if (zulip.length) rows.push({ label: t('Zulip accounts'), items: zulip })
   if (other.length) rows.push({ label: t('Other accounts'), items: other })
   if (!rows.length) rows.push({ label: t('Accounts'), items: accounts.value })
   return rows
@@ -60,6 +72,7 @@ function providerIcon(providerKind: string): string {
     zoom_user: 'tabler:video',
     zoom_server_to_server: 'tabler:video-plus',
     yandex_telemost_user: 'tabler:video-plus',
+    zulip_bot: 'tabler:message-bolt',
   }
   return icons[providerKind] || 'tabler:plug-connected'
 }
@@ -72,6 +85,7 @@ function providerLabel(providerKind: string): string {
     zoom_user: 'Zoom (OAuth/Live)',
     zoom_server_to_server: 'Zoom (Server-to-Server)',
     yandex_telemost_user: 'Yandex Telemost',
+    zulip_bot: 'Zulip Bot',
   }
   return labels[providerKind] || providerKind
 }
@@ -90,14 +104,14 @@ function providerDisplayName(account: ProviderAccount): string {
 function statusText(account: ProviderAccount): string {
   if (typeof account.is_authenticated === 'boolean' && !account.is_authenticated) return t('Not authenticated')
   if (typeof account.is_active === 'boolean' && !account.is_active) return t('Inactive')
-  if (isZoomProvider(account.provider_kind) || isYandexTelemostProvider(account.provider_kind)) return t('Configured')
+  if (isZoomProvider(account.provider_kind) || isYandexTelemostProvider(account.provider_kind) || isZulipProvider(account.provider_kind)) return t('Configured')
   return t('Active')
 }
 
 function statusClass(account: ProviderAccount) {
   if (typeof account.is_authenticated === 'boolean' && !account.is_authenticated) return 'unauthenticated'
   if (typeof account.is_active === 'boolean' && !account.is_active) return 'inactive'
-  if (isZoomProvider(account.provider_kind) || isYandexTelemostProvider(account.provider_kind)) return 'configured'
+  if (isZoomProvider(account.provider_kind) || isYandexTelemostProvider(account.provider_kind) || isZulipProvider(account.provider_kind)) return 'configured'
   return 'active'
 }
 
@@ -246,6 +260,7 @@ async function handleImport() {
 
       <ZoomSettingsPanelShell :selected-account="selectedAccount" @removed="store.selectIntegration(null)" />
       <YandexTelemostSettingsPanelShell :selected-account="selectedAccount" />
+      <ZulipSettingsPanelShell :selected-account="selectedAccount" />
 
       <div class="integration-import-section">
         <button type="button" class="hermes-btn hermes-btn--secondary" @click="isImportPanelOpen = !isImportPanelOpen">

@@ -19,6 +19,14 @@ static TELEGRAM_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static WHATSAPP_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
+static ZULIP_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static ZULIP_EVENT_INGEST_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static ZULIP_ATTACHMENT_DOWNLOAD_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static ZULIP_PROVIDER_OBSERVATION_RECONCILIATION_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 static WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static ZOOM_TOKEN_MAINTENANCE_DATABASES: LazyLock<Mutex<HashSet<String>>> =
@@ -66,6 +74,11 @@ const MAIL_BACKGROUND_SYNC_RUNTIME: &str = "mail_background_sync";
 const MAIL_OUTBOX_DELIVERY_RUNTIME: &str = "mail_outbox_delivery";
 const TELEGRAM_COMMAND_EXECUTOR_RUNTIME: &str = "telegram_command_executor";
 const WHATSAPP_COMMAND_EXECUTOR_RUNTIME: &str = "whatsapp_command_executor";
+const ZULIP_COMMAND_EXECUTOR_RUNTIME: &str = "zulip_command_executor";
+const ZULIP_EVENT_INGEST_RUNTIME: &str = "zulip_event_ingest";
+const ZULIP_ATTACHMENT_DOWNLOAD_RUNTIME: &str = "zulip_attachment_download";
+const ZULIP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME: &str =
+    "zulip_provider_observation_reconciliation";
 const WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_RUNTIME: &str =
     "whatsapp_runtime_restore_reconciliation";
 const WHATSAPP_NATIVE_MD_STARTUP_RESTORE_CONFIG_KEY: &str = "native_md_live_smoke_enabled";
@@ -124,6 +137,10 @@ pub(crate) fn start_background_services(context: ApplicationBootstrapContext) {
     start_mail_outbox_delivery(context.clone());
     start_telegram_command_executor(context.clone());
     start_whatsapp_command_executor(context.clone());
+    start_zulip_event_ingest(context.clone());
+    start_zulip_attachment_download(context.clone());
+    start_zulip_command_executor(context.clone());
+    start_zulip_provider_observation_reconciliation(context.clone());
     start_whatsapp_runtime_restore_reconciliation(context.clone());
     start_zoom_token_maintenance(context.clone());
     start_zoom_recording_sync(context.clone());
@@ -404,6 +421,258 @@ fn start_whatsapp_command_executor(context: ApplicationBootstrapContext) {
                 10,
             )
             .await;
+        }
+    });
+}
+
+fn start_zulip_command_executor(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_zulip_command_executor(&database_url) {
+        return;
+    }
+    let runtime_pool = pool.clone();
+    let vault = context.vault;
+
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &runtime_pool,
+                "zulip",
+                ZULIP_COMMAND_EXECUTOR_RUNTIME,
+                json!({
+                    "label": "Zulip command executor",
+                    "scope": "runtime",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            if !host_vault_is_unlocked(&vault) {
+                continue;
+            }
+            let worker = crate::application::ZulipCommandWorker::new(pool.clone(), vault.clone());
+            match worker.execute_due(Utc::now(), 10).await {
+                Ok(report)
+                    if report.claimed > 0
+                        || report.accounts_failed > 0
+                        || report.dead_lettered > 0 =>
+                {
+                    tracing::info!(
+                        accounts_scanned = report.accounts_scanned,
+                        accounts_failed = report.accounts_failed,
+                        claimed = report.claimed,
+                        completed = report.completed,
+                        retrying = report.retrying,
+                        dead_lettered = report.dead_lettered,
+                        "zulip command executor tick completed"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(error = %error, "zulip command executor tick failed");
+                }
+            }
+        }
+    });
+}
+
+fn start_zulip_event_ingest(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_zulip_event_ingest(&database_url) {
+        return;
+    }
+    let runtime_pool = pool.clone();
+    let vault = context.vault;
+
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &runtime_pool,
+                "zulip",
+                ZULIP_EVENT_INGEST_RUNTIME,
+                json!({
+                    "label": "Zulip event ingest",
+                    "scope": "runtime",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            if !host_vault_is_unlocked(&vault) {
+                continue;
+            }
+            let worker =
+                crate::application::ZulipEventIngestWorker::new(pool.clone(), vault.clone());
+            match worker.poll_due(Utc::now()).await {
+                Ok(report)
+                    if report.events_received > 0
+                        || report.accounts_failed > 0
+                        || report.queues_registered > 0 =>
+                {
+                    tracing::info!(
+                        accounts_scanned = report.accounts_scanned,
+                        accounts_failed = report.accounts_failed,
+                        queues_registered = report.queues_registered,
+                        events_received = report.events_received,
+                        raw_records_recorded = report.raw_records_recorded,
+                        accepted_signals = report.accepted_signals,
+                        checkpoints_saved = report.checkpoints_saved,
+                        "zulip event ingest tick completed"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(error = %error, "zulip event ingest tick failed");
+                }
+            }
+        }
+    });
+}
+
+fn start_zulip_attachment_download(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_zulip_attachment_download(&database_url) {
+        return;
+    }
+    let runtime_pool = pool.clone();
+    let vault = context.vault;
+
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(10));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &runtime_pool,
+                "zulip",
+                ZULIP_ATTACHMENT_DOWNLOAD_RUNTIME,
+                json!({
+                    "label": "Zulip attachment download",
+                    "scope": "runtime",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            if !host_vault_is_unlocked(&vault) {
+                continue;
+            }
+            let worker =
+                crate::application::ZulipAttachmentDownloadWorker::new(pool.clone(), vault.clone());
+            match worker.download_due(Utc::now(), 10).await {
+                Ok(report)
+                    if report.candidates_seen > 0
+                        || report.attachments_materialized > 0
+                        || report.attachments_failed > 0
+                        || report.accounts_failed > 0 =>
+                {
+                    tracing::info!(
+                        accounts_scanned = report.accounts_scanned,
+                        accounts_failed = report.accounts_failed,
+                        candidates_seen = report.candidates_seen,
+                        attachments_downloaded = report.attachments_downloaded,
+                        attachments_materialized = report.attachments_materialized,
+                        attachments_skipped = report.attachments_skipped,
+                        attachments_failed = report.attachments_failed,
+                        "zulip attachment download tick completed"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(error = %error, "zulip attachment download tick failed");
+                }
+            }
+        }
+    });
+}
+
+fn start_zulip_provider_observation_reconciliation(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_zulip_provider_observation_reconciliation_consumer(&database_url) {
+        return;
+    }
+    let event_bus = context.event_bus;
+
+    tokio::spawn(async move {
+        let runner = crate::platform::events::EventConsumerRunner::new(
+            pool.clone(),
+            crate::platform::events::EventConsumerConfig::new(
+                crate::application::ZULIP_PROVIDER_OBSERVATION_RECONCILIATION_CONSUMER,
+            ),
+        );
+        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "zulip",
+                ZULIP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME,
+                json!({
+                    "label": "Zulip provider observation reconciliation consumer",
+                    "scope": "consumer",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            let handler_pool = pool.clone();
+            let handler_event_bus = event_bus.clone();
+            if let Err(error) = runner
+                .process_next_batch(|event| {
+                    let handler_pool = handler_pool.clone();
+                    let handler_event_bus = handler_event_bus.clone();
+                    async move {
+                        crate::application::reconcile_zulip_provider_observation_event(
+                            handler_pool.clone(),
+                            handler_event_bus.clone(),
+                            event,
+                        )
+                        .await
+                        .map_err(crate::platform::events::EventStoreError::ConsumerHandlerFailed)
+                    }
+                })
+                .await
+            {
+                tracing::warn!(
+                    error = %error,
+                    "zulip provider observation reconciliation consumer tick failed"
+                );
+            }
         }
     });
 }
@@ -1612,6 +1881,55 @@ fn register_whatsapp_command_executor(database_url: &str) -> bool {
     }
 }
 
+fn register_zulip_command_executor(database_url: &str) -> bool {
+    match ZULIP_COMMAND_EXECUTOR_DATABASES.lock() {
+        Ok(mut urls) => urls.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "zulip command executor registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn register_zulip_event_ingest(database_url: &str) -> bool {
+    match ZULIP_EVENT_INGEST_DATABASES.lock() {
+        Ok(mut urls) => urls.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(error = %error, "zulip event ingest registry is unavailable");
+            false
+        }
+    }
+}
+
+fn register_zulip_attachment_download(database_url: &str) -> bool {
+    match ZULIP_ATTACHMENT_DOWNLOAD_DATABASES.lock() {
+        Ok(mut urls) => urls.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "zulip attachment download registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn register_zulip_provider_observation_reconciliation_consumer(database_url: &str) -> bool {
+    match ZULIP_PROVIDER_OBSERVATION_RECONCILIATION_DATABASES.lock() {
+        Ok(mut urls) => urls.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "zulip provider observation reconciliation consumer registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
 fn register_whatsapp_runtime_restore_reconciliation(database_url: &str) -> bool {
     match WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_DATABASES.lock() {
         Ok(mut urls) => urls.insert(database_url.to_owned()),
@@ -2618,6 +2936,52 @@ mod tests {
 
         assert!(register_signal_replay_dispatcher(&database_url));
         assert!(!register_signal_replay_dispatcher(&database_url));
+    }
+
+    #[test]
+    fn zulip_command_executor_registration_is_once_per_database_url() {
+        let database_url = format!(
+            "postgres://zulip-command-executor-test/{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+
+        assert!(register_zulip_command_executor(&database_url));
+        assert!(!register_zulip_command_executor(&database_url));
+    }
+
+    #[test]
+    fn zulip_event_ingest_registration_is_once_per_database_url() {
+        let database_url = format!(
+            "postgres://zulip-event-ingest-test/{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+
+        assert!(register_zulip_event_ingest(&database_url));
+        assert!(!register_zulip_event_ingest(&database_url));
+    }
+
+    #[test]
+    fn zulip_attachment_download_registration_is_once_per_database_url() {
+        let database_url = format!(
+            "postgres://zulip-attachment-download-test/{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+
+        assert!(register_zulip_attachment_download(&database_url));
+        assert!(!register_zulip_attachment_download(&database_url));
+    }
+
+    #[test]
+    fn zulip_provider_observation_reconciliation_registration_is_once_per_database_url() {
+        let database_url = format!(
+            "postgres://zulip-provider-reconciliation-test/{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+
+        assert!(register_zulip_provider_observation_reconciliation_consumer(
+            &database_url
+        ));
+        assert!(!register_zulip_provider_observation_reconciliation_consumer(&database_url));
     }
 
     #[test]

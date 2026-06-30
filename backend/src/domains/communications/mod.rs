@@ -27,6 +27,7 @@ pub mod multilingual;
 pub mod outbox;
 pub mod personas;
 pub mod ports;
+pub mod provider_commands;
 pub mod read_receipts;
 pub mod rich_template;
 pub mod rules;

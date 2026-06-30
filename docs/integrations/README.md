@@ -36,6 +36,7 @@ Do not create empty placeholder files just to fill the shape.
 | WhatsApp | [whatsapp](whatsapp/README.md) | `backend/src/integrations/whatsapp` |
 | Zoom | [zoom](zoom/README.md) | `backend/src/integrations/zoom` |
 | Yandex Telemost | [yandex-telemost](yandex-telemost/README.md) | `backend/src/integrations/yandex_telemost` |
+| Zulip | [zulip](zulip/README.md) | `backend/src/integrations/zulip` |
 | Ollama | [ollama](ollama/README.md) | `backend/src/integrations/ollama` |
 | OmniRoute | [omniroute](omniroute/README.md) | `backend/src/integrations/omniroute` |
 

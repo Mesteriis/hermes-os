@@ -23,6 +23,22 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_yandex_telemost_accounts).post(post_yandex_telemost_account),
         )
         .route(
+            "/api/v1/integrations/zulip/accounts",
+            post(post_zulip_account),
+        )
+        .route(
+            "/api/v1/integrations/zulip/accounts/{account_id}/commands/stream-upload",
+            post(post_zulip_stream_upload_command),
+        )
+        .route(
+            "/api/v1/integrations/zulip/accounts/{account_id}/commands/direct-upload",
+            post(post_zulip_direct_upload_command),
+        )
+        .route(
+            "/api/v1/integrations/zulip/accounts/{account_id}/commands/upload",
+            post(post_zulip_upload_command),
+        )
+        .route(
             "/api/v1/integrations/yandex-telemost/runtime/status",
             get(get_yandex_telemost_runtime_status),
         )

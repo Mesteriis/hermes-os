@@ -47,6 +47,7 @@ pub(super) fn email_provider_connected_services(
         | EmailProviderKind::TelegramBot
         | EmailProviderKind::WhatsappWeb
         | EmailProviderKind::WhatsappBusinessCloud
+        | EmailProviderKind::ZulipBot
         | EmailProviderKind::ZoomUser
         | EmailProviderKind::ZoomServerToServer
         | EmailProviderKind::YandexTelemostUser => None,

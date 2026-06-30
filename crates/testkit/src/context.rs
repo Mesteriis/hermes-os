@@ -1,5 +1,5 @@
 use sqlx::postgres::PgPool;
-use tokio::sync::{Mutex, OnceCell};
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::containers::nats::NatsContainer;
@@ -9,8 +9,6 @@ use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use std::path::Path;
 
-static POSTGRES_CONTAINER: OnceCell<PostgresContainer> = OnceCell::const_new();
-static NATS_CONTAINER: OnceCell<NatsContainer> = OnceCell::const_new();
 static DATABASE_SETUP_LOCK: Mutex<()> = Mutex::const_new(());
 
 /// Isolated test environment with a fresh migrated database.
@@ -32,7 +30,8 @@ static DATABASE_SETUP_LOCK: Mutex<()> = Mutex::const_new(());
 /// }
 /// ```
 pub struct TestContext {
-    container: &'static PostgresContainer,
+    container: PostgresContainer,
+    nats_container: Mutex<Option<NatsContainer>>,
     db_name: String,
     vault: TestVault,
     pool: PgPool,
@@ -46,9 +45,7 @@ impl TestContext {
     /// 3. Runs all sqlx migrations
     /// 4. Returns a ready-to-use pool
     pub async fn new() -> Self {
-        let container = POSTGRES_CONTAINER
-            .get_or_init(PostgresContainer::start)
-            .await;
+        let container = PostgresContainer::start().await;
         let db_name = format!("test_{}", Uuid::new_v4().to_string().replace('-', "_"));
 
         let _setup_guard = DATABASE_SETUP_LOCK.lock().await;
@@ -57,6 +54,7 @@ impl TestContext {
 
         Self {
             container,
+            nats_container: Mutex::new(None),
             db_name,
             vault,
             pool,
@@ -98,9 +96,13 @@ impl TestContext {
     }
 
     pub async fn nats_server_url(&self) -> String {
-        NATS_CONTAINER
-            .get_or_init(NatsContainer::start)
-            .await
+        let mut container = self.nats_container.lock().await;
+        if container.is_none() {
+            *container = Some(NatsContainer::start().await);
+        }
+        container
+            .as_ref()
+            .expect("NATS test container should be initialized")
             .server_url()
     }
 

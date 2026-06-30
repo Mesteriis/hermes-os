@@ -12,6 +12,7 @@ pub enum CommunicationProviderKind {
     TelegramBot,
     WhatsappWeb,
     WhatsappBusinessCloud,
+    ZulipBot,
     ZoomUser,
     ZoomServerToServer,
     YandexTelemostUser,
@@ -29,6 +30,7 @@ impl CommunicationProviderKind {
             Self::TelegramBot => "telegram_bot",
             Self::WhatsappWeb => "whatsapp_web",
             Self::WhatsappBusinessCloud => "whatsapp_business_cloud",
+            Self::ZulipBot => "zulip_bot",
             Self::ZoomUser => "zoom_user",
             Self::ZoomServerToServer => "zoom_server_to_server",
             Self::YandexTelemostUser => "yandex_telemost_user",
@@ -45,6 +47,10 @@ impl CommunicationProviderKind {
 
     pub fn is_whatsapp(self) -> bool {
         matches!(self, Self::WhatsappWeb | Self::WhatsappBusinessCloud)
+    }
+
+    pub fn is_zulip(self) -> bool {
+        matches!(self, Self::ZulipBot)
     }
 
     pub fn is_zoom(self) -> bool {
@@ -68,6 +74,7 @@ impl TryFrom<&str> for CommunicationProviderKind {
             "telegram_bot" => Ok(Self::TelegramBot),
             "whatsapp_web" => Ok(Self::WhatsappWeb),
             "whatsapp_business_cloud" => Ok(Self::WhatsappBusinessCloud),
+            "zulip_bot" => Ok(Self::ZulipBot),
             "zoom_user" => Ok(Self::ZoomUser),
             "zoom_server_to_server" => Ok(Self::ZoomServerToServer),
             "yandex_telemost_user" => Ok(Self::YandexTelemostUser),

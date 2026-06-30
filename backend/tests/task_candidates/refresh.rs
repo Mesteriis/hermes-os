@@ -174,6 +174,253 @@ async fn task_candidate_refresh_uses_obligation_engine_for_message_commitments_a
 }
 
 #[tokio::test]
+async fn task_candidate_refresh_detects_russian_message_action_against_postgres() {
+    let Some(context) = live_task_candidate_context().await else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let statement = format!("Надо проверить backup retention {suffix} до пятницы.");
+    let message_id = seed_message(
+        &context,
+        suffix,
+        &format!("russian-action-{suffix}@example.com"),
+        &[format!("owner-{suffix}@example.com")],
+        &format!("provider-task-candidate-russian-{suffix}"),
+        &format!("Russian action {suffix}"),
+        &statement,
+    )
+    .await;
+
+    let refreshed = context
+        .store
+        .refresh_deterministic_candidates(100)
+        .await
+        .expect("refresh");
+    assert!(refreshed >= 1);
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("message observation id");
+
+    let rows: Vec<(String, String, Option<String>, String)> = sqlx::query_as(
+        r#"
+        SELECT title, review_state, due_text, evidence_excerpt
+        FROM task_candidates
+        WHERE source_id = $1
+          AND source_kind = 'observation'
+          AND candidate_kind = 'task'
+        "#,
+    )
+    .bind(&message_observation_id)
+    .fetch_all(&context.pool)
+    .await
+    .expect("message candidate rows");
+
+    assert_eq!(
+        rows.len(),
+        1,
+        "Russian action language should create one reviewable task candidate"
+    );
+    assert_eq!(rows[0].0, statement);
+    assert_eq!(rows[0].1, "suggested");
+    assert_eq!(rows[0].2.as_deref(), Some("пятницы"));
+    assert_eq!(rows[0].3, statement);
+}
+
+#[tokio::test]
+async fn task_candidate_refresh_detects_multilingual_message_actions_against_postgres() {
+    let Some(context) = live_task_candidate_context().await else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let cases = [
+        (
+            "spanish",
+            format!("Acción: preparar el resumen Zulip {suffix} para mañana."),
+            Some("mañana"),
+        ),
+        (
+            "french",
+            format!("À faire: préparer le résumé Zulip {suffix} avant demain."),
+            Some("demain"),
+        ),
+        (
+            "german",
+            format!("Aufgabe: Zulip-Zusammenfassung {suffix} vorbereiten bis morgen."),
+            Some("morgen"),
+        ),
+    ];
+
+    for (language, statement, _) in cases.iter() {
+        seed_message(
+            &context,
+            suffix,
+            &format!("{language}-action-{suffix}@example.com"),
+            &[format!("owner-{suffix}@example.com")],
+            &format!("provider-task-candidate-{language}-{suffix}"),
+            &format!("Multilingual action {language} {suffix}"),
+            statement,
+        )
+        .await;
+    }
+
+    let refreshed = context
+        .store
+        .refresh_deterministic_candidates(100)
+        .await
+        .expect("refresh");
+    assert!(refreshed >= cases.len());
+
+    let mut candidate_ids = Vec::new();
+    for (language, statement, expected_due_text) in cases {
+        let rows: Vec<(String, String, String, Option<String>, String)> = sqlx::query_as(
+            r#"
+            SELECT
+                candidate.task_candidate_id,
+                candidate.title,
+                candidate.review_state,
+                candidate.due_text,
+                candidate.evidence_excerpt
+            FROM task_candidates candidate
+            JOIN communication_messages message
+              ON message.observation_id = candidate.source_id
+            WHERE message.provider_record_id = $1
+              AND candidate.source_kind = 'observation'
+              AND candidate.candidate_kind = 'task'
+            "#,
+        )
+        .bind(format!("provider-task-candidate-{language}-{suffix}"))
+        .fetch_all(&context.pool)
+        .await
+        .expect("multilingual candidate rows");
+
+        assert_eq!(
+            rows.len(),
+            1,
+            "{language} action language should create one reviewable task candidate"
+        );
+        candidate_ids.push(rows[0].0.clone());
+        assert_eq!(rows[0].1, statement);
+        assert_eq!(rows[0].2, "suggested");
+        assert_eq!(rows[0].3.as_deref(), expected_due_text);
+        assert_eq!(rows[0].4, statement);
+    }
+
+    let task_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM tasks WHERE task_candidate_id = ANY($1)",
+    )
+    .bind(candidate_ids)
+    .fetch_one(&context.pool)
+    .await
+    .expect("auto-created task count");
+    assert_eq!(task_count, 0);
+}
+
+#[tokio::test]
+async fn task_candidate_refresh_detects_freeform_multilingual_message_requests_against_postgres() {
+    let Some(context) = live_task_candidate_context().await else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let cases = [
+        (
+            "english",
+            format!("Could you check the Zulip backup retention {suffix} by Friday?"),
+            Some("friday"),
+        ),
+        (
+            "russian",
+            format!("Можешь проверить Zulip backup retention {suffix} до пятницы?"),
+            Some("пятницы"),
+        ),
+        (
+            "spanish",
+            format!("¿Puedes preparar el resumen Zulip {suffix} para mañana?"),
+            Some("mañana"),
+        ),
+        (
+            "french",
+            format!("Peux-tu préparer le résumé Zulip {suffix} avant demain?"),
+            Some("demain"),
+        ),
+        (
+            "german",
+            format!("Kannst du die Zulip-Zusammenfassung {suffix} prüfen bis morgen?"),
+            Some("morgen"),
+        ),
+    ];
+
+    for (language, statement, _) in cases.iter() {
+        seed_message(
+            &context,
+            suffix,
+            &format!("{language}-freeform-{suffix}@example.com"),
+            &[format!("owner-{suffix}@example.com")],
+            &format!("provider-task-candidate-freeform-{language}-{suffix}"),
+            &format!("Freeform request {language} {suffix}"),
+            statement,
+        )
+        .await;
+    }
+
+    let refreshed = context
+        .store
+        .refresh_deterministic_candidates(100)
+        .await
+        .expect("refresh");
+    assert!(refreshed >= cases.len());
+
+    let mut candidate_ids = Vec::new();
+    for (language, statement, expected_due_text) in cases {
+        let rows: Vec<(String, String, String, Option<String>, String)> = sqlx::query_as(
+            r#"
+            SELECT
+                candidate.task_candidate_id,
+                candidate.title,
+                candidate.review_state,
+                candidate.due_text,
+                candidate.evidence_excerpt
+            FROM task_candidates candidate
+            JOIN communication_messages message
+              ON message.observation_id = candidate.source_id
+            WHERE message.provider_record_id = $1
+              AND candidate.source_kind = 'observation'
+              AND candidate.candidate_kind = 'task'
+            "#,
+        )
+        .bind(format!(
+            "provider-task-candidate-freeform-{language}-{suffix}"
+        ))
+        .fetch_all(&context.pool)
+        .await
+        .expect("freeform multilingual candidate rows");
+
+        assert_eq!(
+            rows.len(),
+            1,
+            "{language} free-form request should create one reviewable task candidate"
+        );
+        candidate_ids.push(rows[0].0.clone());
+        assert_eq!(rows[0].1, statement);
+        assert_eq!(rows[0].2, "suggested");
+        assert_eq!(rows[0].3.as_deref(), expected_due_text);
+        assert_eq!(rows[0].4, statement);
+    }
+
+    let task_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM tasks WHERE task_candidate_id = ANY($1)",
+    )
+    .bind(candidate_ids)
+    .fetch_one(&context.pool)
+    .await
+    .expect("auto-created task count");
+    assert_eq!(task_count, 0);
+}
+
+#[tokio::test]
 async fn task_candidate_refresh_uses_obligation_engine_for_document_commitments_against_postgres() {
     let Some(context) = live_task_candidate_context().await else {
         return;

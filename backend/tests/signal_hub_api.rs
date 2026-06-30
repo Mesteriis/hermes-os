@@ -67,6 +67,7 @@ async fn signal_hub_api_restores_fixture_and_lists_sources() {
             "voice",
             "whatsapp",
             "zoom",
+            "zulip",
         ]
     );
 

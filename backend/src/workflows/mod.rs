@@ -20,3 +20,4 @@ pub mod yandex_telemost_calendar_matching;
 pub mod zoom_calendar_matching;
 pub mod zoom_participant_identity;
 pub mod zoom_signal_detection;
+pub mod zulip_attachment_storage;

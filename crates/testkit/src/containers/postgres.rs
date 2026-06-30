@@ -4,11 +4,12 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use tokio::time::{Duration, Instant, sleep};
 
+use crate::containers::labels::{session_id_label_value, testkit_labels};
+
 const POSTGRES_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const POSTGRES_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(250);
 const TEST_POOL_MAX_CONNECTIONS: u32 = 2;
 pub const SESSION_POSTGRES_HOST_PORT_ENV: &str = "HERMES_TEST_POSTGRES_HOST_PORT";
-pub const SESSION_ID_ENV: &str = "HERMES_TEST_SESSION_ID";
 
 pub struct PostgresContainer {
     _container: Option<ContainerAsync<GenericImage>>,
@@ -28,6 +29,10 @@ impl PostgresContainer {
     }
 
     pub async fn start_owned() -> Self {
+        Self::start_owned_with_session(&session_id_label_value()).await
+    }
+
+    pub async fn start_owned_with_session(session_id: &str) -> Self {
         // GenericImage methods (return Self) must come BEFORE ImageExt methods (return ContainerRequest)
         let container = GenericImage::new("pgvector/pgvector", "0.8.2-pg16")
             .with_wait_for(WaitFor::message_on_stdout(
@@ -35,6 +40,7 @@ impl PostgresContainer {
             ))
             .with_exposed_port(5432.tcp())
             // ImageExt methods return ContainerRequest<GenericImage>
+            .with_labels(testkit_labels("postgres", session_id))
             .with_env_var("POSTGRES_DB", "testdb")
             .with_env_var("POSTGRES_USER", "testuser")
             .with_env_var("POSTGRES_PASSWORD", "testpass")

@@ -207,6 +207,7 @@ fn provider_signal_source_code(provider_kind: CommunicationProviderKind) -> &'st
         }
         CommunicationProviderKind::WhatsappWeb
         | CommunicationProviderKind::WhatsappBusinessCloud => "whatsapp",
+        CommunicationProviderKind::ZulipBot => "zulip",
         CommunicationProviderKind::ZoomUser | CommunicationProviderKind::ZoomServerToServer => {
             "zoom"
         }
@@ -355,6 +356,15 @@ fn provider_account_signal_status(account: &ProviderAccount) -> &'static str {
                 _ => "connected",
             }
         }
+        CommunicationProviderKind::ZulipBot => match account
+            .config
+            .get("lifecycle_state")
+            .and_then(Value::as_str)
+        {
+            Some("removed") => "removed",
+            Some("blocked") => "awaiting_user_action",
+            _ => "connected",
+        },
         CommunicationProviderKind::ZoomUser | CommunicationProviderKind::ZoomServerToServer => {
             match account
                 .config

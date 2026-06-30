@@ -75,25 +75,41 @@ pub(super) async fn recent_channel_message_evidence(
         FROM communication_messages message
         JOIN person_identities identity
           ON identity.status = 'active'
-         AND identity.identity_value = message.message_metadata->>'sender_id'
          AND (
                 (
                     message.channel_kind IN ('telegram_user', 'telegram_bot')
                 AND identity.identity_type = 'telegram'
+                AND identity.identity_value = message.message_metadata->>'sender_id'
                 )
              OR (
                     message.channel_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
                 AND identity.identity_type = 'whatsapp'
+                AND identity.identity_value = message.message_metadata->>'sender_id'
+                )
+             OR (
+                    message.channel_kind = 'zulip'
+                AND identity.identity_type = 'zulip'
+                AND identity.identity_value = COALESCE(
+                    NULLIF(trim(message.message_metadata->>'sender_id'), ''),
+                    NULLIF(trim(message.message_metadata->>'sender_email'), '')
+                )
                 )
              )
         WHERE message.channel_kind IN (
             'telegram_user',
             'telegram_bot',
             'whatsapp_web',
-            'whatsapp_business_cloud'
+            'whatsapp_business_cloud',
+            'zulip'
         )
           AND length(trim(message.body_text)) > 0
-          AND length(trim(message.message_metadata->>'sender_id')) > 0
+          AND (
+                length(trim(message.message_metadata->>'sender_id')) > 0
+             OR (
+                    message.channel_kind = 'zulip'
+                AND length(trim(message.message_metadata->>'sender_email')) > 0
+                )
+          )
         ORDER BY COALESCE(message.occurred_at, message.projected_at) DESC, message.message_id
         LIMIT $1
         "#,
