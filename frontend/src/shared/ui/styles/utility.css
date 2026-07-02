@@ -1,0 +1,173 @@
+.hermes-copy-button,
+.hermes-theme-switcher,
+.hermes-locale-switcher,
+.hermes-keyboard-hint,
+.hermes-shortcut,
+.hermes-provider-icon,
+.hermes-status-icon,
+.hermes-entity-icon,
+.hermes-file-icon {
+	color: var(--h-color-text);
+	font-family: var(--h-font-sans);
+}
+
+.hermes-copy-button--copied {
+	color: var(--h-color-success-strong, var(--h-color-success));
+}
+
+.hermes-copy-button--error {
+	color: var(--h-color-danger-strong, var(--h-color-danger));
+}
+
+.hermes-theme-switcher,
+.hermes-locale-switcher {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--h-space-1);
+	width: max-content;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-bg-muted);
+	padding: var(--h-space-1);
+}
+
+.hermes-theme-switcher__option,
+.hermes-locale-switcher__option {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--h-space-2);
+	min-height: var(--h-control-height-sm);
+	border: 1px solid transparent;
+	border-radius: var(--h-radius-md);
+	background: transparent;
+	color: var(--h-color-text-soft);
+	padding: 0 var(--h-space-2);
+	font-size: var(--h-font-size-sm);
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.hermes-theme-switcher__option[aria-checked='true'],
+.hermes-locale-switcher__option[aria-checked='true'] {
+	border-color: var(--h-color-border);
+	background: var(--h-color-surface);
+	color: var(--h-color-text-strong);
+	box-shadow: var(--h-shadow-xs);
+}
+
+.hermes-theme-switcher__option:disabled,
+.hermes-locale-switcher__option:disabled {
+	cursor: not-allowed;
+	opacity: 0.48;
+}
+
+.hermes-theme-switcher__swatch {
+	width: var(--h-space-3);
+	height: var(--h-space-3);
+	border: 1px solid var(--h-color-border-strong);
+	border-radius: var(--h-radius-pill);
+	background: var(--h-color-surface);
+}
+
+.hermes-theme-switcher__swatch[data-theme-swatch='light'] {
+	background: var(--h-color-text-strong);
+}
+
+.hermes-theme-switcher__swatch[data-theme-swatch='dark'] {
+	background: var(--h-color-bg);
+}
+
+.hermes-theme-switcher__swatch[data-theme-swatch='hermes'] {
+	background: var(--h-color-accent);
+}
+
+.hermes-keyboard-hint,
+.hermes-shortcut {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--h-space-2);
+	width: max-content;
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-sm);
+}
+
+.hermes-keyboard-hint__keys,
+.hermes-shortcut {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--h-space-1);
+}
+
+.hermes-keyboard-hint__label {
+	color: var(--h-color-text-soft);
+	font-weight: 650;
+}
+
+.hermes-shortcut__joiner {
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+}
+
+.hermes-provider-icon,
+.hermes-status-icon,
+.hermes-entity-icon,
+.hermes-file-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--h-control-height-md);
+	height: var(--h-control-height-md);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface);
+	color: var(--h-color-text-soft);
+}
+
+.hermes-provider-icon--mail,
+.hermes-provider-icon--documents,
+.hermes-entity-icon--document,
+.hermes-file-icon--text,
+.hermes-file-icon--pdf {
+	color: var(--h-color-danger-strong, var(--h-color-danger));
+	background: var(--h-color-danger-muted);
+}
+
+.hermes-provider-icon--telegram,
+.hermes-provider-icon--calendar,
+.hermes-status-icon--active,
+.hermes-status-icon--syncing,
+.hermes-entity-icon--event,
+.hermes-file-icon--image,
+.hermes-file-icon--video {
+	color: var(--h-color-info);
+	background: var(--h-color-info-muted);
+}
+
+.hermes-provider-icon--whatsapp,
+.hermes-status-icon--success,
+.hermes-entity-icon--person,
+.hermes-file-icon--audio {
+	color: var(--h-color-success-strong, var(--h-color-success));
+	background: var(--h-color-success-muted);
+}
+
+.hermes-status-icon--warning,
+.hermes-entity-icon--obligation,
+.hermes-file-icon--archive {
+	color: var(--h-color-warning-strong, var(--h-color-warning));
+	background: var(--h-color-warning-muted);
+}
+
+.hermes-status-icon--danger {
+	color: var(--h-color-danger-strong, var(--h-color-danger));
+	background: var(--h-color-danger-muted);
+}
+
+.hermes-entity-icon--knowledge,
+.hermes-entity-icon--project,
+.hermes-file-icon--code,
+.hermes-file-icon--spreadsheet {
+	color: var(--h-color-accent);
+	background: var(--h-color-accent-muted);
+}

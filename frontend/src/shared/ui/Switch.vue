@@ -4,6 +4,7 @@ import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
   modelValue?: boolean
+  ariaLabel?: string
   disabled?: boolean
   class?: string
 }>(), {
@@ -16,11 +17,13 @@ const emit = defineEmits<{
 }>()
 
 const rootClasses = computed(() => ['hermes-switch', { 'hermes-switch--disabled': props.disabled }, props.class])
+const accessibleLabel = computed(() => props.ariaLabel ?? 'Toggle')
 </script>
 
 <template>
   <SwitchRoot
     :class="rootClasses"
+    :aria-label="accessibleLabel"
     :checked="modelValue"
     :disabled="disabled"
     @update:checked="(val: boolean) => emit('update:modelValue', val)"
@@ -28,4 +31,3 @@ const rootClasses = computed(() => ['hermes-switch', { 'hermes-switch--disabled'
     <SwitchThumb class="hermes-switch-thumb" />
   </SwitchRoot>
 </template>
-

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { TooltipRoot, TooltipTrigger, TooltipPortal, TooltipContent, TooltipArrow } from 'reka-ui'
+import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipPortal, TooltipContent, TooltipArrow } from 'reka-ui'
 import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
@@ -18,16 +18,17 @@ const contentClasses = computed(() => ['hermes-tooltip-content', props.class])
 </script>
 
 <template>
-  <TooltipRoot :delay-duration="delayDuration">
-    <TooltipTrigger as-child>
-      <slot name="trigger" />
-    </TooltipTrigger>
-    <TooltipPortal>
-      <TooltipContent :class="contentClasses" :side="side" :side-offset="sideOffset">
-        <slot>{{ content }}</slot>
-        <TooltipArrow class="hermes-tooltip-arrow" />
-      </TooltipContent>
-    </TooltipPortal>
-  </TooltipRoot>
+  <TooltipProvider :delay-duration="delayDuration">
+    <TooltipRoot>
+      <TooltipTrigger as-child>
+        <slot name="trigger" />
+      </TooltipTrigger>
+      <TooltipPortal>
+        <TooltipContent :class="contentClasses" :side="side" :side-offset="sideOffset">
+          <slot>{{ content }}</slot>
+          <TooltipArrow class="hermes-tooltip-arrow" />
+        </TooltipContent>
+      </TooltipPortal>
+    </TooltipRoot>
+  </TooltipProvider>
 </template>
-

@@ -2,11 +2,13 @@
 import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
+  id?: string
   modelValue?: string
   placeholder?: string
   disabled?: boolean
   readonly?: boolean
   type?: string
+  ariaLabel?: string
   error?: string
   class?: string
 }>(), {
@@ -47,11 +49,13 @@ function handleBlur(event: FocusEvent): void {
   <div class="hermes-input-wrapper">
     <input
       :class="classes"
+      :id="id"
       :value="modelValue"
       :placeholder="placeholder"
       :disabled="disabled"
       :readonly="readonly"
       :type="type"
+      :aria-label="ariaLabel"
       @input="handleInput"
       @focus="handleFocus"
       @blur="handleBlur"
@@ -59,4 +63,3 @@ function handleBlur(event: FocusEvent): void {
     <span v-if="error" class="hermes-input-error">{{ error }}</span>
   </div>
 </template>
-

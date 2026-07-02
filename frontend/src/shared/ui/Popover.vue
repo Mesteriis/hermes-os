@@ -8,11 +8,13 @@ const props = withDefaults(defineProps<{
   side?: 'top' | 'bottom' | 'left' | 'right'
   sideOffset?: number
   align?: 'start' | 'center' | 'end'
+  closeLabel?: string
   class?: string
 }>(), {
   side: 'bottom',
   sideOffset: 4,
-  align: 'center'
+  align: 'center',
+  closeLabel: 'Close popover'
 })
 
 const emit = defineEmits<{
@@ -32,7 +34,7 @@ const contentClasses = computed(() => ['hermes-popover-content', props.class])
         <PopoverArrow class="hermes-popover-arrow" />
         <slot />
         <PopoverClose class="hermes-popover-close" as-child>
-          <button class="hermes-popover-close-btn">
+          <button class="hermes-popover-close-btn" :aria-label="closeLabel">
             <Icon icon="tabler:x" size="0.875rem" />
           </button>
         </PopoverClose>
@@ -40,4 +42,3 @@ const contentClasses = computed(() => ['hermes-popover-content', props.class])
     </PopoverPortal>
   </PopoverRoot>
 </template>
-

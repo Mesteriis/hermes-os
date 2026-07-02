@@ -1,0 +1,225 @@
+.storybook-shell {
+	min-height: 100vh;
+	background: var(--h-color-bg);
+	color: var(--h-color-text);
+	font-family: var(--h-font-sans);
+	padding: 32px;
+}
+
+.storybook-canvas {
+	display: grid;
+	gap: 20px;
+	max-width: 960px;
+	margin: 0 auto;
+}
+
+.storybook-canvas--wide {
+	max-width: 1280px;
+}
+
+.storybook-narrow {
+	width: 100%;
+	max-width: 540px;
+	justify-self: center;
+}
+
+.storybook-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+}
+
+.storybook-stack {
+	display: grid;
+	gap: var(--h-spacing-2);
+}
+
+.storybook-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 14px;
+}
+
+.storybook-section {
+	display: grid;
+	gap: 12px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-xl);
+	background: var(--h-color-surface);
+	padding: 18px;
+}
+
+.storybook-section h2,
+.storybook-section h3,
+.storybook-section p {
+	margin: 0;
+}
+
+.storybook-section h2 {
+	color: var(--h-color-text-strong);
+	font-size: 18px;
+}
+
+.storybook-section h3 {
+	color: var(--h-color-text-strong);
+	font-size: 14px;
+}
+
+.storybook-section p {
+	color: var(--h-color-text-muted);
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.storybook-token-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 10px;
+}
+
+.storybook-token {
+	display: grid;
+	gap: 8px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface-raised);
+	padding: 12px;
+}
+
+.storybook-swatch {
+	height: 42px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--swatch);
+}
+
+.storybook-separator-sample {
+	min-height: 36px;
+}
+
+.storybook-scroll-sample {
+	max-height: 156px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+}
+
+.storybook-scroll-item {
+	display: flex;
+	align-items: center;
+	gap: var(--h-space-2);
+	min-height: 34px;
+	border-bottom: 1px solid var(--h-color-border);
+	padding: 0 var(--h-space-3);
+	color: var(--h-color-text-soft);
+	font-size: 13px;
+}
+
+.storybook-scroll-item:last-child {
+	border-bottom: 0;
+}
+
+.storybook-layout-card,
+.storybook-layout-shell,
+.storybook-layout-tile {
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+}
+
+.storybook-layout-card,
+.storybook-layout-tile {
+	padding: var(--h-spacing-3);
+}
+
+.storybook-layout-card {
+	color: var(--h-color-text-soft);
+	font-size: var(--h-font-size-sm);
+	line-height: var(--h-line-height-default);
+}
+
+.storybook-layout-card strong,
+.storybook-layout-tile strong {
+	color: var(--h-color-text-strong);
+}
+
+.storybook-layout-tile {
+	display: grid;
+	gap: var(--h-spacing-1);
+	min-width: 0;
+}
+
+.storybook-layout-tile span {
+	overflow: hidden;
+	color: var(--h-color-text-soft);
+	font-size: var(--h-font-size-xs);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.storybook-layout-resizable {
+	padding: var(--h-spacing-3);
+}
+
+.storybook-layout-shell {
+	overflow: hidden;
+}
+
+.storybook-layout-shell__body {
+	display: flex;
+	min-height: var(--h-layout-size-xl);
+}
+
+.storybook-layout-shell__main {
+	display: grid;
+	flex: 1;
+	min-width: 0;
+	padding: var(--h-spacing-4);
+	background: var(--h-color-bg-muted);
+}
+
+.storybook-layout-scroll {
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+}
+
+.storybook-layout-floating {
+	justify-self: end;
+	display: grid;
+	gap: var(--h-spacing-1);
+}
+
+.storybook-layout-floating span {
+	color: var(--h-color-text-soft);
+	font-size: var(--h-font-size-sm);
+}
+
+.storybook-spacing-scale {
+	display: grid;
+	gap: var(--h-spacing-2);
+}
+
+.storybook-spacing-sample {
+	display: grid;
+	grid-template-columns: 54px minmax(0, 1fr);
+	align-items: center;
+	gap: var(--h-spacing-3);
+	color: var(--h-color-text-soft);
+	font-size: var(--h-font-size-sm);
+}
+
+.storybook-spacing-sample::after {
+	display: block;
+	width: var(--storybook-spacing-width);
+	height: 12px;
+	border-radius: var(--h-radius-sm);
+	background: var(--h-color-accent);
+	content: '';
+}
+
+.storybook-spacing-sample--xs { --storybook-spacing-width: var(--h-spacing-1); }
+.storybook-spacing-sample--sm { --storybook-spacing-width: var(--h-spacing-2); }
+.storybook-spacing-sample--md { --storybook-spacing-width: var(--h-spacing-4); }
+.storybook-spacing-sample--lg { --storybook-spacing-width: var(--h-spacing-6); }

@@ -7,10 +7,12 @@ const props = withDefaults(defineProps<{
   open?: boolean
   title?: string
   description?: string
+  closeLabel?: string
   class?: string
   contentClass?: string
 }>(), {
-  open: false
+  open: false,
+  closeLabel: 'Close dialog'
 })
 
 const emit = defineEmits<{
@@ -40,7 +42,7 @@ const contentClasses = computed(() => ['hermes-dialog-content', props.contentCla
             <slot name="footer" />
           </div>
           <DialogClose class="hermes-dialog-close" as-child>
-            <button class="hermes-dialog-close-btn">
+            <button class="hermes-dialog-close-btn" type="button" :aria-label="closeLabel">
               <Icon icon="tabler:x" size="1.125rem" />
             </button>
           </DialogClose>
@@ -49,4 +51,3 @@ const contentClasses = computed(() => ['hermes-dialog-content', props.contentCla
     </DialogPortal>
   </DialogRoot>
 </template>
-

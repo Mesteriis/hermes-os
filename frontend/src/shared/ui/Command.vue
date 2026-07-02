@@ -1,21 +1,8 @@
 <script setup lang="ts">
-import { DialogRoot, DialogPortal, DialogOverlay, DialogContent } from 'reka-ui'
+import { DialogRoot, DialogPortal, DialogOverlay, DialogContent, DialogTitle, DialogDescription } from 'reka-ui'
 import { ref, computed, watch, nextTick } from 'vue'
+import type { CommandGroup, CommandItem } from './Command.types'
 import Icon from './Icon.vue'
-
-export interface CommandGroup {
-  label: string
-  items: CommandItem[]
-}
-
-export interface CommandItem {
-  id: string
-  label: string
-  description?: string
-  icon?: string
-  keywords?: string[]
-  onSelect?: () => void
-}
 
 const props = withDefaults(defineProps<{
   open?: boolean
@@ -38,9 +25,6 @@ const query = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
 const selectedIndex = ref(0)
 
-const flatItems = computed(() => {
-  return (props.groups || []).flatMap((g) => g.items)
-})
 
 const filteredGroups = computed(() => {
   const q = query.value.toLowerCase().trim()
@@ -113,6 +97,8 @@ const contentClasses = computed(() => [
     <DialogPortal>
       <DialogOverlay class="hermes-command-overlay" @pointerdown="emit('update:open', false)">
         <DialogContent :class="contentClasses" @keydown="handleKeyDown" @open-auto-focus="(e: Event) => e.preventDefault()">
+          <DialogTitle class="hermes-sr-only">Command palette</DialogTitle>
+          <DialogDescription class="hermes-sr-only">Search and run Hermes commands.</DialogDescription>
           <div class="hermes-command-input-wrapper">
             <Icon icon="tabler:search" size="1.125rem" class="hermes-command-search-icon" />
             <input
@@ -133,9 +119,9 @@ const contentClasses = computed(() => [
                   v-for="(item, ii) in group.items"
                   :key="item.id"
                   class="hermes-command-item"
-                  :class="{ 'hermes-command-item--selected': flatItems.indexOf(item) === selectedIndex }"
+                  :class="{ 'hermes-command-item--selected': filteredFlatItems.indexOf(item) === selectedIndex }"
                   @click="selectItem(item)"
-                  @mouseenter="selectedIndex = flatItems.indexOf(item)"
+                  @mouseenter="selectedIndex = filteredFlatItems.indexOf(item)"
                 >
                   <Icon v-if="item.icon" :icon="item.icon" size="1.125rem" class="hermes-command-item-icon" />
                   <div class="hermes-command-item-text">
@@ -155,4 +141,3 @@ const contentClasses = computed(() => [
     </DialogPortal>
   </DialogRoot>
 </template>
-

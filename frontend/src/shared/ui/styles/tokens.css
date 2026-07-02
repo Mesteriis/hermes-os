@@ -1,0 +1,124 @@
+:root,
+[data-ui-theme='hermes'] {
+	color-scheme: dark;
+	--h-font-sans: var(--hh-font-sans, 'Inter', ui-sans-serif, system-ui, sans-serif);
+	/*
+	 * @tokens Colors
+	 * @presenter Color
+	 */
+	--h-color-bg: #02090b;
+	--h-color-bg-muted: #041215;
+	--h-color-surface: rgba(6, 24, 27, 0.94);
+	--h-color-surface-raised: rgba(8, 29, 33, 0.98);
+	--h-color-surface-overlay: rgba(8, 29, 33, 0.98);
+	--h-color-surface-hover: rgba(45, 240, 206, 0.08);
+	--h-color-surface-active: rgba(45, 240, 206, 0.14);
+	--h-color-border: rgba(111, 205, 195, 0.14);
+	--h-color-border-strong: rgba(45, 240, 206, 0.42);
+	--h-color-text: #eefefb;
+	--h-color-text-strong: #f8fffe;
+	--h-color-text-muted: #91a8a8;
+	--h-color-text-soft: #dcefed;
+	--h-color-accent: #2df0ce;
+	--h-color-accent-strong: #25d8bd;
+	--h-color-accent-muted: rgba(45, 240, 206, 0.11);
+	--h-color-accent-contrast: #032522;
+	--h-color-danger: #ef3140;
+	--h-color-danger-muted: rgba(239, 49, 64, 0.13);
+	--h-color-danger-contrast: #ffffff;
+	--h-color-success: #28b981;
+	--h-color-success-muted: rgba(40, 185, 129, 0.13);
+	--h-color-warning: #c68124;
+	--h-color-warning-muted: rgba(198, 129, 36, 0.14);
+	--h-color-info: #5288e8;
+	--h-color-info-muted: rgba(82, 136, 232, 0.14);
+	/* @tokens-end */
+	/* @tokens Radii */
+	--h-radius-xs: 4px;
+	--h-radius-sm: 6px;
+	--h-radius-md: 8px;
+	--h-radius-lg: 12px;
+	--h-radius-xl: 18px;
+	--h-radius-pill: 999px;
+	/* @tokens-end */
+	/* @tokens Spacing */
+	--h-space-1: 4px;
+	--h-space-2: 8px;
+	--h-space-3: 12px;
+	--h-space-4: 16px;
+	--h-space-5: 20px;
+	--h-space-6: 24px;
+	--h-spacing-1: var(--h-space-1);
+	--h-spacing-2: var(--h-space-2);
+	--h-spacing-3: var(--h-space-3);
+	--h-spacing-4: var(--h-space-4);
+	--h-spacing-5: var(--h-space-5);
+	--h-spacing-6: var(--h-space-6);
+	/* @tokens-end */
+	/* @tokens Typography */
+	--h-font-size-xs: 0.6875rem;
+	--h-font-size-sm: 0.75rem;
+	--h-font-size-md: 0.8125rem;
+	--h-font-size-lg: 0.9375rem;
+	--h-font-size-xl: 1.125rem;
+	--h-line-height-tight: 1.25;
+	--h-line-height-default: 1.45;
+	/* @tokens-end */
+	/* @tokens Controls */
+	--h-control-height-sm: 28px;
+	--h-control-height-md: 34px;
+	--h-control-height-lg: 40px;
+	--h-control-padding-x: 12px;
+	--h-focus-ring: 0 0 0 3px rgba(45, 240, 206, 0.2);
+	/* @tokens-end */
+	/* @tokens Layout */
+	--h-layout-grid-min: 18rem;
+	--h-layout-size-xs: 12rem;
+	--h-layout-size-sm: 16rem;
+	--h-layout-size-md: 20rem;
+	--h-layout-size-lg: 24rem;
+	--h-layout-size-xl: 32rem;
+	--h-layout-scroll-sm: 12rem;
+	--h-layout-scroll-md: 20rem;
+	--h-layout-scroll-lg: 28rem;
+	/* @tokens-end */
+	/* @tokens Shadows */
+	--h-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.16);
+	--h-shadow-sm: 0 8px 28px rgba(0, 0, 0, 0.18);
+	--h-shadow-md: 0 18px 56px rgba(0, 0, 0, 0.28);
+	--h-shadow-lg: 0 28px 92px rgba(0, 0, 0, 0.42);
+	/* @tokens-end */
+	/* @tokens Motion */
+	--h-motion-fast: 120ms ease;
+	--h-motion-default: 180ms ease;
+	/* @tokens-end */
+	/* @tokens Z Index */
+	--h-z-popover: 40;
+	--h-z-dialog: 60;
+	--h-z-toast: 80;
+	/* @tokens-end */
+}
+
+.hermes-theme-provider {
+	min-height: 100%;
+	background: var(--h-color-bg);
+	color: var(--h-color-text);
+	font-family: var(--h-font-sans);
+}
+
+*:focus-visible {
+	outline: 0;
+	box-shadow: var(--h-focus-ring);
+}
+
+.hermes-sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}

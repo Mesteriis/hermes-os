@@ -11,6 +11,10 @@ export interface ToastItem {
   duration?: number
 }
 
+type DefaultToastItem = Omit<ToastItem, 'id'> & {
+  id?: string
+}
+
 const TOAST_INJECTION_KEY = 'hermes-toast-context'
 
 const props = withDefaults(defineProps<{
@@ -18,15 +22,26 @@ const props = withDefaults(defineProps<{
   swipeDirection?: 'right' | 'left' | 'up' | 'down'
   /** Duration in ms before auto-dismiss */
   duration?: number
+  /** Accessible label for dismiss controls. */
+  closeLabel?: string
+  /** Initial items for Storybook and deterministic visual tests. */
+  defaultToasts?: DefaultToastItem[]
   class?: string
 }>(), {
   swipeDirection: 'right',
-  duration: 4000
+  duration: 4000,
+  closeLabel: 'Dismiss notification',
+  defaultToasts: () => []
 })
 
-const toasts = ref<ToastItem[]>([]) as Ref<ToastItem[]>
+const toasts = ref<ToastItem[]>(
+  props.defaultToasts.map((toast, index) => ({
+    ...toast,
+    id: toast.id ?? `default-toast-${index + 1}`
+  }))
+) as Ref<ToastItem[]>
 
-let toastCounter = 0
+let toastCounter = props.defaultToasts.length
 
 function addToast(item: Omit<ToastItem, 'id'>): string {
   const id = `toast-${++toastCounter}`
@@ -68,10 +83,11 @@ const variantIcons: Record<string, string> = {
   <ToastProvider :swipe-direction="swipeDirection" :duration="duration">
     <slot />
 
-    <ToastViewport :class="viewportClasses">
+    <ToastViewport as="div" :class="viewportClasses">
       <ToastRoot
         v-for="toast in toasts"
         :key="toast.id"
+        as="div"
         :class="['hermes-toast-root', `hermes-toast--${toast.variant || 'default'}`]"
         @update:open="(open: boolean) => { if (!open) removeToast(toast.id) }"
       >
@@ -90,7 +106,7 @@ const variantIcons: Record<string, string> = {
               {{ toast.description }}
             </ToastDescription>
           </div>
-          <ToastClose class="hermes-toast-close-btn">
+          <ToastClose class="hermes-toast-close-btn" :aria-label="closeLabel">
             <Icon icon="tabler:x" size="1rem" />
           </ToastClose>
         </div>
@@ -98,4 +114,3 @@ const variantIcons: Record<string, string> = {
     </ToastViewport>
   </ToastProvider>
 </template>
-

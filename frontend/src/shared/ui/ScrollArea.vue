@@ -4,10 +4,18 @@ import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
   class?: string
+  size?: 'sm' | 'md' | 'lg' | 'full'
   maxHeight?: string
-}>(), {})
+}>(), {
+  size: 'full'
+})
 
-const classes = computed(() => ['hermes-scroll-area', props.class])
+const classes = computed(() => [
+  'hermes-scroll-area',
+  `hermes-scroll-area--${props.size}`,
+  { 'hermes-scroll-area--bounded': props.maxHeight },
+  props.class
+])
 </script>
 
 <template>
@@ -23,4 +31,3 @@ const classes = computed(() => ['hermes-scroll-area', props.class])
     </ScrollAreaScrollbar>
   </ScrollAreaRoot>
 </template>
-

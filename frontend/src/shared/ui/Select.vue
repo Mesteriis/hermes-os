@@ -6,6 +6,7 @@ import Icon from './Icon.vue'
 const props = withDefaults(defineProps<{
   modelValue?: string
   placeholder?: string
+  ariaLabel?: string
   disabled?: boolean
   error?: string
   class?: string
@@ -25,6 +26,8 @@ const triggerClasses = computed(() => [
   { 'hermes-select--error': props.error },
   props.class
 ])
+
+const accessibleLabel = computed(() => props.ariaLabel ?? props.placeholder)
 </script>
 
 <template>
@@ -34,7 +37,7 @@ const triggerClasses = computed(() => [
       :disabled="disabled"
       @update:model-value="(val) => emit('update:modelValue', val || '')"
     >
-      <SelectTrigger :class="triggerClasses">
+      <SelectTrigger :class="triggerClasses" :aria-label="accessibleLabel">
         <SelectValue :placeholder="placeholder" class="hermes-select-value" />
         <Icon icon="tabler:chevron-down" size="1rem" class="hermes-select-chevron" />
       </SelectTrigger>
@@ -59,4 +62,3 @@ const triggerClasses = computed(() => [
     <span v-if="error" class="hermes-select-error">{{ error }}</span>
   </div>
 </template>
-

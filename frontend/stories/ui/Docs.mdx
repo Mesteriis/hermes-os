@@ -1,0 +1,24 @@
+import { Meta } from '@storybook/addon-docs/blocks'
+
+<Meta title="Hermes UI/Docs" />
+
+# Hermes UI Kit
+
+Hermes UI Kit is the shared, provider-neutral component surface for local-first owner workflows.
+
+## Reading the catalog
+
+- Canvas stories are the source for visual inspection.
+- This authored docs page carries durable guidance.
+- Generated empty autodocs pages are disabled because they looked complete without saying anything useful.
+- Components must stay UI-only: no provider runtime, stores, routing, fetch calls or domain mutation.
+
+## Rich text
+
+`RichTextEditor` is a compact semantic editor for context notes, local drafts and evidence snippets. It is intentionally not a word processor ribbon. The toolbar exposes a practical vocabulary: paragraph, headings, quote, ordered and unordered lists, emphasis, nuance, underline, strike, inline code, evidence link, code block, divider and clear formatting.
+
+The editor emits sanitized HTML. Pair it with `HtmlPreview` when a Storybook or product surface needs to show the rendered result. Plain text extraction, persistence and validation belong to the owning domain surface.
+
+## Media and HTML
+
+Mail and documents can arrive as HTML, text or mixed attachments. Use `HtmlPreview` for sanitized HTML and text previews, and keep unsafe provider content blocked until the caller explicitly marks it sanitized.

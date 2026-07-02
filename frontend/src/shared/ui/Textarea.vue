@@ -2,8 +2,10 @@
 import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
+  id?: string
   modelValue?: string
   placeholder?: string
+  ariaLabel?: string
   disabled?: boolean
   rows?: number
   error?: string
@@ -35,7 +37,9 @@ function handleInput(event: Event): void {
   <div class="hermes-textarea-wrapper">
     <textarea
       :class="classes"
+      :id="id"
       :value="modelValue"
+      :aria-label="ariaLabel"
       :placeholder="placeholder"
       :disabled="disabled"
       :rows="rows"
@@ -44,4 +48,3 @@ function handleInput(event: Event): void {
     <span v-if="error" class="hermes-textarea-error">{{ error }}</span>
   </div>
 </template>
-
