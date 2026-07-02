@@ -417,7 +417,7 @@ fn runtime_bridge_runtime_event_payload(
 
 fn dispatch_runtime_bridge_runtime_event(payload: Value) -> Result<u16, String> {
     let url = local_backend_runtime_bridge_url(RUNTIME_EVENTS_BRIDGE_PATH)?;
-    let secret = local_api_secret()?;
+    let secret = crate::local_api_secret();
     let config = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(5)))
         .build();
@@ -463,18 +463,6 @@ fn is_allowed_local_backend_url(url: &str) -> bool {
     url.starts_with("http://127.0.0.1:")
         || url.starts_with("http://localhost:")
         || url.starts_with("http://[::1]:")
-}
-
-fn local_api_secret() -> Result<String, String> {
-    let secret = std::env::var("HERMES_LOCAL_API_SECRET")
-        .unwrap_or_else(|_| "change-me-local-api-secret".to_owned());
-    let secret = secret.trim();
-    if secret.is_empty() {
-        return Err(
-            "HERMES_LOCAL_API_SECRET is required for WhatsApp companion relay dispatch".to_owned(),
-        );
-    }
-    Ok(secret.to_owned())
 }
 
 fn runtime_bridge_import_batch_id(account_id: &str, provider_event_id: &str) -> String {

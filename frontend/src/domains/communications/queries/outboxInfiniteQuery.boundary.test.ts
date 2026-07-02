@@ -19,8 +19,12 @@ describe('outbox infinite query boundary', () => {
 			new URL('./outboxStatusStrip.ts', import.meta.url),
 			'utf8'
 		)
-		const componentSource = readFileSync(
-			new URL('../components/OutboxStatusStrip.vue', import.meta.url),
+		const surfaceSource = readFileSync(
+			new URL('./useCommunicationsPageSurface.ts', import.meta.url),
+			'utf8'
+		)
+		const presentationSource = readFileSync(
+			new URL('../components/outboxStatus.ts', import.meta.url),
 			'utf8'
 		)
 
@@ -28,9 +32,11 @@ describe('outbox infinite query boundary', () => {
 		expect(hookSource).toContain('loadMoreOutboxItems')
 		expect(hookSource).toContain('prefetchMoreOutboxItems')
 		expect(hookSource).toContain('outboxQuery.fetchNextPage()')
-		expect(componentSource).toContain("loadMore: []")
-		expect(componentSource).toContain("prefetchMore: []")
-		expect(componentSource).not.toContain('fetch(')
-		expect(componentSource).not.toContain('ApiClient')
+		expect(surfaceSource).toContain('loadMoreOutboxItems')
+		expect(surfaceSource).toContain('prefetchMoreOutboxItems')
+		expect(surfaceSource).toContain('hasMoreOutboxItems')
+		expect(presentationSource).toContain('outboxStatusPresentation')
+		expect(presentationSource).not.toContain('fetch(')
+		expect(presentationSource).not.toContain('ApiClient')
 	})
 })

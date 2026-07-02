@@ -43,16 +43,18 @@ ifneq ($(strip $(SCCACHE_BIN)),)
 export RUSTC_WRAPPER := $(SCCACHE_BIN)
 endif
 
-.PHONY: help docker-env dev logs build migrate validate lint-architecture lint-rust lint-frontend architecture-check code-boundaries-check backend-fmt-check backend-clippy backend-test backend-validate frontend-lint frontend-test frontend-build frontend-validate test test-fast test-ci test-unit test-integration test-e2e test-architecture test-snapshot snapshot-test snapshot-accept coverage coverage-html coverage-ci mutants audit deny security udeps watch-test watch-unit watch-integration cache-stats cache-reset test-performance-report testcontainers-clean hermes-lab whatsapp-live-smoke-readiness whatsapp-native-md-sdk-gap-readiness whatsapp-live-smoke-evidence whatsapp-live-smoke-collect-evidence whatsapp-domain-closure-audit whatsapp-domain-closure-gate whatsapp-business-cloud-edge-readiness whatsapp-business-cloud-edge-config whatsapp-business-cloud-edge-up whatsapp-business-cloud-edge-stop whatsapp-business-cloud-edge-logs vault-backup vault-restore clean clean-dev clean-validate clean-build clean-data clean-vault
+.PHONY: help docker-env dev dev-desktop logs build migrate validate lint-architecture lint-rust lint-frontend architecture-check code-boundaries-check backend-fmt-check backend-clippy backend-test backend-validate frontend-lint frontend-test frontend-visual frontend-visual-update frontend-build frontend-validate test test-fast test-ci test-unit test-integration test-e2e test-architecture test-snapshot snapshot-test snapshot-accept coverage coverage-html coverage-ci mutants audit deny security udeps watch-test watch-unit watch-integration cache-stats cache-reset test-performance-report testcontainers-clean hermes-lab whatsapp-live-smoke-readiness whatsapp-native-md-sdk-gap-readiness whatsapp-live-smoke-evidence whatsapp-live-smoke-collect-evidence whatsapp-domain-closure-audit whatsapp-domain-closure-gate whatsapp-business-cloud-edge-readiness whatsapp-business-cloud-edge-config whatsapp-business-cloud-edge-up whatsapp-business-cloud-edge-stop whatsapp-business-cloud-edge-logs vault-backup vault-restore clean clean-dev clean-validate clean-build clean-data clean-vault
 
 help:
 	@printf '%s\n' 'Hermes development commands:'
 	@printf '%s\n' '  make docker-env    Create docker/.env from docker/.env.example when missing'
 	@printf '%s\n' '  make dev           Start PostgreSQL, backend watcher, and Vite dev server'
+	@printf '%s\n' '  make dev-desktop   Run make dev plus the Tauri desktop shell window'
 	@printf '%s\n' '  make logs          Tail the active live development log'
 	@printf '%s\n' '  make build         Build backend, frontend, and Tauri release artifacts'
 	@printf '%s\n' '  make migrate       Start PostgreSQL if needed and run backend-managed migrations'
 	@printf '%s\n' '  make validate      Run architecture, backend, and frontend validation'
+	@printf '%s\n' '  make frontend-visual Run Storybook visual regression screenshots'
 	@printf '%s\n' '  make test-fast     Run the fast local test loop (unit + architecture + snapshots + frontend)'
 	@printf '%s\n' '  make test          Run the full local test suite entry point'
 	@printf '%s\n' '  make test-ci       Run the CI-oriented backend nextest profile and frontend unit tests'
@@ -107,6 +109,9 @@ docker-env:
 
 dev:
 	@./scripts/dev.sh
+
+dev-desktop:
+	@./scripts/dev.sh --desktop
 
 logs:
 	@./scripts/logs.sh
@@ -270,10 +275,16 @@ frontend-lint:
 frontend-test:
 	@cd frontend && pnpm test:unit
 
+frontend-visual:
+	@cd frontend && pnpm test:visual
+
+frontend-visual-update:
+	@cd frontend && pnpm test:visual:update
+
 frontend-build:
 	@cd frontend && pnpm build
 
-frontend-validate: frontend-lint frontend-test frontend-build
+frontend-validate: frontend-lint frontend-test frontend-visual frontend-build
 
 vault-backup:
 	@./scripts/vault-backup.sh

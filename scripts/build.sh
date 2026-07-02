@@ -18,6 +18,18 @@ ensure_command pnpm
 
 backend_target_dir="${CARGO_TARGET_DIR:-$CARGO_BUILD_TARGET_DIR}"
 
+# Generate a per-build random local API secret unless the caller provided one.
+# It is baked into both the frontend dist (VITE_HERMES_LOCAL_API_SECRET) and
+# the Tauri shell (HERMES_BUNDLED_LOCAL_API_SECRET via option_env!), so the
+# packaged app never ships with the well-known development fallback.
+if [ -z "${HERMES_BUNDLED_LOCAL_API_SECRET:-}" ]; then
+	ensure_command openssl
+	HERMES_BUNDLED_LOCAL_API_SECRET="$(openssl rand -hex 32)"
+	info "Generated random bundled local API secret for this build"
+fi
+export HERMES_BUNDLED_LOCAL_API_SECRET
+export VITE_HERMES_LOCAL_API_SECRET="$HERMES_BUNDLED_LOCAL_API_SECRET"
+
 info "Building backend release binary"
 CARGO_TARGET_DIR="$backend_target_dir" \
 	cargo build --manifest-path "$REPO_ROOT/backend/Cargo.toml" --bin hermes-hub-backend --release

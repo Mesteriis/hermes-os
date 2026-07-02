@@ -95,13 +95,60 @@ ensure_one_of() {
 	exit 1
 }
 
-require_port_free() {
+# Frees a dev port held by a stale process from a previous `make dev` session.
+# Only processes that look like Hermes dev tooling are terminated; anything
+# else still aborts so we never silently kill an unrelated application.
+reclaim_dev_port() {
 	local port="$1"
 	local label="$2"
-	if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
-		error "$label port $port is already in use."
+	if ! command -v lsof >/dev/null 2>&1; then
+		return 0
+	fi
+
+	local pids
+	pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | sort -u || true)"
+	if [ -z "$pids" ]; then
+		return 0
+	fi
+
+	local pid command_path command_name
+	for pid in $pids; do
+		command_path="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+		command_name="$(basename "${command_path:-unknown}")"
+		case "$command_name" in
+			hermes-hub-backend | cargo | bacon | node | vite | esbuild | pnpm)
+				warn "$label port $port is held by stale dev process '$command_name' (pid $pid); stopping it"
+				kill "$pid" 2>/dev/null || true
+				;;
+			*)
+				error "$label port $port is in use by '$command_name' (pid $pid), which does not look like a Hermes dev process. Stop it manually."
+				exit 1
+				;;
+		esac
+	done
+
+	local attempt=1
+	while [ "$attempt" -le 20 ]; do
+		if ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+			success "$label port $port reclaimed"
+			return 0
+		fi
+		sleep 0.5
+		attempt=$((attempt + 1))
+	done
+
+	pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | sort -u || true)"
+	for pid in $pids; do
+		warn "$label port $port is still busy; force killing pid $pid"
+		kill -9 "$pid" 2>/dev/null || true
+	done
+	sleep 1
+
+	if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+		error "$label port $port is still in use after attempting to reclaim it."
 		exit 1
 	fi
+	success "$label port $port reclaimed"
 }
 
 confirm_or_exit() {

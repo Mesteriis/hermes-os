@@ -14,8 +14,10 @@ describe('frontend env config', () => {
 		expect(config.realtimeTransport).toBe('sse')
 	})
 
-	it('rejects missing local API secret', () => {
-		expect(() => loadFrontendConfig({})).toThrow('VITE_HERMES_LOCAL_API_SECRET is required')
+	it('falls back to the shared local development secret when env is missing', () => {
+		const config = loadFrontendConfig({})
+
+		expect(config.apiSecret).toBe('change-me-local-api-secret')
 	})
 
 	it('accepts explicit Hermes backend URL', () => {

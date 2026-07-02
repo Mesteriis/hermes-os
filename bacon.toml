@@ -1,5 +1,51 @@
+default_job = "check"
+
+# Long-running backend server used by `make dev` (scripts/dev.sh runs
+# `bacon --headless backend-dev`). kill_then_restart is required so the
+# server is restarted on file changes instead of waiting for it to exit.
 [jobs.backend-dev]
 command = ["cargo", "run", "--manifest-path", "backend/Cargo.toml"]
 watch = ["backend/src", "backend/migrations", "backend/Cargo.toml", "backend/Cargo.lock"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+kill = ["kill", "-s", "INT"]
 allow_warnings = true
 show_command_error_code = true
+
+[jobs.check]
+command = ["cargo", "check", "--workspace", "--all-targets"]
+need_stdout = false
+
+[jobs.check-backend]
+command = ["cargo", "check", "--manifest-path", "backend/Cargo.toml", "--all-targets"]
+need_stdout = false
+
+[jobs.clippy]
+command = ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]
+need_stdout = false
+need_stderr = true
+
+[jobs.clippy-backend]
+command = ["cargo", "clippy", "--manifest-path", "backend/Cargo.toml", "--all-targets", "--", "-D", "warnings"]
+need_stdout = false
+need_stderr = true
+
+[jobs.test]
+command = ["cargo", "nextest", "run", "--workspace", "--profile", "default"]
+need_stdout = true
+
+[jobs.test-fast]
+command = ["make", "test-fast"]
+need_stdout = true
+allow_warnings = true
+
+[jobs.test-unit]
+command = ["make", "test-unit"]
+need_stdout = true
+allow_warnings = true
+
+[jobs.architecture]
+command = ["make", "architecture-check"]
+need_stdout = true
+allow_warnings = true

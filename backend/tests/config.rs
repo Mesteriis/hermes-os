@@ -13,7 +13,10 @@ fn default_config_binds_to_localhost_without_database_url() {
     );
     assert_eq!(config.service_name(), "hermes-hub-backend");
     assert_eq!(config.database_url(), None);
-    assert_eq!(config.local_api_secret(), None);
+    assert_eq!(
+        config.local_api_secret(),
+        Some("change-me-local-api-secret")
+    );
     assert_eq!(config.secret_vault_path(), None);
     assert_eq!(config.secret_vault_key(), None);
     assert_eq!(config.tdjson_path(), None);

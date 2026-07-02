@@ -22,12 +22,14 @@ repos:
         pass_filenames: false
         files: ^backend/.*\.rs$
 
-      - id: hermes-rust-clippy
-        name: Hermes Rust clippy
-        entry: make backend-clippy
-        language: system
-        pass_filenames: false
-        files: ^backend/.*\.rs$
+# Clippy runs in CI (backend-clippy job) and via `bacon clippy` during dev.
+# Full-workspace clippy in pre-commit is too slow (5-10 min) for interactive use.
+#       - id: hermes-rust-clippy
+#         name: Hermes Rust clippy
+#         entry: make backend-clippy
+#         language: system
+#         pass_filenames: false
+#         files: ^backend/.*\.rs$
 
       - id: hermes-frontend-lint
         name: Hermes frontend lint (style + TypeScript/Vue, no tests)

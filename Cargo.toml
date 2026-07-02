@@ -5,7 +5,14 @@ exclude = ["frontend/src-tauri"]
 
 [profile.dev]
 debug = "line-tables-only"
+incremental = true
+codegen-units = 256
+lto = false
+opt-level = 0
 
 [profile.test]
 debug = "line-tables-only"
-incremental = false
+incremental = true
+codegen-units = 256
+lto = false
+opt-level = 0

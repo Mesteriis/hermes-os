@@ -11,6 +11,9 @@ const APP_COMMANDS: &[&str] = &[
 ];
 
 fn main() {
+    // The per-build random API secret is embedded via option_env!, so the
+    // crate must be recompiled when the build script provides a new value.
+    println!("cargo:rerun-if-env-changed=HERMES_BUNDLED_LOCAL_API_SECRET");
     let attributes = tauri_build::Attributes::new()
         .app_manifest(tauri_build::AppManifest::new().commands(APP_COMMANDS));
     tauri_build::try_build(attributes).expect("failed to run tauri build script")

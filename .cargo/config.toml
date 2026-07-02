@@ -3,3 +3,7 @@ hermes-nextest = "nextest run --manifest-path backend/Cargo.toml"
 hermes-nextest-ci = "nextest run --manifest-path backend/Cargo.toml --profile ci"
 hermes-nextest-integration = "nextest run --manifest-path backend/Cargo.toml --profile integration --tests"
 hermes-llvm-cov = "llvm-cov --manifest-path backend/Cargo.toml"
+
+[rust-analyzer]
+checkOnSave = true
+check.command = "clippy"

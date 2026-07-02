@@ -10,6 +10,19 @@ source "$SCRIPT_DIR/lib/env.sh"
 # shellcheck source=./lib/postgres.sh
 source "$SCRIPT_DIR/lib/postgres.sh"
 
+DESKTOP_MODE=0
+for arg in "$@"; do
+	case "$arg" in
+		--desktop)
+			DESKTOP_MODE=1
+			;;
+		*)
+			error "Unknown argument: $arg (supported: --desktop)"
+			exit 1
+			;;
+	esac
+done
+
 load_hermes_env
 ensure_frontend_dependencies
 ensure_bacon_available
@@ -17,8 +30,8 @@ ensure_command cargo
 ensure_command curl
 postgres_up
 
-require_port_free "$HERMES_BACKEND_PORT" "Backend"
-require_port_free "$HERMES_FRONTEND_PORT" "Frontend"
+reclaim_dev_port "$HERMES_BACKEND_PORT" "Backend"
+reclaim_dev_port "$HERMES_FRONTEND_PORT" "Frontend"
 
 ensure_dir "$LOG_ROOT"
 flow_id="dev-$(timestamp_compact_utc)-$$"
@@ -106,6 +119,17 @@ frontend_pid="$RUN_SERVICE_PID"
 info "Waiting for frontend dev server"
 wait_for_service_http "$frontend_pid" "http://$HERMES_FRONTEND_BIND:$HERMES_FRONTEND_PORT" "Frontend Vite" "$HERMES_FRONTEND_STARTUP_ATTEMPTS" "$HERMES_FRONTEND_STARTUP_SLEEP_SECONDS"
 
+tauri_pid=""
+if [ "$DESKTOP_MODE" = "1" ]; then
+	# Point the Tauri dev window at the Vite server this script started and
+	# keep the sidecar disabled; the backend already runs via bacon above.
+	tauri_dev_config="{\"build\":{\"devUrl\":\"http://$HERMES_FRONTEND_BIND:$HERMES_FRONTEND_PORT\"}}"
+	export HERMES_DISABLE_BACKEND_SIDECAR=1
+	run_service tauri "$color_yellow" bash -lc "cd '$REPO_ROOT/frontend' && exec pnpm tauri dev --config '$tauri_dev_config'"
+	tauri_pid="$RUN_SERVICE_PID"
+	info "Tauri desktop shell is compiling; the app window opens when the build finishes"
+fi
+
 info "Flow ID: $flow_id"
 info "Logs: $session_log"
 info "Live log: $current_log_link/live.log"
@@ -113,5 +137,12 @@ printf '%s\n' "PostgreSQL:"
 postgres_status
 printf '%s\n' "Backend:  http://$HERMES_BACKEND_BIND:$HERMES_BACKEND_PORT (pid $backend_pid)"
 printf '%s\n' "Frontend: http://$HERMES_FRONTEND_BIND:$HERMES_FRONTEND_PORT (pid $frontend_pid)"
+if [ -n "$tauri_pid" ]; then
+	printf '%s\n' "Tauri:    desktop shell (pid $tauri_pid)"
+fi
 
-wait "$backend_pid" "$frontend_pid"
+if [ -n "$tauri_pid" ]; then
+	wait "$backend_pid" "$frontend_pid" "$tauri_pid"
+else
+	wait "$backend_pid" "$frontend_pid"
+fi

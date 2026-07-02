@@ -8,6 +8,25 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 mod whatsapp_companion;
 mod yandex_telemost_companion;
 
+const DEFAULT_LOCAL_API_SECRET: &str = "change-me-local-api-secret";
+
+/// Resolution order: explicit runtime env, then the per-build random secret
+/// baked in by `scripts/build.sh` (HERMES_BUNDLED_LOCAL_API_SECRET), then the
+/// shared local-development fallback.
+pub(crate) fn local_api_secret() -> String {
+    if let Ok(value) = std::env::var("HERMES_LOCAL_API_SECRET") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_owned();
+        }
+    }
+    option_env!("HERMES_BUNDLED_LOCAL_API_SECRET")
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| DEFAULT_LOCAL_API_SECRET.to_owned())
+}
+
 #[derive(Default)]
 struct BackendSidecar {
     child: Mutex<Option<CommandChild>>,
@@ -66,11 +85,7 @@ fn start_backend_sidecar<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn s
         .shell()
         .sidecar("hermes-hub-backend")?
         .env("HERMES_HTTP_ADDR", "127.0.0.1:8080")
-        .env(
-            "HERMES_LOCAL_API_SECRET",
-            std::env::var_os("HERMES_LOCAL_API_SECRET")
-                .unwrap_or_else(|| "change-me-local-api-secret".into()),
-        );
+        .env("HERMES_LOCAL_API_SECRET", local_api_secret());
 
     for key in [
         "DATABASE_URL",

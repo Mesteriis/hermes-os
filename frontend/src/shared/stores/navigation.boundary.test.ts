@@ -8,11 +8,16 @@ describe('navigation communication source routing boundary', () => {
 			new URL('../../app/shell/AppShell.vue', import.meta.url),
 			'utf8'
 		)
+		const shellSurfaceSource = readFileSync(
+			new URL('../../app/queries/useAppShellSurface.ts', import.meta.url),
+			'utf8'
+		)
 
 		expect(source).toContain("router.push({ name: 'communications', query: { section: sectionId } })")
 		expect(source).toContain('communicationSectionFromQuery(sectionQuery)')
-		expect(shellSource).toContain('route.query.section')
-		expect(shellSource).toContain('nav.syncFromRoute(')
+		expect(shellSource).toContain('const { nav, theme } = useAppShellSurface()')
+		expect(shellSurfaceSource).toContain('route.query.section')
+		expect(shellSurfaceSource).toContain('nav.syncFromRoute(')
 		expect(source).not.toContain('router.push(`/${routeViewId}`)')
 		expect(source).not.toContain("type RouteViewId = AppViewId | 'telegram' | 'whatsapp'")
 	})

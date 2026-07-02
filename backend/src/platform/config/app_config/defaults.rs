@@ -5,10 +5,10 @@ use crate::vault::{default_dev_key_path, default_vault_home};
 
 use super::super::ai::AiRuntimeProvider;
 use super::super::constants::{
-    DEFAULT_HTTP_ADDR, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_CHAT_MODEL,
-    DEFAULT_OLLAMA_EMBED_MODEL, DEFAULT_OLLAMA_TIMEOUT_SECONDS, DEFAULT_OMNIROUTE_BASE_URL,
-    DEFAULT_OMNIROUTE_CHAT_MODEL, DEFAULT_OMNIROUTE_EMBED_MODEL, DEFAULT_OMNIROUTE_TIMEOUT_SECONDS,
-    DEFAULT_SERVICE_NAME,
+    DEFAULT_HTTP_ADDR, DEFAULT_LOCAL_API_SECRET, DEFAULT_OLLAMA_BASE_URL,
+    DEFAULT_OLLAMA_CHAT_MODEL, DEFAULT_OLLAMA_EMBED_MODEL, DEFAULT_OLLAMA_TIMEOUT_SECONDS,
+    DEFAULT_OMNIROUTE_BASE_URL, DEFAULT_OMNIROUTE_CHAT_MODEL, DEFAULT_OMNIROUTE_EMBED_MODEL,
+    DEFAULT_OMNIROUTE_TIMEOUT_SECONDS, DEFAULT_SERVICE_NAME,
 };
 use super::AppConfig;
 
@@ -23,7 +23,7 @@ impl Default for AppConfig {
                 .parse()
                 .expect("default HTTP bind address must be valid"),
             database_url: None,
-            local_api_secret: None,
+            local_api_secret: Some(DEFAULT_LOCAL_API_SECRET.to_owned()),
             nats_server_url: None,
             secret_vault_path: None,
             secret_vault_key: None,
