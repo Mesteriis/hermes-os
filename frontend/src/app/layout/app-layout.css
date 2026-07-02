@@ -1,0 +1,203 @@
+.app-layout-preview {
+	min-height: 100vh;
+	background: var(--h-color-bg);
+	color: var(--h-color-text);
+	font-family: var(--h-font-sans);
+	padding: var(--h-spacing-5);
+}
+
+.hermes-app-layout {
+	--app-layout-rail-width: 56px;
+	--app-layout-sidebar-width: 252px;
+	--app-layout-inspector-width: 340px;
+	--app-layout-pane-padding: var(--h-spacing-4);
+
+	position: relative;
+	display: grid;
+	grid-template-areas: 'workspace';
+	grid-template-columns: minmax(0, 1fr);
+	width: 100%;
+	min-height: calc(100vh - 40px);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-bg-muted);
+	color: var(--h-color-text);
+	box-shadow: var(--h-shadow-sm);
+}
+
+.hermes-app-layout--compact {
+	--app-layout-rail-width: 48px;
+	--app-layout-sidebar-width: 224px;
+	--app-layout-inspector-width: 304px;
+	--app-layout-pane-padding: var(--h-spacing-3);
+}
+
+.hermes-app-layout--has-rail {
+	grid-template-areas: 'rail workspace';
+	grid-template-columns: var(--app-layout-rail-width) minmax(0, 1fr);
+}
+
+.hermes-app-layout--has-sidebar {
+	grid-template-areas: 'sidebar workspace';
+	grid-template-columns: minmax(196px, var(--app-layout-sidebar-width)) minmax(0, 1fr);
+}
+
+.hermes-app-layout--has-inspector {
+	grid-template-areas: 'workspace inspector';
+	grid-template-columns: minmax(0, 1fr) minmax(260px, var(--app-layout-inspector-width));
+}
+
+.hermes-app-layout--has-rail.hermes-app-layout--has-sidebar {
+	grid-template-areas: 'rail sidebar workspace';
+	grid-template-columns:
+		var(--app-layout-rail-width)
+		minmax(196px, var(--app-layout-sidebar-width))
+		minmax(0, 1fr);
+}
+
+.hermes-app-layout--has-rail.hermes-app-layout--has-inspector {
+	grid-template-areas: 'rail workspace inspector';
+	grid-template-columns:
+		var(--app-layout-rail-width)
+		minmax(0, 1fr)
+		minmax(260px, var(--app-layout-inspector-width));
+}
+
+.hermes-app-layout--has-sidebar.hermes-app-layout--has-inspector {
+	grid-template-areas: 'sidebar workspace inspector';
+	grid-template-columns:
+		minmax(196px, var(--app-layout-sidebar-width))
+		minmax(0, 1fr)
+		minmax(260px, var(--app-layout-inspector-width));
+}
+
+.hermes-app-layout--has-rail.hermes-app-layout--has-sidebar.hermes-app-layout--has-inspector {
+	grid-template-areas: 'rail sidebar workspace inspector';
+	grid-template-columns:
+		var(--app-layout-rail-width)
+		minmax(196px, var(--app-layout-sidebar-width))
+		minmax(0, 1fr)
+		minmax(260px, var(--app-layout-inspector-width));
+}
+
+.hermes-app-layout__rail,
+.hermes-app-layout__sidebar,
+.hermes-app-layout__workspace,
+.hermes-app-layout__inspector {
+	min-width: 0;
+	min-height: 0;
+}
+
+.hermes-app-layout__rail {
+	grid-area: rail;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--h-spacing-2);
+	border-right: 1px solid var(--h-color-border);
+	background: var(--h-color-surface-raised);
+	padding: var(--h-spacing-3) var(--h-spacing-2);
+}
+
+.hermes-app-layout__sidebar {
+	grid-area: sidebar;
+	display: grid;
+	align-content: start;
+	gap: var(--h-spacing-3);
+	border-right: 1px solid var(--h-color-border);
+	background: var(--h-color-surface);
+	padding: var(--app-layout-pane-padding);
+}
+
+.hermes-app-layout__workspace {
+	grid-area: workspace;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+	background: var(--h-color-bg-muted);
+}
+
+.hermes-app-layout__topbar,
+.hermes-app-layout__footer {
+	display: flex;
+	align-items: center;
+	gap: var(--h-spacing-3);
+	min-width: 0;
+	border-color: var(--h-color-border);
+	background: var(--h-color-surface);
+	padding: var(--h-spacing-3) var(--app-layout-pane-padding);
+}
+
+.hermes-app-layout__topbar {
+	border-bottom: 1px solid var(--h-color-border);
+}
+
+.hermes-app-layout__main {
+	min-width: 0;
+	min-height: 0;
+	padding: var(--app-layout-pane-padding);
+}
+
+.hermes-app-layout__footer {
+	justify-content: space-between;
+	border-top: 1px solid var(--h-color-border);
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-sm);
+}
+
+.hermes-app-layout__inspector {
+	grid-area: inspector;
+	display: grid;
+	align-content: start;
+	gap: var(--h-spacing-3);
+	border-left: 1px solid var(--h-color-border);
+	background: var(--h-color-surface);
+	padding: var(--app-layout-pane-padding);
+}
+
+@media (max-width: 1100px) {
+	.hermes-app-layout,
+	.hermes-app-layout--has-rail,
+	.hermes-app-layout--has-sidebar,
+	.hermes-app-layout--has-inspector,
+	.hermes-app-layout--has-rail.hermes-app-layout--has-sidebar,
+	.hermes-app-layout--has-rail.hermes-app-layout--has-inspector,
+	.hermes-app-layout--has-sidebar.hermes-app-layout--has-inspector,
+	.hermes-app-layout--has-rail.hermes-app-layout--has-sidebar.hermes-app-layout--has-inspector {
+		grid-template-areas: 'rail workspace';
+		grid-template-columns: var(--app-layout-rail-width) minmax(0, 1fr);
+	}
+
+	.hermes-app-layout__sidebar,
+	.hermes-app-layout__inspector {
+		display: none;
+	}
+
+}
+
+@media (max-width: 700px) {
+	.app-layout-preview {
+		padding: var(--h-spacing-3);
+	}
+
+	.hermes-app-layout,
+	.hermes-app-layout--has-rail,
+	.hermes-app-layout--has-sidebar,
+	.hermes-app-layout--has-inspector,
+	.hermes-app-layout--has-rail.hermes-app-layout--has-sidebar,
+	.hermes-app-layout--has-rail.hermes-app-layout--has-inspector,
+	.hermes-app-layout--has-sidebar.hermes-app-layout--has-inspector,
+	.hermes-app-layout--has-rail.hermes-app-layout--has-sidebar.hermes-app-layout--has-inspector {
+		grid-template-areas: 'workspace';
+		grid-template-columns: minmax(0, 1fr);
+		min-height: calc(100vh - 24px);
+	}
+
+	.hermes-app-layout__rail {
+		display: none;
+	}
+
+	.hermes-app-layout__footer {
+		align-items: stretch;
+		flex-direction: column;
+	}
+}
