@@ -131,7 +131,7 @@ cargo test --manifest-path backend/Cargo.toml
 cargo clippy --manifest-path backend/Cargo.toml --all-targets --all-features -- -D warnings
 ```
 
-For the normal full-stack development loop, use `make dev` from the repository root. It starts PostgreSQL, runs this backend with auto-restart on Rust/TOML/SQL changes, and starts the SvelteKit frontend with Vite HMR. Backend auto-restart requires either `watchexec` or `cargo-watch`.
+For the normal full-stack development loop, use `make dev` from the repository root. It starts PostgreSQL, runs this backend through the `backend-dev` bacon job (auto-restart on Rust/TOML/SQL changes via `kill_then_restart`), and starts the Vue 3 frontend with Vite HMR. Backend auto-restart requires `bacon`; `make dev` installs it locally when missing.
 
 ## Environment
 
@@ -146,7 +146,10 @@ Supported environment variables:
   with 1 second between attempts.
 - `DATABASE_URL` - optional PostgreSQL URL. The current health endpoint does not require a database connection.
 - `HERMES_LOCAL_API_SECRET` - local shared secret required by the router-level
-  guard for protected local API endpoints.
+  guard for protected local API endpoints. Defaults to
+  `change-me-local-api-secret` so local runs work without environment setup;
+  packaged desktop builds bake in a per-build random secret instead
+  (see `scripts/build.sh`).
 - `HERMES_VAULT_HOME` - optional host vault directory; defaults to the local
   Hermes vault home.
 - `HERMES_DEV_MODE` - enables debug-only host vault development key behavior

@@ -148,7 +148,14 @@ make dev
 from `docker/.env.example` when missing, starts PostgreSQL in Docker, runs the
 Rust backend through repo-local `bacon`, runs the Vue 3 + Vite frontend
 natively, and writes structured local logs under
-`.local/dev-logs/`.
+`.local/dev-logs/`. Ports held by stale dev processes from a previous session
+are reclaimed automatically.
+
+To also open the Tauri desktop shell window on top of the same dev loop:
+
+```sh
+make dev-desktop
+```
 
 For a stable tail target during one dev session:
 
@@ -162,6 +169,7 @@ make logs
 
 ```sh
 make dev
+make dev-desktop
 make logs
 make build
 make migrate
