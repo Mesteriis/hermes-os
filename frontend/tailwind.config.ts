@@ -1,7 +1,7 @@
 import type { Config } from 'tailwindcss'
 
 export default {
-	content: ['./index.html', './src/**/*.{vue,ts,tsx}'],
+	content: ['./index.html', './src/**/*.{vue,ts,tsx}', './stories/**/*.{ts,vue}', './.storybook/**/*.{ts,js}'],
 	theme: {
 		extend: {
 			fontFamily: {
@@ -17,6 +17,15 @@ export default {
 				]
 			},
 			colors: {
+				'h-bg': 'var(--h-color-bg)',
+				'h-bg-muted': 'var(--h-color-bg-muted)',
+				'h-surface': 'var(--h-color-surface)',
+				'h-surface-raised': 'var(--h-color-surface-raised)',
+				'h-text': 'var(--h-color-text)',
+				'h-text-strong': 'var(--h-color-text-strong)',
+				'h-text-muted': 'var(--h-color-text-muted)',
+				'h-accent': 'var(--h-color-accent)',
+				'h-danger': 'var(--h-color-danger)',
 				'hh-bg': '#02090b',
 				'hh-bg-raised': '#020d10',
 				'hh-surface': '#06181b',

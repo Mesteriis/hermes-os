@@ -2,6 +2,10 @@ node_modules
 
 # Output
 /dist
+/storybook-static
+/playwright-report
+/test-results
+/public/design-tokens.source.json
 
 # OS
 .DS_Store

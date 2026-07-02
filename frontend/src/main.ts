@@ -10,6 +10,7 @@ import { useRealtimeStatusStore } from './shared/stores/realtimeStatus'
 import './style.css'
 import './styles/surfaces.css'
 import './styles/theme-classes.css'
+import './shared/ui/styles/index.css'
 
 const app = createApp(App)
 const pinia = createPinia()
