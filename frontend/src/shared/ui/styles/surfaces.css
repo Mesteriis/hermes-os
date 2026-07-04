@@ -14,6 +14,8 @@
 }
 
 .hermes-card {
+	position: relative;
+	isolation: isolate;
 	border: 1px solid var(--h-color-border);
 	border-radius: var(--h-radius-md);
 	box-shadow: var(--h-shadow-xs);
@@ -147,6 +149,68 @@
 .hermes-card--disabled {
 	cursor: not-allowed;
 	opacity: 0.52;
+}
+
+.hermes-card--signal {
+	--h-card-signal-color: var(--h-color-accent);
+	--h-card-signal-muted: var(--h-color-accent-muted);
+	border-color: color-mix(in srgb, var(--h-card-signal-color) 36%, var(--h-color-border));
+	background-image: linear-gradient(135deg, var(--h-card-signal-muted), transparent 42%);
+	box-shadow: var(--h-shadow-xs), 0 0 0 1px color-mix(in srgb, var(--h-card-signal-color) 18%, transparent);
+}
+
+.hermes-card--signal-accent {
+	--h-card-signal-color: var(--h-color-accent);
+	--h-card-signal-muted: var(--h-color-accent-muted);
+}
+
+.hermes-card--signal-info {
+	--h-card-signal-color: var(--h-color-info);
+	--h-card-signal-muted: var(--h-color-info-muted);
+}
+
+.hermes-card--signal-success {
+	--h-card-signal-color: var(--h-color-success);
+	--h-card-signal-muted: var(--h-color-success-muted);
+}
+
+.hermes-card--signal-warning {
+	--h-card-signal-color: var(--h-color-warning);
+	--h-card-signal-muted: var(--h-color-warning-muted);
+}
+
+.hermes-card--signal-danger {
+	--h-card-signal-color: var(--h-color-danger);
+	--h-card-signal-muted: var(--h-color-danger-muted);
+}
+
+.hermes-card--signal::before,
+.hermes-card--signal::after {
+	position: absolute;
+	border-radius: inherit;
+	content: "";
+	pointer-events: none;
+}
+
+.hermes-card--signal::before {
+	inset: -1px;
+	border: 1px solid color-mix(in srgb, var(--h-card-signal-color) 58%, transparent);
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--h-card-signal-color) 18%, transparent), 0 0 18px color-mix(in srgb, var(--h-card-signal-color) 16%, transparent);
+	opacity: 0.72;
+}
+
+.hermes-card--signal::after {
+	inset: 3px;
+	border: 1px solid color-mix(in srgb, var(--h-card-signal-color) 20%, transparent);
+	opacity: 0.42;
+}
+
+.hermes-card--signal-pulse::before {
+	animation: hermes-card-signal-border 1.7s ease-in-out infinite;
+}
+
+.hermes-card--signal-pulse::after {
+	animation: hermes-card-signal-inner 1.7s ease-in-out infinite;
 }
 
 .hermes-card-header,
@@ -666,4 +730,46 @@
 	color: var(--h-color-text-muted);
 	font-size: var(--h-font-size-sm);
 	line-height: var(--h-line-height-default);
+}
+
+@keyframes hermes-card-signal-border {
+	0%,
+	100% {
+		box-shadow: 0 0 0 1px color-mix(in srgb, var(--h-card-signal-color) 14%, transparent), 0 0 12px color-mix(in srgb, var(--h-card-signal-color) 12%, transparent);
+		opacity: 0.58;
+	}
+
+	45% {
+		box-shadow: 0 0 0 1px color-mix(in srgb, var(--h-card-signal-color) 34%, transparent), 0 0 26px color-mix(in srgb, var(--h-card-signal-color) 32%, transparent);
+		opacity: 1;
+	}
+}
+
+@keyframes hermes-card-signal-inner {
+	0% {
+		opacity: 0.28;
+	}
+
+	50% {
+		opacity: 0.56;
+	}
+
+	100% {
+		opacity: 0.28;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.hermes-card--signal-pulse::before,
+	.hermes-card--signal-pulse::after {
+		animation: none;
+	}
+
+	.hermes-card--signal::before {
+		opacity: 0.82;
+	}
+
+	.hermes-card--signal::after {
+		opacity: 0.48;
+	}
 }

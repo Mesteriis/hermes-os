@@ -10,7 +10,16 @@ const meta = {
 		components: { ToggleGroup },
 		data() {
 			const copy = generalStoryCopy(storybookLocaleFromGlobals(context.globals))
-			return { copy, selected: 'review', selectedMany: ['review', 'evidence'] }
+			return {
+				copy,
+				languages: [
+					{ value: 'ru', label: 'Русский' },
+					{ value: 'en', label: 'English' }
+				],
+				selected: 'review',
+				selectedLanguage: 'ru',
+				selectedMany: ['review', 'evidence']
+			}
 		},
 		template: `
 			<section class="storybook-canvas">
@@ -18,6 +27,12 @@ const meta = {
 					<h2>{{ copy.controls.toggleGroup }}</h2>
 					<ToggleGroup v-model="selected" :aria-label="copy.controls.toggleGroup" :items="copy.toggles" />
 					<ToggleGroup v-model="selectedMany" multiple :aria-label="copy.controls.toggleGroup" :items="copy.toggles" />
+					<ToggleGroup
+						v-model="selectedLanguage"
+						class="hermes-toggle-group--tabs"
+						aria-label="Language"
+						:items="languages"
+					/>
 				</div>
 			</section>
 		`

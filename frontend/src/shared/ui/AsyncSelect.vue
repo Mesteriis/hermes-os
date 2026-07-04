@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import Button from './Button.vue'
 import SearchableSelect from './SearchableSelect.vue'
-import Spinner from './Spinner.vue'
 import type { SelectOption } from './Selection.types'
 
 const props = withDefaults(defineProps<{
@@ -89,7 +88,11 @@ function emitRetry(): void {
 			aria-live="polite"
 			:aria-label="loadingAnnouncement"
 		>
-			<Spinner size="sm" :label="loadingAnnouncement" decorative />
+			<span class="hermes-async-select__loading-mark" aria-hidden="true">
+				<span class="hermes-async-select__loading-dot" />
+				<span class="hermes-async-select__loading-dot" />
+				<span class="hermes-async-select__loading-dot" />
+			</span>
 			<span v-if="visibleLoadingLabel">{{ visibleLoadingLabel }}</span>
 		</div>
 		<div v-else-if="hasError" class="hermes-async-select__state hermes-async-select__state--error" role="alert">

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 
 type CardVariant = 'default' | 'muted' | 'raised' | 'interactive'
 type CardDensity = 'compact' | 'comfortable'
+type CardSignalTone = 'accent' | 'info' | 'success' | 'warning' | 'danger'
 
 const props = withDefaults(defineProps<{
 	as?: string
@@ -11,6 +12,9 @@ const props = withDefaults(defineProps<{
 	selected?: boolean
 	disabled?: boolean
 	clip?: boolean
+	signal?: boolean
+	signalTone?: CardSignalTone
+	signalPulse?: boolean
 	class?: string
 }>(), {
 	as: 'article',
@@ -18,7 +22,10 @@ const props = withDefaults(defineProps<{
 	density: 'comfortable',
 	selected: false,
 	disabled: false,
-	clip: false
+	clip: false,
+	signal: false,
+	signalTone: 'accent',
+	signalPulse: true
 })
 
 const classes = computed(() => [
@@ -28,6 +35,9 @@ const classes = computed(() => [
 	props.selected && 'hermes-card--selected',
 	props.disabled && 'hermes-card--disabled',
 	props.clip && 'hermes-card--clip',
+	props.signal && 'hermes-card--signal',
+	props.signal && `hermes-card--signal-${props.signalTone}`,
+	props.signal && props.signalPulse && 'hermes-card--signal-pulse',
 	props.class
 ])
 

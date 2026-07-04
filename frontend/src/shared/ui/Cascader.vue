@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import Icon from './Icon.vue'
 import type { TreeSelectOption } from './Selection.types'
+import { useMouseLeaveDismiss } from './useMouseLeaveDismiss'
 
 interface CascaderColumn {
 	columnIndex: number
@@ -52,6 +53,12 @@ const navigationPath = ref<TreeSelectOption[]>([])
 const activeColumnIndex = ref(0)
 const activeOptionIndex = ref(0)
 const componentId = `hermes-cascader-${useId()}`
+const rootRef = ref<HTMLElement | null>(null)
+const popoverRef = ref<HTMLElement | null>(null)
+const { cancelMouseLeaveDismiss, scheduleMouseLeaveDismiss } = useMouseLeaveDismiss(closeCascader, undefined, {
+	isOpen,
+	getBoundaryElements: () => [rootRef.value, popoverRef.value]
+})
 
 const classes = computed(() => ['hermes-cascader', props.class])
 const popoverId = computed(() => `${componentId}-popover`)
@@ -274,6 +281,7 @@ function openCascader(): void {
 	if (!canInteract.value) {
 		return
 	}
+	cancelMouseLeaveDismiss()
 	syncNavigationPathFromModel()
 	setActivePositionToPathEnd()
 	if (isOpen.value) {
@@ -286,6 +294,7 @@ function openCascader(): void {
 }
 
 function closeCascader(): void {
+	cancelMouseLeaveDismiss()
 	if (!isOpen.value) {
 		return
 	}
@@ -427,7 +436,14 @@ function handleFocusout(event: FocusEvent): void {
 </script>
 
 <template>
-	<div :class="classes" @focusout="handleFocusout" @keydown="handleKeydown">
+	<div
+		ref="rootRef"
+		:class="classes"
+		@focusout="handleFocusout"
+		@keydown="handleKeydown"
+		@mouseenter="cancelMouseLeaveDismiss"
+		@mouseleave="scheduleMouseLeaveDismiss"
+	>
 		<button
 			class="hermes-searchable-select__trigger hermes-cascader__trigger"
 			:class="{ 'hermes-searchable-select__trigger--readonly': readonly, 'hermes-cascader__trigger--readonly': readonly }"
@@ -450,7 +466,7 @@ function handleFocusout(event: FocusEvent): void {
 			</span>
 			<Icon icon="tabler:chevron-down" size="1rem" class="hermes-searchable-select__chevron hermes-cascader__chevron" aria-hidden="true" />
 		</button>
-		<div v-if="isOpen" :id="popoverId" class="hermes-cascader__popover">
+		<div v-if="isOpen" :id="popoverId" ref="popoverRef" class="hermes-cascader__popover">
 			<ul
 				v-for="column in columns"
 				:id="columnId(column.columnIndex)"

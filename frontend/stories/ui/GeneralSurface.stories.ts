@@ -96,7 +96,12 @@ export const Cards: Story = {
 		},
 		data() {
 			const copy = generalStoryCopy(storybookLocaleFromGlobals(context.globals))
-			return { copy, stats: copy.surfaces.stats, actionCards: copy.surfaces.actionCards }
+			return {
+				copy,
+				stats: copy.surfaces.stats,
+				actionCards: copy.surfaces.actionCards,
+				signalCards: copy.surfaces.signalCards
+			}
 		},
 		template: `
 			<section class="storybook-canvas">
@@ -129,6 +134,27 @@ export const Cards: Story = {
 					</CardFooter>
 				</Card>
 
+				<div class="storybook-section">
+					<h3>{{ copy.surfaces.signalTitle }}</h3>
+					<p>{{ copy.surfaces.signalDescription }}</p>
+				</div>
+
+				<div class="storybook-grid">
+					<Card
+						v-for="signalCard in signalCards"
+						:key="signalCard.title"
+						variant="raised"
+						:signal="signalCard.active"
+						:signal-tone="signalCard.tone"
+						:signal-pulse="signalCard.pulse !== false"
+					>
+						<CardHeader>
+							<CardTitle>{{ signalCard.title }}</CardTitle>
+							<CardDescription>{{ signalCard.description }}</CardDescription>
+						</CardHeader>
+					</Card>
+				</div>
+
 				<div class="storybook-grid">
 					<ActionCard
 						v-for="(actionCard, index) in actionCards"
@@ -148,6 +174,7 @@ export const Cards: Story = {
 		const canvas = within(canvasElement)
 
 		await expect(canvas.getByText(copy.surfaces.cardsTitle)).toBeVisible()
+		await expect(canvas.getByText(copy.surfaces.signalCards[0].title)).toBeVisible()
 		await expect(canvas.getByText(copy.surfaces.actionCards[0].title)).toBeVisible()
 	}
 }

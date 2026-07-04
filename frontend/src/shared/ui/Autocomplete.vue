@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useMouseLeaveDismiss } from './useMouseLeaveDismiss'
 
 interface AutocompleteOption {
 	value: string
@@ -35,6 +36,12 @@ const emit = defineEmits<{
 
 const isOpen = ref(false)
 const activeIndex = ref(0)
+const rootRef = ref<HTMLElement | null>(null)
+const listboxRef = ref<HTMLElement | null>(null)
+const { cancelMouseLeaveDismiss, scheduleMouseLeaveDismiss } = useMouseLeaveDismiss(closeList, undefined, {
+	isOpen,
+	getBoundaryElements: () => [rootRef.value, listboxRef.value]
+})
 
 const classes = computed(() => ['hermes-autocomplete', props.class])
 const listId = computed(() => `${props.id ?? 'hermes-autocomplete'}-listbox`)
@@ -59,6 +66,7 @@ function optionId(index: number): string {
 function handleInput(event: Event): void {
 	const target = event.target as HTMLInputElement
 	emit('update:modelValue', target.value)
+	cancelMouseLeaveDismiss()
 	isOpen.value = true
 	activeIndex.value = 0
 }
@@ -66,15 +74,25 @@ function handleInput(event: Event): void {
 function selectOption(option: AutocompleteOption): void {
 	emit('update:modelValue', option.value)
 	emit('select', option)
+	closeList()
+}
+
+function openList(): void {
+	cancelMouseLeaveDismiss()
+	isOpen.value = true
+}
+
+function closeList(): void {
+	cancelMouseLeaveDismiss()
 	isOpen.value = false
 }
 
 function handleKeydown(event: KeyboardEvent): void {
 	if (!isOpen.value && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
-		isOpen.value = true
+		openList()
 	}
 	if (event.key === 'Escape') {
-		isOpen.value = false
+		closeList()
 		return
 	}
 	if (filteredOptions.value.length === 0) {
@@ -106,13 +124,19 @@ function handleFocusout(event: FocusEvent): void {
 	const currentTarget = event.currentTarget as HTMLElement
 	const nextTarget = event.relatedTarget
 	if (!(nextTarget instanceof Node) || !currentTarget.contains(nextTarget)) {
-		isOpen.value = false
+		closeList()
 	}
 }
 </script>
 
 <template>
-	<div :class="classes" @focusout="handleFocusout">
+	<div
+		ref="rootRef"
+		:class="classes"
+		@focusout="handleFocusout"
+		@mouseenter="cancelMouseLeaveDismiss"
+		@mouseleave="scheduleMouseLeaveDismiss"
+	>
 		<input
 			class="hermes-native-control"
 			:aria-activedescendant="activeDescendant"
@@ -127,11 +151,11 @@ function handleFocusout(event: FocusEvent): void {
 			role="combobox"
 			:type="'text'"
 			:value="modelValue"
-			@focus="isOpen = true"
+			@focus="openList"
 			@input="handleInput"
 			@keydown="handleKeydown"
 		/>
-		<ul v-if="isOpen" :id="listId" class="hermes-autocomplete__listbox" role="listbox">
+		<ul v-if="isOpen" :id="listId" ref="listboxRef" class="hermes-autocomplete__listbox" role="listbox">
 			<li
 				v-for="(option, index) in filteredOptions"
 				:id="optionId(index)"

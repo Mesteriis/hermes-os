@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import Icon from './Icon.vue'
 import type { NavigationItem } from './Navigation.types'
+import { useMouseLeaveDismiss } from './useMouseLeaveDismiss'
 
 const props = withDefaults(defineProps<{
 	items?: NavigationItem[]
@@ -21,11 +22,23 @@ const emit = defineEmits<{
 }>()
 
 const isOpen = ref(props.defaultOpen)
+const rootRef = ref<HTMLElement | null>(null)
+const contentRef = ref<HTMLElement | null>(null)
 const classes = computed(() => ['hermes-context-menu', props.class])
+const { cancelMouseLeaveDismiss, scheduleMouseLeaveDismiss } = useMouseLeaveDismiss(closeMenu, undefined, {
+	isOpen,
+	getBoundaryElements: () => [rootRef.value, contentRef.value]
+})
 
 function openMenu(event?: Event): void {
 	event?.preventDefault()
+	cancelMouseLeaveDismiss()
 	isOpen.value = true
+}
+
+function closeMenu(): void {
+	cancelMouseLeaveDismiss()
+	isOpen.value = false
 }
 
 function selectItem(item: NavigationItem): void {
@@ -33,12 +46,18 @@ function selectItem(item: NavigationItem): void {
 		return
 	}
 	emit('select', item)
-	isOpen.value = false
+	closeMenu()
 }
 </script>
 
 <template>
-	<div :class="classes" @keydown.escape="isOpen = false">
+	<div
+		ref="rootRef"
+		:class="classes"
+		@keydown.escape="closeMenu"
+		@mouseenter="cancelMouseLeaveDismiss"
+		@mouseleave="scheduleMouseLeaveDismiss"
+	>
 		<div class="hermes-context-menu__trigger" @contextmenu="openMenu">
 			<slot name="trigger">
 				<button class="hermes-context-menu__button" type="button" @click="openMenu">
@@ -46,7 +65,7 @@ function selectItem(item: NavigationItem): void {
 				</button>
 			</slot>
 		</div>
-		<div v-if="isOpen" class="hermes-context-menu__content" role="menu" :aria-label="label">
+		<div v-if="isOpen" ref="contentRef" class="hermes-context-menu__content" role="menu" :aria-label="label">
 			<button
 				v-for="item in items"
 				:key="item.id"

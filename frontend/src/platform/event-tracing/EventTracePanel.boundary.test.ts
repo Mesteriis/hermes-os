@@ -2,16 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 
 describe('EventTracePanel boundary', () => {
-  it('preserves platform event tracing ownership after removing the legacy Vue render layer', () => {
-    const appViewSource = readFileSync(new URL('../../app/views/EventTracingView.vue', import.meta.url), 'utf8')
-    const queriesSource = readFileSync(new URL('./queries.ts', import.meta.url), 'utf8')
-    const typesSource = readFileSync(new URL('./types.ts', import.meta.url), 'utf8')
+	it('preserves platform event tracing ownership after removing the legacy Vue render layer', () => {
+		const appSurfaceSource = readFileSync(new URL('../../app/queries/useEventTracingViewSurface.ts', import.meta.url), 'utf8')
+		const queriesSource = readFileSync(new URL('./queries.ts', import.meta.url), 'utf8')
+		const typesSource = readFileSync(new URL('./types.ts', import.meta.url), 'utf8')
 
     expect(existsSync(new URL('./EventTracePanel.vue', import.meta.url))).toBe(false)
     expect(existsSync(new URL('./EventTraceWorkspace.vue', import.meta.url))).toBe(false)
 
-    expect(appViewSource).toContain('Event tracing UI removed after logic extraction. Rebuild pending new design language.')
-    expect(appViewSource).toContain('Event tracing logic is preserved')
+		expect(appSurfaceSource).toContain('Event tracing UI removed after logic extraction. Rebuild pending new design language.')
+		expect(appSurfaceSource).toContain('Event tracing logic is preserved')
 
     expect(queriesSource).toContain('eventTraceQueryKeys')
     expect(queriesSource).toContain('useEventTraceByEventIdQuery')

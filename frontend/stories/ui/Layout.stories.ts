@@ -15,9 +15,12 @@ import {
 	ScrollArea,
 	SidePanel,
 	Split,
+	Spacer,
 	Stack,
 	StatusBar,
 	Toolbar,
+	ToolbarGroup,
+	ToolbarSeparator,
 	TopBar,
 	VStack,
 	VirtualScrollArea
@@ -125,8 +128,11 @@ export const ShellSurfaces: Story = {
 			HStack,
 			InspectorPanel,
 			SidePanel,
+			Spacer,
 			StatusBar,
 			Toolbar,
+			ToolbarGroup,
+			ToolbarSeparator,
 			TopBar,
 			VStack
 		},
@@ -147,9 +153,17 @@ export const ShellSurfaces: Story = {
 						</template>
 						<template #end>
 							<Toolbar :label="text.layout.toolbarLabel" density="compact">
-								<Button v-for="action in text.layout.toolbarActions" :key="action" size="sm" variant="ghost">
-									{{ action }}
-								</Button>
+								<ToolbarGroup :label="text.layout.toolbarLabel">
+									<Button size="sm" variant="ghost">{{ text.layout.toolbarActions[0] }}</Button>
+									<Button size="sm" variant="ghost">{{ text.layout.toolbarActions[1] }}</Button>
+								</ToolbarGroup>
+								<Spacer orientation="horizontal" />
+								<ToolbarSeparator />
+								<ToolbarGroup :label="text.layout.actionLabel">
+									<Button v-for="action in text.layout.toolbarActions.slice(2)" :key="action" size="sm" variant="ghost">
+										{{ action }}
+									</Button>
+								</ToolbarGroup>
 							</Toolbar>
 						</template>
 					</TopBar>

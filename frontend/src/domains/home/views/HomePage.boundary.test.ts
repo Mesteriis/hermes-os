@@ -2,10 +2,10 @@ import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('HomePage boundary', () => {
-  it('preserves home dashboard derivations after removing the legacy HomePage Vue layer', () => {
-    const appViewSource = readFileSync(new URL('../../../app/views/HomeView.vue', import.meta.url), 'utf8')
-    const surfaceSource = readFileSync(new URL('../queries/useHomePageSurface.ts', import.meta.url), 'utf8')
-    const querySource = readFileSync(new URL('../queries/useHomeQuery.ts', import.meta.url), 'utf8')
+	it('preserves home dashboard derivations after removing the legacy HomePage Vue layer', () => {
+		const appSurfaceSource = readFileSync(new URL('../../../app/queries/useHomeViewSurface.ts', import.meta.url), 'utf8')
+		const surfaceSource = readFileSync(new URL('../queries/useHomePageSurface.ts', import.meta.url), 'utf8')
+		const querySource = readFileSync(new URL('../queries/useHomeQuery.ts', import.meta.url), 'utf8')
 
     expect(existsSync(new URL('./HomePage.vue', import.meta.url))).toBe(false)
     expect(existsSync(new URL('../components/HomeMetrics.vue', import.meta.url))).toBe(false)
@@ -16,8 +16,8 @@ describe('HomePage boundary', () => {
     expect(existsSync(new URL('../components/HomeSystemStatus.vue', import.meta.url))).toBe(false)
     expect(existsSync(new URL('../components/HomeActiveProjects.vue', import.meta.url))).toBe(false)
 
-    expect(appViewSource).toContain('Home UI removed after logic extraction. Rebuild pending new design language.')
-    expect(appViewSource).toContain('Home logic is preserved')
+		expect(appSurfaceSource).toContain('Home UI removed after logic extraction. Rebuild pending new design language.')
+		expect(appSurfaceSource).toContain('Home logic is preserved')
 
     expect(surfaceSource).toContain('channelIcons')
     expect(surfaceSource).toContain('useCommunicationMessagesQuery(50)')

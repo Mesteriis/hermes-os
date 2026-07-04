@@ -2,10 +2,10 @@ import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('AgentsPage boundary', () => {
-  it('preserves agents orchestration after removing the legacy AgentsPage Vue layer', () => {
-    const appViewSource = readFileSync(new URL('../../../app/views/AgentsView.vue', import.meta.url), 'utf8')
-    const surfaceSource = readFileSync(new URL('../queries/useAgentsPageSurface.ts', import.meta.url), 'utf8')
-    const storeSource = readFileSync(new URL('../stores/agents.ts', import.meta.url), 'utf8')
+	it('preserves agents orchestration after removing the legacy AgentsPage Vue layer', () => {
+		const appSurfaceSource = readFileSync(new URL('../../../app/queries/useAgentsViewSurface.ts', import.meta.url), 'utf8')
+		const surfaceSource = readFileSync(new URL('../queries/useAgentsPageSurface.ts', import.meta.url), 'utf8')
+		const storeSource = readFileSync(new URL('../stores/agents.ts', import.meta.url), 'utf8')
 
     expect(existsSync(new URL('./AgentsPage.vue', import.meta.url))).toBe(false)
     expect(existsSync(new URL('../components/AgentsGrid.vue', import.meta.url))).toBe(false)
@@ -14,8 +14,8 @@ describe('AgentsPage boundary', () => {
     expect(existsSync(new URL('../components/AgentsWorkflows.vue', import.meta.url))).toBe(false)
     expect(existsSync(new URL('../components/AgentsRail.vue', import.meta.url))).toBe(false)
 
-    expect(appViewSource).toContain('Agents UI removed after logic extraction. Rebuild pending new design language.')
-    expect(appViewSource).toContain('Agents logic is preserved')
+		expect(appSurfaceSource).toContain('Agents UI removed after logic extraction. Rebuild pending new design language.')
+		expect(appSurfaceSource).toContain('Agents logic is preserved')
 
     expect(surfaceSource).toContain('useAiWorkspaceQuery')
     expect(surfaceSource).toContain('useAgentsStore')

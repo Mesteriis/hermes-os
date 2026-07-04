@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test'
 import type { APIRequestContext, Page } from '@playwright/test'
 
-const THEMES = ['light', 'dark', 'hermes'] as const
+const CANONICAL_THEMES = ['base-light', 'base-dark', 'hermes-light', 'hermes-dark'] as const
+// Product visual policy: screenshot every story in the canonical product baseline theme.
+// Cross-theme token regressions are covered by Hermes UI/Foundation/Themes, which renders all canonical themes side by side.
+const VISUAL_SNAPSHOT_THEMES = ['base-light'] as const
 const LOCALES = ['ru', 'en', 'es'] as const
 
 const VIEWPORTS = [
@@ -16,7 +19,7 @@ const VIEWPORTS = [
 
 const GENERAL_STORY_TITLE_PREFIX = 'Hermes UI/General/'
 
-type UiThemeName = (typeof THEMES)[number]
+type UiThemeName = (typeof CANONICAL_THEMES)[number]
 type StorybookLocale = (typeof LOCALES)[number]
 
 interface StorybookIndex {
@@ -41,8 +44,8 @@ interface StoryBucket {
 
 const STORY_BUCKETS: readonly StoryBucket[] = [
 	{
-		name: 'domain-and-foundation',
-		includes: (story) => story.title.startsWith('Hermes UI/Domain/') || story.title.startsWith('Hermes UI/Foundation/')
+		name: 'app-and-foundation',
+		includes: (story) => story.title.startsWith('Hermes App/') || story.title.startsWith('Hermes UI/Foundation/')
 	},
 	{
 		name: 'general-a-d',
@@ -52,6 +55,7 @@ const STORY_BUCKETS: readonly StoryBucket[] = [
 			'Button Group',
 			'Cascader',
 			'Checkbox',
+			'Communication',
 			'Command',
 			'Context Menu',
 			'Data Display',
@@ -143,7 +147,7 @@ test.describe('Hermes UI Storybook visual regression', () => {
 
 			for (const story of stories) {
 				for (const locale of LOCALES) {
-					for (const theme of THEMES) {
+					for (const theme of VISUAL_SNAPSHOT_THEMES) {
 						for (const viewport of VIEWPORTS) {
 							await test.step(
 								`${story.title} / ${story.name} / ${locale} / ${theme} / ${viewport.name}`,
@@ -210,6 +214,8 @@ async function openStory(page: Page, story: StorybookStory, theme: UiThemeName, 
 	const shell = page.locator('.storybook-shell')
 	await expect(shell).toBeVisible()
 	await expect(shell).toHaveAttribute('data-ui-theme', theme)
+	await expect(shell).toHaveAttribute('data-ui-theme-family', themeFamily(theme))
+	await expect(shell).toHaveAttribute('data-ui-theme-mode', themeMode(theme))
 	await expect(shell).toHaveAttribute('data-ui-locale', locale)
 	await expect(shell).toHaveAttribute('lang', locale)
 	await waitForStableStoryFrame(page)
@@ -237,6 +243,14 @@ async function assertNoStorybookError(page: Page): Promise<void> {
 
 function snapshotName(story: StorybookStory, locale: StorybookLocale, theme: UiThemeName, viewportName: string): string {
 	return `${safeSnapshotPart(story.id)}--${locale}--${theme}--${viewportName}.png`
+}
+
+function themeFamily(theme: UiThemeName): string {
+	return theme.startsWith('hermes-') ? 'hermes' : 'base'
+}
+
+function themeMode(theme: UiThemeName): string {
+	return theme.endsWith('-dark') ? 'dark' : 'light'
 }
 
 function safeSnapshotPart(value: string): string {

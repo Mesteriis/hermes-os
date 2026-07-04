@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { PopoverRoot, PopoverTrigger, PopoverPortal, PopoverContent, PopoverArrow, PopoverClose } from 'reka-ui'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import Icon from './Icon.vue'
+import { useMouseLeaveDismiss } from './useMouseLeaveDismiss'
 
 const props = withDefaults(defineProps<{
   open?: boolean
@@ -22,15 +23,42 @@ const emit = defineEmits<{
 }>()
 
 const contentClasses = computed(() => ['hermes-popover-content', props.class])
+const internalOpen = ref(false)
+const resolvedOpen = computed(() => props.open ?? internalOpen.value)
+const contentRef = ref<HTMLElement | { $el?: Element | null } | null>(null)
+
+const { cancelMouseLeaveDismiss, scheduleMouseLeaveDismiss } = useMouseLeaveDismiss(() => {
+  setOpen(false)
+}, undefined, {
+  isOpen: resolvedOpen,
+  getBoundaryElements: () => [contentRef.value]
+})
+
+function setOpen(value: boolean): void {
+  if (value) {
+    cancelMouseLeaveDismiss()
+  }
+
+  internalOpen.value = value
+  emit('update:open', value)
+}
 </script>
 
 <template>
-  <PopoverRoot :open="open" @update:open="(val) => emit('update:open', val)">
+  <PopoverRoot :open="resolvedOpen" @update:open="setOpen">
     <PopoverTrigger as-child>
       <slot name="trigger" />
     </PopoverTrigger>
     <PopoverPortal>
-      <PopoverContent :class="contentClasses" :side="side" :side-offset="sideOffset" :align="align">
+      <PopoverContent
+        ref="contentRef"
+        :class="contentClasses"
+        :side="side"
+        :side-offset="sideOffset"
+        :align="align"
+        @mouseenter="cancelMouseLeaveDismiss"
+        @mouseleave="scheduleMouseLeaveDismiss"
+      >
         <PopoverArrow class="hermes-popover-arrow" />
         <slot />
         <PopoverClose class="hermes-popover-close" as-child>

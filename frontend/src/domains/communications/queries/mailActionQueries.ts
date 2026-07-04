@@ -21,6 +21,7 @@ import {
   toggleMessageMute,
   toggleMessagePin,
   snoozeMessage,
+  transitionMessageWorkflowState,
   translateThread,
   translateMessage
 } from '../api/communications'
@@ -42,7 +43,8 @@ import type {
   LocalMessageStateResponse,
   SignatureDetection,
   SmartCcResponse,
-  TranslationResponse
+  TranslationResponse,
+  WorkflowStateTransitionResponse
 } from '../types/communications'
 import type { ThreadTranslationResponse } from '../types/multilingual'
 
@@ -92,6 +94,14 @@ export function useMarkMessageReadMutation() {
   const queryClient = useQueryClient()
   return useMutation<Record<string, unknown>, Error, string>({
     mutationFn: async (messageId) => markMessageRead(messageId),
+    onSuccess: (_result, messageId) => invalidateMessageViews(queryClient, messageId)
+  })
+}
+
+export function useMarkMessageSpamMutation() {
+  const queryClient = useQueryClient()
+  return useMutation<WorkflowStateTransitionResponse, Error, string>({
+    mutationFn: async (messageId) => transitionMessageWorkflowState(messageId, 'spam'),
     onSuccess: (_result, messageId) => invalidateMessageViews(queryClient, messageId)
   })
 }

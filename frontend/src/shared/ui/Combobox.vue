@@ -10,7 +10,7 @@ interface ComboboxOption {
 const props = withDefaults(defineProps<{
 	id?: string
 	modelValue?: string
-	options?: ComboboxOption[]
+	options?: readonly ComboboxOption[]
 	placeholder?: string
 	ariaLabel?: string
 	disabled?: boolean

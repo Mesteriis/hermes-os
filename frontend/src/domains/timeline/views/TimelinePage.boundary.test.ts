@@ -2,17 +2,17 @@ import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('TimelinePage boundary', () => {
-  it('preserves timeline orchestration after removing the legacy TimelinePage Vue layer', () => {
-    const appViewSource = readFileSync(new URL('../../../app/views/TimelineView.vue', import.meta.url), 'utf8')
-    const surfaceSource = readFileSync(new URL('../queries/useTimelinePageSurface.ts', import.meta.url), 'utf8')
-    const storeSource = readFileSync(new URL('../stores/timeline.ts', import.meta.url), 'utf8')
+	it('preserves timeline orchestration after removing the legacy TimelinePage Vue layer', () => {
+		const appSurfaceSource = readFileSync(new URL('../../../app/queries/useTimelineViewSurface.ts', import.meta.url), 'utf8')
+		const surfaceSource = readFileSync(new URL('../queries/useTimelinePageSurface.ts', import.meta.url), 'utf8')
+		const storeSource = readFileSync(new URL('../stores/timeline.ts', import.meta.url), 'utf8')
 
     expect(existsSync(new URL('./TimelinePage.vue', import.meta.url))).toBe(false)
     expect(existsSync(new URL('../components/TimelineStream.vue', import.meta.url))).toBe(false)
     expect(existsSync(new URL('../components/TimelineFilters.vue', import.meta.url))).toBe(false)
 
-    expect(appViewSource).toContain('Timeline UI removed after logic extraction. Rebuild pending new design language.')
-    expect(appViewSource).toContain('Timeline logic is preserved')
+		expect(appSurfaceSource).toContain('Timeline UI removed after logic extraction. Rebuild pending new design language.')
+		expect(appSurfaceSource).toContain('Timeline logic is preserved')
 
     expect(surfaceSource).toContain('useTimelineMessagesQuery')
     expect(surfaceSource).toContain('useTimelineStore')

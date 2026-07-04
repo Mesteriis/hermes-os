@@ -16,7 +16,7 @@ import {
 import { storybookLocaleFromGlobals, storybookText } from './storybook-i18n'
 
 const meta = {
-	title: 'Hermes UI/Domain/Communications',
+	title: 'Hermes UI/General/Communication',
 	component: MessageBubble,
 	args: {
 		author: 'Hermes',

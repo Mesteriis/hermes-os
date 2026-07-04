@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ToastProvider, ToastViewport, ToastRoot, ToastTitle, ToastDescription, ToastClose } from 'reka-ui'
-import { ref, computed, provide, inject, type Ref } from 'vue'
+import { ref, computed, provide, inject, onBeforeUnmount, type Ref } from 'vue'
 import Icon from './Icon.vue'
 
 export interface ToastItem {
   id: string
   title?: string
   description?: string
-  variant?: 'default' | 'success' | 'warning' | 'error'
+  variant?: 'default' | 'info' | 'success' | 'warning' | 'error'
   duration?: number
 }
 
@@ -16,6 +16,7 @@ type DefaultToastItem = Omit<ToastItem, 'id'> & {
 }
 
 const TOAST_INJECTION_KEY = 'hermes-toast-context'
+const TOAST_EXIT_ANIMATION_MS = 820
 
 const props = withDefaults(defineProps<{
   /** Swipe direction to dismiss */
@@ -42,6 +43,7 @@ const toasts = ref<ToastItem[]>(
 ) as Ref<ToastItem[]>
 
 let toastCounter = props.defaultToasts.length
+const pendingRemovalTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 function addToast(item: Omit<ToastItem, 'id'>): string {
   const id = `toast-${++toastCounter}`
@@ -50,7 +52,33 @@ function addToast(item: Omit<ToastItem, 'id'>): string {
 }
 
 function removeToast(id: string): void {
+  clearToastRemoval(id)
   toasts.value = toasts.value.filter((t) => t.id !== id)
+}
+
+function clearToastRemoval(id: string): void {
+  const timer = pendingRemovalTimers.get(id)
+  if (timer === undefined) return
+
+  clearTimeout(timer)
+  pendingRemovalTimers.delete(id)
+}
+
+function scheduleToastRemoval(id: string): void {
+  clearToastRemoval(id)
+  pendingRemovalTimers.set(id, setTimeout(() => {
+    pendingRemovalTimers.delete(id)
+    removeToast(id)
+  }, TOAST_EXIT_ANIMATION_MS))
+}
+
+function handleToastOpenChange(id: string, open: boolean): void {
+  if (open) {
+    clearToastRemoval(id)
+    return
+  }
+
+  scheduleToastRemoval(id)
 }
 
 function success(title: string, description?: string): string {
@@ -73,10 +101,18 @@ const viewportClasses = computed(() => [
 ])
 
 const variantIcons: Record<string, string> = {
+  info: 'tabler:info-circle',
   success: 'tabler:check-circle',
   warning: 'tabler:alert-triangle',
   error: 'tabler:alert-circle'
 }
+
+onBeforeUnmount(() => {
+  for (const timer of pendingRemovalTimers.values()) {
+    clearTimeout(timer)
+  }
+  pendingRemovalTimers.clear()
+})
 </script>
 
 <template>
@@ -88,8 +124,9 @@ const variantIcons: Record<string, string> = {
         v-for="toast in toasts"
         :key="toast.id"
         as="div"
+        :data-toast-id="toast.id"
         :class="['hermes-toast-root', `hermes-toast--${toast.variant || 'default'}`]"
-        @update:open="(open: boolean) => { if (!open) removeToast(toast.id) }"
+        @update:open="handleToastOpenChange(toast.id, $event)"
       >
         <div class="hermes-toast-inner">
           <Icon

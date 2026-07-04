@@ -13,3 +13,9 @@ clipping.
 
 Accessibility: choose semantic `as` values and use `variant="interactive"` only
 when the card is meant to behave as an interactive surface.
+
+Signal state: use `signal` when an external event should draw attention to an
+existing card without changing its layout. Pair it with `signalTone` for
+severity and `signalPulse=false` when motion should be disabled by the caller.
+The component only renders the visual state; event timing and acknowledgement
+belong to the owning surface.

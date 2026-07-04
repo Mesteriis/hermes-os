@@ -11,6 +11,8 @@ Boundary rules:
 - does not fetch, cache, debounce or own async data;
 - disables selection while `disabled`, `loading` or `error` is active;
 - uses parent-provided labels for user-visible async state text.
+- renders loading as a local non-rotating activity mark; it should not use the
+  generic spinner.
 
 ## Props
 

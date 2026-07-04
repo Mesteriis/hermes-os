@@ -82,4 +82,18 @@ describe('Hermes UI input and form component contracts', () => {
 			expect(storySource).toContain('Hermes UI/General/')
 		}
 	})
+
+	it('keeps AsyncSelect loading state local and non-rotating', () => {
+		const uiRoot = fileURLToPath(new URL('.', import.meta.url))
+		const asyncSelectSource = readFileSync(join(uiRoot, 'AsyncSelect.vue'), 'utf8')
+		const controlsCss = readFileSync(join(uiRoot, 'styles/controls.css'), 'utf8')
+
+		expect(asyncSelectSource).toContain('hermes-async-select__loading-mark')
+		expect(asyncSelectSource).not.toContain("from './Spinner.vue'")
+		expect(controlsCss).toContain('.hermes-async-select__loading-dot')
+		expect(controlsCss).toContain('.hermes-async-select__state > span:not(.hermes-async-select__loading-mark)')
+		expect(controlsCss).toContain('@keyframes hermes-async-select-loading-dot')
+		expect(controlsCss).toContain('@media (prefers-reduced-motion: reduce)')
+		expect(controlsCss).not.toContain('hermes-async-select-loading-spin')
+	})
 })

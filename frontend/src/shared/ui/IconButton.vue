@@ -34,6 +34,7 @@ const classes = computed(() => ['hermes-icon-button', props.class].filter(Boolea
 		:icon="icon"
 		:loading="loading"
 		:size="size"
+		:title="label"
 		:type="type"
 		:variant="variant"
 		@click="emit('click', $event)"

@@ -72,7 +72,7 @@ const meta = {
 				text,
 				query: text.form.searchValue,
 				email: text.form.emailValue,
-				password: text.form.passwordValue,
+					password: text.form.passwordValue,
 				count: text.form.countValue,
 				otp: text.form.otpValue,
 				note: text.form.noteValue,
@@ -110,8 +110,8 @@ const meta = {
 								<EmailInput id="story-email" v-model="email" :aria-label="text.form.email" />
 							</FormField>
 							<FormField>
-								<FormLabel for="story-password">{{ text.form.password }}</FormLabel>
-								<PasswordInput id="story-password" v-model="password" :aria-label="text.form.password" />
+									<FormLabel for="story-password">{{ text.form.password }}</FormLabel>
+									<PasswordInput id="story-password" v-model="password" :aria-label="text.form.password" />
 							</FormField>
 							<FormField>
 								<FormLabel for="story-count">{{ text.form.count }}</FormLabel>

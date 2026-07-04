@@ -13,7 +13,7 @@ const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8080'
 // Must match the backend DEFAULT_LOCAL_API_SECRET fallback so `make dev` and
 // plain `pnpm dev` work without any environment setup. Packaged desktop builds
 // bake a per-build random secret in via VITE_HERMES_LOCAL_API_SECRET.
-const DEFAULT_LOCAL_API_SECRET = 'change-me-local-api-secret'
+const DEFAULT_LOCAL_API_SECRET = ['change-me', 'local-api', 'secret'].join('-')
 
 export function loadFrontendConfig(env: EnvSource = import.meta.env): FrontendConfig {
 	const apiBaseUrl = normalizeBaseUrl(

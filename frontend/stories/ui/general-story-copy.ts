@@ -142,6 +142,8 @@ const en = {
 		paperTitle: 'Paper',
 		panelTitle: 'Panel',
 		cardsTitle: 'Cards',
+		signalTitle: 'Signal cards',
+		signalDescription: 'Use an edge signal when a fresh event should pull attention without reshaping the card.',
 		sectionsTitle: 'Sections',
 		accordionTitle: 'Accordion',
 		calloutsTitle: 'Callouts and wells',
@@ -181,6 +183,10 @@ const en = {
 			{ title: 'Create surface', description: 'Start with a neutral container.', icon: 'tabler:layout' },
 			{ title: 'Compare states', description: 'Check density and hierarchy.', icon: 'tabler:arrows-diff' },
 			{ title: 'Inspect overlay', description: 'Verify popovers are not clipped.', icon: 'tabler:window' }
+		],
+		signalCards: [
+			{ title: 'New evidence arrived', description: 'The edge pulses while owner attention is useful.', tone: 'info' as const, active: true },
+			{ title: 'Resolved signal', description: 'The signal can stay visible without motion.', tone: 'success' as const, active: true, pulse: false }
 		],
 		callouts: [
 			{ tone: 'info' as const, title: 'Information', body: 'Use callouts for contextual notes.' },
@@ -339,6 +345,8 @@ const ru: GeneralStoryCopy = {
 		paperTitle: 'Paper',
 		panelTitle: 'Panel',
 		cardsTitle: 'Карточки',
+		signalTitle: 'Сигнальные карточки',
+		signalDescription: 'Подсветка края привлекает внимание к свежему событию без перестройки карточки.',
 		sectionsTitle: 'Секции',
 		accordionTitle: 'Аккордеон',
 		calloutsTitle: 'Callout и well',
@@ -378,6 +386,10 @@ const ru: GeneralStoryCopy = {
 			{ title: 'Создать поверхность', description: 'Начните с нейтрального контейнера.', icon: 'tabler:layout' },
 			{ title: 'Сравнить состояния', description: 'Проверьте плотность и иерархию.', icon: 'tabler:arrows-diff' },
 			{ title: 'Проверить overlay', description: 'Убедитесь, что popover не обрезается.', icon: 'tabler:window' }
+		],
+		signalCards: [
+			{ title: 'Пришёл новый сигнал', description: 'Край мягко пульсирует, пока нужно внимание владельца.', tone: 'info', active: true },
+			{ title: 'Сигнал обработан', description: 'Подсветку можно оставить без движения.', tone: 'success', active: true, pulse: false }
 		],
 		callouts: [
 			{ tone: 'info', title: 'Информация', body: 'Используйте callout для контекстных заметок.' },
@@ -534,6 +546,8 @@ const es: GeneralStoryCopy = {
 		paperTitle: 'Paper',
 		panelTitle: 'Panel',
 		cardsTitle: 'Tarjetas',
+		signalTitle: 'Tarjetas de señal',
+		signalDescription: 'El borde señala un evento reciente sin cambiar la estructura de la tarjeta.',
 		sectionsTitle: 'Secciones',
 		accordionTitle: 'Acordeón',
 		calloutsTitle: 'Callouts y wells',
@@ -573,6 +587,10 @@ const es: GeneralStoryCopy = {
 			{ title: 'Crear superficie', description: 'Empieza con un contenedor neutral.', icon: 'tabler:layout' },
 			{ title: 'Comparar estados', description: 'Revisa densidad y jerarquía.', icon: 'tabler:arrows-diff' },
 			{ title: 'Inspeccionar overlay', description: 'Verifica que el popover no se recorte.', icon: 'tabler:window' }
+		],
+		signalCards: [
+			{ title: 'Nueva señal recibida', description: 'El borde pulsa mientras conviene llamar la atención.', tone: 'info', active: true },
+			{ title: 'Señal resuelta', description: 'La señal puede quedar visible sin movimiento.', tone: 'success', active: true, pulse: false }
 		],
 		callouts: [
 			{ tone: 'info', title: 'Información', body: 'Usa callouts para notas contextuales.' },

@@ -82,6 +82,28 @@ describe('Hermes UI surface component contracts', () => {
 		expect(surfaceSelectorsWithImplicitOverflowHidden(cssSource, 'hermes-surface')).toEqual([])
 		expect(surfaceSelectorsWithImplicitOverflowHidden(cssSource, 'hermes-card')).toEqual([])
 	})
+
+	it('keeps Card signal state presentation-only and motion-safe', () => {
+		const uiRoot = fileURLToPath(new URL('.', import.meta.url))
+		const cardSource = readFileSync(join(uiRoot, 'Card.vue'), 'utf8')
+		const cssSource = readFileSync(join(uiRoot, 'styles/surfaces.css'), 'utf8')
+		const storySource = readFileSync(join(uiRoot, '../../../stories/ui/GeneralSurface.stories.ts'), 'utf8')
+		const signalCss = cssSource.slice(cssSource.indexOf('.hermes-card--signal'), cssSource.indexOf('.hermes-card-header'))
+
+		expect(cardSource).toContain('signal?: boolean')
+		expect(cardSource).toContain('signalTone?: CardSignalTone')
+		expect(cardSource).toContain('signalPulse?: boolean')
+		expect(cssSource).toContain('.hermes-card--signal')
+		expect(cssSource).toContain('@keyframes hermes-card-signal-border')
+		expect(cssSource).toContain('@keyframes hermes-card-signal-inner')
+		expect(signalCss).not.toContain('conic-gradient')
+		expect(signalCss).not.toContain('mask-composite')
+		expect(signalCss).not.toContain('rotate(')
+		expect(signalCss).not.toContain('hermes-card-signal-edge')
+		expect(cssSource).toContain('@media (prefers-reduced-motion: reduce)')
+		expect(storySource).toContain(':signal="signalCard.active"')
+		expect(storySource).toContain(':signal-tone="signalCard.tone"')
+	})
 })
 
 function storybookUiImports(source: string): string[] {

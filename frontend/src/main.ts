@@ -2,7 +2,6 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import App from './app/App.vue'
-import router from './app/router'
 import { initializeApiClient } from './platform/bootstrap/api'
 import { initializeRealtime } from './platform/bootstrap/realtime'
 import { loadFrontendConfig } from './platform/config/env'
@@ -11,6 +10,7 @@ import './style.css'
 import './styles/surfaces.css'
 import './styles/theme-classes.css'
 import './shared/ui/styles/index.css'
+import './app/layout/app-layout.css'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -19,7 +19,6 @@ let realtimeClient: ReturnType<typeof initializeRealtime> | null = null
 
 app.use(pinia)
 app.use(VueQueryPlugin, { queryClient })
-app.use(router)
 
 try {
 	const config = loadFrontendConfig()

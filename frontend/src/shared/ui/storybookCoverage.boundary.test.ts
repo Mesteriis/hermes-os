@@ -99,6 +99,7 @@ describe('Hermes UI Storybook visual coverage boundary', () => {
 			'Hermes UI/General/Token Input',
 			'Hermes UI/General/Tag Input',
 			'Hermes UI/General/Checkbox',
+			'Hermes UI/General/Communication',
 			'Hermes UI/General/Radio',
 			'Hermes UI/General/Switch',
 			'Hermes UI/General/Slider',
@@ -124,9 +125,6 @@ describe('Hermes UI Storybook visual coverage boundary', () => {
 			'Hermes UI/General/Layout',
 			'Hermes UI/General/Utility'
 		]
-		const requiredDomainTitles = [
-			'Hermes UI/Domain/Communications'
-		]
 		const requiredFoundationTitles = [
 			'Hermes UI/Foundation/Tokens',
 			'Hermes UI/Foundation/Themes',
@@ -151,25 +149,33 @@ describe('Hermes UI Storybook visual coverage boundary', () => {
 		]
 
 		expect(storySources).not.toContain('Hermes UI/Controls/')
-		for (const title of [...requiredGeneralTitles, ...requiredDomainTitles, ...requiredFoundationTitles]) {
+		for (const title of [...requiredGeneralTitles, ...requiredFoundationTitles]) {
 			expect(storySources).toContain(`title: '${title}'`)
 		}
+		expect(storySources).not.toContain("title: 'Hermes UI/Domain/")
 		for (const title of forbiddenLegacyTopLevelTitles) {
 			expect(storySources).not.toContain(`title: '${title}'`)
 		}
 	})
 
-	it('screenshots all Storybook stories across Hermes themes, locales and responsive widths', () => {
+	it('screenshots product stories in the baseline theme across locales and responsive widths', () => {
 		const visualSpec = readFileSync(
 			new URL('../../../tests/visual/storybook.visual.spec.ts', import.meta.url),
 			'utf8'
 		)
 
-		expect(visualSpec).toContain("const THEMES = ['light', 'dark', 'hermes'] as const")
+		expect(visualSpec).toContain(
+			"const CANONICAL_THEMES = ['base-light', 'base-dark', 'hermes-light', 'hermes-dark'] as const"
+		)
+		expect(visualSpec).toContain("const VISUAL_SNAPSHOT_THEMES = ['base-light'] as const")
+		expect(visualSpec).toContain(
+			'Cross-theme token regressions are covered by Hermes UI/Foundation/Themes'
+		)
 		expect(visualSpec).toContain("const LOCALES = ['ru', 'en', 'es'] as const")
 		for (const width of [320, 375, 768, 1024, 1440, 1920, 5120]) {
 			expect(visualSpec).toContain(`width: ${width}`)
 		}
+		expect(visualSpec).toContain('for (const theme of VISUAL_SNAPSHOT_THEMES)')
 		expect(visualSpec).toContain("request.get('/index.json')")
 		expect(visualSpec).toContain("entry.type === 'story'")
 		expect(visualSpec).toContain('data-ui-locale')

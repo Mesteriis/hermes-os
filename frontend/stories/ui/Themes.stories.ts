@@ -18,13 +18,20 @@ const meta = {
 	render: (_args, context) => ({
 		components: { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, ThemeProvider },
 		setup() {
-			return { swatches, text: storybookText(storybookLocaleFromGlobals(context.globals)) }
+			const text = storybookText(storybookLocaleFromGlobals(context.globals))
+			const themeByValue = Object.fromEntries(text.themes.options.map((theme) => [theme.value, theme])) as Record<string, (typeof text.themes.options)[number]>
+			const themePairs = [
+				{ id: 'base', themes: [themeByValue['base-light'], themeByValue['base-dark']] },
+				{ id: 'hermes', themes: [themeByValue['hermes-light'], themeByValue['hermes-dark']] }
+			]
+
+			return { swatches, text, themePairs }
 		},
 		template: `
-			<section class="storybook-canvas">
-				<div v-for="theme in text.themes.options" :key="theme.value" class="storybook-section">
-					<ThemeProvider :theme="theme.value">
-						<div class="storybook-section">
+			<section class="storybook-canvas storybook-canvas--wide storybook-theme-canvas">
+				<div v-for="pair in themePairs" :key="pair.id" class="storybook-theme-pair">
+					<ThemeProvider v-for="theme in pair.themes" :key="theme.value" :theme="theme.value" class="storybook-theme-column">
+						<div class="storybook-section storybook-theme-panel">
 							<h2>{{ theme.label }}</h2>
 							<p>{{ theme.description }}</p>
 							<div class="storybook-token-grid">

@@ -108,6 +108,7 @@
 
 .hermes-button-group,
 .hermes-toggle-group {
+	box-sizing: border-box;
 	display: inline-flex;
 	align-items: stretch;
 	width: fit-content;
@@ -152,6 +153,11 @@
 	padding: 0 var(--h-spacing-3);
 }
 
+.hermes-toggle-group__item--icon-only {
+	gap: 0;
+	padding-inline: 0;
+}
+
 .hermes-toggle-group__item:last-child {
 	border-right: 0;
 }
@@ -176,6 +182,43 @@
 	opacity: 0.48;
 }
 
+.hermes-toggle-group--tabs {
+	gap: 4px;
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-bg-muted);
+	padding: 4px;
+	overflow: visible;
+}
+
+.hermes-toggle-group--tabs .hermes-toggle-group__item {
+	flex: 1 1 0;
+	min-height: 32px;
+	min-width: 0;
+	border-radius: var(--h-radius-md);
+	border-right: 0;
+	padding: 0 var(--h-spacing-3);
+}
+
+.hermes-toggle-group--tabs .hermes-toggle-group__item--icon-only {
+	padding-inline: 0;
+}
+
+.hermes-toggle-group--tabs .hermes-toggle-group__item span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.hermes-toggle-group--tabs .hermes-toggle-group__item:hover:not(:disabled) {
+	background: var(--h-color-surface-hover);
+}
+
+.hermes-toggle-group--tabs .hermes-toggle-group__item[aria-pressed='true'] {
+	background: var(--h-color-surface-raised);
+	box-shadow: var(--h-shadow-xs);
+	color: var(--h-color-text-strong);
+}
+
 .hermes-split-button {
 	position: relative;
 	display: inline-flex;
@@ -185,21 +228,19 @@
 }
 
 .hermes-split-button__main {
+	border-right-width: 0;
 	border-top-right-radius: 0;
 	border-bottom-right-radius: 0;
 }
 
 .hermes-split-button__toggle {
+	border-left-width: 0;
 	border-top-left-radius: 0;
 	border-bottom-left-radius: 0;
-	border-left-color: color-mix(in srgb, var(--h-color-border) 72%, transparent);
 }
 
 .hermes-split-button__menu {
-	position: absolute;
 	z-index: var(--h-z-popover);
-	top: calc(100% + var(--h-spacing-1));
-	right: 0;
 	display: grid;
 	gap: 2px;
 	min-width: 180px;
@@ -1201,10 +1242,35 @@
 	line-height: 1.4;
 }
 
-.hermes-async-select__state > span {
+.hermes-async-select__state > span:not(.hermes-async-select__loading-mark) {
 	flex: 1 1 160px;
 	min-width: 0;
 	overflow-wrap: anywhere;
+}
+
+.hermes-async-select__loading-mark {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 4px;
+	min-width: 22px;
+	color: var(--h-color-accent);
+}
+
+.hermes-async-select__loading-dot {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: currentColor;
+	animation: hermes-async-select-loading-dot 1.2s ease-in-out infinite;
+}
+
+.hermes-async-select__loading-dot:nth-child(2) {
+	animation-delay: 120ms;
+}
+
+.hermes-async-select__loading-dot:nth-child(3) {
+	animation-delay: 240ms;
 }
 
 .hermes-async-select__state .hermes-btn {
@@ -1222,6 +1288,19 @@
 	background: color-mix(in srgb, var(--h-color-danger) 8%, transparent);
 	color: var(--h-color-danger-strong, var(--h-color-danger));
 	padding: var(--h-spacing-2);
+}
+
+@keyframes hermes-async-select-loading-dot {
+	0%,
+	100% {
+		opacity: 0.36;
+		transform: scale(0.86);
+	}
+
+	45% {
+		opacity: 1;
+		transform: scale(1);
+	}
 }
 
 .hermes-tree-select {
@@ -1583,5 +1662,13 @@
 
 	.hermes-cascader__column {
 		flex-basis: min(76vw, 232px);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.hermes-async-select__loading-dot {
+		animation: none;
+		opacity: 0.72;
+		transform: none;
 	}
 }

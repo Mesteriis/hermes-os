@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import Icon from './Icon.vue'
 import type { TreeSelectOption } from './Selection.types'
+import { useMouseLeaveDismiss } from './useMouseLeaveDismiss'
 
 interface VisibleTreeItem {
 	option: TreeSelectOption
@@ -43,8 +44,14 @@ const emit = defineEmits<{
 const isOpen = ref(false)
 const expandedIds = ref<Set<string>>(new Set())
 const activeIndex = ref(0)
+const rootRef = ref<HTMLElement | null>(null)
+const popoverRef = ref<HTMLElement | null>(null)
 const treeRef = ref<HTMLElement | null>(null)
 const componentId = `hermes-tree-select-${useId()}`
+const { cancelMouseLeaveDismiss, scheduleMouseLeaveDismiss } = useMouseLeaveDismiss(closeTree, undefined, {
+	isOpen,
+	getBoundaryElements: () => [rootRef.value, popoverRef.value]
+})
 
 const classes = computed(() => ['hermes-tree-select', props.class])
 const treeId = computed(() => `${componentId}-tree`)
@@ -181,6 +188,7 @@ function openTree(): void {
 	if (!canInteract.value) {
 		return
 	}
+	cancelMouseLeaveDismiss()
 	expandSelectedAncestors()
 	setActiveIndexToSelected()
 	if (isOpen.value) {
@@ -193,6 +201,7 @@ function openTree(): void {
 }
 
 function closeTree(): void {
+	cancelMouseLeaveDismiss()
 	if (!isOpen.value) {
 		return
 	}
@@ -371,7 +380,14 @@ function handleFocusout(event: FocusEvent): void {
 </script>
 
 <template>
-	<div :class="classes" @focusout="handleFocusout" @keydown="handleKeydown">
+	<div
+		ref="rootRef"
+		:class="classes"
+		@focusout="handleFocusout"
+		@keydown="handleKeydown"
+		@mouseenter="cancelMouseLeaveDismiss"
+		@mouseleave="scheduleMouseLeaveDismiss"
+	>
 		<button
 			class="hermes-tree-select__trigger"
 			:class="{ 'hermes-tree-select__trigger--readonly': readonly }"
@@ -391,7 +407,7 @@ function handleFocusout(event: FocusEvent): void {
 			</span>
 			<Icon icon="tabler:chevron-down" size="1rem" class="hermes-tree-select__chevron" aria-hidden="true" />
 		</button>
-		<div v-if="isOpen" class="hermes-tree-select__popover">
+		<div v-if="isOpen" ref="popoverRef" class="hermes-tree-select__popover">
 			<ul
 				:id="treeId"
 				ref="treeRef"

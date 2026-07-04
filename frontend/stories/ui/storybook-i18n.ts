@@ -432,8 +432,8 @@ const en = {
 		searchPlaceholder: 'Search anything',
 		email: 'Owner email',
 		emailValue: 'owner@example.local',
-		password: 'Vault password',
-		passwordValue: 'correct horse battery staple',
+			password: 'Vault password',
+			passwordValue: 'correct horse battery staple',
 		count: 'Review limit',
 		countValue: 7,
 		otp: 'Verification code',
@@ -647,9 +647,10 @@ const en = {
 	},
 	themes: {
 		options: [
-			{ value: 'light', label: 'Light', description: 'Primary clean corporate theme.' },
-			{ value: 'dark', label: 'Dark', description: 'Neutral dark theme with the same component contracts.' },
-			{ value: 'hermes', label: 'Hermes', description: 'Emerald Hermes accent theme on the same tokens.' }
+			{ value: 'base-light', label: 'Base Light', description: 'Primary clean neutral light theme.' },
+			{ value: 'base-dark', label: 'Base Dark', description: 'Neutral dark theme with the same component contracts.' },
+			{ value: 'hermes-light', label: 'Hermes Light', description: 'Bright Hermes theme with emerald system accents.' },
+			{ value: 'hermes-dark', label: 'Hermes Dark', description: 'Emerald Hermes dark theme on the same tokens.' }
 		],
 		swatches: ['Background', 'Surface', 'Raised', 'Text', 'Muted', 'Accent', 'Danger', 'Border'],
 		cardTitle: 'Hermes surface',
@@ -1085,8 +1086,8 @@ const ru: StorybookText = {
 		searchPlaceholder: 'Искать везде',
 		email: 'Email владельца',
 		emailValue: 'owner@example.local',
-		password: 'Пароль vault',
-		passwordValue: 'correct horse battery staple',
+			password: 'Пароль vault',
+			passwordValue: 'correct horse battery staple',
 		count: 'Лимит проверки',
 		countValue: 7,
 		otp: 'Код проверки',
@@ -1300,9 +1301,10 @@ const ru: StorybookText = {
 	},
 	themes: {
 		options: [
-			{ value: 'light', label: 'Светлая', description: 'Основная чистая корпоративная тема.' },
-			{ value: 'dark', label: 'Темная', description: 'Нейтральная темная тема с теми же контрактами компонентов.' },
-			{ value: 'hermes', label: 'Hermes', description: 'Emerald-акцент Hermes на тех же токенах.' }
+			{ value: 'base-light', label: 'Базовая светлая', description: 'Основная чистая нейтральная тема.' },
+			{ value: 'base-dark', label: 'Базовая темная', description: 'Нейтральная темная тема с теми же контрактами компонентов.' },
+			{ value: 'hermes-light', label: 'Hermes светлая', description: 'Светлая тема Hermes с emerald-акцентами системы.' },
+			{ value: 'hermes-dark', label: 'Hermes темная', description: 'Темная тема Hermes с emerald-акцентами на тех же токенах.' }
 		],
 		swatches: ['Фон', 'Поверхность', 'Raised', 'Текст', 'Muted', 'Акцент', 'Опасность', 'Граница'],
 		cardTitle: 'Поверхность Hermes',
@@ -1736,8 +1738,8 @@ const es: StorybookText = {
 		searchPlaceholder: 'Buscar en todo',
 		email: 'Email del dueño',
 		emailValue: 'owner@example.local',
-		password: 'Contraseña vault',
-		passwordValue: 'correct horse battery staple',
+			password: 'Contraseña vault',
+			passwordValue: 'correct horse battery staple',
 		count: 'Límite de revisión',
 		countValue: 7,
 		otp: 'Código de verificación',
@@ -1951,9 +1953,10 @@ const es: StorybookText = {
 	},
 	themes: {
 		options: [
-			{ value: 'light', label: 'Clara', description: 'Tema corporativo limpio principal.' },
-			{ value: 'dark', label: 'Oscura', description: 'Tema oscuro neutral con los mismos contratos de componentes.' },
-			{ value: 'hermes', label: 'Hermes', description: 'Tema Hermes con acento esmeralda sobre los mismos tokens.' }
+			{ value: 'base-light', label: 'Base clara', description: 'Tema claro neutral principal.' },
+			{ value: 'base-dark', label: 'Base oscura', description: 'Tema oscuro neutral con los mismos contratos de componentes.' },
+			{ value: 'hermes-light', label: 'Hermes claro', description: 'Tema Hermes claro con acentos esmeralda del sistema.' },
+			{ value: 'hermes-dark', label: 'Hermes oscuro', description: 'Tema Hermes oscuro con acento esmeralda sobre los mismos tokens.' }
 		],
 		swatches: ['Fondo', 'Superficie', 'Elevada', 'Texto', 'Muted', 'Acento', 'Peligro', 'Borde'],
 		cardTitle: 'Superficie Hermes',

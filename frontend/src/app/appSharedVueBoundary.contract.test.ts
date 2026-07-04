@@ -63,6 +63,7 @@ describe('App and shared Vue boundary contract', () => {
 
     const commandSource = readFileSync(path.join(sourceRoot, 'shared/ui/Command.vue'), 'utf8')
     const toastSource = readFileSync(path.join(sourceRoot, 'shared/ui/Toast.vue'), 'utf8')
+    const feedbackCss = readFileSync(path.join(sourceRoot, 'shared/ui/styles/feedback.css'), 'utf8')
     const progressSource = readFileSync(path.join(sourceRoot, 'shared/ui/Progress.vue'), 'utf8')
 
     expect(commandSource).toContain('const query = ref')
@@ -73,8 +74,21 @@ describe('App and shared Vue boundary contract', () => {
 
     expect(toastSource).toContain('provide(TOAST_INJECTION_KEY')
     expect(toastSource).toContain('const toasts = ref<ToastItem[]>')
+    expect(toastSource).toContain('TOAST_EXIT_ANIMATION_MS = 820')
+    expect(toastSource).toContain('scheduleToastRemoval')
+    expect(toastSource).toContain('handleToastOpenChange(toast.id, $event)')
+    expect(toastSource).toContain("variant?: 'default' | 'info' | 'success' | 'warning' | 'error'")
+    expect(toastSource).toContain(':data-toast-id="toast.id"')
     expect(toastSource).toContain('removeToast')
     expect(toastSource).not.toContain('queryClient')
+    expect(feedbackCss).toContain('.hermes-toast-viewport')
+    expect(feedbackCss).toContain("bottom: 16px")
+    expect(feedbackCss).toContain("right: 16px")
+    expect(feedbackCss).toContain(".hermes-toast-root[data-state='open']")
+    expect(feedbackCss).toContain(".hermes-toast-root[data-state='closed']")
+    expect(feedbackCss).toContain('hermes-toast-enter-bottom-right')
+    expect(feedbackCss).toContain('hermes-toast-exit-up-right')
+    expect(feedbackCss).toContain('translate(112%, -128px)')
 
     expect(progressSource).toContain('watchEffect(() => {')
     expect(progressSource).toContain('element.style.transform')

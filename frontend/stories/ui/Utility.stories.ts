@@ -35,7 +35,7 @@ export const SwitchersAndCopy: Story = {
 			const text = storybookText(storybookLocaleFromGlobals(context.globals))
 			return {
 				text,
-				theme: 'light',
+				theme: 'base-light',
 				locale: 'ru'
 			}
 		},
@@ -76,6 +76,8 @@ export const SwitchersAndCopy: Story = {
 		await expect(canvas.getByText(text.utility.title)).toBeVisible()
 		await userEvent.click(canvas.getByRole('radio', { name: 'Hermes' }))
 		await expect(canvas.getByRole('radio', { name: 'Hermes' })).toHaveAttribute('aria-checked', 'true')
+		await userEvent.click(canvas.getByRole('radio', { name: 'Dark' }))
+		await expect(canvas.getByRole('radio', { name: 'Dark' })).toHaveAttribute('aria-checked', 'true')
 	}
 }
 

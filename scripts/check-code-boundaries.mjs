@@ -26,6 +26,7 @@ const ignoredSegments = new Set([
 	'frontend/coverage',
 	'frontend/dist',
 	'frontend/src/gen',
+	'frontend/storybook-static',
 	'frontend/node_modules'
 ]);
 const checkedExtensions = new Set([
@@ -51,6 +52,7 @@ const generatedPrefixes = [
 	'frontend/build/',
 	'frontend/coverage/',
 	'frontend/dist/',
+	'frontend/storybook-static/',
 	'frontend/node_modules/'
 ];
 const secretPattern =
@@ -94,6 +96,14 @@ function isTestFile(relativePath) {
 		/(\.|-)(test|spec)\.[cm]?[jt]s$/i.test(relativePath) ||
 		/\.boundary\.test\.[cm]?[jt]s$/i.test(relativePath)
 	);
+}
+
+function isStorybookFile(relativePath) {
+	return relativePath.startsWith('frontend/stories/') || relativePath.startsWith('frontend/.storybook/');
+}
+
+function isStorybookGeneratedRuntimeFile(relativePath) {
+	return relativePath === 'frontend/public/mockServiceWorker.js';
 }
 
 function isFrontendTemplateFile(relativePath) {
@@ -159,9 +169,9 @@ async function checkSourceFiles() {
 		for (const [index, line] of lines.entries()) {
 			const location = `${file}:${index + 1}`;
 
-			if (!isDocFile(file) && !isTestFile(file) && secretPattern.test(line)) {
-				failures.push(`${location}: possible hardcoded secret-like value`);
-			}
+				if (!isDocFile(file) && !isTestFile(file) && !isStorybookFile(file) && secretPattern.test(line)) {
+					failures.push(`${location}: possible hardcoded secret-like value`);
+				}
 
 			if (
 				(file.startsWith('backend/tests/') || file.startsWith('crates/testkit/src/')) &&
@@ -176,10 +186,11 @@ async function checkSourceFiles() {
 				}
 			}
 
-			for (const { pattern, message } of blanketSuppressions) {
-				if (pattern.test(line)) {
-					failures.push(`${location}: ${message}`);
-				}
+				for (const { pattern, message } of blanketSuppressions) {
+					if (isStorybookGeneratedRuntimeFile(file)) continue;
+					if (pattern.test(line)) {
+						failures.push(`${location}: ${message}`);
+					}
 			}
 
 			if (isFrontendTemplateFile(file) && /\sstyle\s*=/.test(line)) {

@@ -82,7 +82,10 @@ export { default as Flex } from './Flex.vue'
 export { default as Split } from './Split.vue'
 export { default as Resizable } from './Resizable.vue'
 export { default as Dock } from './Dock.vue'
+export { default as Spacer } from './Spacer.vue'
 export { default as Toolbar } from './Toolbar.vue'
+export { default as ToolbarGroup } from './ToolbarGroup.vue'
+export { default as ToolbarSeparator } from './ToolbarSeparator.vue'
 export { default as ActionBar } from './ActionBar.vue'
 export { default as TopBar } from './TopBar.vue'
 export { default as BottomBar } from './BottomBar.vue'
@@ -149,6 +152,7 @@ export { default as HoverCard } from './HoverCard.vue'
 export { default as OverlayHost } from './OverlayHost.vue'
 export { default as Portal } from './Portal.vue'
 export { default as FocusTrap } from './FocusTrap.vue'
+export { useMouseLeaveDismiss } from './useMouseLeaveDismiss'
 export { default as Image } from './Image.vue'
 export { default as ImagePreview } from './ImagePreview.vue'
 export { default as ImageGallery } from './ImageGallery.vue'
@@ -186,8 +190,22 @@ export { default as ThemeProvider } from './ThemeProvider.vue'
 export { default as IconButton } from './IconButton.vue'
 export { default as Kbd } from './Kbd.vue'
 export type { AccordionItem } from './Accordion.types'
-export type { UiThemeName, UiThemeOption } from './theme'
-export { uiThemeNames, uiThemeOptions, isUiThemeName } from './theme'
+export type { UiThemeFamily, UiThemeFamilyOption, UiThemeMode, UiThemeModeOption, UiThemeName, UiThemeOption, UiThemeSelection } from './theme'
+export {
+	defaultUiThemeName,
+	isUiThemeFamily,
+	isUiThemeMode,
+	isUiThemeName,
+	normalizeUiThemeName,
+	themeNameToSelection,
+	themeSelectionToName,
+	uiThemeFamilies,
+	uiThemeFamilyOptions,
+	uiThemeModeOptions,
+	uiThemeModes,
+	uiThemeNames,
+	uiThemeOptions
+} from './theme'
 export type { CommandGroup, CommandItem } from './Command.types'
 export type { SelectGroup, SelectOption, SelectionSearchState, SelectionTone, TreeSelectOption } from './Selection.types'
 export type { NavigationItem, TreeItemData } from './Navigation.types'

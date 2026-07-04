@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { SelectRoot, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectItemIndicator, SelectViewport, SelectPortal } from 'reka-ui'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import Icon from './Icon.vue'
+import { useMouseLeaveDismiss } from './useMouseLeaveDismiss'
 
 const props = withDefaults(defineProps<{
   modelValue?: string
@@ -28,21 +29,46 @@ const triggerClasses = computed(() => [
 ])
 
 const accessibleLabel = computed(() => props.ariaLabel ?? props.placeholder)
+const isOpen = ref(false)
+const contentRef = ref<HTMLElement | { $el?: Element | null } | null>(null)
+
+const { cancelMouseLeaveDismiss, scheduleMouseLeaveDismiss } = useMouseLeaveDismiss(() => {
+  isOpen.value = false
+}, undefined, {
+  isOpen,
+  getBoundaryElements: () => [contentRef.value]
+})
+
+function setOpen(value: boolean): void {
+  if (value) {
+    cancelMouseLeaveDismiss()
+  }
+
+  isOpen.value = value
+}
 </script>
 
 <template>
   <div class="hermes-select-wrapper">
     <SelectRoot
+      :open="isOpen"
       :model-value="modelValue || undefined"
       :disabled="disabled"
       @update:model-value="(val) => emit('update:modelValue', val || '')"
+      @update:open="setOpen"
     >
       <SelectTrigger :class="triggerClasses" :aria-label="accessibleLabel">
         <SelectValue :placeholder="placeholder" class="hermes-select-value" />
         <Icon icon="tabler:chevron-down" size="1rem" class="hermes-select-chevron" />
       </SelectTrigger>
       <SelectPortal>
-        <SelectContent class="hermes-select-content" :side-offset="4">
+        <SelectContent
+          ref="contentRef"
+          class="hermes-select-content"
+          :side-offset="4"
+          @mouseenter="cancelMouseLeaveDismiss"
+          @mouseleave="scheduleMouseLeaveDismiss"
+        >
           <SelectViewport class="hermes-select-viewport">
             <SelectItem
               v-for="opt in options"

@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, useId } from 'vue'
 import Icon from './Icon.vue'
 import type { SelectOption } from './Selection.types'
+import { useMouseLeaveDismiss } from './useMouseLeaveDismiss'
 
 const props = withDefaults(defineProps<{
 	modelValue?: string[]
@@ -46,8 +47,14 @@ const emit = defineEmits<{
 const isOpen = ref(false)
 const query = ref('')
 const activeIndex = ref(0)
+const rootRef = ref<HTMLElement | null>(null)
+const popoverRef = ref<HTMLElement | null>(null)
 const listboxRef = ref<HTMLElement | null>(null)
 const componentId = `hermes-searchable-multi-select-${useId()}`
+const { cancelMouseLeaveDismiss, scheduleMouseLeaveDismiss } = useMouseLeaveDismiss(closeList, undefined, {
+	isOpen,
+	getBoundaryElements: () => [rootRef.value, popoverRef.value]
+})
 
 const classes = computed(() => ['hermes-searchable-multi-select', props.class])
 const listId = computed(() => `${componentId}-listbox`)
@@ -112,6 +119,7 @@ function openList(): void {
 	if (!canMutate.value) {
 		return
 	}
+	cancelMouseLeaveDismiss()
 	setActiveIndexToSelected()
 	if (isOpen.value) {
 		scrollActiveOptionIntoView()
@@ -123,6 +131,7 @@ function openList(): void {
 }
 
 function closeList(): void {
+	cancelMouseLeaveDismiss()
 	if (!isOpen.value) {
 		return
 	}
@@ -259,7 +268,14 @@ function handleFocusout(event: FocusEvent): void {
 </script>
 
 <template>
-	<div :class="classes" @focusout="handleFocusout" @keydown="handleKeydown">
+	<div
+		ref="rootRef"
+		:class="classes"
+		@focusout="handleFocusout"
+		@keydown="handleKeydown"
+		@mouseenter="cancelMouseLeaveDismiss"
+		@mouseleave="scheduleMouseLeaveDismiss"
+	>
 		<button
 			class="hermes-searchable-select__trigger hermes-searchable-multi-select__trigger"
 			:class="{ 'hermes-searchable-select__trigger--readonly': readonly }"
@@ -293,7 +309,7 @@ function handleFocusout(event: FocusEvent): void {
 				</button>
 			</span>
 		</div>
-		<div v-if="isOpen" class="hermes-searchable-select__popover">
+		<div v-if="isOpen" ref="popoverRef" class="hermes-searchable-select__popover">
 			<input
 				class="hermes-native-control hermes-searchable-select__search"
 				:aria-activedescendant="activeOptionId"

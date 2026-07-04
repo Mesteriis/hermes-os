@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useAttrs } from 'vue'
 import Icon from './Icon.vue'
+
+defineOptions({
+  inheritAttrs: false
+})
 
 const props = withDefaults(defineProps<{
   variant?: 'default' | 'secondary' | 'outline' | 'ghost' | 'destructive'
@@ -22,6 +26,7 @@ const emit = defineEmits<{
   click: [event: MouseEvent]
 }>()
 
+const attrs = useAttrs()
 const classes = computed(() => {
   return [
     'hermes-btn',
@@ -41,6 +46,7 @@ function handleClick(event: MouseEvent): void {
 
 <template>
   <button
+    v-bind="attrs"
     :class="classes"
     :disabled="disabled || loading"
     :type="type"
@@ -53,4 +59,3 @@ function handleClick(event: MouseEvent): void {
     </span>
   </button>
 </template>
-

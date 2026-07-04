@@ -1,0 +1,35 @@
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+
+describe('AppNavbarRouteBreadcrumbs boundary', () => {
+	it('keeps route breadcrumb dropdowns as a prop-driven layout component', () => {
+		const source = readFileSync(new URL('./AppNavbarRouteBreadcrumbs.vue', import.meta.url), 'utf8')
+		const layoutCss = readFileSync(new URL('./app-layout.css', import.meta.url), 'utf8')
+
+		expect(source).toContain('levels?: readonly AppNavbarRouteBreadcrumbLevel[]')
+		expect(source).toContain('select: [itemId: string]')
+		expect(source).toContain('iconTone?: AppNavbarRouteBreadcrumbIconTone')
+		expect(source).toContain('useMouseLeaveDismiss')
+		expect(source).toContain('role="menuitemradio"')
+		expect(source).toContain('aria-haspopup="menu"')
+		expect(source).toContain(':aria-current="index === levels.length - 1 ? \'page\' : undefined"')
+		expect(source).toContain('triggerClass(index)')
+		expect(source).toContain('app-navbar-route-breadcrumbs__trigger--icon-only')
+		expect(source).toContain('v-if="isLastLevel(index)" class="app-navbar-route-breadcrumbs__label"')
+		expect(source).toContain('iconToneClass(level.currentItem.iconTone)')
+		expect(source).toContain('iconToneClass(item.iconTone)')
+		expect(layoutCss).not.toContain(".app-navbar__breadcrumb-button[aria-current='page']")
+		expect(layoutCss).toContain('.app-navbar-route-breadcrumbs__trigger--icon-only')
+		expect(layoutCss).toContain('.app-navbar-route-breadcrumbs__item-icon--telegram')
+		expect(layoutCss).toContain('#2aabee')
+		expect(layoutCss).toContain('.app-navbar-route-breadcrumbs__item-icon--whatsapp')
+		expect(layoutCss).toContain('#25d366')
+		expect(layoutCss).toContain('.app-navbar-route-breadcrumbs__item-icon--mail')
+		expect(source).not.toContain('tabler:chevron-right')
+		expect(source).not.toContain('app-navbar__breadcrumb-separator')
+		expect(source).not.toContain('useNavigationStore')
+		expect(source).not.toContain('useRouter')
+		expect(source).not.toContain('createRouter')
+		expect(source).not.toContain('router.push')
+	})
+})

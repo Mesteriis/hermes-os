@@ -1,0 +1,556 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+import {
+  mailListAccountOptions,
+  mailListAllAccountsOptionId,
+  mailListItemsForAccount,
+  type MailListItemModel
+} from './mail/mailElements'
+import {
+  mailFolderAriaLabel,
+  mailFolderExpandableIds,
+  mailFolderExpandedIds,
+  mailFolderPresentation,
+  mailFolderRows,
+  mailStandardFolders,
+  type MailFolderModel
+} from './mail/mailFolders'
+import {
+  createMailListSearchBuilderState,
+  mailListItemsForSearch,
+  mailListSearchBuilderAddClause,
+  mailListSearchBuilderClauseViews,
+  mailListSearchBuilderCommittedClauseViews,
+  mailListSearchBuilderDraftTokens,
+  mailListSearchBuilderQuery,
+  mailListSearchBuilderSetField,
+  mailListSearchBuilderSetMatchMode,
+  mailListSearchBuilderSetOperator,
+  mailListSearchBuilderSetValue
+} from './mail/mailSearchBuilder'
+import { mailListSearchBuilderValueSuggestions } from './mail/mailSearchSuggestions'
+
+const mailSearchItems: readonly MailListItemModel[] = [
+  {
+    id: 'provider-record-001',
+    accountLabel: 'Work',
+    mailboxLabel: 'Inbox',
+    fromName: 'Maya Chen',
+    fromAddress: 'maya@example.test',
+    subject: 'Vendor security review',
+    snippet: 'Retention clause is still open.',
+    timestampLabel: '09:42',
+    workflowState: 'needs_action',
+    providerRecordId: 'gmail-msg-security-review-001',
+    recipients: ['owner@example.test', 'legal@example.test'],
+    labels: ['security', 'work'],
+    localState: 'active',
+    deliveryState: 'received',
+    aiCategory: 'risk',
+    importanceScore: 88,
+    attachmentCount: 2,
+    hermesEntities: [
+      { kind: 'organization', title: 'Northwind Security Vendor' },
+      { kind: 'decision', title: 'Retention clause approval' },
+      { kind: 'document', title: 'Security answers' }
+    ],
+    evidenceKinds: ['mail_thread', 'attachment', 'redline'],
+    taskCandidateCount: 1,
+    decisionCandidateCount: 1,
+    documentCandidateCount: 2,
+    deadlineCount: 1,
+    riskCount: 2
+  },
+  {
+    id: 'provider-record-002',
+    accountLabel: 'Work',
+    mailboxLabel: 'Inbox',
+    fromName: 'Finance Team',
+    fromAddress: 'finance@example.test',
+    subject: 'Board pack edits',
+    snippet: 'Disclosure note was approved.',
+    timestampLabel: 'Yesterday',
+    workflowState: 'waiting'
+  }
+]
+
+describe('Communication domain elements', () => {
+  it('defines standard provider-neutral mail folders', () => {
+    expect(mailStandardFolders.map((folder) => folder.kind)).toEqual([
+      'inbox',
+      'sent',
+      'drafts',
+      'outbox',
+      'archive',
+      'spam',
+      'trash',
+      'all'
+    ])
+    const inboxFolder = mailStandardFolders.find((folder) => folder.kind === 'inbox')
+    const spamFolder = mailStandardFolders.find((folder) => folder.kind === 'spam')
+    expect(inboxFolder).toBeDefined()
+    expect(spamFolder).toBeDefined()
+    expect(mailFolderPresentation(inboxFolder!).icon).toBe('tabler:inbox')
+    expect(mailFolderPresentation(spamFolder!).tone).toBe('danger')
+    expect(mailFolderAriaLabel({ ...inboxFolder!, count: 42, unreadCount: 7 })).toBe('Inbox, 7 unread, 42 total')
+    const hierarchicalFolders = [
+      {
+        ...inboxFolder!,
+        children: [
+          { id: 'inbox-work', kind: 'custom', label: 'Work' },
+          { id: 'inbox-finance', kind: 'custom', label: 'Finance' }
+        ]
+      }
+    ] satisfies readonly MailFolderModel[]
+    expect(mailFolderExpandableIds(hierarchicalFolders)).toEqual(['inbox'])
+    expect(mailFolderExpandedIds([], 'inbox', true)).toEqual(['inbox'])
+    expect(mailFolderExpandedIds(['inbox'], 'inbox', false)).toEqual([])
+    expect(mailFolderRows(hierarchicalFolders, ['inbox'])).toEqual([
+      { folder: expect.objectContaining({ id: 'inbox' }), depth: 1, hasChildren: true, expanded: true },
+      { folder: expect.objectContaining({ id: 'inbox-work' }), depth: 2, hasChildren: false, expanded: false },
+      { folder: expect.objectContaining({ id: 'inbox-finance' }), depth: 2, hasChildren: false, expanded: false }
+    ])
+    expect(mailFolderRows(hierarchicalFolders, [])).toEqual([
+      { folder: expect.objectContaining({ id: 'inbox' }), depth: 1, hasChildren: true, expanded: false }
+    ])
+  })
+
+  it('matches backend q fields plus Communications read-model facets in the mail list helper', () => {
+    expect(mailListItemsForSearch(mailSearchItems, 'from:Maya')).toHaveLength(1)
+    expect(mailListItemsForSearch(mailSearchItems, 'subject:board body:approved')).toHaveLength(1)
+    expect(mailListItemsForSearch(mailSearchItems, 'mode:any subject:missing body:retention')).toHaveLength(1)
+    expect(mailListItemsForSearch(mailSearchItems, 'all=provider-record-001')).toHaveLength(1)
+    expect(mailListItemsForSearch(mailSearchItems, 'label:security')).toHaveLength(1)
+    expect(mailListItemsForSearch(mailSearchItems, 'attachment:yes workflow=needs_action')).toHaveLength(1)
+    expect(mailListItemsForSearch(mailSearchItems, 'entity:organization task:yes')).toHaveLength(1)
+    expect(mailListItemsForSearch(mailSearchItems, 'importance>=75')).toHaveLength(1)
+  })
+
+  it('builds structured mail search clauses into the backend q syntax', () => {
+    let builder = createMailListSearchBuilderState()
+    builder = mailListSearchBuilderSetValue(builder, 'Maya Chen')
+    builder = mailListSearchBuilderAddClause(builder)
+    builder = mailListSearchBuilderSetMatchMode(builder, 'any')
+    builder = mailListSearchBuilderSetField(builder, 'body')
+    builder = mailListSearchBuilderSetValue(builder, 'retention')
+
+    expect(mailListSearchBuilderQuery(builder)).toBe('mode:any from:"Maya Chen" body:retention')
+    expect(mailListSearchBuilderClauseViews(builder)).toHaveLength(2)
+    expect(mailListSearchBuilderCommittedClauseViews(builder)).toHaveLength(1)
+    expect(mailListSearchBuilderDraftTokens(builder).map((token) => token.value)).toEqual(['body', 'contains'])
+    expect(mailListItemsForSearch(mailSearchItems, mailListSearchBuilderQuery(builder))).toHaveLength(1)
+  })
+
+  it('builds rich Communications and Hermes search clauses', () => {
+    let builder = createMailListSearchBuilderState()
+    builder = mailListSearchBuilderSetField(builder, 'entity')
+    builder = mailListSearchBuilderSetValue(builder, 'organization')
+    builder = mailListSearchBuilderAddClause(builder)
+    builder = mailListSearchBuilderSetField(builder, 'attachment')
+    builder = mailListSearchBuilderSetValue(builder, 'yes')
+    builder = mailListSearchBuilderAddClause(builder)
+    builder = mailListSearchBuilderSetField(builder, 'importance')
+    builder = mailListSearchBuilderSetOperator(builder, 'gte')
+    builder = mailListSearchBuilderSetValue(builder, '75')
+
+    expect(mailListSearchBuilderQuery(builder)).toBe('entity:organization attachment:yes importance>=75')
+    expect(mailListItemsForSearch(mailSearchItems, mailListSearchBuilderQuery(builder))).toHaveLength(1)
+  })
+
+  it('suggests lazy search values from mail attributes and Hermes entities', () => {
+    let builder = createMailListSearchBuilderState()
+    builder = mailListSearchBuilderSetValue(builder, 'may')
+
+    expect(mailListSearchBuilderValueSuggestions(mailSearchItems, builder)).toContainEqual({
+      value: 'Maya Chen',
+      label: 'Maya Chen'
+    })
+
+    builder = mailListSearchBuilderSetField(builder, 'label')
+    builder = mailListSearchBuilderSetValue(builder, 'sec')
+    expect(mailListSearchBuilderValueSuggestions(mailSearchItems, builder)).toContainEqual({
+      value: 'security',
+      label: 'security'
+    })
+
+    builder = mailListSearchBuilderSetField(builder, 'entity')
+    expect(mailListSearchBuilderValueSuggestions(mailSearchItems, builder)).toEqual(
+      expect.arrayContaining([
+        { value: 'organization', label: 'organization' },
+        { value: 'Northwind Security Vendor', label: 'Northwind Security Vendor' }
+      ])
+    )
+
+    builder = mailListSearchBuilderSetField(builder, 'attachment')
+    expect(mailListSearchBuilderValueSuggestions(mailSearchItems, builder)).toEqual([
+      { value: 'yes', label: 'yes' },
+      { value: 'no', label: 'no' }
+    ])
+  })
+
+  it('keeps mail account filtering separate from the search q syntax', () => {
+    const accountOptions = mailListAccountOptions(mailSearchItems)
+    const workAccount = accountOptions.find((option) => option.label === 'Work')
+
+    expect(accountOptions[0]).toEqual({
+      id: mailListAllAccountsOptionId,
+      label: 'All accounts',
+      count: 2
+    })
+    expect(workAccount).toBeDefined()
+    expect(mailListItemsForAccount(mailSearchItems, workAccount?.id ?? mailListAllAccountsOptionId)).toHaveLength(2)
+    expect(mailListItemsForAccount(mailSearchItems, mailListAllAccountsOptionId)).toHaveLength(2)
+  })
+
+  it('adds provider-neutral domain elements without reintroducing provider product panels', () => {
+    const helperSource = readFileSync(new URL('./communicationDomainElements.ts', import.meta.url), 'utf8')
+    const domainCssSource = readFileSync(new URL('./communicationDomainElements.css', import.meta.url), 'utf8')
+    const shellSource = readFileSync(new URL('./CommunicationWorkspaceShell.vue', import.meta.url), 'utf8')
+    const inboxSource = readFileSync(new URL('./CommunicationInboxList.vue', import.meta.url), 'utf8')
+    const conversationSource = readFileSync(new URL('./CommunicationConversationPane.vue', import.meta.url), 'utf8')
+    const inspectorSource = readFileSync(new URL('./CommunicationHermesInspector.vue', import.meta.url), 'utf8')
+    const mailFolderListSource = readFileSync(new URL('./mail/MailFolderList.vue', import.meta.url), 'utf8')
+    const mailFoldersSource = readFileSync(new URL('./mail/mailFolders.ts', import.meta.url), 'utf8')
+    const mailListSource = readFileSync(new URL('./mail/MailList.vue', import.meta.url), 'utf8')
+    const mailListItemSource = readFileSync(new URL('./mail/MailListItem.vue', import.meta.url), 'utf8')
+    const mailElementsSource = readFileSync(new URL('./mail/mailElements.ts', import.meta.url), 'utf8')
+    const mailSearchSource = readFileSync(new URL('./mail/mailSearchBuilder.ts', import.meta.url), 'utf8')
+    const mailSearchSuggestionSource = readFileSync(new URL('./mail/mailSearchSuggestions.ts', import.meta.url), 'utf8')
+    const mailThreadSource = readFileSync(new URL('./mail/MailThread.vue', import.meta.url), 'utf8')
+    const mailMessageSource = readFileSync(new URL('./mail/MailMessage.vue', import.meta.url), 'utf8')
+    const mailActionSource = readFileSync(new URL('./mail/MailAction.vue', import.meta.url), 'utf8')
+    const mailActionsSource = readFileSync(new URL('./mail/mailActions.ts', import.meta.url), 'utf8')
+    const mailActionQueriesSource = readFileSync(new URL('../queries/mailActionQueries.ts', import.meta.url), 'utf8')
+    const mailOperationQueriesSource = readFileSync(new URL('../queries/mailOperationQueries.ts', import.meta.url), 'utf8')
+    const messageApiSource = readFileSync(new URL('../api/messageApi.ts', import.meta.url), 'utf8')
+    const mailViewerSource = readFileSync(new URL('./mail/MailViewer.vue', import.meta.url), 'utf8')
+    const mailFooterSource = readFileSync(new URL('./mail/MailFooter.vue', import.meta.url), 'utf8')
+    const mailQuotedOriginalSource = readFileSync(new URL('./mail/MailQuotedOriginal.vue', import.meta.url), 'utf8')
+    const mailReplyComposerSource = readFileSync(new URL('./mail/MailReplyComposer.vue', import.meta.url), 'utf8')
+    const mailWorkspaceSource = readFileSync(new URL('./mail/MailWorkspace.vue', import.meta.url), 'utf8')
+    const channelWorkspaceSource = readFileSync(new URL('./CommunicationChannelWorkspace.vue', import.meta.url), 'utf8')
+    const callsSurfaceSource = readFileSync(new URL('./CommunicationCallsSurface.vue', import.meta.url), 'utf8')
+    const outboxSource = readFileSync(new URL('./CommunicationOutboxStatusCard.vue', import.meta.url), 'utf8')
+    const primitiveStorySource = readFileSync(new URL('../../../../stories/ui/Communication.stories.ts', import.meta.url), 'utf8')
+    const mailStorySource = readFileSync(new URL('../../../../stories/app/CommunicationMail.stories.ts', import.meta.url), 'utf8')
+    const messengerStorySource = readFileSync(
+      new URL('../../../../stories/app/CommunicationMessengers.stories.ts', import.meta.url),
+      'utf8'
+    )
+    const channelStorySource = readFileSync(
+      new URL('../../../../stories/app/CommunicationChannels.stories.ts', import.meta.url),
+      'utf8'
+    )
+    const callsStorySource = readFileSync(new URL('../../../../stories/app/CommunicationCalls.stories.ts', import.meta.url), 'utf8')
+    const storySources = [
+      primitiveStorySource,
+      mailStorySource,
+      messengerStorySource,
+      channelStorySource,
+      callsStorySource
+    ]
+
+    expect(existsSync(new URL('./CommunicationInboxList.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./CommunicationConversationPane.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./CommunicationHermesInspector.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./CommunicationWorkspaceShell.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/MailFolderList.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/mailFolders.ts', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/MailList.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/MailListItem.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/mailElements.ts', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/mailSearchBuilder.ts', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/mailSearchSuggestions.ts', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/MailMessage.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/MailAction.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/mailActions.ts', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('../queries/mailActionQueries.ts', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/MailViewer.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/MailFooter.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/MailQuotedOriginal.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/MailReplyComposer.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/MailThread.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./mail/MailWorkspace.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./CommunicationChannelWorkspace.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./CommunicationCallsSurface.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./CommunicationChannelSurfaceCard.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./CommunicationCapabilityCard.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./CommunicationThreadSignalCard.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./CommunicationOutboxStatusCard.vue', import.meta.url))).toBe(true)
+    expect(existsSync(new URL('./CommunicationWorkspaceOverview.vue', import.meta.url))).toBe(true)
+
+    expect(helperSource).toContain('CommunicationThreadSummary')
+    expect(helperSource).toContain('CommunicationOutboxItem')
+    expect(helperSource).toContain('CommunicationInboxItemModel')
+    expect(helperSource).toContain('CommunicationConversationModel')
+    expect(helperSource).toContain('CommunicationMessageAttributeGroupModel')
+    expect(helperSource).toContain('CommunicationMessageActionGroupModel')
+    expect(helperSource).toContain("bodyFormat?: 'plain' | 'html'")
+    expect(helperSource).toContain('bodyHtmlSanitized?: boolean')
+    expect(helperSource).toContain('CommunicationHermesInspectorSectionModel')
+    expect(helperSource).toContain('CommunicationChannelWorkspaceModel')
+    expect(helperSource).toContain('CommunicationCallsSurfaceModel')
+    expect(helperSource).toContain('outboxStatusPresentation')
+    expect(helperSource).toContain("channelKind === 'telegram'")
+    expect(helperSource).toContain("channelKind === 'whatsapp'")
+    expect(helperSource).toContain("channelKind === 'mail' || channelKind === 'email'")
+    expect(helperSource).toContain('communicationConversationIsEmail')
+
+    expect(shellSource).toContain('CommunicationInboxList')
+    expect(shellSource).toContain('CommunicationConversationPane')
+    expect(shellSource).toContain('CommunicationHermesInspector')
+    expect(inboxSource).toContain('Chats, groups and mail threads')
+    expect(mailListSource).toContain('MailListItem')
+    expect(mailListSource).toContain('mail-list-account-select')
+    expect(mailListSource).toContain("import { useI18n } from '@/platform/i18n'")
+    expect(mailListSource).toContain("t('Mail account')")
+    expect(mailListSource).not.toContain('Email threads with attachments')
+    expect(mailListSource).not.toContain('Build the same query with structured tokens.')
+    expect(mailListSource).toContain('mail-list-token-search')
+    expect(mailListSource).toContain('Popover')
+    expect(mailListSource).toContain('hermes-icon-button')
+    expect(mailListSource).toContain("t('Search builder')")
+    expect(mailListSource).toContain('mail-search-builder__token')
+    expect(mailListSource).toContain('searchBuilderFieldGroups')
+    expect(mailListSource).toContain('activeSearchBuilderGroupId')
+    expect(mailListSource).toContain('mail-search-builder__group-tab')
+    expect(mailListSource).toContain('mail-search-builder__rule-panel')
+    expect(mailListSource).toContain('mail-search-builder__value-row')
+    expect(mailListSource).toContain('mail-search-builder__field-option')
+    expect(mailListSource).toContain('searchBuilderPresetOptions')
+    expect(mailListSource).toContain('searchBuilderValueSuggestions')
+    expect(mailListSource).toContain('Combobox')
+    expect(mailListSource).toContain('mailListSearchBuilderQuery')
+    expect(mailListSource).toContain('mailListSearchBuilderCommittedClauseViews')
+    expect(mailListSource).toContain('mailListSearchBuilderDraftTokens')
+    expect(mailListSource).toContain('ToggleGroup')
+    expect(mailListSource).toContain('mailListItemsForSearch')
+    expect(mailListSource).toContain('mailListSearchPlaceholder')
+    expect(mailListSource).toContain('mailListDensityToggleItems')
+    expect(mailListSource).toContain('activeDensity')
+    expect(mailFolderListSource).toContain('MailFolderModel')
+    expect(mailFolderListSource).toContain("t('Mail folders')")
+    expect(mailFolderListSource).toContain('role="tree"')
+    expect(mailFolderListSource).toContain('role="treeitem"')
+    expect(mailFolderListSource).toContain(':aria-level="row.depth"')
+    expect(mailFolderListSource).toContain(':aria-expanded="row.hasChildren ? row.expanded : undefined"')
+    expect(mailFolderListSource).toContain('expandedFolderIds')
+    expect(mailFolderListSource).toContain('toggleFolder')
+    expect(mailFolderListSource).toContain("t('Collapse folder')")
+    expect(mailFolderListSource).toContain("t('Expand folder')")
+    expect(mailFolderListSource).toContain('mail-folder-list__item--active')
+    expect(mailFolderListSource).toContain('folderDepthClass')
+    expect(mailFolderListSource).toContain('mailFolderPresentation')
+    expect(mailFoldersSource).toContain('mailStandardFolders')
+    expect(mailFoldersSource).toContain('children?: readonly MailFolderModel[]')
+    expect(mailFoldersSource).toContain('mailFolderExpandableIds')
+    expect(mailFoldersSource).toContain('mailFolderExpandedIds')
+    expect(mailFoldersSource).toContain('mailFolderRows')
+    expect(mailFoldersSource).toContain("'custom'")
+    expect(mailFoldersSource).toContain("'inbox'")
+    expect(mailFoldersSource).toContain("'sent'")
+    expect(mailFoldersSource).toContain("'drafts'")
+    expect(mailFoldersSource).toContain("'outbox'")
+    expect(mailFoldersSource).toContain("'archive'")
+    expect(mailFoldersSource).toContain("'spam'")
+    expect(mailFoldersSource).toContain("'trash'")
+    expect(mailFoldersSource).toContain("'all'")
+    expect(mailListItemSource).toContain('MailListItemModel')
+    expect(mailListItemSource).toContain('fromName')
+    expect(mailListItemSource).toContain('subject')
+    expect(mailListItemSource).toContain('snippet')
+    expect(mailListItemSource).toContain('Tooltip')
+    expect(mailListItemSource).toContain('mail-list-item__primary')
+    expect(mailListItemSource).toContain('mail-list-item__summary')
+    expect(mailListItemSource).toContain('mail-list-item__signals')
+    expect(mailListItemSource).toContain('density?: MailListItemDensity')
+    expect(mailListItemSource).not.toContain('timelineHint')
+    expect(mailListItemSource).not.toContain('mailListItemConfidenceClass')
+    expect(mailListItemSource).toContain('mailListItemMarkerClass')
+    expect(mailElementsSource).toContain('MailListItemModel')
+    expect(mailElementsSource).toContain('MailListItemConfidence')
+    expect(mailElementsSource).toContain('MailListItemCounter')
+    expect(mailElementsSource).toContain('MailListItemDensity')
+    expect(mailElementsSource).toContain('MailListAccountOption')
+    expect(mailElementsSource).toContain('mailListAccountOptions')
+    expect(mailElementsSource).toContain('mailListItemsForAccount')
+    expect(mailElementsSource).toContain('mailListAllAccountsOptionId')
+    expect(mailElementsSource).toContain('mailListItemStatus')
+    expect(mailElementsSource).toContain('mailListItemHasSignal')
+    expect(mailElementsSource).toContain('mailListItemAttachmentLabel')
+    expect(mailElementsSource).toContain('mailListItemAriaLabel')
+    expect(mailElementsSource).toContain('mailListItemCounters')
+    expect(mailElementsSource).toContain('mailListItemSourceKind')
+    expect(mailElementsSource).toContain('MailListItemMarker')
+    expect(mailElementsSource).toContain('mailListItemMarkerPresentation')
+    expect(mailElementsSource).toContain('mailListItemMarkerClass')
+    expect(mailElementsSource).toContain('mailListItemMarkerSummary')
+    expect(mailElementsSource).toContain('mailListItemDensityOptions')
+    expect(mailElementsSource).toContain('mailListDensityToggleItems')
+    expect(mailElementsSource).toContain('iconOnly: true')
+    expect(mailElementsSource).toContain("icon: 'tabler:list'")
+    expect(mailElementsSource).toContain("icon: 'tabler:list-details'")
+    expect(mailElementsSource).toContain("icon: 'tabler:layout-list'")
+    expect(mailElementsSource).toContain('providerRecordId')
+    expect(mailElementsSource).toContain('recipients')
+    expect(mailElementsSource).toContain('hermesEntities')
+    expect(mailElementsSource).toContain('evidenceKinds')
+    expect(mailElementsSource).toContain('importanceScore')
+    expect(mailSearchSource).toContain('mailListSearchFieldGroups')
+    expect(mailSearchSource).toContain('Mail attrs')
+    expect(mailSearchSource).toContain('Hermes')
+    expect(mailSearchSource).toContain("'workflow'")
+    expect(mailSearchSource).toContain("'attachment'")
+    expect(mailSearchSource).toContain("'entity'")
+    expect(mailSearchSource).toContain("'importance'")
+    expect(mailSearchSource).toContain("'ai_category'")
+    expect(mailSearchSource).toContain("'task'")
+    expect(mailSearchSource).toContain('mode:(all|any)')
+    expect(mailSearchSuggestionSource).toContain('mailListSearchBuilderValueSuggestions')
+    expect(mailSearchSuggestionSource).toContain('mailListEntitySuggestionValues')
+    expect(mailSearchSuggestionSource).toContain('booleanSuggestionValues')
+    expect(mailElementsSource).toContain('tabler:mail-x')
+    expect(mailElementsSource).toContain('tabler:shield-exclamation')
+    expect(mailElementsSource).toContain("'spam'")
+    expect(mailElementsSource).toContain("'phishing'")
+    expect(mailElementsSource).not.toContain('CommunicationInboxItemModel')
+    expect(mailThreadSource).toContain('MailMessage')
+    expect(mailThreadSource).toContain('MailReplyComposer')
+    expect(mailMessageSource).toContain('MailAction')
+    expect(mailMessageSource).toContain('MailViewer')
+    expect(mailMessageSource).toContain('MailFooter')
+    expect(mailMessageSource).toContain('communication-email-center')
+    expect(mailMessageSource).not.toContain('HtmlPreview')
+    expect(mailActionSource).toContain('communication-email-command-bar')
+    expect(mailActionSource).toContain('actionGroups')
+    expect(mailActionSource).toContain('ButtonGroup')
+    expect(mailActionSource).toContain('Spacer')
+    expect(mailActionSource).toContain('SplitButton')
+    expect(mailActionSource).toContain('responseControls')
+    expect(mailActionSource).toContain('ToolbarGroup')
+    expect(mailActionSource).toContain('mailActionResponseControls')
+    expect(mailActionSource).toContain('mailActionToolbarSections')
+    expect(mailActionSource).toContain('communication-email-action-split')
+    expect(mailActionSource).toContain('communication-email-response-group')
+    expect(mailActionSource).toContain('communication-email-command-bar__spacer')
+    expect(mailActionSource).toContain('communication-email-command-bar__inspector-toggle')
+    expect(mailActionSource).toContain('toggle-inspector')
+    expect(mailActionSource).toContain('inspectorVisible')
+    expect(mailActionsSource).toContain('mailActionMenuGroups')
+    expect(mailActionsSource).toContain('mailActionResponseControls')
+    expect(mailActionsSource).toContain('mailActionToolbarSections')
+    expect(mailActionsSource).toContain("itemIds: ['ai-reply', 'ai-reply-variants', 'bilingual-reply-flow', 'smart-cc']")
+    expect(mailActionsSource).toContain("itemIds: ['forward-eml', 'redirect']")
+    expect(mailActionSource).not.toContain('Dialog')
+    expect(mailActionSource).not.toContain('IconButton')
+    expect(mailActionSource).not.toContain('ToggleGroup')
+    expect(mailActionSource).not.toContain('Configure action panel')
+    expect(mailActionSource).not.toContain('Action panel settings')
+    expect(mailActionSource).not.toContain('selectedActionIds')
+    expect(mailActionSource).not.toContain('action.label')
+    expect(domainCssSource).not.toContain('communication-email-command-bar__settings')
+    expect(domainCssSource).not.toContain('communication-email-action-settings-dialog')
+    expect(mailActionSource).not.toContain('Tooltip')
+    expect(mailActionsSource).toContain('Create from message')
+    expect(mailActionsSource).toContain('Forwarding actions')
+    expect(mailActionsSource).toContain('reply-all')
+    expect(mailActionsSource).toContain('forward-eml')
+    expect(mailActionsSource).toContain('redirect')
+    expect(mailActionsSource).toContain('ai-reply-variants')
+    expect(mailActionsSource).toContain('bilingual-reply-flow')
+    expect(mailActionsSource).toContain('mark-unread')
+    expect(mailActionsSource).toContain('restore-trash')
+    expect(mailActionsSource).toContain('bulk-actions')
+    expect(mailActionsSource).toContain('remove-label')
+    expect(mailActionsSource).toContain('update-ai-state')
+    expect(mailActionsSource).toContain('spf-dkim')
+    expect(mailActionsSource).toContain('export-md')
+    expect(mailActionsSource).toContain('Danger zone')
+    expect(mailActionsSource).toContain('mark-spam')
+    expect(mailActionsSource).toContain('delete-provider')
+    expect(mailActionQueriesSource).toContain('useMarkMessageSpamMutation')
+    expect(mailActionQueriesSource).toContain('useMarkMessageUnreadMutation')
+    expect(mailActionQueriesSource).toContain('useRemoveMessageLabelMutation')
+    expect(mailOperationQueriesSource).toContain('useUpdateMessageAiStateMutation')
+    expect(mailOperationQueriesSource).toContain('useBulkMessageActionMutation')
+    expect(messageApiSource).toContain('restoreMessage')
+    expect(mailActionQueriesSource).toContain("transitionMessageWorkflowState(messageId, 'spam')")
+    expect(mailViewerSource).toContain('MailQuotedOriginal')
+    expect(mailViewerSource).toContain('HtmlPreview')
+    expect(mailViewerSource).toContain('communication-email-viewer')
+    expect(mailViewerSource).toContain('communication-email-viewer__mode-divider')
+    expect(mailViewerSource).toContain('communication-email-center__body-scroll')
+    expect(mailViewerSource).toContain('communication-email-center__paper')
+    expect(mailViewerSource).not.toContain('AttachmentChip')
+    expect(mailViewerSource).not.toContain('communication-email-attachment-dock')
+    expect(mailFooterSource).toContain('communication-email-footer')
+    expect(mailFooterSource).toContain('AttachmentChip')
+    expect(mailMessageSource).toContain(':attachments="message.attachments"')
+    expect(mailMessageSource).not.toContain('communication-email-center__context')
+    expect(mailViewerSource).not.toContain('attributeGroups')
+    expect(mailViewerSource).not.toContain('hermesEntities')
+    expect(mailViewerSource).not.toContain("t('Message attributes')")
+    expect(mailViewerSource).not.toContain("t('Hermes candidates')")
+    expect(mailQuotedOriginalSource).toContain('Original message')
+    expect(mailReplyComposerSource).toContain('Reply draft')
+    expect(mailWorkspaceSource).toContain('MailList')
+    expect(mailWorkspaceSource).toContain('MailThread')
+    expect(mailWorkspaceSource).toContain('CommunicationHermesInspector v-if="isInspectorVisible"')
+    expect(mailWorkspaceSource).toContain('@toggle-inspector="handleToggleInspector"')
+    expect(conversationSource).toContain('ChatInput')
+    expect(conversationSource).toContain('MailThread')
+    expect(inspectorSource).toContain('Entities stay candidates')
+    expect(channelWorkspaceSource).toContain('Channel rooms')
+    expect(callsSurfaceSource).toContain('Call transcript')
+    expect(shellSource).not.toContain('frontend/src/integrations')
+    expect(outboxSource).toContain('communicationOutboxCardPresentation')
+
+    expect(primitiveStorySource).toContain('Hermes UI/General/Communication')
+    expect(primitiveStorySource).not.toContain('Hermes App/Communications')
+    expect(mailStorySource).toContain('Hermes App/Communications/Mail')
+    expect(mailStorySource).toContain('MailListItemModel')
+    expect(mailStorySource).toContain('MailListItem')
+    expect(mailStorySource).toContain('MailListItemDynamics')
+    expect(mailStorySource).toContain('MailListItemDensityModes')
+    expect(mailStorySource).toContain('MailListItemInvariants')
+    expect(mailStorySource).toContain('MailFolders')
+    expect(mailStorySource).toContain('mailOpenMessage')
+    expect(mailStorySource).toContain('Message identity')
+    expect(mailStorySource).toContain('Message actions')
+    expect(mailStorySource).toContain('Hermes actions')
+    expect(mailStorySource).toContain('deleteMessageFromProvider')
+    expect(mailStorySource).toContain('runWorkflowAction:create_task')
+    expect(mailStorySource).toContain('MailFolderListComponent')
+    expect(mailStorySource).toContain('mailStandardFolders')
+    expect(mailStorySource).toContain('mailFolderChildrenById')
+    expect(mailStorySource).toContain('inbox-work')
+    expect(mailStorySource).toContain('archive-vendors')
+    expect(mailStorySource).toContain('mailListItemMarkerOptions')
+    expect(mailStorySource).toContain('mailListItemDensityOptions')
+    expect(mailStorySource).toContain('timelineHint')
+    expect(mailStorySource).toContain('insights')
+    expect(mailStorySource).toContain('Spam and risk')
+    expect(mailStorySource).toContain('MailList')
+    expect(mailStorySource).toContain('MailActionComponent')
+    expect(mailStorySource).toContain('MailViewerComponent')
+    expect(mailStorySource).toContain('MailFooterComponent')
+    expect(mailStorySource).toContain('export const MailAction')
+    expect(mailStorySource).toContain('export const MailViewer')
+    expect(mailStorySource).toContain('export const MailFooter')
+    expect(mailStorySource).toContain('MailMessage')
+    expect(mailStorySource).toContain('MailReplyComposer')
+    expect(mailStorySource).toContain('MailThread')
+    expect(mailStorySource).toContain('MailWorkspace')
+    expect(mailStorySource).toContain('Original message')
+    expect(messengerStorySource).toContain('Hermes App/Communications/Messengers')
+    expect(messengerStorySource).toContain('CommunicationWorkspaceShell')
+    expect(channelStorySource).toContain('Hermes App/Communications/Channels')
+    expect(channelStorySource).toContain('CommunicationChannelWorkspace')
+    expect(callsStorySource).toContain('Hermes App/Communications/Calls')
+    expect(callsStorySource).toContain('CommunicationCallsSurface')
+    expect(storySources.join('\n')).not.toContain('Hermes UI/Domain/Communications')
+    expect(storySources.join('\n')).not.toContain('/api/v1/')
+    expect(storySources.join('\n')).not.toContain('/api/v1/telegram')
+    expect(storySources.join('\n')).not.toContain('/api/v1/whatsapp')
+  })
+})

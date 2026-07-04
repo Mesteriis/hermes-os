@@ -2,6 +2,7 @@ import type { Preview } from '@storybook/vue3-vite'
 import { withThemeByDataAttribute } from '@storybook/addon-themes'
 import { initialize, mswLoader } from 'msw-storybook-addon'
 import { storybookLocaleToolbarItems } from '../stories/ui/storybook-i18n'
+import { isUiThemeName, themeNameToSelection } from '../src/shared/ui/theme'
 import '../src/style.css'
 import '../src/styles/surfaces.css'
 import '../src/styles/theme-classes.css'
@@ -18,14 +19,15 @@ const preview: Preview = {
 	globalTypes: {
 		theme: {
 			description: 'Hermes UI theme',
-			defaultValue: 'light',
+			defaultValue: 'base-light',
 			toolbar: {
 				title: 'Theme',
 				icon: 'circlehollow',
 				items: [
-					{ value: 'light', title: 'Light' },
-					{ value: 'dark', title: 'Dark' },
-					{ value: 'hermes', title: 'Hermes' }
+					{ value: 'base-light', title: 'Base Light' },
+					{ value: 'base-dark', title: 'Base Dark' },
+					{ value: 'hermes-light', title: 'Hermes Light' },
+					{ value: 'hermes-dark', title: 'Hermes Dark' }
 				],
 				dynamicTitle: true
 			}
@@ -44,23 +46,28 @@ const preview: Preview = {
 	decorators: [
 		withThemeByDataAttribute({
 			themes: {
-				light: 'light',
-				dark: 'dark',
-				hermes: 'hermes'
+				'base-light': 'base-light',
+				'base-dark': 'base-dark',
+				'hermes-light': 'hermes-light',
+				'hermes-dark': 'hermes-dark'
 			},
-			defaultTheme: 'light',
+			defaultTheme: 'base-light',
 			attributeName: 'data-ui-theme'
 		}),
 		(story, context) => ({
 			components: { story },
 			setup() {
+				const theme = isUiThemeName(context.globals.theme) ? context.globals.theme : 'base-light'
+				const themeSelection = themeNameToSelection(theme)
 				return {
 					locale: context.globals.locale,
 					storyHeading: [context.title, context.name].filter(Boolean).join(' / '),
-					theme: context.globals.theme
+					theme,
+					themeFamily: themeSelection.family,
+					themeMode: themeSelection.mode
 				}
 			},
-			template: '<main :data-ui-theme="theme" :data-ui-locale="locale" :lang="locale" class="storybook-shell"><h1 class="hermes-sr-only">{{ storyHeading }}</h1><story /></main>'
+			template: '<main :data-ui-theme="theme" :data-ui-theme-family="themeFamily" :data-ui-theme-mode="themeMode" :data-ui-locale="locale" :lang="locale" class="storybook-shell"><h1 class="hermes-sr-only">{{ storyHeading }}</h1><story /></main>'
 		})
 	],
 	loaders: [mswLoader],

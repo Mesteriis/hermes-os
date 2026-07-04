@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
+import {
+	isUiThemeName,
+	themeNameToSelection,
+	themeSelectionToName,
+	uiThemeFamilyOptions,
+	uiThemeModeOptions,
+	uiThemeNames
+} from './theme'
 
 const utilityComponents = [
 	'CopyButton',
@@ -55,5 +63,19 @@ describe('Hermes UI utility component contracts', () => {
 		for (const componentName of utilityComponents) {
 			expect(storySource).toContain(componentName)
 		}
+	})
+
+	it('keeps theme ids explicit across family and mode axes', () => {
+		expect(uiThemeNames).toEqual(['base-light', 'base-dark', 'hermes-light', 'hermes-dark'])
+		expect(uiThemeFamilyOptions.map((option) => option.value)).toEqual(['base', 'hermes'])
+		expect(uiThemeModeOptions.map((option) => option.value)).toEqual(['light', 'dark'])
+		expect(themeSelectionToName('base', 'light')).toBe('base-light')
+		expect(themeSelectionToName('base', 'dark')).toBe('base-dark')
+		expect(themeSelectionToName('hermes', 'light')).toBe('hermes-light')
+		expect(themeSelectionToName('hermes', 'dark')).toBe('hermes-dark')
+		expect(themeNameToSelection('hermes-light')).toEqual({ family: 'hermes', mode: 'light' })
+		expect(isUiThemeName('light')).toBe(false)
+		expect(isUiThemeName('dark')).toBe(false)
+		expect(isUiThemeName('hermes')).toBe(false)
 	})
 })

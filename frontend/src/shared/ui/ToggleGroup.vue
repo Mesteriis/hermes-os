@@ -6,12 +6,13 @@ interface ToggleGroupItem {
 	value: string
 	label: string
 	icon?: string
+	iconOnly?: boolean
 	disabled?: boolean
 }
 
 const props = withDefaults(defineProps<{
 	modelValue?: string | string[]
-	items?: ToggleGroupItem[]
+	items?: readonly ToggleGroupItem[]
 	multiple?: boolean
 	ariaLabel?: string
 	disabled?: boolean
@@ -65,14 +66,25 @@ function toggleItem(item: ToggleGroupItem): void {
 		<button
 			v-for="item in items"
 			:key="item.value"
-			class="hermes-toggle-group__item"
+			:class="[
+				'hermes-toggle-group__item',
+				item.iconOnly && 'hermes-toggle-group__item--icon-only'
+			]"
 			type="button"
+			:aria-label="item.iconOnly ? item.label : undefined"
 			:aria-pressed="selectedValues.has(item.value)"
 			:disabled="disabled || item.disabled"
+			:title="item.iconOnly ? item.label : undefined"
 			@click="toggleItem(item)"
 		>
-			<Icon v-if="item.icon" :icon="item.icon" size="1rem" class="hermes-toggle-group__icon" aria-hidden="true" />
-			<span>{{ item.label }}</span>
+			<Icon
+				v-if="item.icon"
+				:icon="item.icon"
+				:size="item.iconOnly ? '1.15rem' : '1rem'"
+				class="hermes-toggle-group__icon"
+				aria-hidden="true"
+			/>
+			<span v-if="!item.iconOnly">{{ item.label }}</span>
 		</button>
 	</div>
 </template>

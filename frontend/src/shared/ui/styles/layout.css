@@ -252,6 +252,58 @@
 .hermes-toolbar--default { padding: var(--h-spacing-2); }
 .hermes-toolbar--comfortable { padding: var(--h-spacing-3); }
 
+.hermes-spacer {
+	display: block;
+	flex: 1 1 0;
+	min-block-size: 0;
+	min-inline-size: 0;
+	pointer-events: none;
+}
+
+.hermes-spacer--horizontal {
+	inline-size: auto;
+}
+
+.hermes-spacer--vertical {
+	block-size: auto;
+}
+
+.hermes-toolbar-group {
+	display: inline-flex;
+	align-items: center;
+	flex: 0 0 auto;
+	gap: var(--h-spacing-1);
+	min-width: 0;
+}
+
+.hermes-toolbar-group--horizontal {
+	flex-direction: row;
+}
+
+.hermes-toolbar-group--vertical {
+	align-items: stretch;
+	flex-direction: column;
+}
+
+.hermes-toolbar-separator {
+	display: block;
+	flex: 0 0 auto;
+	background: color-mix(in srgb, var(--h-color-border) 86%, transparent);
+}
+
+.hermes-toolbar-separator--vertical {
+	align-self: stretch;
+	width: 1px;
+	min-height: var(--h-control-height-sm);
+	margin-inline: var(--h-spacing-1);
+}
+
+.hermes-toolbar-separator--horizontal {
+	height: 1px;
+	width: 100%;
+	margin-block: var(--h-spacing-1);
+}
+
 .hermes-action-bar {
 	gap: var(--h-spacing-2);
 	padding: var(--h-spacing-3);
