@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from '@/platform/i18n'
 import { AttachmentChip, Badge, ChatInput, MessageBubble, MessageStatus, ProviderIcon } from '@/shared/ui'
-import MailThread from './mail/MailThread.vue'
+import MailMessage from './mail/MailMessage.vue'
 import type { CommunicationConversationModel } from './communicationDomainElements'
 import {
   communicationChannelLabel,
@@ -10,13 +12,26 @@ import {
 } from './communicationDomainElements'
 import './communicationDomainElements.css'
 
-defineProps<{
+const props = defineProps<{
   conversation: CommunicationConversationModel
 }>()
+
+const { t } = useI18n()
+const activeMailMessage = computed(() => props.conversation.messages[props.conversation.messages.length - 1])
 </script>
 
 <template>
-	<MailThread v-if="communicationConversationIsEmail(conversation.channelKind)" :conversation="conversation" />
+	<template v-if="communicationConversationIsEmail(conversation.channelKind)">
+		<MailMessage
+			v-if="activeMailMessage"
+			:message="activeMailMessage"
+			:fallback-subject="conversation.title"
+			:show-inspector-toggle="false"
+		/>
+		<section v-else class="communication-workspace-panel communication-mail-workspace-reader" :aria-label="t('Open message')">
+			<p class="communication-mail-workspace-reader__empty">{{ t('No message selected.') }}</p>
+		</section>
+	</template>
 	<section v-else class="communication-workspace-panel communication-conversation" aria-label="Conversation">
 		<header class="communication-workspace-panel__header">
 			<div class="communication-conversation__toolbar">

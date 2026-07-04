@@ -9,8 +9,10 @@ import '../communicationDomainElements.css'
 const props = withDefaults(defineProps<{
   actionGroups?: readonly CommunicationMessageActionGroupModel[]
   inspectorVisible?: boolean
+  showInspectorToggle?: boolean
 }>(), {
-  inspectorVisible: true
+  inspectorVisible: true,
+  showInspectorToggle: true
 })
 
 const emit = defineEmits<{
@@ -69,11 +71,12 @@ function handleToggleInspector(): void {
 			>
 				<template v-if="section.id === 'danger'">
 					<Spacer
-						v-if="responseControls.length || sectionIndex > 0"
+						v-if="showInspectorToggle && (responseControls.length || sectionIndex > 0)"
 						class="communication-email-command-bar__spacer"
 						orientation="horizontal"
 					/>
 					<Button
+						v-if="showInspectorToggle"
 						class="hermes-icon-button communication-email-command-bar__inspector-toggle"
 						:aria-label="inspectorToggleLabel"
 						:aria-pressed="inspectorVisible"

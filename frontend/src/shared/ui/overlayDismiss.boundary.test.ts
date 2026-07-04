@@ -50,4 +50,15 @@ describe('Hermes UI mouse-leave overlay dismissal contract', () => {
 		expect(source).toContain('DropdownMenuPortal')
 		expect(source).toContain('DropdownMenuContent')
 	})
+
+	it('renders tree select menus through a viewport-positioned portal so parent overflow cannot clip them', () => {
+		const uiRoot = fileURLToPath(new URL('.', import.meta.url))
+		const source = readFileSync(join(uiRoot, 'TreeSelect.vue'), 'utf8')
+		const styles = readFileSync(join(uiRoot, 'styles/controls.css'), 'utf8')
+
+		expect(source).toContain('<Teleport to="body">')
+		expect(source).toContain('updatePopoverGeometry')
+		expect(source).toContain("window.addEventListener('scroll', updatePopoverGeometry, true)")
+		expect(styles).toContain('.hermes-tree-select__popover {\n\tposition: fixed;')
+	})
 })

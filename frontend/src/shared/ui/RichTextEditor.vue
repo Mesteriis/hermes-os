@@ -320,6 +320,7 @@ function toggleLink(): void {
 					/>
 				</template>
 			</Tooltip>
+			<slot name="toolbar-end" />
 		</div>
 
 		<div class="hermes-rich-text-editor__surface">

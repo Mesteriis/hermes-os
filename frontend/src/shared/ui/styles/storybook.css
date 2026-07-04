@@ -6,6 +6,13 @@
 	padding: 32px;
 }
 
+.storybook-shell:has(.storybook-canvas--workspace) {
+	height: 100vh;
+	min-height: 0;
+	overflow: hidden;
+	padding: 0;
+}
+
 .storybook-canvas {
 	display: grid;
 	gap: 20px;
@@ -15,6 +22,21 @@
 
 .storybook-canvas--wide {
 	max-width: 1280px;
+}
+
+.storybook-canvas--workspace {
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	max-width: none;
+	gap: 0;
+	margin: 0;
+}
+
+.storybook-canvas--workspace > .communication-workspace-shell {
+	width: 100%;
+	height: 100%;
+	min-height: 0;
 }
 
 .storybook-narrow {

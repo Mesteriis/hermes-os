@@ -10,8 +10,10 @@ withDefaults(defineProps<{
   message: CommunicationConversationMessageModel
   fallbackSubject: string
   inspectorVisible?: boolean
+  showInspectorToggle?: boolean
 }>(), {
-  inspectorVisible: true
+  inspectorVisible: true,
+  showInspectorToggle: true
 })
 
 const emit = defineEmits<{
@@ -33,12 +35,13 @@ function handleToggleInspector(): void {
 			message.tone === 'warning' && 'communication-email-message--signal'
 		]"
 	>
-		<section class="communication-email-center communication-email-center--structured" :aria-label="t('Open message')">
-			<MailAction
-				:action-groups="message.actionGroups"
-				:inspector-visible="inspectorVisible"
-				@toggle-inspector="handleToggleInspector"
-			/>
+		<MailAction
+			:action-groups="message.actionGroups"
+			:inspector-visible="inspectorVisible"
+			:show-inspector-toggle="showInspectorToggle"
+			@toggle-inspector="handleToggleInspector"
+		/>
+		<section class="communication-email-preview communication-email-preview--structured" :aria-label="t('Open message')">
 			<MailViewer :message="message" :fallback-subject="fallbackSubject" />
 			<MailFooter :attachments="message.attachments" />
 		</section>

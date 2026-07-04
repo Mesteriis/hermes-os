@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, useId, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import Icon from './Icon.vue'
 import type { TreeSelectOption } from './Selection.types'
 import { useMouseLeaveDismiss } from './useMouseLeaveDismiss'
@@ -47,7 +47,9 @@ const activeIndex = ref(0)
 const rootRef = ref<HTMLElement | null>(null)
 const popoverRef = ref<HTMLElement | null>(null)
 const treeRef = ref<HTMLElement | null>(null)
+const isPopoverPositioned = ref(false)
 const componentId = `hermes-tree-select-${useId()}`
+let isTrackingPopoverGeometry = false
 const { cancelMouseLeaveDismiss, scheduleMouseLeaveDismiss } = useMouseLeaveDismiss(closeTree, undefined, {
 	isOpen,
 	getBoundaryElements: () => [rootRef.value, popoverRef.value]
@@ -184,6 +186,61 @@ function scrollActiveItemIntoView(): void {
 	})
 }
 
+function getTriggerElement(): HTMLElement | null {
+	return rootRef.value?.querySelector<HTMLElement>('.hermes-tree-select__trigger') ?? null
+}
+
+function updatePopoverGeometry(): void {
+	const triggerElement = getTriggerElement()
+	const popoverElement = popoverRef.value
+	if (!triggerElement || !popoverElement || typeof window === 'undefined') {
+		return
+	}
+
+	const rect = triggerElement.getBoundingClientRect()
+	const viewportPadding = 12
+	const gap = 4
+	const width = Math.max(160, Math.min(rect.width, window.innerWidth - viewportPadding * 2))
+	const left = Math.min(Math.max(rect.left, viewportPadding), window.innerWidth - width - viewportPadding)
+	const preferredTop = rect.bottom + gap
+	const availableBelow = window.innerHeight - preferredTop - viewportPadding
+	const availableAbove = rect.top - gap - viewportPadding
+	const shouldOpenAbove = availableBelow < 160 && availableAbove > availableBelow
+	const availableHeight = shouldOpenAbove ? availableAbove : availableBelow
+	const maxHeight = Math.max(160, Math.min(360, availableHeight))
+	const top = shouldOpenAbove ? Math.max(viewportPadding, rect.top - gap - maxHeight) : preferredTop
+
+	popoverElement.style.setProperty('--h-tree-select-popover-left', `${Math.round(left)}px`)
+	popoverElement.style.setProperty('--h-tree-select-popover-top', `${Math.round(top)}px`)
+	popoverElement.style.setProperty('--h-tree-select-popover-width', `${Math.round(width)}px`)
+	popoverElement.style.setProperty('--h-tree-select-popover-max-height', `${Math.round(maxHeight)}px`)
+	isPopoverPositioned.value = true
+}
+
+function schedulePopoverGeometryUpdate(): void {
+	void nextTick(updatePopoverGeometry)
+}
+
+function addPopoverGeometryListeners(): void {
+	if (isTrackingPopoverGeometry || typeof window === 'undefined') {
+		return
+	}
+
+	window.addEventListener('resize', updatePopoverGeometry)
+	window.addEventListener('scroll', updatePopoverGeometry, true)
+	isTrackingPopoverGeometry = true
+}
+
+function removePopoverGeometryListeners(): void {
+	if (!isTrackingPopoverGeometry || typeof window === 'undefined') {
+		return
+	}
+
+	window.removeEventListener('resize', updatePopoverGeometry)
+	window.removeEventListener('scroll', updatePopoverGeometry, true)
+	isTrackingPopoverGeometry = false
+}
+
 function openTree(): void {
 	if (!canInteract.value) {
 		return
@@ -192,20 +249,26 @@ function openTree(): void {
 	expandSelectedAncestors()
 	setActiveIndexToSelected()
 	if (isOpen.value) {
+		schedulePopoverGeometryUpdate()
 		scrollActiveItemIntoView()
 		return
 	}
+	isPopoverPositioned.value = false
 	isOpen.value = true
+	addPopoverGeometryListeners()
 	emit('open')
+	schedulePopoverGeometryUpdate()
 	scrollActiveItemIntoView()
 }
 
 function closeTree(): void {
 	cancelMouseLeaveDismiss()
+	removePopoverGeometryListeners()
 	if (!isOpen.value) {
 		return
 	}
 	isOpen.value = false
+	isPopoverPositioned.value = false
 	activeIndex.value = 0
 	emit('close')
 }
@@ -373,10 +436,15 @@ function handleItemClick(item: VisibleTreeItem, index: number): void {
 function handleFocusout(event: FocusEvent): void {
 	const currentTarget = event.currentTarget as HTMLElement
 	const nextTarget = event.relatedTarget
-	if (!(nextTarget instanceof Node) || !currentTarget.contains(nextTarget)) {
+	if (
+		!(nextTarget instanceof Node)
+		|| (!currentTarget.contains(nextTarget) && !popoverRef.value?.contains(nextTarget))
+	) {
 		closeTree()
 	}
 }
+
+onBeforeUnmount(removePopoverGeometryListeners)
 </script>
 
 <template>
@@ -407,68 +475,77 @@ function handleFocusout(event: FocusEvent): void {
 			</span>
 			<Icon icon="tabler:chevron-down" size="1rem" class="hermes-tree-select__chevron" aria-hidden="true" />
 		</button>
-		<div v-if="isOpen" ref="popoverRef" class="hermes-tree-select__popover">
-			<ul
-				:id="treeId"
-				ref="treeRef"
-				class="hermes-tree-select__tree"
-				role="tree"
-				:aria-label="treeAriaLabel"
+		<Teleport to="body">
+			<div
+				v-if="isOpen"
+				ref="popoverRef"
+				class="hermes-tree-select__popover"
+				:class="{ 'hermes-tree-select__popover--positioned': isPopoverPositioned }"
+				@mouseenter="cancelMouseLeaveDismiss"
+				@mouseleave="scheduleMouseLeaveDismiss"
 			>
-				<li
-					v-for="(item, index) in visibleItems"
-					:key="item.option.value"
-					class="hermes-tree-select__item"
-					role="none"
+				<ul
+					:id="treeId"
+					ref="treeRef"
+					class="hermes-tree-select__tree"
+					role="tree"
+					:aria-label="treeAriaLabel"
 				>
-					<button
-						:id="treeItemId(index)"
-						class="hermes-tree-select__row"
-						:class="{ 'hermes-tree-select__row--active': index === activeIndex }"
-						type="button"
-						role="treeitem"
-						:aria-disabled="item.isDisabled"
-						:aria-expanded="item.hasChildren ? item.isExpanded : undefined"
-						:aria-level="item.level"
-						:aria-posinset="item.posInSet"
-						:aria-selected="item.isSelectable && item.option.value === modelValue"
-						:aria-setsize="item.setSize"
-						tabindex="-1"
-						@mouseenter="setActiveIndexFromPointer(index)"
-						@mousedown.prevent
-						@click="handleItemClick(item, index)"
+					<li
+						v-for="(item, index) in visibleItems"
+						:key="item.option.value"
+						class="hermes-tree-select__item"
+						role="none"
 					>
-						<span class="hermes-tree-select__spacer" aria-hidden="true">
-							<span
-								v-for="depth in Math.max(item.level - 1, 0)"
-								:key="depth"
-								class="hermes-tree-select__spacer-step"
-							></span>
-						</span>
-						<Icon
-							v-if="item.hasChildren"
-							:icon="item.isExpanded ? 'tabler:chevron-down' : 'tabler:chevron-right'"
-							size="0.875rem"
-							class="hermes-tree-select__disclosure"
-							aria-hidden="true"
-						/>
-						<span v-else class="hermes-tree-select__leaf-spacer" aria-hidden="true"></span>
-						<Icon v-if="item.option.icon" :icon="item.option.icon" size="1rem" class="hermes-tree-select__icon" aria-hidden="true" />
-						<span class="hermes-tree-select__body">
-							<span class="hermes-tree-select__label">{{ item.option.label }}</span>
-							<span v-if="item.option.description" class="hermes-tree-select__description">{{ item.option.description }}</span>
-						</span>
-						<Icon
-							v-if="item.isSelectable && item.option.value === modelValue"
-							icon="tabler:check"
-							size="0.875rem"
-							class="hermes-tree-select__check"
-							aria-hidden="true"
-						/>
-					</button>
-				</li>
-				<li v-if="visibleItems.length === 0" class="hermes-tree-select__empty" role="presentation">{{ emptyLabel }}</li>
-			</ul>
-		</div>
+						<button
+							:id="treeItemId(index)"
+							class="hermes-tree-select__row"
+							:class="{ 'hermes-tree-select__row--active': index === activeIndex }"
+							type="button"
+							role="treeitem"
+							:aria-disabled="item.isDisabled"
+							:aria-expanded="item.hasChildren ? item.isExpanded : undefined"
+							:aria-level="item.level"
+							:aria-posinset="item.posInSet"
+							:aria-selected="item.isSelectable && item.option.value === modelValue"
+							:aria-setsize="item.setSize"
+							tabindex="-1"
+							@mouseenter="setActiveIndexFromPointer(index)"
+							@mousedown.prevent
+							@click="handleItemClick(item, index)"
+						>
+							<span class="hermes-tree-select__spacer" aria-hidden="true">
+								<span
+									v-for="depth in Math.max(item.level - 1, 0)"
+									:key="depth"
+									class="hermes-tree-select__spacer-step"
+								></span>
+							</span>
+							<Icon
+								v-if="item.hasChildren"
+								:icon="item.isExpanded ? 'tabler:chevron-down' : 'tabler:chevron-right'"
+								size="0.875rem"
+								class="hermes-tree-select__disclosure"
+								aria-hidden="true"
+							/>
+							<span v-else class="hermes-tree-select__leaf-spacer" aria-hidden="true"></span>
+							<Icon v-if="item.option.icon" :icon="item.option.icon" size="1rem" class="hermes-tree-select__icon" aria-hidden="true" />
+							<span class="hermes-tree-select__body">
+								<span class="hermes-tree-select__label">{{ item.option.label }}</span>
+								<span v-if="item.option.description" class="hermes-tree-select__description">{{ item.option.description }}</span>
+							</span>
+							<Icon
+								v-if="item.isSelectable && item.option.value === modelValue"
+								icon="tabler:check"
+								size="0.875rem"
+								class="hermes-tree-select__check"
+								aria-hidden="true"
+							/>
+						</button>
+					</li>
+					<li v-if="visibleItems.length === 0" class="hermes-tree-select__empty" role="presentation">{{ emptyLabel }}</li>
+				</ul>
+			</div>
+		</Teleport>
 	</div>
 </template>

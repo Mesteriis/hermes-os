@@ -113,6 +113,11 @@
 	outline: 0;
 }
 
+.hermes-chat-input--auto-grow .hermes-chat-input__textarea {
+	min-height: auto;
+	resize: none;
+}
+
 .hermes-chat-input__textarea::placeholder {
 	color: var(--h-color-text-muted);
 }

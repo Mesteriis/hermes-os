@@ -1,22 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import CommunicationHermesInspector from '../CommunicationHermesInspector.vue'
-import type {
-  CommunicationConversationModel,
-  CommunicationHermesInspectorSectionModel
-} from '../communicationDomainElements'
+import { computed, ref } from 'vue'
+import { useI18n } from '@/platform/i18n'
+import type { CommunicationConversationModel } from '../communicationDomainElements'
 import '../communicationDomainElements.css'
+import MailInspector from './MailInspector.vue'
 import MailList from './MailList.vue'
-import MailThread from './MailThread.vue'
+import MailMessage from './MailMessage.vue'
 import type { MailListItemModel } from './mailElements'
+import type { MailInspectorModel } from './mailInspector'
 
-defineProps<{
+const props = defineProps<{
   items: readonly MailListItemModel[]
   conversation: CommunicationConversationModel
-	inspectorSections: readonly CommunicationHermesInspectorSectionModel[]
+  inspector: MailInspectorModel
 }>()
 
+const { t } = useI18n()
 const isInspectorVisible = ref(true)
+const activeMessage = computed(() => props.conversation.messages[props.conversation.messages.length - 1])
 
 function handleToggleInspector(): void {
   isInspectorVisible.value = !isInspectorVisible.value
@@ -24,13 +25,23 @@ function handleToggleInspector(): void {
 </script>
 
 <template>
-	<section class="communication-workspace-shell">
+	<section
+		:class="[
+			'communication-workspace-shell communication-workspace-shell--mail',
+			!isInspectorVisible && 'communication-workspace-shell--mail-inspector-hidden'
+		]"
+	>
 		<MailList :items="items" />
-		<MailThread
-			:conversation="conversation"
-			:inspector-visible="isInspectorVisible"
-			@toggle-inspector="handleToggleInspector"
-		/>
-		<CommunicationHermesInspector v-if="isInspectorVisible" :sections="inspectorSections" />
+		<section class="communication-mail-workspace-reader" :aria-label="t('Open message')">
+			<MailMessage
+				v-if="activeMessage"
+				:message="activeMessage"
+				:fallback-subject="conversation.title"
+				:inspector-visible="isInspectorVisible"
+				@toggle-inspector="handleToggleInspector"
+			/>
+			<p v-else class="communication-mail-workspace-reader__empty">{{ t('No message selected.') }}</p>
+		</section>
+		<MailInspector v-if="isInspectorVisible" :model="inspector" />
 	</section>
 </template>

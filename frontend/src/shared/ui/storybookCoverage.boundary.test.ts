@@ -122,6 +122,7 @@ describe('Hermes UI Storybook visual coverage boundary', () => {
 			'Hermes UI/General/Media',
 			'Hermes UI/General/Editor',
 			'Hermes UI/General/Feedback',
+			'Hermes UI/General/Graphics',
 			'Hermes UI/General/Layout',
 			'Hermes UI/General/Utility'
 		]

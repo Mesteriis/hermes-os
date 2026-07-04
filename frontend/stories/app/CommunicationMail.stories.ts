@@ -7,11 +7,11 @@ import {
 	MailAction as MailActionComponent,
 	MailFooter as MailFooterComponent,
 	MailFolderList as MailFolderListComponent,
+	MailInspector as MailInspectorComponent,
 	MailList as MailListComponent,
 	MailListItem as MailListItemComponent,
 	MailMessage as MailMessageComponent,
 	MailReplyComposer as MailReplyComposerComponent,
-	MailThread as MailThreadComponent,
 	MailViewer as MailViewerComponent,
 	MailWorkspace as MailWorkspaceComponent,
 	mailListItemAttachmentLabel,
@@ -24,8 +24,8 @@ import {
 	mailStandardFolders,
 	type CommunicationConversationMessageModel,
 	type CommunicationConversationModel,
-	type CommunicationHermesInspectorSectionModel,
 	type MailFolderModel,
+	type MailInspectorModel,
 	type MailListItemDensity,
 	type MailListItemMarker,
 	type MailListItemModel
@@ -184,44 +184,65 @@ function mailStoryText(globals: Record<string, unknown>) {
 			bilingualReplyFlow: 'Двуязычный ответ',
 			bulkAction: 'Массовое действие',
 			contains: 'содержит',
+			compose: 'Написать',
 			entity: 'сущность',
 			expandFolder: 'Развернуть папку',
 			from: 'от',
+			filters: 'Фильтры',
+			filterName: 'Название поискового фильтра',
 			forward: 'Переслать',
 			forwardEml: 'Переслать EML',
 			forwardingActions: 'Пересылка',
 			hermesActions: 'Действия Hermes',
 			hideHermesInspector: 'Скрыть инспектор Hermes',
-			mailAccount: 'Почтовый аккаунт',
+			emailIntelligence: 'Интеллект письма',
+			extractedEntities: 'Извлечённые сущности',
+			mailboxes: 'Почтовые папки',
+			mailInspector: 'Инспектор письма',
 			mailList: 'Список писем',
+			mailView: 'Представление почты',
 			mailSearchValue: 'Значение поиска по почте',
 			mailAttrs: 'Атрибуты письма',
 			mailFolders: 'Папки почты',
+			mailListDensity: 'Плотность списка писем',
 			openDestructiveActions: 'Открыть опасные действия',
 			openEvidenceActions: 'Открыть действия доказательств',
 			openForwardingActions: 'Открыть действия пересылки',
 			openHermesActions: 'Открыть действия Hermes',
+			openMessage: 'Открытое письмо',
 			openOrganizationActions: 'Открыть действия организации',
 			openReplyActions: 'Открыть действия ответа',
 			openStateActions: 'Открыть действия состояния',
 			inbox: 'Входящие',
+			other: 'Прочие',
+			archived: 'Архив',
 			markSpam: 'Пометить как спам',
 			markUnread: 'Отметить непрочитанным',
 			removeLabel: 'Убрать метку',
 			restoreTrash: 'Восстановить из корзины',
 			redirect: 'Перенаправить',
 			replyAll: 'Ответить всем',
+			refresh: 'Обновить',
+			saveFilter: 'Сохранить фильтр',
+			savedFilters: 'Сохранённые фильтры',
 			smartCc: 'Умные CC',
 			showHermesInspector: 'Показать инспектор Hermes',
+			suggestedActions: 'Предложенные действия',
+			relatedContext: 'Связанный контекст',
+			settings: 'Настройки',
 			spfDkim: 'SPF/DKIM',
 			updateAiState: 'Обновить AI-состояние',
 			workFolder: 'Работа',
 			spam: 'Спам',
 			trash: 'Корзина',
 			collapseFolder: 'Свернуть папку',
+			compact: 'Компактно',
+			comfortable: 'Удобно',
+			cozy: 'Просторно',
 			deleteProvider: 'Удалить у провайдера',
 			status: 'статус',
-			value: 'Значение условия поиска'
+			value: 'Значение условия поиска',
+			vendorReviewFilter: 'Проверка поставщика'
 		}
 		: {
 			analyze: 'Analyze',
@@ -233,44 +254,65 @@ function mailStoryText(globals: Record<string, unknown>) {
 			bilingualReplyFlow: 'Bilingual reply flow',
 			bulkAction: 'Bulk message action',
 			contains: 'contains',
+			compose: 'Compose',
 			entity: 'entity',
 			expandFolder: 'Expand folder',
 			from: 'from',
+			filters: 'Filters',
+			filterName: 'Search filter name',
 			forward: 'Forward',
 			forwardEml: 'Forward EML',
 			forwardingActions: 'Forwarding actions',
 			hermesActions: 'Hermes actions',
 			hideHermesInspector: 'Hide Hermes inspector',
-			mailAccount: 'Mail account',
+			emailIntelligence: 'Email Intelligence',
+			extractedEntities: 'Extracted entities',
+			mailboxes: 'Mailboxes',
+			mailInspector: 'Mail inspector',
 			mailList: 'Mail list',
+			mailView: 'Mail view',
 			mailSearchValue: 'Mail search value',
 			mailAttrs: 'Mail attrs',
 			mailFolders: 'Mail folders',
+			mailListDensity: 'Mail list density',
 			openDestructiveActions: 'Open destructive actions',
 			openEvidenceActions: 'Open evidence actions',
 			openForwardingActions: 'Open forwarding actions',
 			openHermesActions: 'Open Hermes actions',
+			openMessage: 'Open message',
 			openOrganizationActions: 'Open organization actions',
 			openReplyActions: 'Open reply actions',
 			openStateActions: 'Open state actions',
 			inbox: 'Inbox',
+			other: 'Other',
+			archived: 'Archived',
 			markSpam: 'Mark spam',
 			markUnread: 'Mark unread',
 			removeLabel: 'Remove label',
 			restoreTrash: 'Restore from trash',
 			redirect: 'Redirect',
 			replyAll: 'Reply all',
+			refresh: 'Refresh',
+			saveFilter: 'Save filter',
+			savedFilters: 'Saved filters',
 			smartCc: 'Smart CC',
 			showHermesInspector: 'Show Hermes inspector',
+			suggestedActions: 'Suggested actions',
+			relatedContext: 'Related context',
+			settings: 'Settings',
 			spfDkim: 'SPF/DKIM',
 			updateAiState: 'Update AI state',
 			workFolder: 'Work',
 			spam: 'Spam',
 			trash: 'Trash',
 			collapseFolder: 'Collapse folder',
+			compact: 'Compact',
+			comfortable: 'Comfortable',
+			cozy: 'Cozy',
 			deleteProvider: 'Delete from provider',
 			status: 'status',
-			value: 'Builder search value'
+			value: 'Builder search value',
+			vendorReviewFilter: 'Vendor review'
 		}
 }
 
@@ -733,44 +775,156 @@ const mailWorkspaceConversation: CommunicationConversationModel = {
 	messages: [mailMessages[0], mailMessages[1], mailOpenMessage]
 }
 
-const mailInspectorSections: readonly CommunicationHermesInspectorSectionModel[] = [
-	{
-		id: 'mail-candidates',
-		title: 'Entity candidates',
-		items: [
+const mailInspectorModel: MailInspectorModel = {
+	intelligence: {
+		score: 92,
+		maxScore: 100,
+		label: 'Email intelligence score',
+		summary: 'Owner review is needed before the retention wording is approved.',
+		checks: [
 			{
-				id: 'candidate-northwind',
-				entity: 'organization',
-				title: 'Northwind Security Vendor',
-				description: 'Potential organization attached to the procurement review.',
-				evidenceLabel: 'Seen in 3 messages and 2 attachments',
-				tone: 'info'
+				id: 'authentic-sender',
+				label: 'Authentic sender',
+				description: 'SPF, DKIM and DMARC passed.',
+				tone: 'success',
+				icon: 'tabler:shield-check'
 			},
 			{
-				id: 'candidate-retention',
-				entity: 'decision',
-				title: 'Retention clause approval',
-				description: 'Owner decision is needed before the final pack is sent.',
-				evidenceLabel: 'Latest inbound email requested explicit approval',
-				tone: 'warning'
+				id: 'no-spam',
+				label: 'No spam indicators',
+				description: 'Clean content and headers.',
+				tone: 'success',
+				icon: 'tabler:circle-check'
+			},
+			{
+				id: 'safe-attachments',
+				label: 'Safe attachments',
+				description: '2 files scanned, no threats.',
+				tone: 'success',
+				icon: 'tabler:paperclip'
 			}
 		]
 	},
-	{
-		id: 'mail-actions',
-		title: 'Review path',
-		items: [
-			{
-				id: 'action-legal',
-				entity: 'task',
-				title: 'Confirm legal wording',
-				description: 'Drafted as a candidate task, not durable truth yet.',
-				evidenceLabel: 'Derived from quoted reply and redline attachment',
-				tone: 'neutral'
-			}
-		]
-	}
-]
+	entityGroups: [
+		{
+			id: 'people',
+			title: 'People',
+			items: [
+				{
+					id: 'maya-chen',
+					entity: 'person',
+					title: 'Maya Chen',
+					description: 'maya@northwind.example',
+					evidenceLabel: 'Sender, 3 thread messages',
+					tone: 'info'
+				}
+			]
+		},
+		{
+			id: 'organizations',
+			title: 'Organizations',
+			items: [
+				{
+					id: 'northwind-security',
+					entity: 'organization',
+					title: 'Northwind Security Vendor',
+					description: 'Vendor in current security review',
+					evidenceLabel: 'Sender domain plus redline attachment',
+					tone: 'info'
+				}
+			]
+		},
+		{
+			id: 'work-items',
+			title: 'Hermes candidates',
+			items: [
+				{
+					id: 'retention-decision',
+					entity: 'decision',
+					title: 'Retention clause approval',
+					description: 'Decision candidate waiting for owner review.',
+					evidenceLabel: 'Quoted reply and attachment:redline',
+					tone: 'warning'
+				},
+				{
+					id: 'legal-task',
+					entity: 'task',
+					title: 'Confirm legal wording',
+					description: 'Task candidate, not durable truth yet.',
+					evidenceLabel: 'Open action state: needs_action',
+					tone: 'neutral'
+				}
+			]
+		}
+	],
+	topics: [
+		{ id: 'security', label: 'Security', tone: 'info' },
+		{ id: 'vendor', label: 'Vendor', tone: 'neutral' },
+		{ id: 'legal-review', label: 'Legal review', tone: 'warning' }
+	],
+	semanticFacts: [
+		{ id: 'intent', label: 'Intent', value: 'Approve retention wording after legal review.', tone: 'warning' },
+		{ id: 'tone', label: 'Tone', value: 'Professional, explicit approval requested.' },
+		{ id: 'evidence', label: 'Evidence path', value: 'mail_thread + attachment:redline', tone: 'info' }
+	],
+	suggestedActions: [
+		{
+			id: 'create-task',
+			label: 'Create task',
+			description: 'Follow up with legal on retention wording.',
+			icon: 'tabler:checkbox',
+			tone: 'warning',
+			contract: 'runWorkflowAction:create_task'
+		},
+		{
+			id: 'ai-reply',
+			label: 'Draft AI reply',
+			description: 'Prepare owner-reviewed reply variants.',
+			icon: 'tabler:robot',
+			tone: 'accent',
+			contract: 'generateAiReplyVariants'
+		},
+		{
+			id: 'smart-cc',
+			label: 'Smart CC',
+			description: 'Suggest Legal as a recipient before sending.',
+			icon: 'tabler:users-plus',
+			tone: 'info',
+			contract: 'fetchMessageSmartCc'
+		},
+		{
+			id: 'create-document',
+			label: 'Create document',
+			description: 'Promote the redline attachment as reviewed evidence.',
+			icon: 'tabler:file-plus',
+			tone: 'neutral',
+			contract: 'runWorkflowAction:create_document'
+		}
+	],
+	relatedContext: [
+		{
+			id: 'organization-context',
+			title: 'Northwind Security Vendor',
+			description: 'Organization context and previous reviews.',
+			icon: 'tabler:building',
+			tone: 'info'
+		},
+		{
+			id: 'decision-context',
+			title: 'Retention clause approval',
+			description: 'Decision candidate with source evidence.',
+			icon: 'tabler:git-branch',
+			tone: 'warning'
+		},
+		{
+			id: 'document-context',
+			title: 'retention-clause-redline.docx',
+			description: 'Attachment evidence, 88 KB.',
+			icon: 'tabler:file-text',
+			tone: 'neutral'
+		}
+	]
+}
 
 const meta = {
 	title: 'Hermes App/Communications/Mail',
@@ -1100,17 +1254,26 @@ export const MailList: Story = {
 		const body = within(canvasElement.ownerDocument.body)
 		const text = mailStoryText(globals)
 		await expect(canvas.getByRole('region', { name: text.mailList })).toBeVisible()
-		await expect(canvas.getByRole('combobox', { name: text.mailAccount })).toBeVisible()
 		await expect(canvas.queryByText('Email threads with attachments, quoted replies and review signals.')).not.toBeInTheDocument()
-		await expect(canvas.getByRole('searchbox', { name: text.mailSearchValue })).toBeVisible()
 		await expect(canvas.getByRole('button', { name: text.builder })).toBeVisible()
-		await expect(canvas.getByRole('button', { name: 'compact' })).toBeVisible()
-		await expect(canvas.getByRole('button', { name: 'comfortable' })).toBeVisible()
-		await expect(canvas.getByRole('button', { name: 'cozy' })).toBeVisible()
+		await expect(canvas.getByRole('button', { name: text.compose })).toBeVisible()
+		await expect(canvas.getByRole('button', { name: text.refresh })).toBeVisible()
+		await expect(canvas.getByRole('button', { name: text.settings })).toBeVisible()
+		await userEvent.click(canvas.getByRole('button', { name: text.settings }))
+		await expect(body.getByRole('menuitem', { name: text.compact })).toBeVisible()
+		await expect(body.getByRole('menuitem', { name: text.comfortable })).toBeVisible()
+		await expect(body.getByRole('menuitem', { name: text.cozy })).toBeVisible()
+		await userEvent.keyboard('{Escape}')
+		await expect(canvas.getByRole('combobox', { name: text.mailView })).toHaveTextContent(text.inbox)
+		await userEvent.click(canvas.getByRole('combobox', { name: text.mailView }))
+		await expect(canvas.getByRole('treeitem', { name: new RegExp(text.mailboxes) })).toBeVisible()
+		await expect(canvas.getByRole('treeitem', { name: new RegExp(text.savedFilters) })).toBeVisible()
+		await userEvent.keyboard('{Escape}')
 		await expect(canvas.getByText('Board pack edits')).toBeVisible()
 		await userEvent.click(canvas.getByRole('button', { name: text.builder }))
 		await waitFor(() => expect(body.getByRole('textbox', { name: text.value })).toBeVisible())
 		await userEvent.type(body.getByRole('textbox', { name: text.value }), 'Maya')
+		await userEvent.type(body.getByRole('textbox', { name: text.filterName }), text.vendorReviewFilter)
 		await expect(body.getByRole('button', { name: text.from })).toBeVisible()
 		await expect(body.getByRole('button', { name: text.contains })).toBeVisible()
 		await expect(body.getByText(text.mailAttrs)).toBeVisible()
@@ -1118,9 +1281,13 @@ export const MailList: Story = {
 		await expect(body.getByRole('button', { name: text.attachments })).toBeVisible()
 		await expect(body.getByText('Hermes')).toBeVisible()
 		await expect(body.getByRole('button', { name: text.entity })).toBeVisible()
-		await expect(canvas.getByRole('searchbox', { name: text.mailSearchValue })).toHaveValue('Maya')
 		await expect(body.getByText('Maya')).toBeVisible()
+		await userEvent.click(body.getByRole('button', { name: text.saveFilter }))
+		await expect(canvas.getByRole('combobox', { name: text.mailView })).toHaveTextContent(text.vendorReviewFilter)
 		await userEvent.click(body.getByRole('button', { name: text.applied }))
+		await expect(canvas.getByText('Maya')).toBeVisible()
+		await userEvent.click(canvas.getByRole('combobox', { name: text.mailView }))
+		await expect(canvas.getByRole('treeitem', { name: new RegExp(text.vendorReviewFilter) })).toBeVisible()
 		await expect(canvas.getByText('Vendor security review')).toBeVisible()
 		await expect(canvas.queryByText('Board pack edits')).not.toBeInTheDocument()
 	}
@@ -1225,6 +1392,35 @@ export const MailFooter: Story = {
 	}
 }
 
+export const MailInspector: Story = {
+	render: (_args, context) => ({
+		components: { MailInspectorComponent },
+		setup() {
+			syncAppLocaleFromStorybook(context.globals)
+			return { model: mailInspectorModel }
+		},
+		template: `
+			<section class="storybook-canvas">
+				<MailInspectorComponent :model="model" />
+			</section>
+		`
+	}),
+	play: async ({ canvasElement, globals }) => {
+		const canvas = within(canvasElement)
+		const text = mailStoryText(globals)
+		await expect(canvas.getByRole('complementary', { name: text.mailInspector })).toBeVisible()
+		await expect(canvas.getByRole('heading', { name: text.emailIntelligence })).toBeVisible()
+		await expect(canvas.getByRole('heading', { name: text.extractedEntities })).toBeVisible()
+		await expect(canvas.getByRole('heading', { name: text.suggestedActions })).toBeVisible()
+		await expect(canvas.getByRole('heading', { name: text.relatedContext })).toBeVisible()
+		await expect(canvas.getByText('92')).toBeVisible()
+		await expect(canvas.getByText('Authentic sender')).toBeVisible()
+		await expect(canvas.getByText('Retention clause approval')).toBeVisible()
+		await expect(canvas.getByText('Draft AI reply')).toBeVisible()
+		await expect(canvas.getByText('retention-clause-redline.docx')).toBeVisible()
+	}
+}
+
 export const MailMessage: Story = {
 	render: (_args, context) => ({
 		components: { MailMessageComponent },
@@ -1257,8 +1453,9 @@ export const MailMessage: Story = {
 		await expect(body.getByRole('menuitem', { name: text.markSpam })).toBeVisible()
 		await userEvent.click(canvas.getByRole('button', { name: text.openHermesActions }))
 		await expect(body.getByRole('menuitem', { name: text.analyze })).toBeVisible()
-		await expect(canvas.getByText('gmail-msg-security-review-001')).toBeVisible()
-		await expect(canvas.getByText('Retention clause approval')).toBeVisible()
+		await expect(canvasElement.querySelector('.communication-email-command-bar')).not.toBeNull()
+		await expect(canvasElement.querySelector('.communication-email-preview')).not.toBeNull()
+		await expect(canvasElement.querySelector('.communication-email-center')).toBeNull()
 		await userEvent.click(canvas.getByRole('button', { name: text.openDestructiveActions }))
 		await expect(body.getByRole('menuitem', { name: text.deleteProvider })).toBeVisible()
 	}
@@ -1286,25 +1483,6 @@ export const MailReplyComposer: Story = {
 	}
 }
 
-export const MailThread: Story = {
-	render: () => ({
-		components: { MailThreadComponent },
-		data() {
-			return { conversation: mailConversation }
-		},
-		template: `
-			<section class="storybook-canvas storybook-canvas--wide">
-				<MailThreadComponent :conversation="conversation" />
-			</section>
-		`
-	}),
-	play: async ({ canvasElement }) => {
-		const canvas = within(canvasElement)
-		await expect(canvas.getByRole('region', { name: 'Mail thread' })).toBeVisible()
-		await expect(canvas.getByRole('heading', { name: 'Re: Vendor security review', level: 2 })).toBeVisible()
-	}
-}
-
 export const MailWorkspace: Story = {
 	render: (_args, context) => ({
 		components: { MailWorkspaceComponent },
@@ -1313,7 +1491,7 @@ export const MailWorkspace: Story = {
 			return {
 				items: mailListItems,
 				conversation: mailWorkspaceConversation,
-				inspectorSections: mailInspectorSections
+				inspector: mailInspectorModel
 			}
 		},
 		template: `
@@ -1321,7 +1499,7 @@ export const MailWorkspace: Story = {
 				<MailWorkspaceComponent
 					:items="items"
 					:conversation="conversation"
-					:inspector-sections="inspectorSections"
+					:inspector="inspector"
 				/>
 			</section>
 		`
@@ -1330,11 +1508,11 @@ export const MailWorkspace: Story = {
 		const canvas = within(canvasElement)
 		const text = mailStoryText(globals)
 		await expect(canvas.getByRole('region', { name: 'Mail list' })).toBeVisible()
-		await expect(canvas.getByRole('region', { name: 'Mail thread' })).toBeVisible()
-		await expect(canvas.getByRole('complementary', { name: 'Hermes inspector' })).toBeVisible()
+		await expect(canvas.getByRole('region', { name: text.openMessage })).toBeVisible()
+		await expect(canvas.getByRole('complementary', { name: text.mailInspector })).toBeVisible()
 		await userEvent.click(canvas.getByRole('button', { name: text.hideHermesInspector }))
-		await expect(canvas.queryByRole('complementary', { name: 'Hermes inspector' })).not.toBeInTheDocument()
+		await expect(canvas.queryByRole('complementary', { name: text.mailInspector })).not.toBeInTheDocument()
 		await userEvent.click(canvas.getByRole('button', { name: text.showHermesInspector }))
-		await expect(canvas.getByRole('complementary', { name: 'Hermes inspector' })).toBeVisible()
+		await expect(canvas.getByRole('complementary', { name: text.mailInspector })).toBeVisible()
 	}
 }
