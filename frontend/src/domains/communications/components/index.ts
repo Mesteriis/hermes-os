@@ -9,6 +9,28 @@ export { default as CommunicationOutboxStatusCard } from './CommunicationOutboxS
 export { default as CommunicationThreadSignalCard } from './CommunicationThreadSignalCard.vue'
 export { default as CommunicationWorkspaceOverview } from './CommunicationWorkspaceOverview.vue'
 export { default as CommunicationWorkspaceShell } from './CommunicationWorkspaceShell.vue'
+export { default as CallAction } from './calls/CallAction.vue'
+export { default as CallInspector } from './calls/CallInspector.vue'
+export { default as CallList } from './calls/CallList.vue'
+export { default as CallListItem } from './calls/CallListItem.vue'
+export { default as CallMessage } from './calls/CallMessage.vue'
+export { default as CallViewer } from './calls/CallViewer.vue'
+export { default as CallWorkspace } from './calls/CallWorkspace.vue'
+export { default as ChannelAction } from './channels/ChannelAction.vue'
+export { default as ChannelInspector } from './channels/ChannelInspector.vue'
+export { default as ChannelList } from './channels/ChannelList.vue'
+export { default as ChannelListItem } from './channels/ChannelListItem.vue'
+export { default as ChannelMessage } from './channels/ChannelMessage.vue'
+export { default as ChannelViewer } from './channels/ChannelViewer.vue'
+export { default as ChannelWorkspace } from './channels/ChannelWorkspace.vue'
+export {
+  channelActionGroupsFromSubSurface,
+  channelComposerCapabilitiesFromSubSurface,
+  channelProviderOptionsFromSubSurfaces
+} from './channels/channelSurfaceAdapters'
+export {
+  createCommunicationCallDateGroups
+} from './communicationDomainElements'
 export { default as MailFolderList } from './mail/MailFolderList.vue'
 export { default as MailAction } from './mail/MailAction.vue'
 export { default as MailFooter } from './mail/MailFooter.vue'
@@ -174,12 +196,38 @@ export type {
 export type {
   CommunicationCapabilityCardModel,
   CommunicationCapabilityStatus,
+  CommunicationCallActionGroupModel,
+  CommunicationCallActionModel,
+  CommunicationCallActiveModel,
   CommunicationCallsSurfaceModel,
+  CommunicationCallDateGroupModel,
+  CommunicationCallInspectorModel,
   CommunicationCallItemModel,
+  CommunicationCallKind,
   CommunicationCallMomentModel,
+  CommunicationPermanentCallLinkModel,
+  CommunicationCallProviderKind,
+  CommunicationCallRecordingModel,
+  CommunicationCallState,
+  CommunicationChannelActionGroupModel,
+  CommunicationChannelActionModel,
   CommunicationChannelId,
+  CommunicationChannelComposerCapabilityModel,
+  CommunicationChannelDirectChatModel,
+  CommunicationChannelDirectFolderModel,
+  CommunicationChannelInspectorActionItem,
+  CommunicationChannelInspectorCheck,
+  CommunicationChannelInspectorContextItem,
+  CommunicationChannelInspectorEntityGroup,
+  CommunicationChannelInspectorEntityItem,
+  CommunicationChannelInspectorIntelligence,
+  CommunicationChannelInspectorModel,
+  CommunicationChannelInspectorSemanticFact,
+  CommunicationChannelInspectorTopic,
+  CommunicationChannelProviderKind,
   CommunicationChannelRoomModel,
   CommunicationChannelSurfaceCardModel,
+  CommunicationChannelTopicModel,
   CommunicationChannelWorkspaceModel,
   CommunicationConversationMessageModel,
   CommunicationConversationModel,

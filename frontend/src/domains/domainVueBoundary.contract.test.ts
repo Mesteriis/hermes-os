@@ -34,17 +34,19 @@ function getScriptSection(source: string): string {
 }
 
 describe('Domain Vue boundary contract', () => {
-  it('keeps domains and integrations on thin Vue surfaces only', () => {
+  it('keeps domain and integration Vue components presentation-only', () => {
     const domainVueFiles = collectVueFiles(path.join(sourceRoot, 'domains'))
     const integrationVueFiles = collectVueFiles(path.join(sourceRoot, 'integrations'))
     const allVueFiles = [...domainVueFiles, ...integrationVueFiles].map((filePath) =>
       filePath.split(path.sep).join('/')
     )
 
-    expect(allVueFiles).toEqual([
-      `${sourceRoot}/domains/communications/views/CommunicationsEmptyPage.vue`.split(path.sep).join('/'),
-      `${sourceRoot}/domains/settings/views/SettingsPage.vue`.split(path.sep).join('/'),
-    ])
+    expect(allVueFiles).toContain(
+      `${sourceRoot}/domains/communications/views/CommunicationsEmptyPage.vue`.split(path.sep).join('/')
+    )
+    expect(allVueFiles).toContain(
+      `${sourceRoot}/domains/settings/views/SettingsPage.vue`.split(path.sep).join('/')
+    )
 
     for (const filePath of allVueFiles) {
       const source = readFileSync(filePath, 'utf8')

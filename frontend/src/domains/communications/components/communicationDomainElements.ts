@@ -1,8 +1,32 @@
-import type { CommunicationTone, EntityIconKind, MessageDirection, ProviderIconKind, StatusIconKind, UtilityTone } from '@/shared/ui'
+import type { CommunicationTone, EntityIconKind, MessageDirection, ProviderIconKind, StatusIconKind, TreeSelectOption, UtilityTone } from '@/shared/ui'
 import type { CommunicationOutboxItem, CommunicationThreadSummary } from '../types/communications'
 import { outboxStatusPresentation } from './outboxStatus'
+export type {
+  CommunicationCallActionGroupModel,
+  CommunicationCallActionModel,
+  CommunicationCallActiveModel,
+  CommunicationCallDateGroupModel,
+  CommunicationCallInspectorModel,
+  CommunicationCallItemModel,
+  CommunicationCallKind,
+  CommunicationCallMomentModel,
+  CommunicationCallProviderKind,
+  CommunicationCallRecordingModel,
+  CommunicationCallsSurfaceModel,
+  CommunicationCallState,
+  CommunicationPermanentCallLinkModel
+} from './calls/callElements'
+export {
+  communicationCallKindIconName,
+  communicationCallProviderIconName,
+  communicationCallProviderLabel,
+  communicationCallStateLabel,
+  communicationCallStateTone,
+  createCommunicationCallDateGroups
+} from './calls/callElements'
 
 export type CommunicationChannelId = 'mail' | 'telegram' | 'whatsapp'
+export type CommunicationChannelProviderKind = 'zulip' | 'slack' | 'discord' | 'mattermost'
 export type CommunicationInboxKind = 'email' | 'direct_chat' | 'group_chat' | 'channel'
 export type CommunicationSurfaceStatus = 'active' | 'partial' | 'facade' | 'blocked'
 export type CommunicationCapabilityStatus = 'available' | 'partial' | 'facade' | 'blocked'
@@ -159,47 +183,163 @@ export type CommunicationHermesInspectorSectionModel = {
 
 export type CommunicationChannelRoomModel = {
   id: string
+  providerKind: CommunicationChannelProviderKind
+  accountId: string
   label: string
   description: string
+  topicCountLabel?: string
+  lastActivityLabel?: string
   unreadCount?: number
+  mentionCount?: number
   selected?: boolean
+}
+
+export type CommunicationChannelDirectChatModel = {
+  id: string
+  providerKind: CommunicationChannelProviderKind
+  accountId: string
+  label: string
+  description: string
+  avatarLabel: string
+  kindLabel?: string
+  lastActivityLabel?: string
+  unreadCount?: number
+  mentionCount?: number
+  selected?: boolean
+}
+
+export type CommunicationChannelDirectFolderModel = {
+  id: string
+  label: string
+  description?: string
+  expanded?: boolean
+  chats: readonly CommunicationChannelDirectChatModel[]
+}
+
+export type CommunicationChannelTopicModel = {
+  id: string
+  label: string
+  summary: string
+  messageCountLabel: string
+  selected?: boolean
+  tone?: UtilityTone
+}
+
+export type CommunicationChannelComposerCapabilityModel = {
+  id: string
+  label: string
+  icon: string
+  disabled?: boolean
+}
+
+export type CommunicationChannelActionModel = {
+  id: string
+  label: string
+  description: string
+  icon: string
+  tone?: UtilityTone
+  contract?: string
+  disabled?: boolean
+}
+
+export type CommunicationChannelActionGroupModel = {
+  id: string
+  title: string
+  menuLabel: string
+  icon: string
+  tone?: UtilityTone
+  actions: readonly CommunicationChannelActionModel[]
+}
+
+export type CommunicationChannelInspectorCheck = {
+  id: string
+  label: string
+  description: string
+  tone?: UtilityTone
+  icon?: string
+}
+
+export type CommunicationChannelInspectorIntelligence = {
+  score: number
+  maxScore: number
+  label: string
+  summary: string
+  checks: readonly CommunicationChannelInspectorCheck[]
+}
+
+export type CommunicationChannelInspectorEntityItem = {
+  id: string
+  entity: EntityIconKind
+  title: string
+  description: string
+  evidenceLabel?: string
+  tone?: UtilityTone
+}
+
+export type CommunicationChannelInspectorEntityGroup = {
+  id: string
+  title: string
+  items: readonly CommunicationChannelInspectorEntityItem[]
+}
+
+export type CommunicationChannelInspectorTopic = {
+  id: string
+  label: string
+  tone?: UtilityTone
+}
+
+export type CommunicationChannelInspectorSemanticFact = {
+  id: string
+  label: string
+  value: string
+  tone?: UtilityTone
+}
+
+export type CommunicationChannelInspectorActionItem = {
+  id: string
+  label: string
+  description: string
+  icon: string
+  tone?: UtilityTone
+  contract?: string
+}
+
+export type CommunicationChannelInspectorContextItem = {
+  id: string
+  title: string
+  description: string
+  icon: string
+  tone?: UtilityTone
+}
+
+export type CommunicationChannelInspectorModel = {
+  intelligence: CommunicationChannelInspectorIntelligence
+  entityGroups: readonly CommunicationChannelInspectorEntityGroup[]
+  topics: readonly CommunicationChannelInspectorTopic[]
+  semanticFacts: readonly CommunicationChannelInspectorSemanticFact[]
+  suggestedActions: readonly CommunicationChannelInspectorActionItem[]
+  relatedContext: readonly CommunicationChannelInspectorContextItem[]
 }
 
 export type CommunicationChannelWorkspaceModel = {
   title: string
-  subtitle: string
+  subtitle?: string
+  providerValue: string
+  providerOptions: TreeSelectOption[]
+  activeProviderKind: CommunicationChannelProviderKind
+  activeProviderLabel: string
+  activeAccountLabel: string
   rooms: readonly CommunicationChannelRoomModel[]
+  directChatFolders: readonly CommunicationChannelDirectFolderModel[]
   activeRoomLabel: string
+  activeRoomDescription: string
+  activeTopicLabel: string
+  topics: readonly CommunicationChannelTopicModel[]
   messages: readonly CommunicationConversationMessageModel[]
-  inspectorSections: readonly CommunicationHermesInspectorSectionModel[]
-}
-
-export type CommunicationCallItemModel = {
-  id: string
-  channelKind: string
-  title: string
-  participants: string
-  startedAt: string
-  durationLabel: string
-  state: 'missed' | 'completed' | 'scheduled' | 'recording' | 'transcribing'
-  summary: string
-  selected?: boolean
-}
-
-export type CommunicationCallMomentModel = {
-  id: string
-  timestamp: string
-  speaker: string
-  text: string
-  tone?: UtilityTone
-}
-
-export type CommunicationCallsSurfaceModel = {
-  title: string
-  subtitle: string
-  calls: readonly CommunicationCallItemModel[]
-  moments: readonly CommunicationCallMomentModel[]
-  inspectorSections: readonly CommunicationHermesInspectorSectionModel[]
+  composerPlaceholder: string
+  composerCapabilities: readonly CommunicationChannelComposerCapabilityModel[]
+  actionGroups: readonly CommunicationChannelActionGroupModel[]
+  inspector: CommunicationChannelInspectorModel
 }
 
 export type CommunicationInboxItemPresentation = {
@@ -373,15 +513,32 @@ export function communicationChannelLabel(channelKind?: string): string {
   return 'Communication'
 }
 
-export function communicationConversationIsEmail(channelKind?: string): boolean {
-  return channelKind === 'mail' || channelKind === 'email'
+export function communicationChannelProviderIconName(providerKind: CommunicationChannelProviderKind): string {
+  if (providerKind === 'slack') return 'tabler:brand-slack'
+  if (providerKind === 'discord') return 'tabler:brand-discord'
+  if (providerKind === 'mattermost') return 'tabler:message-circle-cog'
+  return 'tabler:messages'
 }
 
-export function communicationCallStateTone(state: CommunicationCallItemModel['state']): UtilityTone {
-  if (state === 'missed') return 'danger'
-  if (state === 'recording' || state === 'transcribing') return 'warning'
-  if (state === 'completed') return 'success'
-  return 'info'
+export function communicationChannelProviderLabel(providerKind: CommunicationChannelProviderKind): string {
+  if (providerKind === 'slack') return 'Slack'
+  if (providerKind === 'discord') return 'Discord'
+  if (providerKind === 'mattermost') return 'Mattermost'
+  return 'Zulip'
+}
+
+export function communicationChannelDirectChatCount(
+  folders: readonly CommunicationChannelDirectFolderModel[]
+): number {
+  let total = 0
+  for (const folder of folders) {
+    total += folder.chats.length
+  }
+  return total
+}
+
+export function communicationConversationIsEmail(channelKind?: string): boolean {
+  return channelKind === 'mail' || channelKind === 'email'
 }
 
 export function communicationWorkflowStatusPresentation(workflowState: string): CommunicationStatusPresentation {
