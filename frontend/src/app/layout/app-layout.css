@@ -181,6 +181,11 @@ body {
 	overflow: auto;
 }
 
+.hermes-app-layout__main:has(> .settings-page) {
+	overflow: hidden;
+	padding: 0;
+}
+
 .hermes-app-layout__footer {
 	justify-content: space-between;
 	border-top: 1px solid var(--h-color-border);
@@ -637,7 +642,40 @@ body {
 
 .app-navbar__notifications {
 	display: grid;
+	gap: var(--h-spacing-2);
 	min-height: 0;
+}
+
+.app-navbar__notifications-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--h-spacing-2);
+	color: var(--h-color-text-strong);
+	font-size: var(--h-font-size-sm);
+	font-weight: 700;
+}
+
+.app-navbar__notifications-clear {
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-sm);
+	background: var(--h-color-surface-raised);
+	color: var(--h-color-text-soft);
+	padding: 5px var(--h-spacing-2);
+	font: inherit;
+	font-size: var(--h-font-size-xs);
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.app-navbar__notifications-clear:hover {
+	background: var(--h-color-surface-hover);
+	color: var(--h-color-text-strong);
+}
+
+.app-navbar__notifications-clear:focus-visible {
+	outline: 2px solid var(--h-color-focus-ring);
+	outline-offset: 2px;
 }
 
 .app-navbar__notifications-empty {
@@ -663,12 +701,65 @@ body {
 
 .app-navbar__notification {
 	display: grid;
-	grid-template-columns: auto minmax(0, 1fr);
-	gap: var(--h-spacing-3);
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: start;
+	gap: var(--h-spacing-1);
+	overflow: hidden;
 	border: 1px solid var(--h-color-border);
 	border-radius: var(--h-radius-md);
 	background: var(--h-color-surface-raised);
+	padding: 0;
+}
+
+.app-navbar__notification-main {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: var(--h-spacing-3);
+	width: 100%;
+	border: 0;
+	background: transparent;
+	color: inherit;
 	padding: var(--h-spacing-3);
+	text-align: left;
+	cursor: default;
+}
+
+.app-navbar__notification--clickable .app-navbar__notification-main {
+	cursor: pointer;
+}
+
+.app-navbar__notification--clickable .app-navbar__notification-main:hover {
+	background: var(--h-color-surface-hover);
+}
+
+.app-navbar__notification-main:disabled {
+	opacity: 1;
+}
+
+.app-navbar__notification-main:focus-visible,
+.app-navbar__notification-dismiss:focus-visible {
+	outline: 2px solid var(--h-color-focus-ring);
+	outline-offset: -2px;
+}
+
+.app-navbar__notification-dismiss {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	margin: var(--h-spacing-2) var(--h-spacing-2) 0 0;
+	border: 1px solid transparent;
+	border-radius: var(--h-radius-sm);
+	background: transparent;
+	color: var(--h-color-text-muted);
+	cursor: pointer;
+}
+
+.app-navbar__notification-dismiss:hover {
+	border-color: var(--h-color-border);
+	background: var(--h-color-surface-hover);
+	color: var(--h-color-text-strong);
 }
 
 .app-navbar__notification-icon {
@@ -729,6 +820,7 @@ body {
 	color: var(--h-color-text-muted);
 	font-size: var(--h-font-size-sm);
 	line-height: 1.45;
+	overflow-wrap: anywhere;
 }
 
 .app-navbar__menu {

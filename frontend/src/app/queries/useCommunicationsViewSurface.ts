@@ -7,10 +7,10 @@ export function useCommunicationsViewSurface() {
   return createPlannedScreenSurface({
     screenId: 'communications',
     titleKey: 'Communications',
-    descriptionKey: 'Communications UI removed after logic extraction. Rebuild pending new design language.',
-    preservedLogicKey: 'Communications logic is preserved',
-    detailKey: 'Message queries, thread orchestration, outbox state and compose flows remain in the extracted surface. This screen stays empty until the new communications UI is rebuilt.',
-    status: 'facade',
+    descriptionKey: 'Unified evidence-first workspace for mail, messenger channels, provider commands and review pressure.',
+    preservedLogicKey: 'Communications workspace is active',
+    detailKey: 'Message queries, thread orchestration, outbox state and compose flows are wired through the Communications render surface.',
+    status: 'active',
     ownerLayer: 'domain',
     surfacePath: 'frontend/src/domains/communications/queries/useCommunicationsWorkspaceSurface.ts',
     childSurfaces: communications.childSurfaces

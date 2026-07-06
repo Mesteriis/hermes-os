@@ -1,6 +1,8 @@
 use serde_json::Value;
 
-use crate::platform::communications::ImapMessageFetchRequest;
+use crate::platform::communications::{
+    IMAP_ALL_MAILBOXES, ImapMailboxListRequest, ImapMessageFetchRequest, imap_mailbox_stream_id,
+};
 
 use super::super::errors::ProviderSyncError;
 use super::super::models::{MailSyncPhase, ProgressMode, ProgressUpdate};
@@ -15,14 +17,60 @@ impl MailBackgroundSyncService {
         config: ImapAccountConfig<'_>,
     ) -> Result<ProviderSyncSummary, ProviderSyncError> {
         let mut summary = ProviderSyncSummary::default();
-        let mut last_seen_uid = context
-            .checkpoint_before
+        let mailboxes = self.resolve_imap_mailboxes(&context, config).await?;
+
+        for mailbox in &mailboxes {
+            self.sync_imap_mailbox(&context, config, mailbox, &mut summary)
+                .await?;
+        }
+
+        Ok(summary)
+    }
+
+    async fn resolve_imap_mailboxes(
+        &self,
+        context: &ProviderSyncContext<'_>,
+        config: ImapAccountConfig<'_>,
+    ) -> Result<Vec<String>, ProviderSyncError> {
+        if !config
+            .mailboxes
+            .iter()
+            .any(|mailbox| mailbox == IMAP_ALL_MAILBOXES)
+        {
+            return Ok(config.mailboxes.to_vec());
+        }
+
+        Ok(self
+            .provider_sync
+            .list_imap_mailboxes(ImapMailboxListRequest {
+                account_id: context.account.account_id.clone(),
+                host: config.host.to_owned(),
+                port: config.port,
+                tls: config.tls,
+                username: context.account.external_account_id.clone(),
+            })
+            .await?)
+    }
+
+    async fn sync_imap_mailbox(
+        &self,
+        context: &ProviderSyncContext<'_>,
+        config: ImapAccountConfig<'_>,
+        mailbox: &str,
+        summary: &mut ProviderSyncSummary,
+    ) -> Result<(), ProviderSyncError> {
+        let stream_id = imap_mailbox_stream_id(mailbox);
+        let checkpoint_before = context
+            .communication_store
+            .checkpoint(&context.account.account_id, &stream_id)
+            .await?
+            .map(|checkpoint| checkpoint.checkpoint);
+        let mut last_seen_uid = checkpoint_before
             .as_ref()
             .and_then(|checkpoint| checkpoint.get("last_seen_uid"))
             .and_then(Value::as_u64)
             .and_then(|uid| u32::try_from(uid).ok());
-        let checkpoint_uid_validity = context
-            .checkpoint_before
+        let checkpoint_uid_validity = checkpoint_before
             .as_ref()
             .and_then(|checkpoint| checkpoint.get("uid_validity"))
             .and_then(Value::as_u64)
@@ -50,7 +98,7 @@ impl MailBackgroundSyncService {
                     host: config.host.to_owned(),
                     port: config.port,
                     tls: config.tls,
-                    mailbox: config.mailbox.to_owned(),
+                    mailbox: mailbox.to_owned(),
                     username: context.account.external_account_id.clone(),
                     max_messages: context.settings.batch_size as usize,
                     last_seen_uid,
@@ -84,7 +132,7 @@ impl MailBackgroundSyncService {
                 context.store,
                 context.run_id,
                 context.settings,
-                &mut summary,
+                summary,
                 &context.account.account_id,
                 batch,
             )
@@ -94,6 +142,6 @@ impl MailBackgroundSyncService {
             }
         }
 
-        Ok(summary)
+        Ok(())
     }
 }

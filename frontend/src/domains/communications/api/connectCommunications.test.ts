@@ -1021,6 +1021,7 @@ describe('communications ConnectRPC API', () => {
             sender: 'Ada <ada@example.com>',
             recipients: ['bob@example.com'],
             bodyText: 'Body text',
+            bodyHtml: '<p><strong>Body</strong> text</p>',
             occurredAt: '2026-06-23T10:00:00Z',
             projectedAt: '2026-06-23T10:01:00Z',
             channelKind: 'email',
@@ -1157,6 +1158,7 @@ describe('communications ConnectRPC API', () => {
     const outbox = await fetchCommunicationOutboxConnect('account-1', 'queued', 25, 'cursor-3')
 
     expect(message.message.observation_id).toBe('obs-1')
+    expect(message.message.body_html).toBe('<p><strong>Body</strong> text</p>')
     expect(message.attachments[0].scan_status).toBe('clean')
     expect(threads.next_cursor).toBe('threads-next')
     expect(threadMessages.items[0].provider_record_id).toBe('provider-1')

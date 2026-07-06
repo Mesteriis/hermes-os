@@ -45,6 +45,8 @@ export function useMailListQuery(
   query?: QueryParam<string>,
   localState?: QueryParam<LocalMessageState>
 ) {
+  const pageSize = 100
+
   return useInfiniteQuery<CommunicationMessagesResponse, Error, CommunicationMessageSummary[], readonly unknown[], string | null>({
     queryKey: computed(() => communicationListQueryKey(
       toValue(accountId),
@@ -61,7 +63,7 @@ export function useMailListQuery(
         toValue(channelKind),
         toValue(query),
         toValue(localState),
-        250,
+        pageSize,
         pageParam
       )
     },

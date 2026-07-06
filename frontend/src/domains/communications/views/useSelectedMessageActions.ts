@@ -4,6 +4,7 @@ import {
   useExportMessageMutation,
   useDeleteMessageFromProviderMutation,
   useMarkMessageReadMutation,
+  useMarkMessageSpamMutation,
   useMarkMessageUnreadMutation,
   useExtractMessageNotesMutation,
   useExtractMessageTasksMutation,
@@ -18,6 +19,7 @@ import {
   useToggleMessagePinMutation,
   useTranslateMessageMutation
 } from '../queries/useCommunicationsQuery'
+import { useI18n } from '@/platform/i18n'
 import { splitComposeRecipients } from '../forms/composeValidation'
 import {
   emptyCommunicationMessageInsight,
@@ -26,16 +28,25 @@ import {
   replyAllComposeForm,
   replyComposeForm
 } from '../helpers/communicationPageModels'
+import { useCommunicationActionNotifications } from '../queries/communicationActionNotifications'
 import type { useCommunicationsStore } from '../stores/communications'
 import type {
   AiReplyResponse,
   CommunicationMessageDetailItem,
-  MessageExportFormat
+  MessageExportFormat,
+  TranslationResponse
 } from '../types/communications'
 import type { BilingualReplyFlowResponse } from '../types/bilingualReplyFlow'
 
 type CommunicationsStore = ReturnType<typeof useCommunicationsStore>
 type RefetchHandler = () => Promise<unknown>
+type SelectedMessageActionTone = 'success' | 'warning' | 'info'
+type SelectedMessageActionOutcome = {
+  message: string
+  title?: string
+  tone?: SelectedMessageActionTone
+}
+type SelectedMessageActionResult = string | SelectedMessageActionOutcome
 
 type SelectedMessageActionOptions = {
   getMessageDetail: () => CommunicationMessageDetailItem | null
@@ -46,11 +57,14 @@ export function useSelectedMessageActions(
   store: CommunicationsStore,
   deps: SelectedMessageActionOptions
 ) {
+  const { locale } = useI18n()
+  const notifications = useCommunicationActionNotifications()
   const togglePinMutation = useToggleMessagePinMutation()
   const toggleImportantMutation = useToggleMessageImportantMutation()
   const toggleMuteMutation = useToggleMessageMuteMutation()
   const exportMessageMutation = useExportMessageMutation()
   const markMessageReadMutation = useMarkMessageReadMutation()
+  const markMessageSpamMutation = useMarkMessageSpamMutation()
   const markMessageUnreadMutation = useMarkMessageUnreadMutation()
   const deleteMessageFromProviderMutation = useDeleteMessageFromProviderMutation()
   const generateAiReplyMutation = useGenerateAiReplyMutation()
@@ -118,15 +132,25 @@ export function useSelectedMessageActions(
     store.openCompose(newComposeForm(store.selectedMailAccountId || '', `draft-${Date.now()}`))
   }
 
-  async function runSelectedMessageAction(action: (messageId: string) => Promise<string>) {
+  async function runSelectedMessageAction(
+    action: (messageId: string) => Promise<SelectedMessageActionResult>,
+    actionKey = 'selected-message-action'
+  ) {
     const messageId = store.selectedCommunicationMessageId
     if (!messageId) return
+    const notificationKey = mailActionNotificationKey(actionKey, messageId)
     store.setIsMailActionRunning(true)
     store.setLastMessageExport(null)
+    store.setMailActionStatus('')
+    store.setMailActionError('')
     try {
-      store.setMailActionStatus(await action(messageId))
+      const outcome = selectedMessageActionOutcome(await action(messageId))
+      store.setMailActionStatus(outcome.message)
+      notifySelectedMessageAction(outcome, messageId, notificationKey)
     } catch (e) {
-      store.setMailActionError(e instanceof Error ? e.message : 'Message action failed')
+      const message = selectedMessageActionErrorMessage(e)
+      store.setMailActionError(message)
+      notifications.error('Mail action failed', message, messageId, notificationKey)
     } finally {
       store.setIsMailActionRunning(false)
     }
@@ -177,6 +201,14 @@ export function useSelectedMessageActions(
     })
   }
 
+  async function handleMarkMessageSpam() {
+    await runSelectedMessageAction(async (messageId) => {
+      await markMessageSpamMutation.mutateAsync(messageId)
+      await deps.refetchMessageDetail()
+      return 'Marked as spam'
+    })
+  }
+
   async function handleDeleteFromProvider() {
     await runSelectedMessageAction(async (messageId) => {
       await deleteMessageFromProviderMutation.mutateAsync(messageId)
@@ -219,13 +251,19 @@ export function useSelectedMessageActions(
 
   async function handleTranslate() {
     await runSelectedMessageAction(async (messageId) => {
-      const result = await translateMessageMutation.mutateAsync({ messageId, targetLanguage: 'en' })
+      const targetLanguage = locale.value
+      const notificationKey = mailActionNotificationKey('translation', messageId)
+      notifications.info('Translation started', `Target: ${targetLanguage}`, messageId, notificationKey)
+      const result = await translateMessageMutation.mutateAsync({
+        messageId,
+        targetLanguage
+      })
       store.setCommunicationMessageInsight({
         ...(store.mailMessageInsight ?? emptyCommunicationMessageInsight(messageId)),
         translation: result
       })
-      return 'Translated'
-    })
+      return translationActionOutcome(result, targetLanguage)
+    }, 'translation')
   }
 
   async function handleGenerateAiReply(replyOptions: { tone: string; language: string }) {
@@ -318,6 +356,7 @@ export function useSelectedMessageActions(
     handleCreateTask,
     handleExportMessage,
     handleMarkMessageRead,
+    handleMarkMessageSpam,
     handleMarkMessageUnread,
     handleForwardMessage,
     handleGenerateAiReply,
@@ -333,5 +372,73 @@ export function useSelectedMessageActions(
     handleToggleImportant,
     handleTogglePin,
     handleTranslate
+  }
+
+  function notifySelectedMessageAction(
+    outcome: SelectedMessageActionOutcome,
+    messageId: string,
+    notificationKey: string
+  ): void {
+    const title = outcome.title ?? 'Mail action completed'
+    if (outcome.tone === 'warning') {
+      notifications.warning(title, outcome.message, messageId, notificationKey)
+      return
+    }
+    if (outcome.tone === 'info') {
+      notifications.info(title, outcome.message, messageId, notificationKey)
+      return
+    }
+
+    notifications.success(title, outcome.message, messageId, notificationKey)
+  }
+}
+
+function mailActionNotificationKey(actionKey: string, messageId: string): string {
+  return `mail:${actionKey}:${messageId}`
+}
+
+function selectedMessageActionErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : 'Message action failed'
+  if (message.includes('Failed to fetch')) {
+    return 'Backend API is unavailable. Check system health and retry.'
+  }
+
+  return message
+}
+
+function selectedMessageActionOutcome(
+  result: SelectedMessageActionResult
+): SelectedMessageActionOutcome {
+  if (typeof result === 'string') {
+    return { message: result, tone: 'success' }
+  }
+
+  return { tone: 'success', ...result }
+}
+
+function translationActionOutcome(
+  result: TranslationResponse,
+  targetLanguage: string
+): SelectedMessageActionOutcome {
+  if (result.translated && result.text?.trim()) {
+    return {
+      title: 'Translation ready',
+      message: `Translated to ${result.target ?? targetLanguage}`,
+      tone: 'success',
+    }
+  }
+
+  if (result.translated) {
+    return {
+      title: 'Translation ready',
+      message: `Backend returned no translated text for ${result.target ?? targetLanguage}`,
+      tone: 'warning',
+    }
+  }
+
+  return {
+    title: 'Translation unavailable',
+    message: result.reason ?? 'Backend did not return a translation',
+    tone: 'warning',
   }
 }

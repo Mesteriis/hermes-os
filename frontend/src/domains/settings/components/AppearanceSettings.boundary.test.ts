@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 
 describe('AppearanceSettings boundary', () => {
-  it('preserves appearance orchestration after removing the Vue render layer', () => {
+  it('does not expose appearance controls through SettingsPage', () => {
     const page = readFileSync(
       new URL('../views/SettingsPage.vue', import.meta.url),
       'utf8'
     )
-    const surface = readFileSync(
-      new URL('../queries/useAppearanceSettingsSurface.ts', import.meta.url),
+    const pageSurface = readFileSync(
+      new URL('../queries/useSettingsPageSurface.ts', import.meta.url),
+      'utf8'
+    )
+    const domainSurface = readFileSync(
+      new URL('../queries/useSettingsSurface.ts', import.meta.url),
       'utf8'
     )
 
@@ -22,16 +26,14 @@ describe('AppearanceSettings boundary', () => {
 
     expect(page).not.toContain('import AppearanceSettings')
     expect(page).not.toContain('<AppearanceSettings')
-    expect(page).toContain('Appearance UI removed after logic extraction. Rebuild pending new design language.')
-    expect(page).toContain('Appearance logic is preserved')
+    expect(page).not.toContain("store.selectedSection === 'appearance'")
+    expect(page).not.toContain('updateShellBackground')
+    expect(page).not.toContain('appearanceSettings.')
 
-    expect(surface).toContain('useThemeStore')
-    expect(surface).toContain('theme.saveThemeSettings')
-    expect(surface).toContain('backgroundBrightnessValues')
-    expect(surface).toContain('panelOpacityValues')
-    expect(surface).toContain('panelBlurValues')
-    expect(surface).toContain('resetTheme')
-    expect(surface).not.toContain('../api/')
-    expect(surface).not.toContain('fetch(')
+    expect(pageSurface).not.toContain('useAppearanceSettingsSurface')
+    expect(pageSurface).not.toContain("label: 'Interface'")
+    expect(pageSurface).not.toContain("id: 'appearance'")
+    expect(domainSurface).not.toContain('settings-appearance')
+    expect(domainSurface).not.toContain('settings-interface')
   })
 })

@@ -14,7 +14,7 @@ mod telegram;
 mod whatsapp;
 mod zulip;
 
-pub use self::ai::dispatch_ai_helper_signal;
+pub use self::ai::{dispatch_ai_helper_signal, dispatch_ai_helper_signal_best_effort};
 pub use self::capabilities::SignalHubCapabilityService;
 pub use self::connections::SignalHubConnectionService;
 pub use self::controls::{

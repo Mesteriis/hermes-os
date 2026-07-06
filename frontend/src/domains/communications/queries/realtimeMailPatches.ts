@@ -171,6 +171,7 @@ function patchSyncStatuses(
 	const patched = items.map((item) => {
 		if (item.account_id !== accountId) return item
 		changed = true
+		const patchedAt = new Date().toISOString()
 		return {
 			...item,
 			status: stringValue(payload.status) ?? item.status,
@@ -186,6 +187,7 @@ function patchSyncStatuses(
 					? item.estimated_total_messages
 					: nullableNumberValue(payload.estimated_total_messages),
 			current_batch_size: numberValue(payload.current_batch_size) ?? item.current_batch_size,
+			last_updated_at: patchedAt,
 			next_run_at:
 				typeof payload.next_run_at === 'undefined'
 					? item.next_run_at

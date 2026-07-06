@@ -278,7 +278,7 @@ impl SignalHubStore {
                         WHERE id = $1
                         "#,
                     )
-                    .bind(profile.id)
+                    .bind(parse_required_uuid(&profile.id)?)
                     .bind(fixture.display_name)
                     .bind(fixture.description)
                     .bind(profile_policies_json(fixture)?)
@@ -329,7 +329,7 @@ impl SignalHubStore {
                                     WHERE id = $1
                                     "#,
                                 )
-                                .bind(profile.id)
+                                .bind(parse_required_uuid(&profile.id)?)
                                 .bind(fixture.display_name)
                                 .bind(fixture.description)
                                 .bind(profile_policies_json(fixture)?)

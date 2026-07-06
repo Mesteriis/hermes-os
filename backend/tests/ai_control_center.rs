@@ -5,8 +5,8 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::ai::control_center::{
-    AiControlCenterError, AiControlCenterStore, AiModelRouteUpdateRequest,
-    AiProviderConsentRequest, AiProviderCreateRequest,
+    AiControlCenterError, AiControlCenterStore, AiModelAvailabilityUpdateRequest,
+    AiModelRouteUpdateRequest, AiProviderConsentRequest, AiProviderCreateRequest,
 };
 use hermes_hub_backend::app::{build_router, build_router_with_database};
 use hermes_hub_backend::platform::config::AppConfig;
@@ -49,6 +49,23 @@ async fn response_json(response: axum::response::Response) -> Value {
             .expect("response body"),
     )
     .expect("json response")
+}
+
+fn vault_entropy_events(count: usize) -> Vec<Value> {
+    (0..count)
+        .map(|index| {
+            json!({
+                "x": index % 997,
+                "y": index % 577,
+                "dx": (index % 11) as i64 - 5,
+                "dy": (index % 13) as i64 - 6,
+                "timestamp_ms": index * 5,
+                "velocity": (index % 19) as f64 / 10.0,
+                "acceleration": (index % 23) as f64 / 100.0,
+                "interval_ms": 5.0
+            })
+        })
+        .collect()
 }
 
 #[tokio::test]
@@ -109,6 +126,15 @@ async fn ai_settings_write_endpoints_exist_without_database() {
             json!({"consented": true}),
         ),
         json_request(
+            Method::PATCH,
+            "/api/v1/ai/models/availability",
+            json!({
+                "provider_id": "provider:missing",
+                "model_key": "model:missing",
+                "is_available": true
+            }),
+        ),
+        json_request(
             Method::PUT,
             "/api/v1/ai/model-routes/default_chat",
             json!({
@@ -157,6 +183,80 @@ async fn ai_settings_write_endpoints_exist_without_database() {
         let body = response_json(response).await;
         assert_eq!(body["error"], json!("database_not_configured"));
     }
+}
+
+#[tokio::test]
+async fn model_availability_toggle_removes_disabled_routes() {
+    let ctx = TestContext::new().await;
+    let store = AiControlCenterStore::new(ctx.pool().clone());
+    let provider = store
+        .create_provider(&AiProviderCreateRequest {
+            provider_id: Some("provider:built-in:availability".to_owned()),
+            provider_kind: "built_in".to_owned(),
+            provider_key: "availability".to_owned(),
+            display_name: "Ollama Availability".to_owned(),
+            base_url: None,
+            command_preset: None,
+            config: None,
+            capabilities: None,
+            enabled: Some(true),
+            remote_context_consent: None,
+            api_key: None,
+        })
+        .await
+        .expect("provider");
+
+    store
+        .put_model_route(
+            "default_chat",
+            &AiModelRouteUpdateRequest {
+                provider_id: provider.provider_id.clone(),
+                model_key: "custom/default".to_owned(),
+            },
+        )
+        .await
+        .expect("route model");
+
+    let disabled = store
+        .update_model_availability(
+            &AiModelAvailabilityUpdateRequest {
+                provider_id: provider.provider_id.clone(),
+                model_key: "custom/default".to_owned(),
+                is_available: false,
+            },
+            "test",
+        )
+        .await
+        .expect("disable model");
+
+    assert!(!disabled.is_available);
+    assert!(
+        !store
+            .model_ready_for_private_context(&provider.provider_id, "custom/default")
+            .await
+            .expect("ready check")
+    );
+    assert!(
+        store
+            .route_for_slot("default_chat")
+            .await
+            .expect("route lookup")
+            .is_none()
+    );
+
+    let enabled = store
+        .update_model_availability(
+            &AiModelAvailabilityUpdateRequest {
+                provider_id: provider.provider_id.clone(),
+                model_key: "custom/default".to_owned(),
+                is_available: true,
+            },
+            "test",
+        )
+        .await
+        .expect("enable model");
+
+    assert!(enabled.is_available);
 }
 
 #[tokio::test]
@@ -404,6 +504,108 @@ async fn api_provider_create_with_locked_host_vault_does_not_leave_provider_row(
     .await
     .expect("provider exists query");
     assert!(!provider_exists);
+}
+
+#[tokio::test]
+async fn api_provider_create_with_api_key_marks_ready_and_binds_host_vault_secret() {
+    let ctx = TestContext::new().await;
+    let vault_home = tempfile::tempdir().expect("vault home");
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database");
+    let vault_home = vault_home.path().to_string_lossy().to_string();
+    let config =
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([("HERMES_VAULT_HOME", vault_home.as_str())])
+            .expect("config");
+    let app = build_router_with_database(config, database);
+    let provider_id = "provider:api:omniroute-ready";
+
+    let entropy_response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/vault/collect-entropy",
+            json!({ "events": vault_entropy_events(2_000) }),
+        ))
+        .await
+        .expect("entropy response");
+    assert_eq!(entropy_response.status(), StatusCode::OK);
+    let create_vault_response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/vault/create",
+            json!({}),
+        ))
+        .await
+        .expect("vault create response");
+    assert_eq!(create_vault_response.status(), StatusCode::OK);
+
+    let response = app
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/ai/providers",
+            json!({
+                "provider_id": provider_id,
+                "provider_kind": "api",
+                "provider_key": "omniroute",
+                "display_name": "OmniRoute",
+                "base_url": "https://ai.sh-inc.ru/v1",
+                "remote_context_consent": true,
+                "api_key": "sk-test-provider-secret"
+            }),
+        ))
+        .await
+        .expect("provider create response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["provider_id"], json!(provider_id));
+    assert_eq!(body["status"], json!("ready"));
+    assert_eq!(body["consent_state"], json!("granted"));
+    assert!(
+        !body.to_string().contains("sk-test-provider-secret"),
+        "API response must not echo provider token material"
+    );
+
+    let provider_config: Value =
+        sqlx::query_scalar("SELECT config FROM ai_provider_accounts WHERE provider_id = $1")
+            .bind(provider_id)
+            .fetch_one(ctx.pool())
+            .await
+            .expect("provider config");
+    assert_eq!(
+        provider_config["base_url"],
+        json!("https://ai.sh-inc.ru/v1")
+    );
+    assert!(
+        !provider_config
+            .to_string()
+            .contains("sk-test-provider-secret"),
+        "provider config must stay non-secret"
+    );
+
+    let binding = sqlx::query(
+        r#"
+        SELECT refs.secret_ref, secrets.secret_kind, secrets.store_kind
+        FROM ai_provider_secret_refs refs
+        JOIN secret_references secrets ON secrets.secret_ref = refs.secret_ref
+        WHERE refs.provider_id = $1 AND refs.secret_purpose = 'api_key'
+        "#,
+    )
+    .bind(provider_id)
+    .fetch_one(ctx.pool())
+    .await
+    .expect("host-vault secret binding");
+
+    assert_eq!(
+        binding.get::<String, _>("secret_ref"),
+        format!("secret:ai-provider:{provider_id}:api_key")
+    );
+    assert_eq!(binding.get::<String, _>("secret_kind"), "api_token");
+    assert_eq!(binding.get::<String, _>("store_kind"), "host_vault");
 }
 
 #[tokio::test]

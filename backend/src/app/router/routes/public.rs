@@ -10,6 +10,10 @@ pub(super) fn routes() -> Router<AppState> {
             get(get_gmail_oauth_callback),
         )
         .route(
+            "/api/v1/ai/provider-auth/callback",
+            get(get_ai_provider_auth_callback),
+        )
+        .route(
             "/api/v1/communications/messages/{message_id}/remote-image",
             get(get_v1_communication_message_remote_image),
         )

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useId } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from '@/platform/i18n'
 import {
   Button,
@@ -15,6 +15,8 @@ import {
 } from '@/shared/ui'
 import '../communicationDomainElements.css'
 import MailListItem from './MailListItem.vue'
+import MailSyncProgress from './MailSyncProgress.vue'
+import type { MailSyncStatus } from '../../types/communications'
 import {
   mailListDensityToggleItems,
   type MailListItemDensity,
@@ -44,12 +46,12 @@ import {
   type MailListSearchBuilderState
 } from './mailSearchBuilder'
 import { mailListSearchBuilderValueSuggestions } from './mailSearchSuggestions'
-
-type MailListViewCounts = {
-  inbox: number
-  other: number
-  archived: number
-}
+import {
+  isMailListViewId,
+  mailListItemsForView,
+  mailListTreeSelectOptions,
+  type MailListViewId
+} from './mailListViews'
 
 type MailListSavedFilter = {
   id: string
@@ -59,25 +61,46 @@ type MailListSavedFilter = {
 
 const props = defineProps<{
   items: readonly MailListItemModel[]
+  hasMoreItems?: boolean
+  isLoadingMore?: boolean
+  searchQuery?: string
+  syncStatus?: MailSyncStatus | null
+}>()
+
+const emit = defineEmits<{
+  compose: []
+  'load-more': []
+  refresh: []
+  'select-item': [item: MailListItemModel]
+  'update-search-query': [query: string]
 }>()
 
 const { t } = useI18n()
+const loadMoreScrollThresholdPx = 320
+const plainSearchInputId = `mail-plain-search-${useId()}`
 const searchBuilderValueInputId = `mail-search-builder-value-${useId()}`
 const searchBuilderFilterNameInputId = `mail-search-builder-filter-name-${useId()}`
 const activeDensity = ref<MailListItemDensity>('comfortable')
-const activeMailViewId = ref('mail:inbox')
+const activeMailViewId = ref<MailListViewId | string>('mail:all')
 const activeSearchBuilderGroupId = ref(mailListSearchFieldGroups[0]?.id ?? 'text')
 const isSearchBuilderOpen = ref(false)
+const isPlainSearchOpen = ref(Boolean(props.searchQuery?.trim()))
 const searchBuilderState = ref<MailListSearchBuilderState>(createMailListSearchBuilderState())
 const savedFilterName = ref('')
 const savedFilters = ref<MailListSavedFilter[]>([])
 const nextSavedFilterId = ref(1)
 
-const searchQuery = computed(() => mailListSearchBuilderQuery(searchBuilderState.value))
+const plainSearchQuery = computed(() => props.searchQuery ?? '')
+const plainSearchIsActive = computed(() => plainSearchQuery.value.trim().length > 0)
+const plainSearchButtonClass = computed(() => {
+  const base = 'mail-list-view-select-row__search hermes-icon-button'
+  return plainSearchIsActive.value ? `${base} mail-list-view-select-row__search--active` : base
+})
+const builderSearchQuery = computed(() => mailListSearchBuilderQuery(searchBuilderState.value))
 const listItems = computed(() => props.items)
-const visibleItems = computed(() => mailListItemsForSearch(listItems.value, searchQuery.value))
+const viewItems = computed(() => mailListItemsForView(listItems.value, activeMailViewId.value))
+const visibleItems = computed(() => mailListItemsForSearch(viewItems.value, builderSearchQuery.value))
 const mailViewOptions = computed<TreeSelectOption[]>(() => {
-  const counts = mailListViewCounts(listItems.value)
   const savedFilterOptions: TreeSelectOption[] = []
 
   for (const filter of savedFilters.value) {
@@ -97,24 +120,7 @@ const mailViewOptions = computed<TreeSelectOption[]>(() => {
     })
   }
 
-  return [
-    {
-      value: 'mailboxes',
-      label: t('Mailboxes'),
-      icon: 'tabler:mailbox',
-      children: [
-        { value: 'mail:inbox', label: mailListViewLabel('Inbox', counts.inbox), icon: 'tabler:inbox' },
-        { value: 'mail:other', label: mailListViewLabel('Other', counts.other), icon: 'tabler:folder' },
-        { value: 'mail:archived', label: mailListViewLabel('Archived', counts.archived), icon: 'tabler:archive' }
-      ]
-    },
-    {
-      value: 'saved-filters',
-      label: t('Saved filters'),
-      icon: 'tabler:filter-star',
-      children: savedFilterOptions
-    }
-  ]
+  return mailListTreeSelectOptions(listItems.value, savedFilterOptions, t, Boolean(props.hasMoreItems))
 })
 const searchBuilderCanAdd = computed(() => mailListSearchBuilderCanAdd(searchBuilderState.value))
 const searchBuilderCanApply = computed(() => mailListSearchBuilderCanApply(searchBuilderState.value))
@@ -134,8 +140,16 @@ const searchBuilderPresetOptions = computed(() => {
 })
 const searchBuilderValuePlaceholder = computed(() => t(mailListSearchFieldItem(searchBuilderState.value.field).placeholder))
 const searchBuilderValueSuggestions = computed(() => {
-  return mailListSearchBuilderValueSuggestions(listItems.value, searchBuilderState.value)
+  return mailListSearchBuilderValueSuggestions(viewItems.value, searchBuilderState.value)
 })
+
+watch(
+  () => props.searchQuery,
+  (query) => {
+    if (query?.trim()) isPlainSearchOpen.value = true
+  }
+)
+
 function selectDensity(value: MailListItemDensity): void {
   activeDensity.value = value
 }
@@ -150,37 +164,6 @@ function densityMenuItemClass(value: MailListItemDensity): string {
   }
 
   return 'mail-list-settings-menu__item'
-}
-
-function mailListViewLabel(label: string, count: number): string {
-  if (count <= 0) return t(label)
-  return `${t(label)} ${count}`
-}
-
-function mailListViewCounts(items: readonly MailListItemModel[]): MailListViewCounts {
-  const counts: MailListViewCounts = {
-    inbox: items.length,
-    other: 0,
-    archived: 0
-  }
-
-  for (const item of items) {
-    if (mailListItemBelongsToArchived(item)) {
-      counts.archived += 1
-    } else if (mailListItemBelongsToOther(item)) {
-      counts.other += 1
-    }
-  }
-
-  return counts
-}
-
-function mailListItemBelongsToArchived(item: MailListItemModel): boolean {
-  return item.workflowState === 'archived' || item.localState === 'archived' || item.markers?.includes('archived') === true
-}
-
-function mailListItemBelongsToOther(item: MailListItemModel): boolean {
-  return item.mailboxLabel !== 'Inbox' && !mailListItemBelongsToArchived(item)
 }
 
 function updateSearchBuilderMatchMode(value: string | string[]): void {
@@ -228,6 +211,28 @@ function clearSearchBuilder(): void {
   searchBuilderState.value = mailListSearchBuilderClear()
 }
 
+function togglePlainSearch(): void {
+  isPlainSearchOpen.value = !isPlainSearchOpen.value
+}
+
+function updatePlainSearchQuery(event: Event): void {
+  emit('update-search-query', (event.target as HTMLInputElement).value)
+}
+
+function clearPlainSearchQuery(): void {
+  emit('update-search-query', '')
+}
+
+function handleBodyScroll(event: Event): void {
+  if (!props.hasMoreItems || props.isLoadingMore) return
+
+  const target = event.currentTarget
+  if (!(target instanceof HTMLElement)) return
+
+  const remainingScrollPx = target.scrollHeight - target.scrollTop - target.clientHeight
+  if (remainingScrollPx <= loadMoreScrollThresholdPx) emit('load-more')
+}
+
 function committedSearchBuilderState(state: MailListSearchBuilderState): MailListSearchBuilderState {
   if (!mailListSearchBuilderCanAdd(state)) return state
   return mailListSearchBuilderAddClause(state)
@@ -268,6 +273,11 @@ function saveSearchBuilderFilter(): void {
 }
 
 function selectMailView(option: TreeSelectOption): void {
+  if (typeof option.value === 'string' && isMailListViewId(option.value)) {
+    activeMailViewId.value = option.value
+    return
+  }
+
   for (const filter of savedFilters.value) {
     if (filter.id === option.value) {
       searchBuilderState.value = cloneSearchBuilderState(filter.state)
@@ -280,7 +290,7 @@ function selectMailView(option: TreeSelectOption): void {
 <template>
 	<div class="mail-list-stack">
 		<section class="mail-list-action-card" :aria-label="t('Mail actions')">
-			<Button class="mail-list-action-card__compose" icon="tabler:edit" size="sm">
+			<Button class="mail-list-action-card__compose" icon="tabler:edit" size="sm" @click="emit('compose')">
 				{{ t('Compose') }}
 			</Button>
 			<div class="mail-list-action-card__tools">
@@ -291,6 +301,7 @@ function selectMailView(option: TreeSelectOption): void {
 					icon="tabler:refresh"
 					:aria-label="t('Refresh')"
 					:title="t('Refresh')"
+					@click="emit('refresh')"
 				/>
 				<DropdownMenu
 					align="end"
@@ -339,6 +350,15 @@ function selectMailView(option: TreeSelectOption): void {
 						:aria-label="t('Mail view')"
 						:empty-label="t('No options')"
 						@select="selectMailView"
+					/>
+					<Button
+						:class="plainSearchButtonClass"
+						variant="outline"
+						icon="tabler:search"
+						:aria-expanded="isPlainSearchOpen"
+						:aria-label="t('Search mail')"
+						:title="t('Search mail')"
+						@click="togglePlainSearch"
 					/>
 					<Popover
 						v-model:open="isSearchBuilderOpen"
@@ -517,14 +537,37 @@ function selectMailView(option: TreeSelectOption): void {
 						</div>
 					</Popover>
 				</div>
+				<div v-if="isPlainSearchOpen" class="mail-list-plain-search" role="search">
+					<Icon icon="tabler:search" size="1rem" class="mail-list-plain-search__icon" />
+					<input
+						:id="plainSearchInputId"
+						:value="plainSearchQuery"
+						class="mail-list-plain-search__input"
+						type="search"
+						:placeholder="t('Address, subject or body')"
+						:aria-label="t('Search address, subject or body')"
+						@input="updatePlainSearchQuery"
+					/>
+					<button
+						v-if="plainSearchIsActive"
+						type="button"
+						class="mail-list-plain-search__clear"
+						:aria-label="t('Clear search')"
+						:title="t('Clear search')"
+						@click="clearPlainSearchQuery"
+					>
+						<Icon icon="tabler:x" size="0.9rem" />
+					</button>
+				</div>
 			</header>
-			<div class="communication-workspace-panel__body">
+			<div class="communication-workspace-panel__body" @scroll="handleBodyScroll">
 				<div v-if="visibleItems.length" class="communication-inbox-list">
 					<MailListItem
 						v-for="item in visibleItems"
 						:key="item.id"
 						:item="item"
 						:density="activeDensity"
+						@select="emit('select-item', $event)"
 					/>
 				</div>
 				<NoSearchResultsState
@@ -532,9 +575,29 @@ function selectMailView(option: TreeSelectOption): void {
 					class="mail-list-empty"
 					:title="t('No matching mail')"
 					:description="t('Try text, mail attributes or Hermes entities.')"
-					:query="searchQuery"
+					:query="plainSearchQuery || builderSearchQuery"
 				/>
+				<footer
+					v-if="hasMoreItems || isLoadingMore"
+					class="mail-list-load-more"
+					aria-live="polite"
+				>
+					<Button
+						v-if="hasMoreItems && !isLoadingMore"
+						variant="ghost"
+						size="sm"
+						icon="tabler:chevrons-down"
+						@click="emit('load-more')"
+					>
+						{{ t('Load more') }}
+					</Button>
+					<span v-else class="mail-list-load-more__status">
+						<Icon icon="tabler:loader-2" size="0.95rem" />
+						{{ t('Loading more') }}
+					</span>
+				</footer>
 			</div>
 		</section>
+		<MailSyncProgress :status="syncStatus" />
 	</div>
 </template>

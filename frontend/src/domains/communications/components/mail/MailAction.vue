@@ -3,19 +3,26 @@ import { computed } from 'vue'
 import { useI18n } from '@/platform/i18n'
 import { Button, ButtonGroup, Spacer, SplitButton, ToolbarGroup } from '@/shared/ui'
 import type { CommunicationMessageActionGroupModel } from '../communicationDomainElements'
-import { mailActionResponseControls, mailActionToolbarSections } from './mailActions'
+import {
+  mailActionResponseControls,
+  mailActionToolbarSections,
+  type MailActionMenuGroup
+} from './mailActions'
 import '../communicationDomainElements.css'
 
 const props = withDefaults(defineProps<{
   actionGroups?: readonly CommunicationMessageActionGroupModel[]
   inspectorVisible?: boolean
+  isRunning?: boolean
   showInspectorToggle?: boolean
 }>(), {
   inspectorVisible: true,
+  isRunning: false,
   showInspectorToggle: true
 })
 
 const emit = defineEmits<{
+  'select-action': [actionId: string]
   'toggle-inspector': []
 }>()
 
@@ -30,10 +37,25 @@ const inspectorToggleIcon = computed(() => props.inspectorVisible
 function handleToggleInspector(): void {
   emit('toggle-inspector')
 }
+
+function handleSelectAction(actionId: string | undefined): void {
+  if (!actionId || props.isRunning) return
+  emit('select-action', actionId)
+}
+
+function handleSelectGroupAction(group: MailActionMenuGroup): void {
+  if (group.tone === 'danger') return
+  handleSelectAction(group.items.find((item) => !item.disabled)?.id)
+}
 </script>
 
 <template>
-	<nav class="communication-email-command-bar" role="toolbar" :aria-label="t('Message actions')">
+	<nav
+		class="communication-email-command-bar"
+		role="toolbar"
+		:aria-busy="isRunning"
+		:aria-label="t('Message actions')"
+	>
 		<div v-if="responseControls.length || actionToolbarSections.length" class="communication-email-command-bar__scroll">
 			<ButtonGroup
 				v-if="responseControls.length"
@@ -44,25 +66,27 @@ function handleToggleInspector(): void {
 					<SplitButton
 						v-if="control.kind === 'split'"
 						:class="`communication-email-action-split communication-email-action-split--grouped${control.tone ? ` communication-email-action-split--${control.tone}` : ''}`"
-						:disabled="control.disabled"
+						:disabled="isRunning || control.disabled"
 						:icon="control.icon"
 						:items="control.items"
 						:label="control.label"
 						:menu-label="control.menuLabel"
 						variant="outline"
 						size="sm"
+						@click="handleSelectAction(control.id)"
+						@select="handleSelectAction($event.id)"
 					/>
 					<Button
 						v-else
-						:class="`communication-email-action-button${control.tone ? ` communication-email-action-button--${control.tone}` : ''}`"
-						:disabled="control.disabled"
+						:class="`communication-email-action-button hermes-icon-button${control.tone ? ` communication-email-action-button--${control.tone}` : ''}`"
+						:aria-label="control.label"
+						:disabled="isRunning || control.disabled"
 						:icon="control.icon"
 						:title="control.label"
 						variant="outline"
 						size="sm"
-					>
-						{{ control.label }}
-					</Button>
+						@click="handleSelectAction(control.id)"
+					/>
 				</template>
 			</ButtonGroup>
 			<template
@@ -112,6 +136,9 @@ function handleToggleInspector(): void {
 							:menu-label="group.menuLabel"
 							variant="outline"
 							size="sm"
+							:disabled="isRunning"
+							@click="handleSelectGroupAction(group)"
+							@select="handleSelectAction($event.id)"
 						/>
 					</template>
 				</ToolbarGroup>

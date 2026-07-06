@@ -42,7 +42,7 @@ export async function deleteCommunicationFolder(folderId: string): Promise<Folde
 
 export async function fetchFolderMessages(
   folderId: string,
-  limit = 250,
+  limit = 100,
   cursor?: string | null
 ): Promise<FolderMessageListResponse> {
   return fetchFolderMessagesConnect(folderId, limit, cursor ?? undefined)

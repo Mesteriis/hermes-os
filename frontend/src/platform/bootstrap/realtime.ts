@@ -202,19 +202,20 @@ function realtimeClientOptions(
 	onLaggedObserved?: (skipped: number) => void,
 	onStatus?: RealtimeStatusHandler
 ): { sse: SseClientOptions; webSocket: WebSocketClientOptions } {
+	const realtimeQueryClient = bindRealtimeQueryClient(queryClient)
 	const common = {
 		secret: config.apiSecret,
 		lastEventId: readRealtimeCursor(),
 		onMessage: (event: SseMessageEvent) => {
 			if (event.event === 'lagged') {
 				onLaggedObserved?.(laggedSkippedCount(event.data))
-				handleRealtimeEvent(event, queryClient)
+				handleRealtimeEvent(event, realtimeQueryClient)
 				return
 			}
 
 			persistRealtimeCursor(event.id)
 			onEventObserved?.(event.id)
-			handleRealtimeEvent(event, queryClient)
+			handleRealtimeEvent(event, realtimeQueryClient)
 		}
 	}
 
@@ -237,6 +238,26 @@ function realtimeClientOptions(
 			onStatus
 		}
 	}
+}
+
+function bindRealtimeQueryClient(queryClient: RealtimeQueryClient): RealtimeQueryClient {
+	const boundClient: RealtimeQueryClient = {
+		invalidateQueries: (filters) => queryClient.invalidateQueries(filters)
+	}
+
+	if (queryClient.getQueriesData) {
+		boundClient.getQueriesData = <TData>(filters: { queryKey: readonly unknown[] }) =>
+			queryClient.getQueriesData?.<TData>(filters) ?? []
+	}
+
+	if (queryClient.setQueryData) {
+		boundClient.setQueryData = <TData>(
+			queryKey: readonly unknown[],
+			updater: TData | ((data: TData | undefined) => TData | undefined)
+		) => queryClient.setQueryData?.<TData>(queryKey, updater)
+	}
+
+	return boundClient
 }
 
 function normalizeRealtimeBootstrapOptions(

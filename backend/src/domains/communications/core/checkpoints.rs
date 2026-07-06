@@ -90,4 +90,27 @@ impl CommunicationIngestionStore {
 
         Ok(result.rows_affected() > 0)
     }
+
+    pub async fn delete_checkpoints_with_stream_prefix(
+        &self,
+        account_id: &str,
+        stream_prefix: &str,
+    ) -> Result<u64, CommunicationIngestionError> {
+        validate_non_empty("account_id", account_id)?;
+        validate_non_empty("stream_prefix", stream_prefix)?;
+
+        let result = sqlx::query(
+            r#"
+            DELETE FROM communication_ingestion_checkpoints
+            WHERE account_id = $1
+              AND stream_id LIKE $2
+            "#,
+        )
+        .bind(account_id.trim())
+        .bind(format!("{}%", stream_prefix.trim()))
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
 }

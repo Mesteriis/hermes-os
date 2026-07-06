@@ -114,6 +114,14 @@ pub struct ImapFetchOptions {
     pub latest_messages: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImapMailboxListOptions {
+    pub host: String,
+    pub port: u16,
+    pub tls: bool,
+    pub username: String,
+}
+
 impl ImapFetchOptions {
     pub fn new(
         host: impl Into<String>,
@@ -168,6 +176,30 @@ impl ImapFetchOptions {
         if self.max_messages == 0 {
             return Err(EmailProviderNetworkError::InvalidProviderRequest {
                 field: "max_messages",
+                message: "must be greater than zero",
+            });
+        }
+
+        Ok(())
+    }
+}
+
+impl ImapMailboxListOptions {
+    pub fn new(host: impl Into<String>, port: u16, tls: bool, username: impl Into<String>) -> Self {
+        Self {
+            host: host.into(),
+            port,
+            tls,
+            username: username.into(),
+        }
+    }
+
+    pub(super) fn validate(&self) -> Result<(), EmailProviderNetworkError> {
+        validate_non_empty("host", &self.host)?;
+        validate_non_empty("username", &self.username)?;
+        if self.port == 0 {
+            return Err(EmailProviderNetworkError::InvalidProviderRequest {
+                field: "port",
                 message: "must be greater than zero",
             });
         }

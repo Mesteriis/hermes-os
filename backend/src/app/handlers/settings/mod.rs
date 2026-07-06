@@ -136,7 +136,7 @@ use crate::app::{ApiError, AppState};
 pub(crate) async fn get_application_settings(
     State(state): State<AppState>,
 ) -> Result<Json<ApplicationSettingsResponse>, ApiError> {
-    let items = settings_store(&state)?.list_settings().await?;
+    let items = settings_store(&state)?.list_public_settings().await?;
 
     Ok(Json(ApplicationSettingsResponse { items }))
 }
@@ -154,6 +154,34 @@ pub(crate) async fn get_application_settings_accounts(
         .await?;
 
     Ok(Json(ApplicationAccountsResponse { items }))
+}
+
+pub(crate) async fn patch_application_settings_account(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+    Json(request): Json<ApplicationAccountUpdateRequest>,
+) -> Result<Json<ProviderAccount>, ApiError> {
+    let Some(display_name) = request
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "account display_name is required",
+        ));
+    };
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let account = crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
+        .update_display_name(&account_id, display_name)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+
+    Ok(Json(account))
 }
 
 pub(crate) async fn put_application_setting(

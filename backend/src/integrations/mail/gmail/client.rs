@@ -8,4 +8,6 @@ mod options;
 pub use errors::EmailProviderNetworkError;
 pub use gmail_api::GmailApiClient;
 pub use imap::ImapNetworkClient;
-pub use options::{GmailFetchOptions, GmailHistoryFetchOptions, ImapFetchOptions};
+pub use options::{
+    GmailFetchOptions, GmailHistoryFetchOptions, ImapFetchOptions, ImapMailboxListOptions,
+};

@@ -83,6 +83,18 @@ supports_pause = true
 supports_mute = true
 
 [[sources]]
+code = "yandex_telemost"
+display_name = "Yandex Telemost"
+category = "communications"
+source_kind = "provider"
+default_enabled = true
+supports_connections = true
+supports_runtime = true
+supports_replay = true
+supports_pause = true
+supports_mute = true
+
+[[sources]]
 code = "github"
 display_name = "GitHub"
 category = "code"

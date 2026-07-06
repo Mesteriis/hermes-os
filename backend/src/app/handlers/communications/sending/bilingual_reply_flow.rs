@@ -202,7 +202,7 @@ async fn bilingual_translation_step_with_signal(
     match service.translate(text, target_language).await {
         Ok(Some(translation)) => {
             if let Some(pool) = state.database.pool() {
-                crate::domains::signal_hub::dispatch_ai_helper_signal(
+                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
                     pool.clone(),
                     signal.event_kind,
                     message_id,
@@ -214,7 +214,7 @@ async fn bilingual_translation_step_with_signal(
                     signal.provenance,
                     None,
                 )
-                .await?;
+                .await;
             }
 
             Ok(BilingualTranslationStep {

@@ -1,8 +1,10 @@
 import { computed } from 'vue'
 import { useI18n } from '../../../platform/i18n'
 import { useRealtimeStatusStore } from '../../../shared/stores/realtimeStatus'
-import { useThemeStore } from '../../../shared/stores/theme'
-import { useApplicationSettingsQuery, useProviderAccountsQuery } from './useSettingsQuery'
+import { useAISettingsSurface } from './useAISettingsSurface'
+import { useApplicationSettingsSurface } from './useApplicationSettingsSurface'
+import { useIntegrationsSettingsSurface } from './useIntegrationsSettingsSurface'
+import { useLanguageSettingsSurface } from './useLanguageSettingsSurface'
 import { useSettingsStore, type SettingsSection } from '../stores/settings'
 
 export type SettingsTreeItem = {
@@ -19,7 +21,7 @@ export type SettingsTreeGroup = {
 }
 
 export type SettingsOverviewCard = {
-  id: 'realtime' | 'appearance' | 'sources' | 'registry'
+  id: 'realtime' | 'sources' | 'registry' | 'ai'
   icon: string
   label: string
   value: string
@@ -30,18 +32,27 @@ export type SettingsOverviewCard = {
 export function useSettingsPageSurface() {
   const { t } = useI18n()
   const store = useSettingsStore()
-  const theme = useThemeStore()
   const realtimeStatus = useRealtimeStatusStore()
-  const { data: appSettingsData, isLoading: isApplicationSettingsLoading } = useApplicationSettingsQuery()
-  const { data: providerAccountsData, isLoading: isProviderAccountsLoading } = useProviderAccountsQuery()
+  const applicationSettings = useApplicationSettingsSurface()
+  const aiSettings = useAISettingsSurface()
+  const integrationsSettings = useIntegrationsSettingsSurface()
+  const languageSettings = useLanguageSettingsSurface()
 
-  const applicationSettingsCount = computed(() => appSettingsData.value?.items.length ?? 0)
-  const integrationCount = computed(() => providerAccountsData.value?.items.length ?? 0)
+  const applicationSettingsCount = computed(() => applicationSettings.applicationSettings.value.length)
+  const integrationCount = computed(() => integrationsSettings.accounts.value.length)
+  const aiProviderCount = computed(() => aiSettings.providers.value.length)
 
   const settingsTreeGroups = computed<SettingsTreeGroup[]>(() => [
     {
       label: 'Workspace',
       items: [
+        {
+          id: 'accounts',
+          label: 'Accounts',
+          description: 'Provider identities and service capabilities',
+          icon: 'tabler:id',
+          meta: String(integrationCount.value)
+        },
         {
           id: 'application',
           label: 'Application',
@@ -58,48 +69,20 @@ export function useSettingsPageSurface() {
       ]
     },
     {
-      label: 'Interface',
+      label: 'Intelligence',
       items: [
         {
-          id: 'appearance',
-          label: 'Appearance',
-          description: 'Theme, density, panel surface and preview',
-          icon: 'tabler:palette'
-        },
-        {
-          id: 'sidebar',
-          label: 'Sidebar',
-          description: 'Navigation groups and visible workspaces',
-          icon: 'tabler:layout-sidebar'
-        }
-      ]
-    },
-    {
-      label: 'Sources',
-      items: [
-        {
-          id: 'integrations',
-          label: 'Integrations',
-          description: 'Provider accounts, capabilities and sync controls',
-          icon: 'tabler:plug-connected',
-          meta: isProviderAccountsLoading.value ? '...' : String(integrationCount.value)
+          id: 'ai',
+          label: 'AI Control Center',
+          description: 'Providers, model catalog and action routing',
+          icon: 'tabler:sparkles',
+          meta: String(aiProviderCount.value)
         },
         {
           id: 'signal-hub',
           label: 'Signal Hub',
           description: 'Observed signals, profiles and replay operations',
           icon: 'tabler:database-import'
-        }
-      ]
-    },
-    {
-      label: 'Intelligence',
-      items: [
-        {
-          id: 'ai',
-          label: 'AI Control Center',
-          description: 'Local model providers, readiness and consent',
-          icon: 'tabler:sparkles'
         }
       ]
     }
@@ -125,20 +108,10 @@ export function useSettingsPageSurface() {
       tone: realtimeStatus.realtimeStatusTone
     },
     {
-      id: 'appearance',
-      icon: 'tabler:palette',
-      label: 'Appearance',
-      value: t(theme.themePersistenceLabel),
-      detail: theme.themePersistenceError
-        ? t(theme.themePersistenceError)
-        : t('Theme is stored without private content or secrets'),
-      tone: theme.themePersistenceError ? 'warning' : 'success'
-    },
-    {
       id: 'sources',
       icon: 'tabler:plug-connected',
       label: 'Sources',
-      value: isProviderAccountsLoading.value ? t('Loading...') : String(integrationCount.value),
+      value: String(integrationCount.value),
       detail: t('Provider accounts connected to the local workspace'),
       tone: integrationCount.value > 0 ? 'success' : 'neutral'
     },
@@ -146,20 +119,31 @@ export function useSettingsPageSurface() {
       id: 'registry',
       icon: 'tabler:list-check',
       label: 'Settings registry',
-      value: isApplicationSettingsLoading.value ? t('Loading...') : String(applicationSettingsCount.value),
+      value: applicationSettings.isLoading.value ? t('Loading...') : String(applicationSettingsCount.value),
       detail: t('Declared application settings available for review'),
       tone: applicationSettingsCount.value > 0 ? 'success' : 'neutral'
+    },
+    {
+      id: 'ai',
+      icon: 'tabler:sparkles',
+      label: 'AI providers',
+      value: aiSettings.isLoading.value ? t('Loading...') : String(aiProviderCount.value),
+      detail: t('Provider accounts, model inventory and routes are owned by AI Control Center'),
+      tone: aiProviderCount.value > 0 ? 'success' : 'neutral'
     }
   ])
 
   return {
+    aiSettings,
+    applicationSettings,
     applicationSettingsCount,
     integrationCount,
+    integrationsSettings,
+    languageSettings,
     realtimeStatus,
     settingsOverviewCards,
     settingsTreeGroups,
     selectedTreeItem,
     store,
-    theme
   }
 }

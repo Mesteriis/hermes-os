@@ -1,5 +1,6 @@
 use sqlx::postgres::PgPool;
 
+use crate::ai::control_center::AiControlCenterStore;
 use crate::domains::calendar::events::CalendarAccountStore;
 use crate::domains::communications::core::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore, NewProviderAccount,
@@ -8,6 +9,7 @@ use crate::domains::communications::core::{
 use crate::platform::secrets::{NewSecretReference, SecretReferenceStore};
 use crate::vault::HostVault;
 
+use super::ai_provider_recovery::RecoverableAiProviderSecret;
 use super::calendar_restore::restore_linked_calendar_account;
 use super::errors::HostVaultReconciliationError;
 use super::manifest_enrichment::enrich_manifest_entry_from_postgres;
@@ -23,10 +25,29 @@ pub(super) async fn reconcile_host_vault_manifest(
     let provider_account_store = CommunicationProviderAccountStore::new(pool.clone());
     let provider_secret_binding_store = CommunicationProviderSecretBindingStore::new(pool.clone());
     let calendar_store = CalendarAccountStore::new(pool.clone());
+    let ai_store = AiControlCenterStore::new(pool.clone());
     let mut summary = HostVaultReconciliationSummary::default();
 
     for mut entry in manifest {
         enrich_manifest_entry_from_postgres(&pool, &vault, &mut entry).await?;
+        if let Some(recoverable) = RecoverableAiProviderSecret::from_manifest(entry.clone()) {
+            restore_ai_secret_reference(&secret_store, &recoverable).await?;
+            let restore_missing = ai_store
+                .provider(&recoverable.restore.provider_id)
+                .await?
+                .is_none()
+                || ai_store
+                    .api_key_secret_ref(&recoverable.restore.provider_id)
+                    .await?
+                    .is_none();
+            if restore_missing {
+                ai_store
+                    .restore_provider_from_vault(&recoverable.restore)
+                    .await?;
+                summary.restored_ai_providers += 1;
+            }
+            continue;
+        }
         let Some(recoverable) = RecoverableProviderSecret::from_manifest(entry) else {
             continue;
         };
@@ -41,6 +62,24 @@ pub(super) async fn reconcile_host_vault_manifest(
     }
 
     Ok(summary)
+}
+
+async fn restore_ai_secret_reference(
+    store: &SecretReferenceStore,
+    secret: &RecoverableAiProviderSecret,
+) -> Result<(), HostVaultReconciliationError> {
+    store
+        .upsert_secret_reference(
+            &NewSecretReference::new(
+                &secret.restore.secret_ref,
+                secret.secret_kind,
+                secret.store_kind,
+                &secret.restore.secret_label,
+            )
+            .metadata(secret.restore.secret_metadata.clone()),
+        )
+        .await?;
+    Ok(())
 }
 
 async fn restore_secret_reference(

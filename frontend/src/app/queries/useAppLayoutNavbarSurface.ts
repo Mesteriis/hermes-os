@@ -1,347 +1,688 @@
-import { computed, ref } from 'vue'
+import { formatDistanceToNow } from 'date-fns'
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref } from 'vue'
+import { getActivePinia } from 'pinia'
 import {
-	isUiThemeFamily,
-	isUiThemeMode,
-	themeSelectionToName,
-	type UiThemeFamily,
-	type UiThemeMode,
-	type UiThemeName
+  isUiThemeFamily,
+  isUiThemeMode,
+  themeSelectionToName,
+  type UiThemeFamily,
+  type UiThemeMode,
+  type UiThemeName,
 } from '../../shared/ui/theme'
+import type { CommunicationSubSurfaceId } from '../../domains/communications/queries/communicationChannelSurface'
+import { useCommunicationsWorkspaceSurface } from '../../domains/communications/queries/useCommunicationsWorkspaceSurface'
+import { fetchProviderAccounts } from '../../domains/settings/api/settings'
+import type { ProviderAccount } from '../../domains/settings/types/settings'
+import { fetchTelegramAccounts } from '../../integrations/telegram/api/telegram'
+import type { TelegramAccount } from '../../integrations/telegram/types/telegram'
+import { fetchWhatsappAccounts } from '../../integrations/whatsapp/api/whatsapp'
+import type { WhatsappAccountSummary } from '../../integrations/whatsapp/types/whatsapp'
+import { ApiClient } from '../../platform/api/ApiClient'
+import { fetchMailSyncStatus } from '../../shared/mailSync/syncApi'
+import {
+  useNotificationsStore,
+  type NotificationItem,
+} from '../../shared/stores/notifications'
+import { useRealtimeStatusStore } from '../../shared/stores/realtimeStatus'
+import {
+  backendErrorHealthCheck,
+  backendReadinessHealthChecks,
+  frontendRuntimeHealthChecks,
+  healthChecksNeedRecovery,
+  integrationAccountHealthChecks,
+  mailSyncErrorHealthCheck,
+  mailSyncStatusHealthChecks,
+  type AppLayoutNavbarHealthCheck,
+  type BackendReadinessResponse,
+} from './appLayoutHealthChecks'
 
-export type AppLayoutNavbarHealthStatus = 'healthy' | 'degraded' | 'unhealthy'
+export type {
+  AppLayoutNavbarHealthCheck,
+  AppLayoutNavbarHealthStatus,
+} from './appLayoutHealthChecks'
 
 export type AppLayoutNavbarBreadcrumb = {
-	id: string
-	label: string
+  id: string
+  label: string
 }
 
 export type AppLayoutNavbarNavigationItem = {
-	id: string
-	label: string
-	icon?: string
-	iconTone?: AppLayoutNavbarNavigationIconTone
+  id: string
+  label: string
+  icon?: string
+  iconTone?: AppLayoutNavbarNavigationIconTone
 }
 
 type AppLayoutNavbarNavigationIconTone =
-	| 'accounts'
-	| 'calendar'
-	| 'channels'
-	| 'communication'
-	| 'dashboard'
-	| 'documents'
-	| 'knowledge'
-	| 'mail'
-	| 'review'
-	| 'settings'
-	| 'tasks'
-	| 'telegram'
-	| 'whatsapp'
+  | 'accounts'
+  | 'calendar'
+  | 'channels'
+  | 'communication'
+  | 'dashboard'
+  | 'documents'
+  | 'knowledge'
+  | 'mail'
+  | 'review'
+  | 'settings'
+  | 'tasks'
+  | 'telegram'
+  | 'whatsapp'
 
 export type AppLayoutNavbarNavigationLevel = {
-	id: string
-	label: string
-	currentItem: AppLayoutNavbarNavigationItem
-	items: readonly AppLayoutNavbarNavigationItem[]
+  id: string
+  label: string
+  currentItem: AppLayoutNavbarNavigationItem
+  items: readonly AppLayoutNavbarNavigationItem[]
 }
 
 type AppLayoutNavbarRouteNode = AppLayoutNavbarNavigationItem & {
-	children?: readonly AppLayoutNavbarRouteNode[]
+  children?: readonly AppLayoutNavbarRouteNode[]
 }
 
-export type AppLayoutNavbarHealthCheck = {
-	id: string
-	label: string
-	status: AppLayoutNavbarHealthStatus
-	detail: string
+type AppLayoutNavbarAccountNavigationState = {
+  mail: readonly ProviderAccount[]
+  telegram: readonly TelegramAccount[]
+  whatsapp: readonly WhatsappAccountSummary[]
 }
 
 export type AppLayoutNavbarToggleOption = {
-	value: string
-	label: string
+  value: string
+  label: string
 }
 
 export type AppLayoutNavbarThemeFamilyOption = {
-	value: UiThemeFamily
-	label: string
+  value: UiThemeFamily
+  label: string
 }
 
 export type AppLayoutNavbarThemeModeOption = {
-	value: UiThemeMode
-	label: string
+  value: UiThemeMode
+  label: string
 }
 
 export type AppLayoutNavbarNotification = {
-	id: string
-	title: string
-	body?: string
-	sourceLabel: string
-	timeLabel: string
-	icon: string
-	tone: 'info' | 'success' | 'warning' | 'danger'
+  id: string
+  title: string
+  body?: string
+  sourceLabel: string
+  timeLabel: string
+  icon: string
+  tone: 'info' | 'success' | 'warning' | 'danger'
+  targetView?: string
+  targetId?: string
 }
 
 export type AppLayoutNotificationToast = {
-	id: string
-	title: string
-	description?: string
-	variant: 'info' | 'success' | 'warning' | 'error'
+  id: string
+  title: string
+  description?: string
+  variant: 'info' | 'success' | 'warning' | 'error'
 }
 
+const HEALTH_OK_REFRESH_MS = 30_000
+const HEALTH_RECOVERY_REFRESH_MS = 5_000
+const ACCOUNT_REFRESH_MS = 60_000
+const ACCOUNT_RECOVERY_REFRESH_MS = 15_000
+
 export function useAppLayoutNavbarSurface() {
-	const currentThemeFamily = ref<UiThemeFamily>('base')
-	const currentThemeMode = ref<UiThemeMode>('light')
-	const selectedRouteId = ref('telegram-all-accounts')
-	const healthStatusLabelVisibleMs = 5000
-	const notificationToastVisibleMs = 5000
-	const currentTheme = computed<UiThemeName>(() => {
-		return themeSelectionToName(currentThemeFamily.value, currentThemeMode.value)
-	})
+  const currentThemeFamily = ref<UiThemeFamily>('base')
+  const currentThemeMode = ref<UiThemeMode>('light')
+  const selectedRouteId = ref('communications-mail')
+  const communicationsSurface = useCommunicationsWorkspaceSurface()
+  const accountNavigation = ref<AppLayoutNavbarAccountNavigationState>(
+    emptyAccountNavigation()
+  )
+  const accountNavigationError = ref('')
+  const backendHealthChecks = ref<readonly AppLayoutNavbarHealthCheck[]>([])
+  const mailSyncHealthChecks = ref<readonly AppLayoutNavbarHealthCheck[]>([])
+  const realtimeStatusStore = getActivePinia() ? useRealtimeStatusStore() : null
+  const notificationsStore = getActivePinia() ? useNotificationsStore() : null
+  const healthStatusLabelVisibleMs = 5000
+  const notificationToastVisibleMs = 5000
+  let healthRefreshTimer: number | undefined
+  let accountRefreshTimer: number | undefined
+  let pollingActive = false
+  const healthChecks = computed<readonly AppLayoutNavbarHealthCheck[]>(() => [
+    ...frontendRuntimeHealthChecks(realtimeStatusStore?.status ?? null),
+    ...backendHealthChecks.value,
+    ...mailSyncHealthChecks.value,
+    ...integrationAccountHealthChecks(
+      accountNavigation.value,
+      accountNavigationError.value
+    ),
+  ])
+  const currentTheme = computed<UiThemeName>(() => {
+    return themeSelectionToName(
+      currentThemeFamily.value,
+      currentThemeMode.value
+    )
+  })
 
-	const routeTree: readonly AppLayoutNavbarRouteNode[] = [
-		{ id: 'dashboard', label: 'Dashboard', icon: 'tabler:layout-dashboard', iconTone: 'dashboard' },
-		{
-			id: 'communications',
-			label: 'Communication',
-			icon: 'tabler:messages',
-			iconTone: 'communication',
-			children: [
-				{
-					id: 'communication-all-channels',
-					label: 'All channels',
-					icon: 'tabler:message-circle',
-					iconTone: 'channels'
-				},
-				{
-					id: 'telegram',
-					label: 'Telegram',
-					icon: 'tabler:brand-telegram',
-					iconTone: 'telegram',
-					children: [
-						{ id: 'telegram-all-accounts', label: 'All accounts', icon: 'tabler:users', iconTone: 'accounts' },
-						{ id: 'telegram-account-1', label: 'Telegram account 1', icon: 'tabler:user-circle', iconTone: 'telegram' },
-						{ id: 'telegram-account-2', label: 'Telegram account 2', icon: 'tabler:user-circle', iconTone: 'telegram' }
-					]
-				},
-				{
-					id: 'mail',
-					label: 'Mail',
-					icon: 'tabler:mail',
-					iconTone: 'mail',
-					children: [
-						{ id: 'mail-all-accounts', label: 'All accounts', icon: 'tabler:users', iconTone: 'accounts' },
-						{ id: 'mail-account-1', label: 'Mail account 1', icon: 'tabler:mail-opened', iconTone: 'mail' },
-						{ id: 'mail-account-2', label: 'Mail account 2', icon: 'tabler:mail-opened', iconTone: 'mail' }
-					]
-				},
-				{
-					id: 'whatsapp',
-					label: 'WhatsApp',
-					icon: 'tabler:brand-whatsapp',
-					iconTone: 'whatsapp',
-					children: [
-						{ id: 'whatsapp-all-accounts', label: 'All accounts', icon: 'tabler:users', iconTone: 'accounts' },
-						{ id: 'whatsapp-account-1', label: 'WhatsApp account 1', icon: 'tabler:user-circle', iconTone: 'whatsapp' },
-						{ id: 'whatsapp-account-2', label: 'WhatsApp account 2', icon: 'tabler:user-circle', iconTone: 'whatsapp' }
-					]
-				}
-			]
-		},
-		{ id: 'review', label: 'Review', icon: 'tabler:clipboard-check', iconTone: 'review' },
-		{ id: 'knowledge', label: 'Knowledge', icon: 'tabler:share', iconTone: 'knowledge' },
-		{ id: 'tasks', label: 'Tasks', icon: 'tabler:checkbox', iconTone: 'tasks' },
-		{ id: 'calendar', label: 'Calendar', icon: 'tabler:calendar', iconTone: 'calendar' },
-		{ id: 'documents', label: 'Documents', icon: 'tabler:file-text', iconTone: 'documents' },
-		{ id: 'settings', label: 'Settings', icon: 'tabler:settings', iconTone: 'settings' }
-	]
+  const routeTree = computed<readonly AppLayoutNavbarRouteNode[]>(() => [
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      icon: 'tabler:layout-dashboard',
+      iconTone: 'dashboard',
+    },
+    {
+      id: 'communications',
+      label: 'Communications',
+      icon: 'tabler:messages',
+      iconTone: 'communication',
+      children: communicationsSurface.childSurfaces.flatMap((surface) => {
+        if (!isCommunicationsNavbarSurfaceId(surface.id)) return []
 
-	const selectedRoutePath = computed(() => {
-		return findRoutePath(routeTree, selectedRouteId.value) ?? [routeTree[0]]
-	})
+        return [
+          communicationRouteNode(
+            surface.id,
+            surface.labelKey,
+            accountNavigation.value
+          ),
+        ]
+      }),
+    },
+    {
+      id: 'review',
+      label: 'Review',
+      icon: 'tabler:clipboard-check',
+      iconTone: 'review',
+    },
+    {
+      id: 'knowledge',
+      label: 'Knowledge',
+      icon: 'tabler:share',
+      iconTone: 'knowledge',
+    },
+    { id: 'tasks', label: 'Tasks', icon: 'tabler:checkbox', iconTone: 'tasks' },
+    {
+      id: 'calendar',
+      label: 'Calendar',
+      icon: 'tabler:calendar',
+      iconTone: 'calendar',
+    },
+    {
+      id: 'documents',
+      label: 'Documents',
+      icon: 'tabler:file-text',
+      iconTone: 'documents',
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      icon: 'tabler:settings',
+      iconTone: 'settings',
+    },
+  ])
 
-	const breadcrumbs = computed<readonly AppLayoutNavbarBreadcrumb[]>(() => {
-		return selectedRoutePath.value.map((item) => ({
-			id: item.id,
-			label: item.label
-		}))
-	})
+  const selectedRoutePath = computed(() => {
+    return (
+      findRoutePath(routeTree.value, selectedRouteId.value) ?? [
+        routeTree.value[0],
+      ]
+    )
+  })
 
-	const navigationLevels = computed<readonly AppLayoutNavbarNavigationLevel[]>(() => {
-		return selectedRoutePath.value.map((node, index, path) => {
-			const parentNode = index === 0 ? undefined : path[index - 1]
-			const siblings = parentNode?.children ?? routeTree
+  const selectedTopLevelRouteId = computed(
+    () => selectedRoutePath.value[0]?.id ?? routeTree.value[0].id
+  )
 
-			return {
-				id: `navigation-level-${index}`,
-				label: navigationLevelLabel(index),
-				currentItem: toNavigationItem(node),
-				items: siblings.map(toNavigationItem)
-			}
-		})
-	})
+  const breadcrumbs = computed<readonly AppLayoutNavbarBreadcrumb[]>(() => {
+    return selectedRoutePath.value.map((item) => ({
+      id: item.id,
+      label: item.label,
+    }))
+  })
 
-	const healthChecks = [
-		{
-			id: 'backend-api',
-			label: 'Backend API',
-			status: 'healthy',
-			detail: 'HTTP healthcheck responds'
-		},
-		{
-			id: 'event-spine',
-			label: 'Event spine',
-			status: 'healthy',
-			detail: 'Realtime stream is connected'
-		},
-		{
-			id: 'vault',
-			label: 'Vault',
-			status: 'degraded',
-			detail: 'Unlock is required before provider sync'
-		}
-	] as const satisfies readonly AppLayoutNavbarHealthCheck[]
+  const navigationLevels = computed<readonly AppLayoutNavbarNavigationLevel[]>(
+    () => {
+      return selectedRoutePath.value.map((node, index, path) => {
+        const parentNode = index === 0 ? undefined : path[index - 1]
+        const siblings = parentNode?.children ?? routeTree.value
 
-	const languageOptions: AppLayoutNavbarToggleOption[] = [
-		{ value: 'ru', label: 'Русский' },
-		{ value: 'en', label: 'English' }
-	]
+        return {
+          id: `navigation-level-${index}`,
+          label: navigationLevelLabel(index),
+          currentItem: toNavigationItem(node),
+          items: siblings.map(toNavigationItem),
+        }
+      })
+    }
+  )
 
-	const themeFamilyOptions: AppLayoutNavbarThemeFamilyOption[] = [
-		{ value: 'base', label: 'Base' },
-		{ value: 'hermes', label: 'Hermes' }
-	]
+  const languageOptions: AppLayoutNavbarToggleOption[] = [
+    { value: 'ru', label: 'Русский' },
+    { value: 'en', label: 'English' },
+  ]
 
-	const themeModeOptions: AppLayoutNavbarThemeModeOption[] = [
-		{ value: 'light', label: 'Light' },
-		{ value: 'dark', label: 'Dark' }
-	]
+  const themeFamilyOptions: AppLayoutNavbarThemeFamilyOption[] = [
+    { value: 'base', label: 'Base' },
+    { value: 'hermes', label: 'Hermes' },
+  ]
 
-	const notifications = [
-		{
-			id: 'vault-unlock-required',
-			title: 'Vault требует разблокировки',
-			body: 'Провайдеры не смогут синхронизироваться, пока локальное хранилище секретов закрыто.',
-			sourceLabel: 'System health',
-			timeLabel: '2 мин назад',
-			icon: 'tabler:lock-exclamation',
-			tone: 'warning'
-		},
-		{
-			id: 'review-candidates-ready',
-			title: 'Новые кандидаты на review',
-			body: '3 входящих сигнала готовы к проверке перед продвижением в память.',
-			sourceLabel: 'Review',
-			timeLabel: '18 мин назад',
-			icon: 'tabler:inbox',
-			tone: 'info'
-		},
-		{
-			id: 'event-spine-connected',
-			title: 'Event spine подключён',
-			body: 'Realtime stream восстановил соединение и принимает новые события.',
-			sourceLabel: 'Runtime',
-			timeLabel: '1 ч назад',
-			icon: 'tabler:activity',
-			tone: 'success'
-		}
-	] as const satisfies readonly AppLayoutNavbarNotification[]
+  const themeModeOptions: AppLayoutNavbarThemeModeOption[] = [
+    { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
+  ]
 
-	const notificationToasts = computed<AppLayoutNotificationToast[]>(() => {
-		return notifications.map((notification) => ({
-			id: notification.id,
-			title: notification.title,
-			description: notification.body,
-			variant: notificationToneToToastVariant(notification.tone)
-		}))
-	})
+  const notifications = computed<readonly AppLayoutNavbarNotification[]>(() =>
+    (notificationsStore?.notificationItems ?? []).map(navbarNotification)
+  )
 
-	function selectThemeFamily(value: string): void {
-		if (!isUiThemeFamily(value)) return
+  const notificationToasts = computed<AppLayoutNotificationToast[]>(() => {
+    return notifications.value.map((notification) => ({
+      id: notification.id,
+      title: notification.title,
+      description: notification.body,
+      variant: notificationToneToToastVariant(notification.tone),
+    }))
+  })
+  const notificationsCount = computed(() => notifications.value.length)
 
-		currentThemeFamily.value = value
-	}
+  void refreshAccountNavigation()
+  void refreshHealthChecks()
+  if (getCurrentInstance()) {
+    onMounted(() => {
+      pollingActive = true
+      scheduleHealthRefresh(nextHealthRefreshDelay())
+      scheduleAccountRefresh(nextAccountRefreshDelay())
+    })
+    onBeforeUnmount(() => {
+      pollingActive = false
+      clearHealthRefresh()
+      clearAccountRefresh()
+    })
+  }
 
-	function selectThemeMode(value: string): void {
-		if (!isUiThemeMode(value)) return
+  function selectThemeFamily(value: string): void {
+    if (!isUiThemeFamily(value)) return
 
-		currentThemeMode.value = value
-	}
+    currentThemeFamily.value = value
+  }
 
-	function selectNavigationItem(itemId: string): void {
-		const path = findRoutePath(routeTree, itemId)
-		const selectedNode = path?.at(-1)
-		if (!selectedNode) return
+  function selectThemeMode(value: string): void {
+    if (!isUiThemeMode(value)) return
 
-		selectedRouteId.value = defaultRouteLeaf(selectedNode).id
-	}
+    currentThemeMode.value = value
+  }
 
-	return {
-		breadcrumbs,
-		healthChecks,
-		navigationLevels,
-		currentTheme,
-		currentThemeFamily,
-		currentThemeMode,
-		currentLanguage: 'ru',
-		languageOptions,
-		notifications,
-		notificationToasts,
-		notificationToastVisibleMs,
-		selectNavigationItem,
-		selectThemeFamily,
-		selectThemeMode,
-		themeFamilyOptions,
-		themeModeOptions,
-		healthStatusLabelVisibleMs,
-		notificationsCount: notifications.length
-	}
+  function selectNavigationItem(itemId: string): void {
+    const path = findRoutePath(routeTree.value, itemId)
+    const selectedNode = path?.at(-1)
+    if (!selectedNode) return
+
+    selectedRouteId.value = defaultRouteLeaf(selectedNode).id
+  }
+
+  function selectNotification(notificationId: string): void {
+    const notification = notificationsStore?.notificationItems.find(
+      (item) => item.id === notificationId
+    )
+    if (!notification) return
+    if (!notification.targetView && !notification.targetId) return
+
+    if (
+      notification.targetView &&
+      findRoutePath(routeTree.value, notification.targetView)
+    ) {
+      selectedRouteId.value = notification.targetView
+    }
+
+    notificationsStore?.openNotificationTarget(notification)
+  }
+
+  function dismissNotification(notificationId: string): void {
+    notificationsStore?.dismissNotification(notificationId)
+  }
+
+  function clearNotifications(): void {
+    notificationsStore?.clearNotifications()
+  }
+
+  return {
+    accountNavigationError,
+    breadcrumbs,
+    healthChecks,
+    navigationLevels,
+    selectedRouteId,
+    selectedTopLevelRouteId,
+    currentTheme,
+    currentThemeFamily,
+    currentThemeMode,
+    currentLanguage: 'ru',
+    languageOptions,
+    notifications,
+    notificationToasts,
+    notificationToastVisibleMs,
+    clearNotifications,
+    dismissNotification,
+    selectNavigationItem,
+    selectNotification,
+    selectThemeFamily,
+    selectThemeMode,
+    themeFamilyOptions,
+    themeModeOptions,
+    healthStatusLabelVisibleMs,
+    notificationsCount,
+  }
+
+  async function refreshAccountNavigation(): Promise<void> {
+    try {
+      const [mailResponse, telegramResponse, whatsappResponse] =
+        await Promise.all([
+          fetchProviderAccounts(),
+          fetchTelegramAccounts(),
+          fetchWhatsappAccounts(false),
+        ])
+
+      accountNavigation.value = {
+        mail: mailResponse.items.filter(isVisibleMailAccount),
+        telegram: telegramResponse.items.filter(isVisibleTelegramAccount),
+        whatsapp: whatsappResponse.items.filter(isVisibleWhatsappAccount),
+      }
+      accountNavigationError.value = ''
+    } catch (error) {
+      accountNavigation.value = emptyAccountNavigation()
+      accountNavigationError.value =
+        error instanceof Error
+          ? error.message
+          : 'Navigation account load failed'
+    }
+  }
+
+  async function refreshHealthChecks(): Promise<void> {
+    const [readinessResult, mailSyncResult] = await Promise.allSettled([
+      fetchBackendReadiness(),
+      fetchMailSyncStatusSafely(),
+    ])
+
+    backendHealthChecks.value =
+      readinessResult.status === 'fulfilled'
+        ? backendReadinessHealthChecks(readinessResult.value)
+        : [backendErrorHealthCheck(readinessResult.reason)]
+    mailSyncHealthChecks.value =
+      mailSyncResult.status === 'fulfilled'
+        ? mailSyncStatusHealthChecks(mailSyncResult.value.items)
+        : [mailSyncErrorHealthCheck(mailSyncResult.reason)]
+  }
+
+  async function fetchBackendReadiness(): Promise<BackendReadinessResponse> {
+    return ApiClient.instance.get<BackendReadinessResponse>(
+      '/readyz',
+      'Backend readiness request failed'
+    )
+  }
+
+  async function fetchMailSyncStatusSafely(): Promise<
+    Awaited<ReturnType<typeof fetchMailSyncStatus>>
+  > {
+    return fetchMailSyncStatus()
+  }
+
+  function scheduleHealthRefresh(delayMs: number): void {
+    clearHealthRefresh()
+    healthRefreshTimer = window.setTimeout(() => {
+      healthRefreshTimer = undefined
+      void refreshHealthChecks().finally(() => {
+        if (pollingActive) scheduleHealthRefresh(nextHealthRefreshDelay())
+      })
+    }, delayMs)
+  }
+
+  function scheduleAccountRefresh(delayMs: number): void {
+    clearAccountRefresh()
+    accountRefreshTimer = window.setTimeout(() => {
+      accountRefreshTimer = undefined
+      void refreshAccountNavigation().finally(() => {
+        if (pollingActive) scheduleAccountRefresh(nextAccountRefreshDelay())
+      })
+    }, delayMs)
+  }
+
+  function nextHealthRefreshDelay(): number {
+    return healthChecksNeedRecovery(healthChecks.value)
+      ? HEALTH_RECOVERY_REFRESH_MS
+      : HEALTH_OK_REFRESH_MS
+  }
+
+  function nextAccountRefreshDelay(): number {
+    return accountNavigationError.value
+      ? ACCOUNT_RECOVERY_REFRESH_MS
+      : ACCOUNT_REFRESH_MS
+  }
+
+  function clearHealthRefresh(): void {
+    if (healthRefreshTimer === undefined) return
+    window.clearTimeout(healthRefreshTimer)
+    healthRefreshTimer = undefined
+  }
+
+  function clearAccountRefresh(): void {
+    if (accountRefreshTimer === undefined) return
+    window.clearTimeout(accountRefreshTimer)
+    accountRefreshTimer = undefined
+  }
+}
+
+const communicationsNavbarSurfaceIds = [
+  'mail',
+  'telegram',
+  'whatsapp',
+] as const satisfies readonly CommunicationSubSurfaceId[]
+
+function isCommunicationsNavbarSurfaceId(
+  channelId: CommunicationSubSurfaceId
+): channelId is (typeof communicationsNavbarSurfaceIds)[number] {
+  return (
+    communicationsNavbarSurfaceIds as readonly CommunicationSubSurfaceId[]
+  ).includes(channelId)
+}
+
+function communicationRouteIcon(channelId: CommunicationSubSurfaceId): string {
+  if (channelId === 'mail') return 'tabler:mail'
+  if (channelId === 'telegram') return 'tabler:brand-telegram'
+  if (channelId === 'whatsapp') return 'tabler:brand-whatsapp'
+
+  return 'tabler:message-circle'
+}
+
+function communicationRouteNode(
+  channelId: (typeof communicationsNavbarSurfaceIds)[number],
+  label: string,
+  accountNavigation: AppLayoutNavbarAccountNavigationState
+): AppLayoutNavbarRouteNode {
+  const children = communicationAccountRouteNodes(channelId, accountNavigation)
+
+  return {
+    id: `communications-${channelId}`,
+    label,
+    icon: communicationRouteIcon(channelId),
+    iconTone: communicationRouteIconTone(channelId),
+    ...(children.length > 0 ? { children } : {}),
+  }
+}
+
+function communicationAccountRouteNodes(
+  channelId: (typeof communicationsNavbarSurfaceIds)[number],
+  accountNavigation: AppLayoutNavbarAccountNavigationState
+): AppLayoutNavbarRouteNode[] {
+  if (channelId === 'mail') {
+    return accountNavigation.mail.map((account) => ({
+      id: accountRouteId(channelId, account.account_id),
+      label: mailAccountLabel(account),
+      icon: 'tabler:mail-opened',
+      iconTone: 'mail',
+    }))
+  }
+
+  if (channelId === 'telegram') {
+    return accountNavigation.telegram.map((account) => ({
+      id: accountRouteId(channelId, account.account_id),
+      label: providerRuntimeAccountLabel(account),
+      icon: 'tabler:user-circle',
+      iconTone: 'telegram',
+    }))
+  }
+
+  return accountNavigation.whatsapp.map((account) => ({
+    id: accountRouteId(channelId, account.account_id),
+    label: providerRuntimeAccountLabel(account),
+    icon: 'tabler:user-circle',
+    iconTone: 'whatsapp',
+  }))
+}
+
+function accountRouteId(
+  channelId: (typeof communicationsNavbarSurfaceIds)[number],
+  accountId: string
+): string {
+  return `communications-${channelId}-account:${encodeURIComponent(accountId)}`
+}
+
+function isVisibleMailAccount(account: ProviderAccount): boolean {
+  return account.is_active !== false
+}
+
+function isVisibleTelegramAccount(account: TelegramAccount): boolean {
+  return account.lifecycle_state !== 'removed'
+}
+
+function isVisibleWhatsappAccount(account: WhatsappAccountSummary): boolean {
+  return account.lifecycle_state !== 'removed'
+}
+
+function mailAccountLabel(account: ProviderAccount): string {
+  return firstNonEmpty([
+    account.label,
+    account.email,
+    account.display_name,
+    account.external_account_id,
+    account.account_id,
+  ])
+}
+
+function providerRuntimeAccountLabel(
+  account: TelegramAccount | WhatsappAccountSummary
+): string {
+  return firstNonEmpty([
+    account.display_name,
+    account.external_account_id,
+    account.account_id,
+  ])
+}
+
+function firstNonEmpty(values: readonly (string | null | undefined)[]): string {
+  for (const value of values) {
+    const label = value?.trim()
+    if (label) return label
+  }
+
+  return 'Account'
+}
+
+function emptyAccountNavigation(): AppLayoutNavbarAccountNavigationState {
+  return {
+    mail: [],
+    telegram: [],
+    whatsapp: [],
+  }
+}
+
+function communicationRouteIconTone(
+  channelId: CommunicationSubSurfaceId
+): AppLayoutNavbarNavigationIconTone {
+  if (channelId === 'mail') return 'mail'
+  if (channelId === 'telegram') return 'telegram'
+  if (channelId === 'whatsapp') return 'whatsapp'
+
+  return 'channels'
 }
 
 function navigationLevelLabel(index: number): string {
-	if (index === 0) return 'Main menu'
-	if (index === 1) return 'Sub menu'
-	return 'Elem'
+  if (index === 0) return 'Main menu'
+  if (index === 1) return 'Sub menu'
+  return 'Elem'
 }
 
 function notificationToneToToastVariant(
-	tone: AppLayoutNavbarNotification['tone']
+  tone: AppLayoutNavbarNotification['tone']
 ): AppLayoutNotificationToast['variant'] {
-	if (tone === 'danger') return 'error'
+  if (tone === 'danger') return 'error'
 
-	return tone
+  return tone
 }
 
-function toNavigationItem(node: AppLayoutNavbarRouteNode): AppLayoutNavbarNavigationItem {
-	return {
-		id: node.id,
-		label: node.label,
-		icon: node.icon,
-		iconTone: node.iconTone
-	}
+function navbarNotification(
+  notification: NotificationItem
+): AppLayoutNavbarNotification {
+  return {
+    id: notification.id,
+    title: notification.title,
+    body: notification.body,
+    sourceLabel: notification.sourceLabel ?? 'Hermes',
+    timeLabel: notificationTimeLabel(notification.time),
+    icon: notification.icon,
+    tone: notification.tone ?? 'info',
+    targetView: notification.targetView,
+    targetId: notification.targetId,
+  }
 }
 
-function defaultRouteLeaf(node: AppLayoutNavbarRouteNode): AppLayoutNavbarRouteNode {
-	const firstChild = node.children?.[0]
-	if (!firstChild) return node
+function notificationTimeLabel(time: Date): string {
+  return formatDistanceToNow(time, { addSuffix: true })
+}
 
-	return defaultRouteLeaf(firstChild)
+function toNavigationItem(
+  node: AppLayoutNavbarRouteNode
+): AppLayoutNavbarNavigationItem {
+  return {
+    id: node.id,
+    label: node.label,
+    icon: node.icon,
+    iconTone: node.iconTone,
+  }
+}
+
+function defaultRouteLeaf(
+  node: AppLayoutNavbarRouteNode
+): AppLayoutNavbarRouteNode {
+  if (node.id === 'communications') {
+    return (
+      node.children?.find((child) => child.id === 'communications-mail') ?? node
+    )
+  }
+  if (isCommunicationChannelRouteId(node.id)) return node
+
+  const firstChild = node.children?.[0]
+  if (!firstChild) return node
+
+  return defaultRouteLeaf(firstChild)
+}
+
+function isCommunicationChannelRouteId(routeId: string): boolean {
+  return communicationsNavbarSurfaceIds.some(
+    (channelId) => routeId === `communications-${channelId}`
+  )
 }
 
 function findRoutePath(
-	nodes: readonly AppLayoutNavbarRouteNode[],
-	itemId: string,
-	ancestors: readonly AppLayoutNavbarRouteNode[] = []
+  nodes: readonly AppLayoutNavbarRouteNode[],
+  itemId: string,
+  ancestors: readonly AppLayoutNavbarRouteNode[] = []
 ): AppLayoutNavbarRouteNode[] | undefined {
-	for (const node of nodes) {
-		const path = [...ancestors, node]
-		if (node.id === itemId) {
-			return path
-		}
+  for (const node of nodes) {
+    const path = [...ancestors, node]
+    if (node.id === itemId) {
+      return path
+    }
 
-		const childPath = node.children ? findRoutePath(node.children, itemId, path) : undefined
-		if (childPath) {
-			return childPath
-		}
-	}
+    const childPath = node.children
+      ? findRoutePath(node.children, itemId, path)
+      : undefined
+    if (childPath) {
+      return childPath
+    }
+  }
 
-	return undefined
+  return undefined
 }

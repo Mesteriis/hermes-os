@@ -1,11 +1,12 @@
 use std::fmt::Debug;
 use std::time::Duration;
 
+use async_imap::types::{Name, NameAttribute};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
 use futures::TryStreamExt;
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::integrations::mail::sync::{
@@ -18,7 +19,7 @@ use super::helpers::{
     imap_checkpoint, imap_uid_search_query, next_imap_uid_floor, retain_uids_from_floor,
     select_uids_for_fetch, sha256_fingerprint, uid_set,
 };
-use super::options::ImapFetchOptions;
+use super::options::{ImapFetchOptions, ImapMailboxListOptions};
 
 const IMAP_UID_FETCH_CHUNK_SIZE: usize = 10;
 const IMAP_UID_FETCH_TIMEOUT_SECONDS: u64 = 60;
@@ -47,6 +48,68 @@ impl ImapNetworkClient {
             fetch_imap_with_client(async_imap::Client::new(tcp_stream), password, options).await
         }
     }
+
+    pub async fn list_mailboxes(
+        &self,
+        password: &ResolvedSecret,
+        options: &ImapMailboxListOptions,
+    ) -> Result<Vec<String>, EmailProviderNetworkError> {
+        options.validate()?;
+
+        let address = (options.host.as_str(), options.port);
+        let tcp_stream = tokio::net::TcpStream::connect(address).await?;
+        if options.tls {
+            let tls_stream = async_native_tls::connect(options.host.as_str(), tcp_stream).await?;
+            list_imap_mailboxes_with_client(async_imap::Client::new(tls_stream), password, options)
+                .await
+        } else {
+            list_imap_mailboxes_with_client(async_imap::Client::new(tcp_stream), password, options)
+                .await
+        }
+    }
+}
+
+async fn list_imap_mailboxes_with_client<T>(
+    mut client: async_imap::Client<T>,
+    password: &ResolvedSecret,
+    options: &ImapMailboxListOptions,
+) -> Result<Vec<String>, EmailProviderNetworkError>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Debug + Send,
+{
+    client
+        .read_response()
+        .await?
+        .ok_or(EmailProviderNetworkError::UnexpectedProviderResponse {
+            message: "missing IMAP greeting",
+        })?;
+
+    let mut session = client
+        .login(&options.username, password.expose_for_runtime())
+        .await
+        .map_err(|(error, _client)| EmailProviderNetworkError::Imap(error))?;
+    let names = {
+        let stream = session.list(None, Some("*")).await?;
+        stream.try_collect::<Vec<_>>().await?
+    };
+    session.logout().await?;
+
+    let mut mailboxes = Vec::new();
+    for name in names {
+        if imap_mailbox_name_is_fetchable(&name) {
+            let mailbox = name.name().trim().to_owned();
+            if !mailbox.is_empty() && !mailboxes.contains(&mailbox) {
+                mailboxes.push(mailbox);
+            }
+        }
+    }
+    if mailboxes.is_empty() {
+        return Err(EmailProviderNetworkError::UnexpectedProviderResponse {
+            message: "no selectable IMAP mailboxes",
+        });
+    }
+
+    Ok(mailboxes)
 }
 
 async fn fetch_imap_with_client<T>(
@@ -84,11 +147,7 @@ where
     };
 
     let messages = fetch_imap_uid_chunks(&mut session, &mailbox, options, &uids).await?;
-    let latest_uid = messages
-        .iter()
-        .filter_map(|message| message.provider_record_id.parse::<u32>().ok())
-        .max()
-        .or(options.last_seen_uid);
+    let latest_uid = latest_imap_uid(&messages, options.last_seen_uid);
     session.logout().await?;
 
     Ok(EmailSyncBatch {
@@ -135,16 +194,16 @@ where
             let body = fetched_message
                 .body()
                 .ok_or(EmailProviderNetworkError::MissingProviderField { field: "rfc822" })?;
-            let uid_string = uid.to_string();
+            let provider_record_id = imap_provider_record_id(&options.mailbox, uid);
             let occurred_at = fetched_message
                 .internal_date()
                 .map(|internal_date| internal_date.with_timezone(&Utc));
 
             messages.push(FetchedCommunicationSourceMessage {
-                provider_record_id: uid_string.clone(),
+                provider_record_id: provider_record_id.clone(),
                 source_fingerprint: sha256_fingerprint([
                     "imap".as_bytes(),
-                    uid_string.as_bytes(),
+                    provider_record_id.as_bytes(),
                     body,
                 ]),
                 occurred_at,
@@ -162,4 +221,70 @@ where
     }
 
     Ok(messages)
+}
+
+fn imap_provider_record_id(mailbox: &str, uid: u32) -> String {
+    if mailbox.eq_ignore_ascii_case("INBOX") {
+        return uid.to_string();
+    }
+
+    format!("{}:{uid}", imap_mailbox_stream_id(mailbox))
+}
+
+fn imap_mailbox_name_is_fetchable(name: &Name) -> bool {
+    !name
+        .attributes()
+        .iter()
+        .any(|attribute| matches!(attribute, NameAttribute::NoSelect | NameAttribute::All))
+}
+
+fn latest_imap_uid(
+    messages: &[FetchedCommunicationSourceMessage],
+    fallback: Option<u32>,
+) -> Option<u32> {
+    messages
+        .iter()
+        .filter_map(|message| payload_uid(&message.payload))
+        .max()
+        .or(fallback)
+}
+
+fn payload_uid(payload: &Value) -> Option<u32> {
+    payload
+        .get("uid")
+        .and_then(Value::as_u64)
+        .and_then(|uid| u32::try_from(uid).ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{imap_provider_record_id, latest_imap_uid};
+    use crate::integrations::mail::sync::FetchedCommunicationSourceMessage;
+
+    #[test]
+    fn imap_provider_record_id_keeps_inbox_compatibility_and_namespaces_other_mailboxes() {
+        assert_eq!(imap_provider_record_id("INBOX", 42), "42");
+        assert_eq!(imap_provider_record_id("Junk", 42), "imap:Junk:42");
+        assert_eq!(
+            imap_provider_record_id("Projects:2026%Q2", 42),
+            "imap:Projects%3A2026%25Q2:42"
+        );
+    }
+
+    #[test]
+    fn latest_imap_uid_uses_payload_uid_for_namespaced_records() {
+        let messages = vec![FetchedCommunicationSourceMessage {
+            provider_record_id: "imap:Junk:42".to_owned(),
+            source_fingerprint: "sha256:latest-imap-uid".to_owned(),
+            occurred_at: None,
+            payload: json!({
+                "mailbox": "Junk",
+                "uid": 42
+            }),
+        }];
+
+        assert_eq!(latest_imap_uid(&messages, Some(10)), Some(42));
+    }
 }

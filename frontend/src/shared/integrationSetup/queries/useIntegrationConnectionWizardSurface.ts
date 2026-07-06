@@ -1,7 +1,13 @@
 import { computed, ref, toValue, watch, type MaybeRefOrGetter } from 'vue'
+import { useMutation } from '@tanstack/vue-query'
 import { useStartGmailOAuthSetupMutation } from '../../../integrations/mail/queries/accountSetupQueries'
 import { useOpenWhatsappWebCompanionMutation } from '../../../integrations/whatsapp/queries/useWhatsappRuntimeQuery'
 import { useI18n } from '../../../platform/i18n'
+import {
+  fetchTelegramQrLoginStatus,
+  startTelegramQrLogin,
+  type TelegramQrLoginStatusResponse,
+} from '../api/telegramQrLogin'
 import {
   connectionProviderIdFromAccountKind,
   useIntegrationConnectionWizardStore,
@@ -74,6 +80,8 @@ export function useIntegrationConnectionWizardSurface(options: {
   const { t } = useI18n()
   const wizard = useIntegrationConnectionWizardStore()
   const gmailOAuthSetup = useStartGmailOAuthSetupMutation()
+  const telegramQrLogin = useMutation({ mutationFn: startTelegramQrLogin })
+  const telegramQrStatus = useMutation({ mutationFn: fetchTelegramQrLoginStatus })
   const openCompanionMutation = useOpenWhatsappWebCompanionMutation()
 
   const activeFlowId = ref<ConnectionFlowPattern>('browser_callback')
@@ -175,12 +183,14 @@ export function useIntegrationConnectionWizardSurface(options: {
     }
   })
   const isSubmitting = computed(
-    () => gmailOAuthSetup.isPending.value || openCompanionMutation.isPending.value
+    () => gmailOAuthSetup.isPending.value || telegramQrLogin.isPending.value || openCompanionMutation.isPending.value
   )
   const canSubmit = computed(() => {
     switch (selectedProvider.value.id) {
       case 'mail':
         return !gmailOAuthSetup.isPending.value
+      case 'telegram':
+        return !telegramQrLogin.isPending.value
       case 'whatsapp':
         return isSelectedWhatsAppAccount.value && !openCompanionMutation.isPending.value
       default:
@@ -194,8 +204,21 @@ export function useIntegrationConnectionWizardSurface(options: {
     if (selectedProvider.value.id === 'whatsapp' && openCompanionMutation.isPending.value) {
       return t('Opening QR companion...')
     }
+    if (selectedProvider.value.id === 'telegram' && telegramQrLogin.isPending.value) {
+      return t('Starting Telegram QR...')
+    }
     return t(selectedProvider.value.ctaLabel)
   })
+  const guidedQrImage = computed(() => {
+    const qrSvg = wizard.guidedResult?.qrSvg
+    if (!qrSvg) return null
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(qrSvg)}`
+  })
+  const canRefreshGuidedResult = computed(() =>
+    selectedProvider.value.id === 'telegram' &&
+    Boolean(wizard.guidedResult?.setupId) &&
+    !telegramQrStatus.isPending.value
+  )
 
   function providerStatus(providerId: string): string {
     if (providerId === 'whatsapp' && isSelectedWhatsAppAccount.value) {
@@ -259,10 +282,34 @@ export function useIntegrationConnectionWizardSurface(options: {
     }
   }
 
+  async function startManagedTelegramQrLogin() {
+    try {
+      const response = await telegramQrLogin.mutateAsync(wizard.buildTelegramQrLoginRequest())
+      wizard.setSuccess(telegramQrResult(response))
+    } catch (error) {
+      wizard.setError(error instanceof Error ? error.message : t('Failed to start Telegram QR login.'))
+    }
+  }
+
+  async function handleRefreshGuidedResult() {
+    const setupId = wizard.guidedResult?.setupId
+    if (!setupId) return
+
+    try {
+      const response = await telegramQrStatus.mutateAsync(setupId)
+      wizard.setSuccess(telegramQrResult(response))
+    } catch (error) {
+      wizard.setError(error instanceof Error ? error.message : t('Failed to refresh Telegram QR login status.'))
+    }
+  }
+
   async function handleSubmit() {
     switch (selectedProvider.value.id) {
       case 'mail':
         await startManagedMailConnection()
+        return
+      case 'telegram':
+        await startManagedTelegramQrLogin()
         return
       case 'whatsapp':
         await openManagedWhatsappCompanion()
@@ -315,8 +362,11 @@ export function useIntegrationConnectionWizardSurface(options: {
     activeFlowIcon,
     activeFlowId,
     canSubmit,
+    canRefreshGuidedResult,
     closeWizard,
     exceptionFlowCard,
+    guidedQrImage,
+    handleRefreshGuidedResult,
     handleSubmit,
     isSubmitting,
     launchSteps,
@@ -328,5 +378,16 @@ export function useIntegrationConnectionWizardSurface(options: {
     submitLabel,
     t,
     wizard,
+  }
+}
+
+function telegramQrResult(response: TelegramQrLoginStatusResponse) {
+  return {
+    title: 'Telegram QR login started',
+    message: response.message || `Status: ${response.status}`,
+    setupId: response.setup_id,
+    status: response.status,
+    qrSvg: response.qr_svg ?? undefined,
+    qrLink: response.qr_link ?? undefined,
   }
 }

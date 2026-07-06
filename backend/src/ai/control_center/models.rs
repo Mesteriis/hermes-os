@@ -39,6 +39,112 @@ pub struct AiProviderPreset {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AiProviderAuthStartRequest {
+    pub provider_kind: String,
+    pub provider_key: String,
+    pub display_name: Option<String>,
+    pub callback_url: String,
+}
+
+impl AiProviderAuthStartRequest {
+    pub(super) fn validate(&self) -> Result<(), AiControlCenterError> {
+        let provider_kind = self.provider_kind.trim();
+        validate_provider_kind(provider_kind)?;
+        if provider_kind == "api" {
+            return Err(AiControlCenterError::InvalidRequest(
+                "API providers use API-token setup, not local callback authorization".to_owned(),
+            ));
+        }
+        validate_non_empty("provider_key", &self.provider_key)?;
+        validate_non_empty("callback_url", &self.callback_url)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AiProviderAuthPendingGrant {
+    pub setup_id: String,
+    pub state: String,
+    pub provider_id: String,
+    pub provider_kind: String,
+    pub provider_key: String,
+    pub display_name: String,
+    pub callback_url: String,
+    pub login_command: Option<String>,
+    pub status: String,
+    pub message: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+impl AiProviderAuthPendingGrant {
+    pub fn response(&self, provider: Option<AiProviderAccount>) -> AiProviderAuthStartResponse {
+        AiProviderAuthStartResponse {
+            setup_id: self.setup_id.clone(),
+            provider_id: self.provider_id.clone(),
+            provider_kind: self.provider_kind.clone(),
+            provider_key: self.provider_key.clone(),
+            display_name: self.display_name.clone(),
+            callback_url: self.callback_url.clone(),
+            login_command: self.login_command.clone(),
+            status: self.status.clone(),
+            message: self.message.clone(),
+            expires_at: self.expires_at,
+            provider,
+        }
+    }
+
+    pub fn status_response(
+        &self,
+        provider: Option<AiProviderAccount>,
+    ) -> AiProviderAuthStatusResponse {
+        AiProviderAuthStatusResponse {
+            setup_id: self.setup_id.clone(),
+            provider_id: self.provider_id.clone(),
+            provider_kind: self.provider_kind.clone(),
+            provider_key: self.provider_key.clone(),
+            display_name: self.display_name.clone(),
+            callback_url: self.callback_url.clone(),
+            login_command: self.login_command.clone(),
+            status: self.status.clone(),
+            message: self.message.clone(),
+            expires_at: self.expires_at,
+            provider,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct AiProviderAuthStartResponse {
+    pub setup_id: String,
+    pub provider_id: String,
+    pub provider_kind: String,
+    pub provider_key: String,
+    pub display_name: String,
+    pub callback_url: String,
+    pub login_command: Option<String>,
+    pub status: String,
+    pub message: String,
+    pub expires_at: DateTime<Utc>,
+    pub provider: Option<AiProviderAccount>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct AiProviderAuthStatusResponse {
+    pub setup_id: String,
+    pub provider_id: String,
+    pub provider_kind: String,
+    pub provider_key: String,
+    pub display_name: String,
+    pub callback_url: String,
+    pub login_command: Option<String>,
+    pub status: String,
+    pub message: String,
+    pub expires_at: DateTime<Utc>,
+    pub provider: Option<AiProviderAccount>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AiProviderAccount {
     pub provider_id: String,
     pub provider_kind: String,
@@ -109,6 +215,22 @@ pub struct AiProviderPatchRequest {
     pub api_key: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct AiProviderVaultRestore {
+    pub(crate) provider_id: String,
+    pub(crate) provider_kind: String,
+    pub(crate) provider_key: String,
+    pub(crate) display_name: String,
+    pub(crate) status: String,
+    pub(crate) consent_state: String,
+    pub(crate) config: Value,
+    pub(crate) capabilities: Vec<String>,
+    pub(crate) secret_ref: String,
+    pub(crate) secret_purpose: String,
+    pub(crate) secret_metadata: Value,
+    pub(crate) secret_label: String,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AiProviderConsentRequest {
     pub consented: bool,
@@ -151,6 +273,13 @@ pub struct AiModelCatalogItem {
     pub metadata: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AiModelAvailabilityUpdateRequest {
+    pub provider_id: String,
+    pub model_key: String,
+    pub is_available: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

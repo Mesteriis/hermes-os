@@ -6,7 +6,10 @@ use sqlx::postgres::PgPool;
 
 use crate::domains::communications::core::CommunicationIngestionPort;
 use crate::domains::communications::core::CommunicationProviderAccountPort;
-use crate::platform::communications::{SharedEmailProviderSyncPort, plan_email_sync};
+use crate::platform::communications::{
+    SharedEmailProviderSyncPort, email_sync_plan_selects_all_imap_mailboxes,
+    email_sync_plan_stream_ids, imap_mailbox_stream_prefix, plan_email_sync,
+};
 use crate::vault::HostVault;
 
 use super::errors::MailSyncError;
@@ -206,9 +209,17 @@ impl MailBackgroundSyncService {
             .await?
             .ok_or(MailSyncError::AccountNotFound)?;
         if let Ok(plan) = plan_email_sync(&account) {
-            communication_store
-                .delete_checkpoint(account_id, &plan.stream_id)
-                .await?;
+            if email_sync_plan_selects_all_imap_mailboxes(&plan) {
+                communication_store
+                    .delete_checkpoints_with_stream_prefix(account_id, imap_mailbox_stream_prefix())
+                    .await?;
+            } else {
+                for stream_id in email_sync_plan_stream_ids(&plan) {
+                    communication_store
+                        .delete_checkpoint(account_id, &stream_id)
+                        .await?;
+                }
+            }
         }
 
         self.run_account(account_id, MailSyncTrigger::Manual).await

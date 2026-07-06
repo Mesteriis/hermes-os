@@ -1,3 +1,4 @@
+mod ai_provider_recovery;
 mod calendar_restore;
 mod errors;
 mod lifecycle;

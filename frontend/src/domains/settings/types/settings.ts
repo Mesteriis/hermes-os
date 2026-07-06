@@ -33,10 +33,13 @@ export interface ProviderAccountListResponse {
 }
 
 export interface CalendarAccount {
-  id: string
-  provider_kind: string
-  email: string
-  label: string
-  is_active: boolean
-  calendar_ids: string[]
+  account_id: string
+  provider: string
+  account_name: string
+  email: string | null
+  credentials_reference: string | null
+  sync_status: string
+  capabilities: Record<string, unknown>
+  created_at: string
+  updated_at: string
 }

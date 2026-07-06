@@ -83,7 +83,7 @@ export async function fetchCommunicationMessageConnect(
       sender: response.item?.sender ?? '',
       recipients: response.item?.recipients ?? [],
       body_text: response.item?.bodyText ?? '',
-      body_html: null,
+      body_html: response.item?.bodyHtml ?? null,
       occurred_at: response.item?.occurredAt ?? null,
       projected_at: response.item?.projectedAt ?? '',
       channel_kind: response.item?.channelKind ?? '',

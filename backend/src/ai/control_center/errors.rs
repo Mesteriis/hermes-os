@@ -27,6 +27,9 @@ pub enum AiControlCenterError {
     #[error("AI control center payload contains secret-like data")]
     SecretLikePayload,
 
+    #[error("AI provider model sync failed: {0}")]
+    ProviderModelSync(String),
+
     #[error(transparent)]
     SecretReference(#[from] SecretReferenceError),
 

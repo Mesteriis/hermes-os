@@ -2,4 +2,5 @@
 pub(super) struct HostVaultReconciliationSummary {
     pub(super) restored_accounts: usize,
     pub(super) restored_calendar_accounts: usize,
+    pub(super) restored_ai_providers: usize,
 }

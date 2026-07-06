@@ -25,7 +25,7 @@ impl MailBackgroundSyncService {
                 host,
                 port,
                 tls,
-                mailbox,
+                mailboxes,
             } => {
                 self.sync_imap(
                     context,
@@ -33,7 +33,7 @@ impl MailBackgroundSyncService {
                         host,
                         port: *port,
                         tls: *tls,
-                        mailbox,
+                        mailboxes,
                     },
                 )
                 .await

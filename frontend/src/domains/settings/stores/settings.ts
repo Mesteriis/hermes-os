@@ -1,18 +1,19 @@
-import { defineStore } from 'pinia'
+import { defineStore, getActivePinia } from 'pinia'
 import { ref, computed } from 'vue'
+import { useNotificationsStore, type NotificationItem } from '../../../shared/stores/notifications'
 
 export type SettingsSection =
-  | 'appearance'
+  | 'accounts'
   | 'language'
   | 'application'
-  | 'sidebar'
-  | 'integrations'
   | 'signal-hub'
   | 'ai'
 
+let settingsNotificationCounter = 0
+
 export const useSettingsStore = defineStore('settings-ui', () => {
   // --- UI state ---
-  const selectedSection = ref<SettingsSection>('appearance')
+  const selectedSection = ref<SettingsSection>('accounts')
   const actionMessage = ref('')
   const errorMessage = ref('')
 
@@ -37,11 +38,13 @@ export const useSettingsStore = defineStore('settings-ui', () => {
   function setActionMessage(msg: string) {
     actionMessage.value = msg
     errorMessage.value = ''
+    publishSettingsNotification('success', 'Settings action completed', msg)
   }
 
   function setError(msg: string) {
     errorMessage.value = msg
     actionMessage.value = ''
+    publishSettingsNotification('danger', 'Settings action failed', msg)
   }
 
   function clearMessages() {
@@ -55,6 +58,28 @@ export const useSettingsStore = defineStore('settings-ui', () => {
 
   function updateNewSidebarGroupLabel(label: string) {
     newSidebarGroupLabel.value = label
+  }
+
+  function publishSettingsNotification(
+    tone: NonNullable<NotificationItem['tone']>,
+    title: string,
+    body: string
+  ): void {
+    if (!body.trim()) return
+    if (!getActivePinia()) return
+
+    useNotificationsStore().addNotification({
+      id: `settings-${Date.now()}-${++settingsNotificationCounter}`,
+      title,
+      body,
+      icon: tone === 'success' ? 'tabler:check' : 'tabler:alert-circle',
+      tone,
+      sourceLabel: 'Settings',
+      time: new Date(),
+      targetView: 'settings',
+      targetId: selectedSection.value,
+      dedupeKey: `settings:${tone}:${selectedSection.value}:${body}`,
+    })
   }
 
   return {

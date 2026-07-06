@@ -1,14 +1,20 @@
 use axum::Json;
-use axum::extract::{Path, State};
-use axum::http::HeaderMap;
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::Html;
+use serde::Deserialize;
 
 use crate::ai::control_center::{
-    AiControlCenterError, AiModelRoute, AiModelRouteUpdateRequest, AiPromptActivateRequest,
+    AiControlCenterError, AiControlCenterStore, AiModelAvailabilityUpdateRequest,
+    AiModelCatalogItem, AiModelRoute, AiModelRouteUpdateRequest, AiPromptActivateRequest,
     AiPromptCreateRequest, AiPromptEvalRun, AiPromptTemplate, AiPromptTestRequest, AiPromptVersion,
-    AiPromptVersionCreateRequest, AiProviderAccount, AiProviderCommandKind,
-    AiProviderCommandResponse, AiProviderConsentRequest, AiProviderCreateRequest,
-    AiProviderPatchRequest, AiSettingsOverviewResponse, store_api_key_in_host_vault,
+    AiPromptVersionCreateRequest, AiProviderAccount, AiProviderAuthPendingGrant,
+    AiProviderAuthStartRequest, AiProviderAuthStartResponse, AiProviderAuthStatusResponse,
+    AiProviderCommandKind, AiProviderCommandResponse, AiProviderConsentRequest,
+    AiProviderCreateRequest, AiProviderPatchRequest, AiSettingsOverviewResponse,
+    connect_pending_ai_provider_auth, start_local_provider_auth, store_api_key_in_host_vault,
 };
+use crate::app::api_support::html_escape;
 use crate::app::{ApiError, AppState};
 use crate::vault::{HostVaultError, VaultMode};
 
@@ -45,6 +51,9 @@ pub(crate) async fn post_ai_provider(
             return Err(ApiError::DatabaseNotConfigured);
         };
         store_api_key_in_host_vault(pool, &state.vault, &provider.provider_id, &api_key).await?;
+        if request.enabled.unwrap_or(true) {
+            activate_api_provider_after_secret(&store, &provider.provider_id).await?;
+        }
         let Some(provider) = store.provider(&provider.provider_id).await? else {
             return Err(ApiError::NotFound);
         };
@@ -75,6 +84,9 @@ pub(crate) async fn patch_ai_provider(
             return Err(ApiError::DatabaseNotConfigured);
         };
         store_api_key_in_host_vault(pool, &state.vault, &provider.provider_id, &api_key).await?;
+        if request.enabled != Some(false) && provider.status == "needs_setup" {
+            activate_api_provider_after_secret(&store, &provider.provider_id).await?;
+        }
         let Some(provider) = store.provider(&provider.provider_id).await? else {
             return Err(ApiError::NotFound);
         };
@@ -97,10 +109,64 @@ pub(crate) async fn post_ai_provider_test(
 
 pub(crate) async fn post_ai_provider_sync_models(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(provider_id): Path<String>,
 ) -> Result<Json<AiProviderCommandResponse>, ApiError> {
+    let store = ai_control_center_store(&state)?;
+    let provider = store
+        .provider(&provider_id)
+        .await?
+        .ok_or(AiControlCenterError::ProviderNotFound)?;
+    if provider.provider_kind == "api" {
+        ensure_host_vault_unlocked_for_api_key(&state)?;
+        let secret_ref = store
+            .api_key_secret_ref(&provider.provider_id)
+            .await?
+            .ok_or_else(|| {
+                AiControlCenterError::InvalidRequest(
+                    "API provider requires a host-vault API key before model sync".to_owned(),
+                )
+            })?;
+        let api_key = state.vault.read_secret(&secret_ref)?;
+        let synced = store
+            .sync_openai_compatible_provider_models(
+                &provider,
+                &api_key,
+                &request_actor_id(&headers),
+            )
+            .await?;
+        return Ok(Json(AiProviderCommandResponse {
+            provider_id: provider.provider_id,
+            command: "sync_models".to_owned(),
+            status: "synced".to_owned(),
+            message: format!("Synchronized {synced} provider models"),
+        }));
+    }
+    if provider.provider_kind == "built_in" && provider.provider_key == "ollama" {
+        let synced = store
+            .sync_ollama_provider_models(&provider, &request_actor_id(&headers))
+            .await?;
+        return Ok(Json(AiProviderCommandResponse {
+            provider_id: provider.provider_id,
+            command: "sync_models".to_owned(),
+            status: "synced".to_owned(),
+            message: format!("Synchronized {synced} Ollama models"),
+        }));
+    }
+    if provider.provider_kind == "cli" {
+        let synced = store
+            .sync_cli_provider_models(&provider, &request_actor_id(&headers))
+            .await?;
+        return Ok(Json(AiProviderCommandResponse {
+            provider_id: provider.provider_id,
+            command: "sync_models".to_owned(),
+            status: "synced".to_owned(),
+            message: format!("Synchronized {synced} CLI settings models"),
+        }));
+    }
+
     Ok(Json(
-        ai_control_center_store(&state)?
+        store
             .provider_command(&provider_id, AiProviderCommandKind::SyncModels)
             .await?,
     ))
@@ -118,12 +184,122 @@ pub(crate) async fn post_ai_provider_consent(
     ))
 }
 
+pub(crate) async fn post_ai_provider_auth_start(
+    State(state): State<AppState>,
+    Json(request): Json<AiProviderAuthStartRequest>,
+) -> Result<Json<AiProviderAuthStartResponse>, ApiError> {
+    let mut pending = start_local_provider_auth(&request).await?;
+    let store = ai_control_center_store(&state)?;
+    let provider = if pending.status == "ready" {
+        connect_pending_ai_provider_auth(&store, &mut pending).await?
+    } else {
+        None
+    };
+    upsert_pending_ai_provider_auth(&state, pending.clone())?;
+    Ok(Json(pending.response(provider)))
+}
+
+pub(crate) async fn get_ai_provider_auth_status(
+    State(state): State<AppState>,
+    Path(setup_id): Path<String>,
+) -> Result<Json<AiProviderAuthStatusResponse>, ApiError> {
+    let mut pending = pending_ai_provider_auth(&state, &setup_id)?;
+    let provider =
+        connect_pending_ai_provider_auth(&ai_control_center_store(&state)?, &mut pending).await?;
+    upsert_pending_ai_provider_auth(&state, pending.clone())?;
+    Ok(Json(pending.status_response(provider)))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct AiProviderAuthCallbackQuery {
+    setup_id: Option<String>,
+    state: Option<String>,
+}
+
+pub(crate) async fn get_ai_provider_auth_callback(
+    State(state): State<AppState>,
+    Query(query): Query<AiProviderAuthCallbackQuery>,
+) -> (StatusCode, Html<String>) {
+    let Some(setup_id) = trimmed_query_value(query.setup_id) else {
+        return ai_provider_auth_callback_error_page(
+            StatusCode::BAD_REQUEST,
+            "Missing AI provider setup id. Start the provider connection again.",
+        );
+    };
+    let Some(callback_state) = trimmed_query_value(query.state) else {
+        return ai_provider_auth_callback_error_page(
+            StatusCode::BAD_REQUEST,
+            "Missing AI provider callback state. Start the provider connection again.",
+        );
+    };
+    let mut pending = match pending_ai_provider_auth(&state, &setup_id) {
+        Ok(pending) => pending,
+        Err(_) => {
+            return ai_provider_auth_callback_error_page(
+                StatusCode::BAD_REQUEST,
+                "AI provider callback expired or was already removed. Start again.",
+            );
+        }
+    };
+    if pending.state != callback_state {
+        return ai_provider_auth_callback_error_page(
+            StatusCode::BAD_REQUEST,
+            "AI provider callback state does not match the pending setup.",
+        );
+    }
+
+    let store = match ai_control_center_store(&state) {
+        Ok(store) => store,
+        Err(_) => {
+            tracing::error!("AI provider callback store unavailable");
+            return ai_provider_auth_callback_error_page(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "AI provider setup is unavailable. Check local backend status.",
+            );
+        }
+    };
+
+    match connect_pending_ai_provider_auth(&store, &mut pending).await {
+        Ok(Some(provider)) => {
+            if upsert_pending_ai_provider_auth(&state, pending.clone()).is_err() {
+                tracing::error!("AI provider callback state update failed");
+            }
+            ai_provider_auth_callback_success_page(&provider)
+        }
+        Ok(None) => {
+            if upsert_pending_ai_provider_auth(&state, pending.clone()).is_err() {
+                tracing::error!("AI provider callback state update failed");
+            }
+            ai_provider_auth_callback_waiting_page(&pending)
+        }
+        Err(error) => {
+            tracing::error!(error = %error, "AI provider callback completion failed");
+            ai_provider_auth_callback_error_page(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "AI provider connection failed. Check local backend status.",
+            )
+        }
+    }
+}
+
 pub(crate) async fn get_ai_models(
     State(state): State<AppState>,
 ) -> Result<Json<AiModelListResponse>, ApiError> {
     Ok(Json(AiModelListResponse {
         items: ai_control_center_store(&state)?.list_models().await?,
     }))
+}
+
+pub(crate) async fn patch_ai_model_availability(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<AiModelAvailabilityUpdateRequest>,
+) -> Result<Json<AiModelCatalogItem>, ApiError> {
+    Ok(Json(
+        ai_control_center_store(&state)?
+            .update_model_availability(&request, &request_actor_id(&headers))
+            .await?,
+    ))
 }
 
 pub(crate) async fn put_ai_model_route(
@@ -221,4 +397,171 @@ fn ensure_host_vault_unlocked_for_api_key(state: &AppState) -> Result<(), ApiErr
         VaultMode::Locked => Err(HostVaultError::Locked.into()),
         VaultMode::Uninitialized => Err(HostVaultError::Uninitialized.into()),
     }
+}
+
+async fn activate_api_provider_after_secret(
+    store: &AiControlCenterStore,
+    provider_id: &str,
+) -> Result<(), ApiError> {
+    store
+        .update_provider(
+            provider_id,
+            &AiProviderPatchRequest {
+                display_name: None,
+                base_url: None,
+                config: None,
+                enabled: Some(true),
+                api_key: None,
+            },
+        )
+        .await?;
+    Ok(())
+}
+
+fn pending_ai_provider_auth(
+    state: &AppState,
+    setup_id: &str,
+) -> Result<AiProviderAuthPendingGrant, ApiError> {
+    state
+        .account_setup
+        .pending_ai_provider_auth
+        .lock()
+        .map_err(|_| ApiError::AccountSetupState)?
+        .get(setup_id.trim())
+        .cloned()
+        .ok_or_else(|| {
+            AiControlCenterError::InvalidRequest(
+                "AI provider authorization setup was not found".to_owned(),
+            )
+            .into()
+        })
+}
+
+fn upsert_pending_ai_provider_auth(
+    state: &AppState,
+    pending: AiProviderAuthPendingGrant,
+) -> Result<(), ApiError> {
+    state
+        .account_setup
+        .pending_ai_provider_auth
+        .lock()
+        .map_err(|_| ApiError::AccountSetupState)?
+        .insert(pending.setup_id.clone(), pending);
+    Ok(())
+}
+
+fn trimmed_query_value(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+fn ai_provider_auth_callback_success_page(
+    provider: &AiProviderAccount,
+) -> (StatusCode, Html<String>) {
+    let display_name = html_escape(&provider.display_name);
+    let provider_id = html_escape(&provider.provider_id);
+    (
+        StatusCode::OK,
+        Html(format!(
+            r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hermes Hub AI provider</title>
+  <style>
+    body {{ margin: 0; font-family: system-ui, sans-serif; color: #182033; background: #f5f6f8; }}
+    main {{ max-width: 720px; margin: 48px auto; background: #fff; border: 1px solid #d9dee7; border-radius: 8px; padding: 24px; }}
+    code {{ display: block; overflow-wrap: anywhere; background: #f8fafc; border: 1px solid #d9dee7; border-radius: 6px; padding: 10px; }}
+  </style>
+  <script>
+    window.setTimeout(function () {{
+      try {{
+        if (window.opener && !window.opener.closed) {{
+          window.opener.postMessage({{ type: 'hermes:ai-provider-connected', providerId: '{provider_id}' }}, '*');
+        }}
+      }} catch (_error) {{}}
+      try {{ window.close(); }} catch (_error) {{}}
+    }}, 350);
+  </script>
+</head>
+<body>
+  <main>
+    <h1>AI provider connected</h1>
+    <p>Hermes Hub connected {display_name} through the local callback flow.</p>
+    <p>Provider</p>
+    <code>{provider_id}</code>
+    <p>This tab will close automatically. Return to Hermes Hub settings if it stays open.</p>
+  </main>
+</body>
+</html>"#
+        )),
+    )
+}
+
+fn ai_provider_auth_callback_waiting_page(
+    pending: &AiProviderAuthPendingGrant,
+) -> (StatusCode, Html<String>) {
+    let message = html_escape(&pending.message);
+    let command = pending
+        .login_command
+        .as_deref()
+        .map(html_escape)
+        .unwrap_or_else(|| "No login command required.".to_owned());
+    (
+        StatusCode::ACCEPTED,
+        Html(format!(
+            r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hermes Hub AI provider</title>
+  <style>
+    body {{ margin: 0; font-family: system-ui, sans-serif; color: #182033; background: #f5f6f8; }}
+    main {{ max-width: 720px; margin: 48px auto; background: #fff; border: 1px solid #d9dee7; border-radius: 8px; padding: 24px; }}
+    code {{ display: block; overflow-wrap: anywhere; background: #f8fafc; border: 1px solid #d9dee7; border-radius: 6px; padding: 10px; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>AI provider authorization required</h1>
+    <p>{message}</p>
+    <p>Command</p>
+    <code>{command}</code>
+    <p>After the CLI is signed in, reopen the Hermes callback link from Settings.</p>
+  </main>
+</body>
+</html>"#
+        )),
+    )
+}
+
+fn ai_provider_auth_callback_error_page(
+    status: StatusCode,
+    message: &str,
+) -> (StatusCode, Html<String>) {
+    let message = html_escape(message);
+    (
+        status,
+        Html(format!(
+            r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hermes Hub AI provider</title>
+  <style>
+    body {{ margin: 0; font-family: system-ui, sans-serif; color: #182033; background: #f5f6f8; }}
+    main {{ max-width: 720px; margin: 48px auto; background: #fff; border: 1px solid #d9dee7; border-radius: 8px; padding: 24px; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>AI provider connection failed</h1>
+    <p>{message}</p>
+    <p>Return to Hermes Hub and start the AI provider connection again.</p>
+  </main>
+</body>
+</html>"#
+        )),
+    )
 }

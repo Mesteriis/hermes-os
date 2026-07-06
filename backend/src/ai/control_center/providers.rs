@@ -1,6 +1,9 @@
+mod auth;
 mod commands;
 mod consent;
 mod create;
+mod model_sync;
 mod queries;
+mod recovery;
 mod secrets;
 mod update;

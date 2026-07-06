@@ -3,6 +3,7 @@ import {
   useSaveDraftMutation,
   useSendMailMutation
 } from '../queries/useCommunicationsQuery'
+import { useCommunicationActionNotifications } from '../queries/communicationActionNotifications'
 import { buildComposeDraftPayload } from '../forms/composeDraftAutosave'
 import {
   composeFormToSendRequest,
@@ -16,6 +17,7 @@ type CommunicationsStore = ReturnType<typeof useCommunicationsStore>
 export function useThreadReplyActions(store: CommunicationsStore) {
   const saveDraftMutation = useSaveDraftMutation()
   const sendMailMutation = useSendMailMutation()
+  const notifications = useCommunicationActionNotifications()
   const isThreadReplySending = computed(() => sendMailMutation.isPending.value)
 
   function handleReplyToThreadMessage(message: ThreadMessage, bodyHtml: string, draftId: string) {
@@ -29,8 +31,11 @@ export function useThreadReplyActions(store: CommunicationsStore) {
         threadReplyComposeForm(message, store.selectedMailAccountId, draftId, bodyHtml)
       ))
       store.setMailActionStatus('Draft saved')
+      notifications.success('Draft saved')
     } catch (e) {
-      store.setMailActionError(e instanceof Error ? e.message : 'Save draft failed')
+      const errorMessage = e instanceof Error ? e.message : 'Save draft failed'
+      store.setMailActionError(errorMessage)
+      notifications.error('Draft save failed', errorMessage)
     }
   }
 
@@ -39,9 +44,13 @@ export function useThreadReplyActions(store: CommunicationsStore) {
     try {
       const form = threadReplyComposeForm(message, store.selectedMailAccountId, draftId || `draft-${Date.now()}`, bodyHtml)
       const result = await sendMailMutation.mutateAsync(composeFormToSendRequest(form))
-      store.setMailActionStatus(`Sent via ${result.transport ?? 'provider'}`)
+      const status = `Sent via ${result.transport ?? 'provider'}`
+      store.setMailActionStatus(status)
+      notifications.success('Message queued', status)
     } catch (e) {
-      store.setMailActionError(e instanceof Error ? e.message : 'Send failed')
+      const errorMessage = e instanceof Error ? e.message : 'Send failed'
+      store.setMailActionError(errorMessage)
+      notifications.error('Send failed', errorMessage)
     }
   }
 

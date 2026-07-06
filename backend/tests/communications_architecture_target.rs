@@ -157,18 +157,22 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
         "provider-neutral message/media search routes must honor channel_kind filtering for WhatsApp/Telegram reads"
     );
 
-    let frontend_router = read(root.join("frontend/src/app/router.ts"));
+    let frontend_app_sources = read_all_sources(root.join("frontend/src/app"));
     assert!(
-        !frontend_router.contains("'/telegram'") && !frontend_router.contains("\"/telegram\""),
+        !frontend_app_sources.contains("'/telegram'")
+            && !frontend_app_sources.contains("\"/telegram\""),
         "Telegram must not remain a top-level frontend route"
     );
     assert!(
-        !frontend_router.contains("'/whatsapp'") && !frontend_router.contains("\"/whatsapp\""),
+        !frontend_app_sources.contains("'/whatsapp'")
+            && !frontend_app_sources.contains("\"/whatsapp\""),
         "WhatsApp must not remain a top-level frontend route"
     );
 
     let frontend_communications_domain =
         read_all_sources(root.join("frontend/src/domains/communications"));
+    let frontend_communications_queries =
+        read_all_sources(root.join("frontend/src/domains/communications/queries"));
     let frontend_integration_runtime = read_all_sources(root.join("frontend/src/integrations"));
     let frontend_platform_bootstrap =
         read_all_sources(root.join("frontend/src/platform/bootstrap"));
@@ -176,11 +180,11 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
     let legacy_telegram_key = format!("['{}'", "telegram");
     let legacy_whatsapp_key = format!("['{}'", "whatsapp");
     assert!(
-        !frontend_communications_domain.contains(&legacy_telegram_key),
+        !frontend_communications_queries.contains(&legacy_telegram_key),
         "user-facing communication caches must not use provider-rooted Telegram query keys"
     );
     assert!(
-        !frontend_communications_domain.contains(&legacy_whatsapp_key),
+        !frontend_communications_queries.contains(&legacy_whatsapp_key),
         "user-facing communication caches must not use provider-rooted WhatsApp query keys"
     );
     for forbidden_business_key in [

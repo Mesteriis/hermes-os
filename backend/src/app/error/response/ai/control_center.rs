@@ -27,6 +27,12 @@ pub(super) fn control_center_error_parts(error: AiControlCenterError) -> ErrorPa
             error.to_string(),
             false,
         ),
+        AiControlCenterError::ProviderModelSync(message) => (
+            StatusCode::BAD_GATEWAY,
+            "ai_provider_model_sync_failed",
+            message,
+            false,
+        ),
         AiControlCenterError::HostVault(error) => (
             StatusCode::SERVICE_UNAVAILABLE,
             "host_vault_error",

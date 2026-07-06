@@ -26,7 +26,7 @@ pub(super) fn capability_slots() -> Vec<AiCapabilitySlot> {
 }
 
 pub(super) fn provider_presets() -> Vec<AiProviderPreset> {
-    vec![
+    let mut presets = vec![
         AiProviderPreset {
             provider_kind: "built_in".to_owned(),
             provider_key: "ollama".to_owned(),
@@ -58,42 +58,134 @@ pub(super) fn provider_presets() -> Vec<AiProviderPreset> {
             command_preset: Some("claude".to_owned()),
             capabilities: vec!["chat".to_owned(), "reasoning".to_owned()],
         },
-        AiProviderPreset {
-            provider_kind: "api".to_owned(),
-            provider_key: "openai".to_owned(),
-            display_name: "OpenAI".to_owned(),
-            privacy: "remote".to_owned(),
-            base_url: Some("https://api.openai.com/v1".to_owned()),
-            command_preset: None,
-            capabilities: vec![
-                "chat".to_owned(),
-                "reasoning".to_owned(),
-                "embeddings".to_owned(),
+    ];
+
+    presets.extend([
+        api_provider_preset(
+            "raw",
+            "Raw OpenAI-compatible API",
+            None,
+            &[
+                "chat",
+                "reasoning",
+                "summarization",
+                "embeddings",
+                "extraction",
             ],
-        },
-        AiProviderPreset {
-            provider_kind: "api".to_owned(),
-            provider_key: "deepseek".to_owned(),
-            display_name: "DeepSeek".to_owned(),
-            privacy: "remote".to_owned(),
-            base_url: Some("https://api.deepseek.com/v1".to_owned()),
-            command_preset: None,
-            capabilities: vec!["chat".to_owned(), "reasoning".to_owned()],
-        },
-        AiProviderPreset {
-            provider_kind: "api".to_owned(),
-            provider_key: "omniroute".to_owned(),
-            display_name: "OmniRoute".to_owned(),
-            privacy: "remote".to_owned(),
-            base_url: Some("https://ai.sh-inc.ru/v1".to_owned()),
-            command_preset: None,
-            capabilities: vec![
-                "chat".to_owned(),
-                "embeddings".to_owned(),
-                "routing".to_owned(),
-            ],
-        },
-    ]
+        ),
+        api_provider_preset(
+            "openai",
+            "OpenAI",
+            Some("https://api.openai.com/v1"),
+            &["chat", "reasoning", "embeddings"],
+        ),
+        api_provider_preset(
+            "deepseek",
+            "DeepSeek",
+            Some("https://api.deepseek.com/v1"),
+            &["chat", "reasoning"],
+        ),
+        api_provider_preset(
+            "openrouter",
+            "OpenRouter",
+            Some("https://openrouter.ai/api/v1"),
+            &["chat", "reasoning", "routing"],
+        ),
+        api_provider_preset(
+            "groq",
+            "Groq",
+            Some("https://api.groq.com/openai/v1"),
+            &["chat", "reasoning"],
+        ),
+        api_provider_preset(
+            "together",
+            "Together AI",
+            Some("https://api.together.xyz/v1"),
+            &["chat", "reasoning", "embeddings"],
+        ),
+        api_provider_preset(
+            "fireworks",
+            "Fireworks AI",
+            Some("https://api.fireworks.ai/inference/v1"),
+            &["chat", "reasoning", "embeddings"],
+        ),
+        api_provider_preset(
+            "mistral",
+            "Mistral AI",
+            Some("https://api.mistral.ai/v1"),
+            &["chat", "reasoning", "embeddings"],
+        ),
+        api_provider_preset(
+            "xai",
+            "xAI",
+            Some("https://api.x.ai/v1"),
+            &["chat", "reasoning"],
+        ),
+        api_provider_preset(
+            "gemini-openai",
+            "Google Gemini OpenAI-compatible",
+            Some("https://generativelanguage.googleapis.com/v1beta/openai"),
+            &["chat", "reasoning", "embeddings"],
+        ),
+        api_provider_preset(
+            "perplexity",
+            "Perplexity",
+            Some("https://api.perplexity.ai"),
+            &["chat", "reasoning"],
+        ),
+        api_provider_preset(
+            "nvidia-nim",
+            "NVIDIA NIM",
+            Some("https://integrate.api.nvidia.com/v1"),
+            &["chat", "reasoning", "embeddings"],
+        ),
+        api_provider_preset(
+            "cerebras",
+            "Cerebras",
+            Some("https://api.cerebras.ai/v1"),
+            &["chat", "reasoning"],
+        ),
+        api_provider_preset(
+            "lm-studio",
+            "LM Studio",
+            Some("http://127.0.0.1:1234/v1"),
+            &["chat", "local_runtime"],
+        ),
+        api_provider_preset(
+            "vllm-local",
+            "vLLM local",
+            Some("http://127.0.0.1:8000/v1"),
+            &["chat", "local_runtime"],
+        ),
+        api_provider_preset(
+            "omniroute",
+            "OmniRoute",
+            Some("https://ai.sh-inc.ru/v1"),
+            &["chat", "embeddings", "routing"],
+        ),
+    ]);
+
+    presets
+}
+
+fn api_provider_preset(
+    provider_key: &str,
+    display_name: &str,
+    base_url: Option<&str>,
+    capabilities: &[&str],
+) -> AiProviderPreset {
+    AiProviderPreset {
+        provider_kind: "api".to_owned(),
+        provider_key: provider_key.to_owned(),
+        display_name: display_name.to_owned(),
+        privacy: "remote".to_owned(),
+        base_url: base_url.map(str::to_owned),
+        command_preset: None,
+        capabilities: capabilities
+            .iter()
+            .map(|capability| (*capability).to_owned())
+            .collect(),
+    }
 }
 
 pub(super) struct CuratedModel {

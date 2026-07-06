@@ -4,6 +4,19 @@ use crate::platform::events::models::StoredEventEnvelope;
 use crate::platform::events::rows::row_to_stored_event;
 
 impl EventStore {
+    pub async fn latest_position(&self) -> Result<i64, EventStoreError> {
+        let position = sqlx::query_scalar::<_, Option<i64>>(
+            r#"
+            SELECT MAX(position)
+            FROM event_log
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(position.unwrap_or(0))
+    }
+
     pub async fn list_after_position(
         &self,
         after_position: i64,

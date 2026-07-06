@@ -18,11 +18,28 @@ pub(super) async fn capture_provider_account_observation(
     relationship_kind: &str,
     actor: &str,
 ) -> Result<(), AiControlCenterError> {
+    capture_provider_account_observation_with_origin(
+        transaction,
+        provider,
+        relationship_kind,
+        actor,
+        ObservationOriginKind::LocalRuntime,
+    )
+    .await
+}
+
+pub(super) async fn capture_provider_account_observation_with_origin(
+    transaction: &mut Transaction<'_, Postgres>,
+    provider: &AiProviderAccount,
+    relationship_kind: &str,
+    actor: &str,
+    origin_kind: ObservationOriginKind,
+) -> Result<(), AiControlCenterError> {
     let observation = ObservationStore::capture_in_transaction(
         transaction,
         &NewObservation::new(
             "AI_PROVIDER_ACCOUNT",
-            ObservationOriginKind::LocalRuntime,
+            origin_kind,
             Utc::now(),
             json!({
                 "provider_id": provider.provider_id,
@@ -68,12 +85,31 @@ pub(super) async fn capture_provider_secret_binding_observation(
     secret_ref: &str,
     actor: &str,
 ) -> Result<(), AiControlCenterError> {
+    capture_provider_secret_binding_observation_with_origin(
+        transaction,
+        provider_id,
+        secret_purpose,
+        secret_ref,
+        actor,
+        ObservationOriginKind::LocalRuntime,
+    )
+    .await
+}
+
+pub(super) async fn capture_provider_secret_binding_observation_with_origin(
+    transaction: &mut Transaction<'_, Postgres>,
+    provider_id: &str,
+    secret_purpose: &str,
+    secret_ref: &str,
+    actor: &str,
+    origin_kind: ObservationOriginKind,
+) -> Result<(), AiControlCenterError> {
     let binding_id = format!("{provider_id}:{secret_purpose}");
     let observation = ObservationStore::capture_in_transaction(
         transaction,
         &NewObservation::new(
             "AI_PROVIDER_SECRET_BINDING",
-            ObservationOriginKind::LocalRuntime,
+            origin_kind,
             Utc::now(),
             json!({
                 "provider_id": provider_id,

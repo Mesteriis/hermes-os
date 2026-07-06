@@ -300,6 +300,7 @@ mod tests {
                 "whatsapp",
                 "zulip",
                 "zoom",
+                "yandex_telemost",
                 "github",
                 "browser",
                 "rss",

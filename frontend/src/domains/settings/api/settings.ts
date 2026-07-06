@@ -1,7 +1,8 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
 import type {
+  CalendarAccount,
+  ProviderAccount,
   ProviderAccountListResponse,
-  CalendarAccount
 } from '../types/settings'
 
 export {
@@ -21,23 +22,49 @@ export async function fetchProviderAccounts(): Promise<ProviderAccountListRespon
   )
 }
 
+export async function updateProviderAccount(
+  accountId: string,
+  update: { display_name?: string }
+): Promise<ProviderAccount> {
+  return ApiClient.instance.patch<ProviderAccount>(
+    `/api/v1/settings/accounts/${encodeURIComponent(accountId)}`,
+    update,
+    'Provider account update failed'
+  )
+}
+
 export async function fetchCalendarAccounts(): Promise<{ items: CalendarAccount[] }> {
   return ApiClient.instance.get<{ items: CalendarAccount[] }>(
-    '/api/v1/settings/accounts/calendar',
+    '/api/v1/calendar/accounts',
     'Calendar accounts request failed'
   )
 }
 
-export async function deleteMailAccount(accountId: string): Promise<{ result: boolean; error?: string }> {
-  return ApiClient.instance.delete<{ result: boolean; error?: string }>(
-    `/api/v1/settings/accounts/mail/${encodeURIComponent(accountId)}`,
+export async function updateCalendarAccount(
+  accountId: string,
+  update: { account_name?: string; email?: string | null; sync_status?: string }
+): Promise<CalendarAccount> {
+  return ApiClient.instance.put<CalendarAccount>(
+    `/api/v1/calendar/accounts/${encodeURIComponent(accountId)}`,
+    update,
+    'Calendar account update failed'
+  )
+}
+
+export async function deleteMailAccount(
+  accountId: string
+): Promise<{ account_id: string; deleted: boolean; unbound_secret_refs: string[] }> {
+  return ApiClient.instance.delete<{ account_id: string; deleted: boolean; unbound_secret_refs: string[] }>(
+    `/api/v1/integrations/mail/accounts/${encodeURIComponent(accountId)}`,
     'Mail account delete failed'
   )
 }
 
-export async function logoutMailAccount(accountId: string): Promise<{ result: boolean; error?: string }> {
-  return ApiClient.instance.post<{ result: boolean; error?: string }>(
-    `/api/v1/settings/accounts/mail/${encodeURIComponent(accountId)}/logout`,
+export async function logoutMailAccount(
+  accountId: string
+): Promise<{ account: unknown; capabilities: unknown; sync_settings: unknown }> {
+  return ApiClient.instance.post<{ account: unknown; capabilities: unknown; sync_settings: unknown }>(
+    `/api/v1/integrations/mail/accounts/${encodeURIComponent(accountId)}/logout`,
     {},
     'Mail account logout failed'
   )
@@ -45,18 +72,31 @@ export async function logoutMailAccount(accountId: string): Promise<{ result: bo
 
 export async function exportMailAccountSettings(
   accountId: string
-): Promise<{ result?: { exported_at: string }; error?: string }> {
-  return ApiClient.instance.get<{ result?: { exported_at: string }; error?: string }>(
-    `/api/v1/settings/accounts/mail/${encodeURIComponent(accountId)}/export`,
+): Promise<{ exported_at: string; account: unknown; capabilities: unknown; sync_settings: unknown }> {
+  return ApiClient.instance.get<{ exported_at: string; account: unknown; capabilities: unknown; sync_settings: unknown }>(
+    `/api/v1/integrations/mail/accounts/${encodeURIComponent(accountId)}/export`,
     'Mail account export failed'
   )
 }
 
 export async function importMailAccountSettings(
-  request: { account_id?: string; provider_kind: string; settings: Record<string, unknown> }
-): Promise<{ result?: unknown; error?: string }> {
-  return ApiClient.instance.post<{ result?: unknown; error?: string }>(
-    '/api/v1/settings/accounts/mail/import',
+  request: {
+    account: {
+      account_id: string
+      provider_kind: string
+      display_name: string
+      external_account_id: string
+      config?: Record<string, unknown>
+    }
+    sync_settings?: {
+      sync_enabled?: boolean
+      batch_size?: number
+      poll_interval_seconds?: number
+    }
+  }
+): Promise<{ account: unknown; capabilities: unknown; sync_settings: unknown }> {
+  return ApiClient.instance.post<{ account: unknown; capabilities: unknown; sync_settings: unknown }>(
+    '/api/v1/integrations/mail/accounts/import',
     request,
     'Mail account import failed'
   )

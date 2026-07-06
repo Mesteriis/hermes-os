@@ -4,7 +4,7 @@ import {
   mailListAccountOptions,
   mailListAllAccountsOptionId,
   mailListItemsForAccount,
-  type MailListItemModel
+  type MailListItemModel,
 } from './mail/mailElements'
 import {
   mailFolderAriaLabel,
@@ -13,7 +13,7 @@ import {
   mailFolderPresentation,
   mailFolderRows,
   mailStandardFolders,
-  type MailFolderModel
+  type MailFolderModel,
 } from './mail/mailFolders'
 import {
   createMailListSearchBuilderState,
@@ -26,7 +26,7 @@ import {
   mailListSearchBuilderSetField,
   mailListSearchBuilderSetMatchMode,
   mailListSearchBuilderSetOperator,
-  mailListSearchBuilderSetValue
+  mailListSearchBuilderSetValue,
 } from './mail/mailSearchBuilder'
 import { mailListSearchBuilderValueSuggestions } from './mail/mailSearchSuggestions'
 
@@ -52,14 +52,14 @@ const mailSearchItems: readonly MailListItemModel[] = [
     hermesEntities: [
       { kind: 'organization', title: 'Northwind Security Vendor' },
       { kind: 'decision', title: 'Retention clause approval' },
-      { kind: 'document', title: 'Security answers' }
+      { kind: 'document', title: 'Security answers' },
     ],
     evidenceKinds: ['mail_thread', 'attachment', 'redline'],
     taskCandidateCount: 1,
     decisionCandidateCount: 1,
     documentCandidateCount: 2,
     deadlineCount: 1,
-    riskCount: 2
+    riskCount: 2,
   },
   {
     id: 'provider-record-002',
@@ -70,8 +70,8 @@ const mailSearchItems: readonly MailListItemModel[] = [
     subject: 'Board pack edits',
     snippet: 'Disclosure note was approved.',
     timestampLabel: 'Yesterday',
-    workflowState: 'waiting'
-  }
+    workflowState: 'waiting',
+  },
 ]
 
 describe('Communication domain elements', () => {
@@ -84,46 +84,92 @@ describe('Communication domain elements', () => {
       'archive',
       'spam',
       'trash',
-      'all'
+      'all',
     ])
-    const inboxFolder = mailStandardFolders.find((folder) => folder.kind === 'inbox')
-    const spamFolder = mailStandardFolders.find((folder) => folder.kind === 'spam')
+    const inboxFolder = mailStandardFolders.find(
+      (folder) => folder.kind === 'inbox'
+    )
+    const spamFolder = mailStandardFolders.find(
+      (folder) => folder.kind === 'spam'
+    )
     expect(inboxFolder).toBeDefined()
     expect(spamFolder).toBeDefined()
     expect(mailFolderPresentation(inboxFolder!).icon).toBe('tabler:inbox')
     expect(mailFolderPresentation(spamFolder!).tone).toBe('danger')
-    expect(mailFolderAriaLabel({ ...inboxFolder!, count: 42, unreadCount: 7 })).toBe('Inbox, 7 unread, 42 total')
+    expect(
+      mailFolderAriaLabel({ ...inboxFolder!, count: 42, unreadCount: 7 })
+    ).toBe('Inbox, 7 unread, 42 total')
     const hierarchicalFolders = [
       {
         ...inboxFolder!,
         children: [
           { id: 'inbox-work', kind: 'custom', label: 'Work' },
-          { id: 'inbox-finance', kind: 'custom', label: 'Finance' }
-        ]
-      }
+          { id: 'inbox-finance', kind: 'custom', label: 'Finance' },
+        ],
+      },
     ] satisfies readonly MailFolderModel[]
     expect(mailFolderExpandableIds(hierarchicalFolders)).toEqual(['inbox'])
     expect(mailFolderExpandedIds([], 'inbox', true)).toEqual(['inbox'])
     expect(mailFolderExpandedIds(['inbox'], 'inbox', false)).toEqual([])
     expect(mailFolderRows(hierarchicalFolders, ['inbox'])).toEqual([
-      { folder: expect.objectContaining({ id: 'inbox' }), depth: 1, hasChildren: true, expanded: true },
-      { folder: expect.objectContaining({ id: 'inbox-work' }), depth: 2, hasChildren: false, expanded: false },
-      { folder: expect.objectContaining({ id: 'inbox-finance' }), depth: 2, hasChildren: false, expanded: false }
+      {
+        folder: expect.objectContaining({ id: 'inbox' }),
+        depth: 1,
+        hasChildren: true,
+        expanded: true,
+      },
+      {
+        folder: expect.objectContaining({ id: 'inbox-work' }),
+        depth: 2,
+        hasChildren: false,
+        expanded: false,
+      },
+      {
+        folder: expect.objectContaining({ id: 'inbox-finance' }),
+        depth: 2,
+        hasChildren: false,
+        expanded: false,
+      },
     ])
     expect(mailFolderRows(hierarchicalFolders, [])).toEqual([
-      { folder: expect.objectContaining({ id: 'inbox' }), depth: 1, hasChildren: true, expanded: false }
+      {
+        folder: expect.objectContaining({ id: 'inbox' }),
+        depth: 1,
+        hasChildren: true,
+        expanded: false,
+      },
     ])
   })
 
   it('matches backend q fields plus Communications read-model facets in the mail list helper', () => {
     expect(mailListItemsForSearch(mailSearchItems, 'from:Maya')).toHaveLength(1)
-    expect(mailListItemsForSearch(mailSearchItems, 'subject:board body:approved')).toHaveLength(1)
-    expect(mailListItemsForSearch(mailSearchItems, 'mode:any subject:missing body:retention')).toHaveLength(1)
-    expect(mailListItemsForSearch(mailSearchItems, 'all=provider-record-001')).toHaveLength(1)
-    expect(mailListItemsForSearch(mailSearchItems, 'label:security')).toHaveLength(1)
-    expect(mailListItemsForSearch(mailSearchItems, 'attachment:yes workflow=needs_action')).toHaveLength(1)
-    expect(mailListItemsForSearch(mailSearchItems, 'entity:organization task:yes')).toHaveLength(1)
-    expect(mailListItemsForSearch(mailSearchItems, 'importance>=75')).toHaveLength(1)
+    expect(
+      mailListItemsForSearch(mailSearchItems, 'subject:board body:approved')
+    ).toHaveLength(1)
+    expect(
+      mailListItemsForSearch(
+        mailSearchItems,
+        'mode:any subject:missing body:retention'
+      )
+    ).toHaveLength(1)
+    expect(
+      mailListItemsForSearch(mailSearchItems, 'all=provider-record-001')
+    ).toHaveLength(1)
+    expect(
+      mailListItemsForSearch(mailSearchItems, 'label:security')
+    ).toHaveLength(1)
+    expect(
+      mailListItemsForSearch(
+        mailSearchItems,
+        'attachment:yes workflow=needs_action'
+      )
+    ).toHaveLength(1)
+    expect(
+      mailListItemsForSearch(mailSearchItems, 'entity:organization task:yes')
+    ).toHaveLength(1)
+    expect(
+      mailListItemsForSearch(mailSearchItems, 'importance>=75')
+    ).toHaveLength(1)
   })
 
   it('builds structured mail search clauses into the backend q syntax', () => {
@@ -134,11 +180,20 @@ describe('Communication domain elements', () => {
     builder = mailListSearchBuilderSetField(builder, 'body')
     builder = mailListSearchBuilderSetValue(builder, 'retention')
 
-    expect(mailListSearchBuilderQuery(builder)).toBe('mode:any from:"Maya Chen" body:retention')
+    expect(mailListSearchBuilderQuery(builder)).toBe(
+      'mode:any from:"Maya Chen" body:retention'
+    )
     expect(mailListSearchBuilderClauseViews(builder)).toHaveLength(2)
     expect(mailListSearchBuilderCommittedClauseViews(builder)).toHaveLength(1)
-    expect(mailListSearchBuilderDraftTokens(builder).map((token) => token.value)).toEqual(['body', 'contains'])
-    expect(mailListItemsForSearch(mailSearchItems, mailListSearchBuilderQuery(builder))).toHaveLength(1)
+    expect(
+      mailListSearchBuilderDraftTokens(builder).map((token) => token.value)
+    ).toEqual(['body', 'contains'])
+    expect(
+      mailListItemsForSearch(
+        mailSearchItems,
+        mailListSearchBuilderQuery(builder)
+      )
+    ).toHaveLength(1)
   })
 
   it('builds rich Communications and Hermes search clauses', () => {
@@ -153,38 +208,56 @@ describe('Communication domain elements', () => {
     builder = mailListSearchBuilderSetOperator(builder, 'gte')
     builder = mailListSearchBuilderSetValue(builder, '75')
 
-    expect(mailListSearchBuilderQuery(builder)).toBe('entity:organization attachment:yes importance>=75')
-    expect(mailListItemsForSearch(mailSearchItems, mailListSearchBuilderQuery(builder))).toHaveLength(1)
+    expect(mailListSearchBuilderQuery(builder)).toBe(
+      'entity:organization attachment:yes importance>=75'
+    )
+    expect(
+      mailListItemsForSearch(
+        mailSearchItems,
+        mailListSearchBuilderQuery(builder)
+      )
+    ).toHaveLength(1)
   })
 
   it('suggests lazy search values from mail attributes and Hermes entities', () => {
     let builder = createMailListSearchBuilderState()
     builder = mailListSearchBuilderSetValue(builder, 'may')
 
-    expect(mailListSearchBuilderValueSuggestions(mailSearchItems, builder)).toContainEqual({
+    expect(
+      mailListSearchBuilderValueSuggestions(mailSearchItems, builder)
+    ).toContainEqual({
       value: 'Maya Chen',
-      label: 'Maya Chen'
+      label: 'Maya Chen',
     })
 
     builder = mailListSearchBuilderSetField(builder, 'label')
     builder = mailListSearchBuilderSetValue(builder, 'sec')
-    expect(mailListSearchBuilderValueSuggestions(mailSearchItems, builder)).toContainEqual({
+    expect(
+      mailListSearchBuilderValueSuggestions(mailSearchItems, builder)
+    ).toContainEqual({
       value: 'security',
-      label: 'security'
+      label: 'security',
     })
 
     builder = mailListSearchBuilderSetField(builder, 'entity')
-    expect(mailListSearchBuilderValueSuggestions(mailSearchItems, builder)).toEqual(
+    expect(
+      mailListSearchBuilderValueSuggestions(mailSearchItems, builder)
+    ).toEqual(
       expect.arrayContaining([
         { value: 'organization', label: 'organization' },
-        { value: 'Northwind Security Vendor', label: 'Northwind Security Vendor' }
+        {
+          value: 'Northwind Security Vendor',
+          label: 'Northwind Security Vendor',
+        },
       ])
     )
 
     builder = mailListSearchBuilderSetField(builder, 'attachment')
-    expect(mailListSearchBuilderValueSuggestions(mailSearchItems, builder)).toEqual([
+    expect(
+      mailListSearchBuilderValueSuggestions(mailSearchItems, builder)
+    ).toEqual([
       { value: 'yes', label: 'yes' },
-      { value: 'no', label: 'no' }
+      { value: 'no', label: 'no' },
     ])
   })
 
@@ -195,43 +268,141 @@ describe('Communication domain elements', () => {
     expect(accountOptions[0]).toEqual({
       id: mailListAllAccountsOptionId,
       label: 'All accounts',
-      count: 2
+      count: 2,
     })
     expect(workAccount).toBeDefined()
-    expect(mailListItemsForAccount(mailSearchItems, workAccount?.id ?? mailListAllAccountsOptionId)).toHaveLength(2)
-    expect(mailListItemsForAccount(mailSearchItems, mailListAllAccountsOptionId)).toHaveLength(2)
+    expect(
+      mailListItemsForAccount(
+        mailSearchItems,
+        workAccount?.id ?? mailListAllAccountsOptionId
+      )
+    ).toHaveLength(2)
+    expect(
+      mailListItemsForAccount(mailSearchItems, mailListAllAccountsOptionId)
+    ).toHaveLength(2)
   })
 
   it('adds provider-neutral domain elements without reintroducing provider product panels', () => {
-    const helperSource = readFileSync(new URL('./communicationDomainElements.ts', import.meta.url), 'utf8')
-    const domainCssSource = readFileSync(new URL('./communicationDomainElements.css', import.meta.url), 'utf8')
-    const storybookCssSource = readFileSync(new URL('../../../shared/ui/styles/storybook.css', import.meta.url), 'utf8')
-    const shellSource = readFileSync(new URL('./CommunicationWorkspaceShell.vue', import.meta.url), 'utf8')
-    const inboxSource = readFileSync(new URL('./CommunicationInboxList.vue', import.meta.url), 'utf8')
-    const conversationSource = readFileSync(new URL('./CommunicationConversationPane.vue', import.meta.url), 'utf8')
-    const inspectorSource = readFileSync(new URL('./CommunicationHermesInspector.vue', import.meta.url), 'utf8')
-    const mailFolderListSource = readFileSync(new URL('./mail/MailFolderList.vue', import.meta.url), 'utf8')
-    const mailFoldersSource = readFileSync(new URL('./mail/mailFolders.ts', import.meta.url), 'utf8')
-    const mailListSource = readFileSync(new URL('./mail/MailList.vue', import.meta.url), 'utf8')
-    const mailListItemSource = readFileSync(new URL('./mail/MailListItem.vue', import.meta.url), 'utf8')
-    const mailElementsSource = readFileSync(new URL('./mail/mailElements.ts', import.meta.url), 'utf8')
-    const mailSearchSource = readFileSync(new URL('./mail/mailSearchBuilder.ts', import.meta.url), 'utf8')
-    const mailSearchSuggestionSource = readFileSync(new URL('./mail/mailSearchSuggestions.ts', import.meta.url), 'utf8')
-    const mailMessageSource = readFileSync(new URL('./mail/MailMessage.vue', import.meta.url), 'utf8')
-    const mailActionSource = readFileSync(new URL('./mail/MailAction.vue', import.meta.url), 'utf8')
-    const mailActionsSource = readFileSync(new URL('./mail/mailActions.ts', import.meta.url), 'utf8')
-    const mailActionQueriesSource = readFileSync(new URL('../queries/mailActionQueries.ts', import.meta.url), 'utf8')
-    const mailOperationQueriesSource = readFileSync(new URL('../queries/mailOperationQueries.ts', import.meta.url), 'utf8')
-    const messageApiSource = readFileSync(new URL('../api/messageApi.ts', import.meta.url), 'utf8')
-    const mailViewerSource = readFileSync(new URL('./mail/MailViewer.vue', import.meta.url), 'utf8')
-    const mailFooterSource = readFileSync(new URL('./mail/MailFooter.vue', import.meta.url), 'utf8')
-    const mailInspectorSource = readFileSync(new URL('./mail/MailInspector.vue', import.meta.url), 'utf8')
-    const mailInspectorModelSource = readFileSync(new URL('./mail/mailInspector.ts', import.meta.url), 'utf8')
-    const messengerListSource = readFileSync(new URL('./messengers/MessengerList.vue', import.meta.url), 'utf8')
-    const messengerListItemSource = readFileSync(new URL('./messengers/MessengerListItem.vue', import.meta.url), 'utf8')
-    const messengerActionSource = readFileSync(new URL('./messengers/MessengerAction.vue', import.meta.url), 'utf8')
-    const messengerViewerSource = readFileSync(new URL('./messengers/MessengerViewer.vue', import.meta.url), 'utf8')
-    const messengerRichEditorSource = readFileSync(new URL('./messengers/MessengerRichEditor.vue', import.meta.url), 'utf8')
+    const helperSource = readFileSync(
+      new URL('./communicationDomainElements.ts', import.meta.url),
+      'utf8'
+    )
+    const domainCssSource = readFileSync(
+      new URL('./communicationDomainElements.css', import.meta.url),
+      'utf8'
+    )
+    const storybookCssSource = readFileSync(
+      new URL('../../../shared/ui/styles/storybook.css', import.meta.url),
+      'utf8'
+    )
+    const shellSource = readFileSync(
+      new URL('./CommunicationWorkspaceShell.vue', import.meta.url),
+      'utf8'
+    )
+    const inboxSource = readFileSync(
+      new URL('./CommunicationInboxList.vue', import.meta.url),
+      'utf8'
+    )
+    const conversationSource = readFileSync(
+      new URL('./CommunicationConversationPane.vue', import.meta.url),
+      'utf8'
+    )
+    const inspectorSource = readFileSync(
+      new URL('./CommunicationHermesInspector.vue', import.meta.url),
+      'utf8'
+    )
+    const mailFolderListSource = readFileSync(
+      new URL('./mail/MailFolderList.vue', import.meta.url),
+      'utf8'
+    )
+    const mailFoldersSource = readFileSync(
+      new URL('./mail/mailFolders.ts', import.meta.url),
+      'utf8'
+    )
+    const mailListSource = readFileSync(
+      new URL('./mail/MailList.vue', import.meta.url),
+      'utf8'
+    )
+    const mailListItemSource = readFileSync(
+      new URL('./mail/MailListItem.vue', import.meta.url),
+      'utf8'
+    )
+    const mailListViewsSource = readFileSync(
+      new URL('./mail/mailListViews.ts', import.meta.url),
+      'utf8'
+    )
+    const mailElementsSource = readFileSync(
+      new URL('./mail/mailElements.ts', import.meta.url),
+      'utf8'
+    )
+    const mailSearchSource = readFileSync(
+      new URL('./mail/mailSearchBuilder.ts', import.meta.url),
+      'utf8'
+    )
+    const mailSearchSuggestionSource = readFileSync(
+      new URL('./mail/mailSearchSuggestions.ts', import.meta.url),
+      'utf8'
+    )
+    const mailMessageSource = readFileSync(
+      new URL('./mail/MailMessage.vue', import.meta.url),
+      'utf8'
+    )
+    const mailActionSource = readFileSync(
+      new URL('./mail/MailAction.vue', import.meta.url),
+      'utf8'
+    )
+    const mailActionsSource = readFileSync(
+      new URL('./mail/mailActions.ts', import.meta.url),
+      'utf8'
+    )
+    const mailActionQueriesSource = readFileSync(
+      new URL('../queries/mailActionQueries.ts', import.meta.url),
+      'utf8'
+    )
+    const mailOperationQueriesSource = readFileSync(
+      new URL('../queries/mailOperationQueries.ts', import.meta.url),
+      'utf8'
+    )
+    const messageApiSource = readFileSync(
+      new URL('../api/messageApi.ts', import.meta.url),
+      'utf8'
+    )
+    const mailViewerSource = readFileSync(
+      new URL('./mail/MailViewer.vue', import.meta.url),
+      'utf8'
+    )
+    const mailFooterSource = readFileSync(
+      new URL('./mail/MailFooter.vue', import.meta.url),
+      'utf8'
+    )
+    const mailInspectorSource = readFileSync(
+      new URL('./mail/MailInspector.vue', import.meta.url),
+      'utf8'
+    )
+    const mailInspectorModelSource = readFileSync(
+      new URL('./mail/mailInspector.ts', import.meta.url),
+      'utf8'
+    )
+    const messengerListSource = readFileSync(
+      new URL('./messengers/MessengerList.vue', import.meta.url),
+      'utf8'
+    )
+    const messengerListItemSource = readFileSync(
+      new URL('./messengers/MessengerListItem.vue', import.meta.url),
+      'utf8'
+    )
+    const messengerActionSource = readFileSync(
+      new URL('./messengers/MessengerAction.vue', import.meta.url),
+      'utf8'
+    )
+    const messengerViewerSource = readFileSync(
+      new URL('./messengers/MessengerViewer.vue', import.meta.url),
+      'utf8'
+    )
+    const messengerRichEditorSource = readFileSync(
+      new URL('./messengers/MessengerRichEditor.vue', import.meta.url),
+      'utf8'
+    )
     const messengerProviderRichEditorSource = readFileSync(
       new URL('./messengers/MessengerProviderRichEditor.vue', import.meta.url),
       'utf8'
@@ -248,120 +419,366 @@ describe('Communication domain elements', () => {
       new URL('./messengers/SignalMessengerRichEditor.vue', import.meta.url),
       'utf8'
     )
-    const messengerMessageSource = readFileSync(new URL('./messengers/MessengerMessage.vue', import.meta.url), 'utf8')
-    const messengerInspectorSource = readFileSync(new URL('./messengers/MessengerInspector.vue', import.meta.url), 'utf8')
-    const messengerWorkspaceSource = readFileSync(new URL('./messengers/MessengerWorkspace.vue', import.meta.url), 'utf8')
-    const messengerElementsSource = readFileSync(new URL('./messengers/messengerElements.ts', import.meta.url), 'utf8')
-    const messengerComposerSource = readFileSync(new URL('./messengers/messengerComposer.ts', import.meta.url), 'utf8')
-    const mailQuotedOriginalSource = readFileSync(new URL('./mail/MailQuotedOriginal.vue', import.meta.url), 'utf8')
-    const mailReplyComposerSource = readFileSync(new URL('./mail/MailReplyComposer.vue', import.meta.url), 'utf8')
-    const mailWorkspaceSource = readFileSync(new URL('./mail/MailWorkspace.vue', import.meta.url), 'utf8')
-    const channelWorkspaceSource = readFileSync(new URL('./CommunicationChannelWorkspace.vue', import.meta.url), 'utf8')
-    const channelListSource = readFileSync(new URL('./channels/ChannelList.vue', import.meta.url), 'utf8')
-    const channelActionSource = readFileSync(new URL('./channels/ChannelAction.vue', import.meta.url), 'utf8')
-    const channelViewerSource = readFileSync(new URL('./channels/ChannelViewer.vue', import.meta.url), 'utf8')
-    const channelInspectorSource = readFileSync(new URL('./channels/ChannelInspector.vue', import.meta.url), 'utf8')
-    const channelWorkspaceComponentSource = readFileSync(new URL('./channels/ChannelWorkspace.vue', import.meta.url), 'utf8')
-    const channelSurfaceAdaptersSource = readFileSync(new URL('./channels/channelSurfaceAdapters.ts', import.meta.url), 'utf8')
+    const messengerMessageSource = readFileSync(
+      new URL('./messengers/MessengerMessage.vue', import.meta.url),
+      'utf8'
+    )
+    const messengerInspectorSource = readFileSync(
+      new URL('./messengers/MessengerInspector.vue', import.meta.url),
+      'utf8'
+    )
+    const messengerWorkspaceSource = readFileSync(
+      new URL('./messengers/MessengerWorkspace.vue', import.meta.url),
+      'utf8'
+    )
+    const messengerElementsSource = readFileSync(
+      new URL('./messengers/messengerElements.ts', import.meta.url),
+      'utf8'
+    )
+    const messengerComposerSource = readFileSync(
+      new URL('./messengers/messengerComposer.ts', import.meta.url),
+      'utf8'
+    )
+    const mailQuotedOriginalSource = readFileSync(
+      new URL('./mail/MailQuotedOriginal.vue', import.meta.url),
+      'utf8'
+    )
+    const mailReplyComposerSource = readFileSync(
+      new URL('./mail/MailReplyComposer.vue', import.meta.url),
+      'utf8'
+    )
+    const mailWorkspaceSource = readFileSync(
+      new URL('./mail/MailWorkspace.vue', import.meta.url),
+      'utf8'
+    )
+    const channelWorkspaceSource = readFileSync(
+      new URL('./CommunicationChannelWorkspace.vue', import.meta.url),
+      'utf8'
+    )
+    const channelListSource = readFileSync(
+      new URL('./channels/ChannelList.vue', import.meta.url),
+      'utf8'
+    )
+    const channelActionSource = readFileSync(
+      new URL('./channels/ChannelAction.vue', import.meta.url),
+      'utf8'
+    )
+    const channelViewerSource = readFileSync(
+      new URL('./channels/ChannelViewer.vue', import.meta.url),
+      'utf8'
+    )
+    const channelInspectorSource = readFileSync(
+      new URL('./channels/ChannelInspector.vue', import.meta.url),
+      'utf8'
+    )
+    const channelWorkspaceComponentSource = readFileSync(
+      new URL('./channels/ChannelWorkspace.vue', import.meta.url),
+      'utf8'
+    )
+    const channelSurfaceAdaptersSource = readFileSync(
+      new URL('./channels/channelSurfaceAdapters.ts', import.meta.url),
+      'utf8'
+    )
     const communicationSurfaceSource = readFileSync(
       new URL('../queries/communicationChannelSurface.ts', import.meta.url),
       'utf8'
     )
     const communicationWorkspaceSurfaceSource = readFileSync(
-      new URL('../queries/useCommunicationsWorkspaceSurface.ts', import.meta.url),
+      new URL(
+        '../queries/useCommunicationsWorkspaceSurface.ts',
+        import.meta.url
+      ),
       'utf8'
     )
     const zulipSurfaceSource = readFileSync(
       new URL('../queries/useZulipCommunicationsSurface.ts', import.meta.url),
       'utf8'
     )
-    const callsSurfaceSource = readFileSync(new URL('./CommunicationCallsSurface.vue', import.meta.url), 'utf8')
-    const callElementsSource = readFileSync(new URL('./calls/callElements.ts', import.meta.url), 'utf8')
-    const callListItemSource = readFileSync(new URL('./calls/CallListItem.vue', import.meta.url), 'utf8')
-    const callListSource = readFileSync(new URL('./calls/CallList.vue', import.meta.url), 'utf8')
-    const callActionSource = readFileSync(new URL('./calls/CallAction.vue', import.meta.url), 'utf8')
-    const callViewerSource = readFileSync(new URL('./calls/CallViewer.vue', import.meta.url), 'utf8')
-    const callInspectorSource = readFileSync(new URL('./calls/CallInspector.vue', import.meta.url), 'utf8')
-    const callMessageSource = readFileSync(new URL('./calls/CallMessage.vue', import.meta.url), 'utf8')
-    const callWorkspaceSource = readFileSync(new URL('./calls/CallWorkspace.vue', import.meta.url), 'utf8')
-    const outboxSource = readFileSync(new URL('./CommunicationOutboxStatusCard.vue', import.meta.url), 'utf8')
-    const primitiveStorySource = readFileSync(new URL('../../../../stories/ui/Communication.stories.ts', import.meta.url), 'utf8')
-    const mailStorySource = readFileSync(new URL('../../../../stories/app/CommunicationMail.stories.ts', import.meta.url), 'utf8')
+    const callsSurfaceSource = readFileSync(
+      new URL('./CommunicationCallsSurface.vue', import.meta.url),
+      'utf8'
+    )
+    const callElementsSource = readFileSync(
+      new URL('./calls/callElements.ts', import.meta.url),
+      'utf8'
+    )
+    const callListItemSource = readFileSync(
+      new URL('./calls/CallListItem.vue', import.meta.url),
+      'utf8'
+    )
+    const callListSource = readFileSync(
+      new URL('./calls/CallList.vue', import.meta.url),
+      'utf8'
+    )
+    const callActionSource = readFileSync(
+      new URL('./calls/CallAction.vue', import.meta.url),
+      'utf8'
+    )
+    const callViewerSource = readFileSync(
+      new URL('./calls/CallViewer.vue', import.meta.url),
+      'utf8'
+    )
+    const callInspectorSource = readFileSync(
+      new URL('./calls/CallInspector.vue', import.meta.url),
+      'utf8'
+    )
+    const callMessageSource = readFileSync(
+      new URL('./calls/CallMessage.vue', import.meta.url),
+      'utf8'
+    )
+    const callWorkspaceSource = readFileSync(
+      new URL('./calls/CallWorkspace.vue', import.meta.url),
+      'utf8'
+    )
+    const outboxSource = readFileSync(
+      new URL('./CommunicationOutboxStatusCard.vue', import.meta.url),
+      'utf8'
+    )
+    const primitiveStorySource = readFileSync(
+      new URL(
+        '../../../../stories/ui/Communication.stories.ts',
+        import.meta.url
+      ),
+      'utf8'
+    )
+    const mailStorySource = readFileSync(
+      new URL(
+        '../../../../stories/app/CommunicationMail.stories.ts',
+        import.meta.url
+      ),
+      'utf8'
+    )
     const messengerStorySource = readFileSync(
-      new URL('../../../../stories/app/CommunicationMessengers.stories.ts', import.meta.url),
+      new URL(
+        '../../../../stories/app/CommunicationMessengers.stories.ts',
+        import.meta.url
+      ),
       'utf8'
     )
     const channelStorySource = readFileSync(
-      new URL('../../../../stories/app/CommunicationChannels.stories.ts', import.meta.url),
+      new URL(
+        '../../../../stories/app/CommunicationChannels.stories.ts',
+        import.meta.url
+      ),
       'utf8'
     )
-    const callsStorySource = readFileSync(new URL('../../../../stories/app/CommunicationCalls.stories.ts', import.meta.url), 'utf8')
+    const callsStorySource = readFileSync(
+      new URL(
+        '../../../../stories/app/CommunicationCalls.stories.ts',
+        import.meta.url
+      ),
+      'utf8'
+    )
     const storySources = [
       primitiveStorySource,
       mailStorySource,
       messengerStorySource,
       channelStorySource,
-      callsStorySource
+      callsStorySource,
     ]
 
-    expect(existsSync(new URL('./CommunicationInboxList.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./CommunicationConversationPane.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./CommunicationHermesInspector.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./CommunicationWorkspaceShell.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/MailFolderList.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/mailFolders.ts', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/MailList.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/MailListItem.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/mailElements.ts', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/mailSearchBuilder.ts', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/mailSearchSuggestions.ts', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/MailMessage.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/MailAction.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/mailActions.ts', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('../queries/mailActionQueries.ts', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/MailViewer.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/MailFooter.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/MailInspector.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/mailInspector.ts', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/MessengerList.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/MessengerListItem.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/MessengerAction.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/MessengerViewer.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/MessengerRichEditor.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/MessengerProviderRichEditor.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/TelegramMessengerRichEditor.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/WhatsAppMessengerRichEditor.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/SignalMessengerRichEditor.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/MessengerMessage.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/MessengerInspector.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/MessengerWorkspace.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/messengerElements.ts', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./messengers/messengerComposer.ts', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/MailQuotedOriginal.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/MailReplyComposer.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./mail/MailWorkspace.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./CommunicationChannelWorkspace.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./channels/ChannelListItem.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./channels/ChannelList.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./channels/ChannelAction.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./channels/channelSurfaceAdapters.ts', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./channels/ChannelViewer.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./channels/ChannelInspector.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./channels/ChannelMessage.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./channels/ChannelWorkspace.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./CommunicationCallsSurface.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./calls/CallListItem.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./calls/CallList.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./calls/CallAction.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./calls/CallViewer.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./calls/CallInspector.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./calls/CallMessage.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./calls/CallWorkspace.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./CommunicationChannelSurfaceCard.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./CommunicationCapabilityCard.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./CommunicationThreadSignalCard.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./CommunicationOutboxStatusCard.vue', import.meta.url))).toBe(true)
-    expect(existsSync(new URL('./CommunicationWorkspaceOverview.vue', import.meta.url))).toBe(true)
+    expect(
+      existsSync(new URL('./CommunicationInboxList.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./CommunicationConversationPane.vue', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./CommunicationHermesInspector.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./CommunicationWorkspaceShell.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./mail/MailFolderList.vue', import.meta.url))
+    ).toBe(true)
+    expect(existsSync(new URL('./mail/mailFolders.ts', import.meta.url))).toBe(
+      true
+    )
+    expect(existsSync(new URL('./mail/MailList.vue', import.meta.url))).toBe(
+      true
+    )
+    expect(
+      existsSync(new URL('./mail/MailListItem.vue', import.meta.url))
+    ).toBe(true)
+    expect(existsSync(new URL('./mail/mailElements.ts', import.meta.url))).toBe(
+      true
+    )
+    expect(
+      existsSync(new URL('./mail/mailSearchBuilder.ts', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./mail/mailSearchSuggestions.ts', import.meta.url))
+    ).toBe(true)
+    expect(existsSync(new URL('./mail/MailMessage.vue', import.meta.url))).toBe(
+      true
+    )
+    expect(existsSync(new URL('./mail/MailAction.vue', import.meta.url))).toBe(
+      true
+    )
+    expect(existsSync(new URL('./mail/mailActions.ts', import.meta.url))).toBe(
+      true
+    )
+    expect(
+      existsSync(new URL('../queries/mailActionQueries.ts', import.meta.url))
+    ).toBe(true)
+    expect(existsSync(new URL('./mail/MailViewer.vue', import.meta.url))).toBe(
+      true
+    )
+    expect(existsSync(new URL('./mail/MailFooter.vue', import.meta.url))).toBe(
+      true
+    )
+    expect(
+      existsSync(new URL('./mail/MailInspector.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./mail/mailInspector.ts', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./messengers/MessengerList.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./messengers/MessengerListItem.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./messengers/MessengerAction.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./messengers/MessengerViewer.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./messengers/MessengerRichEditor.vue', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./messengers/MessengerProviderRichEditor.vue', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./messengers/TelegramMessengerRichEditor.vue', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./messengers/WhatsAppMessengerRichEditor.vue', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./messengers/SignalMessengerRichEditor.vue', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./messengers/MessengerMessage.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./messengers/MessengerInspector.vue', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./messengers/MessengerWorkspace.vue', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./messengers/messengerElements.ts', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./messengers/messengerComposer.ts', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./mail/MailQuotedOriginal.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./mail/MailReplyComposer.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./mail/MailWorkspace.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./CommunicationChannelWorkspace.vue', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./channels/ChannelListItem.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./channels/ChannelList.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./channels/ChannelAction.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./channels/channelSurfaceAdapters.ts', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./channels/ChannelViewer.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./channels/ChannelInspector.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./channels/ChannelMessage.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./channels/ChannelWorkspace.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./CommunicationCallsSurface.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./calls/CallListItem.vue', import.meta.url))
+    ).toBe(true)
+    expect(existsSync(new URL('./calls/CallList.vue', import.meta.url))).toBe(
+      true
+    )
+    expect(existsSync(new URL('./calls/CallAction.vue', import.meta.url))).toBe(
+      true
+    )
+    expect(existsSync(new URL('./calls/CallViewer.vue', import.meta.url))).toBe(
+      true
+    )
+    expect(
+      existsSync(new URL('./calls/CallInspector.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./calls/CallMessage.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./calls/CallWorkspace.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./CommunicationChannelSurfaceCard.vue', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(new URL('./CommunicationCapabilityCard.vue', import.meta.url))
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./CommunicationThreadSignalCard.vue', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./CommunicationOutboxStatusCard.vue', import.meta.url)
+      )
+    ).toBe(true)
+    expect(
+      existsSync(
+        new URL('./CommunicationWorkspaceOverview.vue', import.meta.url)
+      )
+    ).toBe(true)
 
     expect(helperSource).toContain('CommunicationThreadSummary')
     expect(helperSource).toContain('CommunicationOutboxItem')
@@ -376,14 +793,20 @@ describe('Communication domain elements', () => {
     expect(helperSource).toContain('CommunicationChannelProviderKind')
     expect(helperSource).toContain('CommunicationChannelActionModel')
     expect(helperSource).toContain('CommunicationChannelActionGroupModel')
-    expect(helperSource).toContain('actionGroups: readonly CommunicationChannelActionGroupModel[]')
+    expect(helperSource).toContain(
+      'actionGroups: readonly CommunicationChannelActionGroupModel[]'
+    )
     expect(helperSource).toContain('CommunicationChannelInspectorModel')
     expect(helperSource).toContain('CommunicationChannelInspectorIntelligence')
     expect(helperSource).toContain('CommunicationChannelInspectorActionItem')
-    expect(helperSource).toContain('inspector: CommunicationChannelInspectorModel')
+    expect(helperSource).toContain(
+      'inspector: CommunicationChannelInspectorModel'
+    )
     expect(helperSource).toContain('CommunicationChannelDirectChatModel')
     expect(helperSource).toContain('CommunicationChannelDirectFolderModel')
-    expect(helperSource).toContain('directChatFolders: readonly CommunicationChannelDirectFolderModel[]')
+    expect(helperSource).toContain(
+      'directChatFolders: readonly CommunicationChannelDirectFolderModel[]'
+    )
     expect(helperSource).toContain('communicationChannelDirectChatCount')
     expect(helperSource).toContain('communicationChannelProviderIconName')
     expect(helperSource).toContain("from './calls/callElements'")
@@ -393,7 +816,9 @@ describe('Communication domain elements', () => {
     expect(callElementsSource).toContain("'telemost'")
     expect(callElementsSource).toContain("'zulip'")
     expect(callElementsSource).toContain('CommunicationPermanentCallLinkModel')
-    expect(callElementsSource).toContain('permanentMeetings: readonly CommunicationPermanentCallLinkModel[]')
+    expect(callElementsSource).toContain(
+      'permanentMeetings: readonly CommunicationPermanentCallLinkModel[]'
+    )
     expect(callElementsSource).toContain('dateGroupLabel: string')
     expect(callElementsSource).toContain('sortKey: string')
     expect(callElementsSource).toContain('CommunicationCallActionGroupModel')
@@ -402,7 +827,9 @@ describe('Communication domain elements', () => {
     expect(helperSource).toContain('outboxStatusPresentation')
     expect(helperSource).toContain("channelKind === 'telegram'")
     expect(helperSource).toContain("channelKind === 'whatsapp'")
-    expect(helperSource).toContain("channelKind === 'mail' || channelKind === 'email'")
+    expect(helperSource).toContain(
+      "channelKind === 'mail' || channelKind === 'email'"
+    )
     expect(helperSource).toContain('communicationConversationIsEmail')
 
     expect(shellSource).toContain('CommunicationInboxList')
@@ -410,11 +837,15 @@ describe('Communication domain elements', () => {
     expect(shellSource).toContain('CommunicationHermesInspector')
     expect(inboxSource).toContain('Chats, groups and mail threads')
     expect(mailListSource).toContain('MailListItem')
-    expect(mailListSource).toContain("import { useI18n } from '@/platform/i18n'")
+    expect(mailListSource).toContain(
+      "import { useI18n } from '@/platform/i18n'"
+    )
     expect(mailListSource).not.toContain('mail-list-account-select')
     expect(mailListSource).not.toContain("t('Mail account')")
     expect(mailListSource).not.toContain('Email threads with attachments')
-    expect(mailListSource).not.toContain('Build the same query with structured tokens.')
+    expect(mailListSource).not.toContain(
+      'Build the same query with structured tokens.'
+    )
     expect(mailListSource).not.toContain('Mail structured search')
     expect(mailListSource).not.toContain('mail-list-toolbar')
     expect(mailListSource).toContain('Popover')
@@ -422,7 +853,6 @@ describe('Communication domain elements', () => {
     expect(mailListSource).toContain("t('Search builder')")
     expect(mailListSource).toContain('TreeSelect')
     expect(mailListSource).toContain('savedFilters')
-    expect(mailListSource).toContain("t('Saved filters')")
     expect(mailListSource).toContain('mail-search-builder__token')
     expect(mailListSource).toContain('searchBuilderFieldGroups')
     expect(mailListSource).toContain('activeSearchBuilderGroupId')
@@ -440,13 +870,31 @@ describe('Communication domain elements', () => {
     expect(mailListSource).toContain('DropdownMenu')
     expect(mailListSource).toContain('mail-list-settings-menu')
     expect(mailListSource).toContain("t('List display')")
+    expect(mailListSource).toContain('mail-list-plain-search')
+    expect(mailListSource).toContain("'update-search-query'")
+    expect(mailListSource).toContain("t('Address, subject or body')")
+    expect(mailListSource).toContain('plainSearchQuery || builderSearchQuery')
     expect(mailListSource).toContain('activeDensity')
+    expect(mailListSource).toContain('mailListItemsForView')
+    expect(mailListSource).toContain('mailListTreeSelectOptions')
+    expect(mailListSource).not.toContain('.slice(0, 24)')
+    expect(mailListViewsSource).toContain("'mail:all'")
+    expect(mailListViewsSource).toContain("'mail:spam'")
+    expect(mailListViewsSource).toContain("'mail:drafts'")
+    expect(mailListViewsSource).toContain("item.mailboxLabel === 'Inbox'")
+    expect(mailListViewsSource).toContain("item.mailboxLabel === 'Sent'")
+    expect(mailListViewsSource).toContain("item.mailboxLabel === 'Trash'")
+    expect(mailListViewsSource).toContain('mailListItemsForView')
+    expect(mailListViewsSource).toContain('mailListTreeSelectOptions')
+    expect(mailListViewsSource).toContain("translate('Saved filters')")
     expect(mailFolderListSource).toContain('MailFolderModel')
     expect(mailFolderListSource).toContain("t('Mail folders')")
     expect(mailFolderListSource).toContain('role="tree"')
     expect(mailFolderListSource).toContain('role="treeitem"')
     expect(mailFolderListSource).toContain(':aria-level="row.depth"')
-    expect(mailFolderListSource).toContain(':aria-expanded="row.hasChildren ? row.expanded : undefined"')
+    expect(mailFolderListSource).toContain(
+      ':aria-expanded="row.hasChildren ? row.expanded : undefined"'
+    )
     expect(mailFolderListSource).toContain('expandedFolderIds')
     expect(mailFolderListSource).toContain('toggleFolder')
     expect(mailFolderListSource).toContain("t('Collapse folder')")
@@ -476,6 +924,7 @@ describe('Communication domain elements', () => {
     expect(mailListItemSource).toContain('mail-list-item__primary')
     expect(mailListItemSource).toContain('mail-list-item__summary')
     expect(mailListItemSource).toContain('mail-list-item__signals')
+    expect(mailListItemSource).toContain('mail-list-item__status-chip--visible')
     expect(mailListItemSource).toContain('density?: MailListItemDensity')
     expect(mailListItemSource).not.toContain('timelineHint')
     expect(mailListItemSource).not.toContain('mailListItemConfidenceClass')
@@ -519,8 +968,12 @@ describe('Communication domain elements', () => {
     expect(mailSearchSource).toContain("'ai_category'")
     expect(mailSearchSource).toContain("'task'")
     expect(mailSearchSource).toContain('mode:(all|any)')
-    expect(mailSearchSuggestionSource).toContain('mailListSearchBuilderValueSuggestions')
-    expect(mailSearchSuggestionSource).toContain('mailListEntitySuggestionValues')
+    expect(mailSearchSuggestionSource).toContain(
+      'mailListSearchBuilderValueSuggestions'
+    )
+    expect(mailSearchSuggestionSource).toContain(
+      'mailListEntitySuggestionValues'
+    )
     expect(mailSearchSuggestionSource).toContain('booleanSuggestionValues')
     expect(mailElementsSource).toContain('tabler:mail-x')
     expect(mailElementsSource).toContain('tabler:shield-exclamation')
@@ -544,15 +997,24 @@ describe('Communication domain elements', () => {
     expect(mailActionSource).toContain('mailActionToolbarSections')
     expect(mailActionSource).toContain('communication-email-action-split')
     expect(mailActionSource).toContain('communication-email-response-group')
-    expect(mailActionSource).toContain('communication-email-command-bar__spacer')
-    expect(mailActionSource).toContain('communication-email-command-bar__inspector-toggle')
+    expect(mailActionSource).toContain(
+      'communication-email-command-bar__spacer'
+    )
+    expect(mailActionSource).toContain(
+      'communication-email-command-bar__inspector-toggle'
+    )
+    expect(mailActionSource).toContain(':aria-label="control.label"')
+    expect(mailActionSource).not.toContain('{{ control.label }}')
+    expect(domainCssSource).toContain('clip-path: inset(50%)')
     expect(mailActionSource).toContain('toggle-inspector')
     expect(mailActionSource).toContain('inspectorVisible')
     expect(mailActionSource).toContain('showInspectorToggle')
     expect(mailActionsSource).toContain('mailActionMenuGroups')
     expect(mailActionsSource).toContain('mailActionResponseControls')
     expect(mailActionsSource).toContain('mailActionToolbarSections')
-    expect(mailActionsSource).toContain("itemIds: ['ai-reply', 'ai-reply-variants', 'bilingual-reply-flow', 'smart-cc']")
+    expect(mailActionsSource).toContain(
+      "itemIds: ['ai-reply', 'ai-reply-variants', 'bilingual-reply-flow', 'smart-cc']"
+    )
     expect(mailActionsSource).toContain("itemIds: ['forward-eml', 'redirect']")
     expect(mailActionSource).not.toContain('Dialog')
     expect(mailActionSource).not.toContain('IconButton')
@@ -561,8 +1023,12 @@ describe('Communication domain elements', () => {
     expect(mailActionSource).not.toContain('Action panel settings')
     expect(mailActionSource).not.toContain('selectedActionIds')
     expect(mailActionSource).not.toContain('action.label')
-    expect(domainCssSource).not.toContain('communication-email-command-bar__settings')
-    expect(domainCssSource).not.toContain('communication-email-action-settings-dialog')
+    expect(domainCssSource).not.toContain(
+      'communication-email-command-bar__settings'
+    )
+    expect(domainCssSource).not.toContain(
+      'communication-email-action-settings-dialog'
+    )
     expect(mailActionSource).not.toContain('Tooltip')
     expect(mailActionsSource).toContain('Create from message')
     expect(mailActionsSource).toContain('Forwarding actions')
@@ -584,18 +1050,35 @@ describe('Communication domain elements', () => {
     expect(mailActionQueriesSource).toContain('useMarkMessageSpamMutation')
     expect(mailActionQueriesSource).toContain('useMarkMessageUnreadMutation')
     expect(mailActionQueriesSource).toContain('useRemoveMessageLabelMutation')
-    expect(mailOperationQueriesSource).toContain('useUpdateMessageAiStateMutation')
+    expect(mailOperationQueriesSource).toContain(
+      'useUpdateMessageAiStateMutation'
+    )
     expect(mailOperationQueriesSource).toContain('useBulkMessageActionMutation')
     expect(messageApiSource).toContain('restoreMessage')
-    expect(mailActionQueriesSource).toContain("transitionMessageWorkflowState(messageId, 'spam')")
+    expect(mailActionQueriesSource).toContain(
+      "transitionMessageWorkflowState(messageId, 'spam')"
+    )
     expect(mailViewerSource).toContain('MailQuotedOriginal')
     expect(mailViewerSource).toContain('HtmlPreview')
     expect(mailViewerSource).toContain('communication-email-viewer')
-    expect(mailViewerSource).toContain('communication-email-viewer__mode-divider')
-    expect(mailViewerSource).toContain('communication-email-center__body-scroll')
+    expect(mailViewerSource).toContain(
+      'communication-email-viewer__mode-divider'
+    )
+    expect(mailViewerSource).toContain(
+      'communication-email-center__body-scroll'
+    )
     expect(mailViewerSource).toContain('communication-email-center__paper')
+    expect(domainCssSource).toContain(
+      '.communication-email-center__paper {\n\talign-content: start;\n\tgap: var(--h-spacing-3);\n\tbox-sizing: border-box;\n\twidth: 100%;'
+    )
+    expect(domainCssSource).not.toContain('width: min(820px, 100%);')
+    expect(domainCssSource).toContain(
+      '.communication-email-message__body-preview .hermes-html-preview__content > :where(table, div, section, article)'
+    )
     expect(mailViewerSource).not.toContain('AttachmentChip')
-    expect(mailViewerSource).not.toContain('communication-email-attachment-dock')
+    expect(mailViewerSource).not.toContain(
+      'communication-email-attachment-dock'
+    )
     expect(mailFooterSource).toContain('communication-email-footer')
     expect(mailFooterSource).toContain('AttachmentChip')
     expect(mailInspectorSource).toContain('MailInspectorModel')
@@ -626,7 +1109,9 @@ describe('Communication domain elements', () => {
     expect(messengerListSource).toContain("t('List display')")
     expect(messengerListSource).not.toContain("t('New message')")
     expect(messengerListItemSource).toContain('MessengerListItemModel')
-    expect(messengerListItemSource).toContain('density?: MessengerListItemDensity')
+    expect(messengerListItemSource).toContain(
+      'density?: MessengerListItemDensity'
+    )
     expect(messengerActionSource).toContain('Messenger conversation actions')
     expect(messengerActionSource).toContain('ButtonGroup')
     expect(messengerActionSource).toContain('Spacer')
@@ -641,9 +1126,15 @@ describe('Communication domain elements', () => {
     expect(messengerProviderRichEditorSource).toContain('RichTextEditor')
     expect(messengerProviderRichEditorSource).toContain('select-capability')
     expect(messengerProviderRichEditorSource).toContain('preset.primaryActions')
-    expect(telegramMessengerRichEditorSource).toContain('telegramMessengerComposerPreset')
-    expect(whatsAppMessengerRichEditorSource).toContain('whatsAppMessengerComposerPreset')
-    expect(signalMessengerRichEditorSource).toContain('signalMessengerComposerPreset')
+    expect(telegramMessengerRichEditorSource).toContain(
+      'telegramMessengerComposerPreset'
+    )
+    expect(whatsAppMessengerRichEditorSource).toContain(
+      'whatsAppMessengerComposerPreset'
+    )
+    expect(signalMessengerRichEditorSource).toContain(
+      'signalMessengerComposerPreset'
+    )
     expect(messengerComposerSource).toContain('telegramMessengerComposerPreset')
     expect(messengerComposerSource).toContain('whatsAppMessengerComposerPreset')
     expect(messengerComposerSource).toContain('signalMessengerComposerPreset')
@@ -658,7 +1149,9 @@ describe('Communication domain elements', () => {
     expect(messengerWorkspaceSource).toContain('MessengerMessage')
     expect(messengerWorkspaceSource).toContain('MessengerInspector')
     expect(mailMessageSource).toContain(':attachments="message.attachments"')
-    expect(mailMessageSource).not.toContain('communication-email-center__context')
+    expect(mailMessageSource).not.toContain(
+      'communication-email-center__context'
+    )
     expect(mailViewerSource).not.toContain('attributeGroups')
     expect(mailViewerSource).not.toContain('hermesEntities')
     expect(mailViewerSource).not.toContain("t('Message attributes')")
@@ -666,12 +1159,18 @@ describe('Communication domain elements', () => {
     expect(mailQuotedOriginalSource).toContain('Original message')
     expect(mailReplyComposerSource).toContain('Reply draft')
     expect(mailWorkspaceSource).toContain('MailList')
+    expect(mailWorkspaceSource).toContain(':search-query="searchQuery"')
+    expect(mailWorkspaceSource).toContain("@update-search-query=\"emit('update-search-query', $event)\"")
     expect(mailWorkspaceSource).toContain('MailMessage')
     expect(mailWorkspaceSource).not.toContain('MailThread')
     expect(mailWorkspaceSource).toContain('activeMessage')
-    expect(mailWorkspaceSource).toContain('MailInspector v-if="isInspectorVisible"')
+    expect(mailWorkspaceSource).toContain(
+      'MailInspector v-if="isInspectorVisible"'
+    )
     expect(mailWorkspaceSource).not.toContain('CommunicationHermesInspector')
-    expect(mailWorkspaceSource).toContain('@toggle-inspector="handleToggleInspector"')
+    expect(mailWorkspaceSource).toContain(
+      '@toggle-inspector="handleToggleInspector"'
+    )
     expect(conversationSource).toContain('ChatInput')
     expect(conversationSource).toContain('MailMessage')
     expect(conversationSource).not.toContain('MailThread')
@@ -684,48 +1183,90 @@ describe('Communication domain elements', () => {
     expect(channelListSource).toContain('communication-channel-direct-folder')
     expect(channelListSource).toContain('select-direct-chat')
     expect(channelListSource).toContain('communicationChannelDirectChatCount')
-    expect(domainCssSource).toContain('.communication-channel-workspace {\n\tgrid-template-columns')
+    expect(domainCssSource).toContain(
+      '.communication-channel-workspace {\n\tgrid-template-columns'
+    )
     expect(domainCssSource).toContain('\theight: 100%;')
-    expect(domainCssSource).toContain('.communication-channel-rail__sections {\n\tdisplay: flex;')
+    expect(domainCssSource).toContain(
+      '.communication-channel-rail__sections {\n\tdisplay: flex;'
+    )
     expect(domainCssSource).toContain('.communication-calls-list__permanent')
     expect(domainCssSource).toContain('.communication-calls-list__date-section')
-    expect(domainCssSource).toContain('.communication-channel-rail__section[open]')
+    expect(domainCssSource).toContain(
+      '.communication-channel-rail__section[open]'
+    )
     expect(domainCssSource).toContain('overscroll-behavior: contain;')
     expect(channelActionSource).toContain('actionGroups')
     expect(channelActionSource).toContain('group.actions')
-    expect(channelActionSource).toContain('action.contract ?? action.description')
+    expect(channelActionSource).toContain(
+      'action.contract ?? action.description'
+    )
     expect(channelViewerSource).toContain('channelMessageAuthor')
-    expect(channelViewerSource).toContain("message.direction === 'system' ? undefined")
-    expect(domainCssSource).toContain('.communication-channel-composer__tools::-webkit-scrollbar')
-    expect(domainCssSource).toContain('.communication-channel-composer__tool.hermes-icon-button')
+    expect(channelViewerSource).toContain(
+      "message.direction === 'system' ? undefined"
+    )
+    expect(domainCssSource).toContain(
+      '.communication-channel-composer__tools::-webkit-scrollbar'
+    )
+    expect(domainCssSource).toContain(
+      '.communication-channel-composer__tool.hermes-icon-button'
+    )
     expect(domainCssSource).toContain('height: 30px;')
-    expect(domainCssSource).toContain('.communication-channel-stream {\n\tgrid-template-rows: auto auto minmax(0, 1fr) auto;')
-    expect(domainCssSource).toContain('.communication-channel-stream__messages {\n\tdisplay: grid;')
+    expect(domainCssSource).toContain(
+      '.communication-channel-stream {\n\tgrid-template-rows: auto auto minmax(0, 1fr) auto;'
+    )
+    expect(domainCssSource).toContain(
+      '.communication-channel-stream__messages {\n\tdisplay: grid;'
+    )
     expect(domainCssSource).toContain('\tmin-height: 0;')
-    expect(domainCssSource).not.toContain('grid-template-rows: auto auto auto minmax(0, 1fr) auto;')
-    expect(channelInspectorSource).toContain('CommunicationChannelInspectorModel')
+    expect(domainCssSource).not.toContain(
+      'grid-template-rows: auto auto auto minmax(0, 1fr) auto;'
+    )
+    expect(channelInspectorSource).toContain(
+      'CommunicationChannelInspectorModel'
+    )
     expect(channelInspectorSource).toContain('ScoreGauge')
     expect(channelInspectorSource).toContain('Channel Intelligence')
     expect(channelInspectorSource).toContain('Extracted entities')
     expect(channelInspectorSource).toContain('Suggested actions')
     expect(channelInspectorSource).toContain('Related context')
-    expect(channelInspectorSource).not.toContain('CommunicationHermesInspectorSectionModel')
+    expect(channelInspectorSource).not.toContain(
+      'CommunicationHermesInspectorSectionModel'
+    )
     expect(channelWorkspaceComponentSource).toContain('ChannelMessage')
     expect(channelWorkspaceComponentSource).toContain('ChannelInspector')
-    expect(channelWorkspaceComponentSource).toContain(':model="workspace.inspector"')
+    expect(channelWorkspaceComponentSource).toContain(
+      ':model="workspace.inspector"'
+    )
     expect(channelWorkspaceComponentSource).toContain('direct-chat-folders')
-    expect(channelSurfaceAdaptersSource).toContain('channelProviderOptionsFromSubSurfaces')
-    expect(channelSurfaceAdaptersSource).toContain('channelActionGroupsFromSubSurface')
-    expect(channelSurfaceAdaptersSource).toContain('channelComposerCapabilitiesFromSubSurface')
+    expect(channelSurfaceAdaptersSource).toContain(
+      'channelProviderOptionsFromSubSurfaces'
+    )
+    expect(channelSurfaceAdaptersSource).toContain(
+      'channelActionGroupsFromSubSurface'
+    )
+    expect(channelSurfaceAdaptersSource).toContain(
+      'channelComposerCapabilitiesFromSubSurface'
+    )
     expect(communicationSurfaceSource).toContain('CommunicationSurface')
     expect(communicationSurfaceSource).toContain('CommunicationSubSurface')
     expect(communicationSurfaceSource).toContain('commonCapabilities')
     expect(communicationSurfaceSource).toContain('subSurfaces')
-    expect(communicationWorkspaceSurfaceSource).toContain('useZulipCommunicationsSurface')
-    expect(communicationWorkspaceSurfaceSource).toContain('useSlackCommunicationsSurface')
-    expect(communicationWorkspaceSurfaceSource).toContain('useDiscordCommunicationsSurface')
-    expect(communicationWorkspaceSurfaceSource).toContain('useMattermostCommunicationsSurface')
-    expect(communicationWorkspaceSurfaceSource).toContain('createCommunicationSurface')
+    expect(communicationWorkspaceSurfaceSource).toContain(
+      'useZulipCommunicationsSurface'
+    )
+    expect(communicationWorkspaceSurfaceSource).toContain(
+      'useSlackCommunicationsSurface'
+    )
+    expect(communicationWorkspaceSurfaceSource).toContain(
+      'useDiscordCommunicationsSurface'
+    )
+    expect(communicationWorkspaceSurfaceSource).toContain(
+      'useMattermostCommunicationsSurface'
+    )
+    expect(communicationWorkspaceSurfaceSource).toContain(
+      'createCommunicationSurface'
+    )
     expect(zulipSurfaceSource).toContain('send_stream_message')
     expect(zulipSurfaceSource).toContain('send_direct_message_with_upload')
     expect(zulipSurfaceSource).toContain('update_message')
@@ -779,7 +1320,9 @@ describe('Communication domain elements', () => {
     expect(mailStorySource).not.toContain('MailThread')
     expect(mailStorySource).toContain('MailWorkspace')
     expect(mailStorySource).toContain('Original message')
-    expect(messengerStorySource).toContain('Hermes App/Communications/Messengers')
+    expect(messengerStorySource).toContain(
+      'Hermes App/Communications/Messengers'
+    )
     expect(messengerStorySource).toContain('MessengerListItem')
     expect(messengerStorySource).toContain('MessengerList')
     expect(messengerStorySource).toContain('MessengerAction')
@@ -806,10 +1349,14 @@ describe('Communication domain elements', () => {
     expect(channelStorySource).toContain('ChannelWorkspace')
     expect(channelStorySource).toContain('storybook-canvas--workspace')
     expect(channelStorySource).not.toContain('height: 760px')
-    expect(storybookCssSource).toContain('.storybook-canvas--workspace > .communication-channel-workspace')
+    expect(storybookCssSource).toContain(
+      '.storybook-canvas--workspace > .communication-channel-workspace'
+    )
     expect(channelStorySource).toContain('directChatFolders')
     expect(channelStorySource).toContain('Owner conversations')
-    expect(channelStorySource).not.toContain('Provider-neutral channel surface for Zulip now')
+    expect(channelStorySource).not.toContain(
+      'Provider-neutral channel surface for Zulip now'
+    )
     expect(channelStorySource).not.toContain('Zulip SubSurface')
     expect(channelStorySource).not.toContain('capabilityInspectorItems')
     expect(channelStorySource).toContain('Channel confidence')
@@ -821,8 +1368,12 @@ describe('Communication domain elements', () => {
     expect(channelStorySource).toContain('communicationsSurface.subSurfaces')
     expect(channelStorySource).toContain('useCommunicationsWorkspaceSurface')
     expect(channelStorySource).toContain('channelActionGroupsFromSubSurface')
-    expect(channelStorySource).toContain('channelComposerCapabilitiesFromSubSurface')
-    expect(channelStorySource).toContain('channelProviderOptionsFromSubSurfaces')
+    expect(channelStorySource).toContain(
+      'channelComposerCapabilitiesFromSubSurface'
+    )
+    expect(channelStorySource).toContain(
+      'channelProviderOptionsFromSubSurfaces'
+    )
     expect(callsStorySource).toContain('Hermes App/Communications/Calls')
     expect(callsStorySource).toContain('CommunicationCallsSurface')
     expect(callsStorySource).toContain('CallListItem')
@@ -863,8 +1414,12 @@ describe('Communication domain elements', () => {
     expect(callMessageSource).toContain('CallAction')
     expect(callMessageSource).toContain('CallViewer')
     expect(callWorkspaceSource).toContain('communication-calls-workspace')
-    expect(storybookCssSource).toContain('.storybook-canvas--workspace > .communication-calls-workspace')
-    expect(storySources.join('\n')).not.toContain('Hermes UI/Domain/Communications')
+    expect(storybookCssSource).toContain(
+      '.storybook-canvas--workspace > .communication-calls-workspace'
+    )
+    expect(storySources.join('\n')).not.toContain(
+      'Hermes UI/Domain/Communications'
+    )
     expect(storySources.join('\n')).not.toContain('/api/v1/')
     expect(storySources.join('\n')).not.toContain('/api/v1/telegram')
     expect(storySources.join('\n')).not.toContain('/api/v1/whatsapp')

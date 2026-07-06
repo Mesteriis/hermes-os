@@ -128,6 +128,51 @@ impl From<ProjectedMessage> for CommunicationMessageDetailItem {
     }
 }
 
+pub(crate) async fn rich_body_html_for_message(
+    pool: sqlx::postgres::PgPool,
+    message: &ProjectedMessage,
+) -> Result<Option<String>, ApiError> {
+    let Some(raw) = crate::domains::communications::core::CommunicationIngestionStore::new(pool)
+        .raw_record(&message.raw_record_id)
+        .await?
+    else {
+        return Ok(None);
+    };
+    if raw.record_kind != "email_message" {
+        return Ok(None);
+    }
+    if raw
+        .payload
+        .get("raw_blob_storage_kind")
+        .and_then(Value::as_str)
+        != Some("local_fs")
+    {
+        return Ok(None);
+    }
+    if raw
+        .payload
+        .get("raw_blob_storage_path")
+        .and_then(Value::as_str)
+        .is_none()
+    {
+        return Ok(None);
+    }
+
+    let blob_store = communication_blob_store();
+    match parse_raw_email_message_from_blob(&blob_store, &raw).await {
+        Ok(parsed) => Ok(parsed.body_html.filter(|value| !value.trim().is_empty())),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                message_id = %message.message_id,
+                raw_record_id = %message.raw_record_id,
+                "mail detail rich html extraction failed; falling back to projected body_text"
+            );
+            Ok(None)
+        }
+    }
+}
+
 #[derive(Serialize)]
 pub(crate) struct CommunicationAttachmentResponse {
     pub(crate) attachment_id: String,

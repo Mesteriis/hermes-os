@@ -234,12 +234,29 @@ async fn v1_status_accepts_local_frontend_cors_preflight_before_auth() {
         "http://tauri.localhost",
         "tauri://localhost",
     ] {
-        assert_local_cors_preflight(&app, origin, "GET", "/api/v1/status").await;
+        assert_local_cors_preflight(&app, origin, "GET", "/api/v1/status", "x-hermes-secret").await;
         assert_local_cors_preflight(
             &app,
             origin,
             "PATCH",
             "/api/v1/communications/messages/message-1",
+            "x-hermes-secret",
+        )
+        .await;
+        assert_local_cors_preflight(
+            &app,
+            origin,
+            "POST",
+            "/hermes.communications.v1.CommunicationsService/ListMessages",
+            "connect-protocol-version,content-type,x-hermes-secret",
+        )
+        .await;
+        assert_local_cors_preflight(
+            &app,
+            origin,
+            "GET",
+            "/api/events/stream?after_position=5",
+            "last-event-id,x-hermes-secret",
         )
         .await;
     }
@@ -250,6 +267,7 @@ async fn assert_local_cors_preflight(
     origin: &'static str,
     request_method: &'static str,
     uri: &'static str,
+    request_headers: &'static str,
 ) {
     let response = app
         .clone()
@@ -264,7 +282,7 @@ async fn assert_local_cors_preflight(
                 )
                 .header(
                     header::ACCESS_CONTROL_REQUEST_HEADERS,
-                    HeaderValue::from_static("x-hermes-secret"),
+                    HeaderValue::from_static(request_headers),
                 )
                 .body(Body::empty())
                 .expect("request"),
@@ -277,6 +295,17 @@ async fn assert_local_cors_preflight(
         response.headers().get(header::ACCESS_CONTROL_ALLOW_ORIGIN),
         Some(&HeaderValue::from_static(origin))
     );
+    let allow_headers = response
+        .headers()
+        .get(header::ACCESS_CONTROL_ALLOW_HEADERS)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    for requested_header in request_headers.split(',') {
+        assert!(
+            allow_headers.contains(requested_header),
+            "missing {requested_header} in {allow_headers}"
+        );
+    }
 }
 
 #[tokio::test]

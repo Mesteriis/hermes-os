@@ -1,4 +1,5 @@
 fn main() {
+    println!("cargo:rerun-if-changed=migrations");
     println!("cargo:rerun-if-changed=../contracts/proto/hermes/common/v1/common.proto");
     println!("cargo:rerun-if-changed=../contracts/proto/hermes/signal_hub/v1/signal_hub.proto");
     println!(

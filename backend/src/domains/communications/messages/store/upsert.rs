@@ -47,8 +47,8 @@ impl MessageProjectionStore {
                 'email',
                 NULL,
                 $6,
-                'received',
-                '{}'::jsonb
+                $10,
+                $11
             FROM communication_raw_records
             WHERE raw_record_id = $2
               AND account_id = $3
@@ -106,6 +106,8 @@ impl MessageProjectionStore {
         .bind(json!(message.recipients))
         .bind(&message.body_text)
         .bind(message.occurred_at)
+        .bind(&message.delivery_state)
+        .bind(&message.message_metadata)
         .fetch_optional(&self.pool)
         .await?;
 

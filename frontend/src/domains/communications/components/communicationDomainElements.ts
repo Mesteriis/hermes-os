@@ -97,6 +97,12 @@ export type CommunicationEmailQuotedOriginalModel = {
   body: string
 }
 
+export type CommunicationMessageTranslationModel = {
+  text: string
+  target: string
+  model?: string
+}
+
 export type CommunicationMessageAttributeModel = {
   id: string
   label: string
@@ -145,6 +151,7 @@ export type CommunicationConversationMessageModel = {
   meta?: string
   tone?: CommunicationTone
   attachments?: readonly CommunicationConversationAttachmentModel[]
+  translation?: CommunicationMessageTranslationModel
   quotedOriginal?: CommunicationEmailQuotedOriginalModel
   labels?: readonly string[]
   markers?: readonly CommunicationMessageAttributeModel[]

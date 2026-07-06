@@ -1,21 +1,13 @@
 <script setup lang="ts">
 import { ToastProvider, ToastViewport, ToastRoot, ToastTitle, ToastDescription, ToastClose } from 'reka-ui'
-import { ref, computed, provide, inject, onBeforeUnmount, type Ref } from 'vue'
+import { ref, computed, provide, onBeforeUnmount, type Ref } from 'vue'
 import Icon from './Icon.vue'
+import {
+  TOAST_INJECTION_KEY,
+  type DefaultToastItem,
+  type ToastItem,
+} from './toast'
 
-export interface ToastItem {
-  id: string
-  title?: string
-  description?: string
-  variant?: 'default' | 'info' | 'success' | 'warning' | 'error'
-  duration?: number
-}
-
-type DefaultToastItem = Omit<ToastItem, 'id'> & {
-  id?: string
-}
-
-const TOAST_INJECTION_KEY = 'hermes-toast-context'
 const TOAST_EXIT_ANIMATION_MS = 820
 
 const props = withDefaults(defineProps<{

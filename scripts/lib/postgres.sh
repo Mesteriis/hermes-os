@@ -32,6 +32,13 @@ postgres_up() {
 	wait_for_postgres
 }
 
+nats_up() {
+	load_hermes_env
+	ensure_postgres_runtime_dependencies
+	info "Starting NATS container"
+	compose_cmd up -d --wait nats
+}
+
 wait_for_postgres() {
 	local attempts=60
 	local index=1
@@ -50,6 +57,11 @@ wait_for_postgres() {
 postgres_status() {
 	load_hermes_env
 	compose_cmd ps postgres
+}
+
+nats_status() {
+	load_hermes_env
+	compose_cmd ps nats
 }
 
 postgres_stop() {

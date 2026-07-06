@@ -798,7 +798,13 @@ async fn store_oauth_token(
         "metadata": sanitize_yandex_telemost_payload(metadata.clone()),
     }));
     secret_store.upsert_secret_reference(&reference).await?;
-    let vault_metadata = sanitize_yandex_telemost_payload(metadata.clone());
+    let vault_metadata = json!({
+        "provider": YANDEX_TELEMOST_PROVIDER_KIND_STR,
+        "provider_kind": YANDEX_TELEMOST_PROVIDER_KIND_STR,
+        "account_id": account_id,
+        "secret_purpose": ProviderAccountSecretPurpose::YandexTelemostOauthToken.as_str(),
+        "metadata": sanitize_yandex_telemost_payload(metadata.clone()),
+    });
     vault.store_secret(
         secret_ref,
         token.trim(),

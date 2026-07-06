@@ -18,7 +18,7 @@ import type {
   CommunicationSectionId,
   CommunicationThreadSummary,
   ProjectItem,
-  TaskItem
+  TaskItem,
 } from '../types/communications'
 
 const emptyComposeForm: ComposeFormModel = {
@@ -34,13 +34,14 @@ const emptyComposeForm: ComposeFormModel = {
   bodyFormat: 'plain',
   scheduledSendAt: '',
   undoSendSeconds: null,
-  inReplyTo: null
+  inReplyTo: null,
 }
 
 export const useCommunicationsStore = defineStore('communications-ui', () => {
   // --- Message list state ---
   const communicationMessages = ref<CommunicationMessageSummary[]>([])
-  const selectedCommunicationDetail = ref<CommunicationMessageDetailResponse | null>(null)
+  const selectedCommunicationDetail =
+    ref<CommunicationMessageDetailResponse | null>(null)
   const communicationsError = ref('')
   const isCommunicationsLoading = ref(false)
   const selectedConversationIndex = ref(-1)
@@ -88,7 +89,12 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
 
   // --- Sync ---
   const mailSyncStatuses = ref<MailSyncStatus[]>([])
-  const selectedMailSyncSettings = ref<{ account_id: string; sync_enabled: boolean; batch_size: number; poll_interval_seconds: number } | null>(null)
+  const selectedMailSyncSettings = ref<{
+    account_id: string
+    sync_enabled: boolean
+    batch_size: number
+    poll_interval_seconds: number
+  } | null>(null)
   const lastMailSyncRuns = ref<Record<string, unknown>[]>([])
   const isMailSyncBusy = ref(false)
   const mailSyncStatusMessage = ref('')
@@ -127,8 +133,13 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
   function setMessages(messages: CommunicationMessageSummary[]) {
     communicationMessages.value = messages
     const visibleIds = new Set(messages.map((message) => message.message_id))
-    selectedMessageIds.value = selectedMessageIds.value.filter((messageId) => visibleIds.has(messageId))
-    if (selectionAnchorMessageId.value && !visibleIds.has(selectionAnchorMessageId.value)) {
+    selectedMessageIds.value = selectedMessageIds.value.filter((messageId) =>
+      visibleIds.has(messageId)
+    )
+    if (
+      selectionAnchorMessageId.value &&
+      !visibleIds.has(selectionAnchorMessageId.value)
+    ) {
       selectionAnchorMessageId.value = ''
     }
   }
@@ -137,7 +148,8 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
     clearSelectedThread()
     selectedConversationIndex.value = index
     if (index >= 0 && index < communicationMessages.value.length) {
-      selectedCommunicationMessageId.value = communicationMessages.value[index].message_id
+      selectedCommunicationMessageId.value =
+        communicationMessages.value[index].message_id
       return
     }
     selectedCommunicationMessageId.value = ''
@@ -146,7 +158,9 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
   function selectMessageId(messageId: string) {
     clearSelectedThread()
     selectedCommunicationMessageId.value = messageId
-    selectedConversationIndex.value = communicationMessages.value.findIndex((message) => message.message_id === messageId)
+    selectedConversationIndex.value = communicationMessages.value.findIndex(
+      (message) => message.message_id === messageId
+    )
   }
 
   function toggleMessageSelection(messageId: string, extendRange = false) {
@@ -157,25 +171,36 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
       return
     }
     if (selectedMessageIdSet.value.has(normalized)) {
-      selectedMessageIds.value = selectedMessageIds.value.filter((id) => id !== normalized)
-      if (selectionAnchorMessageId.value === normalized) selectionAnchorMessageId.value = ''
+      selectedMessageIds.value = selectedMessageIds.value.filter(
+        (id) => id !== normalized
+      )
+      if (selectionAnchorMessageId.value === normalized)
+        selectionAnchorMessageId.value = ''
       return
     }
     selectedMessageIds.value = [...selectedMessageIds.value, normalized]
     selectionAnchorMessageId.value = normalized
   }
 
-  function selectMessageRange(anchorMessageId: string, targetMessageId: string) {
-    const anchorIndex = communicationMessages.value.findIndex((message) => message.message_id === anchorMessageId)
-    const targetIndex = communicationMessages.value.findIndex((message) => message.message_id === targetMessageId)
+  function selectMessageRange(
+    anchorMessageId: string,
+    targetMessageId: string
+  ) {
+    const anchorIndex = communicationMessages.value.findIndex(
+      (message) => message.message_id === anchorMessageId
+    )
+    const targetIndex = communicationMessages.value.findIndex(
+      (message) => message.message_id === targetMessageId
+    )
     if (anchorIndex < 0 || targetIndex < 0) {
       toggleMessageSelection(targetMessageId)
       return
     }
 
-    const [start, end] = anchorIndex < targetIndex
-      ? [anchorIndex, targetIndex]
-      : [targetIndex, anchorIndex]
+    const [start, end] =
+      anchorIndex < targetIndex
+        ? [anchorIndex, targetIndex]
+        : [targetIndex, anchorIndex]
     const existing = new Set(selectedMessageIds.value)
     for (const message of communicationMessages.value.slice(start, end + 1)) {
       existing.add(message.message_id)
@@ -191,7 +216,11 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
   }
 
   function selectVisibleMessages(messageIds: string[]) {
-    const uniqueIds = [...new Set(messageIds.map((messageId) => messageId.trim()).filter(Boolean))]
+    const uniqueIds = [
+      ...new Set(
+        messageIds.map((messageId) => messageId.trim()).filter(Boolean)
+      ),
+    ]
     selectedMessageIds.value = uniqueIds
     selectionAnchorMessageId.value = uniqueIds[0] ?? ''
   }
@@ -222,9 +251,6 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
 
   function setMailSyncStatuses(statuses: MailSyncStatus[]) {
     mailSyncStatuses.value = statuses
-    if (!selectedMailAccountId.value) {
-      selectedMailAccountId.value = statuses[0]?.account_id ?? ''
-    }
   }
 
   function setMailSyncStatusMessage(msg: string) {
@@ -267,7 +293,9 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
     selectedThread.value = null
   }
 
-  function setCommunicationMessageInsight(insight: CommunicationMessageInsight | null) {
+  function setCommunicationMessageInsight(
+    insight: CommunicationMessageInsight | null
+  ) {
     mailMessageInsight.value = insight
   }
 
@@ -370,38 +398,100 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
 
   return {
     // State
-    communicationMessages, selectedCommunicationDetail, communicationsError, isCommunicationsLoading,
-    selectedConversationIndex, selectedCommunicationMessageId, selectedMessageIds,
-    mailStateFilter, mailLocalStateFilter, mailStateCounts, isMailStateTransitioning,
-    isAiAnswerSubmitting, aiAnalysisResult,
-    drafts, mailboxHealth, topSenders, threads, selectedThread, selectedThreadId,
-    mailResources, mailResourceSummary, mailMessageInsight,
-    isMailActionRunning, mailActionStatus, mailActionError, lastMessageExport,
-    mailSyncStatuses, selectedMailSyncSettings, lastMailSyncRuns,
-    isMailSyncBusy, mailSyncStatusMessage, mailSyncError,
-    isComposeOpen, composeForm, selectedMailAccountId,
-    isSendReviewOpen, isSendingMessage, composeSendError, composeStatusMessage, lastSendResponse,
-    messageSearchQuery, communicationsNavigatorMode, expandedCommunicationContactKey,
-    communicationsInspectorMode, activeMessageContextTab,
-    communicationProjects, communicationTasks,
+    communicationMessages,
+    selectedCommunicationDetail,
+    communicationsError,
+    isCommunicationsLoading,
+    selectedConversationIndex,
+    selectedCommunicationMessageId,
+    selectedMessageIds,
+    mailStateFilter,
+    mailLocalStateFilter,
+    mailStateCounts,
+    isMailStateTransitioning,
+    isAiAnswerSubmitting,
+    aiAnalysisResult,
+    drafts,
+    mailboxHealth,
+    topSenders,
+    threads,
+    selectedThread,
+    selectedThreadId,
+    mailResources,
+    mailResourceSummary,
+    mailMessageInsight,
+    isMailActionRunning,
+    mailActionStatus,
+    mailActionError,
+    lastMessageExport,
+    mailSyncStatuses,
+    selectedMailSyncSettings,
+    lastMailSyncRuns,
+    isMailSyncBusy,
+    mailSyncStatusMessage,
+    mailSyncError,
+    isComposeOpen,
+    composeForm,
+    selectedMailAccountId,
+    isSendReviewOpen,
+    isSendingMessage,
+    composeSendError,
+    composeStatusMessage,
+    lastSendResponse,
+    messageSearchQuery,
+    communicationsNavigatorMode,
+    expandedCommunicationContactKey,
+    communicationsInspectorMode,
+    activeMessageContextTab,
+    communicationProjects,
+    communicationTasks,
     // Computed
-    selectedCommunication, selectedMessageIdSet,
+    selectedCommunication,
+    selectedMessageIdSet,
     // Setters
-    setMessages, selectMessage, selectMessageId, toggleMessageSelection, selectVisibleMessages, clearMessageSelection, setMessageDetail,
-    setCommunicationsError, setCommunicationsLoading,
-    setStateFilter, setLocalStateFilter, setStateCounts,
-    setMailSyncStatuses, setMailSyncStatusMessage, setMailSyncError, setIsMailSyncBusy,
-    setDrafts, setMailboxHealth, setTopSenders, setThreads, selectThread, clearSelectedThread,
-    setCommunicationMessageInsight, setIsMailActionRunning, setMailActionStatus, setMailActionError,
+    setMessages,
+    selectMessage,
+    selectMessageId,
+    toggleMessageSelection,
+    selectVisibleMessages,
+    clearMessageSelection,
+    setMessageDetail,
+    setCommunicationsError,
+    setCommunicationsLoading,
+    setStateFilter,
+    setLocalStateFilter,
+    setStateCounts,
+    setMailSyncStatuses,
+    setMailSyncStatusMessage,
+    setMailSyncError,
+    setIsMailSyncBusy,
+    setDrafts,
+    setMailboxHealth,
+    setTopSenders,
+    setThreads,
+    selectThread,
+    clearSelectedThread,
+    setCommunicationMessageInsight,
+    setIsMailActionRunning,
+    setMailActionStatus,
+    setMailActionError,
     setLastMessageExport,
-    openCompose, closeCompose, updateComposeForm,
-    setComposeStatusMessage, setComposeSendError, setIsSendingMessage,
-    openSendReview, closeSendReview,
+    openCompose,
+    closeCompose,
+    updateComposeForm,
+    setComposeStatusMessage,
+    setComposeSendError,
+    setIsSendingMessage,
+    openSendReview,
+    closeSendReview,
     setMessageSearchQuery,
-    setNavigatorMode, setExpandedContactKey,
-    setInspectorMode, setActiveMessageContextTab,
-    setCommunicationProjects, setCommunicationTasks,
-    setSelectedMailAccountId
+    setNavigatorMode,
+    setExpandedContactKey,
+    setInspectorMode,
+    setActiveMessageContextTab,
+    setCommunicationProjects,
+    setCommunicationTasks,
+    setSelectedMailAccountId,
   }
 })
 
@@ -421,21 +511,31 @@ export function messageTime(dateStr: string | null): string {
 
 export function communicationChannelIcon(channelKind: string): string {
   switch (channelKind) {
-    case 'telegram': return 'tabler:brand-telegram'
-    case 'whatsapp': return 'tabler:brand-whatsapp'
-    case 'slack': return 'tabler:brand-slack'
-    case 'signal': return 'tabler:brand-signal'
-    default: return 'tabler:mail'
+    case 'telegram':
+      return 'tabler:brand-telegram'
+    case 'whatsapp':
+      return 'tabler:brand-whatsapp'
+    case 'slack':
+      return 'tabler:brand-slack'
+    case 'signal':
+      return 'tabler:brand-signal'
+    default:
+      return 'tabler:mail'
   }
 }
 
 export function communicationChannelLabel(channelKind: string): string {
   switch (channelKind) {
-    case 'telegram': return 'Telegram'
-    case 'whatsapp': return 'WhatsApp'
-    case 'slack': return 'Slack'
-    case 'signal': return 'Signal'
-    default: return 'Email'
+    case 'telegram':
+      return 'Telegram'
+    case 'whatsapp':
+      return 'WhatsApp'
+    case 'slack':
+      return 'Slack'
+    case 'signal':
+      return 'Signal'
+    default:
+      return 'Email'
   }
 }
 
@@ -444,33 +544,62 @@ export function attachmentIcon(contentType: string): string {
   if (contentType.startsWith('video/')) return 'tabler:video'
   if (contentType.startsWith('audio/')) return 'tabler:music'
   if (contentType.includes('pdf')) return 'tabler:file-text'
-  if (contentType.includes('spreadsheet') || contentType.includes('excel') || contentType.includes('csv')) return 'tabler:table'
-  if (contentType.includes('word') || contentType.includes('document')) return 'tabler:file-description'
-  if (contentType.includes('zip') || contentType.includes('rar') || contentType.includes('tar')) return 'tabler:archive'
+  if (
+    contentType.includes('spreadsheet') ||
+    contentType.includes('excel') ||
+    contentType.includes('csv')
+  )
+    return 'tabler:table'
+  if (contentType.includes('word') || contentType.includes('document'))
+    return 'tabler:file-description'
+  if (
+    contentType.includes('zip') ||
+    contentType.includes('rar') ||
+    contentType.includes('tar')
+  )
+    return 'tabler:archive'
   return 'tabler:file'
 }
 
-export function communicationSectionWorkflowState(sectionId: string): WorkflowState | '' | null {
+export function communicationSectionWorkflowState(
+  sectionId: string
+): WorkflowState | '' | null {
   switch (sectionId) {
-    case 'unified': return ''
-    case 'inbox': return 'new'
-    case 'needs_reply': return 'needs_action'
-    case 'waiting': return 'waiting'
-    case 'done': return 'done'
-    case 'archived': return 'archived'
-    default: return null
+    case 'unified':
+      return ''
+    case 'inbox':
+      return 'new'
+    case 'needs_reply':
+      return 'needs_action'
+    case 'waiting':
+      return 'waiting'
+    case 'done':
+      return 'done'
+    case 'archived':
+      return 'archived'
+    default:
+      return null
   }
 }
 
-export function communicationWorkflowStateSectionId(state: WorkflowState | ''): CommunicationSectionId {
+export function communicationWorkflowStateSectionId(
+  state: WorkflowState | ''
+): CommunicationSectionId {
   switch (state) {
-    case '': return 'unified'
-    case 'new': return 'inbox'
-    case 'needs_action': return 'needs_reply'
-    case 'waiting': return 'waiting'
-    case 'done': return 'done'
-    case 'archived': return 'archived'
-    default: return 'unified'
+    case '':
+      return 'unified'
+    case 'new':
+      return 'inbox'
+    case 'needs_action':
+      return 'needs_reply'
+    case 'waiting':
+      return 'waiting'
+    case 'done':
+      return 'done'
+    case 'archived':
+      return 'archived'
+    default:
+      return 'unified'
   }
 }
 

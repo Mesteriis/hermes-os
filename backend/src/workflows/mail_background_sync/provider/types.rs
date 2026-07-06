@@ -21,5 +21,5 @@ pub(in crate::workflows::mail_background_sync::provider) struct ImapAccountConfi
     pub(in crate::workflows::mail_background_sync::provider) host: &'a str,
     pub(in crate::workflows::mail_background_sync::provider) port: u16,
     pub(in crate::workflows::mail_background_sync::provider) tls: bool,
-    pub(in crate::workflows::mail_background_sync::provider) mailbox: &'a str,
+    pub(in crate::workflows::mail_background_sync::provider) mailboxes: &'a [String],
 }

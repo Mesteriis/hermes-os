@@ -7,6 +7,33 @@ const SECRET_KIND_API_TOKEN: &str = "api_token";
 const SECRET_STORE_HOST_VAULT: &str = "host_vault";
 
 impl AiControlCenterStore {
+    pub async fn api_key_secret_ref(
+        &self,
+        provider_id: &str,
+    ) -> Result<Option<String>, AiControlCenterError> {
+        validate_non_empty("provider_id", provider_id)?;
+        let secret_ref = sqlx::query_scalar::<_, String>(
+            r#"
+            SELECT refs.secret_ref
+            FROM ai_provider_secret_refs refs
+            JOIN secret_references secrets ON secrets.secret_ref = refs.secret_ref
+            WHERE refs.provider_id = $1
+                AND refs.secret_purpose = $2
+                AND secrets.secret_kind = $3
+                AND secrets.store_kind = $4
+            LIMIT 1
+            "#,
+        )
+        .bind(provider_id.trim())
+        .bind(SECRET_PURPOSE_API_KEY)
+        .bind(SECRET_KIND_API_TOKEN)
+        .bind(SECRET_STORE_HOST_VAULT)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(secret_ref)
+    }
+
     pub(in crate::ai::control_center) async fn api_key_secret_configured(
         &self,
         provider_id: &str,

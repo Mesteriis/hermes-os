@@ -223,6 +223,84 @@ impl CommunicationProviderAccountStore {
         .await
     }
 
+    pub async fn update_display_name(
+        &self,
+        account_id: &str,
+        display_name: &str,
+    ) -> Result<Option<ProviderAccount>, CommunicationIngestionError> {
+        validate_non_empty_field("account_id", account_id)?;
+        validate_non_empty_field("display_name", display_name)?;
+        let display_name = display_name.trim();
+
+        let mut transaction = self.pool.begin().await?;
+        let observation = ObservationStore::capture_in_transaction(
+            &mut transaction,
+            &NewObservation::new(
+                "COMMUNICATION_PROVIDER_ACCOUNT_DISPLAY_NAME_MUTATION",
+                ObservationOriginKind::LocalRuntime,
+                chrono::Utc::now(),
+                json!({
+                    "account_id": account_id.trim(),
+                    "display_name": display_name,
+                    "action": "update_display_name",
+                }),
+                format!(
+                    "communication-provider-account://{}/display-name",
+                    account_id.trim()
+                ),
+            )
+            .provenance(json!({
+                "captured_by": "settings.provider_accounts.update_display_name",
+                "action": "update_display_name",
+            })),
+        )
+        .await?;
+
+        let row = sqlx::query(
+            r#"
+            UPDATE communication_provider_accounts
+            SET display_name = $2,
+                updated_at = now()
+            WHERE account_id = $1
+            RETURNING
+                account_id,
+                provider_kind,
+                display_name,
+                external_account_id,
+                config,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(account_id.trim())
+        .bind(display_name)
+        .fetch_optional(&mut *transaction)
+        .await?;
+
+        if row.is_some() {
+            link_vault_owned_entity_in_transaction(
+                &mut transaction,
+                VaultOwnedEntityLink {
+                    observation_id: observation.observation_id.clone(),
+                    domain: "vault",
+                    entity_kind: "communication_provider_account",
+                    entity_id: account_id.trim().to_owned(),
+                    relationship_kind: "display_name_update",
+                    base_metadata: json!({
+                        "account_id": account_id.trim(),
+                    }),
+                    extra_metadata: None,
+                },
+            )
+            .await?;
+            transaction.commit().await?;
+        } else {
+            transaction.rollback().await?;
+        }
+
+        row.map(row_to_provider_account).transpose()
+    }
+
     pub async fn update_whatsapp_lifecycle_state(
         &self,
         account_id: &str,

@@ -1,12 +1,15 @@
 use serde_json::json;
 use sqlx::Row;
 use tempfile::tempdir;
+use tokio::time::{Duration, sleep};
 use tower::ServiceExt;
 
+use hermes_hub_backend::ai::control_center::{AiControlCenterStore, AiProviderAccount};
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
 use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, ProviderAccountSecretPurpose,
+    CommunicationIngestionStore, CommunicationProviderKind, EmailProviderKind,
+    ProviderAccountSecretPurpose,
 };
 use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretResolver};
 use hermes_hub_backend::platform::storage::Database;
@@ -14,7 +17,7 @@ use hermes_hub_backend::vault::{HostVault, HostVaultConfig, SecretEntryContext};
 use testkit::context::TestContext;
 
 use super::support::{
-    LOCAL_API_TOKEN, json_request_with_token_and_actor, unlock_test_vault,
+    LOCAL_API_TOKEN, json_body, json_request_with_token_and_actor, unlock_test_vault,
     wait_for_calendar_account, wait_for_manifest_metadata_key, wait_for_provider_account,
     wait_for_provider_account_secret_binding, wait_for_secret_reference,
 };
@@ -308,4 +311,322 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
             .expose_for_runtime(),
         "icloud-app-password"
     );
+}
+
+#[tokio::test]
+async fn startup_reconciles_non_mail_provider_account_from_host_vault_manifest() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let config =
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([
+                ("HERMES_DEV_MODE", "true"),
+                (
+                    "HERMES_VAULT_HOME",
+                    vault_home.to_str().expect("vault path"),
+                ),
+                (
+                    "HERMES_DEV_KEY_PATH",
+                    dev_key_path.to_str().expect("dev key path"),
+                ),
+            ])
+            .expect("config");
+    let app = build_router_with_database(config.clone(), database.clone());
+    unlock_test_vault(app).await;
+
+    let account_id = "zulip-recover";
+    let secret_ref = "secret:provider-account:zulip-recover:zulip_api_key";
+    let vault = HostVault::new(HostVaultConfig {
+        home: vault_home,
+        dev_mode: true,
+        dev_key_path,
+    })
+    .expect("host vault");
+    vault.unlock_existing().expect("unlock host vault");
+    vault
+        .store_secret(
+            secret_ref,
+            "zulip-api-key",
+            SecretEntryContext {
+                entry_kind: "provider_api_token",
+                account_id,
+                purpose: ProviderAccountSecretPurpose::ZulipApiKey.as_str(),
+                secret_kind: SecretKind::ApiToken.as_str(),
+                label: "Zulip API key",
+                metadata: &json!({
+                    "provider": CommunicationProviderKind::ZulipBot.as_str(),
+                    "account_id": account_id,
+                    "display_name": "Recovered Zulip",
+                    "external_account_id": "bot@example.zulipchat.com",
+                    "provider_account_config": {
+                        "base_url": "https://example.zulipchat.com",
+                        "runtime": "api"
+                    }
+                }),
+            },
+        )
+        .expect("store zulip secret");
+
+    let restarted_database = Database::connect(Some(&database_url))
+        .await
+        .expect("restarted database connection");
+    let _restarted_app = build_router_with_database(config, restarted_database.clone());
+    let restarted_pool = restarted_database.pool().expect("configured pool").clone();
+    let communication_store = CommunicationIngestionStore::new(restarted_pool.clone());
+    let secret_store = SecretReferenceStore::new(restarted_pool);
+
+    let account = wait_for_provider_account(&communication_store, account_id).await;
+    assert_eq!(account.provider_kind, CommunicationProviderKind::ZulipBot);
+    assert_eq!(account.display_name, "Recovered Zulip");
+    assert_eq!(account.external_account_id, "bot@example.zulipchat.com");
+    assert_eq!(
+        account.config["base_url"],
+        json!("https://example.zulipchat.com")
+    );
+
+    let reference = wait_for_secret_reference(&secret_store, secret_ref).await;
+    assert_eq!(reference.secret_kind, SecretKind::ApiToken);
+    assert_eq!(reference.store_kind.as_str(), "host_vault");
+    let binding = wait_for_provider_account_secret_binding(
+        &communication_store,
+        account_id,
+        ProviderAccountSecretPurpose::ZulipApiKey,
+    )
+    .await;
+    assert_eq!(binding.secret_ref, secret_ref);
+    assert_eq!(
+        vault
+            .resolve(&reference)
+            .await
+            .expect("resolve restored zulip secret")
+            .expose_for_runtime(),
+        "zulip-api-key"
+    );
+}
+
+#[tokio::test]
+async fn startup_reconciles_legacy_gmail_manifest_without_provider_metadata() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+    let config =
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([
+                ("HERMES_DEV_MODE", "true"),
+                (
+                    "HERMES_VAULT_HOME",
+                    vault_home.to_str().expect("vault path"),
+                ),
+                (
+                    "HERMES_DEV_KEY_PATH",
+                    dev_key_path.to_str().expect("dev key path"),
+                ),
+            ])
+            .expect("config");
+    let vault = HostVault::new(HostVaultConfig {
+        home: vault_home.clone(),
+        dev_mode: true,
+        dev_key_path: dev_key_path.clone(),
+    })
+    .expect("host vault");
+    vault
+        .collect_entropy(super::support::vault_entropy_events(128).into_iter().map(|value| {
+            serde_json::from_value(value).expect("entropy event")
+        }))
+        .expect("collect entropy");
+    vault.create().expect("create host vault");
+
+    let account_id = "mail-gmail-karelon-gmail-com";
+    let secret_ref = "secret:provider-account:mail-gmail-karelon-gmail-com:oauth_token";
+    vault
+        .store_secret(
+            secret_ref,
+            "legacy-gmail-oauth-token",
+            SecretEntryContext {
+                entry_kind: "provider_credential",
+                account_id: secret_ref,
+                purpose: ProviderAccountSecretPurpose::OauthToken.as_str(),
+                secret_kind: SecretKind::OauthToken.as_str(),
+                label: "OAuth credential",
+                metadata: &json!({}),
+            },
+        )
+        .expect("store legacy gmail secret");
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let _app = build_router_with_database(config, database.clone());
+    let pool = database.pool().expect("configured pool").clone();
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let secret_store = SecretReferenceStore::new(pool);
+
+    let account = wait_for_provider_account(&communication_store, account_id).await;
+    assert_eq!(account.provider_kind, EmailProviderKind::Gmail);
+    assert_eq!(account.display_name, "Google Workspace");
+    assert_eq!(account.external_account_id, "karelon@gmail.com");
+    assert_eq!(account.config["auth"], json!("oauth"));
+    assert_eq!(account.config["api"], json!("gmail"));
+
+    let reference = wait_for_secret_reference(&secret_store, secret_ref).await;
+    assert_eq!(reference.secret_kind, SecretKind::OauthToken);
+    assert_eq!(reference.store_kind.as_str(), "host_vault");
+    let binding = wait_for_provider_account_secret_binding(
+        &communication_store,
+        account_id,
+        ProviderAccountSecretPurpose::OauthToken,
+    )
+    .await;
+    assert_eq!(binding.secret_ref, secret_ref);
+    assert_eq!(
+        vault
+            .resolve(&reference)
+            .await
+            .expect("resolve restored legacy gmail secret")
+            .expose_for_runtime(),
+        "legacy-gmail-oauth-token"
+    );
+}
+
+#[tokio::test]
+async fn startup_reconciles_ai_api_provider_from_host_vault_after_postgres_metadata_wipe() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let config =
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([
+                ("HERMES_DEV_MODE", "true"),
+                (
+                    "HERMES_VAULT_HOME",
+                    vault_home.to_str().expect("vault path"),
+                ),
+                (
+                    "HERMES_DEV_KEY_PATH",
+                    dev_key_path.to_str().expect("dev key path"),
+                ),
+            ])
+            .expect("config");
+    let app = build_router_with_database(config.clone(), database.clone());
+    unlock_test_vault(app.clone()).await;
+
+    let response = app
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/ai/providers",
+            json!({
+                "provider_kind": "api",
+                "provider_key": "omniroute",
+                "display_name": "Recovered OmniRoute",
+                "base_url": "https://ai.sh-inc.ru/v1",
+                "capabilities": ["chat", "reasoning", "embeddings"],
+                "enabled": true,
+                "remote_context_consent": true,
+                "api_key": "omniroute-api-key"
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = json_body(response).await;
+    let provider_id = body["provider_id"]
+        .as_str()
+        .expect("provider id")
+        .to_owned();
+    let secret_ref = format!("secret:ai-provider:{provider_id}:api_key");
+
+    let pool = database.pool().expect("configured pool").clone();
+    let vault = HostVault::new(HostVaultConfig {
+        home: vault_home.clone(),
+        dev_mode: true,
+        dev_key_path: dev_key_path.clone(),
+    })
+    .expect("host vault");
+    vault.unlock_existing().expect("unlock host vault");
+    wait_for_manifest_metadata_key(&vault, &secret_ref, "provider_key").await;
+
+    sqlx::query("DELETE FROM ai_provider_accounts WHERE provider_id = $1")
+        .bind(&provider_id)
+        .execute(&pool)
+        .await
+        .expect("delete ai provider metadata");
+    sqlx::query("DELETE FROM secret_references WHERE secret_ref = $1")
+        .bind(&secret_ref)
+        .execute(&pool)
+        .await
+        .expect("delete ai secret reference");
+
+    let restarted_database = Database::connect(Some(&database_url))
+        .await
+        .expect("restarted database connection");
+    let _restarted_app = build_router_with_database(config, restarted_database.clone());
+    let restarted_pool = restarted_database.pool().expect("configured pool").clone();
+    let ai_store = AiControlCenterStore::new(restarted_pool.clone());
+    let secret_store = SecretReferenceStore::new(restarted_pool.clone());
+
+    let provider = wait_for_ai_provider(&ai_store, &provider_id).await;
+    assert_eq!(provider.provider_kind, "api");
+    assert_eq!(provider.provider_key, "omniroute");
+    assert_eq!(provider.display_name, "Recovered OmniRoute");
+    assert_eq!(provider.status, "ready");
+    assert_eq!(provider.consent_state, "granted");
+    assert_eq!(
+        provider.config["base_url"],
+        json!("https://ai.sh-inc.ru/v1")
+    );
+    assert!(provider.capabilities.contains(&"chat".to_owned()));
+
+    assert_eq!(
+        ai_store
+            .api_key_secret_ref(&provider_id)
+            .await
+            .expect("ai api key ref"),
+        Some(secret_ref.clone())
+    );
+    let reference = wait_for_secret_reference(&secret_store, &secret_ref).await;
+    assert_eq!(reference.secret_kind, SecretKind::ApiToken);
+    assert_eq!(reference.store_kind.as_str(), "host_vault");
+    assert_eq!(
+        vault
+            .resolve(&reference)
+            .await
+            .expect("resolve restored ai secret")
+            .expose_for_runtime(),
+        "omniroute-api-key"
+    );
+    let model_count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai_model_catalog WHERE provider_id = $1")
+            .bind(&provider_id)
+            .fetch_one(&restarted_pool)
+            .await
+            .expect("model count");
+    assert!(model_count > 0);
+}
+
+async fn wait_for_ai_provider(
+    store: &AiControlCenterStore,
+    provider_id: &str,
+) -> AiProviderAccount {
+    for _ in 0..50 {
+        if let Some(provider) = store.provider(provider_id).await.expect("load ai provider") {
+            return provider;
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+
+    panic!("AI provider {provider_id} was not reconciled");
 }

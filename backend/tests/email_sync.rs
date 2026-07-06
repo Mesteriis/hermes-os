@@ -10,6 +10,9 @@ use hermes_hub_backend::domains::communications::core::{
 use hermes_hub_backend::integrations::mail::sync::{
     EmailSyncAdapterConfig, EmailSyncPlanError, plan_email_sync,
 };
+use hermes_hub_backend::platform::communications::{
+    IMAP_ALL_MAILBOXES, email_sync_plan_selects_all_imap_mailboxes, email_sync_plan_stream_ids,
+};
 use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
@@ -89,7 +92,7 @@ async fn email_sync_plan_selects_provider_specific_credentials_and_streams_again
             host: "imap.mail.me.com".to_owned(),
             port: 993,
             tls: true,
-            mailbox: "Archive".to_owned(),
+            mailboxes: vec!["Archive".to_owned()],
         }
     );
 
@@ -105,7 +108,71 @@ async fn email_sync_plan_selects_provider_specific_credentials_and_streams_again
             host: "imap.example.net".to_owned(),
             port: 1993,
             tls: true,
-            mailbox: "INBOX".to_owned(),
+            mailboxes: vec!["INBOX".to_owned()],
+        }
+    );
+}
+
+#[test]
+fn email_sync_plan_supports_multiple_imap_mailboxes() {
+    let account = NewProviderAccount::new(
+        "acct_multi_mailbox_imap",
+        EmailProviderKind::Icloud,
+        "Multi mailbox iCloud",
+        "multi-mailbox@example.net",
+    )
+    .config(json!({
+        "host": "imap.mail.me.com",
+        "port": 993,
+        "tls": true,
+        "mailbox": "INBOX",
+        "mailboxes": ["INBOX", "Junk", "Archive", "Junk"]
+    }))
+    .into_test_provider_account();
+
+    let plan = plan_email_sync(&account).expect("multi-mailbox IMAP plan");
+
+    assert_eq!(plan.stream_id, "imap:INBOX");
+    assert_eq!(
+        plan.adapter_config,
+        EmailSyncAdapterConfig::Imap {
+            host: "imap.mail.me.com".to_owned(),
+            port: 993,
+            tls: true,
+            mailboxes: vec!["INBOX".to_owned(), "Junk".to_owned(), "Archive".to_owned()],
+        }
+    );
+}
+
+#[test]
+fn email_sync_plan_can_select_all_imap_mailboxes() {
+    let account = NewProviderAccount::new(
+        "acct_all_mailboxes_imap",
+        EmailProviderKind::Icloud,
+        "All mailboxes iCloud",
+        "all-mailboxes@example.net",
+    )
+    .config(json!({
+        "host": "imap.mail.me.com",
+        "port": 993,
+        "tls": true,
+        "sync_all_mailboxes": true,
+        "mailboxes": ["INBOX"]
+    }))
+    .into_test_provider_account();
+
+    let plan = plan_email_sync(&account).expect("all mailbox IMAP plan");
+
+    assert_eq!(plan.stream_id, "imap:*");
+    assert!(email_sync_plan_selects_all_imap_mailboxes(&plan));
+    assert!(email_sync_plan_stream_ids(&plan).is_empty());
+    assert_eq!(
+        plan.adapter_config,
+        EmailSyncAdapterConfig::Imap {
+            host: "imap.mail.me.com".to_owned(),
+            port: 993,
+            tls: true,
+            mailboxes: vec![IMAP_ALL_MAILBOXES.to_owned()],
         }
     );
 }
@@ -280,7 +347,7 @@ fn email_sync_plan_uses_delimiter_safe_imap_stream_id() {
             host: "imap.example.net".to_owned(),
             port: 993,
             tls: true,
-            mailbox: "Projects:2026%Q2".to_owned(),
+            mailboxes: vec!["Projects:2026%Q2".to_owned()],
         }
     );
 }

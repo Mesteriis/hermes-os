@@ -216,6 +216,29 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
 
     let resp = r
         .clone()
+        .oneshot(get("/api/v1/integrations/mail/accounts/sync-status"))
+        .await
+        .expect("get sync statuses");
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(resp.into_body(), 1024 * 1024)
+            .await
+            .expect("read sync statuses"),
+    )
+    .expect("sync statuses json");
+    let sync_status = body["items"]
+        .as_array()
+        .expect("sync status items")
+        .iter()
+        .find(|item| item["account_id"] == account_id)
+        .expect("sync status for account");
+    assert!(
+        sync_status.get("last_updated_at").is_some(),
+        "sync status exposes last_updated_at for frontend health"
+    );
+
+    let resp = r
+        .clone()
         .oneshot(pput(
             &settings_path,
             json!({"sync_enabled": false, "batch_size": 7, "poll_interval_seconds": 600}),

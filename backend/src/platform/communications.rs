@@ -15,7 +15,11 @@ mod email_sync;
 mod raw_signals;
 pub mod rfc822;
 
-pub use email_sync::{EmailSyncPlanError, imap_mailbox_stream_id, plan_email_sync};
+pub use email_sync::{
+    EmailSyncPlanError, IMAP_ALL_MAILBOXES, email_sync_plan_selects_all_imap_mailboxes,
+    email_sync_plan_stream_ids, imap_mailbox_stream_id, imap_mailbox_stream_prefix,
+    plan_email_sync,
+};
 pub use raw_signals::{CommunicationRawSignalSource, build_communication_raw_signal_event};
 
 pub const DEFAULT_MAIL_SYNC_BLOB_ROOT: &str = "docker/data/mail";
@@ -489,7 +493,7 @@ pub enum EmailSyncAdapterConfig {
         host: String,
         port: u16,
         tls: bool,
-        mailbox: String,
+        mailboxes: Vec<String>,
     },
 }
 
@@ -771,6 +775,15 @@ pub struct ImapMessageFetchRequest {
     pub last_seen_uid: Option<u32>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImapMailboxListRequest {
+    pub account_id: String,
+    pub host: String,
+    pub port: u16,
+    pub tls: bool,
+    pub username: String,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EmailProviderSyncErrorKind {
     MissingCredential,
@@ -838,6 +851,11 @@ pub trait EmailProviderSyncPort: Send + Sync {
         &'a self,
         request: ImapMessageFetchRequest,
     ) -> Pin<Box<dyn Future<Output = Result<EmailSyncBatch, EmailProviderSyncError>> + Send + 'a>>;
+
+    fn list_imap_mailboxes<'a>(
+        &'a self,
+        request: ImapMailboxListRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<String>, EmailProviderSyncError>> + Send + 'a>>;
 }
 
 #[derive(Debug, Error)]

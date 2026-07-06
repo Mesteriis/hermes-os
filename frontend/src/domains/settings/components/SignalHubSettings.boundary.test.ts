@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 
 describe('SignalHubSettings boundary', () => {
-  it('preserves Signal Hub orchestration after removing the Vue render layer', () => {
+  it('keeps Signal Hub render shell under SettingsPage while preserving orchestration surfaces', () => {
     const page = readFileSync(
       new URL('../views/SettingsPage.vue', import.meta.url),
       'utf8'
@@ -20,8 +20,9 @@ describe('SignalHubSettings boundary', () => {
 
     expect(page).not.toContain('import SignalHubSettings')
     expect(page).not.toContain('<SignalHubSettings')
-    expect(page).toContain('Signal Hub UI removed after logic extraction. Rebuild pending new design language.')
-    expect(page).toContain('Signal Hub logic is preserved')
+    expect(page).toContain("store.selectedSection === 'signal-hub'")
+    expect(page).toContain('Signal Hub contracts are preserved')
+    expect(page).toContain('settings-note-panel')
 
     expect(source).toContain("./useSignalHubQuery")
     expect(source).toContain("../lib/signalHubReplay")

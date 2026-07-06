@@ -27,7 +27,19 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             "/api/v1/ai/providers/{provider_id}/consent",
             post(post_ai_provider_consent),
         )
+        .route(
+            "/api/v1/ai/provider-auth/start",
+            post(post_ai_provider_auth_start),
+        )
+        .route(
+            "/api/v1/ai/provider-auth/{setup_id}",
+            get(get_ai_provider_auth_status),
+        )
         .route("/api/v1/ai/models", get(get_ai_models))
+        .route(
+            "/api/v1/ai/models/availability",
+            patch(patch_ai_model_availability),
+        )
         .route("/api/v1/ai/model-routes/{slot}", put(put_ai_model_route))
         .route(
             "/api/v1/ai/prompts",

@@ -8,6 +8,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_application_settings_accounts),
         )
         .route(
+            "/api/v1/settings/accounts/{account_id}",
+            patch(patch_application_settings_account),
+        )
+        .route(
             "/api/v1/settings/{setting_key}",
             put(put_application_setting),
         )

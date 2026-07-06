@@ -14,12 +14,25 @@ import {
   mailListItemStatusClass
 } from './mailElements'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   item: MailListItemModel
   density?: MailListItemDensity
 }>(), {
   density: 'comfortable'
 })
+
+const emit = defineEmits<{
+  select: [item: MailListItemModel]
+}>()
+
+function handleSelect(): void {
+  emit('select', props.item)
+}
+
+function statusChipClass(item: MailListItemModel): string {
+  if (item.workflowState !== 'new') return 'mail-list-item__status-chip'
+  return 'mail-list-item__status-chip mail-list-item__status-chip--visible'
+}
 </script>
 
 <template>
@@ -32,6 +45,7 @@ withDefaults(defineProps<{
 			item.selected && 'mail-list-item--selected',
 			mailListItemHasSignal(item) && 'mail-list-item--signal'
 		]"
+		@click="handleSelect"
 	>
 		<div class="mail-list-item__main">
 			<div class="mail-list-item__primary">
@@ -57,7 +71,10 @@ withDefaults(defineProps<{
 					<p class="mail-list-item__snippet">{{ item.snippet }}</p>
 					<div class="mail-list-item__signals" aria-label="List item signals">
 						<span :class="['mail-list-item__status-dot', mailListItemStatusClass(item)]" aria-hidden="true" />
-						<Badge class="mail-list-item__status-chip" :variant="mailListItemStatus(item).badgeTone">
+						<Badge
+							:class="statusChipClass(item)"
+							:variant="mailListItemStatus(item).badgeTone"
+						>
 							{{ mailListItemStatus(item).label }}
 						</Badge>
 						<span v-if="item.attachmentCount" class="mail-list-item__attachment">

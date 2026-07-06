@@ -17,7 +17,7 @@ pub(crate) async fn post_v1_extract_tasks(
     if llm_task_count > 0
         && let Some(pool) = state.database.pool()
     {
-        crate::domains::signal_hub::dispatch_ai_helper_signal(
+        crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
             pool.clone(),
             "message_task_extraction",
             &message_id,
@@ -37,7 +37,7 @@ pub(crate) async fn post_v1_extract_tasks(
             }),
             None,
         )
-        .await?;
+        .await;
     }
     Ok(Json(serde_json::json!({"tasks": tasks})))
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { initializeRealtime, handleRealtimeEvent } from './realtime'
-import type { RealtimeClientOptions } from './realtime'
+import type { RealtimeClientOptions, RealtimeQueryClient } from './realtime'
 import type { SseClientOptions, WebSocketClientOptions } from '../sse'
 
 describe('realtime bootstrap', () => {
@@ -47,6 +47,70 @@ describe('realtime bootstrap', () => {
     })
     options.onStatus?.({ transport: 'sse', state: 'connected' })
     expect(onStatus).toHaveBeenCalledWith({ transport: 'sse', state: 'connected' })
+  })
+
+  it('keeps TanStack-style query client methods bound for realtime cache patches', () => {
+    class PrivateFieldQueryClient implements RealtimeQueryClient {
+      #queryCache = new Map<string, unknown>()
+
+      invalidateQueries = vi.fn((filters: { queryKey: readonly unknown[] }) => {
+        this.#queryCache.set(JSON.stringify(filters.queryKey), filters)
+      })
+
+      getQueriesData<TData>(_filters: { queryKey: readonly unknown[] }): Array<[
+        readonly unknown[],
+        TData | undefined
+      ]> {
+        void this.#queryCache
+        return []
+      }
+
+      setQueryData<TData>(
+        queryKey: readonly unknown[],
+        updater: TData | ((data: TData | undefined) => TData | undefined)
+      ): unknown {
+        this.#queryCache.set(JSON.stringify(queryKey), updater)
+        return undefined
+      }
+    }
+
+    const queryClient = new PrivateFieldQueryClient()
+    let capturedOptions: RealtimeClientOptions | null = null
+
+    initializeRealtime(
+      {
+        apiBaseUrl: 'http://127.0.0.1:8080',
+        apiSecret: 'test-secret',
+        sseUrl: 'http://127.0.0.1:8080/api/events/stream',
+        webSocketUrl: 'ws://127.0.0.1:8080/api/events/ws',
+        realtimeTransport: 'sse'
+      },
+      queryClient,
+      {
+        createClient: (options) => {
+          capturedOptions = options
+          return { connect: vi.fn(), disconnect: vi.fn(), reconnect: vi.fn() }
+        }
+      }
+    )
+
+    const options = capturedOptions as unknown as SseClientOptions
+    expect(() =>
+      options.onMessage?.({
+        id: '53',
+        event: 'event',
+        data: JSON.stringify({
+          event: {
+            event_type: 'mail.sync.started',
+            payload: {
+              account_id: 'account-1',
+              status: 'running',
+              phase: 'fetch'
+            }
+          }
+        })
+      })
+    ).not.toThrow()
   })
 
   it('starts WebSocket transport first and falls back to SSE when it disconnects', () => {

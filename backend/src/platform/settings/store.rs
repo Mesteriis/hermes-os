@@ -13,6 +13,8 @@ use super::persistence::{
 };
 use super::validation::{validate_declared_setting, validate_non_empty, validate_setting_key};
 
+const PUBLIC_SETTINGS_EXCLUDED_CATEGORIES: &[&str] = &["ai"];
+
 #[derive(Clone)]
 pub struct ApplicationSettingsStore {
     pool: PgPool,
@@ -49,6 +51,17 @@ impl ApplicationSettingsStore {
         .await?;
 
         rows.into_iter().map(row_to_setting).collect()
+    }
+
+    pub async fn list_public_settings(&self) -> Result<Vec<ApplicationSetting>, SettingsError> {
+        let settings = self.list_settings().await?;
+
+        Ok(settings
+            .into_iter()
+            .filter(|setting| {
+                !PUBLIC_SETTINGS_EXCLUDED_CATEGORIES.contains(&setting.category.as_str())
+            })
+            .collect())
     }
 
     pub async fn setting(

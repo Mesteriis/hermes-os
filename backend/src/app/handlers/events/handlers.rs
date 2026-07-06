@@ -179,14 +179,8 @@ pub(crate) async fn get_events_stream(
     State(state): State<AppState>,
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    let after_position = query.after_position.unwrap_or(0);
-    if after_position < 0 {
-        return Err(ApiError::InvalidCommunicationQuery(
-            "after_position must be non-negative",
-        ));
-    }
-
     let store = event_store(&state)?;
+    let after_position = stream_start_position(&store, query.after_position).await?;
     let stream_state = EventStreamState {
         store,
         after_position,
@@ -235,14 +229,8 @@ pub(crate) async fn get_events_websocket(
     Query(query): Query<EventStreamQuery>,
     ws: WebSocketUpgrade,
 ) -> Result<impl IntoResponse, ApiError> {
-    let after_position = query.after_position.unwrap_or(0);
-    if after_position < 0 {
-        return Err(ApiError::InvalidCommunicationQuery(
-            "after_position must be non-negative",
-        ));
-    }
-
     let store = event_store(&state)?;
+    let after_position = stream_start_position(&store, query.after_position).await?;
     let stream_state = EventStreamState {
         store,
         after_position,
@@ -269,6 +257,19 @@ pub(crate) async fn get_audit_events(
         .await?;
 
     Ok(Json(AuditEventsResponse { items }))
+}
+
+async fn stream_start_position(
+    store: &crate::platform::events::EventStore,
+    after_position: Option<i64>,
+) -> Result<i64, ApiError> {
+    match after_position {
+        Some(position) if position < 0 => Err(ApiError::InvalidCommunicationQuery(
+            "after_position must be non-negative",
+        )),
+        Some(position) => Ok(position),
+        None => Ok(store.latest_position().await?),
+    }
 }
 
 struct EventStreamState {

@@ -4,7 +4,9 @@ use serde_json::{Map, json};
 use crate::ai::core::AI_EMBEDDING_DIMENSION;
 
 use super::errors::AiControlCenterError;
+use super::models::AiProviderAuthStartRequest;
 use super::presets::{capability_slots, provider_presets};
+use super::provider_auth::local_provider_auth_callback_url;
 use super::validation::{reject_secret_like_json, render_prompt, validate_cli_preset};
 
 #[test]
@@ -46,6 +48,18 @@ fn provider_presets_include_remote_consent_targets() {
             .iter()
             .any(|preset| preset.provider_key == "omniroute")
     );
+    assert!(presets.iter().any(|preset| preset.provider_key == "raw"));
+    assert!(
+        presets
+            .iter()
+            .any(|preset| preset.provider_key == "openrouter")
+    );
+    assert!(presets.iter().any(|preset| preset.provider_key == "groq"));
+    assert!(
+        presets
+            .iter()
+            .any(|preset| preset.provider_key == "gemini-openai")
+    );
     assert!(
         presets
             .iter()
@@ -65,6 +79,35 @@ fn capability_slots_preserve_embedding_dimension_constraint() {
         embeddings.requires_embedding_dimension,
         Some(AI_EMBEDDING_DIMENSION as i32)
     );
+}
+
+#[test]
+fn local_provider_callback_url_carries_setup_state() {
+    let url = local_provider_auth_callback_url(
+        "http://127.0.0.1:8080/api/v1/ai/provider-auth/callback",
+        "setup-1",
+        "state-1",
+    )
+    .expect("local callback URL should be accepted");
+
+    assert!(url.contains("setup_id=setup-1"));
+    assert!(url.contains("state=state-1"));
+}
+
+#[test]
+fn api_provider_auth_start_rejects_callback_flow() {
+    let request = AiProviderAuthStartRequest {
+        provider_kind: "api".to_owned(),
+        provider_key: "openai".to_owned(),
+        display_name: Some("OpenAI".to_owned()),
+        callback_url: "http://127.0.0.1:8080/api/v1/ai/provider-auth/callback".to_owned(),
+    };
+
+    let error = request
+        .validate()
+        .expect_err("API provider auth must use token setup");
+
+    assert!(matches!(error, AiControlCenterError::InvalidRequest(_)));
 }
 
 #[test]

@@ -6,6 +6,8 @@ import {
   fetchProviderAccounts,
   fetchCalendarAccounts,
   logoutMailAccount,
+  updateCalendarAccount,
+  updateProviderAccount,
 } from '../api/settings'
 import {
   saveApplicationSetting,
@@ -126,6 +128,24 @@ export function useExportMailAccountSettingsMutation() {
   })
 }
 
+export function useUpdateProviderAccountMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      accountId,
+      update
+    }: {
+      accountId: string
+      update: { display_name?: string }
+    }) => updateProviderAccount(accountId, update),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: settingsKeys.providerAccounts() })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.workspace() })
+    },
+  })
+}
+
 export function useLogoutMailAccountMutation() {
   const queryClient = useQueryClient()
 
@@ -145,6 +165,24 @@ export function useDeleteMailAccountMutation() {
     mutationFn: (accountId: string) => deleteMailAccount(accountId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: settingsKeys.providerAccounts() })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.workspace() })
+    },
+  })
+}
+
+export function useUpdateCalendarAccountMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      accountId,
+      update
+    }: {
+      accountId: string
+      update: { account_name?: string; email?: string | null; sync_status?: string }
+    }) => updateCalendarAccount(accountId, update),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: settingsKeys.calendarAccounts() })
       queryClient.invalidateQueries({ queryKey: settingsKeys.workspace() })
     },
   })

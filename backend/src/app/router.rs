@@ -145,7 +145,13 @@ pub(crate) fn local_frontend_cors_layer() -> CorsLayer {
             Method::OPTIONS,
         ])
         .allow_headers([
+            HeaderName::from_static("connect-accept-encoding"),
+            HeaderName::from_static("connect-content-encoding"),
+            HeaderName::from_static("connect-protocol-version"),
+            HeaderName::from_static("connect-timeout-ms"),
             header::CONTENT_TYPE,
+            HeaderName::from_static("last-event-id"),
+            HeaderName::from_static("x-hermes-actor-id"),
             HeaderName::from_static("x-hermes-secret"),
         ])
 }

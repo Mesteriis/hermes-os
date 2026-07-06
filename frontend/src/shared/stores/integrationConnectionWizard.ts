@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { loadFrontendConfig } from '../../platform/config/env'
 import type { GmailOAuthStartRequest } from '../../integrations/mail/api/accountSetup'
+import type { TelegramQrLoginStartRequest } from '../integrationSetup/api/telegramQrLogin'
 
 export type ConnectionProviderId =
   | 'mail'
@@ -33,6 +34,10 @@ export interface GuidedConnectionResult {
   title: string
   message: string
   blockers?: string[]
+  setupId?: string
+  status?: string
+  qrSvg?: string
+  qrLink?: string
 }
 
 const GMAIL_CONNECTION_ACCOUNT_PREFIX = 'mail-gmail'
@@ -66,13 +71,13 @@ const providerCatalog: ConnectionProviderOption[] = [
     id: 'telegram',
     label: 'Telegram',
     icon: 'tabler:brand-telegram',
-    summary: 'Telegram setup continues in a dedicated runtime when callback or QR onboarding is unavailable.',
-    flowLabel: 'Exception route',
-    entryLabel: 'Dedicated runtime',
-    status: 'Guided outside Settings',
-    guidance: 'Telegram credentials, TDLib material and session secrets never belong in this settings panel.',
-    ctaLabel: 'View exception route',
-    flowPattern: 'managed_surface',
+    summary: 'Telegram setup uses the backend TDLib QR login contract and keeps session material outside Settings.',
+    flowLabel: 'QR companion',
+    entryLabel: 'TDLib QR login',
+    status: 'QR ready',
+    guidance: 'Scan the QR code with Telegram. TDLib session material remains in the provider runtime boundary.',
+    ctaLabel: 'Start Telegram QR',
+    flowPattern: 'qr_companion',
   },
   {
     id: 'zoom',
@@ -225,6 +230,17 @@ export const useIntegrationConnectionWizardStore = defineStore(
       }
     }
 
+    function buildTelegramQrLoginRequest(): TelegramQrLoginStartRequest {
+      const accountId = makeTelegramAccountId()
+
+      return {
+        account_id: accountId,
+        display_name: 'Telegram',
+        external_account_id: accountId,
+        transcription_enabled: true,
+      }
+    }
+
     function gmailOAuthRedirectUri(): string {
       return `${frontendConfig.apiBaseUrl.replace(/\/+$/, '')}/api/v1/integrations/mail/accounts/gmail/oauth/callback`
     }
@@ -232,6 +248,11 @@ export const useIntegrationConnectionWizardStore = defineStore(
     function makeMailAccountId(): string {
       const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
       return `${GMAIL_CONNECTION_ACCOUNT_PREFIX}-${nonce}`
+    }
+
+    function makeTelegramAccountId(): string {
+      const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+      return `telegram-qr-${nonce}`
     }
 
     return {
@@ -253,6 +274,7 @@ export const useIntegrationConnectionWizardStore = defineStore(
       setBlocked,
       setError,
       buildGmailOAuthRequest,
+      buildTelegramQrLoginRequest,
     }
   }
 )

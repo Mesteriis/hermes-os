@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from '@/platform/i18n'
 import { HtmlPreview, IconButton, ToggleGroup } from '@/shared/ui'
 import type { CommunicationConversationMessageModel } from '../communicationDomainElements'
@@ -8,14 +8,9 @@ import '../communicationDomainElements.css'
 import MailQuotedOriginal from './MailQuotedOriginal.vue'
 
 const { t } = useI18n()
-type MailViewerBodyMode = 'clean' | 'original' | 'plain'
+type MailViewerBodyMode = 'translation' | 'clean' | 'original' | 'plain'
 const bodyMode = ref<MailViewerBodyMode>('clean')
 const recipientsOpen = ref(false)
-const bodyModeItems = computed(() => [
-  { value: 'clean', label: t('Clean'), icon: 'tabler:sparkles', iconOnly: true },
-  { value: 'original', label: t('Original HTML'), icon: 'tabler:code', iconOnly: true },
-  { value: 'plain', label: t('Plain text'), icon: 'tabler:file-text', iconOnly: true }
-])
 
 const props = defineProps<{
   message: CommunicationConversationMessageModel
@@ -47,7 +42,27 @@ const recipientDetailRows = computed<RecipientDetailRow[]>(() => {
 })
 const senderLabel = computed(() => props.message.fromLabel ?? props.message.author)
 const recipientLabel = computed(() => props.message.toLabel ?? 'Owner')
+const hasTranslation = computed(() => Boolean(props.message.translation?.text.trim()))
+const bodyModeItems = computed(() => [
+  ...(hasTranslation.value
+    ? [{ value: 'translation', label: t('Translation'), icon: 'tabler:language' }]
+    : []),
+  { value: 'clean', label: t('Clean'), icon: 'tabler:sparkles' },
+  { value: 'original', label: t('Original HTML'), icon: 'tabler:code' },
+  { value: 'plain', label: t('Plain text'), icon: 'tabler:file-text' }
+])
+const translationMeta = computed(() => {
+  if (!props.message.translation) return ''
+  const parts = [t('Translation'), props.message.translation.target]
+  if (props.message.translation.model) parts.push(props.message.translation.model)
+
+  return parts.join(' · ')
+})
 const bodyPreviewContent = computed(() => {
+  if (bodyMode.value === 'translation' && props.message.translation) {
+    return props.message.translation.text
+  }
+
   if (bodyMode.value === 'plain') {
     return props.message.bodyFormat === 'html' && props.message.bodyHtml
       ? htmlToComposePlainText(props.message.bodyHtml)
@@ -58,7 +73,7 @@ const bodyPreviewContent = computed(() => {
     ? (props.message.bodyHtml ?? props.message.body)
     : props.message.body
 })
-const bodyPreviewFormat = computed(() => bodyMode.value === 'plain'
+const bodyPreviewFormat = computed(() => bodyMode.value === 'plain' || bodyMode.value === 'translation'
   ? 'text'
   : props.message.bodyFormat === 'html' ? 'html' : 'text')
 const bodyPreviewSanitized = computed(() => bodyPreviewFormat.value === 'html' && props.message.bodyHtmlSanitized === true)
@@ -100,8 +115,22 @@ const contextSummaryItems = computed<ContextSummaryItem[]>(() => {
 const hasContext = computed(() => contextSummaryItems.value.length > 0)
 const hasRecipientDetails = computed(() => recipientDetailRows.value.length > 0)
 
+watch(() => [props.message.id, props.message.translation?.text] as const, () => {
+  if (hasTranslation.value) {
+    bodyMode.value = 'translation'
+    return
+  }
+
+  bodyMode.value = props.message.bodyHtml ? 'original' : 'clean'
+}, { immediate: true })
+
 function setBodyMode(value: string | string[]): void {
-  if (value === 'clean' || value === 'original' || value === 'plain') {
+  if (
+    value === 'translation' ||
+    value === 'clean' ||
+    value === 'original' ||
+    value === 'plain'
+  ) {
     bodyMode.value = value
   }
 }
@@ -187,6 +216,12 @@ function toggleRecipients(): void {
 
 		<div class="communication-email-center__body-scroll">
 			<article class="communication-email-center__paper">
+				<div
+					v-if="bodyMode === 'translation' && translationMeta"
+					class="communication-email-message__translation-meta"
+				>
+					{{ translationMeta }}
+				</div>
 				<HtmlPreview
 					:class="bodyPreviewClass"
 					:content="bodyPreviewContent"

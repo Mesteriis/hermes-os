@@ -22,6 +22,7 @@ export type MailSyncStatus = {
   estimated_total_messages: number | null
   current_batch_size: number
   last_started_at: string | null
+  last_updated_at: string | null
   last_completed_at: string | null
   next_run_at: string | null
   last_error_code: string | null

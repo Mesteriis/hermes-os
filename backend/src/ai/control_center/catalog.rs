@@ -2,7 +2,7 @@ use serde_json::json;
 
 use super::errors::AiControlCenterError;
 use super::evidence::capture_model_catalog_item_observation;
-use super::models::{AiModelCatalogItem, AiProviderAccount};
+use super::models::{AiModelAvailabilityUpdateRequest, AiModelCatalogItem, AiProviderAccount};
 use super::presets::curated_models_for;
 use super::rows::row_to_model;
 use super::store::AiControlCenterStore;
@@ -67,6 +67,72 @@ impl AiControlCenterStore {
         .await?;
 
         row.map(row_to_model).transpose()
+    }
+
+    pub async fn update_model_availability(
+        &self,
+        request: &AiModelAvailabilityUpdateRequest,
+        actor: &str,
+    ) -> Result<AiModelCatalogItem, AiControlCenterError> {
+        validate_non_empty("provider_id", &request.provider_id)?;
+        validate_non_empty("model_key", &request.model_key)?;
+
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(
+            r#"
+            UPDATE ai_model_catalog
+            SET is_available = $3,
+                updated_at = now()
+            WHERE provider_id = $1 AND model_key = $2
+            RETURNING
+                provider_id,
+                model_key,
+                display_name,
+                category,
+                privacy,
+                capabilities,
+                context_window,
+                embedding_dimension,
+                is_available,
+                metadata,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(request.provider_id.trim())
+        .bind(request.model_key.trim())
+        .bind(request.is_available)
+        .fetch_optional(&mut *transaction)
+        .await?;
+
+        let row = row.ok_or(AiControlCenterError::ModelNotFound)?;
+        if !request.is_available {
+            sqlx::query(
+                r#"
+                DELETE FROM ai_model_routes
+                WHERE provider_id = $1 AND model_key = $2
+                "#,
+            )
+            .bind(request.provider_id.trim())
+            .bind(request.model_key.trim())
+            .execute(&mut *transaction)
+            .await?;
+        }
+
+        let model = row_to_model(row)?;
+        capture_model_catalog_item_observation(
+            &mut transaction,
+            &model,
+            if request.is_available {
+                "availability_enabled"
+            } else {
+                "availability_disabled"
+            },
+            actor,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(model)
     }
 
     pub(super) async fn seed_models_for_provider(

@@ -1,4 +1,5 @@
 use super::*;
+use crate::app::vault_reconciliation::spawn_host_vault_manifest_reconciliation;
 use crate::domains::communications::templates::{
     CommunicationMergePreviewRow, CommunicationTemplateStore, NewCommunicationTemplate,
 };
@@ -225,13 +226,17 @@ pub(crate) async fn post_v1_vault_collect_entropy(
 pub(crate) async fn post_v1_vault_create(
     State(state): State<AppState>,
 ) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
-    Ok(Json(state.vault.create()?))
+    let status = state.vault.create()?;
+    spawn_host_vault_manifest_reconciliation(&state);
+    Ok(Json(status))
 }
 
 pub(crate) async fn post_v1_vault_unlock(
     State(state): State<AppState>,
 ) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
-    Ok(Json(state.vault.unlock()?))
+    let status = state.vault.unlock()?;
+    spawn_host_vault_manifest_reconciliation(&state);
+    Ok(Json(status))
 }
 
 pub(crate) async fn post_v1_vault_recovery_export(
@@ -249,5 +254,7 @@ pub(crate) async fn post_v1_vault_recovery_import(
     State(state): State<AppState>,
     Json(request): Json<VaultRecoveryImportRequest>,
 ) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
-    Ok(Json(state.vault.import_recovery(&request.recovery_phrase)?))
+    let status = state.vault.import_recovery(&request.recovery_phrase)?;
+    spawn_host_vault_manifest_reconciliation(&state);
+    Ok(Json(status))
 }

@@ -29,7 +29,11 @@ defineProps<{
 			<p>{{ description }}</p>
 		</header>
 
-		<section class="communication-domain-overview__section" aria-labelledby="communication-channels-title">
+		<section
+			v-if="channels.length > 0"
+			class="communication-domain-overview__section"
+			aria-labelledby="communication-channels-title"
+		>
 			<h3 id="communication-channels-title">Channel surfaces</h3>
 			<p>Provider channels stay under one Communications product surface.</p>
 			<div class="communication-domain-overview__grid">
@@ -41,7 +45,11 @@ defineProps<{
 			</div>
 		</section>
 
-		<section class="communication-domain-overview__section" aria-labelledby="communication-capabilities-title">
+		<section
+			v-if="capabilities.length > 0"
+			class="communication-domain-overview__section"
+			aria-labelledby="communication-capabilities-title"
+		>
 			<h3 id="communication-capabilities-title">Workspace tools</h3>
 			<p>Communication actions stay grouped by owner workflow, not by transport details.</p>
 			<div class="communication-domain-overview__grid">
@@ -53,7 +61,11 @@ defineProps<{
 			</div>
 		</section>
 
-		<section class="communication-domain-overview__section" aria-labelledby="communication-threads-title">
+		<section
+			v-if="threads.length > 0"
+			class="communication-domain-overview__section"
+			aria-labelledby="communication-threads-title"
+		>
 			<h3 id="communication-threads-title">Thread signals</h3>
 			<p>Fresh events can signal review pressure without becoming durable truth by themselves.</p>
 			<div class="communication-domain-overview__wide-grid">
@@ -65,7 +77,11 @@ defineProps<{
 			</div>
 		</section>
 
-		<section class="communication-domain-overview__section" aria-labelledby="communication-outbox-title">
+		<section
+			v-if="outboxItems.length > 0"
+			class="communication-domain-overview__section"
+			aria-labelledby="communication-outbox-title"
+		>
 			<h3 id="communication-outbox-title">Outbox state</h3>
 			<p>Provider writes stay observable through durable outbox and delivery state.</p>
 			<div class="communication-domain-overview__wide-grid">

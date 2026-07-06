@@ -53,7 +53,7 @@ async fn signal_hub_restores_canonical_sources_idempotently() {
         .await
         .expect("second fixture restore");
 
-    assert_eq!(first.sources_created, 15);
+    assert_eq!(first.sources_created, 16);
     assert_eq!(first.profiles_created, 4);
     assert_eq!(second.sources_created, 0);
     assert_eq!(second.sources_repaired, 0);
@@ -79,6 +79,7 @@ async fn signal_hub_restores_canonical_sources_idempotently() {
             "telegram",
             "voice",
             "whatsapp",
+            "yandex_telemost",
             "zoom",
             "zulip",
         ]
@@ -104,6 +105,46 @@ async fn signal_hub_restores_canonical_sources_idempotently() {
         profile_codes,
         vec!["development", "maintenance", "production", "testing"]
     );
+}
+
+#[tokio::test]
+async fn signal_hub_restore_repairs_existing_system_profile_by_uuid_id() {
+    let ctx = TestContext::new().await;
+    let store = SignalHubStore::new(ctx.pool().clone());
+
+    store
+        .restore_system_sources()
+        .await
+        .expect("initial fixture restore");
+
+    sqlx::query(
+        r#"
+        UPDATE signal_profiles
+        SET
+            display_name = 'Broken Testing Profile',
+            source_policies = '[]'::jsonb
+        WHERE code = 'testing'
+        "#,
+    )
+    .execute(ctx.pool())
+    .await
+    .expect("corrupt testing profile fixture");
+
+    let report = store
+        .restore_system_sources()
+        .await
+        .expect("repair fixture restore");
+
+    assert_eq!(report.profiles_repaired, 1);
+
+    let profiles = store.list_profiles().await.expect("list profiles");
+    let testing = profiles
+        .iter()
+        .find(|profile| profile.code == "testing")
+        .expect("testing profile");
+
+    assert_eq!(testing.display_name, "Testing");
+    assert_eq!(testing.source_policies.len(), 13);
 }
 
 #[test]

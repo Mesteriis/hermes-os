@@ -25,6 +25,7 @@ pub(super) fn row_to_status(row: PgRow) -> Result<MailSyncStatus, MailSyncError>
         estimated_total_messages: row.try_get("estimated_total_messages")?,
         current_batch_size: row.try_get("current_batch_size")?,
         last_started_at: row.try_get("last_started_at")?,
+        last_updated_at: row.try_get("last_updated_at")?,
         last_completed_at: row.try_get("last_completed_at")?,
         next_run_at: row.try_get("next_run_at")?,
         last_error_code: row.try_get("last_error_code")?,

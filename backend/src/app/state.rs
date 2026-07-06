@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use crate::ai::control_center::AiProviderAuthPendingGrant;
 use crate::integrations::mail::accounts::GmailOAuthPendingGrant;
 use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::integrations::telegram::tdjson::PendingQrLoginMap;
@@ -23,6 +24,7 @@ pub(crate) struct AppState {
 #[derive(Clone, Default)]
 pub(crate) struct AccountSetupState {
     pub(crate) pending_gmail_oauth: Arc<Mutex<HashMap<String, GmailOAuthPendingGrant>>>,
+    pub(crate) pending_ai_provider_auth: Arc<Mutex<HashMap<String, AiProviderAuthPendingGrant>>>,
     pub(crate) pending_zoom_oauth: Arc<Mutex<HashMap<String, ZoomOAuthPendingGrant>>>,
     pub(crate) pending_telegram_qr_login: PendingQrLoginMap,
 }

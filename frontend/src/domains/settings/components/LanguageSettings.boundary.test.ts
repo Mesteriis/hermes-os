@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 
 describe('LanguageSettings boundary', () => {
-  it('preserves locale orchestration after removing the Vue render layer', () => {
+  it('renders locale choices through SettingsPage while keeping persistence in the surface', () => {
     const page = readFileSync(
       new URL('../views/SettingsPage.vue', import.meta.url),
       'utf8'
@@ -15,8 +15,9 @@ describe('LanguageSettings boundary', () => {
     expect(existsSync(new URL('./LanguageSettings.vue', import.meta.url))).toBe(false)
     expect(page).not.toContain('import LanguageSettings')
     expect(page).not.toContain('<LanguageSettings')
-    expect(page).toContain('Language UI removed after logic extraction. Rebuild pending new design language.')
-    expect(page).toContain('Language logic is preserved')
+    expect(page).toContain("store.selectedSection === 'language'")
+    expect(page).toContain('languageSettings.handleLocaleChange')
+    expect(page).toContain('languageSettings.localeOptions')
 
     expect(surface).toContain('useSaveFrontendLocaleMutation')
     expect(surface).toContain('localeOptions')

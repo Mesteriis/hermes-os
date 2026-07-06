@@ -17,6 +17,8 @@ pub async fn dispatch_ai_helper_signal(
     correlation_id: Option<&str>,
 ) -> Result<Option<EventEnvelope>, SignalHubError> {
     let event_store = EventStore::new(pool.clone());
+    let signal_store = SignalHubStore::new(pool);
+    signal_store.restore_system_sources().await?;
     let raw_signal = build_ai_helper_signal(
         event_kind,
         source_id,
@@ -34,7 +36,6 @@ pub async fn dispatch_ai_helper_signal(
         .await?
         .ok_or_else(|| SignalHubError::InvalidRawSignalEventType(raw_signal.event_type.clone()))?;
 
-    let signal_store = SignalHubStore::new(pool);
     if !signal_hub_raw_dispatcher_allows_processing(&signal_store).await? {
         return Ok(None);
     }
@@ -78,4 +79,37 @@ fn build_ai_helper_signal(
     };
 
     Ok(builder.build()?)
+}
+
+pub async fn dispatch_ai_helper_signal_best_effort(
+    pool: PgPool,
+    event_kind: &str,
+    source_id: &str,
+    subject: Value,
+    payload: Value,
+    provenance: Value,
+    correlation_id: Option<&str>,
+) -> Option<EventEnvelope> {
+    match dispatch_ai_helper_signal(
+        pool,
+        event_kind,
+        source_id,
+        subject,
+        payload,
+        provenance,
+        correlation_id,
+    )
+    .await
+    {
+        Ok(event) => event,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                event_kind,
+                source_id,
+                "AI helper Signal Hub dispatch failed"
+            );
+            None
+        }
+    }
 }

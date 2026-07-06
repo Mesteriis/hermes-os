@@ -6,9 +6,12 @@ export type NotificationItem = {
   title: string
   body?: string
   icon: string
+  tone?: 'info' | 'success' | 'warning' | 'danger'
+  sourceLabel?: string
   time: Date
   targetView?: string
   targetId?: string
+  dedupeKey?: string
 }
 
 export const useNotificationsStore = defineStore('notifications', () => {
@@ -18,12 +21,10 @@ export const useNotificationsStore = defineStore('notifications', () => {
   const rawNotificationItems = ref<NotificationItem[]>([])
   const pendingNotificationTarget = ref<NotificationItem | null>(null)
 
-  // In a real implementation, notification items would come from SSE events
-  // For now, using an empty array as the shell-ready state
-
   const notificationItems = computed<NotificationItem[]>(() => {
     return rawNotificationItems.value
       .filter((item) => !dismissedNotificationIds.value.has(item.id))
+      .filter((item) => !isSuppressedNotification(item))
       .sort((a, b) => b.time.getTime() - a.time.getTime())
       .slice(0, 12)
   })
@@ -66,7 +67,33 @@ export const useNotificationsStore = defineStore('notifications', () => {
   }
 
   function addNotification(notification: NotificationItem): void {
-    rawNotificationItems.value = [notification, ...rawNotificationItems.value]
+    if (isSuppressedNotification(notification)) return
+
+    const existingItems = notification.dedupeKey
+      ? rawNotificationItems.value.filter((item) => item.dedupeKey !== notification.dedupeKey)
+      : rawNotificationItems.value
+
+    rawNotificationItems.value = [notification, ...existingItems].slice(0, 64)
+  }
+
+  function removeNotifications(notificationIds: readonly string[]): void {
+    if (notificationIds.length === 0) return
+
+    const ids = new Set(notificationIds)
+    rawNotificationItems.value = rawNotificationItems.value.filter((item) => !ids.has(item.id))
+    dismissedNotificationIds.value = new Set(
+      [...dismissedNotificationIds.value].filter((id) => !ids.has(id))
+    )
+    expandedNotificationIds.value = new Set(
+      [...expandedNotificationIds.value].filter((id) => !ids.has(id))
+    )
+  }
+
+  function clearNotifications(): void {
+    rawNotificationItems.value = []
+    dismissedNotificationIds.value = new Set()
+    expandedNotificationIds.value = new Set()
+    pendingNotificationTarget.value = null
   }
 
   return {
@@ -83,6 +110,34 @@ export const useNotificationsStore = defineStore('notifications', () => {
     toggleNotificationExpanded,
     openNotificationTarget,
     consumePendingNotificationTarget,
-    addNotification
+    addNotification,
+    removeNotifications,
+    clearNotifications
   }
 })
+
+function isSuppressedNotification(notification: NotificationItem): boolean {
+  return (
+    isLegacyAiSignalHubFailure(notification) ||
+    isTransientMailNetworkFailure(notification)
+  )
+}
+
+function isLegacyAiSignalHubFailure(notification: NotificationItem): boolean {
+  return (
+    notification.sourceLabel === 'Mail' &&
+    notification.title === 'Mail action failed' &&
+    notification.body?.includes('invalid raw signal event type: signal.raw.ai.') === true
+  )
+}
+
+function isTransientMailNetworkFailure(notification: NotificationItem): boolean {
+  return (
+    notification.sourceLabel === 'Mail' &&
+    notification.title === 'Mail action failed' &&
+    (
+      notification.body?.includes('Failed to fetch') === true ||
+      notification.body?.includes('Backend API is unavailable') === true
+    )
+  )
+}

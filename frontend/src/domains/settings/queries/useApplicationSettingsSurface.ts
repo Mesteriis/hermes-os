@@ -11,7 +11,9 @@ export function useApplicationSettingsSurface() {
   const settingDrafts = ref<Record<string, string>>({})
   const savingSettingKey = ref<string | null>(null)
 
-  const applicationSettings = computed(() => appSettingsData.value?.items ?? [])
+  const applicationSettings = computed(() => {
+    return (appSettingsData.value?.items ?? []).filter(isPublicApplicationSetting)
+  })
   const settingsByCategory = computed(() => groupSettingsByCategory(applicationSettings.value))
 
   function settingDraftValue(setting: ApplicationSetting): string {
@@ -94,6 +96,10 @@ export function useApplicationSettingsSurface() {
     settingMetadataFlag,
     settingMetadataText
   }
+}
+
+function isPublicApplicationSetting(setting: ApplicationSetting): boolean {
+  return setting.category !== 'ai' && !setting.setting_key.startsWith('ai.')
 }
 
 function coerceValue(draft: string, kind: string): ApplicationSetting['value'] {

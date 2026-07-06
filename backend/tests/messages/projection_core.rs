@@ -312,3 +312,12 @@ async fn message_projection_derives_message_id_for_direct_upsert_against_postgre
     .expect("arbitrary message ID count");
     assert_eq!(arbitrary_count, 0);
 }
+
+#[test]
+fn email_projection_upsert_uses_projected_metadata_bindings() {
+    let source = include_str!("../../src/domains/communications/messages/store/upsert.rs");
+
+    assert!(source.contains(".bind(&message.delivery_state)"));
+    assert!(source.contains(".bind(&message.message_metadata)"));
+    assert!(!source.contains("'received',\n                '{}'::jsonb"));
+}

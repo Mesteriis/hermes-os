@@ -19,6 +19,7 @@ impl MailSyncStore {
                     estimated_total_messages,
                     current_batch_size,
                     started_at,
+                    updated_at,
                     completed_at,
                     next_run_at,
                     error_code,
@@ -40,6 +41,7 @@ impl MailSyncStore {
                 latest.estimated_total_messages,
                 COALESCE(latest.current_batch_size, COALESCE(settings.batch_size, $1)) AS current_batch_size,
                 latest.started_at AS last_started_at,
+                latest.updated_at AS last_updated_at,
                 latest.completed_at AS last_completed_at,
                 COALESCE(
                     latest.next_run_at,

@@ -7,12 +7,12 @@ use sqlx::postgres::PgPool;
 use crate::integrations::mail::accounts::EmailAccountSetupService;
 use crate::integrations::mail::gmail::client::{
     EmailProviderNetworkError, GmailApiClient, GmailFetchOptions, GmailHistoryFetchOptions,
-    ImapFetchOptions, ImapNetworkClient,
+    ImapFetchOptions, ImapMailboxListOptions, ImapNetworkClient,
 };
 use crate::platform::communications::{
     EmailProviderSyncError, EmailProviderSyncPort, EmailSyncBatch, GmailHistoryFetchRequest,
-    GmailMessageListFetchRequest, ImapMessageFetchRequest, ProviderAccountSecretPurpose,
-    ProviderSecretBindingLookupPort,
+    GmailMessageListFetchRequest, ImapMailboxListRequest, ImapMessageFetchRequest,
+    ProviderAccountSecretPurpose, ProviderSecretBindingLookupPort,
 };
 use crate::platform::secrets::{ResolvedSecret, SecretReferenceStore, SecretResolver};
 use crate::vault::HostVault;
@@ -169,6 +169,34 @@ impl EmailProviderSyncPort for LiveEmailProviderSyncPort {
             }
             ImapNetworkClient::new()
                 .fetch_raw_messages(&credential, &options)
+                .await
+                .map_err(|error| EmailProviderSyncError::provider_network(error, false))
+        })
+    }
+
+    fn list_imap_mailboxes<'a>(
+        &'a self,
+        request: ImapMailboxListRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<String>, EmailProviderSyncError>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            let secret_store = SecretReferenceStore::new(self.pool.clone());
+            let credential = read_provider_secret(
+                self.provider_secret_binding_store.as_ref(),
+                &secret_store,
+                &self.vault,
+                &request.account_id,
+                ProviderAccountSecretPurpose::ImapPassword,
+            )
+            .await?;
+            let options = ImapMailboxListOptions::new(
+                &request.host,
+                request.port,
+                request.tls,
+                &request.username,
+            );
+            ImapNetworkClient::new()
+                .list_mailboxes(&credential, &options)
                 .await
                 .map_err(|error| EmailProviderSyncError::provider_network(error, false))
         })

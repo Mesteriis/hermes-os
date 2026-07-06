@@ -94,7 +94,7 @@ export async function fetchCommunicationMessages(
   channelKind?: string,
   query?: string,
   localState?: LocalMessageState,
-  limit = 250,
+  limit = 100,
   cursor?: string | null
 ): Promise<CommunicationMessagesResponse> {
   return fetchCommunicationMessagesConnect({

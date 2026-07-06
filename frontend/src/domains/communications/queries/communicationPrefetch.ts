@@ -97,7 +97,7 @@ export async function prefetchCommunicationListForSavedSearch(
 
   await queryClient.prefetchQuery<CommunicationMessagesResponse>({
     queryKey: communicationListQueryKey(accountId, workflowState, channelKind, query, localState),
-    queryFn: () => fetchCommunicationMessages(accountId, workflowState, channelKind, query, localState, 250, null),
+    queryFn: () => fetchCommunicationMessages(accountId, workflowState, channelKind, query, localState, 100, null),
     staleTime: MESSAGE_PREFETCH_STALE_MS
   })
 }

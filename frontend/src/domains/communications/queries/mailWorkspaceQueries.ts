@@ -213,7 +213,7 @@ export function useFolderMessagesQuery(
       if (!id) {
         return { items: [], next_cursor: null, has_more: false }
       }
-      return fetchFolderMessages(id, 250, pageParam)
+      return fetchFolderMessages(id, 100, pageParam)
     },
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),

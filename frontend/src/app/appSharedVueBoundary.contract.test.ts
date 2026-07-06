@@ -63,6 +63,7 @@ describe('App and shared Vue boundary contract', () => {
 
     const commandSource = readFileSync(path.join(sourceRoot, 'shared/ui/Command.vue'), 'utf8')
     const toastSource = readFileSync(path.join(sourceRoot, 'shared/ui/Toast.vue'), 'utf8')
+    const toastHelperSource = readFileSync(path.join(sourceRoot, 'shared/ui/toast.ts'), 'utf8')
     const feedbackCss = readFileSync(path.join(sourceRoot, 'shared/ui/styles/feedback.css'), 'utf8')
     const progressSource = readFileSync(path.join(sourceRoot, 'shared/ui/Progress.vue'), 'utf8')
 
@@ -77,7 +78,9 @@ describe('App and shared Vue boundary contract', () => {
     expect(toastSource).toContain('TOAST_EXIT_ANIMATION_MS = 820')
     expect(toastSource).toContain('scheduleToastRemoval')
     expect(toastSource).toContain('handleToastOpenChange(toast.id, $event)')
-    expect(toastSource).toContain("variant?: 'default' | 'info' | 'success' | 'warning' | 'error'")
+    expect(toastSource).toContain("from './toast'")
+    expect(toastHelperSource).toContain("variant?: 'default' | 'info' | 'success' | 'warning' | 'error'")
+    expect(toastHelperSource).toContain('export function useToast()')
     expect(toastSource).toContain(':data-toast-id="toast.id"')
     expect(toastSource).toContain('removeToast')
     expect(toastSource).not.toContain('queryClient')

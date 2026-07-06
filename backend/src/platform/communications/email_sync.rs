@@ -6,6 +6,10 @@ use super::{
     ProviderAccountSecretPurpose,
 };
 
+const DEFAULT_IMAP_MAILBOX: &str = "INBOX";
+pub const IMAP_ALL_MAILBOXES: &str = "*";
+const IMAP_STREAM_PREFIX: &str = "imap:";
+
 #[derive(Debug, Error)]
 pub enum EmailSyncPlanError {
     #[error("invalid provider config field {field}: {message}")]
@@ -40,7 +44,7 @@ pub fn plan_email_sync(account: &ProviderAccount) -> Result<EmailSyncPlan, Email
 }
 
 pub fn imap_mailbox_stream_id(mailbox: &str) -> String {
-    let mut stream_id = String::from("imap:");
+    let mut stream_id = String::from(IMAP_STREAM_PREFIX);
 
     for character in mailbox.chars() {
         match character {
@@ -51,6 +55,29 @@ pub fn imap_mailbox_stream_id(mailbox: &str) -> String {
     }
 
     stream_id
+}
+
+pub fn email_sync_plan_stream_ids(plan: &EmailSyncPlan) -> Vec<String> {
+    match &plan.adapter_config {
+        EmailSyncAdapterConfig::Gmail { .. } => vec![plan.stream_id.clone()],
+        EmailSyncAdapterConfig::Imap { mailboxes, .. } => mailboxes
+            .iter()
+            .filter(|mailbox| !imap_mailbox_selects_all(mailbox))
+            .map(|mailbox| imap_mailbox_stream_id(mailbox))
+            .collect(),
+    }
+}
+
+pub fn email_sync_plan_selects_all_imap_mailboxes(plan: &EmailSyncPlan) -> bool {
+    matches!(
+        &plan.adapter_config,
+        EmailSyncAdapterConfig::Imap { mailboxes, .. }
+            if mailboxes.iter().any(|mailbox| imap_mailbox_selects_all(mailbox))
+    )
+}
+
+pub fn imap_mailbox_stream_prefix() -> &'static str {
+    IMAP_STREAM_PREFIX
 }
 
 fn plan_gmail_sync(
@@ -78,11 +105,13 @@ fn plan_imap_sync(
     let host = required_string(&account.config, "host")?;
     let port = required_port(&account.config, "port")?;
     let tls = required_bool(&account.config, "tls")?;
-    let mailbox =
-        optional_string(&account.config, "mailbox")?.unwrap_or_else(|| "INBOX".to_owned());
-    validate_non_empty("mailbox", &mailbox)?;
-    validate_no_control_chars("mailbox", &mailbox)?;
-    let stream_id = imap_mailbox_stream_id(&mailbox);
+    let mailboxes = imap_mailboxes(&account.config)?;
+    let stream_id = imap_mailbox_stream_id(
+        mailboxes
+            .first()
+            .map(String::as_str)
+            .unwrap_or(DEFAULT_IMAP_MAILBOX),
+    );
 
     Ok(EmailSyncPlan {
         account_id,
@@ -93,9 +122,49 @@ fn plan_imap_sync(
             host,
             port,
             tls,
-            mailbox,
+            mailboxes,
         },
     })
+}
+
+fn imap_mailboxes(config: &Value) -> Result<Vec<String>, EmailSyncPlanError> {
+    if optional_bool(config, "sync_all_mailboxes")?.unwrap_or(false) {
+        return Ok(vec![IMAP_ALL_MAILBOXES.to_owned()]);
+    }
+
+    if let Some(mailboxes) = optional_string_array(config, "mailboxes")? {
+        return validate_mailboxes(mailboxes);
+    }
+
+    let mailbox =
+        optional_string(config, "mailbox")?.unwrap_or_else(|| DEFAULT_IMAP_MAILBOX.to_owned());
+    validate_mailboxes(vec![mailbox])
+}
+
+fn validate_mailboxes(mailboxes: Vec<String>) -> Result<Vec<String>, EmailSyncPlanError> {
+    let mut validated = Vec::new();
+    for mailbox in mailboxes {
+        let mailbox = validate_non_empty("mailbox", &mailbox)?;
+        validate_no_control_chars("mailbox", &mailbox)?;
+        if imap_mailbox_selects_all(&mailbox) {
+            return Ok(vec![IMAP_ALL_MAILBOXES.to_owned()]);
+        }
+        if !validated.contains(&mailbox) {
+            validated.push(mailbox);
+        }
+    }
+    if validated.is_empty() {
+        return Err(EmailSyncPlanError::InvalidProviderConfig {
+            field: "mailboxes",
+            message: "must contain at least one mailbox",
+        });
+    }
+
+    Ok(validated)
+}
+
+fn imap_mailbox_selects_all(mailbox: &str) -> bool {
+    matches!(mailbox.trim(), IMAP_ALL_MAILBOXES)
 }
 
 fn required_string(config: &Value, field: &'static str) -> Result<String, EmailSyncPlanError> {
@@ -123,6 +192,34 @@ fn optional_string(
     };
 
     Ok(Some(value.trim().to_owned()))
+}
+
+fn optional_string_array(
+    config: &Value,
+    field: &'static str,
+) -> Result<Option<Vec<String>>, EmailSyncPlanError> {
+    let Some(value) = config.get(field) else {
+        return Ok(None);
+    };
+    let Some(values) = value.as_array() else {
+        return Err(EmailSyncPlanError::InvalidProviderConfig {
+            field,
+            message: "expected string array",
+        });
+    };
+
+    let mut strings = Vec::with_capacity(values.len());
+    for value in values {
+        let Some(value) = value.as_str() else {
+            return Err(EmailSyncPlanError::InvalidProviderConfig {
+                field,
+                message: "expected string array",
+            });
+        };
+        strings.push(value.trim().to_owned());
+    }
+
+    Ok(Some(strings))
 }
 
 fn required_port(config: &Value, field: &'static str) -> Result<u16, EmailSyncPlanError> {
@@ -156,6 +253,20 @@ fn required_bool(config: &Value, field: &'static str) -> Result<bool, EmailSyncP
             field,
             message: "expected boolean value",
         })
+}
+
+fn optional_bool(config: &Value, field: &'static str) -> Result<Option<bool>, EmailSyncPlanError> {
+    let Some(value) = config.get(field) else {
+        return Ok(None);
+    };
+    let Some(value) = value.as_bool() else {
+        return Err(EmailSyncPlanError::InvalidProviderConfig {
+            field,
+            message: "expected boolean value",
+        });
+    };
+
+    Ok(Some(value))
 }
 
 fn reject_secret_like_config_keys(config: &Value) -> Result<(), EmailSyncPlanError> {

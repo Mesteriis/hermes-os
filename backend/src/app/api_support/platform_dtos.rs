@@ -11,6 +11,11 @@ pub(crate) struct ApplicationAccountsResponse {
 }
 
 #[derive(Deserialize)]
+pub(crate) struct ApplicationAccountUpdateRequest {
+    pub(crate) display_name: Option<String>,
+}
+
+#[derive(Deserialize)]
 pub(crate) struct ApplicationSettingUpdateRequest {
     pub(crate) value: Value,
 }

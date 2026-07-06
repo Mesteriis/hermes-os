@@ -71,6 +71,8 @@ type AppNavbarNotification = {
 	timeLabel: string
 	icon: string
 	tone: 'info' | 'success' | 'warning' | 'danger'
+	targetView?: string
+	targetId?: string
 }
 
 const props = withDefaults(defineProps<{
@@ -102,6 +104,9 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
 	navigationSelect: [itemId: string]
+	notificationDismiss: [notificationId: string]
+	notificationSelect: [notificationId: string]
+	notificationsClear: []
 	themeFamilyChange: [value: UiThemeFamily]
 	themeModeChange: [value: UiThemeMode]
 }>()
@@ -195,6 +200,10 @@ function formatNotificationsCount(count: number): string {
 	if (lastDigit >= 2 && lastDigit <= 4) return `${count} активных уведомления`
 
 	return `${count} активных уведомлений`
+}
+
+function isNotificationClickable(notification: AppNavbarNotification): boolean {
+	return Boolean(notification.targetView || notification.targetId)
 }
 
 function closeMenus(): void {
@@ -456,28 +465,60 @@ onBeforeUnmount(() => {
 						<span>Новых уведомлений нет</span>
 					</div>
 
-					<ol v-else class="app-navbar__notifications-list" aria-label="Список уведомлений">
-						<li
-							v-for="notification in visibleNotifications"
-							:key="notification.id"
-							class="app-navbar__notification"
-							:class="`app-navbar__notification--${notification.tone}`"
-						>
-							<span class="app-navbar__notification-icon" aria-hidden="true">
-								<Icon :icon="notification.icon" size="18" />
-							</span>
-							<span class="app-navbar__notification-copy">
-								<span class="app-navbar__notification-meta">
-									<span>{{ notification.sourceLabel }}</span>
-									<span>{{ notification.timeLabel }}</span>
-								</span>
-								<span class="app-navbar__notification-title">{{ notification.title }}</span>
-								<span v-if="notification.body" class="app-navbar__notification-body">
-									{{ notification.body }}
-								</span>
-							</span>
-						</li>
-					</ol>
+					<template v-else>
+						<header class="app-navbar__notifications-header">
+							<strong>{{ notificationDrawerDescription }}</strong>
+							<button
+								type="button"
+								class="app-navbar__notifications-clear"
+								@click="emit('notificationsClear')"
+							>
+								Очистить все
+							</button>
+						</header>
+
+						<ol class="app-navbar__notifications-list" aria-label="Список уведомлений">
+							<li
+								v-for="notification in visibleNotifications"
+								:key="notification.id"
+								class="app-navbar__notification"
+								:class="[
+									`app-navbar__notification--${notification.tone}`,
+									{ 'app-navbar__notification--clickable': isNotificationClickable(notification) }
+								]"
+							>
+								<button
+									type="button"
+									class="app-navbar__notification-main"
+									:disabled="!isNotificationClickable(notification)"
+									@click="emit('notificationSelect', notification.id)"
+								>
+									<span class="app-navbar__notification-icon" aria-hidden="true">
+										<Icon :icon="notification.icon" size="18" />
+									</span>
+									<span class="app-navbar__notification-copy">
+										<span class="app-navbar__notification-meta">
+											<span>{{ notification.sourceLabel }}</span>
+											<span>{{ notification.timeLabel }}</span>
+										</span>
+										<span class="app-navbar__notification-title">{{ notification.title }}</span>
+										<span v-if="notification.body" class="app-navbar__notification-body">
+											{{ notification.body }}
+										</span>
+									</span>
+								</button>
+								<button
+									type="button"
+									class="app-navbar__notification-dismiss"
+									:aria-label="`Очистить уведомление: ${notification.title}`"
+									:title="`Очистить уведомление: ${notification.title}`"
+									@click.stop="emit('notificationDismiss', notification.id)"
+								>
+									<Icon icon="tabler:x" size="16" />
+								</button>
+							</li>
+						</ol>
+					</template>
 				</div>
 			</Drawer>
 

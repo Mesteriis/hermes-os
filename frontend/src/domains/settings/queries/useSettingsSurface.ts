@@ -20,19 +20,10 @@ export function useSettingsSurface() {
         contract: 'useSettingsPageSurface.settingsTreeGroups'
       },
       {
-        id: 'settings-appearance',
-        labelKey: 'Appearance',
-        descriptionKey: 'Theme, density, language and navigation preferences.',
-        icon: 'tabler:palette',
-        status: 'active',
-        kind: 'settings',
-        contract: 'useSettingsPageSurface.theme'
-      },
-      {
-        id: 'settings-integrations',
-        labelKey: 'Integrations',
+        id: 'settings-accounts',
+        labelKey: 'Accounts',
         descriptionKey: 'Provider accounts, capability status and sync controls.',
-        icon: 'tabler:plug-connected',
+        icon: 'tabler:id',
         status: 'active',
         kind: 'settings',
         contract: 'useSettingsPageSurface.integrationCount'
@@ -47,20 +38,12 @@ export function useSettingsSurface() {
         capabilityIds: ['settings-application']
       },
       {
-        id: 'settings-interface',
-        labelKey: 'Interface',
+        id: 'settings-accounts',
+        labelKey: 'Accounts',
         status: 'active',
         surfacePath,
-        capabilityIds: ['settings-appearance']
-      },
-      {
-        id: 'settings-sources',
-        labelKey: 'Sources',
-        status: 'active',
-        surfacePath,
-        capabilityIds: ['settings-integrations']
+        capabilityIds: ['settings-accounts']
       }
     ]
   })
 }
-

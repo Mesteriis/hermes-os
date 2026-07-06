@@ -82,6 +82,65 @@ async fn event_stream_replays_event_log_positions_as_sse_against_postgres() {
 }
 
 #[tokio::test]
+async fn event_stream_without_cursor_starts_at_current_tail_against_postgres() {
+    let context = TestContext::new().await;
+    let app = app_with_database(&context.connection_string()).await;
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock after unix epoch")
+        .as_nanos();
+    let event_id = format!("evt_api_stream_tail_{suffix}");
+
+    let create_response = app
+        .clone()
+        .oneshot(json_request_with_token(
+            "/api/v1/events",
+            json!({
+                "event_id": event_id,
+                "event_type": "system_api_tail_test_event",
+                "occurred_at": Utc::now(),
+                "source": {
+                    "kind": "test",
+                    "provider": "integration",
+                    "source_id": event_id
+                },
+                "subject": {"kind": "system", "entity_id": "backend"}
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("create response");
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let create_body = json_body(create_response).await;
+    let position = create_body["position"].as_i64().expect("position");
+
+    let response = app
+        .oneshot(get_request_with_token(
+            "/api/events/stream?heartbeat_seconds=1",
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("stream response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let mut stream = response.into_body().into_data_stream();
+    let chunk = timeout(Duration::from_secs(2), stream.next())
+        .await
+        .expect("first SSE chunk timed out")
+        .expect("first SSE chunk")
+        .expect("first SSE chunk bytes");
+    let text = std::str::from_utf8(&chunk).expect("SSE chunk is UTF-8");
+
+    assert!(text.contains("event: heartbeat"), "{text}");
+    assert!(
+        text.contains(&format!("\"after_position\":{position}")),
+        "{text}"
+    );
+    assert!(!text.contains(&event_id), "{text}");
+}
+
+#[tokio::test]
 async fn event_trace_api_returns_causal_edges_against_postgres() {
     let context = TestContext::new().await;
     let app = app_with_database(&context.connection_string()).await;

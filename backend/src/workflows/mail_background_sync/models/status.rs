@@ -12,6 +12,7 @@ pub struct MailSyncStatus {
     pub estimated_total_messages: Option<i64>,
     pub current_batch_size: i32,
     pub last_started_at: Option<DateTime<Utc>>,
+    pub last_updated_at: Option<DateTime<Utc>>,
     pub last_completed_at: Option<DateTime<Utc>>,
     pub next_run_at: Option<DateTime<Utc>>,
     pub last_error_code: Option<String>,

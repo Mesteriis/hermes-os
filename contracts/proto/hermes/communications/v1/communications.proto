@@ -52,6 +52,7 @@ message CommunicationMessage {
   optional string local_state_changed_at = 23;
   optional string local_state_reason = 24;
   int64 attachment_count = 25;
+  optional string body_html = 26;
 }
 
 message ListMessagesRequest {

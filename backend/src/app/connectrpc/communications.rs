@@ -239,7 +239,7 @@ impl CommunicationsService for CommunicationsConnectService {
             .transpose()?
             .unwrap_or(LocalMessageState::Active);
         let match_mode = parse_match_mode(req.match_mode.as_deref())?;
-        let limit = normalize_limit(req.limit, 5000, 5000);
+        let limit = normalize_limit(req.limit, 100, 500);
         let page = self
             .message_store
             .list_messages_page(ProjectedMessagePageQuery {
@@ -290,9 +290,18 @@ impl CommunicationsService for CommunicationsConnectService {
             .attachments_for_message(&req.message_id)
             .await
             .map_err(storage_connect_error)?;
+        let body_html =
+            crate::app::api_support::rich_body_html_for_message(self.pool.clone(), &message)
+                .await
+                .map_err(api_error_connect_error)?;
 
         Response::ok(GetMessageResponse {
-            item: Some(proto_message(message, attachments.len() as i64)).into(),
+            item: Some(proto_message_with_body_html(
+                message,
+                attachments.len() as i64,
+                body_html,
+            ))
+            .into(),
             attachments: attachments
                 .into_iter()
                 .map(proto_attachment_from_storage)
@@ -876,7 +885,7 @@ impl CommunicationsService for CommunicationsConnectService {
 
         match service.generate_reply(&message, &opts).await {
             Ok(Some(draft)) => {
-                crate::domains::signal_hub::dispatch_ai_helper_signal(
+                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
                     self.pool.clone(),
                     "reply_drafting",
                     &req.message_id,
@@ -896,8 +905,7 @@ impl CommunicationsService for CommunicationsConnectService {
                     }),
                     None,
                 )
-                .await
-                .map_err(signal_hub_connect_error)?;
+                .await;
 
                 Response::ok(ProtoAiReplyResponse {
                     subject: Some(draft.subject),
@@ -976,7 +984,7 @@ impl CommunicationsService for CommunicationsConnectService {
         };
 
         if !variants.is_empty() {
-            crate::domains::signal_hub::dispatch_ai_helper_signal(
+            crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
                 self.pool.clone(),
                 "reply_variant_generation",
                 &req.message_id,
@@ -997,8 +1005,7 @@ impl CommunicationsService for CommunicationsConnectService {
                 }),
                 None,
             )
-            .await
-            .map_err(signal_hub_connect_error)?;
+            .await;
         }
 
         Response::ok(ProtoAiReplyVariantsResponse {
@@ -1399,7 +1406,7 @@ impl CommunicationsService for CommunicationsConnectService {
 
         match service.translate(&message.body_text, target_language).await {
             Ok(Some(translation)) => {
-                crate::domains::signal_hub::dispatch_ai_helper_signal(
+                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
                     self.pool.clone(),
                     "message_translation",
                     message_id,
@@ -1420,8 +1427,7 @@ impl CommunicationsService for CommunicationsConnectService {
                     }),
                     None,
                 )
-                .await
-                .map_err(signal_hub_connect_error)?;
+                .await;
 
                 Response::ok(TranslateMessageResponse {
                     translated: true,
@@ -1486,7 +1492,7 @@ impl CommunicationsService for CommunicationsConnectService {
             .map_err(extract_connect_error)?;
         let llm_task_count = tasks.iter().filter(|task| task.source == "llm").count();
         if llm_task_count > 0 {
-            crate::domains::signal_hub::dispatch_ai_helper_signal(
+            crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
                 self.pool.clone(),
                 "message_task_extraction",
                 &req.message_id,
@@ -1506,8 +1512,7 @@ impl CommunicationsService for CommunicationsConnectService {
                 }),
                 None,
             )
-            .await
-            .map_err(signal_hub_connect_error)?;
+            .await;
         }
 
         Response::ok(ExtractMessageTasksResponse {
@@ -1631,7 +1636,7 @@ impl CommunicationsService for CommunicationsConnectService {
                 );
             match service.translate(&message.body_text, target_language).await {
                 Ok(Some(translation)) => {
-                    crate::domains::signal_hub::dispatch_ai_helper_signal(
+                    crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
                         self.pool.clone(),
                         "thread_message_translation",
                         &message.message_id,
@@ -1656,8 +1661,7 @@ impl CommunicationsService for CommunicationsConnectService {
                         }),
                         None,
                     )
-                    .await
-                    .map_err(signal_hub_connect_error)?;
+                    .await;
 
                     items.push(ProtoThreadTranslationItem {
                         message_id: message.message_id,
@@ -2088,8 +2092,8 @@ impl CommunicationsService for CommunicationsConnectService {
                 cursor: page_request
                     .and_then(|page| (!page.cursor.is_empty()).then_some(page.cursor.as_str())),
                 limit: normalize_limit(
-                    page_request.map(|page| page.limit).unwrap_or(250),
-                    250,
+                    page_request.map(|page| page.limit).unwrap_or(100),
+                    100,
                     1000,
                 ),
             })
@@ -2459,7 +2463,7 @@ impl CommunicationsService for CommunicationsConnectService {
 
         match service.translate(source_text, target_language).await {
             Ok(Some(translation)) => {
-                crate::domains::signal_hub::dispatch_ai_helper_signal(
+                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
                     self.pool.clone(),
                     "attachment_translation",
                     &attachment.attachment.message_id,
@@ -2482,8 +2486,7 @@ impl CommunicationsService for CommunicationsConnectService {
                     }),
                     None,
                 )
-                .await
-                .map_err(signal_hub_connect_error)?;
+                .await;
 
                 Response::ok(TranslateAttachmentResponse {
                     attachment_id: attachment.attachment.attachment_id,
@@ -2564,6 +2567,14 @@ fn proto_message_summary(summary: ProjectedMessageSummary) -> ProtoCommunication
 }
 
 fn proto_message(message: ProjectedMessage, attachment_count: i64) -> ProtoCommunicationMessage {
+    proto_message_with_body_html(message, attachment_count, None)
+}
+
+fn proto_message_with_body_html(
+    message: ProjectedMessage,
+    attachment_count: i64,
+    body_html: Option<String>,
+) -> ProtoCommunicationMessage {
     ProtoCommunicationMessage {
         message_id: message.message_id,
         raw_record_id: message.raw_record_id,
@@ -2574,6 +2585,7 @@ fn proto_message(message: ProjectedMessage, attachment_count: i64) -> ProtoCommu
         sender: message.sender,
         recipients: message.recipients,
         body_text: message.body_text,
+        body_html,
         occurred_at: message.occurred_at.map(timestamp_string),
         projected_at: timestamp_string(message.projected_at),
         channel_kind: message.channel_kind,

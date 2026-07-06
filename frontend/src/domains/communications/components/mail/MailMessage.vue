@@ -10,13 +10,16 @@ withDefaults(defineProps<{
   message: CommunicationConversationMessageModel
   fallbackSubject: string
   inspectorVisible?: boolean
+  isActionRunning?: boolean
   showInspectorToggle?: boolean
 }>(), {
   inspectorVisible: true,
+  isActionRunning: false,
   showInspectorToggle: true
 })
 
 const emit = defineEmits<{
+  'select-action': [actionId: string]
   'toggle-inspector': []
 }>()
 
@@ -24,6 +27,10 @@ const { t } = useI18n()
 
 function handleToggleInspector(): void {
   emit('toggle-inspector')
+}
+
+function handleSelectAction(actionId: string): void {
+  emit('select-action', actionId)
 }
 </script>
 
@@ -38,7 +45,9 @@ function handleToggleInspector(): void {
 		<MailAction
 			:action-groups="message.actionGroups"
 			:inspector-visible="inspectorVisible"
+			:is-running="isActionRunning"
 			:show-inspector-toggle="showInspectorToggle"
+			@select-action="handleSelectAction"
 			@toggle-inspector="handleToggleInspector"
 		/>
 		<section class="communication-email-preview communication-email-preview--structured" :aria-label="t('Open message')">

@@ -4,6 +4,7 @@ use testkit::context::TestContext;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
+use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
@@ -73,6 +74,21 @@ async fn application_settings_store_lists_seeded_settings_against_postgres() {
         settings
             .iter()
             .all(|setting| !setting.setting_key.contains("password"))
+    );
+
+    let public_settings = store
+        .list_public_settings()
+        .await
+        .expect("list public settings");
+    assert!(
+        public_settings
+            .iter()
+            .all(|setting| setting.category != "ai" && !setting.setting_key.starts_with("ai."))
+    );
+    assert!(
+        public_settings
+            .iter()
+            .any(|setting| setting.setting_key == "ui.theme")
     );
 }
 
@@ -419,6 +435,12 @@ async fn application_settings_api_updates_existing_setting_against_postgres() {
     assert_eq!(list_response.status(), StatusCode::OK);
     let list_body = json_body(list_response).await;
     let items = list_body["items"].as_array().expect("settings items");
+    assert!(items.iter().all(|item| {
+        item["category"] != json!("ai")
+            && item["setting_key"]
+                .as_str()
+                .map_or(true, |key| !key.starts_with("ai."))
+    }));
     assert!(items.iter().any(|item| {
         item["setting_key"] == json!("ui.theme") && item["value"] == json!("dark")
     }));
@@ -545,6 +567,84 @@ async fn settings_accounts_api_lists_provider_accounts_against_postgres() {
     }));
 }
 
+#[tokio::test]
+async fn settings_accounts_api_updates_provider_account_label_against_postgres() {
+    let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("acct_settings_label_{suffix}");
+    CommunicationIngestionStore::new(pool.clone())
+        .upsert_provider_account(&NewProviderAccount::new(
+            &account_id,
+            EmailProviderKind::Icloud,
+            "Original iCloud label",
+            format!("label-{suffix}@icloud.com"),
+        ))
+        .await
+        .expect("seed provider account");
+
+    let app = build_router_with_database(
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        database,
+    );
+
+    let response = app
+        .oneshot(json_patch_request_with_actor(
+            format!("/api/v1/settings/accounts/{account_id}").as_str(),
+            json!({
+                "display_name": "Personal iCloud"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    assert_eq!(body["account_id"], json!(account_id));
+    assert_eq!(body["display_name"], json!("Personal iCloud"));
+
+    let observation = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'vault'
+          AND link.entity_kind = 'communication_provider_account'
+          AND link.entity_id = $1
+          AND link.relationship_kind = 'display_name_update'
+        ORDER BY link.created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("display name observation");
+
+    assert_eq!(
+        observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "COMMUNICATION_PROVIDER_ACCOUNT_DISPLAY_NAME_MUTATION"
+    );
+    assert_eq!(
+        observation
+            .try_get::<String, _>("relationship_kind")
+            .expect("relationship kind"),
+        "display_name_update"
+    );
+}
+
 fn get_request_with_token(uri: &str, token: &str) -> Request<Body> {
     Request::builder()
         .method("GET")
@@ -557,6 +657,16 @@ fn get_request_with_token(uri: &str, token: &str) -> Request<Body> {
 fn json_put_request_with_actor(uri: &str, body: Value, token: &str) -> Request<Body> {
     Request::builder()
         .method("PUT")
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-hermes-secret", token)
+        .body(Body::from(body.to_string()))
+        .expect("request")
+}
+
+fn json_patch_request_with_actor(uri: &str, body: Value, token: &str) -> Request<Body> {
+    Request::builder()
+        .method("PATCH")
         .uri(uri)
         .header(header::CONTENT_TYPE, "application/json")
         .header("x-hermes-secret", token)

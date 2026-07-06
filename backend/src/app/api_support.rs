@@ -118,7 +118,7 @@ use crate::domains::calendar::scheduling::{
 use crate::domains::calendar::sync::{export_event_ics, export_event_md};
 use crate::domains::communications::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage, ProjectedMessageSummary,
-    WorkflowState,
+    WorkflowState, parse_raw_email_message_from_blob,
 };
 use crate::domains::communications::storage::{
     CommunicationStorageError, CommunicationStorageStore, StoredCommunicationAttachmentWithBlob,

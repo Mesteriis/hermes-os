@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 
 describe('ApplicationSettings boundary', () => {
-  it('preserves application settings orchestration after removing the Vue render layer', () => {
+  it('renders application settings through SettingsPage while keeping orchestration in the surface', () => {
     const page = readFileSync(
       new URL('../views/SettingsPage.vue', import.meta.url),
       'utf8'
@@ -15,11 +15,15 @@ describe('ApplicationSettings boundary', () => {
     expect(existsSync(new URL('./ApplicationSettings.vue', import.meta.url))).toBe(false)
     expect(page).not.toContain('import ApplicationSettings')
     expect(page).not.toContain('<ApplicationSettings')
-    expect(page).toContain('Application settings UI removed after logic extraction. Rebuild pending new design language.')
-    expect(page).toContain('Application settings logic is preserved')
+    expect(page).toContain("store.selectedSection === 'application'")
+    expect(page).toContain('settings-registry-row')
+    expect(page).toContain('applicationSettings.handleSave')
 
     expect(surface).toContain('useApplicationSettingsQuery')
     expect(surface).toContain('useSaveApplicationSettingMutation')
+    expect(surface).toContain('isPublicApplicationSetting')
+    expect(surface).toContain("setting.category !== 'ai'")
+    expect(surface).toContain("!setting.setting_key.startsWith('ai.')")
     expect(surface).toContain('groupSettingsByCategory')
     expect(surface).toContain('settingControlType')
     expect(surface).toContain('settingAllowedValues')

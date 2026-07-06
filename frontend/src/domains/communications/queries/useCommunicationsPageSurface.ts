@@ -7,14 +7,21 @@ import {
   useMailboxHealthQuery,
   useMailListQuery,
   useMessageQuery,
+  useSaveDraftMutation,
+  useSendMailMutation,
   useStateCountsQuery,
   useSyncStatusesQuery,
   useThreadMessagesQuery
 } from './useCommunicationsQuery'
+import { useCommunicationActionNotifications } from './communicationActionNotifications'
 import { useFolderMailList } from './folderMailList'
 import { useOutboxStatusStrip } from './outboxStatusStrip'
 import { useMailResourceOverview } from '../views/useMailResourceOverview'
-import { draftToComposeForm } from '../helpers/communicationPageModels'
+import { buildComposeDraftPayload } from '../forms/composeDraftAutosave'
+import {
+  composeFormToSendRequest,
+  draftToComposeForm
+} from '../helpers/communicationPageModels'
 import {
   communicationSectionWorkflowState,
   communicationWorkflowStateSectionId,
@@ -35,6 +42,7 @@ type BulkActionCommand = Omit<BulkMessageActionRequest, 'message_ids'>
 
 export function useCommunicationsPageSurface() {
   const store = useCommunicationsStore()
+  const notifications = useCommunicationActionNotifications()
   const isAccountSetupOpen = ref(false)
   const inspectorVisible = ref(true)
   const activeSavedSearchId = ref('')
@@ -96,6 +104,8 @@ export function useCommunicationsPageSurface() {
     () => store.selectedThread?.subject ?? null
   )
   const deleteDraftMutation = useDeleteDraftMutation()
+  const saveDraftMutation = useSaveDraftMutation()
+  const sendMailMutation = useSendMailMutation()
   const bulkMessageActionMutation = useBulkMessageActionMutation()
   const {
     outboxItems,
@@ -108,8 +118,8 @@ export function useCommunicationsPageSurface() {
     loadMoreOutboxItems,
     prefetchMoreOutboxItems
   } = useOutboxStatusStrip(() => store.selectedMailAccountId || undefined, {
-    onStatus: (message) => store.setMailActionStatus(message),
-    onError: (message) => store.setMailActionError(message)
+    onStatus: (message) => notifications.info('Outbox updated', message),
+    onError: (message) => notifications.error('Outbox failed', message)
   })
 
   const mailList = computed(() => mailListData.value ?? [])
@@ -245,11 +255,15 @@ export function useCommunicationsPageSurface() {
         ...command,
         message_ids: messageIds
       })
-      store.setMailActionStatus(`${result.updated_count} messages updated`)
+      const status = `${result.updated_count} messages updated`
+      store.setMailActionStatus(status)
+      notifications.success('Mail action completed', status)
       store.clearMessageSelection()
       await Promise.all([refetchMailList(), refetchStateCounts()])
     } catch (e) {
-      store.setMailActionError(e instanceof Error ? e.message : 'Bulk action failed')
+      const message = e instanceof Error ? e.message : 'Bulk action failed'
+      store.setMailActionError(message)
+      notifications.error('Mail action failed', message)
     } finally {
       store.setIsMailActionRunning(false)
     }
@@ -265,6 +279,7 @@ export function useCommunicationsPageSurface() {
     handleCreateTask,
     handleExportMessage,
     handleMarkMessageRead,
+    handleMarkMessageSpam,
     handleMarkMessageUnread,
     handleForwardMessage,
     handleGenerateAiReply,
@@ -331,12 +346,58 @@ export function useCommunicationsPageSurface() {
     store.openCompose(draftToComposeForm(draft))
   }
 
+  function notifyMailActionError(message: string) {
+    store.setMailActionError(message)
+    notifications.error('Mail action failed', message)
+  }
+
   async function handleDeleteDraft(draftId: string) {
     try {
       await deleteDraftMutation.mutateAsync(draftId)
       await refetchDrafts()
     } catch (e) {
-      store.setMailActionError(e instanceof Error ? e.message : 'Delete draft failed')
+      const message = e instanceof Error ? e.message : 'Delete draft failed'
+      store.setMailActionError(message)
+      notifications.error('Draft delete failed', message)
+    }
+  }
+
+  async function handleSaveComposeDraft() {
+    store.setIsSendingMessage(true)
+    store.setComposeStatusMessage('')
+    store.setComposeSendError('')
+    try {
+      const draft = await saveDraftMutation.mutateAsync(buildComposeDraftPayload(store.composeForm))
+      store.openCompose(draftToComposeForm(draft))
+      store.setComposeStatusMessage('Draft saved')
+      notifications.success('Draft saved')
+      await refetchDrafts()
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Save draft failed'
+      store.setComposeSendError(message)
+      notifications.error('Draft save failed', message)
+    } finally {
+      store.setIsSendingMessage(false)
+    }
+  }
+
+  async function handleSendCompose() {
+    store.setIsSendingMessage(true)
+    store.setComposeStatusMessage('')
+    store.setComposeSendError('')
+    try {
+      const result = await sendMailMutation.mutateAsync(composeFormToSendRequest(store.composeForm))
+      store.closeCompose()
+      const status = result.status === 'sent' ? `Sent via ${result.transport}` : `Message ${result.status}`
+      store.setMailActionStatus(status)
+      notifications.success('Message queued', status)
+      await Promise.all([refetchMailList(), refetchDrafts()])
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Send failed'
+      store.setComposeSendError(message)
+      notifications.error('Send failed', message)
+    } finally {
+      store.setIsSendingMessage(false)
     }
   }
 
@@ -412,8 +473,11 @@ export function useCommunicationsPageSurface() {
     handleSendThreadReply,
     handleSnoozeMessage,
     handleMarkMessageRead,
+    handleMarkMessageSpam,
     handleMarkMessageUnread,
     handleDeleteFromProvider,
+    handleSaveComposeDraft,
+    handleSendCompose,
     handleSyncNow,
     handleToggleImportant,
     handleTogglePin,
@@ -439,6 +503,7 @@ export function useCommunicationsPageSurface() {
     loadMoreOutboxItems,
     mailboxHealth,
     messageDetail,
+    notifyMailActionError,
     outboxErrorMessage,
     outboxItems,
     prefetchMoreOutboxItems,

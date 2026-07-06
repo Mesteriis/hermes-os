@@ -93,7 +93,7 @@ pub(crate) async fn post_v1_translate(
     {
         Some(t) => {
             if let Some(pool) = state.database.pool() {
-                crate::domains::signal_hub::dispatch_ai_helper_signal(
+                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
                     pool.clone(),
                     "message_translation",
                     &message_id,
@@ -114,7 +114,7 @@ pub(crate) async fn post_v1_translate(
                     }),
                     None,
                 )
-                .await?;
+                .await;
             }
 
             Ok(Json(
@@ -164,7 +164,7 @@ pub(crate) async fn post_v1_translate_attachment(
     match service.translate(source_text, target_language).await {
         Ok(Some(translation)) => {
             if let Some(pool) = state.database.pool() {
-                crate::domains::signal_hub::dispatch_ai_helper_signal(
+                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
                     pool.clone(),
                     "attachment_translation",
                     &attachment.attachment.attachment_id,
@@ -188,7 +188,7 @@ pub(crate) async fn post_v1_translate_attachment(
                     }),
                     None,
                 )
-                .await?;
+                .await;
             }
 
             Ok(Json(AttachmentTranslationResponse {
@@ -285,7 +285,7 @@ pub(crate) async fn post_v1_translate_thread(
         match service.translate(&message.body_text, target_language).await {
             Ok(Some(translation)) => {
                 if let Some(pool) = state.database.pool() {
-                    crate::domains::signal_hub::dispatch_ai_helper_signal(
+                    crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
                         pool.clone(),
                         "thread_message_translation",
                         &message.message_id,
@@ -310,7 +310,7 @@ pub(crate) async fn post_v1_translate_thread(
                         }),
                         None,
                     )
-                    .await?;
+                    .await;
                 }
 
                 items.push(ThreadTranslationItem {
