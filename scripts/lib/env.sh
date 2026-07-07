@@ -7,6 +7,19 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 DOCKER_ENV_FILE="$REPO_ROOT/docker/.env"
 DOCKER_ENV_TEMPLATE="$REPO_ROOT/docker/.env.example"
+LOCAL_ENV_FILE="$REPO_ROOT/.env"
+
+provider_runtime_env_names() {
+	printf '%s\n' \
+		HERMES_TDJSON_PATH \
+		HERMES_TELEGRAM_API_ID \
+		HERMES_TELEGRAM_API_HASH \
+		HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH \
+		HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_SOURCE \
+		HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON \
+		HERMES_GOOGLE_OAUTH_CLIENT_ID \
+		HERMES_GOOGLE_OAUTH_CLIENT_SECRET
+}
 
 ensure_docker_env_file() {
 	if [ ! -f "$DOCKER_ENV_FILE" ]; then
@@ -15,13 +28,35 @@ ensure_docker_env_file() {
 	fi
 }
 
+source_env_file() {
+	local env_file="$1"
+	if [ -z "$env_file" ]; then
+		return 0
+	fi
+	if [ ! -f "$env_file" ]; then
+		error "Hermes env file was not found: $env_file"
+		exit 1
+	fi
+	set -a
+	# shellcheck disable=SC1090
+	. "$env_file"
+	set +a
+}
+
+source_env_file_if_exists() {
+	local env_file="$1"
+	if [ -f "$env_file" ]; then
+		source_env_file "$env_file"
+	fi
+}
+
 load_hermes_env() {
 	prepend_tools_bin_to_path
 	ensure_docker_env_file
-	set -a
-	# shellcheck disable=SC1090
-	. "$DOCKER_ENV_FILE"
-	set +a
+	source_env_file "$DOCKER_ENV_FILE"
+	source_env_file_if_exists "$LOCAL_ENV_FILE"
+	import_launchctl_env_name HERMES_ENV_FILE
+	source_env_file "${HERMES_ENV_FILE:-}"
 
 	: "${HERMES_POSTGRES_DB:=hermes_hub}"
 	: "${HERMES_POSTGRES_USER:=hermes}"
@@ -62,6 +97,79 @@ load_hermes_env() {
 	export HERMES_NATS_MONITOR_BIND
 	export HERMES_NATS_MONITOR_PORT
 	export HERMES_NATS_SERVER_URL
+	import_launchctl_provider_runtime_env
+	export_provider_runtime_env
+}
+
+import_launchctl_env_name() {
+	local name="$1"
+	if [ "$(uname -s 2>/dev/null || true)" != "Darwin" ]; then
+		return 0
+	fi
+	if ! command -v launchctl >/dev/null 2>&1; then
+		return 0
+	fi
+	if [ "${!name+x}" = "x" ]; then
+		return 0
+	fi
+
+	local value uid
+	value="$(launchctl getenv "$name" 2>/dev/null || true)"
+	if [ -z "$value" ]; then
+		uid="$(id -u)"
+		value="$(launchctl asuser "$uid" getenv "$name" 2>/dev/null || true)"
+	fi
+	if [ -n "$value" ]; then
+		export "$name=$value"
+	fi
+}
+
+import_launchctl_provider_runtime_env() {
+	local name
+	while IFS= read -r name; do
+		import_launchctl_env_name "$name"
+	done < <(provider_runtime_env_names)
+}
+
+export_provider_runtime_env() {
+	local name
+	while IFS= read -r name; do
+		if [ "${!name+x}" = "x" ]; then
+			export "$name"
+		fi
+	done < <(provider_runtime_env_names)
+}
+
+prepare_bundled_provider_runtime_env() {
+	if [ -z "${HERMES_BUNDLED_TELEGRAM_API_ID:-}" ] && [ -n "${HERMES_TELEGRAM_API_ID:-}" ]; then
+		HERMES_BUNDLED_TELEGRAM_API_ID="$HERMES_TELEGRAM_API_ID"
+		export HERMES_BUNDLED_TELEGRAM_API_ID
+	fi
+	if [ -z "${HERMES_BUNDLED_TELEGRAM_API_HASH:-}" ] && [ -n "${HERMES_TELEGRAM_API_HASH:-}" ]; then
+		HERMES_BUNDLED_TELEGRAM_API_HASH="$HERMES_TELEGRAM_API_HASH"
+		export HERMES_BUNDLED_TELEGRAM_API_HASH
+	fi
+	if [ -z "${HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_JSON:-}" ]; then
+		if [ -n "${HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON:-}" ]; then
+			HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_JSON="$HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON"
+			export HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_JSON
+		else
+			local google_oauth_source
+			google_oauth_source="${HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_SOURCE:-${HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH:-}}"
+			if [ -n "$google_oauth_source" ] && [ -f "$google_oauth_source" ]; then
+				HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_JSON="$(cat "$google_oauth_source")"
+				export HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_JSON
+			fi
+		fi
+	fi
+	if [ -z "${HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_ID:-}" ] && [ -n "${HERMES_GOOGLE_OAUTH_CLIENT_ID:-}" ]; then
+		HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_ID="$HERMES_GOOGLE_OAUTH_CLIENT_ID"
+		export HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_ID
+	fi
+	if [ -z "${HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_SECRET:-}" ] && [ -n "${HERMES_GOOGLE_OAUTH_CLIENT_SECRET:-}" ]; then
+		HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_SECRET="$HERMES_GOOGLE_OAUTH_CLIENT_SECRET"
+		export HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_SECRET
+	fi
 }
 
 ensure_bacon_available() {

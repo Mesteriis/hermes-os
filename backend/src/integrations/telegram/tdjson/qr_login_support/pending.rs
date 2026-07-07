@@ -1,7 +1,8 @@
 use std::sync::mpsc::Sender;
 
 use crate::integrations::telegram::client::{
-    TelegramError, TelegramQrLoginStatus, TelegramQrLoginStatusResponse,
+    TelegramError, TelegramQrLoginStartRequest, TelegramQrLoginStatus,
+    TelegramQrLoginStatusResponse,
 };
 
 use super::types::{
@@ -11,6 +12,7 @@ use super::types::{
 
 pub(in crate::integrations::telegram::tdjson) fn upsert_pending_response(
     pending_logins: &PendingQrLoginMap,
+    request: TelegramQrLoginStartRequest,
     response: TelegramQrLoginStatusResponse,
     command_tx: Sender<TelegramQrLoginCommand>,
     worker_completion: QrLoginWorkerCompletion,
@@ -21,6 +23,7 @@ pub(in crate::integrations::telegram::tdjson) fn upsert_pending_response(
     pending_logins.insert(
         response.setup_id.clone(),
         TelegramQrLoginSession {
+            request,
             response,
             command_tx,
             worker_completion,

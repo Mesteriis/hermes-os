@@ -29,6 +29,7 @@ if [ -z "${HERMES_BUNDLED_LOCAL_API_SECRET:-}" ]; then
 fi
 export HERMES_BUNDLED_LOCAL_API_SECRET
 export VITE_HERMES_LOCAL_API_SECRET="$HERMES_BUNDLED_LOCAL_API_SECRET"
+prepare_bundled_provider_runtime_env
 
 info "Building backend release binary"
 CARGO_TARGET_DIR="$backend_target_dir" \

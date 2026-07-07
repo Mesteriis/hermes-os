@@ -151,7 +151,9 @@ function saveSelectedAccountLabel() {
                   :class="{ active: row.isSelected }"
                   @click="integrationsSettings.selectIntegration(row.account.account_id)"
                 >
-                  <Icon :icon="row.icon" />
+                  <i class="settings-provider-icon" :class="row.iconTone" aria-hidden="true">
+                    <Icon :icon="row.icon" />
+                  </i>
                   <span>
                     <strong>{{ row.displayName }}</strong>
                     <small>{{ row.providerLabel }} · {{ row.flowLabel }}</small>
@@ -170,10 +172,19 @@ function saveSelectedAccountLabel() {
             <section class="settings-account-detail">
               <template v-if="selectedAccountSummary">
                 <header class="settings-account-detail__header">
-                  <div>
-                    <span>{{ selectedAccountSummary.providerLabel }}</span>
-                    <h3>{{ selectedAccountSummary.displayName }}</h3>
-                    <p>{{ selectedAccountSummary.email || selectedAccountSummary.account.external_account_id }}</p>
+                  <div class="settings-account-detail__identity">
+                    <i
+                      class="settings-provider-icon settings-provider-icon--lg"
+                      :class="selectedAccountSummary.iconTone"
+                      aria-hidden="true"
+                    >
+                      <Icon :icon="selectedAccountSummary.icon" />
+                    </i>
+                    <div>
+                      <span>{{ selectedAccountSummary.providerLabel }}</span>
+                      <h3>{{ selectedAccountSummary.displayName }}</h3>
+                      <p>{{ selectedAccountSummary.email || selectedAccountSummary.account.external_account_id }}</p>
+                    </div>
                   </div>
                   <label class="settings-switch" :title="selectedAccountSummary.accountToggleHelp">
                     <input
@@ -236,6 +247,15 @@ function saveSelectedAccountLabel() {
 
                 <footer class="settings-account-actions">
                   <button
+                    v-if="selectedAccountSummary.canRecoverExpiredCredential"
+                    type="button"
+                    class="secondary-button"
+                    @click="integrationsSettings.openCredentialRecovery()"
+                  >
+                    <Icon icon="tabler:key" />
+                    {{ t('Восстановить аккаунт') }}
+                  </button>
+                  <button
                     type="button"
                     class="secondary-button"
                     :disabled="!selectedAccountSummary.canOpenSetupAction"
@@ -273,7 +293,7 @@ function saveSelectedAccountLabel() {
                     @click="integrationsSettings.handleDelete(selectedAccountSummary.account.account_id)"
                   >
                     <Icon icon="tabler:trash" />
-                    {{ t('Delete') }}
+                    {{ t('Delete permanently') }}
                   </button>
                 </footer>
               </template>

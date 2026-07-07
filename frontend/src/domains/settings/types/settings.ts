@@ -26,6 +26,20 @@ export interface ProviderAccount {
   is_active?: boolean
   is_authenticated?: boolean
   last_sync_at?: string | null
+  credential_state?: ProviderAccountCredentialState
+}
+
+export type ProviderAccountCredentialStatus =
+  | 'not_applicable'
+  | 'valid'
+  | 'expired'
+  | 'missing'
+  | 'unavailable'
+  | string
+
+export interface ProviderAccountCredentialState {
+  status: ProviderAccountCredentialStatus
+  requires_reauthorization: boolean
 }
 
 export interface ProviderAccountListResponse {

@@ -6,26 +6,13 @@ use reqwest::Url;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
+use super::super::catalog::DiscoveredModel;
 use super::super::errors::AiControlCenterError;
-use super::super::evidence::capture_model_catalog_item_observation;
 use super::super::models::AiProviderAccount;
-use super::super::rows::row_to_model;
 use super::super::store::AiControlCenterStore;
 use super::super::validation::validate_non_empty;
 
 const OPENAI_COMPATIBLE_MODELS_TIMEOUT_SECS: u64 = 20;
-
-#[derive(Debug)]
-struct DiscoveredModel {
-    model_key: String,
-    display_name: String,
-    category: String,
-    privacy: String,
-    capabilities: Vec<String>,
-    context_window: Option<i32>,
-    embedding_dimension: Option<i32>,
-    metadata: Value,
-}
 
 #[derive(Debug, Deserialize)]
 struct OpenAiCompatibleModelsResponse {
@@ -127,76 +114,6 @@ impl AiControlCenterStore {
         self.upsert_discovered_models_for_provider(provider, &discovered, actor)
             .await
     }
-
-    async fn upsert_discovered_models_for_provider(
-        &self,
-        provider: &AiProviderAccount,
-        models: &[DiscoveredModel],
-        actor: &str,
-    ) -> Result<usize, AiControlCenterError> {
-        let mut transaction = self.pool.begin().await?;
-        let mut synced = 0usize;
-        for model in models {
-            let row = sqlx::query(
-                r#"
-                INSERT INTO ai_model_catalog (
-                    provider_id,
-                    model_key,
-                    display_name,
-                    category,
-                    privacy,
-                    capabilities,
-                    context_window,
-                    embedding_dimension,
-                    is_available,
-                    metadata,
-                    created_at,
-                    updated_at
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9, now(), now())
-                ON CONFLICT (provider_id, model_key)
-                DO UPDATE SET
-                    display_name = EXCLUDED.display_name,
-                    category = EXCLUDED.category,
-                    privacy = EXCLUDED.privacy,
-                    capabilities = EXCLUDED.capabilities,
-                    context_window = EXCLUDED.context_window,
-                    embedding_dimension = EXCLUDED.embedding_dimension,
-                    metadata = EXCLUDED.metadata,
-                    updated_at = now()
-                RETURNING
-                    provider_id,
-                    model_key,
-                    display_name,
-                    category,
-                    privacy,
-                    capabilities,
-                    context_window,
-                    embedding_dimension,
-                    is_available,
-                    metadata,
-                    created_at,
-                    updated_at
-                "#,
-            )
-            .bind(&provider.provider_id)
-            .bind(&model.model_key)
-            .bind(&model.display_name)
-            .bind(&model.category)
-            .bind(&model.privacy)
-            .bind(json!(model.capabilities))
-            .bind(model.context_window)
-            .bind(model.embedding_dimension)
-            .bind(&model.metadata)
-            .fetch_one(&mut *transaction)
-            .await?;
-            let model = row_to_model(row)?;
-            capture_model_catalog_item_observation(&mut transaction, &model, "sync", actor).await?;
-            synced += 1;
-        }
-        transaction.commit().await?;
-        Ok(synced)
-    }
 }
 
 async fn read_cli_models_from_settings(
@@ -292,10 +209,10 @@ fn expand_home_path(path: &str) -> PathBuf {
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(path));
     }
-    if let Some(rest) = path.strip_prefix("~/") {
-        if let Some(home) = std::env::var_os("HOME") {
-            return PathBuf::from(home).join(rest);
-        }
+    if let Some(rest) = path.strip_prefix("~/")
+        && let Some(home) = std::env::var_os("HOME")
+    {
+        return PathBuf::from(home).join(rest);
     }
     PathBuf::from(path)
 }
@@ -731,7 +648,7 @@ fn discovered_cli_model_from_value(
         value,
         &["display_name", "displayName", "label", "name", "id", "slug"],
     )
-    .unwrap_or(&model_key);
+    .unwrap_or(model_key);
     Some(discovered_cli_model_from_parts(
         provider,
         settings_path,
@@ -1004,14 +921,13 @@ fn ollama_record_model_key(record: &OllamaModelRecord) -> &str {
 }
 
 fn ollama_model_category(model_key: &str, show: Option<&OllamaShowResponse>) -> String {
-    if let Some(show) = show {
-        if show
+    if let Some(show) = show
+        && show
             .capabilities
             .iter()
             .any(|capability| capability.to_ascii_lowercase().contains("embed"))
-        {
-            return "embeddings".to_owned();
-        }
+    {
+        return "embeddings".to_owned();
     }
     inferred_model_category(model_key).to_owned()
 }

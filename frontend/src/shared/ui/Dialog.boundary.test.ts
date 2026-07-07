@@ -7,5 +7,7 @@ describe('Dialog controlled mode compatibility', () => {
 
     expect(source).toContain('<DialogTrigger v-if="$slots.trigger" as-child>')
     expect(source).toContain('<DialogRoot :open="open" @update:open="(val) => emit(\'update:open\', val)">')
+    expect(source).toContain('showClose: true')
+    expect(source).toContain('<DialogClose v-if="showClose" class="hermes-dialog-close" as-child>')
   })
 })

@@ -654,6 +654,91 @@
 	padding: 10px;
 }
 
+.settings-provider-icon {
+	--provider-brand-color: var(--h-color-text-strong);
+	display: inline-grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	border: 1px solid color-mix(in srgb, var(--provider-brand-color) 52%, var(--h-color-border));
+	border-radius: var(--h-radius-md);
+	background: color-mix(in srgb, var(--provider-brand-color) 18%, var(--h-color-surface));
+	color: var(--provider-brand-color);
+	font-style: normal;
+	line-height: 1;
+	flex: 0 0 auto;
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--provider-brand-color) 10%, transparent);
+}
+
+.settings-provider-icon svg {
+	color: currentColor;
+}
+
+.settings-provider-icon--lg {
+	width: 42px;
+	height: 42px;
+}
+
+.provider-brand-anthropic {
+	--provider-brand-color: #d97757;
+}
+
+.provider-brand-api {
+	--provider-brand-color: #6366f1;
+}
+
+.provider-brand-codex {
+	--provider-brand-color: #10a37f;
+}
+
+.provider-brand-deepseek {
+	--provider-brand-color: #4d6bfe;
+}
+
+.provider-brand-gmail {
+	--provider-brand-color: #ea4335;
+}
+
+.provider-brand-icloud {
+	--provider-brand-color: #3b82f6;
+}
+
+.provider-brand-imap {
+	--provider-brand-color: #64748b;
+}
+
+.provider-brand-ollama {
+	--provider-brand-color: #111827;
+}
+
+.provider-brand-omniroute {
+	--provider-brand-color: #14b8a6;
+}
+
+.provider-brand-openai {
+	--provider-brand-color: #10a37f;
+}
+
+.provider-brand-telegram {
+	--provider-brand-color: #229ed9;
+}
+
+.provider-brand-whatsapp {
+	--provider-brand-color: #25d366;
+}
+
+.provider-brand-yandex {
+	--provider-brand-color: #fc3f1d;
+}
+
+.provider-brand-zoom {
+	--provider-brand-color: #2d8cff;
+}
+
+.provider-brand-zulip {
+	--provider-brand-color: #52c2af;
+}
+
 .settings-method-card footer span {
 	border-radius: var(--h-radius-pill);
 	background: var(--h-color-bg-muted);
@@ -668,6 +753,14 @@
 	grid-template-columns: minmax(0, 1fr) auto;
 	align-items: end;
 	gap: var(--h-spacing-2);
+}
+
+.settings-account-detail__identity {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: var(--h-spacing-3);
+	min-width: 0;
 }
 
 .settings-account-label-form label {
@@ -1012,10 +1105,10 @@
 	place-items: center;
 	width: 42px;
 	height: 42px;
-	border: 1px solid var(--h-color-border);
+	border: 1px solid color-mix(in srgb, var(--provider-brand-color, var(--h-color-text-strong)) 52%, var(--h-color-border));
 	border-radius: var(--h-radius-md);
-	background: var(--h-color-bg-muted);
-	color: var(--h-color-text-strong);
+	background: color-mix(in srgb, var(--provider-brand-color, var(--h-color-text-strong)) 18%, var(--h-color-surface));
+	color: var(--provider-brand-color, var(--h-color-text-strong));
 }
 
 .settings-ai-provider-detail-header__actions,
@@ -2019,6 +2112,402 @@
 
 .settings-note-panel {
 	grid-template-columns: auto minmax(0, 1fr);
+}
+
+.app-connection-wizard {
+	display: grid;
+	gap: 14px;
+	width: min(680px, 100%);
+	text-align: left;
+}
+
+.app-connection-wizard--telegram-auth {
+	width: min(620px, 100%);
+	gap: 12px;
+}
+
+.app-connection-wizard__providers {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.app-connection-wizard__provider {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 10px;
+	min-height: 72px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface-overlay);
+	color: var(--h-color-text);
+	text-align: left;
+	cursor: pointer;
+	padding: var(--h-space-3);
+}
+
+.app-connection-wizard__provider:hover,
+.app-connection-wizard__provider.active {
+	border-color: var(--h-color-accent);
+	background: color-mix(in srgb, var(--h-color-accent) 10%, var(--h-color-surface-overlay));
+}
+
+.app-connection-wizard__provider-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	border-radius: var(--h-radius-md);
+	color: var(--app-connection-brand);
+	background: color-mix(in srgb, var(--app-connection-brand) 12%, var(--h-color-surface-overlay));
+}
+
+.app-connection-wizard__provider-icon--mail {
+	--app-connection-brand: #ea4335;
+}
+
+.app-connection-wizard__provider-icon--icloud {
+	--app-connection-brand: #3b82f6;
+}
+
+.app-connection-wizard__provider-icon--telegram {
+	--app-connection-brand: #229ed9;
+}
+
+.app-connection-wizard__provider-icon--whatsapp {
+	--app-connection-brand: #25d366;
+}
+
+.app-connection-wizard__provider strong,
+.app-connection-wizard__provider small,
+.app-connection-wizard__check strong,
+.app-connection-wizard__check small,
+.app-connection-wizard__capability strong,
+.app-connection-wizard__capability small,
+.app-connection-wizard__result strong,
+.app-connection-wizard__result span,
+.app-connection-wizard__method-card strong,
+.app-connection-wizard__method-card small {
+	display: block;
+}
+
+.app-connection-wizard__provider strong,
+.app-connection-wizard__check strong,
+.app-connection-wizard__capability strong,
+.app-connection-wizard__result strong,
+.app-connection-wizard__method-card strong {
+	color: var(--h-color-text-strong);
+	font-size: 13px;
+	font-weight: 760;
+	line-height: 1.25;
+}
+
+.app-connection-wizard__provider small,
+.app-connection-wizard__check small,
+.app-connection-wizard__capability small,
+.app-connection-wizard__result span,
+.app-connection-wizard__method-card small {
+	margin-top: 3px;
+	color: var(--h-color-text-muted);
+	font-size: 12px;
+	line-height: 1.35;
+}
+
+.app-connection-wizard__fields {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+
+.app-connection-wizard__mode {
+	display: inline-grid;
+	grid-column: 1 / -1;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 4px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+	padding: 4px;
+}
+
+.app-connection-wizard__mode-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: 38px;
+	border: 0;
+	border-radius: calc(var(--h-radius-lg) - 4px);
+	background: transparent;
+	color: var(--h-color-text-muted);
+	font-size: 13px;
+	font-weight: 760;
+	cursor: pointer;
+}
+
+.app-connection-wizard__mode-button:hover,
+.app-connection-wizard__mode-button.active {
+	background: color-mix(in srgb, var(--h-color-accent) 12%, var(--h-color-surface-overlay));
+	color: var(--h-color-text-strong);
+}
+
+.app-connection-wizard__method-card {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 12px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: color-mix(in srgb, #229ed9 9%, var(--h-color-surface-overlay));
+	color: #229ed9;
+	padding: var(--h-space-3);
+}
+
+.app-connection-wizard__method-card > svg {
+	width: 24px;
+	height: 24px;
+}
+
+.app-connection-wizard__field {
+	display: grid;
+	gap: 7px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface-overlay);
+	padding: var(--h-space-3);
+}
+
+.app-connection-wizard__field--wide,
+.app-connection-wizard__field:first-child:last-child {
+	grid-column: 1 / -1;
+}
+
+.app-connection-wizard__field span {
+	color: var(--h-color-text-muted);
+	font-size: 12px;
+	font-weight: 720;
+}
+
+.app-connection-wizard__checks,
+.app-connection-wizard__capabilities {
+	display: grid;
+	gap: 10px;
+}
+
+.app-connection-wizard__capabilities {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-connection-wizard__check,
+.app-connection-wizard__capability,
+.app-connection-wizard__result {
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface-overlay);
+	padding: var(--h-space-3);
+}
+
+.app-connection-wizard__check,
+.app-connection-wizard__capability {
+	display: grid;
+	align-items: center;
+	gap: 12px;
+}
+
+.app-connection-wizard__check {
+	grid-template-columns: auto minmax(0, 1fr);
+}
+
+.app-connection-wizard__capability {
+	grid-template-columns: minmax(0, 1fr) auto;
+	min-height: 84px;
+}
+
+.app-connection-wizard__check.is-ready {
+	color: var(--h-color-success);
+}
+
+.app-connection-wizard__check.is-pending {
+	color: var(--h-color-warning);
+}
+
+.app-connection-wizard__check.is-blocked,
+.app-connection-wizard__result.is-error,
+.app-connection-wizard__result.is-blocked {
+	color: var(--h-color-danger);
+}
+
+.app-connection-wizard__result.is-success {
+	color: var(--h-color-success);
+}
+
+.app-connection-wizard__result--telegram-waiting_qr_scan,
+.app-connection-wizard__result--telegram-waiting_password {
+	border-color: color-mix(in srgb, #229ed9 30%, var(--h-color-border));
+	background:
+		linear-gradient(135deg, color-mix(in srgb, #229ed9 13%, transparent), transparent 44%),
+		var(--h-color-surface-overlay);
+	color: #229ed9;
+}
+
+.app-connection-wizard__result--telegram-waiting_qr_scan {
+	justify-items: center;
+	border-color: transparent;
+	background: transparent;
+	box-shadow: none;
+	padding: 0;
+}
+
+.app-connection-wizard__result--telegram-waiting_qr_scan > strong,
+.app-connection-wizard__result--telegram-waiting_qr_scan > span {
+	display: none;
+}
+
+.app-connection-wizard__result--telegram-ready {
+	border-color: color-mix(in srgb, var(--h-color-success) 35%, var(--h-color-border));
+}
+
+.app-connection-wizard__result {
+	display: grid;
+	gap: 8px;
+}
+
+.app-connection-wizard__result ul {
+	display: grid;
+	gap: 6px;
+	margin: 0;
+	color: var(--h-color-text-muted);
+	padding-left: 18px;
+}
+
+.app-connection-wizard__qr {
+	display: grid;
+	place-items: center;
+	margin: 0;
+}
+
+.app-connection-wizard__qr--telegram {
+	position: relative;
+	gap: 10px;
+	justify-self: center;
+	width: min(320px, 100%);
+	margin-top: 6px;
+	border: 1px solid color-mix(in srgb, #229ed9 28%, var(--h-color-border));
+	border-radius: 22px;
+	background:
+		linear-gradient(180deg, color-mix(in srgb, #229ed9 10%, var(--h-color-surface-overlay)), var(--h-color-surface-overlay)),
+		var(--h-color-surface-overlay);
+	box-shadow: 0 22px 48px color-mix(in srgb, #229ed9 14%, transparent);
+	padding: 20px 18px 16px;
+}
+
+.app-connection-wizard__qr-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	border: 1px solid color-mix(in srgb, #229ed9 26%, transparent);
+	border-radius: 999px;
+	background: #229ed9;
+	color: white;
+	box-shadow: 0 10px 24px color-mix(in srgb, #229ed9 24%, transparent);
+}
+
+.app-connection-wizard__qr img {
+	width: 180px;
+	height: 180px;
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+	padding: var(--h-space-3);
+}
+
+.app-connection-wizard__qr--telegram img {
+	width: 218px;
+	height: 218px;
+	border: 10px solid white;
+	border-radius: 18px;
+	background: white;
+	box-shadow: 0 12px 30px color-mix(in srgb, var(--h-color-shadow) 18%, transparent);
+	padding: 6px;
+}
+
+.app-connection-wizard__qr figcaption {
+	color: var(--h-color-text-muted);
+	font-size: 12px;
+	font-weight: 720;
+	line-height: 1.35;
+	text-align: center;
+}
+
+.app-connection-wizard__password {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 172px;
+	align-items: stretch;
+	gap: 12px;
+}
+
+.app-connection-wizard__password .app-connection-wizard__field {
+	min-width: 0;
+}
+
+.app-connection-wizard__password-submit.hermes-btn {
+	align-self: stretch;
+	height: auto;
+	min-height: 86px;
+	border-color: color-mix(in srgb, #229ed9 58%, var(--h-color-border));
+	border-radius: var(--h-radius-lg);
+	background:
+		linear-gradient(135deg, color-mix(in srgb, #229ed9 92%, white), #2563eb),
+		#229ed9;
+	color: white;
+	font-size: 14px;
+	font-weight: 780;
+	box-shadow: 0 16px 34px color-mix(in srgb, #229ed9 22%, transparent);
+}
+
+.app-connection-wizard__password-submit.hermes-btn:hover:not(:disabled) {
+	border-color: #229ed9;
+	background:
+		linear-gradient(135deg, #229ed9, color-mix(in srgb, #2563eb 92%, black)),
+		#229ed9;
+}
+
+.app-connection-wizard__password-submit.hermes-btn:disabled {
+	border-color: color-mix(in srgb, #229ed9 22%, var(--h-color-border));
+	background:
+		linear-gradient(135deg, color-mix(in srgb, #229ed9 20%, var(--h-color-surface-overlay)), var(--h-color-surface-overlay)),
+		var(--h-color-surface-overlay);
+	color: color-mix(in srgb, #229ed9 42%, var(--h-color-text-muted));
+	box-shadow: none;
+	opacity: 1;
+}
+
+.app-connection-wizard__password-submit svg {
+	width: 18px;
+	height: 18px;
+}
+
+@media (max-width: 980px) {
+	.app-connection-wizard__providers,
+	.app-connection-wizard__capabilities {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 680px) {
+	.app-connection-wizard__providers,
+	.app-connection-wizard__fields,
+	.app-connection-wizard__capabilities,
+	.app-connection-wizard__password {
+		grid-template-columns: 1fr;
+	}
+
+	.app-connection-wizard__password-submit.hermes-btn {
+		min-height: var(--h-control-height-lg);
+	}
 }
 
 .integration-connection-wizard {

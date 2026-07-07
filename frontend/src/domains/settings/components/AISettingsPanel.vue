@@ -3,22 +3,19 @@ import { computed, ref } from 'vue'
 import { useI18n } from '../../../platform/i18n'
 import Dialog from '../../../shared/ui/Dialog.vue'
 import Icon from '../../../shared/ui/Icon.vue'
-import SearchInput from '../../../shared/ui/SearchInput.vue'
 import type { AISettingsSurface, AiModelRouteRow } from '../queries/useAISettingsSurface'
 import type { AiModelCatalogItem, AiProviderAccount, AiProviderPreset } from '../types/aiControlCenter'
+import AIModelCatalogPanel from './AIModelCatalogPanel.vue'
 import AIProviderConnectionWizard from './AIProviderConnectionWizard.vue'
+import { modelCapabilityBadges, modelDetail, modelRuntimeFacts } from './aiModelCatalogPresentation'
+import { aiProviderBrand, providerBrandClass } from './providerBranding'
 
 type AiSettingsTab = 'providers' | 'models' | 'routes'
-
-interface AiProviderModelGroup {
-  provider: AiProviderAccount
-  models: AiModelCatalogItem[]
-  availableCount: number
-}
 
 interface AiProviderListItem {
   id: string
   icon: string
+  iconTone: string
   title: string
   subtitle: string
   badge: string
@@ -38,25 +35,11 @@ interface AiDetailRow {
   value: string
 }
 
-interface AiModelCapabilityBadge {
-  key: string
-  label: string
-  muted: boolean
-}
-
-interface AiModelRuntimeFact {
-  key: string
-  label: string
-  value: string
-}
-
 const props = defineProps<{
   surface: AISettingsSurface
 }>()
 const { t } = useI18n()
 const activeTab = ref<AiSettingsTab>('providers')
-const activeModelProviderId = ref<string | null>(null)
-const modelCatalogSearch = ref('')
 const isProviderWizardOpen = ref(false)
 const isModelPickerOpen = ref(false)
 
@@ -80,26 +63,6 @@ const tabs = computed(() => [
     count: props.surface.routeRows.value.length,
   },
 ])
-
-const providerModelGroups = computed<AiProviderModelGroup[]>(() => {
-  const groups: AiProviderModelGroup[] = []
-
-  for (const provider of props.surface.providers.value) {
-    const models: AiModelCatalogItem[] = []
-    let availableCount = 0
-
-    for (const model of props.surface.models.value) {
-      if (model.provider_id !== provider.provider_id) continue
-
-      models.push(model)
-      if (model.is_available) availableCount += 1
-    }
-
-    groups.push({ provider, models, availableCount })
-  }
-
-  return groups
-})
 
 const providerListGroups = computed<AiProviderListGroup[]>(() => {
   const localItems: AiProviderListItem[] = []
@@ -166,39 +129,27 @@ const modelPickerDescription = computed(() => {
   return `${provider.display_name} · ${selectedAvailableModelCount.value}/${props.surface.selectedProviderModels.value.length} ${t('available')}`
 })
 
-const selectedModelGroup = computed<AiProviderModelGroup | null>(() => {
-  const groups = providerModelGroups.value
-  if (!groups.length) return null
-  return groups.find((group) => group.provider.provider_id === activeModelProviderId.value) ?? groups[0]
-})
-
-const normalizedModelCatalogSearch = computed(() => modelCatalogSearch.value.trim().toLowerCase())
-
-const selectedModelGroupModels = computed<AiModelCatalogItem[]>(() => {
-  const group = selectedModelGroup.value
-  if (!group) return []
-  const query = normalizedModelCatalogSearch.value
-  if (!query) return group.models
-  return group.models.filter((model) => modelMatchesSearch(model, group.provider, query))
-})
-
 function providerGroupId(providerKind: string): 'local' | 'cli' | 'api' {
   if (providerKind === 'built_in') return 'local'
   if (providerKind === 'cli') return 'cli'
   return 'api'
 }
 
-function providerIcon(providerKind: string): string {
-  if (providerKind === 'built_in') return 'tabler:device-desktop'
-  if (providerKind === 'cli') return 'tabler:terminal-2'
-  return 'tabler:cloud-cog'
+function providerIcon(providerKind: string, providerKey?: string): string {
+  return aiProviderBrand(providerKind, providerKey).icon
+}
+
+function providerIconTone(providerKind: string, providerKey?: string): string {
+  return providerBrandClass(aiProviderBrand(providerKind, providerKey))
 }
 
 function providerListItemForProvider(provider: AiProviderAccount): AiProviderListItem {
   const modelCount = providerModelCount(provider.provider_id)
+  const brand = aiProviderBrand(provider.provider_kind, provider.provider_key)
   return {
     id: provider.provider_id,
-    icon: providerIcon(provider.provider_kind),
+    icon: brand.icon,
+    iconTone: providerBrandClass(brand),
     title: provider.display_name,
     subtitle: `${provider.provider_key} · ${provider.status} · ${provider.consent_state}`,
     badge: provider.provider_kind,
@@ -209,9 +160,11 @@ function providerListItemForProvider(provider: AiProviderAccount): AiProviderLis
 }
 
 function providerListItemForPreset(preset: AiProviderPreset): AiProviderListItem {
+  const brand = aiProviderBrand(preset.provider_kind, preset.provider_key)
   return {
     id: `${preset.provider_kind}:${preset.provider_key}`,
-    icon: providerIcon(preset.provider_kind),
+    icon: brand.icon,
+    iconTone: providerBrandClass(brand),
     title: preset.display_name,
     subtitle: `${preset.privacy} · ${preset.capabilities.join(', ')}`,
     badge: t('Preset'),
@@ -281,203 +234,6 @@ function refreshLocalAuth() {
   void props.surface.handleRefreshLocalAuth()
 }
 
-function selectModelProvider(providerId: string): void {
-  activeModelProviderId.value = providerId
-  modelCatalogSearch.value = ''
-}
-
-function modelMatchesSearch(
-  model: AiModelCatalogItem,
-  provider: AiProviderAccount,
-  query: string
-): boolean {
-  return modelSearchTokens(model, provider).some((token) => token.toLowerCase().includes(query))
-}
-
-function modelSearchTokens(model: AiModelCatalogItem, provider: AiProviderAccount): string[] {
-  const details = metadataRecord(model.metadata, 'runtime_details') ?? metadataRecord(model.metadata, 'details')
-  return [
-    provider.display_name,
-    provider.provider_key,
-    provider.provider_kind,
-    model.display_name,
-    model.model_key,
-    model.category,
-    model.privacy,
-    ...model.capabilities,
-    ...metadataStringArray(model.metadata, 'runtime_capabilities'),
-    ...providerMetadataCapabilities(model.metadata),
-    metadataString(model.metadata, 'owned_by'),
-    metadataString(model.metadata, 'source'),
-    metadataString(model.metadata, 'capability_source'),
-    metadataString(details, 'family'),
-    metadataString(details, 'format'),
-    metadataString(details, 'parameter_size'),
-    metadataString(details, 'quantization_level'),
-  ].filter((token) => token.trim().length > 0)
-}
-
-function modelCapabilityBadges(model: AiModelCatalogItem): AiModelCapabilityBadge[] {
-  const badges = new Map<string, AiModelCapabilityBadge>()
-  const capabilitySource = metadataString(model.metadata, 'capability_source')
-  const modelCapabilitiesAreInferred = capabilitySource === 'hermes_model_key_heuristic'
-
-  for (const capability of metadataStringArray(model.metadata, 'runtime_capabilities')) {
-    addCapabilityBadge(badges, capability, false)
-  }
-  for (const capability of providerMetadataCapabilities(model.metadata)) {
-    addCapabilityBadge(badges, capability, false)
-  }
-  for (const capability of model.capabilities) {
-    addCapabilityBadge(badges, capability, modelCapabilitiesAreInferred)
-  }
-
-  if (badges.size === 0) {
-    return [
-      {
-        key: 'runtime-not-reported',
-        label: t('Runtime did not report capabilities'),
-        muted: true,
-      },
-    ]
-  }
-
-  return [...badges.values()]
-}
-
-function addCapabilityBadge(
-  badges: Map<string, AiModelCapabilityBadge>,
-  capability: string,
-  muted: boolean
-): void {
-  const normalized = normalizedCapabilityKey(capability)
-  if (!normalized) return
-  const existing = badges.get(normalized)
-  if (existing && (!existing.muted || muted)) return
-  badges.set(normalized, {
-    key: normalized,
-    label: capabilityLabel(normalized, capability),
-    muted,
-  })
-}
-
-function normalizedCapabilityKey(capability: string): string {
-  const normalized = capability.trim().replace(/_/g, '-').toLowerCase()
-  if (!normalized) return ''
-  if (['completion', 'completions', 'chat-completion', 'chat-completions', 'text-generation', 'text'].includes(normalized)) {
-    return 'chat'
-  }
-  if (['embedding', 'embeddings'].includes(normalized)) return 'embeddings'
-  if (['image', 'images', 'image-input'].includes(normalized)) return 'vision'
-  if (['audio-input', 'audio-output'].includes(normalized)) return 'audio'
-  if (['tool', 'tools', 'tool-use', 'function-calling'].includes(normalized)) return 'tools'
-  return normalized
-}
-
-function capabilityLabel(capability: string, fallback: string): string {
-  const labels: Record<string, string> = {
-    audio: t('Audio'),
-    chat: t('Chat'),
-    embeddings: t('Embeddings'),
-    extraction: t('Extraction'),
-    multimodal: t('Multimodal'),
-    reasoning: t('Reasoning'),
-    routing: t('Routing'),
-    summarization: t('Summaries'),
-    tools: t('Tools'),
-    vision: t('Vision'),
-  }
-  return labels[capability] ?? fallback
-}
-
-function modelRuntimeFacts(model: AiModelCatalogItem): AiModelRuntimeFact[] {
-  const facts: AiModelRuntimeFact[] = []
-  const details = metadataRecord(model.metadata, 'runtime_details') ?? metadataRecord(model.metadata, 'details')
-  const infoSummary = metadataRecord(model.metadata, 'model_info_summary')
-  const owner = metadataString(model.metadata, 'owned_by')
-  const source = metadataString(model.metadata, 'source')
-  const capabilitySource = metadataString(model.metadata, 'capability_source')
-  const contextWindow = model.context_window ?? metadataNumber(infoSummary, 'context_window')
-  const embeddingDimension = model.embedding_dimension ?? metadataNumber(infoSummary, 'embedding_dimension')
-
-  if (contextWindow) {
-    facts.push({ key: 'context', label: t('Context'), value: `${contextWindow} ctx` })
-  }
-  if (embeddingDimension) {
-    facts.push({ key: 'embedding', label: t('Embedding'), value: `${embeddingDimension} dim` })
-  }
-  addRuntimeFact(facts, 'family', t('Family'), metadataString(details, 'family'))
-  addRuntimeFact(facts, 'format', t('Format'), metadataString(details, 'format'))
-  addRuntimeFact(facts, 'parameters', t('Parameters'), metadataString(details, 'parameter_size'))
-  addRuntimeFact(facts, 'quantization', t('Quantization'), metadataString(details, 'quantization_level'))
-  addRuntimeFact(facts, 'owner', t('Owner'), owner)
-  addRuntimeFact(facts, 'source', t('Source'), source)
-  addRuntimeFact(facts, 'capability-source', t('Capability source'), capabilitySource)
-
-  return facts
-}
-
-function addRuntimeFact(
-  facts: AiModelRuntimeFact[],
-  key: string,
-  label: string,
-  value: string
-): void {
-  if (!value) return
-  facts.push({ key, label, value })
-}
-
-function providerMetadataCapabilities(metadata: Record<string, unknown>): string[] {
-  const providerMetadata = metadataRecord(metadata, 'provider_metadata')
-  if (!providerMetadata) return []
-  return [
-    ...metadataStringArray(providerMetadata, 'capabilities'),
-    ...metadataStringArray(providerMetadata, 'modalities'),
-    ...metadataStringArray(providerMetadata, 'input_modalities'),
-    ...metadataStringArray(providerMetadata, 'output_modalities'),
-    ...metadataStringArray(providerMetadata, 'supported_features'),
-  ]
-}
-
-function metadataRecord(
-  metadata: Record<string, unknown> | null,
-  key: string
-): Record<string, unknown> | null {
-  if (!metadata) return null
-  const value = metadata[key]
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
-  return value as Record<string, unknown>
-}
-
-function metadataString(metadata: Record<string, unknown> | null, key: string): string {
-  if (!metadata) return ''
-  const value = metadata[key]
-  return typeof value === 'string' ? value : ''
-}
-
-function metadataNumber(metadata: Record<string, unknown> | null, key: string): number | null {
-  if (!metadata) return null
-  const value = metadata[key]
-  return typeof value === 'number' ? value : null
-}
-
-function metadataStringArray(metadata: Record<string, unknown> | null, key: string): string[] {
-  if (!metadata) return []
-  const value = metadata[key]
-  if (!Array.isArray(value)) return []
-  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-}
-
-function modelDetail(model: AiModelCatalogItem): string {
-  const details = [`${model.model_key}`, model.category, model.privacy]
-  if (model.context_window) {
-    details.push(`${model.context_window} ctx`)
-  }
-  if (model.embedding_dimension) {
-    details.push(`${model.embedding_dimension} dim`)
-  }
-  return details.join(' · ')
-}
 </script>
 
 <template>
@@ -564,7 +320,9 @@ function modelDetail(model: AiModelCatalogItem): string {
                 }"
                 @click="selectProviderListItem(item)"
               >
-                <Icon :icon="item.icon" />
+                <i class="settings-provider-icon" :class="item.iconTone" aria-hidden="true">
+                  <Icon :icon="item.icon" />
+                </i>
                 <span>
                   <strong>{{ item.title }}</strong>
                   <small>{{ item.subtitle }}</small>
@@ -586,8 +344,19 @@ function modelDetail(model: AiModelCatalogItem): string {
           <template v-if="surface.selectedProvider.value">
             <header class="settings-ai-provider-detail-header">
               <div>
-                <span class="settings-ai-provider-detail-header__icon">
-                  <Icon :icon="providerIcon(surface.selectedProvider.value.provider_kind)" />
+                <span
+                  class="settings-ai-provider-detail-header__icon settings-provider-icon settings-provider-icon--lg"
+                  :class="providerIconTone(
+                    surface.selectedProvider.value.provider_kind,
+                    surface.selectedProvider.value.provider_key
+                  )"
+                >
+                  <Icon
+                    :icon="providerIcon(
+                      surface.selectedProvider.value.provider_kind,
+                      surface.selectedProvider.value.provider_key
+                    )"
+                  />
                 </span>
                 <div>
                   <span>{{ t('Provider detail') }}</span>
@@ -752,126 +521,7 @@ function modelDetail(model: AiModelCatalogItem): string {
       role="tabpanel"
       aria-labelledby="settings-ai-tab-models"
     >
-          <div v-if="providerModelGroups.length" class="settings-ai-model-catalog">
-            <aside class="settings-ai-model-provider-tabs" :aria-label="t('Model providers')">
-              <button
-                v-for="group in providerModelGroups"
-                :key="group.provider.provider_id"
-                type="button"
-                class="settings-ai-model-provider-tab"
-                :class="{ active: selectedModelGroup?.provider.provider_id === group.provider.provider_id }"
-                @click="selectModelProvider(group.provider.provider_id)"
-              >
-                <Icon :icon="providerIcon(group.provider.provider_kind)" />
-                <span>
-                  <strong>{{ group.provider.display_name }}</strong>
-                  <small>{{ group.provider.provider_key }} · {{ group.provider.status }}</small>
-                </span>
-                <em>{{ group.availableCount }}/{{ group.models.length }}</em>
-              </button>
-            </aside>
-
-            <section v-if="selectedModelGroup" class="settings-ai-model-browser">
-              <header class="settings-ai-model-browser__header">
-                <div>
-                  <span>{{ selectedModelGroup.provider.provider_kind }}</span>
-                  <strong>{{ selectedModelGroup.provider.display_name }}</strong>
-                  <small>
-                    {{ selectedModelGroup.availableCount }}/{{ selectedModelGroup.models.length }}
-                    {{ t('available') }}
-                  </small>
-                </div>
-                <div class="settings-ai-model-browser__actions">
-                  <div class="settings-ai-model-search">
-                    <SearchInput
-                      v-model="modelCatalogSearch"
-                      :aria-label="t('Search models')"
-                      :clear-label="t('Clear model search')"
-                      :placeholder="t('Search models')"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    class="secondary-button"
-                    :disabled="surface.isBusy.value"
-                    @click="syncModels(selectedModelGroup.provider)"
-                  >
-                    <Icon icon="tabler:refresh" />
-                    {{ t('Sync models') }}
-                  </button>
-                </div>
-              </header>
-
-              <div
-                v-if="selectedModelGroup.models.length && selectedModelGroupModels.length"
-                class="settings-ai-model-list settings-ai-model-list--catalog"
-              >
-                <article
-                  v-for="model in selectedModelGroupModels"
-                  :key="`${model.provider_id}:${model.model_key}`"
-                  class="settings-ai-model-card"
-                  :class="{ 'is-unavailable': !model.is_available }"
-                >
-                  <label class="settings-ai-model-checkbox">
-                    <input
-                      type="checkbox"
-                      :checked="model.is_available"
-                      :disabled="surface.isBusy.value"
-                      @change="toggleModelAvailability(model, $event)"
-                    >
-                    <span>
-                      <strong>{{ model.is_available ? t('Enabled in Hermes') : t('Disabled in Hermes') }}</strong>
-                      <small>{{ t('Controls whether this model appears in action routing.') }}</small>
-                    </span>
-                  </label>
-
-                  <div class="settings-ai-model-card__body">
-                    <div class="settings-ai-model-card__title">
-                      <strong>{{ model.display_name }}</strong>
-                      <small>{{ modelDetail(model) }}</small>
-                    </div>
-                    <div class="settings-ai-capability-row">
-                      <span
-                        v-for="capability in modelCapabilityBadges(model)"
-                        :key="`${model.provider_id}:${model.model_key}:${capability.key}`"
-                        :class="{ 'is-muted': capability.muted }"
-                      >
-                        {{ capability.label }}
-                      </span>
-                    </div>
-                    <div
-                      v-if="modelRuntimeFacts(model).length"
-                      class="settings-ai-model-facts"
-                    >
-                      <span
-                        v-for="fact in modelRuntimeFacts(model)"
-                        :key="`${model.provider_id}:${model.model_key}:${fact.key}`"
-                      >
-                        <strong>{{ fact.label }}</strong>
-                        {{ fact.value }}
-                      </span>
-                    </div>
-                  </div>
-                </article>
-              </div>
-
-              <div v-else-if="selectedModelGroup.models.length" class="settings-empty-state">
-                <Icon icon="tabler:search-off" />
-                <strong>{{ t('No matching models') }}</strong>
-                <span>{{ t('Clear the search or choose another provider.') }}</span>
-              </div>
-
-              <div v-else class="settings-empty-state">
-                <Icon icon="tabler:list-search" />
-                <strong>{{ t('No models synced') }}</strong>
-              </div>
-            </section>
-          </div>
-
-          <div v-else-if="!surface.isLoading.value" class="settings-empty-state">
-            <Icon icon="tabler:sparkles-off" />
-            <strong>{{ t('No AI providers yet') }}</strong>
-          </div>
+      <AIModelCatalogPanel :surface="surface" />
     </section>
 
     <section
@@ -1003,7 +653,7 @@ function modelDetail(model: AiModelCatalogItem): string {
               </div>
               <div class="settings-ai-capability-row">
                 <span
-                  v-for="capability in modelCapabilityBadges(model)"
+                  v-for="capability in modelCapabilityBadges(model, t)"
                   :key="`${model.provider_id}:${model.model_key}:picker:${capability.key}`"
                   :class="{ 'is-muted': capability.muted }"
                 >
@@ -1011,11 +661,11 @@ function modelDetail(model: AiModelCatalogItem): string {
                 </span>
               </div>
               <div
-                v-if="modelRuntimeFacts(model).length"
+                v-if="modelRuntimeFacts(model, t).length"
                 class="settings-ai-model-facts"
               >
                 <span
-                  v-for="fact in modelRuntimeFacts(model)"
+                  v-for="fact in modelRuntimeFacts(model, t)"
                   :key="`${model.provider_id}:${model.model_key}:picker:${fact.key}`"
                 >
                   <strong>{{ fact.label }}</strong>

@@ -141,6 +141,7 @@ export { default as Switch } from './Switch.vue'
 export { default as Select } from './Select.vue'
 export { default as Dialog } from './Dialog.vue'
 export { default as AlertDialog } from './AlertDialog.vue'
+export { default as Steps } from './Steps.vue'
 export { default as Sheet } from './Sheet.vue'
 export { default as Drawer } from './Drawer.vue'
 export { default as Avatar } from './Avatar.vue'
@@ -218,6 +219,7 @@ export type { SelectGroup, SelectOption, SelectionSearchState, SelectionTone, Tr
 export type { NavigationItem, TreeItemData } from './Navigation.types'
 export type { DataDisplayTone, DataListItem, DataTableColumn, DataTableRow, KeyValueItem, TimelineEntry } from './DataDisplay.types'
 export type { MediaAttachmentItem, MediaImageItem, MediaTone, MediaTrack } from './Media.types'
+export type { StepsItem, StepsSlotProps } from './Steps.types'
 export type { RichTextEditorAction, RichTextEditorToolbarAction } from './RichTextEditor.types'
 export type {
 	CommunicationTone,

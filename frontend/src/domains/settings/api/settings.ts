@@ -53,8 +53,20 @@ export async function updateCalendarAccount(
 
 export async function deleteMailAccount(
   accountId: string
-): Promise<{ account_id: string; deleted: boolean; unbound_secret_refs: string[] }> {
-  return ApiClient.instance.delete<{ account_id: string; deleted: boolean; unbound_secret_refs: string[] }>(
+): Promise<{
+  account_id: string
+  deleted: boolean
+  unbound_secret_refs: string[]
+  vault_deleted_secret_refs: string[]
+  retained_secret_refs: string[]
+}> {
+  return ApiClient.instance.delete<{
+    account_id: string
+    deleted: boolean
+    unbound_secret_refs: string[]
+    vault_deleted_secret_refs: string[]
+    retained_secret_refs: string[]
+  }>(
     `/api/v1/integrations/mail/accounts/${encodeURIComponent(accountId)}`,
     'Mail account delete failed'
   )

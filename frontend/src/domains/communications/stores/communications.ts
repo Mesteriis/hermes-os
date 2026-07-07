@@ -163,6 +163,15 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
     )
   }
 
+  function clearSelectedMessageContext() {
+    selectedConversationIndex.value = -1
+    selectedCommunicationMessageId.value = ''
+    selectedCommunicationDetail.value = null
+    mailMessageInsight.value = null
+    selectedThread.value = null
+    clearMessageSelection()
+  }
+
   function toggleMessageSelection(messageId: string, extendRange = false) {
     const normalized = messageId.trim()
     if (!normalized) return
@@ -393,7 +402,10 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
   // --- Account ---
 
   function setSelectedMailAccountId(accountId: string) {
-    selectedMailAccountId.value = accountId
+    const normalizedAccountId = accountId.trim()
+    if (selectedMailAccountId.value === normalizedAccountId) return
+    selectedMailAccountId.value = normalizedAccountId
+    clearSelectedMessageContext()
   }
 
   return {
@@ -452,6 +464,7 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
     setMessages,
     selectMessage,
     selectMessageId,
+    clearSelectedMessageContext,
     toggleMessageSelection,
     selectVisibleMessages,
     clearMessageSelection,

@@ -48,6 +48,7 @@ import {
 import { mailListSearchBuilderValueSuggestions } from './mailSearchSuggestions'
 import {
   isMailListViewId,
+  mailListItemIds,
   mailListItemsForView,
   mailListTreeSelectOptions,
   type MailListViewId
@@ -73,6 +74,7 @@ const emit = defineEmits<{
   refresh: []
   'select-item': [item: MailListItemModel]
   'update-search-query': [query: string]
+  'visible-items-change': [itemIds: string[]]
 }>()
 
 const { t } = useI18n()
@@ -85,6 +87,7 @@ const activeMailViewId = ref<MailListViewId | string>('mail:all')
 const activeSearchBuilderGroupId = ref(mailListSearchFieldGroups[0]?.id ?? 'text')
 const isSearchBuilderOpen = ref(false)
 const isPlainSearchOpen = ref(Boolean(props.searchQuery?.trim()))
+const syncProgressVisible = ref(false)
 const searchBuilderState = ref<MailListSearchBuilderState>(createMailListSearchBuilderState())
 const savedFilterName = ref('')
 const savedFilters = ref<MailListSavedFilter[]>([])
@@ -142,6 +145,14 @@ const searchBuilderValuePlaceholder = computed(() => t(mailListSearchFieldItem(s
 const searchBuilderValueSuggestions = computed(() => {
   return mailListSearchBuilderValueSuggestions(viewItems.value, searchBuilderState.value)
 })
+
+watch(
+  visibleItems,
+  (items) => {
+    emit('visible-items-change', mailListItemIds(items))
+  },
+  { immediate: true }
+)
 
 watch(
   () => props.searchQuery,
@@ -233,6 +244,10 @@ function handleBodyScroll(event: Event): void {
   if (remainingScrollPx <= loadMoreScrollThresholdPx) emit('load-more')
 }
 
+function handleSyncProgressVisibilityChange(isVisible: boolean): void {
+  syncProgressVisible.value = isVisible
+}
+
 function committedSearchBuilderState(state: MailListSearchBuilderState): MailListSearchBuilderState {
   if (!mailListSearchBuilderCanAdd(state)) return state
   return mailListSearchBuilderAddClause(state)
@@ -288,7 +303,7 @@ function selectMailView(option: TreeSelectOption): void {
 </script>
 
 <template>
-	<div class="mail-list-stack">
+	<div :class="['mail-list-stack', syncProgressVisible && 'mail-list-stack--sync-visible']">
 		<section class="mail-list-action-card" :aria-label="t('Mail actions')">
 			<Button class="mail-list-action-card__compose" icon="tabler:edit" size="sm" @click="emit('compose')">
 				{{ t('Compose') }}
@@ -598,6 +613,16 @@ function selectMailView(option: TreeSelectOption): void {
 				</footer>
 			</div>
 		</section>
-		<MailSyncProgress :status="syncStatus" />
+		<div
+			:class="['mail-sync-progress-region', syncProgressVisible && 'mail-sync-progress-region--visible']"
+			:aria-hidden="!syncProgressVisible"
+		>
+			<div class="mail-sync-progress-region__content">
+				<MailSyncProgress
+					:status="syncStatus"
+					@visibility-change="handleSyncProgressVisibilityChange"
+				/>
+			</div>
+		</div>
 	</div>
 </template>

@@ -19,12 +19,13 @@ pub(in crate::integrations::mail::accounts::service) fn gmail_account_config(
 
 pub(in crate::integrations::mail::accounts::service) fn gmail_secret_metadata(
     pending: &GmailOAuthPendingGrant,
+    account_id: &str,
     external_account_id: &str,
     account_config: &Value,
 ) -> Value {
     json!({
         "provider": "gmail",
-        "account_id": pending.account_id,
+        "account_id": account_id,
         "display_name": pending.request.display_name,
         "external_account_id": external_account_id,
         "connected_services": ["mail", "calendar", "contacts"],

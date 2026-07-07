@@ -16,11 +16,13 @@ import {
 } from './useSettingsQuery'
 import { useSettingsStore } from '../stores/settings'
 import type { CalendarAccount, ProviderAccount } from '../types/settings'
+import { communicationProviderBrand, providerBrandClass } from '../components/providerBranding'
 
 export interface IntegrationAccountRow {
   account: ProviderAccount
   displayName: string
   icon: string
+  iconTone: string
   providerLabel: string
   flowLabel: string
   statusText: string
@@ -32,10 +34,11 @@ export interface IntegrationGroup {
   label: string
   items: IntegrationAccountRow[]
 }
-
 export interface SelectedIntegrationSummary {
   account: ProviderAccount
   displayName: string
+  icon: string
+  iconTone: string
   providerLabel: string
   flowLabel: string
   email: string
@@ -44,6 +47,7 @@ export interface SelectedIntegrationSummary {
   selectedInspectorActionLabel: string
   canManageMail: boolean
   canOpenSetupAction: boolean
+  canRecoverExpiredCredential: boolean
   accountEnabled: boolean
   accountToggleLabel: string
   accountToggleHelp: string
@@ -65,20 +69,6 @@ export interface AccountServiceRow {
   isBusy: boolean
 }
 
-const PROVIDER_ICONS: Record<string, string> = {
-  gmail: 'tabler:mail',
-  icloud: 'tabler:cloud',
-  imap: 'tabler:server',
-  telegram_user: 'tabler:brand-telegram',
-  telegram_bot: 'tabler:robot',
-  whatsapp_web: 'tabler:brand-whatsapp',
-  whatsapp_business_cloud: 'tabler:brand-whatsapp',
-  zoom_user: 'tabler:video',
-  zoom_server_to_server: 'tabler:video-plus',
-  yandex_telemost_user: 'tabler:video-plus',
-  zulip_bot: 'tabler:message-bolt',
-}
-
 const PROVIDER_LABELS: Record<string, string> = {
   gmail: 'Gmail',
   icloud: 'iCloud',
@@ -96,39 +86,30 @@ const PROVIDER_LABELS: Record<string, string> = {
 function isMailProvider(providerKind: string): boolean {
   return providerKind === 'gmail' || providerKind === 'icloud' || providerKind === 'imap'
 }
-
 function supportsCalendar(providerKind: string): boolean {
   return providerKind === 'gmail' || providerKind === 'icloud'
 }
-
 function isZoomProvider(providerKind: string): boolean {
   return providerKind === 'zoom_user' || providerKind === 'zoom_server_to_server'
 }
-
 function isTelegramProvider(providerKind: string): boolean {
   return providerKind === 'telegram_user' || providerKind === 'telegram_bot'
 }
-
 function isWhatsappProvider(providerKind: string): boolean {
   return providerKind === 'whatsapp_web' || providerKind === 'whatsapp_business_cloud'
 }
-
 function isYandexTelemostProvider(providerKind: string): boolean {
   return providerKind === 'yandex_telemost_user'
 }
-
 function isZulipProvider(providerKind: string): boolean {
   return providerKind === 'zulip_bot'
 }
-
 function isExceptionOnlyProvider(providerKind: string): boolean {
   return providerKind === 'icloud' || providerKind === 'imap'
 }
-
 function isExceptionRouteProvider(providerKind: string): boolean {
   return isZulipProvider(providerKind)
 }
-
 function isManagedRuntimeProvider(providerKind: string): boolean {
   return (
     isZoomProvider(providerKind) ||
@@ -137,10 +118,6 @@ function isManagedRuntimeProvider(providerKind: string): boolean {
     isYandexTelemostProvider(providerKind) ||
     isZulipProvider(providerKind)
   )
-}
-
-function providerIcon(providerKind: string): string {
-  return PROVIDER_ICONS[providerKind] ?? 'tabler:plug-connected'
 }
 
 function providerLabel(providerKind: string): string {
@@ -166,6 +143,13 @@ function providerAccountEnabled(account: ProviderAccount): boolean {
   if (typeof account.is_authenticated === 'boolean' && !account.is_authenticated) return false
   if (typeof account.is_active === 'boolean') return account.is_active
   return account.config?.auth_state !== 'logged_out'
+}
+
+function accountCredentialRequiresReauthorization(account: ProviderAccount): boolean {
+  return (
+    account.credential_state?.status === 'expired' &&
+    account.credential_state.requires_reauthorization === true
+  )
 }
 
 function defaultProviderIdFromAccount(
@@ -314,16 +298,20 @@ export function useIntegrationsSettingsSurface() {
     )
   }
 
-  const toIntegrationAccountRow = (account: ProviderAccount): IntegrationAccountRow => ({
-    account,
-    displayName: providerDisplayName(account),
-    icon: providerIcon(account.provider_kind),
-    providerLabel: providerLabel(account.provider_kind),
-    flowLabel: providerFlowLabel(account.provider_kind),
-    statusText: statusText(account),
-    statusClass: statusClass(account),
-    isSelected: store.selectedIntegrationId === account.account_id,
-  })
+  const toIntegrationAccountRow = (account: ProviderAccount): IntegrationAccountRow => {
+    const brand = communicationProviderBrand(account.provider_kind)
+    return {
+      account,
+      displayName: providerDisplayName(account),
+      icon: brand.icon,
+      iconTone: providerBrandClass(brand),
+      providerLabel: providerLabel(account.provider_kind),
+      flowLabel: providerFlowLabel(account.provider_kind),
+      statusText: statusText(account),
+      statusClass: statusClass(account),
+      isSelected: store.selectedIntegrationId === account.account_id,
+    }
+  }
 
   const groups = computed<IntegrationGroup[]>(() => {
     const rows = [
@@ -377,9 +365,12 @@ export function useIntegrationsSettingsSurface() {
     if (!selectedAccount.value) return null
     const account = selectedAccount.value
     const accountEnabled = providerAccountEnabled(account)
+    const brand = communicationProviderBrand(account.provider_kind)
     return {
       account,
       displayName: providerDisplayName(account),
+      icon: brand.icon,
+      iconTone: providerBrandClass(brand),
       providerLabel: providerLabel(account.provider_kind),
       flowLabel: providerFlowLabel(account.provider_kind),
       email: selectedAccountEmail(account),
@@ -388,6 +379,7 @@ export function useIntegrationsSettingsSurface() {
       selectedInspectorActionLabel: selectedInspectorActionLabel(account),
       canManageMail: isMailProvider(account.provider_kind),
       canOpenSetupAction: canOpenSetupAction(account),
+      canRecoverExpiredCredential: accountCredentialRequiresReauthorization(account),
       accountEnabled,
       accountToggleLabel: accountEnabled ? t('Account enabled') : t('Account disabled'),
       accountToggleHelp: accountEnabled
@@ -404,6 +396,10 @@ export function useIntegrationsSettingsSurface() {
     connectWizardProviderId.value = providerId ?? defaultProviderIdFromAccount(selectedAccount.value?.provider_kind)
     connectWizardUsesSelectedAccount.value = providerId === null && Boolean(selectedAccount.value)
     isConnectWizardOpen.value = true
+  }
+
+  function openCredentialRecovery() {
+    openConnectWizard(null)
   }
 
   function closeConnectWizard() {
@@ -472,11 +468,15 @@ export function useIntegrationsSettingsSurface() {
   async function handleDelete(accountId: string) {
     activeMailAction.value = accountId
     try {
-      await deleteMailMutation.mutateAsync(accountId)
+      const result = await deleteMailMutation.mutateAsync(accountId)
       if (store.selectedIntegrationId === accountId) {
         store.selectIntegration(null)
       }
-      store.setActionMessage(t('Mail account deleted'))
+      store.setActionMessage(
+        result.vault_deleted_secret_refs.length > 0
+          ? t('Mail account deleted from Hermes and vault')
+          : t('Mail account deleted')
+      )
     } catch (error) {
       store.setError(error instanceof Error ? error.message : t('Delete failed'))
     } finally {
@@ -663,6 +663,7 @@ export function useIntegrationsSettingsSurface() {
     connectWizardSelectedAccount,
     groups,
     isConnectWizardOpen,
+    openCredentialRecovery,
     openConnectWizard,
     selectIntegration,
     selectedAccount,

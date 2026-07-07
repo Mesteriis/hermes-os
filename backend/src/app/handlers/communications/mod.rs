@@ -166,7 +166,7 @@ use crate::platform::events::{
     EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
 };
 use crate::platform::secrets::DatabaseEncryptedSecretVault;
-use crate::platform::secrets::{SecretKind, SecretReferenceStore};
+use crate::platform::secrets::{SecretKind, SecretReferenceStore, SecretStoreKind};
 use crate::platform::settings::{
     AiRuntimeSettings, ApplicationSetting, ApplicationSettingsStore, SettingsError,
 };

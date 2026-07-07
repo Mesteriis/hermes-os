@@ -20,6 +20,8 @@ describe('IntegrationsSettings boundary', () => {
     expect(page).not.toContain("store.selectedSection === 'integrations'")
     expect(page).toContain('settings-service-row')
     expect(page).toContain('IntegrationConnectionWizard')
+    expect(page).toContain('selectedAccountSummary.canRecoverExpiredCredential')
+    expect(page).toContain('Восстановить аккаунт')
     expect(store).not.toContain("| 'integrations'")
 
     expect(surface).toContain('useProviderAccountsQuery')
@@ -32,6 +34,9 @@ describe('IntegrationsSettings boundary', () => {
     expect(surface).toContain('useUpdateCalendarAccountMutation')
     expect(surface).toContain('groups = computed')
     expect(surface).toContain('selectedAccountSummary = computed')
+    expect(surface).toContain('accountCredentialRequiresReauthorization')
+    expect(surface).toContain("account.credential_state?.status === 'expired'")
+    expect(surface).toContain('openCredentialRecovery')
     expect(surface).toContain('serviceRowsForAccount')
     expect(surface).toContain("if (isTelegramProvider(providerKind)) return t('QR companion')")
     expect(surface).not.toContain('connectionModes = computed')

@@ -1,0 +1,13 @@
+import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import { createWizardStory, wizardStoryModels } from './wizardStory'
+
+const meta = {
+	title: 'Hermes App/Wizard/WhatsApp'
+} satisfies Meta
+
+export default meta
+type Story = StoryObj<typeof meta>
+
+export const Default: Story = {
+	render: () => createWizardStory(wizardStoryModels.whatsapp)
+}

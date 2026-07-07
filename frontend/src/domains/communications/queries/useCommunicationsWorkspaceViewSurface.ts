@@ -31,6 +31,14 @@ import {
 } from './communicationMailWorkspaceActions'
 import { mailItem } from './communicationMailWorkspaceModels'
 import {
+  routeToAccountId,
+  routeToChannelId,
+  type PrimaryChannelId,
+} from './communicationWorkspaceRoutes'
+import {
+  handleVisibleMailItemIdsChange as syncVisibleMailSelection,
+} from './visibleMailSelection'
+import {
   messengerInspectorModel,
   telegramMessengerConversation as buildTelegramMessengerConversation,
   telegramMessengerListItem,
@@ -47,14 +55,6 @@ import {
   useWhatsappBusinessConversationsQuery,
   useWhatsappBusinessMessagesQuery,
 } from './whatsappBusinessQueries'
-
-type PrimaryChannelId = 'mail' | 'telegram' | 'whatsapp'
-
-const primaryChannelIds: readonly PrimaryChannelId[] = [
-  'mail',
-  'telegram',
-  'whatsapp',
-]
 
 export function useCommunicationsWorkspaceViewSurface(
   selectedRouteId?: MaybeRefOrGetter<string | undefined>
@@ -307,6 +307,7 @@ export function useCommunicationsWorkspaceViewSurface(
     pageSurface,
     refreshMail,
     selectMailAction,
+    handleVisibleMailItemIdsChange,
     selectMailMessage,
     selectTelegramConversation,
     selectWhatsappConversation,
@@ -337,6 +338,10 @@ export function useCommunicationsWorkspaceViewSurface(
     pageSurface.handleSelectMessage(messageIndex)
   }
 
+  function handleVisibleMailItemIdsChange(itemIds: string[]): void {
+    syncVisibleMailSelection(pageSurface, itemIds)
+  }
+
   function openNotificationTarget(notification: NotificationItem | null): void {
     if (notification?.targetView !== 'communications-mail') return
 
@@ -364,33 +369,6 @@ function mailSyncStatusIsActive(status: string): boolean {
     status === 'running' ||
     status === 'recoverable_full_resync_needed'
   )
-}
-
-function routeToChannelId(
-  routeId: string | undefined
-): PrimaryChannelId | undefined {
-  if (!routeId || routeId === 'communications') return 'mail'
-
-  for (const channelId of primaryChannelIds) {
-    if (routeId === `communications-${channelId}`) return channelId
-    if (routeId.startsWith(`communications-${channelId}-account:`))
-      return channelId
-  }
-
-  return undefined
-}
-
-function routeToAccountId(routeId: string | undefined): string | undefined {
-  if (!routeId) return undefined
-  const accountMarker = '-account:'
-  const markerIndex = routeId.indexOf(accountMarker)
-  if (markerIndex < 0) return undefined
-
-  try {
-    return decodeURIComponent(routeId.slice(markerIndex + accountMarker.length))
-  } catch {
-    return undefined
-  }
 }
 
 function attachmentCount(

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use sqlx::postgres::PgPool;
 
 use crate::ai::control_center::AiControlCenterStore;
@@ -20,13 +22,16 @@ pub(super) async fn reconcile_host_vault_manifest(
     pool: PgPool,
     vault: HostVault,
 ) -> Result<HostVaultReconciliationSummary, HostVaultReconciliationError> {
-    let manifest = vault.account_secret_manifest()?;
+    let mut manifest = vault.account_secret_manifest()?;
+    manifest.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
     let secret_store = SecretReferenceStore::new(pool.clone());
     let provider_account_store = CommunicationProviderAccountStore::new(pool.clone());
     let provider_secret_binding_store = CommunicationProviderSecretBindingStore::new(pool.clone());
     let calendar_store = CalendarAccountStore::new(pool.clone());
     let ai_store = AiControlCenterStore::new(pool.clone());
     let mut summary = HostVaultReconciliationSummary::default();
+    let mut provider_restore_identities =
+        existing_provider_restore_identities(&provider_account_store).await?;
 
     for mut entry in manifest {
         enrich_manifest_entry_from_postgres(&pool, &vault, &mut entry).await?;
@@ -51,6 +56,16 @@ pub(super) async fn reconcile_host_vault_manifest(
         let Some(recoverable) = RecoverableProviderSecret::from_manifest(entry) else {
             continue;
         };
+        if !claim_provider_restore_identity(
+            &mut provider_restore_identities,
+            &recoverable,
+            &mut summary,
+        ) {
+            if vault.delete_secret(&recoverable.secret_ref)? {
+                summary.purged_duplicate_provider_secrets += 1;
+            }
+            continue;
+        }
         restore_secret_reference(&secret_store, &recoverable).await?;
         restore_provider_account(&provider_account_store, &recoverable, &mut summary).await?;
         restore_provider_account_secret_binding(&provider_secret_binding_store, &recoverable)
@@ -62,6 +77,62 @@ pub(super) async fn reconcile_host_vault_manifest(
     }
 
     Ok(summary)
+}
+
+async fn existing_provider_restore_identities(
+    store: &CommunicationProviderAccountStore,
+) -> Result<HashMap<String, String>, HostVaultReconciliationError> {
+    let mut identities = HashMap::new();
+    for account in store.list().await? {
+        let Some(identity) =
+            provider_restore_identity(account.provider_kind.as_str(), &account.external_account_id)
+        else {
+            continue;
+        };
+        identities.entry(identity).or_insert(account.account_id);
+    }
+
+    Ok(identities)
+}
+
+fn claim_provider_restore_identity(
+    identities: &mut HashMap<String, String>,
+    secret: &RecoverableProviderSecret,
+    summary: &mut HostVaultReconciliationSummary,
+) -> bool {
+    let Some(identity) =
+        provider_restore_identity(secret.provider_kind.as_str(), &secret.external_account_id)
+    else {
+        return true;
+    };
+
+    if let Some(account_id) = identities.get(&identity) {
+        if account_id == &secret.account_id {
+            return true;
+        }
+        summary.skipped_duplicate_provider_secrets += 1;
+        tracing::warn!(
+            provider_kind = secret.provider_kind.as_str(),
+            external_account_id = %secret.external_account_id,
+            duplicate_account_id = %secret.account_id,
+            canonical_account_id = %account_id,
+            "deduplicating provider account secret from host vault manifest"
+        );
+        return false;
+    }
+
+    identities.insert(identity, secret.account_id.clone());
+    true
+}
+
+fn provider_restore_identity(provider_kind: &str, external_account_id: &str) -> Option<String> {
+    let provider = provider_kind.trim();
+    let external = external_account_id.trim().to_ascii_lowercase();
+    if provider.is_empty() || external.is_empty() {
+        return None;
+    }
+
+    Some(format!("{provider}:{external}"))
 }
 
 async fn restore_ai_secret_reference(

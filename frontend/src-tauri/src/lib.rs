@@ -122,6 +122,7 @@ fn start_backend_sidecar<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn s
     if std::env::var_os("HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH").is_none()
         && std::env::var_os("HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON").is_none()
         && std::env::var_os("HERMES_GOOGLE_OAUTH_CLIENT_ID").is_none()
+        && !has_bundled_google_oauth_config()
     {
         if let Some(google_oauth_client_config_path) = bundled_google_oauth_client_config_path(app)
         {
@@ -162,6 +163,15 @@ fn start_backend_sidecar<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn s
     });
 
     Ok(())
+}
+
+fn has_bundled_google_oauth_config() -> bool {
+    option_env!("HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_JSON")
+        .map(str::trim)
+        .is_some_and(|value| !value.is_empty())
+        || option_env!("HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_ID")
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty())
 }
 
 fn log_sidecar_line(level: log::Level, bytes: &[u8]) {

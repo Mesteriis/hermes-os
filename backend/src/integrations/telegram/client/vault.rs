@@ -1,5 +1,3 @@
-use serde_json::json;
-
 use crate::platform::communications::{CommunicationProviderKind, ProviderAccountSecretPurpose};
 use crate::platform::secrets::{DatabaseEncryptedSecretVault, SecretKind, SecretStoreKind};
 use crate::vault::{HostVault, SecretEntryContext};
@@ -13,6 +11,7 @@ pub(super) struct TelegramCredentialWrite<'a> {
     pub(super) secret_kind: SecretKind,
     pub(super) label: &'a str,
     pub(super) value: String,
+    pub(super) metadata: serde_json::Value,
 }
 
 pub enum TelegramSecretVault {
@@ -52,11 +51,7 @@ impl TelegramSecretVault {
                     purpose: credential.secret_purpose.as_str(),
                     secret_kind: credential.secret_kind.as_str(),
                     label: credential.label,
-                    metadata: &json!({
-                        "provider": credential.provider_kind.as_str(),
-                        "account_id": credential.account_id,
-                        "secret_purpose": credential.secret_purpose.as_str()
-                    }),
+                    metadata: &credential.metadata,
                 },
             )?,
         }

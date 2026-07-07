@@ -96,7 +96,9 @@ fn legacy_provider_from_account_id(account_id: &str, purpose: &str) -> Option<St
     if normalized.starts_with("icloud-") {
         return Some("icloud".to_owned());
     }
-    if normalized.starts_with("imap-") || purpose == ProviderAccountSecretPurpose::ImapPassword.as_str() {
+    if normalized.starts_with("imap-")
+        || purpose == ProviderAccountSecretPurpose::ImapPassword.as_str()
+    {
         return Some("imap".to_owned());
     }
     None
@@ -137,7 +139,11 @@ fn email_from_prefixed_account_id(
     }
     let domain_suffix = format!("-{}", expected_domain.replace('.', "-"));
     let local = local_and_domain.strip_suffix(&domain_suffix)?;
-    non_empty(Some(format!("{}@{}", local.replace('-', "."), expected_domain)))
+    non_empty(Some(format!(
+        "{}@{}",
+        local.replace('-', "."),
+        expected_domain
+    )))
 }
 
 pub(super) fn is_recoverable_provider_entry_kind(entry_kind: &str) -> bool {

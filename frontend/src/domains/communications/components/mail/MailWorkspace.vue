@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from '@/platform/i18n'
-import { Icon } from '@/shared/ui'
+import { Dialog, Icon, RichTextEditor } from '@/shared/ui'
 import type { CommunicationConversationModel } from '../communicationDomainElements'
-import type { ComposeFormModel, MailSyncStatus } from '../../types/communications'
+import type {
+  CommunicationAccountOption,
+  ComposeFormModel,
+  MailSyncStatus
+} from '../../types/communications'
+import { htmlToComposePlainText, plainTextToComposeHtml } from '../richComposeHtml'
 import '../communicationDomainElements.css'
 import MailInspector from './MailInspector.vue'
 import MailList from './MailList.vue'
 import MailMessage from './MailMessage.vue'
 import type { MailListItemModel } from './mailElements'
+import { composeAccountOptionSignature, sendCapableComposeAccounts } from './mailComposeOptions'
 import type { MailInspectorModel } from './mailInspector'
 
 const props = defineProps<{
@@ -20,6 +26,7 @@ const props = defineProps<{
   isLoadingMore?: boolean
   composeOpen?: boolean
   composeForm?: ComposeFormModel
+  composeAccountOptions?: readonly CommunicationAccountOption[]
   composeStatus?: string
   composeError?: string
   isSending?: boolean
@@ -38,12 +45,26 @@ const emit = defineEmits<{
   'send-compose': []
   'toggle-inspector': []
   'update-search-query': [query: string]
+  'visible-items-change': [itemIds: string[]]
   'update-compose': [partial: Partial<ComposeFormModel>]
 }>()
 
 const { t } = useI18n()
 const isInspectorVisible = ref(true)
 const activeMessage = computed(() => props.conversation.messages[props.conversation.messages.length - 1])
+const composeAccountOptions = computed(() => props.composeAccountOptions ?? [])
+const composeSendAccountOptions = computed(() =>
+  sendCapableComposeAccounts(composeAccountOptions.value)
+)
+const composeAccountOptionKey = computed(() =>
+  composeAccountOptionSignature(composeAccountOptions.value)
+)
+const composeEditorHtml = computed(() => {
+  const form = props.composeForm
+  if (!form) return '<p></p>'
+  return form.bodyHtml?.trim() ? form.bodyHtml : plainTextToComposeHtml(form.body)
+})
+const isComposeDialogOpen = computed(() => Boolean(props.composeOpen && props.composeForm))
 const composeTitle = computed(() => {
   switch (props.composeForm?.mode) {
     case 'reply': return t('Reply')
@@ -52,13 +73,52 @@ const composeTitle = computed(() => {
   }
 })
 
+watch(
+  () => ({
+    isOpen: Boolean(props.composeOpen),
+    accountId: props.composeForm?.accountId ?? '',
+    optionKey: composeAccountOptionKey.value
+  }),
+  ({ isOpen, accountId }) => {
+    if (!isOpen || composeSendAccountOptions.value.length === 0) return
+    const normalizedAccountId = accountId.trim()
+    if (
+      normalizedAccountId &&
+      composeSendAccountOptions.value.some((account) => account.account_id === normalizedAccountId)
+    ) {
+      return
+    }
+    emit('update-compose', { accountId: composeSendAccountOptions.value[0].account_id })
+  },
+  { immediate: true }
+)
+
 function handleToggleInspector(): void {
   isInspectorVisible.value = !isInspectorVisible.value
   emit('toggle-inspector')
 }
 
+function handleComposeDialogOpenChange(open: boolean): void {
+  if (!open) emit('close-compose')
+}
+
 function inputValue(event: Event): string {
-  return (event.target as HTMLInputElement | HTMLTextAreaElement).value
+  return (event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
+}
+
+function handleComposeBodyHtmlChange(bodyHtml: string): void {
+  emit('update-compose', {
+    body: htmlToComposePlainText(bodyHtml),
+    bodyHtml,
+    bodyFormat: 'html'
+  })
+}
+
+function composeAccountOptionLabel(account: CommunicationAccountOption): string {
+  const label = account.email && account.email !== account.label
+    ? `${account.label} · ${account.email}`
+    : account.label
+  return account.can_send ? label : `${label} · ${t('Read only')}`
 }
 </script>
 
@@ -80,6 +140,7 @@ function inputValue(event: Event): string {
 			@refresh="emit('refresh')"
 			@select-item="emit('select-message', $event)"
 			@update-search-query="emit('update-search-query', $event)"
+			@visible-items-change="emit('visible-items-change', $event)"
 		/>
 		<section class="communication-mail-workspace-reader" :aria-label="t('Open message')">
 			<MailMessage
@@ -92,24 +153,44 @@ function inputValue(event: Event): string {
 				@toggle-inspector="handleToggleInspector"
 			/>
 			<p v-else class="communication-mail-workspace-reader__empty">{{ t('No message selected.') }}</p>
-			<section v-if="composeOpen && composeForm" class="mail-compose-panel" :aria-label="composeTitle">
-				<header class="mail-compose-panel__header">
-					<div class="mail-compose-panel__title-group">
-						<strong class="mail-compose-panel__title">{{ composeTitle }}</strong>
-						<span v-if="composeStatus" class="mail-compose-panel__status">{{ composeStatus }}</span>
-						<span v-if="composeError" class="mail-compose-panel__status mail-compose-panel__status--error">{{ composeError }}</span>
-					</div>
-					<button
-						type="button"
-						class="mail-compose-panel__close"
-						:aria-label="t('Close compose')"
-						:title="t('Close compose')"
-						@click="emit('close-compose')"
-					>
-						<Icon icon="tabler:x" size="1rem" />
-					</button>
-				</header>
+		</section>
+		<MailInspector v-if="isInspectorVisible" :model="inspector" />
+		<Dialog
+			:open="isComposeDialogOpen"
+			:title="composeTitle"
+			:close-label="t('Close compose')"
+			content-class="mail-compose-dialog"
+			@update:open="handleComposeDialogOpenChange"
+		>
+			<section v-if="composeForm" class="mail-compose-panel" :aria-label="composeTitle">
+				<div
+					v-if="composeStatus || composeError"
+					class="mail-compose-panel__status-row"
+				>
+					<span v-if="composeStatus" class="mail-compose-panel__status">{{ composeStatus }}</span>
+					<span v-if="composeError" class="mail-compose-panel__status mail-compose-panel__status--error">
+						{{ composeError }}
+					</span>
+				</div>
 				<div class="mail-compose-panel__fields">
+					<label class="mail-compose-panel__field mail-compose-panel__field--from">
+						<span>{{ t('From') }}</span>
+						<select
+							:value="composeForm.accountId"
+							:disabled="isSending || composeAccountOptions.length === 0"
+							@change="emit('update-compose', { accountId: inputValue($event) })"
+						>
+							<option value="" disabled>{{ t('Select sender account') }}</option>
+							<option
+								v-for="account in composeAccountOptions"
+								:key="account.account_id"
+								:value="account.account_id"
+								:disabled="!account.can_send"
+							>
+								{{ composeAccountOptionLabel(account) }}
+							</option>
+						</select>
+					</label>
 					<label class="mail-compose-panel__field">
 						<span>{{ t('To') }}</span>
 						<input
@@ -145,16 +226,21 @@ function inputValue(event: Event): string {
 							@input="emit('update-compose', { subject: inputValue($event) })"
 						/>
 					</label>
-					<label class="mail-compose-panel__body-field">
-						<span>{{ t('Body') }}</span>
-						<textarea
-							:value="composeForm.body"
-							rows="6"
-							@input="emit('update-compose', { body: inputValue($event), bodyFormat: 'plain', bodyHtml: null })"
+					<div class="mail-compose-panel__body-field">
+						<RichTextEditor
+							class="mail-compose-panel__editor"
+							:model-value="composeEditorHtml"
+							:label="t('Body')"
+							:placeholder="t('Write email')"
+							:toolbar-label="t('Mail formatting')"
+							:disabled="isSending"
+							@update:model-value="handleComposeBodyHtmlChange"
 						/>
-					</label>
+					</div>
 				</div>
-				<footer class="mail-compose-panel__actions">
+			</section>
+			<template #footer>
+				<template v-if="composeForm">
 					<button
 						type="button"
 						class="mail-compose-panel__button mail-compose-panel__button--secondary"
@@ -173,9 +259,8 @@ function inputValue(event: Event): string {
 						<Icon :icon="isSending ? 'tabler:loader-2' : 'tabler:send'" size="1rem" />
 						{{ isSending ? t('Sending') : t('Send') }}
 					</button>
-				</footer>
-			</section>
-		</section>
-		<MailInspector v-if="isInspectorVisible" :model="inspector" />
+				</template>
+			</template>
+		</Dialog>
 	</section>
 </template>

@@ -111,6 +111,7 @@ describe('Hermes UI Storybook visual coverage boundary', () => {
 			'Hermes UI/General/Command',
 			'Hermes UI/General/Tabs',
 			'Hermes UI/General/Dialog',
+			'Hermes UI/General/Steps',
 			'Hermes UI/General/Drawer',
 			'Hermes UI/General/Tooltip',
 			'Hermes UI/General/Popover',

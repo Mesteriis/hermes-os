@@ -116,6 +116,21 @@ describe('communications mail account selection', () => {
 
     expect(store.selectedMailAccountId).toBe('account-2')
   })
+
+  it('clears the selected message context when the selected account changes', () => {
+    const store = useCommunicationsStore()
+    store.setMessages([messageSummary('msg-1')])
+    store.selectMessage(0)
+    store.setMessageDetail({ message: detailedMessage('msg-1'), attachments: [] })
+    store.toggleMessageSelection('msg-1')
+
+    store.setSelectedMailAccountId('account-2')
+
+    expect(store.selectedMailAccountId).toBe('account-2')
+    expect(store.selectedCommunicationMessageId).toBe('')
+    expect(store.selectedCommunicationDetail).toBeNull()
+    expect(store.selectedMessageIds).toEqual([])
+  })
 })
 
 function messageSummary(messageId: string): CommunicationMessageSummary {
@@ -143,6 +158,15 @@ function messageSummary(messageId: string): CommunicationMessageSummary {
     attachment_count: 0,
     local_state: 'active',
     local_state_changed_at: null,
+  }
+}
+
+function detailedMessage(messageId: string) {
+  return {
+    ...messageSummary(messageId),
+    body_text: 'Body',
+    body_html: null,
+    local_state_reason: null,
   }
 }
 

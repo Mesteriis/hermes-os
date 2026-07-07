@@ -194,6 +194,14 @@ describe('Communications workspace surface', () => {
       new URL('../queries/useCommunicationsPageSurface.ts', import.meta.url),
       'utf8'
     )
+    const accountApiSource = readFileSync(
+      new URL('../api/accountApi.ts', import.meta.url),
+      'utf8'
+    )
+    const mailAccountQueriesSource = readFileSync(
+      new URL('../queries/mailAccountQueries.ts', import.meta.url),
+      'utf8'
+    )
     const mailCoreQueriesSource = readFileSync(
       new URL('../queries/mailCoreQueries.ts', import.meta.url),
       'utf8'
@@ -206,6 +214,10 @@ describe('Communications workspace surface', () => {
       new URL('../components/mail/mailListViews.ts', import.meta.url),
       'utf8'
     )
+    const communicationDomainElementsCss = readFileSync(
+      new URL('../components/communicationDomainElements.css', import.meta.url),
+      'utf8'
+    )
 
     expect(viewSource).toContain('MailWorkspace')
     expect(viewSource).toContain(
@@ -216,6 +228,9 @@ describe('Communications workspace surface', () => {
     )
     expect(viewSource).toContain(
       ':search-query="surface.pageSurface.store.messageSearchQuery"'
+    )
+    expect(viewSource).toContain(
+      ':compose-account-options="surface.pageSurface.mailComposeAccountOptions.value"'
     )
     expect(viewSource).toContain(':sync-status="surface.mailSyncStatus.value"')
     expect(viewSource).toContain(
@@ -269,7 +284,31 @@ describe('Communications workspace surface', () => {
     expect(mailWorkspaceSource).toContain(':has-more-items="hasMoreItems"')
     expect(mailWorkspaceSource).toContain(':is-loading-more="isLoadingMore"')
     expect(mailWorkspaceSource).toContain('@load-more="emit(\'load-more\')"')
+    expect(mailWorkspaceSource).toContain('<Dialog')
+    expect(mailWorkspaceSource).toContain('content-class="mail-compose-dialog"')
+    expect(mailWorkspaceSource).toContain('@update:open="handleComposeDialogOpenChange"')
+    expect(mailWorkspaceSource).toContain('RichTextEditor')
+    expect(mailWorkspaceSource).toContain('composeAccountOptions')
+    expect(mailWorkspaceSource).toContain('plainTextToComposeHtml')
+    expect(mailWorkspaceSource).toContain('htmlToComposePlainText')
+    expect(mailWorkspaceSource).toContain('handleComposeBodyHtmlChange')
+    expect(mailWorkspaceSource).toContain('mail-compose-panel__field--from')
+    expect(mailWorkspaceSource).toContain('composeSendAccountOptions')
+    expect(mailWorkspaceSource).toContain(':disabled="!account.can_send"')
+    expect(communicationDomainElementsCss).toContain('.mail-compose-dialog.hermes-dialog-content')
     expect(pageSurfaceSource).toContain('handleLoadMoreMessages')
+    expect(pageSurfaceSource).toContain('useEmailAccountsQuery')
+    expect(pageSurfaceSource).toContain('mailComposeAccountOptions')
+    expect(pageSurfaceSource).toContain('sendCapableMailComposeAccountOptions')
+    expect(pageSurfaceSource).toContain('send_unavailable_reason')
+    expect(pageSurfaceSource).not.toContain(
+      '.filter((item) => item.capabilities.send)'
+    )
+    expect(pageSurfaceSource).toContain('getDefaultMailAccountId')
+    expect(pageSurfaceSource).toContain('composeFormWithAvailableMailAccount')
+    expect(accountApiSource).toContain('/api/v1/communications/email/accounts')
+    expect(accountApiSource).not.toContain(['/api/v1/integrations', 'mail/accounts'].join('/'))
+    expect(mailAccountQueriesSource).toContain('useEmailAccountsQuery')
     expect(pageSurfaceSource).not.toContain(
       'watch([hasNextPage, isFetchingNextPage, activeFolderId]'
     )
@@ -281,10 +320,57 @@ describe('Communications workspace surface', () => {
     expect(mailListSource.indexOf('communication-workspace-panel--inbox')).toBeLessThan(
       mailListSource.indexOf('<MailSyncProgress')
     )
-    expect(mailSyncProgressSource).toContain('v-if="visible && status"')
+    expect(mailListSource).toContain('syncProgressVisible')
+    expect(mailListSource).toContain('mail-sync-progress-region')
+    expect(mailListSource).toContain(':aria-hidden="!syncProgressVisible"')
+    expect(mailListSource).toContain('@visibility-change="handleSyncProgressVisibilityChange"')
+    expect(mailSyncProgressSource).toContain('v-if="status"')
+    expect(mailSyncProgressSource).toContain("defineEmits<{")
+    expect(mailSyncProgressSource).toContain("'visibility-change': [visible: boolean]")
     expect(mailSyncProgressSource).toContain(
       "status === 'recoverable_full_resync_needed'"
     )
+    expect(mailSyncProgressSource).toContain('useCommunicationActionNotifications')
+    expect(mailSyncProgressSource).toContain('mailSyncFailureKey')
+    expect(mailSyncProgressSource).toContain('mail-sync-progress--exiting')
+    expect(mailSyncProgressSource).toContain('failureKey.value !== null')
+    expect(mailSyncProgressSource).toContain('mail-sync:${key}')
+    expect(mailSyncProgressSource).toContain('return phaseLabel(status.phase)')
+    expect(mailSyncProgressSource).not.toContain(
+      '`${status.account_id} · ${phaseLabel(status.phase)}`'
+    )
+    expect(mailSyncProgressSource).toContain('mail-sync-progress__ambient')
+    expect(mailSyncProgressSource).toContain('mail-sync-progress__orb')
+    expect(communicationDomainElementsCss).toContain('.mail-sync-progress--exiting')
+    expect(communicationDomainElementsCss).toContain('.mail-sync-progress-region')
+    expect(communicationDomainElementsCss).toContain('mail-sync-progress-sheen')
+    expect(communicationDomainElementsCss).toContain('mail-sync-progress-breathe')
+    expect(communicationDomainElementsCss).toContain('mail-sync-progress-bar-flow')
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-sync-progress__badge\s*\{[^}]*text-transform: none;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.communications-workspace-view\s*\{[^}]*box-sizing: border-box;[^}]*height: 100%;[^}]*max-height: 100%;/s
+    )
+    expect(communicationDomainElementsCss).not.toContain('calc(100dvh - 72px)')
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-list-stack\s*\{[^}]*height: 100%;[^}]*max-height: 100%;[^}]*overflow: hidden;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-sync-progress-region\s*\{[^}]*max-height: 0;[^}]*transition:[^}]*max-height/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-sync-progress-region--visible\s*\{[^}]*max-height: 180px;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /@media \(max-width: 1180px\)[\s\S]*\.communication-workspace-shell--mail,\s*\.communication-workspace-shell--mail-inspector-hidden\s*\{[\s\S]*grid-template-rows: minmax\(0, 1fr\);/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /@media \(max-width: 1180px\)[\s\S]*\.communication-workspace-shell--mail > \.communication-workspace-panel--inspector\s*\{[\s\S]*display: none;/s
+    )
+    expect(communicationDomainElementsCss).toContain('grid-template-rows: 0fr')
+    expect(communicationDomainElementsCss).toContain('grid-template-rows: 1fr')
+    expect(communicationDomainElementsCss).toContain('mail-sync-progress-exit-down')
     expect(viewSurfaceSource).not.toContain('menuItems')
     expect(viewSurfaceSource).not.toContain('routeToMenuItemId')
   })

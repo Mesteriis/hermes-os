@@ -1,18 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from 'vue'
 import { useI18n } from '../../../platform/i18n'
-import Dialog from '../../../shared/ui/Dialog.vue'
+import Button from '../../../shared/ui/Button.vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import SearchableSelect from '../../../shared/ui/SearchableSelect.vue'
+import Steps from '../../../shared/ui/Steps.vue'
+import type { StepsItem } from '../../../shared/ui/Steps.types'
 import type { AISettingsSurface } from '../queries/useAISettingsSurface'
 import type { AiModelCatalogItem, AiProviderAccount } from '../types/aiControlCenter'
-
-type WizardStep = 'connection' | 'verification' | 'models'
-
-interface WizardStepDefinition {
-  id: WizardStep
-  label: string
-}
 
 const props = withDefaults(defineProps<{
   open?: boolean
@@ -26,25 +21,24 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const step = ref<WizardStep>('connection')
+const currentStep = ref(1)
 const connectedProviderId = ref<string | null>(null)
 const verificationStatus = ref('')
 const verificationMessage = ref('')
 const syncStatus = ref('')
 const syncMessage = ref('')
 
-const stepDefinitions: readonly WizardStepDefinition[] = [
-  { id: 'connection', label: 'Connection parameters' },
-  { id: 'verification', label: 'Verification' },
-  { id: 'models', label: 'Model access' },
-]
+const wizardSteps = computed<StepsItem[]>(() => [
+  { title: t('Параметры API') },
+  { title: t('Проверка') },
+  { title: t('Модели Hermes') },
+])
 
-const currentStepIndex = computed(() => {
-  for (let index = 0; index < stepDefinitions.length; index += 1) {
-    if (stepDefinitions[index]?.id === step.value) return index
-  }
-
-  return 0
+const wizardOpen = computed({
+  get: () => props.open,
+  set: (value: boolean) => {
+    emit('update:open', value)
+  },
 })
 
 const connectedProvider = computed<AiProviderAccount | null>(() => {
@@ -65,6 +59,12 @@ const connectedProviderModels = computed<AiModelCatalogItem[]>(() => {
   }
 
   return models
+})
+
+const nextLabel = computed(() => {
+  if (currentStep.value === 1) return t('Подключить')
+  if (currentStep.value === 2) return t('Проверить')
+  return t('Готово')
 })
 
 function eventValue(event: Event): string {
@@ -90,7 +90,7 @@ function selectApiProvider(providerKey: string): void {
 }
 
 function resetWizard(): void {
-  step.value = 'connection'
+  currentStep.value = 1
   connectedProviderId.value = null
   verificationStatus.value = ''
   verificationMessage.value = ''
@@ -103,13 +103,21 @@ function closeWizard(): void {
 }
 
 function goBack(): void {
-  if (step.value === 'models') {
-    step.value = 'verification'
+  if (currentStep.value > 1) {
+    currentStep.value -= 1
+  }
+}
+
+async function goNext(): Promise<void> {
+  if (currentStep.value === 1) {
+    await submitConnection()
     return
   }
-  if (step.value === 'verification') {
-    step.value = 'connection'
+  if (currentStep.value === 2) {
+    await verifyConnection()
+    return
   }
+  closeWizard()
 }
 
 async function submitConnection(): Promise<void> {
@@ -119,7 +127,7 @@ async function submitConnection(): Promise<void> {
   connectedProviderId.value = provider.provider_id
   verificationStatus.value = ''
   verificationMessage.value = ''
-  step.value = 'verification'
+  currentStep.value = 2
 }
 
 async function verifyConnection(): Promise<void> {
@@ -132,7 +140,7 @@ async function verifyConnection(): Promise<void> {
   verificationStatus.value = response.status
   verificationMessage.value = response.message
   if (response.status === 'ok') {
-    step.value = 'models'
+    currentStep.value = 3
   }
 }
 
@@ -162,195 +170,186 @@ function modelDetail(model: AiModelCatalogItem): string {
   return details.join(' · ')
 }
 
-function stepTone(definition: WizardStepDefinition, index: number): string {
-  if (definition.id === step.value) return 'active'
-  if (index < currentStepIndex.value) return 'done'
-  return 'pending'
-}
-
 watch(() => props.open, (isOpen) => {
   if (isOpen) resetWizard()
 })
 </script>
 
 <template>
-  <Dialog
-    :open="open"
-    :title="t('Connect AI provider')"
-    :description="t('Add an OpenAI-compatible provider, verify it and choose which models Hermes may use.')"
-    :close-label="t('Close wizard')"
-    content-class="settings-ai-wizard-dialog"
-    @update:open="(value) => emit('update:open', value)"
+  <Steps
+    v-model:open="wizardOpen"
+    v-model:step="currentStep"
+    :title="t('Подключение AI провайдера')"
+    :description="connectedProvider?.display_name ?? t('AI провайдер')"
+    :steps="wizardSteps"
+    :step-count="3"
+    :busy="surface.isBusy.value"
+    :next-label="nextLabel"
+    :finish-label="t('Готово')"
+    :previous-label="t('Назад')"
+    :steps-label="t('Шаги мастера')"
+    size="lg"
   >
-    <nav class="settings-ai-wizard-steps" :aria-label="t('Connection wizard steps')">
-      <span
-        v-for="(definition, index) in stepDefinitions"
-        :key="definition.id"
-        class="settings-ai-wizard-step"
-        :class="`is-${stepTone(definition, index)}`"
-      >
-        <Icon :icon="index < currentStepIndex ? 'tabler:check' : 'tabler:circle-number-' + (index + 1)" />
-        <span>{{ t(definition.label) }}</span>
-      </span>
-    </nav>
+    <template #step-1>
+      <section class="settings-ai-wizard-panel">
+        <SearchableSelect
+          class="settings-ai-preset-select"
+          :model-value="surface.activeApiPresetKey.value"
+          :options="surface.apiPresetOptions.value"
+          :placeholder="t('Выберите провайдера')"
+          :search-placeholder="t('Поиск')"
+          :empty-label="t('Ничего не найдено')"
+          :clearable="false"
+          :aria-label="t('AI провайдер')"
+          @update:model-value="selectApiProvider"
+        />
 
-    <section v-if="step === 'connection'" class="settings-ai-wizard-panel">
-      <SearchableSelect
-        class="settings-ai-preset-select"
-        :model-value="surface.activeApiPresetKey.value"
-        :options="surface.apiPresetOptions.value"
-        :placeholder="t('Choose API provider')"
-        :search-placeholder="t('Search providers...')"
-        :empty-label="t('No providers found')"
-        :clearable="false"
-        :aria-label="t('AI provider')"
-        @update:model-value="selectApiProvider"
-      />
-
-      <div class="settings-form-grid settings-ai-wizard-form">
-        <label>
-          <span>{{ t('Display name') }}</span>
-          <input
-            type="text"
-            autocomplete="off"
-            :value="surface.apiDisplayName.value"
-            @input="updateText(surface.apiDisplayName, $event)"
-          >
-        </label>
-        <label>
-          <span>{{ t('Provider key') }}</span>
-          <input
-            type="text"
-            autocomplete="off"
-            :value="surface.apiProviderKey.value"
-            @input="updateText(surface.apiProviderKey, $event)"
-          >
-        </label>
-        <label class="settings-ai-wizard-form__wide">
-          <span>{{ t('Base URL') }}</span>
-          <input
-            type="url"
-            autocomplete="off"
-            :value="surface.apiBaseUrl.value"
-            @input="updateText(surface.apiBaseUrl, $event)"
-          >
-        </label>
-        <label class="settings-ai-wizard-form__wide">
-          <span>{{ t('API token') }}</span>
-          <input
-            type="password"
-            autocomplete="off"
-            :value="surface.apiToken.value"
-            @input="updateText(surface.apiToken, $event)"
-          >
-        </label>
-      </div>
-
-      <label class="settings-switch">
-        <input
-          type="checkbox"
-          :checked="surface.apiConsent.value"
-          @change="updateBoolean(surface.apiConsent, $event)"
-        >
-        <span />
-        <strong>{{ t('Allow remote private context') }}</strong>
-      </label>
-    </section>
-
-    <section v-else-if="step === 'verification'" class="settings-ai-wizard-panel">
-      <div class="settings-ai-wizard-status">
-        <Icon icon="tabler:heartbeat" />
-        <span>
-          <strong>{{ connectedProvider?.display_name ?? t('Provider') }}</strong>
-          <small>{{ t('Verify that consent and Host Vault API key binding are ready before syncing models.') }}</small>
-        </span>
-      </div>
-      <div v-if="verificationMessage" class="settings-ai-wizard-result" :class="`is-${verificationStatus}`">
-        <strong>{{ verificationStatus }}</strong>
-        <span>{{ verificationMessage }}</span>
-      </div>
-    </section>
-
-    <section v-else class="settings-ai-wizard-panel">
-      <div class="settings-ai-wizard-toolbar">
-        <div>
-          <strong>{{ connectedProvider?.display_name ?? t('Provider') }}</strong>
-          <small>{{ t('Sync the provider catalog, then choose which models are available in Hermes.') }}</small>
+        <div class="settings-form-grid settings-ai-wizard-form">
+          <label>
+            <span>{{ t('Название') }}</span>
+            <input
+              type="text"
+              autocomplete="off"
+              :value="surface.apiDisplayName.value"
+              @input="updateText(surface.apiDisplayName, $event)"
+            >
+          </label>
+          <label>
+            <span>{{ t('Ключ провайдера') }}</span>
+            <input
+              type="text"
+              autocomplete="off"
+              :value="surface.apiProviderKey.value"
+              @input="updateText(surface.apiProviderKey, $event)"
+            >
+          </label>
+          <label class="settings-ai-wizard-form__wide">
+            <span>{{ t('URL API') }}</span>
+            <input
+              type="url"
+              autocomplete="off"
+              :value="surface.apiBaseUrl.value"
+              @input="updateText(surface.apiBaseUrl, $event)"
+            >
+          </label>
+          <label class="settings-ai-wizard-form__wide">
+            <span>{{ t('API-токен') }}</span>
+            <input
+              type="password"
+              autocomplete="off"
+              :value="surface.apiToken.value"
+              @input="updateText(surface.apiToken, $event)"
+            >
+          </label>
         </div>
-        <button
-          type="button"
-          class="secondary-button"
-          :disabled="surface.isBusy.value || !connectedProvider"
-          @click="syncModels"
-        >
-          <Icon icon="tabler:refresh" />
-          {{ t('Sync models') }}
-        </button>
-      </div>
 
-      <div v-if="syncMessage" class="settings-ai-wizard-result" :class="`is-${syncStatus}`">
-        <strong>{{ syncStatus }}</strong>
-        <span>{{ syncMessage }}</span>
-      </div>
-
-      <div v-if="connectedProviderModels.length" class="settings-ai-wizard-model-list">
-        <label
-          v-for="model in connectedProviderModels"
-          :key="`${model.provider_id}:${model.model_key}`"
-          class="settings-ai-wizard-model"
-        >
+        <label class="settings-switch">
           <input
             type="checkbox"
-            :checked="model.is_available"
-            :disabled="surface.isBusy.value"
-            @change="toggleModel(model, $event)"
+            :checked="surface.apiConsent.value"
+            @change="updateBoolean(surface.apiConsent, $event)"
           >
-          <span>
-            <strong>{{ model.display_name }}</strong>
-            <small>{{ modelDetail(model) }}</small>
-          </span>
+          <span />
+          <strong>{{ t('Разрешить приватный контекст') }}</strong>
         </label>
-      </div>
+      </section>
+    </template>
 
-      <div v-else class="settings-empty-state">
-        <Icon icon="tabler:list-search" />
-        <strong>{{ t('No models synced') }}</strong>
-      </div>
-    </section>
+    <template #step-2>
+      <section class="settings-ai-wizard-panel">
+        <div class="settings-ai-wizard-status">
+          <Icon icon="tabler:heartbeat" />
+          <span>
+            <strong>{{ connectedProvider?.display_name ?? t('Провайдер') }}</strong>
+            <small>{{ verificationMessage || t('Готов к проверке') }}</small>
+          </span>
+        </div>
+        <div v-if="verificationMessage" class="settings-ai-wizard-result" :class="`is-${verificationStatus}`">
+          <strong>{{ verificationStatus }}</strong>
+          <span>{{ verificationMessage }}</span>
+        </div>
+      </section>
+    </template>
+
+    <template #step-3>
+      <section class="settings-ai-wizard-panel">
+        <div class="settings-ai-wizard-toolbar">
+          <div>
+            <strong>{{ connectedProvider?.display_name ?? t('Провайдер') }}</strong>
+            <small>{{ connectedProviderModels.length }} {{ t('моделей') }}</small>
+          </div>
+          <Button
+            variant="secondary"
+            icon="tabler:refresh"
+            :disabled="surface.isBusy.value || !connectedProvider"
+            @click="syncModels"
+          >
+            {{ t('Синхронизировать модели') }}
+          </Button>
+        </div>
+
+        <div v-if="syncMessage" class="settings-ai-wizard-result" :class="`is-${syncStatus}`">
+          <strong>{{ syncStatus }}</strong>
+          <span>{{ syncMessage }}</span>
+        </div>
+
+        <div v-if="connectedProviderModels.length" class="settings-ai-wizard-model-list">
+          <label
+            v-for="model in connectedProviderModels"
+            :key="`${model.provider_id}:${model.model_key}`"
+            class="settings-ai-wizard-model"
+          >
+            <input
+              type="checkbox"
+              :checked="model.is_available"
+              :disabled="surface.isBusy.value"
+              @change="toggleModel(model, $event)"
+            >
+            <span>
+              <strong>{{ model.display_name }}</strong>
+              <small>{{ modelDetail(model) }}</small>
+            </span>
+          </label>
+        </div>
+
+        <div v-else class="settings-empty-state">
+          <Icon icon="tabler:list-search" />
+          <strong>{{ t('Моделей пока нет') }}</strong>
+        </div>
+      </section>
+    </template>
 
     <template #footer>
-      <button type="button" class="secondary-button" @click="closeWizard">
-        {{ step === 'models' ? t('Done') : t('Cancel') }}
-      </button>
-      <button
-        v-if="step !== 'connection'"
-        type="button"
-        class="secondary-button"
-        :disabled="surface.isBusy.value"
-        @click="goBack"
-      >
-        {{ t('Back') }}
-      </button>
-      <button
-        v-if="step === 'connection'"
-        type="button"
-        class="primary-button"
-        :disabled="surface.isBusy.value"
-        @click="submitConnection"
-      >
-        <Icon icon="tabler:arrow-right" />
-        {{ t('Continue') }}
-      </button>
-      <button
-        v-else-if="step === 'verification'"
-        type="button"
-        class="primary-button"
-        :disabled="surface.isBusy.value || !connectedProvider"
-        @click="verifyConnection"
-      >
-        <Icon icon="tabler:heartbeat" />
-        {{ t('Verify connection') }}
-      </button>
+      <div class="hermes-steps__dock">
+        <Button
+          class="hermes-steps__dock-back"
+          variant="ghost"
+          icon="tabler:arrow-left"
+          :aria-label="t('Назад')"
+          :disabled="currentStep === 1 || surface.isBusy.value"
+          @click="goBack"
+        />
+        <nav class="hermes-steps__dots" :aria-label="t('Шаги мастера')">
+          <button
+            v-for="item in wizardSteps"
+            :key="item.title"
+            class="hermes-steps__dot"
+            :class="{ 'hermes-steps__dot--active': wizardSteps.indexOf(item) + 1 === currentStep }"
+            type="button"
+            :aria-current="wizardSteps.indexOf(item) + 1 === currentStep ? 'step' : undefined"
+            :aria-label="item.title"
+            :disabled="surface.isBusy.value"
+            @click="currentStep = wizardSteps.indexOf(item) + 1"
+          />
+        </nav>
+        <Button
+          class="hermes-steps__dock-next"
+          :loading="surface.isBusy.value"
+          @click="goNext"
+        >
+          {{ nextLabel }}
+        </Button>
+      </div>
     </template>
-  </Dialog>
+  </Steps>
 </template>

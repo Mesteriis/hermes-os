@@ -315,7 +315,7 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
 }
 
 #[tokio::test]
-async fn email_account_delete_rejects_accounts_with_retained_raw_records() {
+async fn email_account_delete_purges_access_and_keeps_retained_raw_records() {
     let ctx = TestContext::new().await;
     let store = CommunicationIngestionStore::new(ctx.pool().clone());
     store
@@ -342,6 +342,7 @@ async fn email_account_delete_rejects_accounts_with_retained_raw_records() {
 
     let app = app(&ctx).await;
     let response = app
+        .clone()
         .oneshot(request(
             Method::DELETE,
             "/api/v1/integrations/mail/accounts/imap-with-evidence",
@@ -350,9 +351,37 @@ async fn email_account_delete_rejects_accounts_with_retained_raw_records() {
         .await
         .expect("delete response");
 
-    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
-    assert_eq!(body["error"], "email_account_delete_conflict");
+    assert_eq!(body["account_id"], "imap-with-evidence");
+    assert_eq!(body["deleted"], true);
+
+    let account_config: Value = sqlx::query_scalar(
+        "SELECT config FROM communication_provider_accounts WHERE account_id = 'imap-with-evidence'",
+    )
+    .fetch_one(ctx.pool())
+    .await
+    .expect("tombstoned provider account config");
+    assert_eq!(account_config["auth_state"], "deleted");
+    assert!(account_config.get("deleted_at").is_some());
+
+    let raw_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM communication_raw_records WHERE account_id = 'imap-with-evidence'",
+    )
+    .fetch_one(ctx.pool())
+    .await
+    .expect("retained raw record count");
+    assert_eq!(raw_count, 1);
+
+    let response = app
+        .oneshot(request(
+            Method::GET,
+            "/api/v1/integrations/mail/accounts/imap-with-evidence",
+            None,
+        ))
+        .await
+        .expect("get tombstoned account response");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

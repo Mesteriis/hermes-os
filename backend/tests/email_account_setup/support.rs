@@ -308,6 +308,15 @@ pub fn get_request(uri: &str) -> Request<Body> {
         .expect("request")
 }
 
+pub fn delete_request_with_token(uri: &str, token: &str) -> Request<Body> {
+    Request::builder()
+        .method("DELETE")
+        .uri(uri)
+        .header("x-hermes-secret", token)
+        .body(Body::empty())
+        .expect("request")
+}
+
 pub async fn unlock_test_vault<S>(app: S)
 where
     S: tower::Service<Request<Body>, Response = axum::response::Response> + Clone,

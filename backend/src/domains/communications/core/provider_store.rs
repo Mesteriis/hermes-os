@@ -461,6 +461,191 @@ impl CommunicationProviderAccountStore {
         })
     }
 
+    pub async fn delete_access_metadata(
+        &self,
+        account_id: &str,
+    ) -> Result<DeletedProviderAccount, CommunicationIngestionError> {
+        validate_non_empty_field("account_id", account_id)?;
+
+        let mut transaction = self.pool.begin().await?;
+
+        let binding_rows = sqlx::query(
+            r#"
+            DELETE FROM communication_provider_account_secret_refs
+            WHERE account_id = $1
+            RETURNING account_id, secret_purpose, secret_ref
+            "#,
+        )
+        .bind(account_id.trim())
+        .fetch_all(&mut *transaction)
+        .await?;
+        let mut removed_bindings = Vec::with_capacity(binding_rows.len());
+        let unbound_secret_refs = binding_rows
+            .into_iter()
+            .map(|row| {
+                let removed_account_id: String = row.try_get("account_id")?;
+                let secret_purpose: String = row.try_get("secret_purpose")?;
+                let secret_ref: String = row.try_get("secret_ref")?;
+                removed_bindings.push((removed_account_id, secret_purpose, secret_ref.clone()));
+                Ok(secret_ref)
+            })
+            .collect::<Result<Vec<String>, sqlx::Error>>()?;
+
+        for (removed_account_id, secret_purpose, secret_ref) in &removed_bindings {
+            let observation = ObservationStore::capture_in_transaction(
+                &mut transaction,
+                &NewObservation::new(
+                    "COMMUNICATION_PROVIDER_SECRET_BINDING_REMOVED",
+                    ObservationOriginKind::LocalRuntime,
+                    chrono::Utc::now(),
+                    json!({
+                        "account_id": removed_account_id,
+                        "secret_purpose": secret_purpose,
+                        "secret_ref": secret_ref,
+                        "action": "remove_provider_account_secret_binding",
+                    }),
+                    format!(
+                        "communication-provider-account://{removed_account_id}/secret-binding/{secret_purpose}/delete"
+                    ),
+                )
+                .provenance(json!({
+                    "captured_by": "vault.communication_provider_accounts.delete_access_metadata",
+                    "action": "remove_provider_account_secret_binding",
+                })),
+            )
+            .await?;
+            link_vault_owned_entity_in_transaction(
+                &mut transaction,
+                VaultOwnedEntityLink {
+                    observation_id: observation.observation_id.clone(),
+                    domain: "vault",
+                    entity_kind: "communication_provider_secret_binding",
+                    entity_id: format!("{removed_account_id}:{secret_purpose}"),
+                    relationship_kind: "remove",
+                    base_metadata: json!({
+                        "account_id": removed_account_id,
+                        "secret_purpose": secret_purpose,
+                        "secret_ref": secret_ref,
+                    }),
+                    extra_metadata: None,
+                },
+            )
+            .await?;
+        }
+
+        sqlx::query(
+            r#"
+            DELETE FROM communication_ingestion_checkpoints
+            WHERE account_id = $1
+            "#,
+        )
+        .bind(account_id.trim())
+        .execute(&mut *transaction)
+        .await?;
+
+        let existing_row = sqlx::query(
+            r#"
+            SELECT config
+            FROM communication_provider_accounts
+            WHERE account_id = $1
+            "#,
+        )
+        .bind(account_id.trim())
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let Some(existing_row) = existing_row else {
+            transaction.commit().await?;
+            return Ok(DeletedProviderAccount {
+                account: None,
+                unbound_secret_refs,
+            });
+        };
+        let mut config: serde_json::Value = existing_row.try_get("config")?;
+        let config_object = config
+            .as_object_mut()
+            .ok_or(CommunicationIngestionError::NonObjectJson("config"))?;
+        config_object.insert("auth_state".to_owned(), json!("deleted"));
+        config_object.insert("deleted_at".to_owned(), json!(chrono::Utc::now()));
+        config_object.insert(
+            "deleted_reason".to_owned(),
+            json!("retained_evidence_credentials_purged"),
+        );
+        config_object.insert("sync_enabled".to_owned(), json!(false));
+
+        let account_row = sqlx::query(
+            r#"
+            UPDATE communication_provider_accounts
+            SET config = $2,
+                updated_at = now()
+            WHERE account_id = $1
+            RETURNING
+                account_id,
+                provider_kind,
+                display_name,
+                external_account_id,
+                config,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(account_id.trim())
+        .bind(&config)
+        .fetch_optional(&mut *transaction)
+        .await?;
+
+        if let Some(account) = account_row.as_ref() {
+            let deleted_account = row_ref_to_provider_account(account)?;
+            let observation = ObservationStore::capture_in_transaction(
+                &mut transaction,
+                &NewObservation::new(
+                    "COMMUNICATION_PROVIDER_ACCOUNT_DELETED",
+                    ObservationOriginKind::LocalRuntime,
+                    chrono::Utc::now(),
+                    json!({
+                        "account_id": deleted_account.account_id,
+                        "provider_kind": deleted_account.provider_kind.as_str(),
+                        "display_name": deleted_account.display_name,
+                        "external_account_id": deleted_account.external_account_id,
+                        "action": "delete_communication_provider_account_access",
+                    }),
+                    format!(
+                        "communication-provider-account://{}/access/delete",
+                        deleted_account.account_id
+                    ),
+                )
+                .provenance(json!({
+                    "captured_by": "vault.communication_provider_accounts.delete_access_metadata",
+                    "action": "delete_communication_provider_account_access",
+                    "provider_kind": deleted_account.provider_kind.as_str(),
+                })),
+            )
+            .await?;
+            link_vault_owned_entity_in_transaction(
+                &mut transaction,
+                VaultOwnedEntityLink {
+                    observation_id: observation.observation_id.clone(),
+                    domain: "vault",
+                    entity_kind: "communication_provider_account",
+                    entity_id: deleted_account.account_id.clone(),
+                    relationship_kind: "delete_access",
+                    base_metadata: json!({
+                        "provider_kind": deleted_account.provider_kind.as_str(),
+                        "external_account_id": deleted_account.external_account_id,
+                    }),
+                    extra_metadata: None,
+                },
+            )
+            .await?;
+        }
+
+        transaction.commit().await?;
+
+        Ok(DeletedProviderAccount {
+            account: account_row.map(row_to_provider_account).transpose()?,
+            unbound_secret_refs,
+        })
+    }
+
     pub async fn delete_metadata(
         &self,
         account_id: &str,

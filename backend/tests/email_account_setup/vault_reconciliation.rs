@@ -13,13 +13,13 @@ use hermes_hub_backend::domains::communications::core::{
 };
 use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretResolver};
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::vault::{HostVault, HostVaultConfig, SecretEntryContext};
+use hermes_hub_backend::vault::{EntropyEvent, HostVault, HostVaultConfig, SecretEntryContext};
 use testkit::context::TestContext;
 
 use super::support::{
-    LOCAL_API_TOKEN, json_body, json_request_with_token_and_actor, unlock_test_vault,
-    wait_for_calendar_account, wait_for_manifest_metadata_key, wait_for_provider_account,
-    wait_for_provider_account_secret_binding, wait_for_secret_reference,
+    LOCAL_API_TOKEN, delete_request_with_token, json_body, json_request_with_token_and_actor,
+    unlock_test_vault, wait_for_calendar_account, wait_for_manifest_metadata_key,
+    wait_for_provider_account, wait_for_provider_account_secret_binding, wait_for_secret_reference,
 };
 
 #[tokio::test]
@@ -314,6 +314,134 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
 }
 
 #[tokio::test]
+async fn delete_mail_account_removes_unbound_host_vault_secret_and_reference() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let config =
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([
+                ("HERMES_DEV_MODE", "true"),
+                (
+                    "HERMES_VAULT_HOME",
+                    vault_home.to_str().expect("vault path"),
+                ),
+                (
+                    "HERMES_DEV_KEY_PATH",
+                    dev_key_path.to_str().expect("dev key path"),
+                ),
+            ])
+            .expect("config");
+    let app = build_router_with_database(config, database.clone());
+    unlock_test_vault(app.clone()).await;
+
+    let account_id = "icloud-delete-vault";
+    let secret_ref = "secret:provider-account:icloud-delete-vault:imap_password";
+    let smtp_secret_ref = "secret:provider-account:icloud-delete-vault:smtp_password";
+    let setup_response = app
+        .clone()
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/integrations/mail/accounts/imap",
+            json!({
+                "account_id": account_id,
+                "provider_kind": "icloud",
+                "display_name": "Delete Vault iCloud",
+                "external_account_id": "delete-vault@icloud.com",
+                "host": "imap.mail.me.com",
+                "port": 993,
+                "tls": true,
+                "mailbox": "INBOX",
+                "username": "delete-vault@icloud.com",
+                "password": "icloud-app-password",
+                "secret_kind": "app_password"
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("setup response");
+    assert_eq!(setup_response.status(), axum::http::StatusCode::OK);
+
+    let pool = database.pool().expect("configured pool").clone();
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let secret_store = SecretReferenceStore::new(pool.clone());
+    let vault = HostVault::new(HostVaultConfig {
+        home: vault_home,
+        dev_mode: true,
+        dev_key_path,
+    })
+    .expect("host vault");
+    vault.unlock_existing().expect("unlock host vault");
+
+    assert!(
+        communication_store
+            .provider_account(account_id)
+            .await
+            .expect("provider account before delete")
+            .is_some()
+    );
+    assert!(
+        secret_store
+            .secret_reference(secret_ref)
+            .await
+            .expect("secret reference before delete")
+            .is_some()
+    );
+
+    let delete_response = app
+        .oneshot(delete_request_with_token(
+            &format!("/api/v1/integrations/mail/accounts/{account_id}"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("delete response");
+    assert_eq!(delete_response.status(), axum::http::StatusCode::OK);
+    let body = json_body(delete_response).await;
+    assert_eq!(body["deleted"], json!(true));
+    assert_eq!(
+        body["vault_deleted_secret_refs"],
+        json!([secret_ref, smtp_secret_ref])
+    );
+    assert_eq!(body["retained_secret_refs"], json!([]));
+
+    assert!(
+        communication_store
+            .provider_account(account_id)
+            .await
+            .expect("provider account after delete")
+            .is_none()
+    );
+    assert!(
+        secret_store
+            .secret_reference(secret_ref)
+            .await
+            .expect("secret reference after delete")
+            .is_none()
+    );
+    assert!(
+        secret_store
+            .secret_reference(smtp_secret_ref)
+            .await
+            .expect("smtp secret reference after delete")
+            .is_none()
+    );
+    assert!(
+        vault
+            .account_secret_manifest()
+            .expect("manifest after delete")
+            .into_iter()
+            .all(|entry| entry.secret_ref != secret_ref && entry.secret_ref != smtp_secret_ref)
+    );
+    assert!(vault.read_secret(secret_ref).is_err());
+    assert!(vault.read_secret(smtp_secret_ref).is_err());
+}
+
+#[tokio::test]
 async fn startup_reconciles_non_mail_provider_account_from_host_vault_manifest() {
     let ctx = TestContext::new().await;
     let vault_dir = tempdir().expect("vault tempdir");
@@ -437,10 +565,12 @@ async fn startup_reconciles_legacy_gmail_manifest_without_provider_metadata() {
         dev_key_path: dev_key_path.clone(),
     })
     .expect("host vault");
+    let entropy_events: Vec<EntropyEvent> = super::support::vault_entropy_events(2000)
+        .into_iter()
+        .map(|value| serde_json::from_value(value).expect("entropy event"))
+        .collect();
     vault
-        .collect_entropy(super::support::vault_entropy_events(128).into_iter().map(|value| {
-            serde_json::from_value(value).expect("entropy event")
-        }))
+        .collect_entropy(entropy_events)
         .expect("collect entropy");
     vault.create().expect("create host vault");
 
@@ -494,6 +624,156 @@ async fn startup_reconciles_legacy_gmail_manifest_without_provider_metadata() {
             .expose_for_runtime(),
         "legacy-gmail-oauth-token"
     );
+}
+
+#[tokio::test]
+async fn startup_reconciles_one_account_for_duplicate_provider_external_identity() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+    let config =
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([
+                ("HERMES_DEV_MODE", "true"),
+                (
+                    "HERMES_VAULT_HOME",
+                    vault_home.to_str().expect("vault path"),
+                ),
+                (
+                    "HERMES_DEV_KEY_PATH",
+                    dev_key_path.to_str().expect("dev key path"),
+                ),
+            ])
+            .expect("config");
+    let vault = HostVault::new(HostVaultConfig {
+        home: vault_home,
+        dev_mode: true,
+        dev_key_path,
+    })
+    .expect("host vault");
+    let entropy_events: Vec<EntropyEvent> = super::support::vault_entropy_events(2000)
+        .into_iter()
+        .map(|value| serde_json::from_value(value).expect("entropy event"))
+        .collect();
+    vault
+        .collect_entropy(entropy_events)
+        .expect("collect entropy");
+    vault.create().expect("create host vault");
+
+    vault
+        .store_secret(
+            "secret:provider-account:gmail-duplicate-old:oauth_token",
+            "old-gmail-oauth-token",
+            SecretEntryContext {
+                entry_kind: "provider_credential",
+                account_id: "gmail-duplicate-old",
+                purpose: ProviderAccountSecretPurpose::OauthToken.as_str(),
+                secret_kind: SecretKind::OauthToken.as_str(),
+                label: "Old Gmail OAuth credential",
+                metadata: &json!({
+                    "provider": "gmail",
+                    "account_id": "gmail-duplicate-old",
+                    "display_name": "Old Gmail",
+                    "external_account_id": "duplicate@gmail.com",
+                    "provider_account_config": {
+                        "auth": "oauth",
+                        "api": "gmail"
+                    }
+                }),
+            },
+        )
+        .expect("store old duplicate gmail secret");
+    vault
+        .store_secret(
+            "secret:provider-account:gmail-duplicate-new:oauth_token",
+            "new-gmail-oauth-token",
+            SecretEntryContext {
+                entry_kind: "provider_credential",
+                account_id: "gmail-duplicate-new",
+                purpose: ProviderAccountSecretPurpose::OauthToken.as_str(),
+                secret_kind: SecretKind::OauthToken.as_str(),
+                label: "New Gmail OAuth credential",
+                metadata: &json!({
+                    "provider": "gmail",
+                    "account_id": "gmail-duplicate-new",
+                    "display_name": "New Gmail",
+                    "external_account_id": "duplicate@gmail.com",
+                    "provider_account_config": {
+                        "auth": "oauth",
+                        "api": "gmail"
+                    }
+                }),
+            },
+        )
+        .expect("store new duplicate gmail secret");
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let _app = build_router_with_database(config, database.clone());
+    let pool = database.pool().expect("configured pool").clone();
+
+    for _ in 0..50 {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*)
+             FROM communication_provider_accounts
+             WHERE provider_kind = 'gmail'
+               AND external_account_id = 'duplicate@gmail.com'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("duplicate account count");
+        if count == 1 {
+            sleep(Duration::from_millis(100)).await;
+            let stable_count: i64 = sqlx::query_scalar(
+                "SELECT count(*)
+                 FROM communication_provider_accounts
+                 WHERE provider_kind = 'gmail'
+                   AND external_account_id = 'duplicate@gmail.com'",
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("stable duplicate account count");
+            assert_eq!(stable_count, 1);
+            let binding_count: i64 = sqlx::query_scalar(
+                "SELECT count(*)
+                 FROM communication_provider_account_secret_refs refs
+                 JOIN communication_provider_accounts accounts
+                   ON accounts.account_id = refs.account_id
+                 WHERE accounts.provider_kind = 'gmail'
+                   AND accounts.external_account_id = 'duplicate@gmail.com'",
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("duplicate binding count");
+            assert_eq!(binding_count, 1);
+
+            let duplicate_manifest_entries: Vec<_> = vault
+                .account_secret_manifest()
+                .expect("host vault manifest")
+                .into_iter()
+                .filter(|entry| {
+                    entry
+                        .metadata
+                        .get("provider")
+                        .and_then(|value| value.as_str())
+                        == Some("gmail")
+                        && entry
+                            .metadata
+                            .get("external_account_id")
+                            .and_then(|value| value.as_str())
+                            == Some("duplicate@gmail.com")
+                })
+                .collect();
+            assert_eq!(duplicate_manifest_entries.len(), 1);
+            return;
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+
+    panic!("duplicate Gmail vault entries were not reconciled to one account");
 }
 
 #[tokio::test]

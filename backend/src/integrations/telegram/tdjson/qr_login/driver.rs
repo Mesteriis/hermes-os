@@ -48,6 +48,7 @@ fn start_qr_login_driver(
 
     upsert_pending_response(
         &pending_logins,
+        request.clone(),
         response.clone(),
         command_tx.clone(),
         Arc::clone(&worker_completion),

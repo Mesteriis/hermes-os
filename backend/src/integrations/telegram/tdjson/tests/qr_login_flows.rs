@@ -77,6 +77,7 @@ fn qr_password_submission_sends_command_to_pending_session() {
     let pending = Arc::new(Mutex::new(HashMap::from([(
         "setup-id".to_owned(),
         super::super::TelegramQrLoginSession {
+            request: super::test_qr_login_request(),
             response: super::test_qr_login_response(TelegramQrLoginStatus::WaitingPassword),
             command_tx,
             worker_completion: super::super::new_worker_completion(),
@@ -111,6 +112,7 @@ fn qr_password_submission_requires_waiting_password_status() {
     let pending = Arc::new(Mutex::new(HashMap::from([(
         "setup-id".to_owned(),
         super::super::TelegramQrLoginSession {
+            request: super::test_qr_login_request(),
             response: super::test_qr_login_response(TelegramQrLoginStatus::WaitingQrScan),
             command_tx,
             worker_completion: super::super::new_worker_completion(),
@@ -140,6 +142,7 @@ fn qr_login_cancel_removes_pending_session_and_notifies_worker() {
     let pending = Arc::new(Mutex::new(HashMap::from([(
         "setup-id".to_owned(),
         super::super::TelegramQrLoginSession {
+            request: super::test_qr_login_request(),
             response: super::test_qr_login_response(TelegramQrLoginStatus::WaitingQrScan),
             command_tx,
             worker_completion,
@@ -185,6 +188,7 @@ fn qr_login_start_cancels_existing_sessions_for_same_account() {
         (
             "setup-id".to_owned(),
             super::super::TelegramQrLoginSession {
+                request: super::test_qr_login_request(),
                 response: super::test_qr_login_response(TelegramQrLoginStatus::WaitingQrScan),
                 command_tx: same_account_tx,
                 worker_completion: same_account_completion,
@@ -193,6 +197,7 @@ fn qr_login_start_cancels_existing_sessions_for_same_account() {
         (
             "other-setup-id".to_owned(),
             super::super::TelegramQrLoginSession {
+                request: super::test_qr_login_request(),
                 response: other_response,
                 command_tx: other_account_tx,
                 worker_completion: other_account_completion,

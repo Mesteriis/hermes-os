@@ -7,7 +7,57 @@ pub(crate) struct ApplicationSettingsResponse {
 
 #[derive(Serialize)]
 pub(crate) struct ApplicationAccountsResponse {
-    pub(crate) items: Vec<ProviderAccount>,
+    pub(crate) items: Vec<ApplicationAccountView>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct ApplicationAccountView {
+    #[serde(flatten)]
+    pub(crate) account: ProviderAccount,
+    pub(crate) credential_state: ApplicationAccountCredentialState,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct ApplicationAccountCredentialState {
+    pub(crate) status: &'static str,
+    pub(crate) requires_reauthorization: bool,
+}
+
+impl ApplicationAccountCredentialState {
+    pub(crate) fn not_applicable() -> Self {
+        Self {
+            status: "not_applicable",
+            requires_reauthorization: false,
+        }
+    }
+
+    pub(crate) fn valid() -> Self {
+        Self {
+            status: "valid",
+            requires_reauthorization: false,
+        }
+    }
+
+    pub(crate) fn expired() -> Self {
+        Self {
+            status: "expired",
+            requires_reauthorization: true,
+        }
+    }
+
+    pub(crate) fn missing() -> Self {
+        Self {
+            status: "missing",
+            requires_reauthorization: false,
+        }
+    }
+
+    pub(crate) fn unavailable() -> Self {
+        Self {
+            status: "unavailable",
+            requires_reauthorization: false,
+        }
+    }
 }
 
 #[derive(Deserialize)]

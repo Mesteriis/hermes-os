@@ -173,6 +173,10 @@ describe('AppNavbar boundary', () => {
       new URL('../queries/appLayoutHealthChecks.ts', import.meta.url),
       'utf8'
     )
+    const accountNavigation = readFileSync(
+      new URL('../queries/appLayoutAccountNavigation.ts', import.meta.url),
+      'utf8'
+    )
 
     expect(app).toContain(
       "import AppLayoutRoot from './layout/AppLayoutRoot.vue'"
@@ -255,7 +259,8 @@ describe('AppNavbar boundary', () => {
     expect(surface).toContain('Elem')
     expect(surface).toContain('routeTree')
     expect(surface).toContain('useCommunicationsWorkspaceSurface')
-    expect(surface).toContain('communicationsNavbarSurfaceIds')
+    expect(surface).toContain('./appLayoutAccountNavigation')
+    expect(accountNavigation).toContain('communicationsNavbarSurfaceIds')
     expect(surface).toContain('Communications')
     expect(surface).toContain("selectedRouteId = ref('communications-mail')")
     expect(surface).toContain('selectedTopLevelRouteId')
@@ -271,9 +276,11 @@ describe('AppNavbar boundary', () => {
     expect(surface).not.toContain('mail-all-accounts')
     expect(surface).not.toContain('whatsapp-all-accounts')
     expect(surface).not.toContain('All accounts')
-    expect(surface).toContain("if (channelId === 'telegram') return 'telegram'")
-    expect(surface).toContain("if (channelId === 'whatsapp') return 'whatsapp'")
-    expect(surface).toContain("if (channelId === 'mail') return 'mail'")
+    expect(accountNavigation).toContain('Все ящики')
+    expect(accountNavigation).toContain('Все аккаунты')
+    expect(accountNavigation).toContain("if (channelId === 'telegram') return 'telegram'")
+    expect(accountNavigation).toContain("if (channelId === 'whatsapp') return 'whatsapp'")
+    expect(accountNavigation).toContain("if (channelId === 'mail') return 'mail'")
     expect(surface).toContain("iconTone: 'communication'")
     expect(surface).not.toContain('Telegram account 1')
     expect(surface).not.toContain('Mail account 1')
@@ -349,6 +356,17 @@ describe('AppNavbar boundary', () => {
       'WhatsApp',
     ])
     expect(levelOptions(surface, 'Elem')).toEqual([])
+  })
+
+  it('accepts OAuth callback return routes for same-tab browser fallback redirects', () => {
+    const surface = useAppLayoutNavbarSurface()
+
+    surface.selectReturnRouteFromSearch(
+      '?hermes_route=settings&hermes_oauth=gmail_connected'
+    )
+
+    expect(surface.selectedRouteId.value).toBe('settings')
+    expect(currentNavigationPath(surface)).toEqual(['Settings'])
   })
 
   it('prepares app notifications for the toast host', () => {

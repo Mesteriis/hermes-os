@@ -60,6 +60,8 @@ impl MailSyncStore {
             LEFT JOIN communication_account_sync_settings settings ON settings.account_id = a.account_id
             LEFT JOIN latest ON latest.account_id = a.account_id
             WHERE a.provider_kind IN ('gmail', 'icloud', 'imap')
+              AND COALESCE(a.config->>'auth_state', '') <> 'deleted'
+              AND NOT (a.config ? 'deleted_at')
             ORDER BY a.display_name ASC, a.account_id ASC
             "#,
         )

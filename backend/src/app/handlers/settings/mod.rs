@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io;
 
 use axum::extract::{Path, Query, RawQuery, State};
@@ -57,6 +58,7 @@ use crate::domains::persons::identity::{
 };
 
 use crate::application::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
+use crate::application::mail_background_sync::MailSyncStore;
 use crate::domains::calendar::brain::{CalendarBrainError, CalendarBrainService};
 use crate::domains::calendar::core::{
     CalendarCoreError, ContextPackInput, EventAgendaStore, EventChecklistStore,
@@ -149,11 +151,60 @@ pub(crate) async fn get_application_settings_accounts(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
-        .list()
-        .await?;
+    let accounts =
+        crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool.clone())
+            .list()
+            .await?
+            .into_iter()
+            .filter(|account| !account.is_deleted())
+            .collect::<Vec<_>>();
+    let mail_sync_error_codes =
+        match crate::app::api_support::app_store::<MailSyncStore>(pool.clone())
+            .sync_statuses()
+            .await
+        {
+            Ok(statuses) => statuses
+                .into_iter()
+                .map(|status| (status.account_id, status.last_error_code))
+                .collect::<HashMap<_, _>>(),
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    "failed to inspect mail sync statuses for provider account credential state"
+                );
+                HashMap::new()
+            }
+        };
+    let mut items = Vec::with_capacity(accounts.len());
+    for account in accounts {
+        let credential_state = application_account_credential_state_from_sync_failure(
+            account.provider_kind,
+            mail_sync_error_codes
+                .get(&account.account_id)
+                .and_then(|error_code| error_code.as_deref()),
+        );
+        items.push(ApplicationAccountView {
+            account,
+            credential_state,
+        });
+    }
 
     Ok(Json(ApplicationAccountsResponse { items }))
+}
+
+fn application_account_credential_state_from_sync_failure(
+    provider_kind: EmailProviderKind,
+    last_error_code: Option<&str>,
+) -> ApplicationAccountCredentialState {
+    if provider_kind != EmailProviderKind::Gmail {
+        return ApplicationAccountCredentialState::not_applicable();
+    }
+
+    if last_error_code == Some("oauth_refresh_failed") {
+        ApplicationAccountCredentialState::expired()
+    } else {
+        ApplicationAccountCredentialState::valid()
+    }
 }
 
 pub(crate) async fn patch_application_settings_account(
@@ -202,4 +253,39 @@ pub(crate) async fn put_application_setting(
         .await?;
 
     Ok(Json(setting))
+}
+
+#[cfg(test)]
+mod account_credential_state_tests {
+    use super::*;
+
+    #[test]
+    fn gmail_oauth_credential_state_requests_reauth_after_refresh_failure() {
+        let state = application_account_credential_state_from_sync_failure(
+            EmailProviderKind::Gmail,
+            Some("oauth_refresh_failed"),
+        );
+
+        assert_eq!(state, ApplicationAccountCredentialState::expired());
+    }
+
+    #[test]
+    fn gmail_oauth_credential_state_does_not_request_reauth_without_refresh_failure() {
+        let state = application_account_credential_state_from_sync_failure(
+            EmailProviderKind::Gmail,
+            Some("provider_network_error"),
+        );
+
+        assert_eq!(state, ApplicationAccountCredentialState::valid());
+    }
+
+    #[test]
+    fn non_gmail_provider_credential_state_is_not_applicable() {
+        let state = application_account_credential_state_from_sync_failure(
+            EmailProviderKind::Icloud,
+            Some("oauth_refresh_failed"),
+        );
+
+        assert_eq!(state, ApplicationAccountCredentialState::not_applicable());
+    }
 }

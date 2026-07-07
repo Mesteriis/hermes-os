@@ -57,6 +57,10 @@ prepare_google_oauth_resource() {
 	source_json="${HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_SOURCE:-${HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH:-}}"
 
 	if [ -z "$source_json" ]; then
+		if [ -n "${HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_JSON:-}" ] || [ -n "${HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_ID:-}" ]; then
+			info "Skipping bundled Google OAuth resource; build already has bundled Google OAuth config"
+			return 0
+		fi
 		error "Unable to prepare bundled Google OAuth Desktop client resource. Set HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH."
 		exit 1
 	fi
@@ -181,4 +185,3 @@ build_tdlib_from_source() {
 
 	printf '%s\n' "$built_lib"
 }
-

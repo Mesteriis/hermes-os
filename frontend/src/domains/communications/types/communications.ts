@@ -1,9 +1,12 @@
 // --- Re-exported API types from Svelte reference ---
-
 import type { MailCertificate } from './certificates'
-
+export type {
+  EmailAccountCapabilities,
+  EmailAccountListResponse,
+  EmailAccountView,
+  EmailProviderAccount
+} from './mailAccounts'
 export type LocalMessageState = 'active' | 'trash' | 'all'
-
 export type WorkflowState = 'new' | 'reviewed' | 'needs_action' | 'waiting' | 'done' | 'archived' | 'muted' | 'spam'
 
 export type CommunicationMessageSummary = {
@@ -38,7 +41,6 @@ export type CommunicationMessagesResponse = {
   next_cursor: string | null
   has_more: boolean
 }
-
 export type CommunicationAttachment = {
   attachment_id: string
   message_id: string
@@ -636,6 +638,8 @@ export type CommunicationAccountOption = {
   label: string
   provider_kind: string
   email: string
+  can_send: boolean
+  send_unavailable_reason: string
 }
 
 export type SendCapability = {
@@ -647,7 +651,6 @@ export type RenderedMessageContent = {
   html: string
   isHtml: boolean
 }
-
 export type OriginalMailSrcdocOptions = {
   messageId: string
   bodyHtml: string
@@ -656,7 +659,6 @@ export type OriginalMailSrcdocOptions = {
 export type NavigatorMode = 'threads' | 'contacts'
 export type InspectorMode = 'context' | 'contact' | 'organization' | null
 export type MessageContextTab = 'message' | 'attachments' | 'headers' | 'related' | 'timeline'
-
 export type ProjectItem = {
   project_id: string
   name: string
@@ -666,7 +668,6 @@ export type TaskItem = {
   task_id: string
   title: string
 }
-
 export type CommunicationSectionId =
   | 'unified'
   | 'inbox'

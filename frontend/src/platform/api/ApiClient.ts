@@ -34,10 +34,11 @@ export class ApiClient {
 			} catch {
 				// ignore parse error
 			}
-			const err: ApiError = {
-				message: errorBody ?? fallbackMessage ?? `${method} request failed`,
-				status: res.status
-			}
+			const err = apiErrorFromResponseBody(
+				errorBody,
+				res.status,
+				fallbackMessage ?? `${method} request failed`
+			)
 			throw err
 		}
 
@@ -102,4 +103,36 @@ export class ApiClient {
 	static resetForTests(): void {
 		ApiClient._instance = null
 	}
+}
+
+function apiErrorFromResponseBody(
+	body: string | undefined,
+	status: number,
+	fallbackMessage: string
+): Error & ApiError {
+	const parsed = parseJsonErrorBody(body)
+	const message = parsed?.message ?? body ?? fallbackMessage
+	const err = new Error(message) as Error & ApiError
+	err.status = status
+	err.code = parsed?.code
+	return err
+}
+
+function parseJsonErrorBody(body: string | undefined): { code?: string; message?: string } | null {
+	if (!body) return null
+	try {
+		const parsed: unknown = JSON.parse(body)
+		if (!parsed || typeof parsed !== 'object') return null
+		const record = parsed as Record<string, unknown>
+		return {
+			code: stringValue(record.error) ?? stringValue(record.code),
+			message: stringValue(record.message),
+		}
+	} catch {
+		return null
+	}
+}
+
+function stringValue(value: unknown): string | undefined {
+	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 }

@@ -144,6 +144,7 @@ fn handle_wait_other_device_confirmation(
     let response = qr_waiting_response(context.setup_id, &context.request.account_id, link)?;
     upsert_pending_response(
         context.pending_logins,
+        context.request.clone(),
         response,
         context.command_tx.clone(),
         std::sync::Arc::clone(context.worker_completion),

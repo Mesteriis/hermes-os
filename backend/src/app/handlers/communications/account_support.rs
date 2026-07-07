@@ -51,6 +51,8 @@ pub(crate) struct EmailAccountDeleteResponse {
     pub(super) account_id: String,
     pub(super) deleted: bool,
     pub(super) unbound_secret_refs: Vec<String>,
+    pub(super) vault_deleted_secret_refs: Vec<String>,
+    pub(super) retained_secret_refs: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -89,7 +91,7 @@ pub(super) async fn email_account_or_not_found(
     else {
         return Err(ApiError::NotFound);
     };
-    if !account.provider_kind.is_email() {
+    if !account.provider_kind.is_email() || account.is_deleted() {
         return Err(ApiError::NotFound);
     }
 

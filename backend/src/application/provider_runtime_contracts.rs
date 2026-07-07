@@ -24,10 +24,10 @@ pub(crate) use crate::integrations::telegram::client::{
     TelegramAccountSetupResponse, TelegramAttachmentAnchor, TelegramAttachmentDownloadStateUpdate,
     TelegramChat, TelegramChatGroupFilter, TelegramChatGroupFilterListResponse, TelegramChatMember,
     TelegramError, TelegramLiveAccountSetupRequest, TelegramMessageIngestResult,
-    TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest, TelegramQrLoginStatusResponse,
-    TelegramSecretVault, TelegramTopic, TelegramTopicCloseRequest, TelegramTopicCreateRequest,
-    TelegramTopicLifecycleResponse, TelegramTopicListResponse, ensure_telegram_account_active,
-    telegram_chat_id,
+    TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest, TelegramQrLoginStatus,
+    TelegramQrLoginStatusResponse, TelegramSecretVault, TelegramTopic, TelegramTopicCloseRequest,
+    TelegramTopicCreateRequest, TelegramTopicLifecycleResponse, TelegramTopicListResponse,
+    ensure_telegram_account_active, telegram_chat_id,
 };
 pub(crate) use crate::integrations::telegram::runtime::{
     TelegramChatSyncRequest, TelegramChatSyncResponse, TelegramHistorySyncRequest,
@@ -35,6 +35,7 @@ pub(crate) use crate::integrations::telegram::runtime::{
     TelegramMediaSendType, TelegramRuntimeRestartRequest, TelegramRuntimeStartRequest,
     TelegramRuntimeStatus, TelegramRuntimeStopRequest,
 };
+pub(crate) use crate::integrations::telegram::tdjson::tdlib_database_directory;
 pub(crate) mod qr_login {
     pub(crate) use crate::integrations::telegram::tdjson::{
         cancel_qr_login, start_qr_login, submit_qr_login_password,

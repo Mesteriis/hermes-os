@@ -12,11 +12,8 @@ import {
 import type { CommunicationSubSurfaceId } from '../../domains/communications/queries/communicationChannelSurface'
 import { useCommunicationsWorkspaceSurface } from '../../domains/communications/queries/useCommunicationsWorkspaceSurface'
 import { fetchProviderAccounts } from '../../domains/settings/api/settings'
-import type { ProviderAccount } from '../../domains/settings/types/settings'
 import { fetchTelegramAccounts } from '../../integrations/telegram/api/telegram'
-import type { TelegramAccount } from '../../integrations/telegram/types/telegram'
 import { fetchWhatsappAccounts } from '../../integrations/whatsapp/api/whatsapp'
-import type { WhatsappAccountSummary } from '../../integrations/whatsapp/types/whatsapp'
 import { ApiClient } from '../../platform/api/ApiClient'
 import { fetchMailSyncStatus } from '../../shared/mailSync/syncApi'
 import {
@@ -35,6 +32,20 @@ import {
   type AppLayoutNavbarHealthCheck,
   type BackendReadinessResponse,
 } from './appLayoutHealthChecks'
+import {
+  communicationAccountRouteNodes,
+  communicationRouteIconTone,
+  emptyAccountNavigation,
+  isCommunicationChannelRouteId,
+  isCommunicationsNavbarSurfaceId,
+  isVisibleMailAccount,
+  isVisibleTelegramAccount,
+  isVisibleWhatsappAccount,
+  type AppLayoutNavbarAccountNavigationState,
+  type AppLayoutNavbarCommunicationSurfaceId,
+  type AppLayoutNavbarNavigationIconTone,
+  type AppLayoutNavbarRouteNode,
+} from './appLayoutAccountNavigation'
 
 export type {
   AppLayoutNavbarHealthCheck,
@@ -53,36 +64,11 @@ export type AppLayoutNavbarNavigationItem = {
   iconTone?: AppLayoutNavbarNavigationIconTone
 }
 
-type AppLayoutNavbarNavigationIconTone =
-  | 'accounts'
-  | 'calendar'
-  | 'channels'
-  | 'communication'
-  | 'dashboard'
-  | 'documents'
-  | 'knowledge'
-  | 'mail'
-  | 'review'
-  | 'settings'
-  | 'tasks'
-  | 'telegram'
-  | 'whatsapp'
-
 export type AppLayoutNavbarNavigationLevel = {
   id: string
   label: string
   currentItem: AppLayoutNavbarNavigationItem
   items: readonly AppLayoutNavbarNavigationItem[]
-}
-
-type AppLayoutNavbarRouteNode = AppLayoutNavbarNavigationItem & {
-  children?: readonly AppLayoutNavbarRouteNode[]
-}
-
-type AppLayoutNavbarAccountNavigationState = {
-  mail: readonly ProviderAccount[]
-  telegram: readonly TelegramAccount[]
-  whatsapp: readonly WhatsappAccountSummary[]
 }
 
 export type AppLayoutNavbarToggleOption = {
@@ -216,11 +202,15 @@ export function useAppLayoutNavbarSurface() {
   ])
 
   const selectedRoutePath = computed(() => {
-    return (
-      findRoutePath(routeTree.value, selectedRouteId.value) ?? [
-        routeTree.value[0],
-      ]
-    )
+    const path = findRoutePath(routeTree.value, selectedRouteId.value)
+    if (!path) return [routeTree.value[0]]
+
+    const leaf = path.at(-1)
+    if (leaf && isCommunicationChannelRouteId(leaf.id) && leaf.children?.length) {
+      return [...path, leaf.children[0]]
+    }
+
+    return path
   })
 
   const selectedTopLevelRouteId = computed(
@@ -314,6 +304,13 @@ export function useAppLayoutNavbarSurface() {
     selectedRouteId.value = defaultRouteLeaf(selectedNode).id
   }
 
+  function selectReturnRouteFromSearch(search: string): void {
+    const routeId = oauthReturnRouteId(search)
+    if (!routeId) return
+
+    selectNavigationItem(routeId)
+  }
+
   function selectNotification(notificationId: string): void {
     const notification = notificationsStore?.notificationItems.find(
       (item) => item.id === notificationId
@@ -356,6 +353,7 @@ export function useAppLayoutNavbarSurface() {
     notificationToastVisibleMs,
     clearNotifications,
     dismissNotification,
+    selectReturnRouteFromSearch,
     selectNavigationItem,
     selectNotification,
     selectThemeFamily,
@@ -464,20 +462,6 @@ export function useAppLayoutNavbarSurface() {
   }
 }
 
-const communicationsNavbarSurfaceIds = [
-  'mail',
-  'telegram',
-  'whatsapp',
-] as const satisfies readonly CommunicationSubSurfaceId[]
-
-function isCommunicationsNavbarSurfaceId(
-  channelId: CommunicationSubSurfaceId
-): channelId is (typeof communicationsNavbarSurfaceIds)[number] {
-  return (
-    communicationsNavbarSurfaceIds as readonly CommunicationSubSurfaceId[]
-  ).includes(channelId)
-}
-
 function communicationRouteIcon(channelId: CommunicationSubSurfaceId): string {
   if (channelId === 'mail') return 'tabler:mail'
   if (channelId === 'telegram') return 'tabler:brand-telegram'
@@ -487,7 +471,7 @@ function communicationRouteIcon(channelId: CommunicationSubSurfaceId): string {
 }
 
 function communicationRouteNode(
-  channelId: (typeof communicationsNavbarSurfaceIds)[number],
+  channelId: AppLayoutNavbarCommunicationSurfaceId,
   label: string,
   accountNavigation: AppLayoutNavbarAccountNavigationState
 ): AppLayoutNavbarRouteNode {
@@ -500,102 +484,6 @@ function communicationRouteNode(
     iconTone: communicationRouteIconTone(channelId),
     ...(children.length > 0 ? { children } : {}),
   }
-}
-
-function communicationAccountRouteNodes(
-  channelId: (typeof communicationsNavbarSurfaceIds)[number],
-  accountNavigation: AppLayoutNavbarAccountNavigationState
-): AppLayoutNavbarRouteNode[] {
-  if (channelId === 'mail') {
-    return accountNavigation.mail.map((account) => ({
-      id: accountRouteId(channelId, account.account_id),
-      label: mailAccountLabel(account),
-      icon: 'tabler:mail-opened',
-      iconTone: 'mail',
-    }))
-  }
-
-  if (channelId === 'telegram') {
-    return accountNavigation.telegram.map((account) => ({
-      id: accountRouteId(channelId, account.account_id),
-      label: providerRuntimeAccountLabel(account),
-      icon: 'tabler:user-circle',
-      iconTone: 'telegram',
-    }))
-  }
-
-  return accountNavigation.whatsapp.map((account) => ({
-    id: accountRouteId(channelId, account.account_id),
-    label: providerRuntimeAccountLabel(account),
-    icon: 'tabler:user-circle',
-    iconTone: 'whatsapp',
-  }))
-}
-
-function accountRouteId(
-  channelId: (typeof communicationsNavbarSurfaceIds)[number],
-  accountId: string
-): string {
-  return `communications-${channelId}-account:${encodeURIComponent(accountId)}`
-}
-
-function isVisibleMailAccount(account: ProviderAccount): boolean {
-  return account.is_active !== false
-}
-
-function isVisibleTelegramAccount(account: TelegramAccount): boolean {
-  return account.lifecycle_state !== 'removed'
-}
-
-function isVisibleWhatsappAccount(account: WhatsappAccountSummary): boolean {
-  return account.lifecycle_state !== 'removed'
-}
-
-function mailAccountLabel(account: ProviderAccount): string {
-  return firstNonEmpty([
-    account.label,
-    account.email,
-    account.display_name,
-    account.external_account_id,
-    account.account_id,
-  ])
-}
-
-function providerRuntimeAccountLabel(
-  account: TelegramAccount | WhatsappAccountSummary
-): string {
-  return firstNonEmpty([
-    account.display_name,
-    account.external_account_id,
-    account.account_id,
-  ])
-}
-
-function firstNonEmpty(values: readonly (string | null | undefined)[]): string {
-  for (const value of values) {
-    const label = value?.trim()
-    if (label) return label
-  }
-
-  return 'Account'
-}
-
-function emptyAccountNavigation(): AppLayoutNavbarAccountNavigationState {
-  return {
-    mail: [],
-    telegram: [],
-    whatsapp: [],
-  }
-}
-
-function communicationRouteIconTone(
-  channelId: CommunicationSubSurfaceId
-): AppLayoutNavbarNavigationIconTone {
-  if (channelId === 'mail') return 'mail'
-  if (channelId === 'telegram') return 'telegram'
-  if (channelId === 'whatsapp') return 'whatsapp'
-
-  return 'channels'
 }
 
 function navigationLevelLabel(index: number): string {
@@ -632,6 +520,11 @@ function notificationTimeLabel(time: Date): string {
   return formatDistanceToNow(time, { addSuffix: true })
 }
 
+function oauthReturnRouteId(search: string): string | null {
+  const params = new URLSearchParams(search)
+  return params.get('hermes_route')?.trim() || null
+}
+
 function toNavigationItem(
   node: AppLayoutNavbarRouteNode
 ): AppLayoutNavbarNavigationItem {
@@ -651,18 +544,12 @@ function defaultRouteLeaf(
       node.children?.find((child) => child.id === 'communications-mail') ?? node
     )
   }
-  if (isCommunicationChannelRouteId(node.id)) return node
+  if (isCommunicationChannelRouteId(node.id)) return node.children?.[0] ?? node
 
   const firstChild = node.children?.[0]
   if (!firstChild) return node
 
   return defaultRouteLeaf(firstChild)
-}
-
-function isCommunicationChannelRouteId(routeId: string): boolean {
-  return communicationsNavbarSurfaceIds.some(
-    (channelId) => routeId === `communications-${channelId}`
-  )
 }
 
 function findRoutePath(

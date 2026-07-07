@@ -6,6 +6,9 @@ use crate::app::signal_hub_support::{
     provider_account_or_not_found, sync_provider_account_signal_connection,
 };
 
+const DEFAULT_GMAIL_OAUTH_APP_RETURN_URL: &str =
+    "http://127.0.0.1:5174/?hermes_route=settings&hermes_oauth=gmail_connected";
+
 pub(crate) async fn get_gmail_oauth_callback(
     State(state): State<AppState>,
     Query(query): Query<GmailOAuthCallbackQuery>,
@@ -63,7 +66,6 @@ pub(crate) async fn get_gmail_oauth_callback(
         }
     };
     let app_return_url = pending.request.app_return_url.clone();
-    let mail_account_id = pending.account_id.clone();
     let display_name = pending.request.display_name.clone();
     let external_account_id = gmail_pending_external_account_id(&pending);
     match service.complete_gmail_oauth(pending, &code).await {
@@ -90,7 +92,7 @@ pub(crate) async fn get_gmail_oauth_callback(
             }
             if let Err(error) = upsert_google_workspace_calendar_account(
                 &state,
-                &mail_account_id,
+                &result.account_id,
                 &display_name,
                 &external_account_id,
                 &result.secret_ref,
@@ -141,17 +143,13 @@ fn gmail_oauth_callback_success_page(
     app_return_url: Option<&str>,
 ) -> (StatusCode, Html<String>) {
     let account_id = html_escape(account_id);
-    let return_url_json = app_return_url
-        .map(|url| serde_json::to_string(url).expect("serialize OAuth return URL"))
-        .unwrap_or_else(|| "null".to_owned());
-    let return_link = app_return_url
-        .map(|url| {
-            format!(
-                r#"<p><a href="{}">Return to Hermes Hub settings</a></p>"#,
-                html_escape(url)
-            )
-        })
-        .unwrap_or_default();
+    let app_return_url = app_return_url.unwrap_or(DEFAULT_GMAIL_OAUTH_APP_RETURN_URL);
+    let return_url_json =
+        serde_json::to_string(app_return_url).expect("serialize OAuth return URL");
+    let return_link = format!(
+        r#"<p><a href="{}">Return to Hermes Hub settings</a></p>"#,
+        html_escape(app_return_url)
+    );
     (
         StatusCode::OK,
         Html(format!(
@@ -180,10 +178,8 @@ fn gmail_oauth_callback_success_page(
     }}, 250);
     window.setTimeout(function () {{
       var returnUrl = {return_url_json};
-      if (returnUrl) {{
-        window.location.replace(returnUrl);
-      }}
-    }}, 1400);
+      window.location.replace(returnUrl);
+    }}, 650);
   </script>
 </head>
 <body>

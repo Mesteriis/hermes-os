@@ -28,12 +28,16 @@ pub(crate) fn spawn_host_vault_manifest_reconciliation(state: &AppState) {
             Ok(summary)
                 if summary.restored_accounts > 0
                     || summary.restored_calendar_accounts > 0
-                    || summary.restored_ai_providers > 0 =>
+                    || summary.restored_ai_providers > 0
+                    || summary.skipped_duplicate_provider_secrets > 0
+                    || summary.purged_duplicate_provider_secrets > 0 =>
             {
                 tracing::info!(
                     restored_accounts = summary.restored_accounts,
                     restored_calendar_accounts = summary.restored_calendar_accounts,
                     restored_ai_providers = summary.restored_ai_providers,
+                    skipped_duplicate_provider_secrets = summary.skipped_duplicate_provider_secrets,
+                    purged_duplicate_provider_secrets = summary.purged_duplicate_provider_secrets,
                     "host vault manifest reconciliation completed"
                 );
             }

@@ -50,6 +50,7 @@ type SelectedMessageActionResult = string | SelectedMessageActionOutcome
 
 type SelectedMessageActionOptions = {
   getMessageDetail: () => CommunicationMessageDetailItem | null
+  getDefaultMailAccountId?: () => string
   refetchMessageDetail: RefetchHandler
 }
 
@@ -79,19 +80,23 @@ export function useSelectedMessageActions(
   const extractMessageTasksMutation = useExtractMessageTasksMutation()
   const extractMessageNotesMutation = useExtractMessageNotesMutation()
 
+  function fallbackMailAccountId(): string {
+    return deps.getDefaultMailAccountId?.() || store.selectedMailAccountId || ''
+  }
+
   function handleReply() {
     if (!store.selectedCommunication) return
-    store.openCompose(replyComposeForm(store.selectedCommunication, store.selectedMailAccountId, `draft-${Date.now()}`))
+    store.openCompose(replyComposeForm(store.selectedCommunication, fallbackMailAccountId(), `draft-${Date.now()}`))
   }
 
   function handleReplyAll() {
     if (!store.selectedCommunication) return
-    store.openCompose(replyAllComposeForm(store.selectedCommunication, store.selectedMailAccountId, `draft-${Date.now()}`))
+    store.openCompose(replyAllComposeForm(store.selectedCommunication, fallbackMailAccountId(), `draft-${Date.now()}`))
   }
 
   function handleForwardMessage() {
     if (!store.selectedCommunication) return
-    store.openCompose(forwardComposeForm(store.selectedCommunication, store.selectedMailAccountId, `draft-${Date.now()}`))
+    store.openCompose(forwardComposeForm(store.selectedCommunication, fallbackMailAccountId(), `draft-${Date.now()}`))
   }
 
   async function handleRedirectMessage(recipientsText: string) {
@@ -114,7 +119,7 @@ export function useSelectedMessageActions(
     store.openCompose({
       mode: 'reply',
       draftId: `draft-${Date.now()}`,
-      accountId: detail.account_id || store.selectedMailAccountId || '',
+      accountId: detail.account_id || fallbackMailAccountId(),
       toText: detail.sender,
       ccText: '',
       bccText: '',
@@ -129,7 +134,7 @@ export function useSelectedMessageActions(
   }
 
   function handleNewMessage() {
-    store.openCompose(newComposeForm(store.selectedMailAccountId || '', `draft-${Date.now()}`))
+    store.openCompose(newComposeForm(fallbackMailAccountId(), `draft-${Date.now()}`))
   }
 
   async function runSelectedMessageAction(

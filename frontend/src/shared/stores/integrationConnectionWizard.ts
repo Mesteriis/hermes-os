@@ -6,6 +6,7 @@ import type { TelegramQrLoginStartRequest } from '../integrationSetup/api/telegr
 
 export type ConnectionProviderId =
   | 'mail'
+  | 'icloud'
   | 'telegram'
   | 'whatsapp'
   | 'zoom'
@@ -40,13 +41,19 @@ export interface GuidedConnectionResult {
   qrLink?: string
 }
 
+export interface RecoverableConnectionAccount {
+  account_id: string
+  external_account_id?: string | null
+}
+
 const GMAIL_CONNECTION_ACCOUNT_PREFIX = 'mail-gmail'
+const DEFAULT_GMAIL_APP_RETURN_ORIGIN = 'http://127.0.0.1:5174'
 
 const providerCatalog: ConnectionProviderOption[] = [
   {
     id: 'mail',
     label: 'Gmail',
-    icon: 'tabler:mail',
+    icon: 'simple-icons:gmail',
     summary: 'Secure Google sign-in launches in the browser and returns to Hermes automatically.',
     flowLabel: 'Browser callback',
     entryLabel: 'Managed OAuth',
@@ -54,6 +61,18 @@ const providerCatalog: ConnectionProviderOption[] = [
     guidance: 'Mailbox passwords and client secrets never appear in Settings.',
     ctaLabel: 'Start Google sign-in',
     flowPattern: 'browser_callback',
+  },
+  {
+    id: 'icloud',
+    label: 'iCloud Mail',
+    icon: 'simple-icons:icloud',
+    summary: 'iCloud Mail connects with the owner-entered email and app password.',
+    flowLabel: 'Mail setup',
+    entryLabel: 'iCloud Mail',
+    status: 'Ready now',
+    guidance: 'Use the iCloud mailbox address and app password.',
+    ctaLabel: 'Connect iCloud',
+    flowPattern: 'managed_surface',
   },
   {
     id: 'whatsapp',
@@ -121,6 +140,8 @@ export function connectionProviderIdFromAccountKind(
   providerKind: string | null | undefined
 ): ConnectionProviderId {
   switch (providerKind) {
+    case 'icloud':
+      return 'icloud'
     case 'telegram_user':
     case 'telegram_bot':
       return 'telegram'
@@ -214,28 +235,33 @@ export const useIntegrationConnectionWizardStore = defineStore(
       statusMessage.value = ''
       guidedResult.value = {
         kind: 'error',
-        title: 'Connection failed',
+        title: 'Ошибка подключения',
         message,
       }
     }
 
-    function buildGmailOAuthRequest(): GmailOAuthStartRequest {
-      const accountId = makeMailAccountId()
+    function buildGmailOAuthRequest(
+      displayName = 'Gmail',
+      account: RecoverableConnectionAccount | null = null
+    ): GmailOAuthStartRequest {
+      const accountId = account?.account_id.trim() || makeMailAccountId()
+      const externalAccountId = account?.external_account_id?.trim() || accountId
 
       return {
         account_id: accountId,
-        display_name: 'Gmail',
-        external_account_id: accountId,
+        display_name: displayName.trim() || externalAccountId || 'Gmail',
+        external_account_id: externalAccountId,
         redirect_uri: gmailOAuthRedirectUri(),
+        app_return_url: gmailOAuthAppReturnUrl(),
       }
     }
 
-    function buildTelegramQrLoginRequest(): TelegramQrLoginStartRequest {
+    function buildTelegramQrLoginRequest(displayName = 'Telegram'): TelegramQrLoginStartRequest {
       const accountId = makeTelegramAccountId()
 
       return {
         account_id: accountId,
-        display_name: 'Telegram',
+        display_name: displayName.trim() || 'Telegram',
         external_account_id: accountId,
         transcription_enabled: true,
       }
@@ -243,6 +269,17 @@ export const useIntegrationConnectionWizardStore = defineStore(
 
     function gmailOAuthRedirectUri(): string {
       return `${frontendConfig.apiBaseUrl.replace(/\/+$/, '')}/api/v1/integrations/mail/accounts/gmail/oauth/callback`
+    }
+
+    function gmailOAuthAppReturnUrl(): string {
+      const origin =
+        typeof window === 'undefined'
+          ? DEFAULT_GMAIL_APP_RETURN_ORIGIN
+          : window.location.origin
+      const returnUrl = new URL('/', origin)
+      returnUrl.searchParams.set('hermes_route', 'settings')
+      returnUrl.searchParams.set('hermes_oauth', 'gmail_connected')
+      return returnUrl.toString()
     }
 
     function makeMailAccountId(): string {

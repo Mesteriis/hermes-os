@@ -15,6 +15,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_v1_email_accounts),
         )
         .route(
+            "/api/v1/communications/email/accounts",
+            get(get_v1_email_accounts),
+        )
+        .route(
             "/api/v1/integrations/mail/accounts/import",
             post(post_v1_email_account_import),
         )

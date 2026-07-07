@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Condvar, Mutex};
 
-use crate::integrations::telegram::client::TelegramQrLoginStatusResponse;
+use crate::integrations::telegram::client::{
+    TelegramQrLoginStartRequest, TelegramQrLoginStatusResponse,
+};
 
 pub(crate) type PendingQrLoginMap = Arc<Mutex<HashMap<String, TelegramQrLoginSession>>>;
 pub(in crate::integrations::telegram::tdjson) type QrLoginWorkerCompletion =
@@ -10,6 +12,7 @@ pub(in crate::integrations::telegram::tdjson) type QrLoginWorkerCompletion =
 
 #[derive(Clone)]
 pub(crate) struct TelegramQrLoginSession {
+    pub(crate) request: TelegramQrLoginStartRequest,
     pub(crate) response: TelegramQrLoginStatusResponse,
     pub(in crate::integrations::telegram::tdjson) command_tx: Sender<TelegramQrLoginCommand>,
     pub(in crate::integrations::telegram::tdjson) worker_completion: QrLoginWorkerCompletion,

@@ -1,5 +1,3 @@
-use serde_json::json;
-
 use crate::platform::communications::NewProviderAccountSecretBinding;
 use crate::platform::secrets::{NewSecretReference, SecretReferenceStore};
 
@@ -25,11 +23,7 @@ impl TelegramStore {
                     vault.store_kind(),
                     format!("{} for {}", credential.label, credential.account_id),
                 )
-                .metadata(json!({
-                    "provider": credential.provider_kind.as_str(),
-                    "account_id": credential.account_id,
-                    "secret_purpose": credential.secret_purpose.as_str()
-                })),
+                .metadata(credential.metadata.clone()),
             )
             .await?;
         vault.store_secret(&secret_ref, &credential).await?;

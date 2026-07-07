@@ -93,6 +93,7 @@ export {
   fetchExpiringMailCertificates,
   fetchMailCertificates
 } from './certificateApi'
+export { fetchEmailAccounts } from './accountApi'
 export {
   fetchMessageAiState,
   updateMessageAiState

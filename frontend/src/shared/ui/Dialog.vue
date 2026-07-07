@@ -8,11 +8,13 @@ const props = withDefaults(defineProps<{
   title?: string
   description?: string
   closeLabel?: string
+  showClose?: boolean
   class?: string
   contentClass?: string
 }>(), {
   open: false,
-  closeLabel: 'Close dialog'
+  closeLabel: 'Close dialog',
+  showClose: true
 })
 
 const emit = defineEmits<{
@@ -41,7 +43,7 @@ const contentClasses = computed(() => ['hermes-dialog-content', props.contentCla
           <div v-if="$slots.footer" class="hermes-dialog-footer">
             <slot name="footer" />
           </div>
-          <DialogClose class="hermes-dialog-close" as-child>
+          <DialogClose v-if="showClose" class="hermes-dialog-close" as-child>
             <button class="hermes-dialog-close-btn" type="button" :aria-label="closeLabel">
               <Icon icon="tabler:x" size="1.125rem" />
             </button>

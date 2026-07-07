@@ -1,0 +1,198 @@
+.wizard-story-canvas {
+	min-height: 760px;
+	align-items: start;
+}
+
+.wizard-story-launcher {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 16px;
+	width: min(920px, 100%);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-xl);
+	background: var(--h-color-surface-overlay);
+	box-shadow: var(--h-shadow-sm);
+	padding: var(--h-space-4);
+}
+
+.wizard-story-launcher__copy {
+	min-width: 0;
+	text-align: left;
+}
+
+.wizard-story-launcher__copy h2,
+.wizard-story-launcher__copy p {
+	margin: 0;
+}
+
+.wizard-story-launcher__copy h2 {
+	color: var(--h-color-text-strong);
+	font-size: 18px;
+	font-weight: 780;
+	line-height: 1.2;
+}
+
+.wizard-story-launcher__copy p {
+	margin-top: 4px;
+	color: var(--h-color-text-muted);
+	font-size: 13px;
+	line-height: 1.35;
+}
+
+.wizard-story-launcher__eyebrow {
+	margin: 0 0 4px;
+	color: var(--h-color-text-soft);
+	font-size: 11px;
+	font-weight: 780;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.wizard-story-provider-mark {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 48px;
+	height: 48px;
+	border-radius: 14px;
+	color: var(--wizard-story-brand);
+	background: color-mix(in srgb, var(--wizard-story-brand) 12%, var(--h-color-surface-overlay));
+}
+
+.wizard-story-provider-mark--gmail {
+	--wizard-story-brand: #ea4335;
+}
+
+.wizard-story-provider-mark--icloud {
+	--wizard-story-brand: #3b82f6;
+}
+
+.wizard-story-provider-mark--telegram {
+	--wizard-story-brand: #229ed9;
+}
+
+.wizard-story-provider-mark--whatsapp {
+	--wizard-story-brand: #25d366;
+}
+
+.wizard-story-provider-mark--ai {
+	--wizard-story-brand: #7c3aed;
+}
+
+.wizard-story-step {
+	display: grid;
+	gap: 14px;
+	width: min(680px, 100%);
+	text-align: left;
+}
+
+.wizard-story-field-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+
+.wizard-story-field:first-child,
+.wizard-story-field:last-child {
+	grid-column: 1 / -1;
+}
+
+.wizard-story-field {
+	display: grid;
+	gap: 7px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface-overlay);
+	padding: var(--h-space-3);
+}
+
+.wizard-story-field span {
+	color: var(--h-color-text-muted);
+	font-size: 12px;
+	font-weight: 720;
+}
+
+.wizard-story-check-list,
+.wizard-story-capability-list {
+	display: grid;
+	gap: 10px;
+}
+
+.wizard-story-capability-list {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.wizard-story-check,
+.wizard-story-capability {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 12px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface-overlay);
+	padding: var(--h-space-3);
+}
+
+.wizard-story-capability {
+	grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.wizard-story-check--ready {
+	color: var(--h-color-success);
+}
+
+.wizard-story-check--pending {
+	color: var(--h-color-warning);
+}
+
+.wizard-story-check--blocked {
+	color: var(--h-color-danger);
+}
+
+.wizard-story-check strong,
+.wizard-story-check small,
+.wizard-story-capability strong,
+.wizard-story-capability small {
+	display: block;
+}
+
+.wizard-story-check strong,
+.wizard-story-capability strong {
+	color: var(--h-color-text-strong);
+	font-size: 13px;
+	font-weight: 760;
+	line-height: 1.25;
+}
+
+.wizard-story-check small,
+.wizard-story-capability small {
+	margin-top: 3px;
+	color: var(--h-color-text-muted);
+	font-size: 12px;
+	line-height: 1.35;
+}
+
+.wizard-story-capability-list .wizard-story-capability {
+	align-items: start;
+	min-height: 88px;
+}
+
+@media (max-width: 760px) {
+	.wizard-story-launcher {
+		grid-template-columns: auto minmax(0, 1fr);
+	}
+
+	.wizard-story-launcher .hermes-btn {
+		grid-column: 1 / -1;
+	}
+
+	.wizard-story-field-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.wizard-story-capability-list {
+		grid-template-columns: 1fr;
+	}
+}

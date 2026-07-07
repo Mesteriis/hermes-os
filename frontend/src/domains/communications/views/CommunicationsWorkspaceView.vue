@@ -19,6 +19,7 @@ const surface = useCommunicationsWorkspaceViewSurface(() => props.selectedRouteI
 			:has-more-items="surface.pageSurface.hasVisibleNextPage.value"
 			:inspector="surface.mailInspector.value"
 			:compose-error="surface.pageSurface.store.composeSendError"
+			:compose-account-options="surface.pageSurface.mailComposeAccountOptions.value"
 			:compose-form="surface.pageSurface.store.composeForm"
 			:compose-open="surface.pageSurface.store.isComposeOpen"
 			:compose-status="surface.pageSurface.store.composeStatusMessage"
@@ -37,6 +38,7 @@ const surface = useCommunicationsWorkspaceViewSurface(() => props.selectedRouteI
 			@send-compose="surface.pageSurface.handleSendCompose"
 			@update-search-query="surface.pageSurface.handleSearchQueryUpdate"
 			@update-compose="surface.pageSurface.store.updateComposeForm"
+			@visible-items-change="surface.handleVisibleMailItemIdsChange"
 		/>
 
 		<MessengerWorkspace

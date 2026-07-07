@@ -89,6 +89,16 @@ export function mailListItemsForView(
   return items.filter((item) => mailListItemBelongsToView(item, viewId))
 }
 
+export function mailListItemIds(
+  items: readonly MailListItemModel[]
+): string[] {
+  const ids: string[] = []
+  for (const item of items) {
+    ids.push(item.id)
+  }
+  return ids
+}
+
 export function isMailListViewId(value: string): value is MailListViewId {
   return mailListViewIdSet.has(value)
 }

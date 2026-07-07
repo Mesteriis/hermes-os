@@ -17,6 +17,16 @@ pub struct ProviderAccount {
     pub updated_at: DateTime<Utc>,
 }
 
+impl ProviderAccount {
+    pub fn is_deleted(&self) -> bool {
+        self.config
+            .get("auth_state")
+            .and_then(Value::as_str)
+            .is_some_and(|state| state == "deleted")
+            || self.config.get("deleted_at").is_some()
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ProviderAccountUsage {
     pub raw_record_count: i64,

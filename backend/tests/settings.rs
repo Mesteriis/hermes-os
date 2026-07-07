@@ -439,7 +439,7 @@ async fn application_settings_api_updates_existing_setting_against_postgres() {
         item["category"] != json!("ai")
             && item["setting_key"]
                 .as_str()
-                .map_or(true, |key| !key.starts_with("ai."))
+                .is_none_or(|key| !key.starts_with("ai."))
     }));
     assert!(items.iter().any(|item| {
         item["setting_key"] == json!("ui.theme") && item["value"] == json!("dark")

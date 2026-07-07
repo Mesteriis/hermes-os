@@ -36,7 +36,22 @@ impl EmailAccountSetupService {
                     field: "refresh_token",
                 })?;
         let expires_at = expires_at(token.expires_in);
-        let secret_ref = oauth_secret_ref(&pending.account_id);
+        let provider_account_store = self.provider_account_store()?;
+        let account_id = provider_account_store
+            .list()
+            .await
+            .map_err(|error| EmailAccountSetupError::ProviderAccountStore(error.to_string()))?
+            .into_iter()
+            .find(|account| {
+                account.provider_kind == EmailProviderKind::Gmail
+                    && account
+                        .external_account_id
+                        .trim()
+                        .eq_ignore_ascii_case(external_account_id.trim())
+            })
+            .map(|account| account.account_id)
+            .unwrap_or_else(|| pending.account_id.clone());
+        let secret_ref = oauth_secret_ref(&account_id);
         let token_bundle = GmailOAuthTokenBundle {
             token_url: pending.request.token_endpoint.clone(),
             client_id: pending.request.client_id.clone(),
@@ -48,11 +63,10 @@ impl EmailAccountSetupService {
             scope: token.scope,
         };
         let secret_store = self.secret_store()?;
-        let provider_account_store = self.provider_account_store()?;
         let secret_binding_store = self.provider_secret_binding_store()?;
         let account_config = gmail_account_config(&pending);
         let secret_metadata =
-            gmail_secret_metadata(&pending, &external_account_id, &account_config);
+            gmail_secret_metadata(&pending, &account_id, &external_account_id, &account_config);
         secret_store
             .upsert_secret_reference(
                 &NewSecretReference::new(
@@ -73,7 +87,7 @@ impl EmailAccountSetupService {
                 &serde_json::to_string(&token_bundle)?,
                 SecretWriteContext {
                     entry_kind: "provider_credential",
-                    account_id: &pending.account_id,
+                    account_id: &account_id,
                     purpose: ProviderAccountSecretPurpose::OauthToken.as_str(),
                     secret_kind: SecretKind::OauthToken,
                     label: "Gmail OAuth credential",
@@ -84,7 +98,7 @@ impl EmailAccountSetupService {
         provider_account_store
             .upsert(
                 &NewProviderAccount::new(
-                    &pending.account_id,
+                    &account_id,
                     EmailProviderKind::Gmail,
                     &pending.request.display_name,
                     &external_account_id,
@@ -95,7 +109,7 @@ impl EmailAccountSetupService {
             .map_err(|error| EmailAccountSetupError::ProviderAccountStore(error.to_string()))?;
         secret_binding_store
             .bind(&NewProviderAccountSecretBinding::new(
-                &pending.account_id,
+                &account_id,
                 ProviderAccountSecretPurpose::OauthToken,
                 &secret_ref,
             ))
@@ -103,7 +117,7 @@ impl EmailAccountSetupService {
             .map_err(|error| EmailAccountSetupError::ProviderAccountStore(error.to_string()))?;
 
         Ok(EmailAccountSetupResult {
-            account_id: pending.account_id,
+            account_id,
             secret_ref,
             secret_kind: SecretKind::OauthToken,
             store_kind: self.vault.store_kind(),

@@ -20,11 +20,30 @@ const notificationToasts = navbar.notificationToasts
 const selectedRouteId = navbar.selectedRouteId
 const selectedTopLevelRouteId = navbar.selectedTopLevelRouteId
 
+consumeReturnNavigationFromLocation()
+
 watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mode]) => {
 	document.documentElement.setAttribute('data-ui-theme', theme)
 	document.documentElement.setAttribute('data-ui-theme-family', family)
 	document.documentElement.setAttribute('data-ui-theme-mode', mode)
 }, { immediate: true })
+
+function consumeReturnNavigationFromLocation(): void {
+	if (typeof window === 'undefined') return
+
+	navbar.selectReturnRouteFromSearch(window.location.search)
+
+	const params = new URLSearchParams(window.location.search)
+	const hadReturnRoute = params.has('hermes_route')
+	const hadOauthStatus = params.has('hermes_oauth')
+	params.delete('hermes_route')
+	params.delete('hermes_oauth')
+	if (!hadReturnRoute && !hadOauthStatus) return
+
+	const nextSearch = params.toString()
+	const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`
+	window.history.replaceState(window.history.state, '', nextUrl)
+}
 </script>
 
 <template>

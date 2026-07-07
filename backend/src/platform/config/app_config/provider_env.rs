@@ -10,8 +10,19 @@ use super::AppConfig;
 
 pub(super) fn apply_bundled_google_oauth_client(config: &mut AppConfig) -> Result<(), ConfigError> {
     if let Some(raw_json) = option_env!("HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_JSON") {
-        config.google_oauth_client =
-            Some(GoogleOAuthClientConfig::from_client_secret_json(raw_json)?);
+        config.google_oauth_client = Some(GoogleOAuthClientConfig::from_client_secret_json(
+            non_empty(raw_json, ConfigError::EmptyGoogleOAuthClientConfigJson)?,
+        )?);
+    }
+    if let Some(client_id) = option_env!("HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_ID") {
+        config.google_oauth_client_id =
+            Some(non_empty(client_id, ConfigError::EmptyGoogleOAuthClientId)?.to_owned());
+    }
+    if let Some(client_secret) = option_env!("HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_SECRET") {
+        config.google_oauth_client_secret = Some(ResolvedSecret::new(non_empty(
+            client_secret,
+            ConfigError::EmptyGoogleOAuthClientSecret,
+        )?)?);
     }
 
     Ok(())

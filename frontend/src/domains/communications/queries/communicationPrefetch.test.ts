@@ -185,7 +185,7 @@ describe('communication prefetch query helpers', () => {
       'email',
       'quarterly',
       'active',
-      250,
+      100,
       null
     )
     expect(client.getQueryData(communicationListQueryKey('account-1', 'needs_action', 'email', 'quarterly', 'active'))).toEqual(response)

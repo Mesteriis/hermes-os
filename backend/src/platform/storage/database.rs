@@ -6,6 +6,8 @@ use crate::platform::settings::{ApplicationSettingsStore, SettingsError};
 use crate::platform::storage::errors::StorageError;
 use crate::platform::storage::models::{DatabaseReadiness, MigrationReadiness};
 
+const DEFAULT_DATABASE_MAX_CONNECTIONS: u32 = 32;
+
 #[derive(Clone)]
 pub struct Database {
     pool: Option<PgPool>,
@@ -19,7 +21,7 @@ impl Database {
         };
 
         let pool = PgPoolOptions::new()
-            .max_connections(5)
+            .max_connections(DEFAULT_DATABASE_MAX_CONNECTIONS)
             .connect(database_url)
             .await?;
         run_migrations(&pool).await?;

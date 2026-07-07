@@ -24,6 +24,7 @@ impl TelegramStore {
         }
 
         let runtime = live_runtime(request);
+        let account_config = live_account_config(request, runtime);
         let stored_account = self
             .provider_account_store()
             .upsert(
@@ -33,13 +34,13 @@ impl TelegramStore {
                     &request.display_name,
                     &request.external_account_id,
                 )
-                .config(live_account_config(request, runtime)),
+                .config(account_config.clone()),
             )
             .await
             .map_err(|error| TelegramError::ProviderAccountStore(error.to_string()))?;
 
         let credential_bindings = self
-            .store_live_account_credentials(secret_store, vault, request)
+            .store_live_account_credentials(secret_store, vault, request, &account_config)
             .await?;
 
         Ok(TelegramAccountSetupResponse {

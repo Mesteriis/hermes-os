@@ -16,7 +16,7 @@ pub(crate) async fn get_v1_email_accounts(
         .list()
         .await?
         .into_iter()
-        .filter(|account| account.provider_kind.is_email())
+        .filter(|account| account.provider_kind.is_email() && !account.is_deleted())
         .map(email_account_view)
         .collect();
 
@@ -194,20 +194,124 @@ pub(crate) async fn delete_v1_email_account(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool);
+    let store =
+        crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool.clone());
     let usage = store.usage(&account.account_id).await?;
-    if usage.has_retained_evidence() {
-        return Err(ApiError::EmailAccountDeleteConflict);
+    if account_has_host_vault_secret_refs(&pool, &account.account_id).await? {
+        require_unlocked_host_vault(&state)?;
     }
 
-    let deleted = store.delete_metadata(&account.account_id).await?;
+    let deleted = if usage.has_retained_evidence() {
+        store.delete_access_metadata(&account.account_id).await?
+    } else {
+        store.delete_metadata(&account.account_id).await?
+    };
     remove_provider_account_signal_connection(&state, &account).await?;
+    let (vault_deleted_secret_refs, retained_secret_refs) =
+        delete_unbound_host_vault_secrets(&state, &pool, &deleted.unbound_secret_refs).await?;
 
     Ok(Json(EmailAccountDeleteResponse {
         account_id: account.account_id,
         deleted: deleted.account.is_some(),
         unbound_secret_refs: deleted.unbound_secret_refs,
+        vault_deleted_secret_refs,
+        retained_secret_refs,
     }))
+}
+
+async fn account_has_host_vault_secret_refs(
+    pool: &sqlx::postgres::PgPool,
+    account_id: &str,
+) -> Result<bool, CommunicationIngestionError> {
+    let count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)
+        FROM communication_provider_account_secret_refs refs
+        JOIN secret_references secrets ON secrets.secret_ref = refs.secret_ref
+        WHERE refs.account_id = $1
+          AND secrets.store_kind = 'host_vault'
+        "#,
+    )
+    .bind(account_id.trim())
+    .fetch_one(pool)
+    .await?;
+
+    Ok(count > 0)
+}
+
+async fn delete_unbound_host_vault_secrets(
+    state: &AppState,
+    pool: &sqlx::postgres::PgPool,
+    secret_refs: &[String],
+) -> Result<(Vec<String>, Vec<String>), ApiError> {
+    let secret_store = SecretReferenceStore::new(pool.clone());
+    let mut vault_deleted_secret_refs = Vec::new();
+    let mut retained_secret_refs = Vec::new();
+
+    for secret_ref in secret_refs {
+        if provider_secret_ref_still_bound(pool, secret_ref).await? {
+            retained_secret_refs.push(secret_ref.clone());
+            continue;
+        }
+
+        let Some(reference) = secret_store
+            .secret_reference(secret_ref)
+            .await
+            .map_err(|error| {
+                tracing::error!(
+                    error = %error,
+                    secret_ref = %secret_ref,
+                    "failed to load provider account secret reference metadata"
+                );
+                ApiError::FailedPrecondition(
+                    "failed to load provider account secret reference metadata".to_owned(),
+                )
+            })?
+        else {
+            retained_secret_refs.push(secret_ref.clone());
+            continue;
+        };
+        if reference.store_kind != SecretStoreKind::HostVault {
+            retained_secret_refs.push(secret_ref.clone());
+            continue;
+        }
+
+        state.vault.delete_secret(secret_ref)?;
+        secret_store
+            .delete_secret_reference(secret_ref)
+            .await
+            .map_err(|error| {
+                tracing::error!(
+                    error = %error,
+                    secret_ref = %secret_ref,
+                    "failed to delete provider account secret reference metadata"
+                );
+                ApiError::FailedPrecondition(
+                    "failed to delete provider account secret reference metadata".to_owned(),
+                )
+            })?;
+        vault_deleted_secret_refs.push(secret_ref.clone());
+    }
+
+    Ok((vault_deleted_secret_refs, retained_secret_refs))
+}
+
+async fn provider_secret_ref_still_bound(
+    pool: &sqlx::postgres::PgPool,
+    secret_ref: &str,
+) -> Result<bool, CommunicationIngestionError> {
+    let count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)
+        FROM communication_provider_account_secret_refs
+        WHERE secret_ref = $1
+        "#,
+    )
+    .bind(secret_ref.trim())
+    .fetch_one(pool)
+    .await?;
+
+    Ok(count > 0)
 }
 
 pub(crate) async fn get_v1_email_account_sync_status(

@@ -4,6 +4,7 @@ import {
   useConversationsQuery,
   useDeleteDraftMutation,
   useDraftsQuery,
+  useEmailAccountsQuery,
   useMailboxHealthQuery,
   useMailListQuery,
   useMessageQuery,
@@ -29,9 +30,12 @@ import {
 } from '../stores/communications'
 import type {
   BulkMessageActionRequest,
+  CommunicationAccountOption,
+  ComposeFormModel,
   CommunicationSectionId,
   CommunicationDraft,
-  CommunicationThreadSummary
+  CommunicationThreadSummary,
+  EmailAccountView
 } from '../types/communications'
 import type { CommunicationSavedSearch } from '../types/savedSearches'
 import { useMailSyncActions } from '../views/useMailSyncActions'
@@ -76,6 +80,9 @@ export function useCommunicationsPageSurface() {
     data: syncStatusesData,
     refetch: refetchSyncStatuses
   } = useSyncStatusesQuery()
+  const {
+    data: emailAccountsData
+  } = useEmailAccountsQuery()
   const {
     data: draftsData,
     refetch: refetchDrafts,
@@ -125,6 +132,29 @@ export function useCommunicationsPageSurface() {
   const mailList = computed(() => mailListData.value ?? [])
   const messageDetail = computed(() => messageDetailData.value ?? null)
   const stateCounts = computed(() => stateCountsData.value ?? [])
+  const mailComposeAccountOptions = computed<CommunicationAccountOption[]>(() =>
+    (emailAccountsData.value?.items ?? [])
+      .map(emailAccountToComposeOption)
+  )
+  const sendCapableMailComposeAccountOptions = computed(() =>
+    mailComposeAccountOptions.value.filter((option) => option.can_send)
+  )
+  const defaultMailAccountId = computed(() => {
+    const options = sendCapableMailComposeAccountOptions.value
+    if (options.length === 0) return ''
+
+    const selectedAccountId = store.selectedMailAccountId.trim()
+    if (selectedAccountId && options.some((option) => option.account_id === selectedAccountId)) {
+      return selectedAccountId
+    }
+
+    const messageAccountId = messageDetail.value?.message.account_id?.trim() ?? store.selectedCommunication?.account_id?.trim() ?? ''
+    if (messageAccountId && options.some((option) => option.account_id === messageAccountId)) {
+      return messageAccountId
+    }
+
+    return options[0]?.account_id ?? ''
+  })
   const drafts = computed(() => draftsData.value ?? [])
   const hasMoreDrafts = computed(() => Boolean(hasDraftNextPage.value))
   const isLoadingMoreDrafts = computed(() => isFetchingDraftNextPage.value)
@@ -296,6 +326,7 @@ export function useCommunicationsPageSurface() {
     handleTogglePin,
     handleTranslate
   } = useSelectedMessageActions(store, {
+    getDefaultMailAccountId: () => defaultMailAccountId.value,
     getMessageDetail: () => messageDetail.value?.message ?? null,
     refetchMessageDetail
   })
@@ -363,11 +394,21 @@ export function useCommunicationsPageSurface() {
   }
 
   async function handleSaveComposeDraft() {
-    store.setIsSendingMessage(true)
     store.setComposeStatusMessage('')
     store.setComposeSendError('')
+    const form = composeFormWithAvailableMailAccount()
+    const accountError = composeAccountValidationError(form)
+    if (accountError) {
+      store.setComposeSendError(accountError)
+      notifications.error('Draft save failed', accountError)
+      return
+    }
+    if (form.accountId !== store.composeForm.accountId) {
+      store.updateComposeForm({ accountId: form.accountId })
+    }
+    store.setIsSendingMessage(true)
     try {
-      const draft = await saveDraftMutation.mutateAsync(buildComposeDraftPayload(store.composeForm))
+      const draft = await saveDraftMutation.mutateAsync(buildComposeDraftPayload(form))
       store.openCompose(draftToComposeForm(draft))
       store.setComposeStatusMessage('Draft saved')
       notifications.success('Draft saved')
@@ -382,11 +423,21 @@ export function useCommunicationsPageSurface() {
   }
 
   async function handleSendCompose() {
-    store.setIsSendingMessage(true)
     store.setComposeStatusMessage('')
     store.setComposeSendError('')
+    const form = composeFormWithAvailableMailAccount()
+    const accountError = composeAccountValidationError(form)
+    if (accountError) {
+      store.setComposeSendError(accountError)
+      notifications.error('Send failed', accountError)
+      return
+    }
+    if (form.accountId !== store.composeForm.accountId) {
+      store.updateComposeForm({ accountId: form.accountId })
+    }
+    store.setIsSendingMessage(true)
     try {
-      const result = await sendMailMutation.mutateAsync(composeFormToSendRequest(store.composeForm))
+      const result = await sendMailMutation.mutateAsync(composeFormToSendRequest(form))
       store.closeCompose()
       const status = result.status === 'sent' ? `Sent via ${result.transport}` : `Message ${result.status}`
       store.setMailActionStatus(status)
@@ -399,6 +450,29 @@ export function useCommunicationsPageSurface() {
     } finally {
       store.setIsSendingMessage(false)
     }
+  }
+
+  function composeFormWithAvailableMailAccount(): ComposeFormModel {
+    const form = store.composeForm
+    const accountId = form.accountId.trim()
+    const sendAccountOptions = sendCapableMailComposeAccountOptions.value
+    const currentAccountCanSend = Boolean(accountId) && (
+      sendAccountOptions.some((option) => option.account_id === accountId)
+    )
+    if (currentAccountCanSend) return form
+
+    const fallbackAccountId = defaultMailAccountId.value
+    return fallbackAccountId ? { ...form, accountId: fallbackAccountId } : form
+  }
+
+  function composeAccountValidationError(form: ComposeFormModel): string {
+    const accountId = form.accountId.trim()
+    if (!accountId) return 'Select a sender account'
+    const selectedAccount = mailComposeAccountOptions.value.find((option) => option.account_id === accountId)
+    if (selectedAccount && !selectedAccount.can_send) {
+      return selectedAccount.send_unavailable_reason
+    }
+    return ''
   }
 
   const {
@@ -501,6 +575,7 @@ export function useCommunicationsPageSurface() {
     isThreadReplySending,
     isUndoingOutbox,
     loadMoreOutboxItems,
+    mailComposeAccountOptions,
     mailboxHealth,
     messageDetail,
     notifyMailActionError,
@@ -521,4 +596,30 @@ export function useCommunicationsPageSurface() {
     visibleMailList,
     visibleMailListErrorMessage
   }
+}
+
+function emailAccountToComposeOption(view: EmailAccountView): CommunicationAccountOption {
+  const account = view.account
+  const label = firstNonEmpty(
+    account.label,
+    account.display_name,
+    account.email,
+    account.external_account_id,
+    account.account_id
+  )
+  return {
+    account_id: account.account_id,
+    label,
+    provider_kind: account.provider_kind,
+    email: firstNonEmpty(account.email, account.external_account_id),
+    can_send: view.capabilities.send,
+    send_unavailable_reason: view.capabilities.send ? '' : 'Sending is not configured for this account'
+  }
+}
+
+function firstNonEmpty(...values: Array<string | null | undefined>): string {
+  const value = values.find(
+    (candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0
+  )
+  return value?.trim() ?? ''
 }

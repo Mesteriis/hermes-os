@@ -6,6 +6,7 @@ import type {
 } from '../api/accountSetup'
 
 const providerKinds = ['gmail', 'icloud', 'imap'] as const
+const DEFAULT_GMAIL_APP_RETURN_ORIGIN = 'http://127.0.0.1:5174'
 
 export type MailAccountSetupProvider = typeof providerKinds[number]
 export type AccountSetupFormValues = z.infer<typeof accountSetupFormSchema>
@@ -129,10 +130,22 @@ export function accountSetupFormToGmailOAuthStart(
 		account_id: accountSetupDefaultAccountId('gmail', parsed.email),
 		display_name: parsed.display_name || parsed.email,
 		external_account_id: parsed.email,
-		redirect_uri: gmailOAuthRedirectUri(apiBaseUrl)
+		redirect_uri: gmailOAuthRedirectUri(apiBaseUrl),
+		app_return_url: gmailOAuthAppReturnUrl()
 	}
 }
 
 function gmailOAuthRedirectUri(apiBaseUrl: string): string {
 	return `${apiBaseUrl.replace(/\/+$/, '')}/api/v1/integrations/mail/accounts/gmail/oauth/callback`
+}
+
+function gmailOAuthAppReturnUrl(): string {
+	const origin =
+		typeof window === 'undefined'
+			? DEFAULT_GMAIL_APP_RETURN_ORIGIN
+			: window.location.origin
+	const returnUrl = new URL('/', origin)
+	returnUrl.searchParams.set('hermes_route', 'settings')
+	returnUrl.searchParams.set('hermes_oauth', 'gmail_connected')
+	return returnUrl.toString()
 }

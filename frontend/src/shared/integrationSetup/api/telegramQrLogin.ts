@@ -23,6 +23,10 @@ export interface TelegramQrLoginStatusResponse {
   message?: string | null
 }
 
+export interface TelegramQrLoginPasswordRequest {
+  password: string
+}
+
 export async function startTelegramQrLogin(
   request: TelegramQrLoginStartRequest
 ): Promise<TelegramQrLoginStatusResponse> {
@@ -39,5 +43,16 @@ export async function fetchTelegramQrLoginStatus(
   return ApiClient.instance.get<TelegramQrLoginStatusResponse>(
     `/api/v1/integrations/telegram/login/qr/${encodeURIComponent(setupId)}`,
     'Telegram QR login status request failed'
+  )
+}
+
+export async function submitTelegramQrLoginPassword(
+  setupId: string,
+  request: TelegramQrLoginPasswordRequest
+): Promise<TelegramQrLoginStatusResponse> {
+  return ApiClient.instance.post<TelegramQrLoginStatusResponse>(
+    `/api/v1/integrations/telegram/login/qr/${encodeURIComponent(setupId)}/password`,
+    request,
+    'Telegram QR login password submission failed'
   )
 }

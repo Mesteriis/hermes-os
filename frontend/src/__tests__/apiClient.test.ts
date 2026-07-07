@@ -84,6 +84,33 @@ describe('ApiClient', () => {
 		vi.unstubAllGlobals()
 	})
 
+	it('throws Error instances with parsed backend JSON error details', async () => {
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 400,
+			text: () => Promise.resolve(JSON.stringify({
+				error: 'invalid_telegram_request',
+				message: 'api_id must not be empty'
+			}))
+		})
+		vi.stubGlobal('fetch', mockFetch)
+
+		ApiClient.init('http://localhost:3000', 'secret')
+
+		await expect(
+			ApiClient.instance.post('/api/v1/integrations/telegram/login/qr/start', {})
+		).rejects.toMatchObject({
+			code: 'invalid_telegram_request',
+			message: 'api_id must not be empty',
+			status: 400
+		})
+		await expect(
+			ApiClient.instance.post('/api/v1/integrations/telegram/login/qr/start', {})
+		).rejects.toBeInstanceOf(Error)
+
+		vi.unstubAllGlobals()
+	})
+
 	it('sends JSON body with POST requests', async () => {
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
