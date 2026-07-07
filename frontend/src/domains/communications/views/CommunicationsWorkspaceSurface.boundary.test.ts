@@ -214,6 +214,10 @@ describe('Communications workspace surface', () => {
       new URL('../components/mail/mailListViews.ts', import.meta.url),
       'utf8'
     )
+    const mailComposeOptionsSource = readFileSync(
+      new URL('../components/mail/mailComposeOptions.ts', import.meta.url),
+      'utf8'
+    )
     const communicationDomainElementsCss = readFileSync(
       new URL('../components/communicationDomainElements.css', import.meta.url),
       'utf8'
@@ -295,6 +299,17 @@ describe('Communications workspace surface', () => {
     expect(mailWorkspaceSource).toContain('mail-compose-panel__field--from')
     expect(mailWorkspaceSource).toContain('composeSendAccountOptions')
     expect(mailWorkspaceSource).toContain(':disabled="!account.can_send"')
+    expect(mailWorkspaceSource).toContain('activeComposePanel')
+    expect(mailWorkspaceSource).toContain('toggleComposeEdgePanel')
+    expect(mailWorkspaceSource).toContain('closeComposeEdgePanels')
+    expect(mailWorkspaceSource).toContain('compose-edge-panel--left')
+    expect(mailWorkspaceSource).toContain('compose-edge-panel--right')
+    expect(mailWorkspaceSource).toContain('mail-compose-stage')
+    expect(mailWorkspaceSource).toContain('mail-compose-card')
+    expect(mailComposeOptionsSource).toContain('ComposeEdgePanelId')
+    expect(mailComposeOptionsSource).toContain('composeAiPanelActions')
+    expect(mailComposeOptionsSource).toContain('composeContextPanelSections')
+    expect(mailWorkspaceSource).not.toContain('{{ account.account_id }}')
     expect(communicationDomainElementsCss).toContain('.mail-compose-dialog.hermes-dialog-content')
     expect(pageSurfaceSource).toContain('handleLoadMoreMessages')
     expect(pageSurfaceSource).toContain('useEmailAccountsQuery')

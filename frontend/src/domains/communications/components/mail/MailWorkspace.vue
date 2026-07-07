@@ -14,7 +14,13 @@ import MailInspector from './MailInspector.vue'
 import MailList from './MailList.vue'
 import MailMessage from './MailMessage.vue'
 import type { MailListItemModel } from './mailElements'
-import { composeAccountOptionSignature, sendCapableComposeAccounts } from './mailComposeOptions'
+import {
+  composeAccountOptionSignature,
+  composeAiPanelActions,
+  composeContextPanelSections,
+  sendCapableComposeAccounts,
+  type ComposeEdgePanelId
+} from './mailComposeOptions'
 import type { MailInspectorModel } from './mailInspector'
 
 const props = defineProps<{
@@ -51,11 +57,14 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const isInspectorVisible = ref(true)
+const activeComposePanel = ref<ComposeEdgePanelId | null>(null)
 const activeMessage = computed(() => props.conversation.messages[props.conversation.messages.length - 1])
 const composeAccountOptions = computed(() => props.composeAccountOptions ?? [])
 const composeSendAccountOptions = computed(() =>
   sendCapableComposeAccounts(composeAccountOptions.value)
 )
+const composeAiActions = computed(() => composeAiPanelActions())
+const composeContextSections = computed(() => composeContextPanelSections(composeAccountOptions.value))
 const composeAccountOptionKey = computed(() =>
   composeAccountOptionSignature(composeAccountOptions.value)
 )
@@ -99,7 +108,26 @@ function handleToggleInspector(): void {
 }
 
 function handleComposeDialogOpenChange(open: boolean): void {
-  if (!open) emit('close-compose')
+  if (!open) {
+    closeComposeEdgePanels()
+    emit('close-compose')
+  }
+}
+
+function toggleComposeEdgePanel(panelId: ComposeEdgePanelId): void {
+  activeComposePanel.value = activeComposePanel.value === panelId ? null : panelId
+}
+
+function closeComposeEdgePanels(): void {
+  activeComposePanel.value = null
+}
+
+function handleComposeEscape(): void {
+  if (activeComposePanel.value) {
+    closeComposeEdgePanels()
+    return
+  }
+  emit('close-compose')
 }
 
 function inputValue(event: Event): string {
@@ -162,82 +190,152 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 			content-class="mail-compose-dialog"
 			@update:open="handleComposeDialogOpenChange"
 		>
-			<section v-if="composeForm" class="mail-compose-panel" :aria-label="composeTitle">
-				<div
-					v-if="composeStatus || composeError"
-					class="mail-compose-panel__status-row"
+			<section
+				v-if="composeForm"
+				class="mail-compose-stage"
+				:class="[
+					activeComposePanel === 'ai' && 'mail-compose-stage--ai-open',
+					activeComposePanel === 'context' && 'mail-compose-stage--context-open'
+				]"
+				:data-active-panel="activeComposePanel ?? 'none'"
+				@keydown.esc.stop="handleComposeEscape"
+			>
+				<aside
+					class="compose-edge-panel compose-edge-panel--left"
+					:class="{ 'is-open': activeComposePanel === 'ai' }"
+					:aria-label="t('AI writing tools')"
 				>
-					<span v-if="composeStatus" class="mail-compose-panel__status">{{ composeStatus }}</span>
-					<span v-if="composeError" class="mail-compose-panel__status mail-compose-panel__status--error">
-						{{ composeError }}
-					</span>
-				</div>
-				<div class="mail-compose-panel__fields">
-					<label class="mail-compose-panel__field mail-compose-panel__field--from">
-						<span>{{ t('From') }}</span>
-						<select
-							:value="composeForm.accountId"
-							:disabled="isSending || composeAccountOptions.length === 0"
-							@change="emit('update-compose', { accountId: inputValue($event) })"
+					<button
+						type="button"
+						class="compose-edge-panel__handle"
+						:aria-expanded="activeComposePanel === 'ai'"
+						:title="t('AI writing tools')"
+						@click="toggleComposeEdgePanel('ai')"
+					>
+						<Icon icon="tabler:sparkles" size="1rem" />
+						<span>{{ t('AI') }}</span>
+					</button>
+					<div class="compose-edge-panel__surface">
+						<button
+							v-for="action in composeAiActions"
+							:key="action.id"
+							type="button"
+							class="compose-edge-panel__action"
+							:title="t(action.description)"
+							:disabled="action.disabled"
 						>
-							<option value="" disabled>{{ t('Select sender account') }}</option>
-							<option
-								v-for="account in composeAccountOptions"
-								:key="account.account_id"
-								:value="account.account_id"
-								:disabled="!account.can_send"
-							>
-								{{ composeAccountOptionLabel(account) }}
-							</option>
-						</select>
-					</label>
-					<label class="mail-compose-panel__field">
-						<span>{{ t('To') }}</span>
-						<input
-							:value="composeForm.toText"
-							type="text"
-							autocomplete="email"
-							@input="emit('update-compose', { toText: inputValue($event) })"
-						/>
-					</label>
-					<label class="mail-compose-panel__field">
-						<span>{{ t('Cc') }}</span>
-						<input
-							:value="composeForm.ccText"
-							type="text"
-							autocomplete="email"
-							@input="emit('update-compose', { ccText: inputValue($event) })"
-						/>
-					</label>
-					<label class="mail-compose-panel__field">
-						<span>{{ t('Bcc') }}</span>
-						<input
-							:value="composeForm.bccText"
-							type="text"
-							autocomplete="email"
-							@input="emit('update-compose', { bccText: inputValue($event) })"
-						/>
-					</label>
-					<label class="mail-compose-panel__field mail-compose-panel__field--subject">
-						<span>{{ t('Subject') }}</span>
-						<input
-							:value="composeForm.subject"
-							type="text"
-							@input="emit('update-compose', { subject: inputValue($event) })"
-						/>
-					</label>
-					<div class="mail-compose-panel__body-field">
-						<RichTextEditor
-							class="mail-compose-panel__editor"
-							:model-value="composeEditorHtml"
-							:label="t('Body')"
-							:placeholder="t('Write email')"
-							:toolbar-label="t('Mail formatting')"
-							:disabled="isSending"
-							@update:model-value="handleComposeBodyHtmlChange"
-						/>
+							<Icon :icon="action.icon" size="1rem" />
+							<span>{{ t(action.label) }}</span>
+							<small>{{ t(action.description) }}</small>
+						</button>
 					</div>
-				</div>
+				</aside>
+				<section class="mail-compose-panel mail-compose-card" :aria-label="composeTitle">
+					<div
+						v-if="composeStatus || composeError"
+						class="mail-compose-panel__status-row"
+					>
+						<span v-if="composeStatus" class="mail-compose-panel__status">{{ composeStatus }}</span>
+						<span v-if="composeError" class="mail-compose-panel__status mail-compose-panel__status--error">
+							{{ composeError }}
+						</span>
+					</div>
+					<div class="mail-compose-panel__fields">
+						<label class="mail-compose-panel__field mail-compose-panel__field--from">
+							<span>{{ t('From') }}</span>
+							<select
+								:value="composeForm.accountId"
+								:disabled="isSending || composeAccountOptions.length === 0"
+								@change="emit('update-compose', { accountId: inputValue($event) })"
+							>
+								<option value="" disabled>{{ t('Select sender account') }}</option>
+								<option
+									v-for="account in composeAccountOptions"
+									:key="account.account_id"
+									:value="account.account_id"
+									:disabled="!account.can_send"
+								>
+									{{ composeAccountOptionLabel(account) }}
+								</option>
+							</select>
+						</label>
+						<label class="mail-compose-panel__field">
+							<span>{{ t('To') }}</span>
+							<input
+								:value="composeForm.toText"
+								type="text"
+								autocomplete="email"
+								@input="emit('update-compose', { toText: inputValue($event) })"
+							/>
+						</label>
+						<label class="mail-compose-panel__field">
+							<span>{{ t('Cc') }}</span>
+							<input
+								:value="composeForm.ccText"
+								type="text"
+								autocomplete="email"
+								@input="emit('update-compose', { ccText: inputValue($event) })"
+							/>
+						</label>
+						<label class="mail-compose-panel__field">
+							<span>{{ t('Bcc') }}</span>
+							<input
+								:value="composeForm.bccText"
+								type="text"
+								autocomplete="email"
+								@input="emit('update-compose', { bccText: inputValue($event) })"
+							/>
+						</label>
+						<label class="mail-compose-panel__field mail-compose-panel__field--subject">
+							<span>{{ t('Subject') }}</span>
+							<input
+								:value="composeForm.subject"
+								type="text"
+								@input="emit('update-compose', { subject: inputValue($event) })"
+							/>
+						</label>
+						<div class="mail-compose-panel__body-field">
+							<RichTextEditor
+								class="mail-compose-panel__editor"
+								:model-value="composeEditorHtml"
+								:label="t('Body')"
+								:placeholder="t('Write email')"
+								:toolbar-label="t('Mail formatting')"
+								:disabled="isSending"
+								@update:model-value="handleComposeBodyHtmlChange"
+							/>
+						</div>
+					</div>
+				</section>
+				<aside
+					class="compose-edge-panel compose-edge-panel--right"
+					:class="{ 'is-open': activeComposePanel === 'context' }"
+					:aria-label="t('Compose context tools')"
+				>
+					<button
+						type="button"
+						class="compose-edge-panel__handle"
+						:aria-expanded="activeComposePanel === 'context'"
+						:title="t('Compose context tools')"
+						@click="toggleComposeEdgePanel('context')"
+					>
+						<Icon icon="tabler:layout-sidebar-right" size="1rem" />
+						<span>{{ t('Context') }}</span>
+					</button>
+					<div class="compose-edge-panel__surface">
+						<section
+							v-for="section in composeContextSections"
+							:key="section.id"
+							class="compose-edge-panel__section"
+						>
+							<h3>
+								<Icon :icon="section.icon" size="1rem" />
+								<span>{{ t(section.title) }}</span>
+							</h3>
+							<p v-for="item in section.items" :key="item">{{ item }}</p>
+						</section>
+					</div>
+				</aside>
 			</section>
 			<template #footer>
 				<template v-if="composeForm">

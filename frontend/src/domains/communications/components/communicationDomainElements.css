@@ -305,8 +305,9 @@
 
 .mail-compose-dialog.hermes-dialog-content {
 	grid-template-rows: auto minmax(0, 1fr) auto;
-	width: min(960px, calc(100vw - 32px));
+	width: min(920px, calc(100vw - 96px));
 	max-height: min(840px, calc(100dvh - 32px));
+	overflow: visible;
 }
 
 .mail-compose-dialog .hermes-dialog-header {
@@ -320,6 +321,7 @@
 }
 
 .mail-compose-dialog .hermes-dialog-body {
+	overflow: visible;
 	padding: var(--h-spacing-4) var(--h-spacing-5);
 }
 
@@ -337,6 +339,192 @@
 	background: transparent;
 	box-shadow: none;
 	padding: 0;
+}
+
+.mail-compose-stage {
+	position: relative;
+	z-index: 0;
+	display: grid;
+	min-width: 0;
+	isolation: isolate;
+}
+
+.mail-compose-dialog .mail-compose-card {
+	position: relative;
+	z-index: 2;
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface-overlay);
+	box-shadow: 0 18px 44px color-mix(in srgb, var(--h-color-text-strong) 10%, transparent);
+}
+
+.compose-edge-panel {
+	position: absolute;
+	top: var(--h-spacing-2);
+	bottom: var(--h-spacing-2);
+	z-index: 1;
+	width: min(260px, 24vw);
+	pointer-events: none;
+	opacity: 0.78;
+	transition:
+		opacity var(--h-motion-default),
+		transform var(--h-motion-default);
+	will-change: transform, opacity;
+}
+
+.compose-edge-panel--left {
+	left: 0;
+	transform: translateX(calc(-100% + 38px));
+}
+
+.compose-edge-panel--right {
+	right: 0;
+	transform: translateX(calc(100% - 38px));
+}
+
+.compose-edge-panel--left.is-open {
+	transform: translateX(calc(-100% - var(--h-spacing-3)));
+}
+
+.compose-edge-panel--right.is-open {
+	transform: translateX(calc(100% + var(--h-spacing-3)));
+}
+
+.compose-edge-panel.is-open {
+	pointer-events: auto;
+	opacity: 1;
+}
+
+.compose-edge-panel__surface {
+	display: grid;
+	align-content: start;
+	gap: var(--h-spacing-2);
+	height: 100%;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background:
+		linear-gradient(180deg, color-mix(in srgb, var(--h-color-accent) 9%, transparent), transparent 44%),
+		var(--h-color-surface-overlay);
+	box-shadow: 0 18px 48px color-mix(in srgb, var(--h-color-text-strong) 12%, transparent);
+	padding: var(--h-spacing-3);
+	overflow: hidden auto;
+}
+
+.compose-edge-panel__handle {
+	position: absolute;
+	top: var(--h-spacing-4);
+	z-index: 2;
+	display: inline-flex;
+	align-items: center;
+	gap: var(--h-spacing-1);
+	min-width: var(--h-control-height-md);
+	height: var(--h-control-height-md);
+	border: 1px solid var(--h-color-border);
+	border-radius: 999px;
+	background: var(--h-color-surface-raised);
+	color: var(--h-color-text-strong);
+	box-shadow: var(--h-shadow-sm);
+	cursor: pointer;
+	pointer-events: auto;
+	padding: 0 var(--h-spacing-2);
+	transition:
+		background var(--h-motion-default),
+		border-color var(--h-motion-default),
+		color var(--h-motion-default),
+		transform var(--h-motion-default);
+}
+
+.compose-edge-panel__handle:hover,
+.compose-edge-panel__handle[aria-expanded='true'] {
+	border-color: color-mix(in srgb, var(--h-color-accent) 46%, var(--h-color-border));
+	background: color-mix(in srgb, var(--h-color-accent) 14%, var(--h-color-surface-raised));
+	color: var(--h-color-accent);
+}
+
+.compose-edge-panel__handle span {
+	overflow: hidden;
+	max-width: 0;
+	opacity: 0;
+	white-space: nowrap;
+	transition:
+		max-width var(--h-motion-default),
+		opacity var(--h-motion-default);
+}
+
+.compose-edge-panel.is-open .compose-edge-panel__handle span {
+	max-width: 96px;
+	opacity: 1;
+}
+
+.compose-edge-panel--left .compose-edge-panel__handle {
+	right: calc(-1 * var(--h-spacing-5));
+}
+
+.compose-edge-panel--right .compose-edge-panel__handle {
+	left: calc(-1 * var(--h-spacing-5));
+}
+
+.compose-edge-panel__action {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: start;
+	gap: 2px var(--h-spacing-2);
+	width: 100%;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: color-mix(in srgb, var(--h-color-surface-raised) 78%, transparent);
+	color: var(--h-color-text);
+	text-align: left;
+	cursor: pointer;
+	padding: var(--h-spacing-2);
+}
+
+.compose-edge-panel__action:hover {
+	border-color: color-mix(in srgb, var(--h-color-accent) 38%, var(--h-color-border));
+	background: color-mix(in srgb, var(--h-color-accent) 9%, var(--h-color-surface-raised));
+}
+
+.compose-edge-panel__action > svg,
+.compose-edge-panel__action > .iconify {
+	grid-row: span 2;
+	color: var(--h-color-accent);
+}
+
+.compose-edge-panel__action span,
+.compose-edge-panel__section h3 {
+	min-width: 0;
+	color: var(--h-color-text-strong);
+	font-size: var(--h-font-size-sm);
+	font-weight: 760;
+	line-height: var(--h-line-height-tight);
+}
+
+.compose-edge-panel__action small,
+.compose-edge-panel__section p {
+	margin: 0;
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	line-height: var(--h-line-height-default);
+}
+
+.compose-edge-panel__section {
+	display: grid;
+	gap: var(--h-spacing-1);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: color-mix(in srgb, var(--h-color-surface-raised) 70%, transparent);
+	padding: var(--h-spacing-2);
+}
+
+.compose-edge-panel__section h3 {
+	display: flex;
+	align-items: center;
+	gap: var(--h-spacing-1);
+	margin: 0 0 2px;
+}
+
+.compose-edge-panel__section h3 svg,
+.compose-edge-panel__section h3 .iconify {
+	color: var(--h-color-accent);
 }
 
 .mail-compose-panel__status-row {
@@ -4202,6 +4390,10 @@
 	.communication-workspace-panel--inspector {
 		grid-column: 1 / -1;
 	}
+
+	.compose-edge-panel {
+		width: min(236px, 38vw);
+	}
 }
 
 @media (max-width: 760px) {
@@ -4230,6 +4422,42 @@
 
 	.mail-compose-panel__fields {
 		grid-template-columns: 1fr;
+	}
+
+	.mail-compose-dialog.hermes-dialog-content {
+		width: min(680px, calc(100vw - 24px));
+		overflow: hidden;
+	}
+
+	.mail-compose-dialog .hermes-dialog-body {
+		overflow: auto;
+		padding-inline: var(--h-spacing-3);
+	}
+
+	.compose-edge-panel {
+		top: var(--h-spacing-1);
+		bottom: var(--h-spacing-1);
+		width: min(280px, calc(100vw - 72px));
+	}
+
+	.compose-edge-panel--left,
+	.compose-edge-panel--left.is-open {
+		left: 0;
+		transform: translateX(-10px);
+	}
+
+	.compose-edge-panel--right,
+	.compose-edge-panel--right.is-open {
+		right: 0;
+		transform: translateX(10px);
+	}
+
+	.compose-edge-panel.is-open {
+		z-index: 3;
+	}
+
+	.compose-edge-panel__surface {
+		box-shadow: var(--h-shadow-md);
 	}
 
 	.mail-search-builder__field-layout,
