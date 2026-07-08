@@ -14,9 +14,11 @@ describe('EventTracePanel boundary', () => {
 		expect(appSurfaceSource).toContain('Event tracing logic is preserved')
 
     expect(queriesSource).toContain('eventTraceQueryKeys')
+    expect(queriesSource).toContain('useEventsQuery')
     expect(queriesSource).toContain('useEventTraceByEventIdQuery')
     expect(queriesSource).toContain('useEventTraceByCorrelationIdQuery')
     expect(queriesSource).toContain('useEventChildrenQuery')
+    expect(queriesSource).toContain('fetchEvents')
     expect(queriesSource).toContain('fetchEventTraceByEventId')
     expect(queriesSource).toContain('fetchEventTraceByCorrelationId')
     expect(queriesSource).toContain('fetchEventChildren')

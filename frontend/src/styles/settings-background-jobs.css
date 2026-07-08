@@ -1,0 +1,364 @@
+.settings-background-section {
+	overflow: auto;
+}
+
+.settings-background-summary {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: var(--h-spacing-2);
+}
+
+.settings-background-summary-tile,
+.settings-background-panel {
+	min-width: 0;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface);
+	box-shadow: var(--h-shadow-sm);
+}
+
+.settings-background-summary-tile {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 4px var(--h-spacing-2);
+	padding: var(--h-spacing-3);
+}
+
+.settings-background-summary-tile > svg {
+	grid-row: span 2;
+	color: var(--h-color-text-muted);
+	font-size: 20px;
+}
+
+.settings-background-summary-tile span,
+.settings-background-panel__header span,
+.settings-background-job header span {
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	font-weight: 760;
+	text-transform: uppercase;
+}
+
+.settings-background-summary-tile strong {
+	color: var(--h-color-text-strong);
+	font-size: var(--h-font-size-xl);
+	line-height: 1;
+}
+
+.settings-background-summary-tile small {
+	grid-column: 2;
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+}
+
+.settings-background-summary-tile.tone-good > svg {
+	color: var(--h-color-success);
+}
+
+.settings-background-summary-tile.tone-warn > svg {
+	color: var(--h-color-warning);
+}
+
+.settings-background-summary-tile.tone-bad > svg {
+	color: var(--h-color-danger);
+}
+
+.settings-background-panel {
+	display: grid;
+	gap: var(--h-spacing-3);
+	padding: var(--h-spacing-3);
+}
+
+.settings-background-panel__header {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	align-items: start;
+	gap: var(--h-spacing-3);
+	min-width: 0;
+}
+
+.settings-background-panel__header--compact {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-background-panel__header div {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+}
+
+.settings-background-panel__header strong {
+	color: var(--h-color-text-strong);
+	font-size: var(--h-font-size-lg);
+	line-height: var(--h-line-height-tight);
+}
+
+.settings-background-panel__header small {
+	justify-self: start;
+	max-width: 760px;
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-sm);
+	line-height: var(--h-line-height-default);
+	text-align: left;
+}
+
+.settings-background-tabs {
+	display: flex;
+	justify-self: stretch;
+	gap: var(--h-spacing-2);
+	min-width: 0;
+	overflow-x: auto;
+	padding-bottom: 2px;
+}
+
+.settings-background-tab {
+	display: inline-flex;
+	align-items: center;
+	flex: 0 0 auto;
+	gap: 7px;
+	min-height: 36px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-bg);
+	color: var(--h-color-text-muted);
+	font: inherit;
+	font-size: var(--h-font-size-sm);
+	font-weight: 760;
+	line-height: 1;
+	padding: 0 10px;
+	cursor: pointer;
+}
+
+.settings-background-tab:hover,
+.settings-background-tab.active {
+	border-color: color-mix(in srgb, var(--h-color-accent) 45%, var(--h-color-border));
+	background: color-mix(in srgb, var(--h-color-accent) 10%, var(--h-color-surface));
+	color: var(--h-color-text-strong);
+}
+
+.settings-background-tab strong {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 22px;
+	border-radius: var(--h-radius-pill);
+	background: var(--h-color-bg-muted);
+	color: var(--h-color-text);
+	font-size: var(--h-font-size-xs);
+	line-height: 1;
+	padding: 4px 6px;
+}
+
+.settings-background-job-list {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--h-spacing-2);
+	min-width: 0;
+}
+
+.settings-background-job {
+	display: grid;
+	gap: var(--h-spacing-2);
+	min-width: 0;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-bg);
+	padding: var(--h-spacing-3);
+}
+
+.settings-background-job.tone-good {
+	border-color: color-mix(in srgb, var(--h-color-success) 28%, var(--h-color-border));
+}
+
+.settings-background-job.tone-warn {
+	border-color: color-mix(in srgb, var(--h-color-warning) 34%, var(--h-color-border));
+}
+
+.settings-background-job.tone-bad {
+	border-color: color-mix(in srgb, var(--h-color-danger) 32%, var(--h-color-border));
+}
+
+.settings-background-job header {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: var(--h-spacing-2);
+	min-width: 0;
+}
+
+.settings-background-job header div {
+	display: grid;
+	gap: 2px;
+	min-width: 0;
+}
+
+.settings-background-job header strong {
+	overflow: hidden;
+	color: var(--h-color-text-strong);
+	font-size: var(--h-font-size-base);
+	line-height: var(--h-line-height-tight);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.settings-background-job header em,
+.settings-background-state {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: fit-content;
+	border-radius: var(--h-radius-pill);
+	background: var(--h-color-bg-muted);
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	font-style: normal;
+	font-weight: 760;
+	line-height: 1;
+	padding: 5px 8px;
+	text-transform: uppercase;
+}
+
+.settings-background-job header em.tone-good,
+.settings-background-state.tone-good {
+	background: color-mix(in srgb, var(--h-color-success) 14%, var(--h-color-surface));
+	color: var(--h-color-success);
+}
+
+.settings-background-job header em.tone-warn,
+.settings-background-state.tone-warn {
+	background: color-mix(in srgb, var(--h-color-warning) 16%, var(--h-color-surface));
+	color: var(--h-color-warning);
+}
+
+.settings-background-job header em.tone-bad,
+.settings-background-state.tone-bad {
+	background: color-mix(in srgb, var(--h-color-danger) 13%, var(--h-color-surface));
+	color: var(--h-color-danger);
+}
+
+.settings-background-job p {
+	margin: 0;
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-sm);
+	line-height: var(--h-line-height-default);
+}
+
+.settings-background-job-facts {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px var(--h-spacing-2);
+	margin: 0;
+}
+
+.settings-background-job-facts div {
+	min-width: 0;
+}
+
+.settings-background-job-facts dt {
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	font-weight: 760;
+	text-transform: uppercase;
+}
+
+.settings-background-job-facts dd {
+	overflow: hidden;
+	margin: 2px 0 0;
+	color: var(--h-color-text);
+	font-size: var(--h-font-size-sm);
+	line-height: var(--h-line-height-default);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.settings-background-job footer {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	min-width: 0;
+}
+
+.settings-background-job footer code,
+.settings-background-job footer span,
+.settings-background-mail-table code {
+	border-radius: var(--h-radius-sm);
+	background: var(--h-color-bg-muted);
+	color: var(--h-color-text);
+	font-size: var(--h-font-size-xs);
+	padding: 4px 6px;
+}
+
+.settings-background-mail-table-scroll {
+	overflow: auto;
+	min-width: 0;
+}
+
+.settings-background-mail-table {
+	width: 100%;
+	min-width: 860px;
+	border-collapse: separate;
+	border-spacing: 0 7px;
+}
+
+.settings-background-mail-table th {
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	font-weight: 760;
+	text-align: left;
+	text-transform: uppercase;
+	padding: 0 var(--h-spacing-2);
+}
+
+.settings-background-mail-table td {
+	border-top: 1px solid var(--h-color-border);
+	border-bottom: 1px solid var(--h-color-border);
+	background: var(--h-color-bg);
+	color: var(--h-color-text);
+	font-size: var(--h-font-size-sm);
+	padding: var(--h-spacing-2);
+	vertical-align: top;
+}
+
+.settings-background-mail-table td:first-child {
+	border-left: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md) 0 0 var(--h-radius-md);
+}
+
+.settings-background-mail-table td:last-child {
+	border-right: 1px solid var(--h-color-border);
+	border-radius: 0 var(--h-radius-md) var(--h-radius-md) 0;
+}
+
+.settings-background-mail-table td small {
+	display: block;
+	margin-top: 4px;
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	line-height: var(--h-line-height-default);
+}
+
+@media (max-width: 1100px) {
+	.settings-background-summary,
+	.settings-background-job-list {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.settings-background-panel__header {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.settings-background-panel__header small,
+	.settings-background-tabs {
+		justify-self: stretch;
+		text-align: left;
+	}
+}
+
+@media (max-width: 720px) {
+	.settings-background-summary,
+	.settings-background-job-list,
+	.settings-background-job-facts {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}

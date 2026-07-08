@@ -7,6 +7,7 @@ pub(crate) mod decisions;
 pub(crate) mod documents;
 pub(crate) mod events;
 pub(crate) mod graph;
+pub(crate) mod maintenance;
 pub(crate) mod obligations;
 pub(crate) mod organizations;
 pub(crate) mod persons;

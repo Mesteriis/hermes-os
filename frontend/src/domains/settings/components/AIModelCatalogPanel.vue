@@ -26,6 +26,7 @@ const props = defineProps<{
 const { t } = useI18n()
 const activeModelProviderId = ref<string | null>(null)
 const modelCatalogSearch = ref('')
+const showAvailableModelsOnly = ref(true)
 
 const providerModelGroups = computed<AiProviderModelGroup[]>(() => {
   const groups: AiProviderModelGroup[] = []
@@ -59,10 +60,10 @@ const selectedModelGroupModels = computed<AiModelCatalogItem[]>(() => {
   const group = selectedModelGroup.value
   if (!group) return []
   const query = normalizedModelCatalogSearch.value
-  if (!query) return group.models
   const models: AiModelCatalogItem[] = []
   for (const model of group.models) {
-    if (modelMatchesSearch(model, group.provider, query)) models.push(model)
+    if (showAvailableModelsOnly.value && !model.is_available) continue
+    if (!query || modelMatchesSearch(model, group.provider, query)) models.push(model)
   }
   return models
 })
@@ -77,6 +78,10 @@ function providerIconTone(providerKind: string, providerKey?: string): string {
 
 function eventChecked(event: Event): boolean {
   return event.target instanceof HTMLInputElement ? event.target.checked : false
+}
+
+function updateAvailableModelsFilter(event: Event): void {
+  showAvailableModelsOnly.value = eventChecked(event)
 }
 
 function syncModels(provider: AiProviderAccount) {
@@ -138,14 +143,26 @@ function selectModelProvider(providerId: string): void {
               :placeholder="t('Search models')"
             />
           </div>
+          <label
+            class="settings-ai-model-availability-filter"
+            :title="t('Show only available models')"
+          >
+            <input
+              type="checkbox"
+              :aria-label="t('Show only available models')"
+              :checked="showAvailableModelsOnly"
+              @change="updateAvailableModelsFilter"
+            >
+          </label>
           <button
             type="button"
-            class="secondary-button"
+            class="icon-button"
+            :title="t('Sync models')"
+            :aria-label="t('Sync models')"
             :disabled="surface.isBusy.value"
             @click="syncModels(selectedModelGroup.provider)"
           >
             <Icon icon="tabler:refresh" />
-            {{ t('Sync models') }}
           </button>
         </div>
       </header>
@@ -206,7 +223,7 @@ function selectModelProvider(providerId: string): void {
       <div v-else-if="selectedModelGroup.models.length" class="settings-empty-state">
         <Icon icon="tabler:search-off" />
         <strong>{{ t('No matching models') }}</strong>
-        <span>{{ t('Clear the search or choose another provider.') }}</span>
+        <span>{{ t('Clear the search, disable the availability filter or choose another provider.') }}</span>
       </div>
 
       <div v-else class="settings-empty-state">

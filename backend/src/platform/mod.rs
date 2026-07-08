@@ -7,6 +7,7 @@ pub mod config;
 pub mod events;
 pub mod formatting;
 pub mod graph;
+pub mod maintenance;
 pub mod observations;
 pub mod projections;
 pub mod realtime_conversation;

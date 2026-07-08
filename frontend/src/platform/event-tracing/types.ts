@@ -20,6 +20,12 @@ export type StoredEventEnvelope = {
   event: EventEnvelope
 }
 
+export type EventListResponse = {
+  items: StoredEventEnvelope[]
+  next_after_position: number
+  has_more: boolean
+}
+
 export type EventTraceEdge = {
   parent_event_id: string
   child_event_id: string

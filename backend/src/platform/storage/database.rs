@@ -66,6 +66,18 @@ impl Database {
         self.database_url.as_deref()
     }
 
+    pub async fn size_bytes(&self) -> Result<Option<u64>, StorageError> {
+        let Some(pool) = &self.pool else {
+            return Ok(None);
+        };
+
+        let size = sqlx::query_scalar::<_, i64>("SELECT pg_database_size(current_database())")
+            .fetch_one(pool)
+            .await?;
+
+        Ok(u64::try_from(size).ok())
+    }
+
     pub async fn readiness(&self) -> DatabaseReadiness {
         let Some(pool) = &self.pool else {
             return DatabaseReadiness::not_configured();

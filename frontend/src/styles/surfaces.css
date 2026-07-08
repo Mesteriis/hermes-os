@@ -1526,10 +1526,41 @@
 	width: 100%;
 }
 
+.settings-ai-model-availability-filter {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	width: 34px;
+	min-height: 34px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-bg);
+	color: var(--h-color-text);
+	font-size: var(--h-font-size-sm);
+	font-weight: 720;
+	line-height: 1;
+	padding: 0;
+	cursor: pointer;
+}
+
+.settings-ai-model-availability-filter input {
+	width: 16px;
+	height: 16px;
+	margin: 0;
+	accent-color: var(--h-color-accent);
+}
+
 .settings-ai-model-browser__header div {
 	display: grid;
 	gap: 3px;
 	min-width: 0;
+}
+
+.settings-ai-model-browser__header .settings-ai-model-browser__actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
 }
 
 .settings-ai-model-browser__header span {

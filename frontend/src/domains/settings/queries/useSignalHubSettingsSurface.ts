@@ -40,7 +40,14 @@ import type {
   SignalHubPolicyScope,
   SignalHubRuntimeState
 } from '../types/signalHub'
-import { sourceControlState } from '../components/signalHubSettingsPresentation'
+import {
+  buildSignalConsumerGraphRoute,
+  buildSignalGraphTabs,
+  buildSignalInventoryTabs,
+  buildSignalInventoryRow,
+  sourceControlState,
+  SIGNAL_HUB_REPLAY_PROJECTION_TARGETS
+} from '../components/signalHubSettingsPresentation'
 
 export type SignalHubTab =
   | 'sources'
@@ -50,6 +57,8 @@ export type SignalHubTab =
   | 'policies'
   | 'health'
   | 'replay'
+
+export type SignalHubSettingsView = 'graph' | 'inventory'
 
 export function useSignalHubSettingsSurface() {
   const { data: sourcesData, isLoading } = useSignalHubSourcesQuery()
@@ -81,8 +90,11 @@ export function useSignalHubSettingsSurface() {
   const updateRuntime = useUpdateSignalHubRuntimeStateMutation()
 
   const activeTab = ref<SignalHubTab>('sources')
+  const activeSignalView = ref<SignalHubSettingsView>('graph')
   const selectedSourceCode = ref<string | null>(null)
   const selectedProfileCode = ref<string | null>(null)
+  const selectedGraphSourceCode = ref('all')
+  const selectedInventorySourceCode = ref('all')
   const sourceSearch = ref('')
   const sourceCategory = ref('all')
   const policyScope = ref<SignalHubPolicyScope>('event_pattern')
@@ -125,8 +137,9 @@ export function useSignalHubSettingsSurface() {
     { id: 'replay', label: 'Replay', icon: 'tabler:player-track-next' }
   ]
 
+  const allSources = computed(() => sourcesData.value?.items ?? [])
   const sources = computed(() =>
-    (sourcesData.value?.items ?? []).filter((source) => source.category !== 'test')
+    allSources.value.filter((source) => source.category !== 'test')
   )
   const policies = computed(() => policiesData.value?.items ?? [])
   const profiles = computed(() => profilesData.value?.items ?? [])
@@ -142,6 +155,16 @@ export function useSignalHubSettingsSurface() {
           .map((runtime) => runtime.runtime_kind.trim())
           .filter((runtimeKind) => runtimeKind.length > 0)
       )
+    ).sort()
+  )
+  const replayTargetProjections = computed(() =>
+    Array.from(
+      new Set([
+        ...SIGNAL_HUB_REPLAY_PROJECTION_TARGETS,
+        ...replayRequests.value
+          .map((request) => request.target_projection?.trim() ?? '')
+          .filter((target) => target.length > 0)
+      ])
     ).sort()
   )
   const categories = computed(() => {
@@ -219,6 +242,46 @@ export function useSignalHubSettingsSurface() {
         (request) => request.status !== 'completed' && request.status !== 'failed'
       ).length
   )
+  const signalConsumerGraph = computed(() =>
+    allSources.value.map((source) =>
+      buildSignalConsumerGraphRoute(source, policies.value, runtimeStates.value, replayRequests.value)
+    )
+  )
+  const graphSourceCodes = computed(() => new Set(signalConsumerGraph.value.map((route) => route.source.code)))
+  const graphSourceTabs = computed(() => buildSignalGraphTabs(signalConsumerGraph.value))
+  const filteredSignalConsumerGraph = computed(() => {
+    const selectedSource = selectedGraphSourceCode.value
+    if (selectedSource === 'all' || !graphSourceCodes.value.has(selectedSource)) {
+      return signalConsumerGraph.value
+    }
+    return signalConsumerGraph.value.filter((route) => route.source.code === selectedSource)
+  })
+  const signalInventoryRows = computed(() =>
+    allSources.value.map((source) =>
+      buildSignalInventoryRow(
+        source,
+        policies.value,
+        connections.value,
+        runtimeStates.value,
+        healthItems.value,
+        capabilityItems.value,
+        replayRequests.value
+      )
+    )
+  )
+  const inventorySourceCodes = computed(() => new Set(signalInventoryRows.value.map((row) => row.source.code)))
+  const inventorySourceTabs = computed(() => buildSignalInventoryTabs(signalInventoryRows.value))
+  const filteredSignalInventoryRows = computed(() => {
+    const selectedSource = selectedInventorySourceCode.value
+    if (selectedSource === 'all' || !inventorySourceCodes.value.has(selectedSource)) {
+      return signalInventoryRows.value
+    }
+    return signalInventoryRows.value.filter((row) => row.source.code === selectedSource)
+  })
+  const signalViewTabs = computed(() => [
+    { id: 'graph' as const, label: 'Graph', count: signalConsumerGraph.value.length },
+    { id: 'inventory' as const, label: 'Inventory', count: signalInventoryRows.value.length }
+  ])
   const isApplyingProfile = computed(() => applyProfile.isPending.value)
   const isSavingProfile = computed(() => createProfile.isPending.value || updateProfile.isPending.value)
   const isRemovingProfile = computed(() => removeProfile.isPending.value)
@@ -262,6 +325,18 @@ export function useSignalHubSettingsSurface() {
     profileDisplayNameInput.value = profile.display_name
     profileDescriptionInput.value = profile.description
     profileDraftPolicies.value = profile.source_policies.map((policy) => ({ ...policy }))
+  }
+
+  function handleSelectGraphSource(sourceCode: string) {
+    selectedGraphSourceCode.value = sourceCode
+  }
+
+  function handleSelectInventorySource(sourceCode: string) {
+    selectedInventorySourceCode.value = sourceCode
+  }
+
+  function handleSelectSignalView(view: SignalHubSettingsView) {
+    activeSignalView.value = view
   }
 
   function addDraftProfilePolicy() {
@@ -383,6 +458,38 @@ export function useSignalHubSettingsSurface() {
     await disableSource.mutateAsync(sourceCode)
   }
 
+  async function handlePauseSourceSignals(sourceCode: string) {
+    await pauseSignals.mutateAsync({
+      scope: 'source',
+      source_code: sourceCode,
+      reason: 'settings signal inventory pause'
+    })
+  }
+
+  async function handleResumeSourceSignals(sourceCode: string) {
+    await resumeSignals.mutateAsync({
+      scope: 'source',
+      source_code: sourceCode,
+      reason: 'settings signal inventory resume'
+    })
+  }
+
+  async function handleMuteSourceSignals(sourceCode: string) {
+    await muteSignals.mutateAsync({
+      scope: 'source',
+      source_code: sourceCode,
+      reason: 'settings signal inventory mute'
+    })
+  }
+
+  async function handleUnmuteSourceSignals(sourceCode: string) {
+    await unmuteSignals.mutateAsync({
+      scope: 'source',
+      source_code: sourceCode,
+      reason: 'settings signal inventory unmute'
+    })
+  }
+
   async function handleClearPolicy(policy: {
     scope: SignalHubPolicyScope
     mode: SignalHubPolicyMode
@@ -410,6 +517,7 @@ export function useSignalHubSettingsSurface() {
     activeTab,
     activeProfile,
     activeRuntimeCount,
+    activeSignalView,
     addDraftProfilePolicy,
     applyProfile,
     capabilitiesData,
@@ -424,7 +532,10 @@ export function useSignalHubSettingsSurface() {
     createReplayRequest,
     describeSignalHubReplayRequest,
     enabledCount,
+    filteredSignalConsumerGraph,
+    filteredSignalInventoryRows,
     filteredSources,
+    graphSourceTabs,
     handleApplyProfile,
     handleClearPolicy,
     handleCreateConnection,
@@ -432,13 +543,20 @@ export function useSignalHubSettingsSurface() {
     handleCreateReplayRequest,
     handleDisableSource,
     handleEnableSource,
+    handleMuteSourceSignals,
+    handlePauseSourceSignals,
     handleRemoveConnection,
     handleRemoveProfile,
     handleRunHealthCheck,
     handleSaveProfile,
+    handleSelectGraphSource,
+    handleSelectInventorySource,
     handleSelectProfile,
+    handleSelectSignalView,
     handleSetConnectionStatus,
     handleSetRuntimeState,
+    handleResumeSourceSignals,
+    handleUnmuteSourceSignals,
     healthItems,
     isApplyingProfile,
     isCreatingConnection,
@@ -451,6 +569,7 @@ export function useSignalHubSettingsSurface() {
     isUpdatingConnection,
     isUpdatingRuntime,
     isUpdatingSignalControls,
+    inventorySourceTabs,
     policies,
     policyConnectionId,
     policyEventPattern,
@@ -484,6 +603,7 @@ export function useSignalHubSettingsSurface() {
     replaySourceCode,
     replayTargetConsumer,
     replayTargetConsumers,
+    replayTargetProjections,
     replayTargetProjection,
     replayToPosition,
     replayToTime,
@@ -493,9 +613,14 @@ export function useSignalHubSettingsSurface() {
     runtimeStates,
     selectedProfile,
     selectedProfileCode,
+    selectedGraphSourceCode,
+    selectedInventorySourceCode,
     selectedSource,
     selectedSourceCapabilities,
     selectedSourceCode,
+    signalConsumerGraph,
+    signalInventoryRows,
+    signalViewTabs,
     sourceCategory,
     sourceSearch,
     sources,

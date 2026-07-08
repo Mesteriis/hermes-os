@@ -5,6 +5,16 @@ import IntegrationConnectionWizard from '../../../shared/integrationSetup/Integr
 import Icon from '../../../shared/ui/Icon.vue'
 import { useToast } from '../../../shared/ui'
 import AISettingsPanel from '../components/AISettingsPanel.vue'
+import BackgroundJobsSettingsPanel from '../components/BackgroundJobsSettingsPanel.vue'
+import MaintenanceSettingsPanel from '../components/MaintenanceSettingsPanel.vue'
+import TraceLogsSettingsPanel from '../components/TraceLogsSettingsPanel.vue'
+import {
+  healthTone,
+  signalTargetTone,
+  sourceIcon,
+  sourceStateTone
+} from '../components/signalHubSettingsPresentation'
+import type { SignalRouteTargetKind } from '../components/signalHubSettingsPresentation'
 import { useSettingsPageSurface } from '../queries/useSettingsPageSurface'
 import type { AccountServiceRow } from '../queries/useIntegrationsSettingsSurface'
 import type { ApplicationSetting } from '../types/settings'
@@ -14,12 +24,16 @@ const toast = useToast()
 const {
   aiSettings,
   applicationSettings,
+  backgroundJobsSettings,
   integrationsSettings,
   languageSettings,
+  maintenanceSettings,
   realtimeStatus,
   settingsOverviewCards,
   settingsTreeGroups,
+  signalHubSettings,
   store,
+  traceLogsSettings,
 } = useSettingsPageSurface()
 
 const accountGroups = integrationsSettings.groups
@@ -66,6 +80,10 @@ function updateSelectedAccountLabel(event: Event) {
 
 function saveSelectedAccountLabel() {
   void integrationsSettings.handleSaveSelectedAccountLabel()
+}
+
+function signalTargetIcon(kind: SignalRouteTargetKind): string {
+  return kind === 'projection' ? 'tabler:chart-dots' : 'tabler:route'
 }
 
 </script>
@@ -401,6 +419,18 @@ function saveSelectedAccountLabel() {
           </template>
         </section>
 
+        <BackgroundJobsSettingsPanel
+          v-else-if="store.selectedSection === 'background-jobs'"
+          :surface="backgroundJobsSettings"
+        />
+
+        <TraceLogsSettingsPanel
+          v-else-if="store.selectedSection === 'logs-traces'"
+          :surface="traceLogsSettings"
+        />
+
+        <MaintenanceSettingsPanel v-else-if="store.selectedSection === 'maintenance'" :surface="maintenanceSettings" />
+
         <section
           v-else-if="store.selectedSection === 'language'"
           class="settings-section"
@@ -429,7 +459,7 @@ function saveSelectedAccountLabel() {
 
         <section
           v-else-if="store.selectedSection === 'signal-hub'"
-          class="settings-section"
+          class="settings-section settings-signal-section"
         >
           <header class="settings-section-toolbar">
             <div>
@@ -437,13 +467,218 @@ function saveSelectedAccountLabel() {
               <p>{{ t('Signal source controls stay under Settings; provider account setup stays in Accounts.') }}</p>
             </div>
           </header>
-          <div class="settings-note-panel">
-            <Icon icon="tabler:database-import" />
-            <div>
-              <strong>{{ t('Signal Hub contracts are preserved') }}</strong>
-              <p>{{ t('Profiles, source controls, runtime health and replay flows continue to live in the Settings domain surfaces.') }}</p>
-            </div>
+
+          <div v-if="signalHubSettings.isLoading.value" class="settings-empty-state">
+            <Icon icon="tabler:loader-2" />
+            <strong>{{ t('Loading Signal Hub') }}</strong>
           </div>
+
+          <template v-else>
+            <section class="settings-signal-summary" :aria-label="t('Signal Hub summary')">
+              <article class="settings-signal-summary-tile">
+                <span>{{ t('Sources') }}</span>
+                <strong>{{ signalHubSettings.signalInventoryRows.value.length }}</strong>
+              </article>
+              <article class="settings-signal-summary-tile">
+                <span>{{ t('Running') }}</span>
+                <strong>{{ signalHubSettings.enabledCount.value }}</strong>
+              </article>
+              <article class="settings-signal-summary-tile">
+                <span>{{ t('Connected') }}</span>
+                <strong>{{ signalHubSettings.connectedCount.value }}</strong>
+              </article>
+              <article class="settings-signal-summary-tile">
+                <span>{{ t('Attention') }}</span>
+                <strong>{{ signalHubSettings.unhealthyCount.value + signalHubSettings.replayPendingCount.value }}</strong>
+              </article>
+            </section>
+
+            <section
+              class="settings-signal-panel"
+              :aria-label="t(signalHubSettings.activeSignalView.value === 'graph' ? 'Signal consumer graph' : 'Signal inventory')"
+            >
+              <header class="settings-signal-panel__header">
+                <div>
+                  <span>{{ t(signalHubSettings.activeSignalView.value === 'graph' ? 'Graph' : 'Inventory') }}</span>
+                  <strong>{{ t(signalHubSettings.activeSignalView.value === 'graph' ? 'Signals and consumers' : 'All signals') }}</strong>
+                </div>
+                <small>{{ t(signalHubSettings.activeSignalView.value === 'graph' ? 'Raw and accepted signal routes from the current Signal Hub surface.' : 'Source-scoped pause, mute, disable and resume controls.') }}</small>
+                <nav class="settings-signal-view-tabs" :aria-label="t('Signal Hub views')">
+                  <button
+                    v-for="view in signalHubSettings.signalViewTabs.value"
+                    :key="view.id"
+                    type="button"
+                    class="settings-signal-view-tab"
+                    :class="{ active: signalHubSettings.activeSignalView.value === view.id }"
+                    :aria-pressed="signalHubSettings.activeSignalView.value === view.id"
+                    @click="signalHubSettings.handleSelectSignalView(view.id)"
+                  >
+                    <Icon :icon="view.id === 'graph' ? 'tabler:route' : 'tabler:table'" />
+                    <span>{{ t(view.label) }}</span>
+                    <strong>{{ view.count }}</strong>
+                  </button>
+                </nav>
+              </header>
+
+              <nav
+                v-if="signalHubSettings.activeSignalView.value === 'graph'"
+                class="settings-signal-category-tabs"
+                :aria-label="t('Signal categories')"
+              >
+                <button
+                  v-for="category in signalHubSettings.graphSourceTabs.value"
+                  :key="category.id"
+                  type="button"
+                  class="settings-signal-category-tab"
+                  :class="{ active: signalHubSettings.selectedGraphSourceCode.value === category.id }"
+                  :aria-pressed="signalHubSettings.selectedGraphSourceCode.value === category.id"
+                  @click="signalHubSettings.handleSelectGraphSource(category.id)"
+                >
+                  <span>{{ t(category.label) }}</span>
+                  <strong>{{ category.count }}</strong>
+                </button>
+              </nav>
+
+              <nav v-else class="settings-signal-category-tabs" :aria-label="t('Signal inventory categories')">
+                <button
+                  v-for="category in signalHubSettings.inventorySourceTabs.value"
+                  :key="category.id"
+                  type="button"
+                  class="settings-signal-category-tab"
+                  :class="{ active: signalHubSettings.selectedInventorySourceCode.value === category.id }"
+                  :aria-pressed="signalHubSettings.selectedInventorySourceCode.value === category.id"
+                  @click="signalHubSettings.handleSelectInventorySource(category.id)"
+                >
+                  <span>{{ t(category.label) }}</span>
+                  <strong>{{ category.count }}</strong>
+                </button>
+              </nav>
+
+              <div v-if="signalHubSettings.activeSignalView.value === 'graph'" class="settings-signal-graph">
+                <article
+                  v-for="route in signalHubSettings.filteredSignalConsumerGraph.value"
+                  :key="route.source.code"
+                  class="settings-signal-route"
+                >
+                  <div class="settings-signal-node settings-signal-node--source">
+                    <i class="settings-provider-icon" aria-hidden="true">
+                      <Icon :icon="sourceIcon(route.source)" />
+                    </i>
+                    <span>
+                      <strong>{{ route.source.display_name }}</strong>
+                      <small>{{ route.source.code }}</small>
+                    </span>
+                    <em :class="`is-${sourceStateTone(route.state)}`">{{ t(route.state) }}</em>
+                  </div>
+
+                  <div class="settings-signal-node settings-signal-node--patterns">
+                    <code>{{ route.raw_pattern }}</code>
+                    <code>{{ route.accepted_pattern }}</code>
+                  </div>
+
+                  <div class="settings-signal-node settings-signal-node--targets">
+                    <span
+                      v-for="target in route.targets"
+                      :key="`${target.kind}:${target.id}`"
+                      class="settings-signal-chip"
+                      :class="[`is-${target.kind}`, `tone-${signalTargetTone(target)}`]"
+                    >
+                      <Icon :icon="signalTargetIcon(target.kind)" />
+                      {{ target.label }}
+                    </span>
+                  </div>
+                </article>
+              </div>
+
+              <div v-else class="settings-signal-table-scroll">
+                <table class="settings-signal-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{{ t('Signal') }}</th>
+                      <th scope="col">{{ t('State') }}</th>
+                      <th scope="col">{{ t('Consumed by') }}</th>
+                      <th scope="col">{{ t('Health') }}</th>
+                      <th scope="col">{{ t('Controls') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="row in signalHubSettings.filteredSignalInventoryRows.value"
+                      :key="row.source.code"
+                    >
+                      <td>
+                        <div class="settings-signal-identity">
+                          <i class="settings-provider-icon" aria-hidden="true">
+                            <Icon :icon="sourceIcon(row.source)" />
+                          </i>
+                          <span>
+                            <strong>{{ row.source.display_name }}</strong>
+                            <small>{{ row.raw_pattern }}</small>
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <span class="settings-signal-state" :class="`is-${sourceStateTone(row.state)}`">
+                          {{ t(row.state) }}
+                        </span>
+                        <small>{{ row.active_policies.length }} {{ t('policies') }}</small>
+                      </td>
+                      <td>
+                        <div class="settings-signal-chip-list">
+                          <span
+                            v-for="target in row.targets"
+                            :key="`${target.kind}:${target.id}`"
+                            class="settings-signal-chip"
+                            :class="[`is-${target.kind}`, `tone-${signalTargetTone(target)}`]"
+                          >
+                            {{ target.label }}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <div class="settings-signal-health">
+                          <span
+                            class="settings-signal-state"
+                            :class="`is-${healthTone(row.health?.level ?? 'unknown')}`"
+                          >
+                            {{ t(row.health?.level ?? 'unknown') }}
+                          </span>
+                          <small>{{ row.health?.summary ?? t('No health history') }}</small>
+                          <small>
+                            {{ row.connection_count }} {{ t('connections') }} ·
+                            {{ row.runtime_states.length }} {{ t('runtimes') }} ·
+                            {{ row.capabilities.length }} {{ t('capabilities') }}
+                          </small>
+                        </div>
+                      </td>
+                      <td>
+                        <div class="settings-signal-controls">
+                          <button type="button" class="icon-button" :title="t('Pause')" :aria-label="`${t('Pause')} ${row.source.display_name}`" :disabled="!row.source.supports_pause || row.state === 'paused' || signalHubSettings.isUpdatingSignalControls.value" @click="signalHubSettings.handlePauseSourceSignals(row.source.code)">
+                            <Icon icon="tabler:player-pause" />
+                          </button>
+                          <button type="button" class="icon-button" :title="t('Resume')" :aria-label="`${t('Resume')} ${row.source.display_name}`" :disabled="row.state !== 'paused' || signalHubSettings.isUpdatingSignalControls.value" @click="signalHubSettings.handleResumeSourceSignals(row.source.code)">
+                            <Icon icon="tabler:player-play" />
+                          </button>
+                          <button type="button" class="icon-button" :title="t('Mute')" :aria-label="`${t('Mute')} ${row.source.display_name}`" :disabled="!row.source.supports_mute || row.state === 'muted' || signalHubSettings.isUpdatingSignalControls.value" @click="signalHubSettings.handleMuteSourceSignals(row.source.code)">
+                            <Icon icon="tabler:volume-off" />
+                          </button>
+                          <button type="button" class="icon-button" :title="t('Unmute')" :aria-label="`${t('Unmute')} ${row.source.display_name}`" :disabled="row.state !== 'muted' || signalHubSettings.isUpdatingSignalControls.value" @click="signalHubSettings.handleUnmuteSourceSignals(row.source.code)">
+                            <Icon icon="tabler:volume" />
+                          </button>
+                          <button type="button" class="icon-button danger-icon-button" :title="t('Disable')" :aria-label="`${t('Disable')} ${row.source.display_name}`" :disabled="row.state === 'disabled' || signalHubSettings.isUpdatingSignalControls.value" @click="signalHubSettings.handleDisableSource(row.source.code)">
+                            <Icon icon="tabler:circle-off" />
+                          </button>
+                          <button type="button" class="icon-button" :title="t('Enable')" :aria-label="`${t('Enable')} ${row.source.display_name}`" :disabled="(row.state !== 'disabled' && row.state !== 'off') || signalHubSettings.isUpdatingSignalControls.value" @click="signalHubSettings.handleEnableSource(row.source.code)">
+                            <Icon icon="tabler:power" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </template>
         </section>
 
         <AISettingsPanel

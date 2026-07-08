@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClient } from '../api/ApiClient'
 import {
   fetchEventChildren,
+  fetchEvents,
   fetchEventTraceByCorrelationId,
   fetchEventTraceByEventId
 } from './api'
@@ -50,6 +51,22 @@ describe('event tracing API', () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe(
       'http://127.0.0.1:8080/api/v1/events/event%3Av1%3Aparent/children?limit=1000'
+    )
+  })
+
+  it('fetches event log batches through the platform event endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ items: [], next_after_position: 0, has_more: false }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchEvents({ afterPosition: -10, limit: 5000, waitSeconds: 99 })
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'http://127.0.0.1:8080/api/v1/events?after_position=0&limit=1000&wait_seconds=30'
     )
   })
 })

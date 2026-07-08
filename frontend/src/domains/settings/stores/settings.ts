@@ -6,6 +6,9 @@ export type SettingsSection =
   | 'accounts'
   | 'language'
   | 'application'
+  | 'background-jobs'
+  | 'logs-traces'
+  | 'maintenance'
   | 'signal-hub'
   | 'ai'
 

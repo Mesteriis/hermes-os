@@ -3,8 +3,12 @@ import { useI18n } from '../../../platform/i18n'
 import { useRealtimeStatusStore } from '../../../shared/stores/realtimeStatus'
 import { useAISettingsSurface } from './useAISettingsSurface'
 import { useApplicationSettingsSurface } from './useApplicationSettingsSurface'
+import { useBackgroundJobsSettingsSurface } from './useBackgroundJobsSettingsSurface'
 import { useIntegrationsSettingsSurface } from './useIntegrationsSettingsSurface'
 import { useLanguageSettingsSurface } from './useLanguageSettingsSurface'
+import { useMaintenanceSettingsSurface } from './useMaintenanceSettingsSurface'
+import { useSignalHubSettingsSurface } from './useSignalHubSettingsSurface'
+import { useTraceLogsSettingsSurface } from './useTraceLogsSettingsSurface'
 import { useSettingsStore, type SettingsSection } from '../stores/settings'
 
 export type SettingsTreeItem = {
@@ -37,10 +41,22 @@ export function useSettingsPageSurface() {
   const aiSettings = useAISettingsSurface()
   const integrationsSettings = useIntegrationsSettingsSurface()
   const languageSettings = useLanguageSettingsSurface()
+  const maintenanceSettings = useMaintenanceSettingsSurface()
+  const signalHubSettings = useSignalHubSettingsSurface()
+  const backgroundJobsSettings = useBackgroundJobsSettingsSurface({
+    aiSettings,
+    integrationsSettings,
+    realtimeStatus,
+    signalHubSettings
+  })
+  const traceLogsSettings = useTraceLogsSettingsSurface()
 
   const applicationSettingsCount = computed(() => applicationSettings.applicationSettings.value.length)
   const integrationCount = computed(() => integrationsSettings.accounts.value.length)
   const aiProviderCount = computed(() => aiSettings.providers.value.length)
+  const signalSourceCount = computed(() => signalHubSettings.signalInventoryRows.value.length)
+  const backgroundJobCount = computed(() => backgroundJobsSettings.backgroundJobRows.value.length)
+  const traceSpanCount = computed(() => traceLogsSettings.traceEventRows.value.length)
 
   const settingsTreeGroups = computed<SettingsTreeGroup[]>(() => [
     {
@@ -59,6 +75,27 @@ export function useSettingsPageSurface() {
           description: 'Runtime flags and declared workspace preferences',
           icon: 'tabler:adjustments-horizontal',
           meta: String(applicationSettingsCount.value)
+        },
+        {
+          id: 'background-jobs',
+          label: 'Background Jobs',
+          description: 'Schedulers, workers and projection consumers',
+          icon: 'tabler:clock-cog',
+          meta: backgroundJobsSettings.isLoading.value ? t('Loading...') : String(backgroundJobCount.value)
+        },
+        {
+          id: 'logs-traces',
+          label: 'Logs & Traces',
+          description: 'Event log spans and causal trace graph',
+          icon: 'tabler:timeline-event',
+          meta: traceLogsSettings.isLoading.value ? t('Loading...') : String(traceSpanCount.value)
+        },
+        {
+          id: 'maintenance',
+          label: 'Maintenance',
+          description: 'Cleanup, backups and local storage sizes',
+          icon: 'tabler:tool',
+          meta: maintenanceSettings.isLoading.value ? t('Loading...') : maintenanceSettings.totalSizeLabel.value
         },
         {
           id: 'language',
@@ -82,7 +119,8 @@ export function useSettingsPageSurface() {
           id: 'signal-hub',
           label: 'Signal Hub',
           description: 'Observed signals, profiles and replay operations',
-          icon: 'tabler:database-import'
+          icon: 'tabler:database-import',
+          meta: signalHubSettings.isLoading.value ? t('Loading...') : String(signalSourceCount.value)
         }
       ]
     }
@@ -137,13 +175,17 @@ export function useSettingsPageSurface() {
     aiSettings,
     applicationSettings,
     applicationSettingsCount,
+    backgroundJobsSettings,
     integrationCount,
     integrationsSettings,
     languageSettings,
+    maintenanceSettings,
     realtimeStatus,
     settingsOverviewCards,
     settingsTreeGroups,
     selectedTreeItem,
+    signalHubSettings,
     store,
+    traceLogsSettings
   }
 }

@@ -4,6 +4,7 @@ mod calendar;
 mod communications;
 mod email_accounts;
 mod knowledge;
+mod maintenance;
 mod messaging;
 mod organizations;
 mod persons;
@@ -28,6 +29,7 @@ pub(super) fn protected_routes(api_secret: String) -> Router<AppState> {
     let routes = tasks::add_routes(routes);
     let routes = review::add_routes(routes);
     let routes = settings::add_routes(routes);
+    let routes = maintenance::add_routes(routes);
     let routes = signal_hub::add_routes(routes);
     let routes = ai::add_routes(routes);
     let routes = messaging::add_routes(routes);
