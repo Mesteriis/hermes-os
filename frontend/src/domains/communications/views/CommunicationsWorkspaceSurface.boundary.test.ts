@@ -218,8 +218,20 @@ describe('Communications workspace surface', () => {
       new URL('../components/mail/mailComposeOptions.ts', import.meta.url),
       'utf8'
     )
+    const selectedMessageActionsSource = readFileSync(
+      new URL('./useSelectedMessageActions.ts', import.meta.url),
+      'utf8'
+    )
     const communicationDomainElementsCss = readFileSync(
       new URL('../components/communicationDomainElements.css', import.meta.url),
+      'utf8'
+    )
+    const enI18nSource = readFileSync(
+      new URL('../../../platform/i18n/en.json', import.meta.url),
+      'utf8'
+    )
+    const ruI18nSource = readFileSync(
+      new URL('../../../platform/i18n/ru.json', import.meta.url),
       'utf8'
     )
 
@@ -290,7 +302,15 @@ describe('Communications workspace surface', () => {
     expect(mailWorkspaceSource).toContain('@load-more="emit(\'load-more\')"')
     expect(mailWorkspaceSource).toContain('<Dialog')
     expect(mailWorkspaceSource).toContain('content-class="mail-compose-dialog"')
+    expect(mailWorkspaceSource).toContain(':close-on-interact-outside="false"')
     expect(mailWorkspaceSource).toContain('@update:open="handleComposeDialogOpenChange"')
+    expect(mailWorkspaceSource).toContain('AlertDialog')
+    expect(mailWorkspaceSource).toContain('isComposeCloseConfirmOpen')
+    expect(mailWorkspaceSource).toContain('composeFormHasTypedContent')
+    expect(mailWorkspaceSource).toContain('requestComposeClose')
+    expect(mailWorkspaceSource).toContain('handleSaveComposeDraftAndClose')
+    expect(mailWorkspaceSource).toContain("t('Close draft?')")
+    expect(mailWorkspaceSource).toContain("t('Save draft and close')")
     expect(mailWorkspaceSource).toContain('RichTextEditor')
     expect(mailWorkspaceSource).toContain('composeAccountOptions')
     expect(mailWorkspaceSource).toContain('plainTextToComposeHtml')
@@ -299,22 +319,106 @@ describe('Communications workspace surface', () => {
     expect(mailWorkspaceSource).toContain('mail-compose-panel__field--from')
     expect(mailWorkspaceSource).toContain('composeSendAccountOptions')
     expect(mailWorkspaceSource).toContain(':disabled="!account.can_send"')
-    expect(mailWorkspaceSource).toContain('activeComposePanel')
+    expect(mailWorkspaceSource).toContain('v-if="composeStatus"')
+    expect(mailWorkspaceSource).not.toContain('v-if="composeStatus || composeError"')
+    expect(mailWorkspaceSource).not.toContain(
+      'mail-compose-panel__status--error'
+    )
+    expect(mailWorkspaceSource).toContain('const isCcVisible = ref(false)')
+    expect(mailWorkspaceSource).toContain('const isBccVisible = ref(false)')
+    expect(mailWorkspaceSource).toContain('showCcField')
+    expect(mailWorkspaceSource).toContain('showBccField')
+    expect(mailWorkspaceSource).toContain('v-if="isCcVisible"')
+    expect(mailWorkspaceSource).toContain('v-if="isBccVisible"')
+    expect(mailWorkspaceSource).toContain('mail-compose-panel__recipient-actions')
+    expect(mailWorkspaceSource).toContain('isAiComposePanelOpen')
+    expect(mailWorkspaceSource).toContain('isContextComposePanelOpen')
+    expect(mailWorkspaceSource).toContain('composeActivePanelState')
     expect(mailWorkspaceSource).toContain('toggleComposeEdgePanel')
     expect(mailWorkspaceSource).toContain('closeComposeEdgePanels')
     expect(mailWorkspaceSource).toContain('compose-edge-panel--left')
     expect(mailWorkspaceSource).toContain('compose-edge-panel--right')
+    expect(mailWorkspaceSource).toContain('<template #chrome>')
+    expect(mailWorkspaceSource).toContain('compose-edge-panel__rail')
+    expect(mailWorkspaceSource).toContain('compose-edge-panel__rail-button')
+    expect(mailWorkspaceSource).toContain('compose-edge-panel__toggle')
+    expect(mailWorkspaceSource).toContain("t('AI commands')")
+    expect(mailWorkspaceSource).toContain("t('Context commands')")
+    expect(mailWorkspaceSource).toContain("t('Show AI')")
+    expect(mailWorkspaceSource).toContain("t('Hide AI')")
+    expect(mailWorkspaceSource).toContain("t('Show context')")
+    expect(mailWorkspaceSource).toContain("t('Hide context')")
+    expect(mailWorkspaceSource).toContain('{{ t(item) }}')
     expect(mailWorkspaceSource).toContain('mail-compose-stage')
     expect(mailWorkspaceSource).toContain('mail-compose-card')
+    expect(selectedMessageActionsSource).toContain('openGeneratedAiReply(result)')
+    expect(selectedMessageActionsSource).toContain('function openGeneratedAiReply')
     expect(mailComposeOptionsSource).toContain('ComposeEdgePanelId')
     expect(mailComposeOptionsSource).toContain('composeAiPanelActions')
     expect(mailComposeOptionsSource).toContain('composeContextPanelSections')
     expect(mailWorkspaceSource).not.toContain('{{ account.account_id }}')
     expect(communicationDomainElementsCss).toContain('.mail-compose-dialog.hermes-dialog-content')
+    expect(communicationDomainElementsCss).toContain('--compose-edge-rail-width')
+    expect(communicationDomainElementsCss).toContain('--compose-edge-panel-width')
+    expect(communicationDomainElementsCss).toContain('--compose-edge-rail-gap')
+    expect(communicationDomainElementsCss).toContain('.compose-edge-panel__rail')
+    expect(communicationDomainElementsCss).toContain('.compose-edge-panel__rail-button')
+    expect(communicationDomainElementsCss).toContain('.compose-edge-panel.is-open .compose-edge-panel__surface')
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-compose-dialog \.hermes-dialog-header\s*\{[^}]*border-bottom: 0;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-compose-dialog \.hermes-dialog-header\s*\{[^}]*border-radius: 12px;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-compose-dialog \.hermes-dialog-footer\s*\{[^}]*border-top: 0;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-compose-dialog \.hermes-dialog-footer\s*\{[^}]*border-radius: 12px;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-compose-dialog \.mail-compose-card\s*\{[^}]*border: 0;[^}]*box-shadow: none;[^}]*outline: 0;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-compose-dialog \.hermes-dialog-body\s*\{[^}]*overflow: hidden;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-compose-panel__fields\s*\{[^}]*overflow-y: auto;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-compose-panel__editor \.hermes-rich-text-editor__prosemirror blockquote\s*\{[^}]*border-left: 3px solid/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.compose-edge-panel__surface\s*\{[^}]*opacity: 0;[^}]*pointer-events: none;[^}]*visibility: hidden;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.compose-edge-panel\s*\{[^}]*width: calc\(var\(--compose-edge-panel-width\) \+ var\(--compose-edge-rail-width\) \+ var\(--compose-edge-rail-gap\)\);[^}]*column-gap: var\(--compose-edge-rail-gap\);/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.compose-edge-panel--left \.compose-edge-panel__rail\s*\{[^}]*border-radius: var\(--h-radius-lg\);/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.compose-edge-panel--right \.compose-edge-panel__rail\s*\{[^}]*border-radius: var\(--h-radius-lg\);/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.compose-edge-panel__surface\s*\{[^}]*border-radius: 12px;/s
+    )
+    expect(communicationDomainElementsCss).toContain('.mail-compose-close-confirm__save')
+    expect(communicationDomainElementsCss).toMatch(
+      /\.mail-compose-close-confirm \.hermes-alert-dialog-body\s*\{[^}]*justify-content: flex-end;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.compose-edge-panel--left\s*\{[^}]*grid-template-columns: var\(--compose-edge-rail-width\) var\(--compose-edge-panel-width\);[^}]*transform: translateX\(calc\(-1 \* \(var\(--compose-edge-rail-width\) \+ var\(--compose-edge-rail-gap\)\)\)\);/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.compose-edge-panel--right\s*\{[^}]*grid-template-columns: var\(--compose-edge-panel-width\) var\(--compose-edge-rail-width\);[^}]*transform: translateX\(calc\(var\(--compose-edge-rail-width\) \+ var\(--compose-edge-rail-gap\)\)\);/s
+    )
     expect(pageSurfaceSource).toContain('handleLoadMoreMessages')
     expect(pageSurfaceSource).toContain('useEmailAccountsQuery')
     expect(pageSurfaceSource).toContain('mailComposeAccountOptions')
     expect(pageSurfaceSource).toContain('sendCapableMailComposeAccountOptions')
+    expect(pageSurfaceSource).toContain('.filter(isEmailAccountView)')
+    expect(pageSurfaceSource).toContain('isMailProviderKind(view.account.provider_kind)')
     expect(pageSurfaceSource).toContain('send_unavailable_reason')
     expect(pageSurfaceSource).not.toContain(
       '.filter((item) => item.capabilities.send)'
@@ -324,6 +428,29 @@ describe('Communications workspace surface', () => {
     expect(accountApiSource).toContain('/api/v1/communications/email/accounts')
     expect(accountApiSource).not.toContain(['/api/v1/integrations', 'mail/accounts'].join('/'))
     expect(mailAccountQueriesSource).toContain('useEmailAccountsQuery')
+    const composeI18nKeys = [
+      'Cc',
+      'Bcc',
+      'AI writing tools',
+      'Compose context tools',
+      'Prompt to email',
+      'Draft from intent',
+      'Rewrite draft',
+      'Keep meaning, improve shape',
+      'Adjust tone',
+      'Make it warmer, firmer, or shorter',
+      'Autocorrect',
+      'Fix typos and grammar',
+      'Close draft?',
+      'This email has unsaved content. Save it as a draft before closing?',
+      'Keep writing',
+      'Close without saving',
+      'Save draft and close'
+    ]
+    composeI18nKeys.forEach((key) => {
+      expect(enI18nSource).toContain(`"${key}"`)
+      expect(ruI18nSource).toContain(`"${key}"`)
+    })
     expect(pageSurfaceSource).not.toContain(
       'watch([hasNextPage, isFetchingNextPage, activeFolderId]'
     )

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from '@/platform/i18n'
-import { Dialog, Icon, RichTextEditor } from '@/shared/ui'
+import { AlertDialog, Dialog, Icon, RichTextEditor } from '@/shared/ui'
 import type { CommunicationConversationModel } from '../communicationDomainElements'
 import type {
   CommunicationAccountOption,
@@ -57,7 +57,11 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const isInspectorVisible = ref(true)
-const activeComposePanel = ref<ComposeEdgePanelId | null>(null)
+const isAiComposePanelOpen = ref(false)
+const isContextComposePanelOpen = ref(false)
+const isComposeCloseConfirmOpen = ref(false)
+const isCcVisible = ref(false)
+const isBccVisible = ref(false)
 const activeMessage = computed(() => props.conversation.messages[props.conversation.messages.length - 1])
 const composeAccountOptions = computed(() => props.composeAccountOptions ?? [])
 const composeSendAccountOptions = computed(() =>
@@ -81,6 +85,12 @@ const composeTitle = computed(() => {
     default: return t('Compose')
   }
 })
+const composeActivePanelState = computed(() => {
+  const openPanels: ComposeEdgePanelId[] = []
+  if (isAiComposePanelOpen.value) openPanels.push('ai')
+  if (isContextComposePanelOpen.value) openPanels.push('context')
+  return openPanels.join(' ') || 'none'
+})
 
 watch(
   () => ({
@@ -102,32 +112,103 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => ({
+    isOpen: isComposeDialogOpen.value,
+    ccText: props.composeForm?.ccText ?? '',
+    bccText: props.composeForm?.bccText ?? ''
+  }),
+  ({ isOpen, ccText, bccText }) => {
+    if (!isOpen) {
+      isCcVisible.value = false
+      isBccVisible.value = false
+      isComposeCloseConfirmOpen.value = false
+      return
+    }
+    if (ccText.trim()) isCcVisible.value = true
+    if (bccText.trim()) isBccVisible.value = true
+  },
+  { immediate: true }
+)
+
 function handleToggleInspector(): void {
   isInspectorVisible.value = !isInspectorVisible.value
   emit('toggle-inspector')
 }
 
 function handleComposeDialogOpenChange(open: boolean): void {
-  if (!open) {
-    closeComposeEdgePanels()
-    emit('close-compose')
-  }
+  if (open) return
+  requestComposeClose()
 }
 
 function toggleComposeEdgePanel(panelId: ComposeEdgePanelId): void {
-  activeComposePanel.value = activeComposePanel.value === panelId ? null : panelId
+  if (panelId === 'ai') {
+    isAiComposePanelOpen.value = !isAiComposePanelOpen.value
+    return
+  }
+  isContextComposePanelOpen.value = !isContextComposePanelOpen.value
 }
 
 function closeComposeEdgePanels(): void {
-  activeComposePanel.value = null
+  isAiComposePanelOpen.value = false
+  isContextComposePanelOpen.value = false
+}
+
+function showCcField(): void {
+  isCcVisible.value = true
+}
+
+function showBccField(): void {
+  isBccVisible.value = true
 }
 
 function handleComposeEscape(): void {
-  if (activeComposePanel.value) {
+  if (isAiComposePanelOpen.value || isContextComposePanelOpen.value) {
     closeComposeEdgePanels()
     return
   }
+  requestComposeClose()
+}
+
+function composeFormHasTypedContent(): boolean {
+  const form = props.composeForm
+  if (!form) return false
+  const bodyText = htmlToComposePlainText(form.bodyHtml ?? form.body)
+  return [
+    form.toText,
+    form.ccText,
+    form.bccText,
+    form.subject,
+    form.body,
+    bodyText
+  ].some((value) => value.trim().length > 0)
+}
+
+function requestComposeClose(): void {
+  if (composeFormHasTypedContent()) {
+    isComposeCloseConfirmOpen.value = true
+    return
+  }
+  closeComposeNow()
+}
+
+function closeComposeNow(): void {
+  isComposeCloseConfirmOpen.value = false
+  closeComposeEdgePanels()
   emit('close-compose')
+}
+
+function handleComposeCloseConfirmOpenChange(open: boolean): void {
+  isComposeCloseConfirmOpen.value = open
+}
+
+function handleDiscardComposeDraft(): void {
+  closeComposeNow()
+}
+
+function handleSaveComposeDraftAndClose(): void {
+  emit('save-compose')
+  closeComposeNow()
 }
 
 function inputValue(event: Event): string {
@@ -187,58 +268,121 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 			:open="isComposeDialogOpen"
 			:title="composeTitle"
 			:close-label="t('Close compose')"
+			:close-on-interact-outside="false"
 			content-class="mail-compose-dialog"
 			@update:open="handleComposeDialogOpenChange"
 		>
+			<template #chrome>
+				<template v-if="composeForm">
+					<aside
+						class="compose-edge-panel compose-edge-panel--left"
+						:class="{ 'is-open': isAiComposePanelOpen }"
+						:aria-label="t('AI writing tools')"
+						@keydown.esc.stop="handleComposeEscape"
+					>
+						<nav class="compose-edge-panel__rail" :aria-label="t('AI commands')">
+							<button
+								type="button"
+								class="compose-edge-panel__toggle compose-edge-panel__rail-button"
+								:aria-expanded="isAiComposePanelOpen"
+								:title="isAiComposePanelOpen ? t('Hide AI') : t('Show AI')"
+								@click="toggleComposeEdgePanel('ai')"
+							>
+								<Icon
+									:icon="isAiComposePanelOpen ? 'tabler:chevron-right' : 'tabler:sparkles'"
+									size="1rem"
+								/>
+								<span>{{ isAiComposePanelOpen ? t('Hide AI') : t('Show AI') }}</span>
+							</button>
+							<button
+								v-for="action in composeAiActions"
+								:key="action.id"
+								type="button"
+								class="compose-edge-panel__rail-button"
+								:title="t(action.label)"
+								:aria-label="t(action.label)"
+								:disabled="action.disabled"
+							>
+								<Icon :icon="action.icon" size="1rem" />
+								<span>{{ t(action.label) }}</span>
+							</button>
+						</nav>
+						<div class="compose-edge-panel__surface">
+							<button
+								v-for="action in composeAiActions"
+								:key="action.id"
+								type="button"
+								class="compose-edge-panel__action"
+								:title="t(action.description)"
+								:disabled="action.disabled"
+							>
+								<Icon :icon="action.icon" size="1rem" />
+								<span>{{ t(action.label) }}</span>
+								<small>{{ t(action.description) }}</small>
+							</button>
+						</div>
+					</aside>
+					<aside
+						class="compose-edge-panel compose-edge-panel--right"
+						:class="{ 'is-open': isContextComposePanelOpen }"
+						:aria-label="t('Compose context tools')"
+						@keydown.esc.stop="handleComposeEscape"
+					>
+						<nav class="compose-edge-panel__rail" :aria-label="t('Context commands')">
+							<button
+								type="button"
+								class="compose-edge-panel__toggle compose-edge-panel__rail-button"
+								:aria-expanded="isContextComposePanelOpen"
+								:title="isContextComposePanelOpen ? t('Hide context') : t('Show context')"
+								@click="toggleComposeEdgePanel('context')"
+							>
+								<Icon
+									:icon="isContextComposePanelOpen ? 'tabler:chevron-left' : 'tabler:layout-sidebar-right'"
+									size="1rem"
+								/>
+								<span>{{ isContextComposePanelOpen ? t('Hide context') : t('Show context') }}</span>
+							</button>
+							<button
+								v-for="section in composeContextSections"
+								:key="section.id"
+								type="button"
+								class="compose-edge-panel__rail-button"
+								:title="t(section.title)"
+								:aria-label="t(section.title)"
+							>
+								<Icon :icon="section.icon" size="1rem" />
+								<span>{{ t(section.title) }}</span>
+							</button>
+						</nav>
+						<div class="compose-edge-panel__surface">
+							<section
+								v-for="section in composeContextSections"
+								:key="section.id"
+								class="compose-edge-panel__section"
+							>
+								<h3>
+									<Icon :icon="section.icon" size="1rem" />
+									<span>{{ t(section.title) }}</span>
+								</h3>
+								<p v-for="item in section.items" :key="item">{{ t(item) }}</p>
+							</section>
+						</div>
+					</aside>
+				</template>
+			</template>
 			<section
 				v-if="composeForm"
 				class="mail-compose-stage"
 				:class="[
-					activeComposePanel === 'ai' && 'mail-compose-stage--ai-open',
-					activeComposePanel === 'context' && 'mail-compose-stage--context-open'
+					isAiComposePanelOpen && 'mail-compose-stage--ai-open',
+					isContextComposePanelOpen && 'mail-compose-stage--context-open'
 				]"
-				:data-active-panel="activeComposePanel ?? 'none'"
+				:data-active-panel="composeActivePanelState"
 				@keydown.esc.stop="handleComposeEscape"
 			>
-				<aside
-					class="compose-edge-panel compose-edge-panel--left"
-					:class="{ 'is-open': activeComposePanel === 'ai' }"
-					:aria-label="t('AI writing tools')"
-				>
-					<button
-						type="button"
-						class="compose-edge-panel__handle"
-						:aria-expanded="activeComposePanel === 'ai'"
-						:title="t('AI writing tools')"
-						@click="toggleComposeEdgePanel('ai')"
-					>
-						<Icon icon="tabler:sparkles" size="1rem" />
-						<span>{{ t('AI') }}</span>
-					</button>
-					<div class="compose-edge-panel__surface">
-						<button
-							v-for="action in composeAiActions"
-							:key="action.id"
-							type="button"
-							class="compose-edge-panel__action"
-							:title="t(action.description)"
-							:disabled="action.disabled"
-						>
-							<Icon :icon="action.icon" size="1rem" />
-							<span>{{ t(action.label) }}</span>
-							<small>{{ t(action.description) }}</small>
-						</button>
-					</div>
-				</aside>
 				<section class="mail-compose-panel mail-compose-card" :aria-label="composeTitle">
-					<div
-						v-if="composeStatus || composeError"
-						class="mail-compose-panel__status-row"
-					>
+					<div v-if="composeStatus" class="mail-compose-panel__status-row">
 						<span v-if="composeStatus" class="mail-compose-panel__status">{{ composeStatus }}</span>
-						<span v-if="composeError" class="mail-compose-panel__status mail-compose-panel__status--error">
-							{{ composeError }}
-						</span>
 					</div>
 					<div class="mail-compose-panel__fields">
 						<label class="mail-compose-panel__field mail-compose-panel__field--from">
@@ -259,16 +403,43 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 								</option>
 							</select>
 						</label>
-						<label class="mail-compose-panel__field">
-							<span>{{ t('To') }}</span>
-							<input
-								:value="composeForm.toText"
-								type="text"
-								autocomplete="email"
-								@input="emit('update-compose', { toText: inputValue($event) })"
-							/>
-						</label>
-						<label class="mail-compose-panel__field">
+						<div class="mail-compose-panel__recipient-row">
+							<label class="mail-compose-panel__field mail-compose-panel__field--to">
+								<span>{{ t('To') }}</span>
+								<input
+									:value="composeForm.toText"
+									type="text"
+									autocomplete="email"
+									@input="emit('update-compose', { toText: inputValue($event) })"
+								/>
+							</label>
+							<div
+								v-if="!isCcVisible || !isBccVisible"
+								class="mail-compose-panel__recipient-actions"
+								:aria-label="t('Optional recipients')"
+							>
+								<button
+									v-if="!isCcVisible"
+									type="button"
+									class="mail-compose-panel__field-toggle"
+									@click="showCcField"
+								>
+									{{ t('Cc') }}
+								</button>
+								<button
+									v-if="!isBccVisible"
+									type="button"
+									class="mail-compose-panel__field-toggle"
+									@click="showBccField"
+								>
+									{{ t('Bcc') }}
+								</button>
+							</div>
+						</div>
+						<label
+							v-if="isCcVisible"
+							class="mail-compose-panel__field mail-compose-panel__field--cc"
+						>
 							<span>{{ t('Cc') }}</span>
 							<input
 								:value="composeForm.ccText"
@@ -277,7 +448,10 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 								@input="emit('update-compose', { ccText: inputValue($event) })"
 							/>
 						</label>
-						<label class="mail-compose-panel__field">
+						<label
+							v-if="isBccVisible"
+							class="mail-compose-panel__field mail-compose-panel__field--bcc"
+						>
 							<span>{{ t('Bcc') }}</span>
 							<input
 								:value="composeForm.bccText"
@@ -307,35 +481,6 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 						</div>
 					</div>
 				</section>
-				<aside
-					class="compose-edge-panel compose-edge-panel--right"
-					:class="{ 'is-open': activeComposePanel === 'context' }"
-					:aria-label="t('Compose context tools')"
-				>
-					<button
-						type="button"
-						class="compose-edge-panel__handle"
-						:aria-expanded="activeComposePanel === 'context'"
-						:title="t('Compose context tools')"
-						@click="toggleComposeEdgePanel('context')"
-					>
-						<Icon icon="tabler:layout-sidebar-right" size="1rem" />
-						<span>{{ t('Context') }}</span>
-					</button>
-					<div class="compose-edge-panel__surface">
-						<section
-							v-for="section in composeContextSections"
-							:key="section.id"
-							class="compose-edge-panel__section"
-						>
-							<h3>
-								<Icon :icon="section.icon" size="1rem" />
-								<span>{{ t(section.title) }}</span>
-							</h3>
-							<p v-for="item in section.items" :key="item">{{ item }}</p>
-						</section>
-					</div>
-				</aside>
 			</section>
 			<template #footer>
 				<template v-if="composeForm">
@@ -360,5 +505,27 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 				</template>
 			</template>
 		</Dialog>
+		<AlertDialog
+			:open="isComposeCloseConfirmOpen"
+			:title="t('Close draft?')"
+			:description="t('This email has unsaved content. Save it as a draft before closing?')"
+			:cancel-label="t('Keep writing')"
+			:action-label="t('Close without saving')"
+			tone="danger"
+			content-class="mail-compose-close-confirm"
+			@update:open="handleComposeCloseConfirmOpenChange"
+			@cancel="handleComposeCloseConfirmOpenChange(false)"
+			@action="handleDiscardComposeDraft"
+		>
+			<button
+				type="button"
+				class="mail-compose-close-confirm__save"
+				:disabled="isSending"
+				@click="handleSaveComposeDraftAndClose"
+			>
+				<Icon icon="tabler:device-floppy" size="1rem" />
+				{{ t('Save draft and close') }}
+			</button>
+		</AlertDialog>
 	</section>
 </template>

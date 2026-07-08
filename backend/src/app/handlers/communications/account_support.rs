@@ -111,7 +111,7 @@ pub(super) fn email_account_capabilities(account: &ProviderAccount) -> EmailAcco
         .get("auth_state")
         .and_then(Value::as_str)
         .is_some_and(|state| state == "logged_out");
-    let smtp = smtp_configured(&account.config);
+    let smtp = smtp_configured(account);
     let imap = matches!(
         account.provider_kind,
         EmailProviderKind::Icloud | EmailProviderKind::Imap
@@ -143,10 +143,18 @@ pub(super) fn email_account_capabilities(account: &ProviderAccount) -> EmailAcco
     }
 }
 
-pub(super) fn smtp_configured(config: &Value) -> bool {
-    let Some(object) = config.as_object() else {
-        return false;
-    };
+pub(super) fn smtp_configured(account: &ProviderAccount) -> bool {
+    let explicit_smtp = account
+        .config
+        .as_object()
+        .is_some_and(has_explicit_smtp_config);
+
+    explicit_smtp
+        || (matches!(account.provider_kind, EmailProviderKind::Icloud)
+            && !account.external_account_id.trim().is_empty())
+}
+
+fn has_explicit_smtp_config(object: &serde_json::Map<String, Value>) -> bool {
     object
         .get("smtp_host")
         .and_then(Value::as_str)
@@ -275,5 +283,54 @@ pub(super) fn mail_sync_api_error(error: MailSyncError) -> ApiError {
             tracing::error!(error = %error, "mail sync observation store failed");
             ApiError::InvalidCommunicationQuery("mail sync operation failed")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use serde_json::json;
+
+    fn email_account(provider_kind: EmailProviderKind, config: Value) -> ProviderAccount {
+        ProviderAccount {
+            account_id: "account:test".to_owned(),
+            provider_kind,
+            display_name: "Test account".to_owned(),
+            external_account_id: "owner@example.com".to_owned(),
+            config,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn icloud_without_explicit_smtp_is_send_capable_via_default_smtp() {
+        let account = email_account(EmailProviderKind::Icloud, json!({}));
+
+        let capabilities = email_account_capabilities(&account);
+
+        assert!(capabilities.smtp);
+        assert!(capabilities.send);
+    }
+
+    #[test]
+    fn icloud_with_non_object_config_is_send_capable_via_default_smtp() {
+        let account = email_account(EmailProviderKind::Icloud, Value::Null);
+
+        let capabilities = email_account_capabilities(&account);
+
+        assert!(capabilities.smtp);
+        assert!(capabilities.send);
+    }
+
+    #[test]
+    fn imap_without_explicit_smtp_stays_read_only_for_send() {
+        let account = email_account(EmailProviderKind::Imap, json!({}));
+
+        let capabilities = email_account_capabilities(&account);
+
+        assert!(!capabilities.smtp);
+        assert!(!capabilities.send);
     }
 }

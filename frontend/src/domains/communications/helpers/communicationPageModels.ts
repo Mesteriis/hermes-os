@@ -1,4 +1,5 @@
 import type {
+  CommunicationMessageDetailItem,
   CommunicationMessageSummary,
   ComposeFormModel,
   CommunicationDraft,
@@ -9,6 +10,13 @@ import type {
 } from '../types/communications'
 import { datetimeLocalToIso } from '../forms/composeDraftAutosave'
 import { splitComposeRecipients } from '../forms/composeValidation'
+
+type ReplyMessageSource = CommunicationMessageSummary | CommunicationMessageDetailItem
+type QuoteMessageSource = ReplyMessageSource | ThreadMessage
+type ReplyComposeOptions = {
+  draftBodyText?: string
+  draftBodyHtml?: string | null
+}
 
 export type AiSummaryContract = {
   key_points: string[]
@@ -167,10 +175,12 @@ function nonEmptyString(value: string): value is string {
 }
 
 export function replyComposeForm(
-  message: CommunicationMessageSummary,
+  message: ReplyMessageSource,
   fallbackAccountId: string,
-  draftId: string
+  draftId: string,
+  options: ReplyComposeOptions = {}
 ): ComposeFormModel {
+  const replyBody = replyBodyWithQuote(message, options)
   return {
     mode: 'reply',
     draftId,
@@ -179,9 +189,9 @@ export function replyComposeForm(
     ccText: '',
     bccText: '',
     subject: message.subject.startsWith('Re:') ? message.subject : `Re: ${message.subject}`,
-    body: '',
-    bodyHtml: null,
-    bodyFormat: 'plain',
+    body: replyBody.body,
+    bodyHtml: replyBody.bodyHtml,
+    bodyFormat: 'html',
     scheduledSendAt: '',
     undoSendSeconds: null,
     inReplyTo: message.provider_record_id || null
@@ -189,12 +199,13 @@ export function replyComposeForm(
 }
 
 export function replyAllComposeForm(
-  message: CommunicationMessageSummary,
+  message: ReplyMessageSource,
   fallbackAccountId: string,
-  draftId: string
+  draftId: string,
+  options: ReplyComposeOptions = {}
 ): ComposeFormModel {
   return {
-    ...replyComposeForm(message, fallbackAccountId, draftId),
+    ...replyComposeForm(message, fallbackAccountId, draftId, options),
     ccText: message.recipients.join(', ')
   }
 }
@@ -237,8 +248,7 @@ export function threadReplyComposeForm(
   draftId: string,
   draftBodyHtml = ''
 ): ComposeFormModel {
-  const quotedText = quotedPlainText(message)
-  const normalizedDraftHtml = draftBodyHtml.trim()
+  const replyBody = replyBodyWithQuote(message, { draftBodyHtml })
   return {
     mode: 'reply',
     draftId,
@@ -247,12 +257,8 @@ export function threadReplyComposeForm(
     ccText: '',
     bccText: '',
     subject: message.subject.startsWith('Re:') ? message.subject : `Re: ${message.subject}`,
-    body: normalizedDraftHtml
-      ? `${htmlToPlainText(normalizedDraftHtml)}${quotedText}`
-      : quotedText,
-    bodyHtml: normalizedDraftHtml
-      ? `${normalizedDraftHtml}${quotedHtml(message)}`
-      : quotedHtml(message),
+    body: replyBody.body,
+    bodyHtml: replyBody.bodyHtml,
     bodyFormat: 'html',
     scheduledSendAt: '',
     undoSendSeconds: null,
@@ -295,22 +301,72 @@ export function composeFormToSendRequest(form: ComposeFormModel): SendCommunicat
   }
 }
 
-function quotedPlainText(message: ThreadMessage): string {
+function replyBodyWithQuote(
+  message: QuoteMessageSource,
+  options: ReplyComposeOptions
+): Pick<ComposeFormModel, 'body' | 'bodyHtml'> {
+  const quotedText = quotedPlainText(message)
+  const quotedHtmlValue = quotedHtml(message)
+  const draftBodyHtml = options.draftBodyHtml?.trim() ?? ''
+  const draftBodyText = options.draftBodyText?.trim() ?? ''
+  if (draftBodyHtml) {
+    return {
+      body: `${htmlToPlainText(draftBodyHtml)}${quotedText}`,
+      bodyHtml: `${draftBodyHtml}${quotedHtmlValue}`
+    }
+  }
+  if (draftBodyText) {
+    return {
+      body: `${draftBodyText}${quotedText}`,
+      bodyHtml: `${plainTextToHtml(draftBodyText)}${quotedHtmlValue}`
+    }
+  }
+  return {
+    body: quotedText,
+    bodyHtml: quotedHtmlValue
+  }
+}
+
+function quotedPlainText(message: QuoteMessageSource): string {
   const header = `On ${message.projected_at}, ${message.sender} wrote:`
-  const quoted = message.body_text
+  const quoted = quoteBodyText(message)
     .split(/\r?\n/)
     .map((line) => `> ${line}`)
     .join('\n')
   return `\n\n${header}\n${quoted}`
 }
 
-function quotedHtml(message: ThreadMessage): string {
-  const body = escapeHtml(message.body_text).replace(/\r?\n/g, '<br>')
+function quotedHtml(message: QuoteMessageSource): string {
+  const body = escapeHtml(quoteBodyText(message)).replace(/\r?\n/g, '<br>')
   return [
     '<p><br></p>',
     `<p>On ${escapeHtml(message.projected_at)}, ${escapeHtml(message.sender)} wrote:</p>`,
     `<blockquote>${body}</blockquote>`
   ].join('')
+}
+
+function quoteBodyText(message: QuoteMessageSource): string {
+  if ('body_text' in message && message.body_text.trim().length > 0) {
+    return message.body_text
+  }
+  if ('body_html' in message && message.body_html) {
+    return htmlToPlainText(message.body_html)
+  }
+  if ('body_text_preview' in message) {
+    return message.body_text_preview
+  }
+  return ''
+}
+
+function plainTextToHtml(value: string): string {
+  const paragraphs = value
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0)
+  if (paragraphs.length === 0) return '<p></p>'
+  return paragraphs
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\r?\n/g, '<br>')}</p>`)
+    .join('')
 }
 
 function escapeHtml(value: string): string {

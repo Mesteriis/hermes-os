@@ -1,4 +1,5 @@
 import type { CommunicationSubSurfaceId } from '../../domains/communications/queries/communicationChannelSurface'
+import { isMailProviderKind } from '../../domains/communications/helpers/mailProviderKinds'
 import type { ProviderAccount } from '../../domains/settings/types/settings'
 import type { TelegramAccount } from '../../integrations/telegram/types/telegram'
 import type { WhatsappAccountSummary } from '../../integrations/whatsapp/types/whatsapp'
@@ -95,7 +96,7 @@ export function communicationAccountRouteNodes(
 }
 
 export function isVisibleMailAccount(account: ProviderAccount): boolean {
-  return account.is_active !== false
+  return account.is_active !== false && isMailProviderKind(account.provider_kind)
 }
 
 export function isVisibleTelegramAccount(account: TelegramAccount): boolean {

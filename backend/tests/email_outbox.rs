@@ -437,6 +437,49 @@ async fn smtp_outbox_sender_resolves_account_scoped_smtp_credentials_against_pos
 }
 
 #[tokio::test]
+async fn smtp_outbox_sender_uses_icloud_defaults_and_imap_credential_when_smtp_binding_missing_against_postgres()
+ {
+    let context = TestContext::new().await;
+    let pool = context.pool().clone();
+    let suffix = Utc::now()
+        .timestamp_nanos_opt()
+        .expect("current timestamp nanos");
+    let account_id = format!("acct-outbox-icloud-{suffix}");
+    let secret_ref = format!("secret:outbox-icloud:{suffix}");
+    seed_icloud_provider_account_with_imap_secret(pool.clone(), &account_id, &secret_ref, suffix)
+        .await;
+    let mut resolver = InMemorySecretResolver::new();
+    resolver
+        .insert(&secret_ref, "icloud-app-password")
+        .expect("insert icloud test credential");
+    let transport = RecordingSmtpTransport::default();
+    let sender = SmtpOutboxEmailSender::new(pool.clone(), resolver, transport.clone());
+    let store = CommunicationOutboxStore::new(pool);
+    let outbox_id = format!("outbox-icloud-{suffix}");
+    let item = enqueue_due_item(&store, &account_id, &outbox_id, Utc::now()).await;
+
+    let receipt = sender
+        .send(&item)
+        .await
+        .expect("send outbox item via iCloud SMTP");
+
+    assert_eq!(receipt.provider_message_id, "smtp-message-1");
+    assert_eq!(receipt.accepted_recipients, vec!["recipient@example.com"]);
+    let calls = transport.calls.lock().expect("smtp transport calls");
+    assert_eq!(calls.len(), 1);
+    let call = &calls[0];
+    assert_eq!(call.config.host, "smtp.mail.me.com");
+    assert_eq!(call.config.port, 587);
+    assert_eq!(
+        call.config.username,
+        format!("icloud-delivery-{suffix}@example.com")
+    );
+    assert!(call.config.tls);
+    assert!(call.config.starttls);
+    assert_eq!(call.password, "icloud-app-password");
+}
+
+#[tokio::test]
 async fn smtp_outbox_sender_rejects_missing_smtp_config_without_transport_call() {
     let context = TestContext::new().await;
     let pool = context.pool().clone();
@@ -527,6 +570,44 @@ async fn seed_smtp_provider_account(
         ))
         .await
         .expect("bind SMTP secret reference");
+}
+
+async fn seed_icloud_provider_account_with_imap_secret(
+    pool: sqlx::PgPool,
+    account_id: &str,
+    secret_ref: &str,
+    suffix: i64,
+) {
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    communication_store
+        .upsert_provider_account(
+            &NewProviderAccount::new(
+                account_id,
+                EmailProviderKind::Icloud,
+                "Outbox iCloud",
+                format!("icloud-delivery-{suffix}@example.com"),
+            )
+            .config(json!({})),
+        )
+        .await
+        .expect("store iCloud provider account");
+    SecretReferenceStore::new(pool.clone())
+        .upsert_secret_reference(&NewSecretReference::new(
+            secret_ref,
+            SecretKind::Password,
+            SecretStoreKind::TestDouble,
+            "iCloud test credential",
+        ))
+        .await
+        .expect("store iCloud secret reference");
+    communication_store
+        .bind_provider_account_secret(&NewProviderAccountSecretBinding::new(
+            account_id,
+            ProviderAccountSecretPurpose::ImapPassword,
+            secret_ref,
+        ))
+        .await
+        .expect("bind IMAP secret reference");
 }
 
 async fn enqueue_due_item(

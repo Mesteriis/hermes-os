@@ -23,6 +23,7 @@ import {
   composeFormToSendRequest,
   draftToComposeForm
 } from '../helpers/communicationPageModels'
+import { isMailProviderKind } from '../helpers/mailProviderKinds'
 import {
   communicationSectionWorkflowState,
   communicationWorkflowStateSectionId,
@@ -134,6 +135,7 @@ export function useCommunicationsPageSurface() {
   const stateCounts = computed(() => stateCountsData.value ?? [])
   const mailComposeAccountOptions = computed<CommunicationAccountOption[]>(() =>
     (emailAccountsData.value?.items ?? [])
+      .filter(isEmailAccountView)
       .map(emailAccountToComposeOption)
   )
   const sendCapableMailComposeAccountOptions = computed(() =>
@@ -596,6 +598,10 @@ export function useCommunicationsPageSurface() {
     visibleMailList,
     visibleMailListErrorMessage
   }
+}
+
+function isEmailAccountView(view: EmailAccountView): boolean {
+  return isMailProviderKind(view.account.provider_kind)
 }
 
 function emailAccountToComposeOption(view: EmailAccountView): CommunicationAccountOption {

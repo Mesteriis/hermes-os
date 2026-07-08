@@ -229,6 +229,8 @@ impl CommunicationOutboxStore {
         let mut transaction = self.pool.begin().await?;
         ensure_canonical_account_in_transaction(&mut transaction, Some(item.account_id.as_str()))
             .await?;
+        let draft_id =
+            existing_draft_id_in_transaction(&mut transaction, item.draft_id.as_deref()).await?;
         let sql = outbox_returning_query(
             r#"
             INSERT INTO communication_outbox (
@@ -253,7 +255,7 @@ impl CommunicationOutboxStore {
         let row = sqlx::query(&sql)
             .bind(item.outbox_id.trim())
             .bind(item.account_id.trim())
-            .bind(item.draft_id.as_deref())
+            .bind(draft_id.as_deref())
             .bind(serde_json::to_value(&item.to_recipients)?)
             .bind(serde_json::to_value(&item.cc_recipients)?)
             .bind(serde_json::to_value(&item.bcc_recipients)?)
@@ -721,6 +723,22 @@ async fn capture_outbox_transition_observation(
     Ok(())
 }
 
+async fn existing_draft_id_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    draft_id: Option<&str>,
+) -> Result<Option<String>, CommunicationOutboxError> {
+    let Some(draft_id) = draft_id.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM communication_drafts WHERE draft_id = $1)")
+            .bind(draft_id)
+            .fetch_one(&mut **transaction)
+            .await?;
+
+    Ok(exists.then(|| draft_id.to_owned()))
+}
+
 async fn ensure_canonical_account_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     account_id: Option<&str>,
@@ -729,7 +747,7 @@ async fn ensure_canonical_account_in_transaction(
         return Ok(());
     };
 
-    sqlx::query(
+    let result = sqlx::query(
         r#"
         INSERT INTO communication_accounts (
             account_id, provider_kind, display_name, external_account_id, config, metadata, created_at, updated_at
@@ -745,12 +763,21 @@ async fn ensure_canonical_account_in_transaction(
             updated_at
         FROM communication_provider_accounts
         WHERE account_id = $1
-        ON CONFLICT (account_id) DO NOTHING
+        ON CONFLICT (account_id)
+        DO UPDATE SET
+            provider_kind = EXCLUDED.provider_kind,
+            display_name = EXCLUDED.display_name,
+            external_account_id = EXCLUDED.external_account_id,
+            config = EXCLUDED.config,
+            updated_at = EXCLUDED.updated_at
         "#,
     )
-    .bind(account_id)
+    .bind(account_id.trim())
     .execute(&mut **transaction)
     .await?;
+    if result.rows_affected() == 0 {
+        return Err(CommunicationOutboxError::Invalid("account_id"));
+    }
 
     Ok(())
 }

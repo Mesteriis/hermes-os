@@ -139,6 +139,11 @@ impl CommunicationProviderAccountStore {
         .bind(&account.config)
         .fetch_one(&mut *transaction)
         .await?;
+        ensure_canonical_provider_account_in_transaction(
+            &mut transaction,
+            account.account_id.trim(),
+        )
+        .await?;
         link_vault_owned_entity_in_transaction(
             &mut transaction,
             VaultOwnedEntityLink {
@@ -1355,6 +1360,50 @@ async fn link_vault_owned_entity_in_transaction(
     )
     .await
 }
+
+async fn ensure_canonical_provider_account_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    account_id: &str,
+) -> Result<(), CommunicationIngestionError> {
+    sqlx::query(
+        r#"
+        INSERT INTO communication_accounts (
+            account_id,
+            provider_kind,
+            display_name,
+            external_account_id,
+            config,
+            metadata,
+            created_at,
+            updated_at
+        )
+        SELECT
+            account_id,
+            provider_kind,
+            display_name,
+            external_account_id,
+            config,
+            '{}'::jsonb,
+            created_at,
+            updated_at
+        FROM communication_provider_accounts
+        WHERE account_id = $1
+        ON CONFLICT (account_id)
+        DO UPDATE SET
+            provider_kind = EXCLUDED.provider_kind,
+            display_name = EXCLUDED.display_name,
+            external_account_id = EXCLUDED.external_account_id,
+            config = EXCLUDED.config,
+            updated_at = EXCLUDED.updated_at
+        "#,
+    )
+    .bind(account_id)
+    .execute(&mut **transaction)
+    .await?;
+
+    Ok(())
+}
+
 fn row_to_provider_account(row: PgRow) -> Result<ProviderAccount, CommunicationIngestionError> {
     Ok(ProviderAccount {
         account_id: row.try_get("account_id")?,

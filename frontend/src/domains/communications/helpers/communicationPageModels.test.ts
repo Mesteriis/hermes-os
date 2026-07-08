@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { CommunicationMessageSummary, CommunicationDraft, ThreadMessage } from '../types/communications'
+import type {
+  CommunicationDraft,
+  CommunicationMessageDetailItem,
+  CommunicationMessageSummary,
+  ThreadMessage
+} from '../types/communications'
 import {
   aiSummaryContractFromMetadata,
   composeFormToSendRequest,
@@ -65,6 +70,36 @@ function draft(): CommunicationDraft {
     metadata: {},
     created_at: '2026-06-15T10:00:00Z',
     updated_at: '2026-06-15T10:01:00Z'
+  }
+}
+
+function detailMessage(overrides: Partial<CommunicationMessageDetailItem> = {}): CommunicationMessageDetailItem {
+  return {
+    message_id: 'msg-1',
+    raw_record_id: 'raw-1',
+    account_id: 'account-1',
+    provider_record_id: 'provider-1',
+    subject: 'Quarterly update',
+    sender: 'alice@example.com',
+    recipients: ['owner@example.com'],
+    body_text: 'Full line one\nFull line two',
+    body_html: null,
+    occurred_at: null,
+    projected_at: '2026-06-15T10:00:00Z',
+    channel_kind: 'email',
+    conversation_id: null,
+    sender_display_name: null,
+    delivery_state: 'received',
+    workflow_state: 'new',
+    importance_score: null,
+    ai_category: null,
+    ai_summary: null,
+    ai_summary_generated_at: null,
+    message_metadata: {},
+    local_state: 'active',
+    local_state_changed_at: null,
+    local_state_reason: null,
+    ...overrides
   }
 }
 
@@ -293,6 +328,34 @@ describe('mail page model helpers', () => {
       bccText: 'bcc@example.com',
       body: 'Draft body'
     })
+  })
+
+  it('builds quoted rich compose models for message replies', () => {
+    const form = replyComposeForm(detailMessage(), 'fallback-account', 'draft-reply')
+
+    expect(form).toMatchObject({
+      mode: 'reply',
+      draftId: 'draft-reply',
+      accountId: 'account-1',
+      toText: 'alice@example.com',
+      subject: 'Re: Quarterly update',
+      bodyFormat: 'html',
+      inReplyTo: 'provider-1'
+    })
+    expect(form.body).toContain('On 2026-06-15T10:00:00Z, alice@example.com wrote:')
+    expect(form.body).toContain('> Full line one')
+    expect(form.bodyHtml ?? '').toContain('<p><br></p>')
+    expect(form.bodyHtml ?? '').toContain('<blockquote>Full line one<br>Full line two</blockquote>')
+  })
+
+  it('places AI generated reply text before the quoted original message', () => {
+    const form = replyComposeForm(detailMessage(), 'fallback-account', 'draft-ai-reply', {
+      draftBodyText: 'Thanks, I will review this today.'
+    })
+
+    expect(form.body).toContain('Thanks, I will review this today.\n\nOn 2026-06-15T10:00:00Z')
+    expect(form.bodyHtml ?? '').toContain('<p>Thanks, I will review this today.</p><p><br></p>')
+    expect(form.bodyHtml ?? '').toContain('<blockquote>Full line one<br>Full line two</blockquote>')
   })
 
   it('builds quoted rich compose models for thread message replies', () => {

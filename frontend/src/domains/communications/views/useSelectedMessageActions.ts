@@ -33,6 +33,7 @@ import type { useCommunicationsStore } from '../stores/communications'
 import type {
   AiReplyResponse,
   CommunicationMessageDetailItem,
+  CommunicationMessageSummary,
   MessageExportFormat,
   TranslationResponse
 } from '../types/communications'
@@ -84,14 +85,20 @@ export function useSelectedMessageActions(
     return deps.getDefaultMailAccountId?.() || store.selectedMailAccountId || ''
   }
 
+  function selectedReplyMessage(): CommunicationMessageDetailItem | CommunicationMessageSummary | null {
+    return deps.getMessageDetail() ?? store.selectedCommunication
+  }
+
   function handleReply() {
-    if (!store.selectedCommunication) return
-    store.openCompose(replyComposeForm(store.selectedCommunication, fallbackMailAccountId(), `draft-${Date.now()}`))
+    const message = selectedReplyMessage()
+    if (!message) return
+    store.openCompose(replyComposeForm(message, fallbackMailAccountId(), `draft-${Date.now()}`))
   }
 
   function handleReplyAll() {
-    if (!store.selectedCommunication) return
-    store.openCompose(replyAllComposeForm(store.selectedCommunication, fallbackMailAccountId(), `draft-${Date.now()}`))
+    const message = selectedReplyMessage()
+    if (!message) return
+    store.openCompose(replyAllComposeForm(message, fallbackMailAccountId(), `draft-${Date.now()}`))
   }
 
   function handleForwardMessage() {
@@ -116,21 +123,10 @@ export function useSelectedMessageActions(
   function handleBilingualReplySend(response: BilingualReplyFlowResponse): void {
     const detail = deps.getMessageDetail()
     if (!detail || !response.send_ready) return
-    store.openCompose({
-      mode: 'reply',
-      draftId: `draft-${Date.now()}`,
-      accountId: detail.account_id || fallbackMailAccountId(),
-      toText: detail.sender,
-      ccText: '',
-      bccText: '',
-      subject: response.subject,
-      body: response.reply.text,
-      bodyHtml: null,
-      bodyFormat: 'plain',
-      scheduledSendAt: '',
-      undoSendSeconds: null,
-      inReplyTo: detail.provider_record_id || null
+    const form = replyComposeForm(detail, fallbackMailAccountId(), `draft-${Date.now()}`, {
+      draftBodyText: response.reply.text
     })
+    store.openCompose({ ...form, subject: response.subject || form.subject })
   }
 
   function handleNewMessage() {
@@ -282,6 +278,7 @@ export function useSelectedMessageActions(
         ...(store.mailMessageInsight ?? emptyCommunicationMessageInsight(messageId)),
         aiReply: result
       })
+      openGeneratedAiReply(result)
       return result.generated === false ? result.reason || 'AI reply not generated' : 'AI reply generated'
     })
   }
@@ -289,21 +286,20 @@ export function useSelectedMessageActions(
   function handleApplyAiReply(response: AiReplyResponse) {
     const detail = deps.getMessageDetail()
     if (!detail || !response.body) return
-    store.openCompose({
-      mode: 'reply',
-      draftId: `draft-${Date.now()}`,
-      accountId: detail.account_id || store.selectedMailAccountId || '',
-      toText: detail.sender,
-      ccText: '',
-      bccText: '',
-      subject: response.subject || (detail.subject.startsWith('Re:') ? detail.subject : `Re: ${detail.subject}`),
-      body: response.body,
-      bodyHtml: null,
-      bodyFormat: 'plain',
-      scheduledSendAt: '',
-      undoSendSeconds: null,
-      inReplyTo: detail.provider_record_id || null
+    const form = replyComposeForm(detail, fallbackMailAccountId(), `draft-${Date.now()}`, {
+      draftBodyText: response.body
     })
+    store.openCompose({ ...form, subject: response.subject || form.subject })
+  }
+
+  function openGeneratedAiReply(response: AiReplyResponse): void {
+    if (response.generated === false || !response.body?.trim()) return
+    const message = selectedReplyMessage()
+    if (!message) return
+    const form = replyComposeForm(message, fallbackMailAccountId(), `draft-${Date.now()}`, {
+      draftBodyText: response.body
+    })
+    store.openCompose({ ...form, subject: response.subject || form.subject })
   }
 
   async function handleReviewSecurity() {

@@ -9,11 +9,13 @@ const props = withDefaults(defineProps<{
   description?: string
   closeLabel?: string
   showClose?: boolean
+  closeOnInteractOutside?: boolean
   class?: string
   contentClass?: string
 }>(), {
   open: false,
   closeLabel: 'Close dialog',
+  closeOnInteractOutside: true,
   showClose: true
 })
 
@@ -22,6 +24,11 @@ const emit = defineEmits<{
 }>()
 
 const contentClasses = computed(() => ['hermes-dialog-content', props.contentClass])
+
+function handleOutsideCloseEvent(event: Event): void {
+  if (props.closeOnInteractOutside) return
+  event.preventDefault()
+}
 </script>
 
 <template>
@@ -31,7 +38,11 @@ const contentClasses = computed(() => ['hermes-dialog-content', props.contentCla
     </DialogTrigger>
     <DialogPortal>
       <DialogOverlay class="hermes-dialog-overlay">
-        <DialogContent :class="contentClasses">
+        <DialogContent
+          :class="contentClasses"
+          @interact-outside="handleOutsideCloseEvent"
+          @pointer-down-outside="handleOutsideCloseEvent"
+        >
           <div class="hermes-dialog-header">
             <DialogTitle v-if="title" class="hermes-dialog-title">{{ title }}</DialogTitle>
             <DialogDescription v-if="description" class="hermes-dialog-description">{{ description }}</DialogDescription>
@@ -43,6 +54,7 @@ const contentClasses = computed(() => ['hermes-dialog-content', props.contentCla
           <div v-if="$slots.footer" class="hermes-dialog-footer">
             <slot name="footer" />
           </div>
+          <slot name="chrome" />
           <DialogClose v-if="showClose" class="hermes-dialog-close" as-child>
             <button class="hermes-dialog-close-btn" type="button" :aria-label="closeLabel">
               <Icon icon="tabler:x" size="1.125rem" />

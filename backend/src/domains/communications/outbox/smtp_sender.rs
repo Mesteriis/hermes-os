@@ -8,12 +8,16 @@ use crate::domains::communications::core::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
 use crate::domains::communications::core::{
-    EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose, ProviderCredentialReader,
+    EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose, ProviderCredentialError,
+    ProviderCredentialReader,
 };
 use crate::platform::communications::{OutgoingEmail, SmtpConfig, SmtpTransport};
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 
 use super::{CommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt};
+
+const ICLOUD_SMTP_HOST: &str = "smtp.mail.me.com";
+const ICLOUD_SMTP_PORT: u16 = 587;
 
 #[derive(Clone)]
 pub struct SmtpOutboxEmailSender<R, T> {
@@ -67,15 +71,36 @@ where
                 self.secret_store.clone(),
                 &self.resolver,
             );
-            let credential = credential_reader
+            let credential = match credential_reader
                 .read(
                     &account.account_id,
                     ProviderAccountSecretPurpose::SmtpPassword,
                 )
                 .await
-                .map_err(|error| {
-                    delivery_error("SMTP credential is unavailable for this account", error)
-                })?;
+            {
+                Ok(credential) => credential,
+                Err(error) if should_try_imap_credential_for_smtp(&account, &error) => {
+                    tracing::warn!(
+                        error = %error,
+                        "SMTP credential unavailable; trying IMAP credential for SMTP"
+                    );
+                    credential_reader
+                        .read(
+                            &account.account_id,
+                            ProviderAccountSecretPurpose::ImapPassword,
+                        )
+                        .await
+                        .map_err(|error| {
+                            delivery_error("SMTP credential is unavailable for this account", error)
+                        })?
+                }
+                Err(error) => {
+                    return Err(delivery_error(
+                        "SMTP credential is unavailable for this account",
+                        error,
+                    ));
+                }
+            };
             let email = outgoing_email_from_outbox_item(item, &account);
             let result = self
                 .transport
@@ -108,40 +133,74 @@ pub fn smtp_config_for_provider_account(
         }
     }
 
-    let config = account.config.as_object().ok_or_else(|| {
-        OutboxDeliveryError::Transport("provider account config must be a JSON object".to_owned())
-    })?;
+    let config = account.config.as_object();
     let host = config
-        .get("smtp_host")
+        .and_then(|config| config.get("smtp_host"))
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| default_smtp_host(account.provider_kind).map(ToOwned::to_owned))
         .ok_or_else(|| {
             OutboxDeliveryError::Transport("SMTP config is unavailable for this account".to_owned())
         })?;
     let port = config
-        .get("smtp_port")
+        .and_then(|config| config.get("smtp_port"))
         .and_then(Value::as_u64)
         .filter(|value| *value > 0 && *value <= u64::from(u16::MAX))
+        .map(|value| value as u16)
+        .or_else(|| default_smtp_port(account.provider_kind))
         .ok_or_else(|| {
             OutboxDeliveryError::Transport("SMTP port is unavailable for this account".to_owned())
-        })? as u16;
+        })?;
     let username = config
-        .get("smtp_username")
+        .and_then(|config| config.get("smtp_username"))
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or(account.external_account_id.as_str());
     let tls = config
-        .get("smtp_tls")
+        .and_then(|config| config.get("smtp_tls"))
         .and_then(Value::as_bool)
         .unwrap_or(true);
     let starttls = config
-        .get("smtp_starttls")
+        .and_then(|config| config.get("smtp_starttls"))
         .and_then(Value::as_bool)
-        .unwrap_or(false);
+        .unwrap_or_else(|| default_smtp_starttls(account.provider_kind));
 
     Ok(SmtpConfig::new(host, port, tls, username).starttls(starttls))
+}
+
+fn default_smtp_host(provider_kind: EmailProviderKind) -> Option<&'static str> {
+    match provider_kind {
+        EmailProviderKind::Icloud => Some(ICLOUD_SMTP_HOST),
+        _ => None,
+    }
+}
+
+fn default_smtp_port(provider_kind: EmailProviderKind) -> Option<u16> {
+    match provider_kind {
+        EmailProviderKind::Icloud => Some(ICLOUD_SMTP_PORT),
+        _ => None,
+    }
+}
+
+fn default_smtp_starttls(provider_kind: EmailProviderKind) -> bool {
+    matches!(provider_kind, EmailProviderKind::Icloud)
+}
+
+fn should_try_imap_credential_for_smtp(
+    account: &ProviderAccount,
+    error: &ProviderCredentialError,
+) -> bool {
+    matches!(
+        account.provider_kind,
+        EmailProviderKind::Icloud | EmailProviderKind::Imap
+    ) && matches!(
+        error,
+        ProviderCredentialError::MissingBinding { .. }
+            | ProviderCredentialError::MissingSecretReference { .. }
+    )
 }
 
 pub fn outgoing_email_from_outbox_item(

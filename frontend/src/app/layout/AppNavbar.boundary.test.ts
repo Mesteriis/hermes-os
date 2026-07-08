@@ -278,6 +278,7 @@ describe('AppNavbar boundary', () => {
     expect(surface).not.toContain('All accounts')
     expect(accountNavigation).toContain('Все ящики')
     expect(accountNavigation).toContain('Все аккаунты')
+    expect(accountNavigation).toContain('isMailProviderKind(account.provider_kind)')
     expect(accountNavigation).toContain("if (channelId === 'telegram') return 'telegram'")
     expect(accountNavigation).toContain("if (channelId === 'whatsapp') return 'whatsapp'")
     expect(accountNavigation).toContain("if (channelId === 'mail') return 'mail'")

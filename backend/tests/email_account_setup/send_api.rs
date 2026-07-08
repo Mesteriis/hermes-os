@@ -21,6 +21,7 @@ async fn imap_send_api_queues_outbox_without_direct_smtp_against_postgres() {
     let ctx = TestContext::new().await;
     let vault_dir = tempdir().expect("vault tempdir");
     let database_url = ctx.connection_string();
+    let pool = ctx.pool().clone();
     let vault_home = vault_dir.path().join("vault");
     let dev_key_path = vault_dir.path().join("dev").join("master.key");
     let database = Database::connect(Some(&database_url))
@@ -73,6 +74,14 @@ async fn imap_send_api_queues_outbox_without_direct_smtp_against_postgres() {
         .await
         .expect("setup response");
     assert_eq!(setup_response.status(), StatusCode::OK);
+    let canonical_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM communication_accounts WHERE account_id = $1)",
+    )
+    .bind(account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("canonical account exists query");
+    assert!(canonical_exists);
 
     let send_response = app
         .oneshot(json_request_with_token_and_actor(
@@ -83,6 +92,7 @@ async fn imap_send_api_queues_outbox_without_direct_smtp_against_postgres() {
                 "cc": ["copy@example.com"],
                 "subject": "SMTP send test",
                 "body_text": "Message body from Hermes test.",
+                "draft_id": "draft-local-only",
                 "confirmed_provider_write": true
             }),
             LOCAL_API_TOKEN,
@@ -100,9 +110,8 @@ async fn imap_send_api_queues_outbox_without_direct_smtp_against_postgres() {
     );
     let outbox_id = send_body["outbox_id"].as_str().expect("outbox id");
     assert_eq!(send_body["message_id"], json!(outbox_id));
-    let pool = ctx.pool().clone();
     let outbox = sqlx::query(
-        "SELECT status, to_participants, cc_participants, bcc_participants, subject
+        "SELECT status, draft_id, to_participants, cc_participants, bcc_participants, subject
          FROM communication_outbox
          WHERE outbox_id = $1",
     )
@@ -118,8 +127,10 @@ async fn imap_send_api_queues_outbox_without_direct_smtp_against_postgres() {
         .try_get("bcc_participants")
         .expect("bcc participants");
     let outbox_status: String = outbox.try_get("status").expect("outbox status");
+    let outbox_draft_id: Option<String> = outbox.try_get("draft_id").expect("outbox draft id");
     let outbox_subject: String = outbox.try_get("subject").expect("outbox subject");
     assert_eq!(outbox_status, "queued");
+    assert_eq!(outbox_draft_id, None);
     assert_eq!(outbox_subject, "SMTP send test");
     assert_eq!(to_participants, json!(["recipient@example.com"]));
     assert_eq!(cc_participants, json!(["copy@example.com"]));
