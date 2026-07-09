@@ -1,5 +1,7 @@
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::workflows::email_intelligence::models::{EmailKnowledgeCandidate, EmailSummaryContract};
+use crate::workflows::email_intelligence::models::{
+    EmailKnowledgeCandidate, EmailSummaryContract, email_candidate_identifiers_email,
+};
 
 const URGENT_WORDS: &[&str] = &[
     "urgent",
@@ -196,11 +198,34 @@ pub(super) fn structured_summary(message: &ProjectedMessage) -> EmailSummaryCont
         action_items,
         risks,
         deadlines,
-        event_candidates: knowledge_candidates(&candidate_phrases, EVENT_WORDS, 5),
+        event_candidates: knowledge_candidates(
+            message,
+            &candidate_phrases,
+            "event",
+            EVENT_WORDS,
+            5,
+        ),
         persona_candidates: persona_candidates(message),
         organization_candidates: organization_candidates(message),
-        document_candidates: knowledge_candidates(&candidate_phrases, DOCUMENT_WORDS, 5),
-        agreement_candidates: knowledge_candidates(&candidate_phrases, AGREEMENT_WORDS, 5),
+        document_candidates: knowledge_candidates(
+            message,
+            &candidate_phrases,
+            "document",
+            DOCUMENT_WORDS,
+            5,
+        ),
+        agreement_candidates: knowledge_candidates(
+            message,
+            &candidate_phrases,
+            "agreement",
+            AGREEMENT_WORDS,
+            5,
+        ),
+        task_candidates: Vec::new(),
+        decision_candidates: Vec::new(),
+        obligation_candidates: Vec::new(),
+        relationship_candidates: Vec::new(),
+        fact_candidates: Vec::new(),
     }
 }
 
@@ -214,7 +239,9 @@ fn phrases_for_candidates(message: &ProjectedMessage) -> Vec<String> {
 }
 
 fn knowledge_candidates(
+    message: &ProjectedMessage,
     phrases: &[String],
+    kind: &str,
     words: &[&str],
     limit: usize,
 ) -> Vec<EmailKnowledgeCandidate> {
@@ -222,7 +249,14 @@ fn knowledge_candidates(
     for phrase in phrases {
         let lower = phrase.to_lowercase();
         if contains_any(&lower, words) {
-            push_candidate_bounded(&mut candidates, phrase.clone(), phrase.clone(), limit);
+            push_candidate_bounded(
+                &mut candidates,
+                EmailKnowledgeCandidate::new(phrase.clone(), phrase.clone())
+                    .kind(kind)
+                    .confidence(0.62)
+                    .source_message_id(message.message_id.clone()),
+                limit,
+            );
         }
     }
     candidates
@@ -231,11 +265,13 @@ fn knowledge_candidates(
 fn persona_candidates(message: &ProjectedMessage) -> Vec<EmailKnowledgeCandidate> {
     let mut candidates = Vec::new();
     push_persona_candidate(
+        message,
         &mut candidates,
         message.sender_display_name.as_deref(),
         &message.sender,
     );
     push_persona_candidate(
+        message,
         &mut candidates,
         Some(message.sender.as_str()),
         &message.sender,
@@ -243,7 +279,15 @@ fn persona_candidates(message: &ProjectedMessage) -> Vec<EmailKnowledgeCandidate
     for line in message.body_text.lines().take(20) {
         let trimmed = line.trim();
         if let Some((label, email)) = email_identity(trimmed) {
-            push_candidate_bounded(&mut candidates, label, email, 5);
+            push_candidate_bounded(
+                &mut candidates,
+                EmailKnowledgeCandidate::new(label, email.clone())
+                    .kind("person")
+                    .confidence(0.64)
+                    .source_message_id(message.message_id.clone())
+                    .identifiers(email_candidate_identifiers_email(&email)),
+                5,
+            );
         }
     }
     candidates
@@ -257,7 +301,15 @@ fn organization_candidates(message: &ProjectedMessage) -> Vec<EmailKnowledgeCand
     values.extend(message.body_text.split_whitespace().take(80));
     for value in values {
         if let Some(domain) = email_domain(value) {
-            push_candidate_bounded(&mut candidates, domain.clone(), value.to_owned(), 5);
+            push_candidate_bounded(
+                &mut candidates,
+                EmailKnowledgeCandidate::new(domain.clone(), value.to_owned())
+                    .kind("organization")
+                    .confidence(0.6)
+                    .source_message_id(message.message_id.clone())
+                    .identifiers(serde_json::json!({ "domain": domain })),
+                5,
+            );
         }
     }
     candidates
@@ -316,6 +368,7 @@ fn push_unique_bounded(target: &mut Vec<String>, value: Option<String>, limit: u
 }
 
 fn push_persona_candidate(
+    message: &ProjectedMessage,
     target: &mut Vec<EmailKnowledgeCandidate>,
     label: Option<&str>,
     evidence: &str,
@@ -326,7 +379,14 @@ fn push_persona_candidate(
     if label.contains('@') && label.len() > 120 {
         return;
     }
-    push_candidate_bounded(target, label, evidence.to_owned(), 5);
+    let mut candidate = EmailKnowledgeCandidate::new(label, evidence.to_owned())
+        .kind("person")
+        .confidence(0.62)
+        .source_message_id(message.message_id.clone());
+    if evidence.contains('@') {
+        candidate = candidate.identifiers(email_candidate_identifiers_email(evidence));
+    }
+    push_candidate_bounded(target, candidate, 5);
 }
 
 fn email_identity(value: &str) -> Option<(String, String)> {
@@ -362,12 +422,11 @@ fn email_domain(value: &str) -> Option<String> {
 
 fn push_candidate_bounded(
     target: &mut Vec<EmailKnowledgeCandidate>,
-    title: String,
-    evidence: String,
+    candidate: EmailKnowledgeCandidate,
     limit: usize,
 ) {
-    let title = title.trim().to_owned();
-    let evidence = evidence.trim().to_owned();
+    let title = candidate.title.trim().to_owned();
+    let evidence = candidate.evidence.trim().to_owned();
     if title.is_empty()
         || target.len() >= limit
         || target
@@ -376,5 +435,9 @@ fn push_candidate_bounded(
     {
         return;
     }
-    target.push(EmailKnowledgeCandidate { title, evidence });
+    target.push(EmailKnowledgeCandidate {
+        title,
+        evidence,
+        ..candidate
+    });
 }

@@ -8,6 +8,48 @@ export interface AiSettingsOverviewResponse {
   provider_presets: AiProviderPreset[]
 }
 
+export interface AiHubUsageStatsResponse {
+  generated_at: string
+  window_hours: number
+  totals: AiHubUsageTotals
+  providers: AiHubProviderUsageStats[]
+  hourly: AiHubHourlyUsageStats[]
+}
+
+export interface AiHubUsageTotals {
+  request_count: number
+  completed_count: number
+  failed_count: number
+  estimated_tokens: number
+  estimated_cost_usd?: number | null
+  avg_latency_ms?: number | null
+}
+
+export interface AiHubProviderUsageStats {
+  provider_id: string
+  provider_kind: string
+  provider_key: string
+  display_name: string
+  status: string
+  request_count: number
+  completed_count: number
+  failed_count: number
+  estimated_tokens: number
+  estimated_cost_usd?: number | null
+  avg_latency_ms?: number | null
+  balance_remaining_usd?: number | null
+  token_quota_remaining?: number | null
+  last_request_at?: string | null
+}
+
+export interface AiHubHourlyUsageStats {
+  hour: string
+  provider_id: string
+  request_count: number
+  failed_count: number
+  estimated_tokens: number
+}
+
 export interface AiCapabilitySlot {
   slot: string
   label: string
@@ -126,6 +168,11 @@ export interface AiModelAvailabilityUpdateRequest {
   provider_id: string
   model_key: string
   is_available: boolean
+}
+
+export interface AiModelDownloadRequest {
+  provider_id: string
+  model_key: string
 }
 
 export interface AiModelRoute {

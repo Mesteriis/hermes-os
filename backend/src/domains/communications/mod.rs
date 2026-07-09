@@ -37,6 +37,7 @@ pub mod search;
 pub mod service;
 pub mod signatures;
 pub mod sources;
+pub mod spam_reputation;
 pub mod spf_dkim;
 pub mod storage;
 pub mod subscriptions;

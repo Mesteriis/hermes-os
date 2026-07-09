@@ -1,6 +1,8 @@
 use super::super::types::ApiError;
 use crate::ai::control_center::AiControlCenterError;
 use crate::ai::core::AiError;
+use crate::ai::hub::AiHubError;
+use crate::platform::ai_runtime::AiRuntimePortError;
 
 impl From<AiError> for ApiError {
     fn from(error: AiError) -> Self {
@@ -19,22 +21,23 @@ impl From<AiControlCenterError> for ApiError {
 
 impl From<crate::integrations::ollama::client::OllamaError> for ApiError {
     fn from(error: crate::integrations::ollama::client::OllamaError) -> Self {
-        Self::Ai(AiError::Runtime(
-            crate::integrations::ai_runtime::AiRuntimeError::Ollama(error),
-        ))
+        Self::Ai(AiError::Runtime(AiHubError::Runtime(
+            AiRuntimePortError::provider("ollama", error.to_string()),
+        )))
     }
 }
 
 impl From<crate::integrations::omniroute::client::OmniRouteError> for ApiError {
     fn from(error: crate::integrations::omniroute::client::OmniRouteError) -> Self {
-        Self::Ai(AiError::Runtime(
-            crate::integrations::ai_runtime::AiRuntimeError::OmniRoute(error),
-        ))
+        Self::Ai(AiError::Runtime(AiHubError::Runtime(
+            AiRuntimePortError::provider("omniroute", error.to_string()),
+        )))
     }
 }
 
 impl From<crate::integrations::ai_runtime::AiRuntimeError> for ApiError {
     fn from(error: crate::integrations::ai_runtime::AiRuntimeError) -> Self {
-        Self::Ai(AiError::Runtime(error))
+        let port_error: AiRuntimePortError = error.into();
+        Self::Ai(AiError::Runtime(AiHubError::Runtime(port_error)))
     }
 }

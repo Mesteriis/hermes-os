@@ -1,7 +1,7 @@
 use thiserror::Error;
 
+use crate::ai::hub::AiHubError;
 use crate::application::review_inbox::ReviewInboxWorkflowError;
-use crate::integrations::ai_runtime::AiRuntimeError;
 use crate::platform::events::EventStoreError;
 use crate::platform::observations::ObservationStoreError;
 
@@ -25,7 +25,7 @@ pub enum AiError {
     RunNotFound,
 
     #[error(transparent)]
-    Runtime(#[from] AiRuntimeError),
+    Runtime(#[from] AiHubError),
 
     #[error(transparent)]
     EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),

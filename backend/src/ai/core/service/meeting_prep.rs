@@ -12,6 +12,7 @@ use super::super::runs::{AiRunStore, NewAiRun};
 use super::super::types::{AiMeetingPrepRequest, AiMeetingPrepResponse};
 use super::core::AiService;
 use super::events::AiRunEvent;
+use crate::ai::hub::AiModelRoute;
 
 impl AiService {
     pub async fn meeting_prep(
@@ -68,47 +69,78 @@ impl AiService {
         })
         .await?;
 
-        let citations = self.retrieve_citations(&query).await?;
-        let prompt = meeting_prep_prompt(&topic, &citations);
-        let chat = self.runtime.chat_with_model(&prompt, &chat_model).await?;
-        let duration_ms = elapsed_ms(started_at);
-        let stored = run_store
-            .complete_run(
-                &run_id,
-                &chat.content,
-                &citations,
-                duration_ms,
-                &completed_event_id,
-            )
+        let result: Result<AiMeetingPrepResponse, AiError> = async {
+            let citations = self.retrieve_citations(&query).await?;
+            let prompt = meeting_prep_prompt(&topic, &citations);
+            let chat = self.hub.chat(AiModelRoute::MeetingPrep, &prompt).await?;
+            let duration_ms = elapsed_ms(started_at);
+            let stored = run_store
+                .complete_run(
+                    &run_id,
+                    &chat.content,
+                    &citations,
+                    duration_ms,
+                    &completed_event_id,
+                )
+                .await?;
+            self.append_run_event(AiRunEvent {
+                event_id: &completed_event_id,
+                event_type: "ai.run.completed",
+                run_id: &run_id,
+                agent_id: &agent_id,
+                actor_id,
+                query: &query,
+                payload: json!({
+                    "workflow": "meeting_prep",
+                    "citation_count": citations.len(),
+                    "duration_ms": duration_ms,
+                }),
+                correlation_id: request.correlation_id.as_deref(),
+            })
             .await?;
-        self.append_run_event(AiRunEvent {
-            event_id: &completed_event_id,
-            event_type: "ai.run.completed",
-            run_id: &run_id,
-            agent_id: &agent_id,
-            actor_id,
-            query: &query,
-            payload: json!({
-                "workflow": "meeting_prep",
-                "citation_count": citations.len(),
-                "duration_ms": duration_ms,
-            }),
-            correlation_id: request.correlation_id.as_deref(),
-        })
-        .await?;
 
-        Ok(AiMeetingPrepResponse {
-            run_id,
-            agent_id,
-            agent_persona_id: attribution.agent_persona_id,
-            owner_persona_id: attribution.owner_persona_id,
-            status: stored.status,
-            briefing: chat.content,
-            citations,
-            model: chat.model,
-            embedding_model: self.model_routing.embeddings.clone(),
-            created_at: stored.started_at,
-            duration_ms,
-        })
+            Ok(AiMeetingPrepResponse {
+                run_id: run_id.clone(),
+                agent_id: agent_id.clone(),
+                agent_persona_id: attribution.agent_persona_id,
+                owner_persona_id: attribution.owner_persona_id,
+                status: stored.status,
+                briefing: chat.content,
+                citations,
+                model: chat.model,
+                embedding_model: self.model_routing.embeddings.clone(),
+                created_at: stored.started_at,
+                duration_ms,
+            })
+        }
+        .await;
+
+        match result {
+            Ok(response) => Ok(response),
+            Err(error) => {
+                let duration_ms = elapsed_ms(started_at);
+                let failed_event_id = event_id_from_command("ai.run.failed", &command_id);
+                let error_summary = error.to_string();
+                run_store
+                    .fail_run(&run_id, &error_summary, duration_ms, &failed_event_id)
+                    .await?;
+                self.append_run_event(AiRunEvent {
+                    event_id: &failed_event_id,
+                    event_type: "ai.run.failed",
+                    run_id: &run_id,
+                    agent_id: &agent_id,
+                    actor_id,
+                    query: &query,
+                    payload: json!({
+                        "workflow": "meeting_prep",
+                        "duration_ms": duration_ms,
+                        "reason": error_summary,
+                    }),
+                    correlation_id: request.correlation_id.as_deref(),
+                })
+                .await?;
+                Err(error)
+            }
+        }
     }
 }

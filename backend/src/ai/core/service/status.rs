@@ -4,8 +4,8 @@ use super::core::AiService;
 
 impl AiService {
     pub async fn status(&self) -> AiStatusResponse {
-        let version = self.runtime.version().await;
-        let models = self.runtime.models().await;
+        let version = self.hub.version().await;
+        let models = self.hub.models().await;
         let chat_model_available = models
             .as_ref()
             .map(|models| {
@@ -24,7 +24,7 @@ impl AiService {
             .unwrap_or(false);
 
         AiStatusResponse {
-            runtime: self.runtime.runtime_name().to_owned(),
+            runtime: self.hub.runtime_name().to_owned(),
             status: if version.is_ok()
                 && models.is_ok()
                 && chat_model_available

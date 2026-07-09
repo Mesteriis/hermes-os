@@ -1,6 +1,7 @@
 use super::super::*;
 use super::ai_routing::ai_model_routing;
 use super::database::database_pool;
+use crate::ai::control_center::AiControlCenterStore;
 use crate::domains::signal_hub::{SignalHubError, SignalHubStore};
 use std::future::Future;
 use std::pin::Pin;
@@ -84,11 +85,10 @@ pub(crate) async fn ai_service(state: &AppState) -> Result<AiService, ApiError> 
     let runtime_settings = ai_runtime_settings(state).await?;
     let model_routing = ai_model_routing(state, &runtime_settings).await?;
     let runtime = ai_runtime_client(state, &runtime_settings)?;
+    let hub = ai_hub_from_runtime_client(runtime, model_routing);
 
-    Ok(
-        AiService::new_with_routing(pool.clone(), runtime, model_routing)
-            .with_persona_attribution(ai_persona_attribution_port_from_pool(pool)),
-    )
+    Ok(AiService::new_with_hub(pool.clone(), hub)
+        .with_persona_attribution(ai_persona_attribution_port_from_pool(pool)))
 }
 
 pub(crate) async fn ai_requests_allowed(state: &AppState) -> Result<bool, ApiError> {
@@ -154,9 +154,7 @@ pub(crate) fn ai_runtime_client(
         )?)),
         AiRuntimeProvider::OmniRoute => {
             let api_key = state.config.omniroute_api_key().cloned().ok_or_else(|| {
-                ApiError::Ai(AiError::Runtime(AiRuntimeError::OmniRoute(
-                    OmniRouteError::MissingApiKey,
-                )))
+                ApiError::from(AiRuntimeError::OmniRoute(OmniRouteError::MissingApiKey))
             })?;
             Ok(AiRuntimeClient::OmniRoute(OmniRouteClient::new(
                 OmniRouteClientConfig::new(
@@ -171,24 +169,59 @@ pub(crate) fn ai_runtime_client(
     }
 }
 
-pub(crate) fn ai_runtime_port(
-    state: &AppState,
-    settings: &AiRuntimeSettings,
-) -> Option<crate::platform::ai_runtime::SharedAiRuntimePort> {
-    ai_runtime_client(state, settings)
-        .ok()
-        .map(|runtime| Arc::new(runtime) as crate::platform::ai_runtime::SharedAiRuntimePort)
+pub(crate) fn ai_hub_from_runtime_client(
+    runtime: AiRuntimeClient,
+    model_routing: AiModelRouting,
+) -> crate::ai::hub::SharedAiHub {
+    crate::ai::hub::AiHub::shared(
+        Arc::new(runtime) as crate::platform::ai_runtime::SharedAiRuntimePort,
+        model_routing,
+    )
 }
 
-pub(crate) async fn ai_runtime_port_optional(
+pub(crate) fn ai_hub_from_runtime_client_with_store(
+    runtime: AiRuntimeClient,
+    model_routing: AiModelRouting,
+    store: AiControlCenterStore,
+) -> crate::ai::hub::SharedAiHub {
+    crate::ai::hub::AiHub::shared_with_usage_recorder(
+        Arc::new(runtime) as crate::platform::ai_runtime::SharedAiRuntimePort,
+        model_routing,
+        Arc::new(store) as crate::ai::hub::SharedAiHubUsageRecorder,
+    )
+}
+
+pub(crate) async fn ai_hub_optional(
     state: &AppState,
-) -> Result<Option<crate::platform::ai_runtime::SharedAiRuntimePort>, ApiError> {
+) -> Result<Option<crate::ai::hub::SharedAiHub>, ApiError> {
     if !ai_requests_allowed(state).await? {
         return Ok(None);
     }
 
     let settings = ai_runtime_settings(state).await?;
-    Ok(ai_runtime_port(state, &settings))
+    let model_routing = match ai_model_routing(state, &settings).await {
+        Ok(model_routing) => model_routing,
+        Err(error) => {
+            tracing::warn!(error = ?error, "AI Hub routing unavailable; helper service disabled");
+            return Ok(None);
+        }
+    };
+    match ai_runtime_client(state, &settings) {
+        Ok(runtime) => {
+            let Some(pool) = state.database.pool() else {
+                return Ok(Some(ai_hub_from_runtime_client(runtime, model_routing)));
+            };
+            Ok(Some(ai_hub_from_runtime_client_with_store(
+                runtime,
+                model_routing,
+                AiControlCenterStore::new(pool.clone()),
+            )))
+        }
+        Err(error) => {
+            tracing::warn!(error = ?error, "AI Hub runtime construction failed; helper service disabled");
+            Ok(None)
+        }
+    }
 }
 
 pub(crate) async fn email_multilingual_service(
@@ -196,7 +229,7 @@ pub(crate) async fn email_multilingual_service(
 ) -> Result<crate::domains::communications::multilingual::MultilingualService, ApiError> {
     Ok(
         crate::domains::communications::multilingual::MultilingualService::new(
-            ai_runtime_port_optional(state).await?,
+            ai_hub_optional(state).await?,
         ),
     )
 }
@@ -206,7 +239,7 @@ pub(crate) async fn email_ai_reply_service(
 ) -> Result<crate::domains::communications::ai_reply::AiReplyService, ApiError> {
     Ok(
         crate::domains::communications::ai_reply::AiReplyService::new(
-            ai_runtime_port_optional(state).await?,
+            ai_hub_optional(state).await?,
         ),
     )
 }

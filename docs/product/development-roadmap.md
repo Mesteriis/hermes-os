@@ -57,6 +57,7 @@ The repository already contains meaningful implementation slices:
 | Decisions and Obligations are partial top-level domains. | Both have source-backed persistence, deterministic candidate detectors where explicit evidence exists, accepted graph projection, guarded backend entity/global list/review routes, a global Tasks workspace review panel and a cross-domain Review workspace panel with shared action routing. Message and document task candidate refresh use Obligation detection for explicit commitments/requests, confirmed `obligation_task` candidates now materialize accepted Obligations linked to Tasks, reset/reject review on those candidates synchronizes the durable Obligation state, email sync and Telegram/WhatsApp fixture ingestion refresh reviewable Decision and obligation-derived task candidates for projected Communications, compatibility `person_promises` now materialize accepted Obligations, explicit message/imported-document Decision candidates now persist as source-backed `suggested` Decisions, project link reviews now materialize accepted Decisions, and meeting outcomes now create reviewable Decisions or Obligations for `decision`, `promise`, `task` and `follow_up` outcomes. Broader live-provider ingestion, candidate routing and follow-ups can still blur together. | Wire remaining candidate extraction and review workflows to accepted Decisions and Obligations, then add adapters from compatibility surfaces. |
 | Engine boundaries are not fully separated. | Memory, Timeline, Trust, Risk, Enrichment and Obligation behavior appears inside domain modules. | Write engine specs before extraction or renaming. |
 | Notes remain ambiguous. | Frontend has Notes page, but foundation treats Notes as document-like artifacts. | Keep Notes as capture/document artifacts until a future ADR promotes them. |
+| Rust-native embedded AI inference is not implemented. | AI Hub can route to Ollama and remote/API providers, and Rust owns local deterministic guards, but small translation/classification/extraction models do not yet run inside the backend process. | Add a future AI Hub ADR for embedded inference through a Rust runtime such as Candle, mistral.rs or llama.cpp bindings, with model cache, download lifecycle, evaluation fixtures and route integration. |
 | Documentation tree is incomplete. | Developers cannot yet derive all domain behavior from one product model. | Complete Wave 1 first, then create domain, engine and workflow specs in order. |
 
 ## Slice 1: Communication Memory Spine
@@ -169,6 +170,9 @@ Refactoring plan topics:
 - represent AI agents as Personas when they enter the graph;
 - make agent writes auditable;
 - keep AI output derived until accepted by domain rules.
+- keep Ollama/API providers as runtime adapters, and plan Rust-native embedded
+  models as a separate AI Hub backend for small offline translation,
+  categorization and extraction tasks.
 
 ## Slice 7: Operating Surface
 
@@ -212,6 +216,7 @@ Create dedicated refactoring plans for:
 | Telegram production plan | Capability-gated Telegram delivery slices for accounts, sessions, proxies, chats, messages, tombstones, media, calls, offline, export and desktop UX. |
 | Polygraph engine plan | Consistency / Contradiction Engine, observations, review workflow and source citations. |
 | Obligations and Decisions plan | Durable obligations and decisions separated from tasks, promises, follow-ups and meeting outcomes. |
+| Rust-native embedded AI plan | Small local models running inside the Rust backend through AI Hub routes for translation, categorization, extraction and guard refinement; separate from the current Ollama provider lifecycle. |
 | Engine boundary plan | Documentation and later implementation extraction for Memory, Timeline, Trust, Risk, Enrichment and Obligation behavior. |
 | UI vocabulary plan | Rename or reinterpret current UI surfaces that still expose compatibility language. |
 

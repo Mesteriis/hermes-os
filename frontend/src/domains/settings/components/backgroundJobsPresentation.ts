@@ -302,7 +302,7 @@ export const BACKGROUND_JOB_CATALOG: BackgroundJobCatalogItem[] = [
     sourceCode: 'ai',
     runtimeKinds: [],
     cadence: 'Manual provider sync action',
-    evidence: 'AI Control Center provider model API',
+    evidence: 'AI Hub provider model API',
     controlSection: 'ai'
   }
 ]

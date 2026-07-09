@@ -63,36 +63,33 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
 
     let status = response.status();
     let body = json_body(response).await;
-    assert_eq!(status, StatusCode::OK, "body={body}");
-    assert_eq!(body["agent_id"], json!("MNEMOSYNE"));
-    assert_eq!(
-        body["agent_persona_id"],
-        json!("persona:v1:ai_agent:MNEMOSYNE")
-    );
-    assert_eq!(body["owner_persona_id"], json!(owner.person_id));
-    assert_eq!(body["status"], json!("completed"));
-    assert_eq!(body["model"], json!("qwen3:4b"));
-    assert_eq!(body["embedding_model"], json!("qwen3-embedding:4b"));
-    assert_eq!(body["answer"], json!("Hermes Hub V3 is source-backed."));
-    assert!(body["duration_ms"].as_i64().expect("duration") >= 0);
-
-    let citations = body["citations"].as_array().expect("citations");
-    assert!(!citations.is_empty());
-    assert!(citations.iter().any(|citation| {
-        citation["source_kind"] == json!("message") && citation["source_id"] == json!(message_id)
-    }));
+    assert_eq!(status, StatusCode::ACCEPTED, "body={body}");
+    assert_eq!(body["status"], json!("accepted"));
 
     let run_id = body["run_id"].as_str().expect("run id");
-    let stored = AiRunStore::new(pool.clone())
-        .get_run(run_id)
-        .await
-        .expect("load run")
-        .expect("stored run");
+    let stored = wait_for_run_status(&pool, run_id, "completed").await;
+    assert_eq!(stored.agent_id, "MNEMOSYNE");
+    assert_eq!(
+        stored.agent_persona_id.as_deref(),
+        Some("persona:v1:ai_agent:MNEMOSYNE")
+    );
+    assert_eq!(
+        stored.owner_persona_id.as_deref(),
+        Some(owner.person_id.as_str())
+    );
+    assert_eq!(stored.chat_model, "qwen3:4b");
+    assert_eq!(stored.embedding_model, "qwen3-embedding:4b");
     assert_eq!(
         stored.answer.as_deref(),
         Some("Hermes Hub V3 is source-backed.")
     );
     assert_eq!(stored.status, "completed");
+    assert!(stored.duration_ms.expect("duration") >= 0);
+    let citations = stored.citations.as_array().expect("citations");
+    assert!(!citations.is_empty());
+    assert!(citations.iter().any(|citation| {
+        citation["source_kind"] == json!("message") && citation["source_id"] == json!(message_id)
+    }));
 
     let run_observations: i64 = sqlx::query_scalar(
         r#"
@@ -117,25 +114,23 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
         "expected run requested + completed observations"
     );
 
-    let raw_signal_count: i64 = sqlx::query_scalar(
-        r#"
-        SELECT count(*)::bigint
-        FROM event_log
-        WHERE correlation_id = $1
-          AND event_type IN (
-            'signal.raw.ai.run_requested.observed',
-            'signal.raw.ai.run_completed.observed',
-            'signal.accepted.ai.run_requested',
-            'signal.accepted.ai.run_completed'
-          )
-          AND subject->>'run_id' = $1
-        "#,
+    let run_event_count = wait_for_event_types(
+        &pool,
+        run_id,
+        run_id,
+        &["ai.run.requested", "ai.run.completed"],
     )
-    .bind(run_id)
-    .fetch_one(&pool)
-    .await
-    .expect("ai signal hub event count");
-    assert_eq!(raw_signal_count, 4);
+    .await;
+    assert_eq!(run_event_count, 2);
+
+    let hub_event_count = wait_for_event_types(
+        &pool,
+        run_id,
+        run_id,
+        &["ai.hub.requested", "ai.hub.completed"],
+    )
+    .await;
+    assert_eq!(hub_event_count, 2);
 
     let run_attribution = sqlx::query(
         r#"
@@ -236,6 +231,69 @@ async fn ai_answer_api_is_blocked_when_ai_source_is_muted_by_signal_hub() {
 }
 
 #[tokio::test]
+async fn ai_answer_missing_route_becomes_failed_run_instead_of_sync_api_error() {
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
+    let _guard = AI_RUNTIME_TEST_LOCK.lock().await;
+    let ollama_base_url = spawn_fake_ollama().await;
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+
+    ApplicationSettingsStore::new(pool.clone())
+        .update_setting_value(
+            "ai.ollama_base_url",
+            &json!(ollama_base_url),
+            "hermes-frontend",
+        )
+        .await
+        .expect("fake Ollama setting");
+
+    let suffix = unique_suffix();
+    let app = build_router_with_database(
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str())])
+            .expect("config"),
+        database,
+    );
+
+    let response = app
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/ai/answers",
+            json!({
+                "command_id": format!("answer-missing-route-{suffix}"),
+                "query": format!("Missing route query {suffix}"),
+                "agent_id": "MNEMOSYNE"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
+
+    let status = response.status();
+    let body = json_body(response).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "body={body}");
+    let run_id = body["run_id"].as_str().expect("run id");
+
+    let stored = wait_for_run_status(&pool, run_id, "failed").await;
+    let error_summary = stored.error_summary.expect("error summary");
+    assert!(
+        error_summary.contains("route_not_configured"),
+        "unexpected error summary: {error_summary}"
+    );
+
+    let hub_failed_count = wait_for_event_types(
+        &pool,
+        run_id,
+        run_id,
+        &["ai.hub.requested", "ai.hub.failed"],
+    )
+    .await;
+    assert_eq!(hub_failed_count, 2);
+}
+
+#[tokio::test]
 async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
     let test_context = TestContext::new().await;
     let database_url = test_context.connection_string();
@@ -279,10 +337,14 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
 
     let status = response.status();
     let body = json_body(response).await;
-    assert_eq!(status, StatusCode::OK, "body={body}");
-    assert_eq!(body["status"], json!("completed"));
-    assert_eq!(body["created_count"], json!(1));
+    assert_eq!(status, StatusCode::ACCEPTED, "body={body}");
+    assert_eq!(body["status"], json!("accepted"));
     let run_id = body["run_id"].as_str().expect("run id");
+    let stored = wait_for_run_status(&pool, run_id, "completed").await;
+    assert_eq!(
+        stored.answer.as_deref(),
+        Some("Created 1 suggested task candidate(s).")
+    );
 
     let message_observation_id: String = sqlx::query_scalar(
         "SELECT observation_id FROM communication_messages WHERE message_id = $1",
@@ -342,25 +404,16 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
     let metadata = review_item_row.get::<serde_json::Value, _>("metadata");
     assert_eq!(metadata["mirrored_from"], json!("task_candidates"));
 
-    let raw_signal_count: i64 = sqlx::query_scalar(
-        r#"
-        SELECT count(*)::bigint
-        FROM event_log
-        WHERE correlation_id = $1
-          AND event_type IN (
-            'signal.raw.ai.run_requested.observed',
-            'signal.raw.ai.run_completed.observed',
-            'signal.raw.ai.task_extraction.observed',
-            'signal.accepted.ai.run_requested',
-            'signal.accepted.ai.run_completed',
-            'signal.accepted.ai.task_extraction'
-          )
-          AND subject->>'run_id' = $1
-        "#,
+    let run_event_count = wait_for_event_types(
+        &pool,
+        run_id,
+        run_id,
+        &[
+            "ai.run.requested",
+            "ai.run.completed",
+            "ai.task_extraction.completed",
+        ],
     )
-    .bind(run_id)
-    .fetch_one(&pool)
-    .await
-    .expect("ai task refresh signal hub event count");
-    assert_eq!(raw_signal_count, 6);
+    .await;
+    assert_eq!(run_event_count, 3);
 }

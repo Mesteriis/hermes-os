@@ -8,12 +8,16 @@ use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
 use crate::integrations::telegram::runtime::TelegramRuntimeManager;
+use crate::platform::config::AppConfig;
 use crate::platform::events::EventBus;
+use crate::platform::settings::AiRuntimeSettings;
 use crate::vault::{HostVault, VaultMode};
 
 static MAIL_BACKGROUND_SYNC_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static MAIL_OUTBOX_DELIVERY_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static MAIL_AI_PIPELINE_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static TELEGRAM_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -72,6 +76,7 @@ static SIGNAL_REPLAY_DISPATCHER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
 
 const MAIL_BACKGROUND_SYNC_RUNTIME: &str = "mail_background_sync";
 const MAIL_OUTBOX_DELIVERY_RUNTIME: &str = "mail_outbox_delivery";
+const MAIL_AI_PIPELINE_RUNTIME: &str = "mail_ai_pipeline";
 const TELEGRAM_COMMAND_EXECUTOR_RUNTIME: &str = "telegram_command_executor";
 const WHATSAPP_COMMAND_EXECUTOR_RUNTIME: &str = "whatsapp_command_executor";
 const ZULIP_COMMAND_EXECUTOR_RUNTIME: &str = "zulip_command_executor";
@@ -124,6 +129,7 @@ pub(crate) struct ApplicationBootstrapContext {
     pub(crate) pool: Option<PgPool>,
     pub(crate) database_url: Option<String>,
     pub(crate) nats_server_url: Option<String>,
+    pub(crate) config: AppConfig,
     pub(crate) zoom_token_maintenance_scheduler_enabled: bool,
     pub(crate) zoom_recording_sync_scheduler_enabled: bool,
     pub(crate) zoom_retention_cleanup_scheduler_enabled: bool,
@@ -135,6 +141,7 @@ pub(crate) struct ApplicationBootstrapContext {
 pub(crate) fn start_background_services(context: ApplicationBootstrapContext) {
     start_mail_background_sync(context.clone());
     start_mail_outbox_delivery(context.clone());
+    start_mail_ai_pipeline(context.clone());
     start_telegram_command_executor(context.clone());
     start_whatsapp_command_executor(context.clone());
     start_zulip_event_ingest(context.clone());
@@ -284,6 +291,71 @@ fn start_mail_outbox_delivery(context: ApplicationBootstrapContext) {
                 Ok(_) => {}
                 Err(error) => {
                     tracing::warn!(error = %error, "mail outbox delivery scheduler tick failed");
+                }
+            }
+        }
+    });
+}
+
+fn start_mail_ai_pipeline(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_mail_ai_pipeline(&database_url) {
+        return;
+    }
+    let config = context.config;
+    let vault = context.vault;
+
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(10));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "ai",
+                MAIL_AI_PIPELINE_RUNTIME,
+                json!({
+                    "label": "Mail AI pipeline",
+                    "scope": "worker",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+
+            let hub = mail_ai_hub_optional(&pool, &config, &vault).await;
+            let target_language = mail_ai_target_language(&pool).await;
+            let service = crate::workflows::email_intelligence::MailAiPipelineService::new(
+                pool.clone(),
+                hub,
+                target_language,
+            );
+            match service.process_next_batch(10).await {
+                Ok(report)
+                    if report.claimed > 0
+                        || report.processed > 0
+                        || report.failed > 0
+                        || report.suppressed > 0 =>
+                {
+                    tracing::info!(
+                        claimed = report.claimed,
+                        processed = report.processed,
+                        suppressed = report.suppressed,
+                        failed = report.failed,
+                        review_candidates = report.review_candidates,
+                        "mail AI pipeline tick completed"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(error = %error, "mail AI pipeline tick failed");
                 }
             }
         }
@@ -2174,6 +2246,272 @@ fn register_mail_outbox_delivery_scheduler(database_url: &str) -> bool {
             false
         }
     }
+}
+
+fn register_mail_ai_pipeline(database_url: &str) -> bool {
+    match MAIL_AI_PIPELINE_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "mail AI pipeline registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+async fn mail_ai_hub_optional(
+    pool: &PgPool,
+    config: &AppConfig,
+    vault: &HostVault,
+) -> Option<crate::ai::hub::SharedAiHub> {
+    let settings = match crate::platform::settings::ApplicationSettingsStore::new(pool.clone())
+        .ai_runtime_settings(config)
+        .await
+    {
+        Ok(settings) => settings,
+        Err(error) => {
+            tracing::warn!(error = %error, "mail AI pipeline settings lookup failed");
+            AiRuntimeSettings::from_config(config)
+        }
+    };
+    let store = crate::ai::control_center::AiControlCenterStore::new(pool.clone());
+    let model_routing = match resolve_mail_ai_model_routing(&store).await {
+        Ok(routing) => routing,
+        Err(error) => {
+            tracing::warn!(error = %error, "mail AI pipeline routing unavailable");
+            return None;
+        }
+    };
+    let mail_provider_id = match mail_ai_route_provider_id(&model_routing) {
+        Some(provider_id) => provider_id,
+        None => {
+            tracing::warn!("mail AI pipeline route target is unavailable");
+            return None;
+        }
+    };
+    let provider = match store.provider(mail_provider_id).await {
+        Ok(Some(provider)) => provider,
+        Ok(None) => {
+            tracing::warn!(
+                provider_id = %mail_provider_id,
+                "mail AI pipeline provider is missing"
+            );
+            return None;
+        }
+        Err(error) => {
+            tracing::warn!(error = %error, "mail AI pipeline provider lookup failed");
+            return None;
+        }
+    };
+    let runtime =
+        match mail_ai_runtime_client(pool, &store, vault, &settings, &provider, &model_routing)
+            .await
+        {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                tracing::warn!(error = %error, "mail AI pipeline runtime unavailable");
+                return None;
+            }
+        };
+
+    Some(crate::ai::hub::AiHub::shared_with_usage_recorder(
+        Arc::new(runtime) as crate::platform::ai_runtime::SharedAiRuntimePort,
+        model_routing,
+        Arc::new(store) as crate::ai::hub::SharedAiHubUsageRecorder,
+    ))
+}
+
+async fn resolve_mail_ai_model_routing(
+    store: &crate::ai::control_center::AiControlCenterStore,
+) -> Result<crate::ai::core::AiModelRouting, crate::ai::control_center::AiControlCenterError> {
+    let mail_intelligence = resolve_mail_ai_slot_model(store, "mail_intelligence").await?;
+    let mail_model_key = mail_intelligence.model_key.clone();
+
+    Ok(crate::ai::core::AiModelRouting {
+        default_chat: mail_model_key.clone(),
+        reasoning: mail_model_key.clone(),
+        summarization: mail_model_key.clone(),
+        mail_intelligence: mail_model_key.clone(),
+        reply_draft: mail_model_key.clone(),
+        extraction: mail_model_key.clone(),
+        embeddings: mail_model_key.clone(),
+        meeting_prep: mail_model_key,
+        targets: vec![mail_intelligence],
+    })
+}
+
+async fn resolve_mail_ai_slot_model(
+    store: &crate::ai::control_center::AiControlCenterStore,
+    slot: &str,
+) -> Result<crate::ai::core::AiModelRouteTarget, crate::ai::control_center::AiControlCenterError> {
+    let Some(route) = store.route_for_slot(slot).await? else {
+        return Err(
+            crate::ai::control_center::AiControlCenterError::InvalidRequest(format!(
+                "route_not_configured:{slot}: use Hub route settings"
+            )),
+        );
+    };
+    let Some(provider) = store.provider(&route.provider_id).await? else {
+        return Err(
+            crate::ai::control_center::AiControlCenterError::InvalidRequest(format!(
+                "route_provider_missing:{}",
+                route.provider_id
+            )),
+        );
+    };
+    store
+        .ensure_model_ready_for_private_context(&route.provider_id, &route.model_key)
+        .await?;
+
+    Ok(crate::ai::core::AiModelRouteTarget {
+        capability_slot: slot.to_owned(),
+        provider_id: route.provider_id,
+        model_key: route.model_key,
+    })
+}
+
+fn mail_ai_route_provider_id(routing: &crate::ai::core::AiModelRouting) -> Option<&str> {
+    routing
+        .targets
+        .iter()
+        .find(|target| target.capability_slot == "mail_intelligence")
+        .map(|target| target.provider_id.as_str())
+}
+
+async fn mail_ai_runtime_client(
+    pool: &PgPool,
+    store: &crate::ai::control_center::AiControlCenterStore,
+    vault: &HostVault,
+    settings: &AiRuntimeSettings,
+    provider: &crate::ai::control_center::AiProviderAccount,
+    routing: &crate::ai::core::AiModelRouting,
+) -> Result<crate::integrations::ai_runtime::AiRuntimeClient, MailAiRuntimeBuildError> {
+    match (
+        provider.provider_kind.as_str(),
+        provider.provider_key.as_str(),
+    ) {
+        ("built_in", "ollama") => Ok(crate::integrations::ai_runtime::AiRuntimeClient::Ollama(
+            crate::integrations::ollama::client::OllamaClient::new(
+                crate::integrations::ollama::client::OllamaClientConfig::new(
+                    mail_ai_provider_base_url(provider)
+                        .as_deref()
+                        .unwrap_or(&settings.base_url),
+                    &routing.mail_intelligence,
+                    &routing.embeddings,
+                )
+                .with_timeout_seconds(settings.timeout_seconds),
+            )
+            .map_err(crate::integrations::ai_runtime::AiRuntimeError::from)?,
+        )),
+        ("api", _) => {
+            let base_url = mail_ai_provider_base_url(provider).ok_or_else(|| {
+                MailAiRuntimeBuildError::MissingBaseUrl(provider.provider_id.clone())
+            })?;
+            let api_key =
+                mail_ai_provider_api_key(pool, store, vault, &provider.provider_id).await?;
+            Ok(crate::integrations::ai_runtime::AiRuntimeClient::OmniRoute(
+                crate::integrations::omniroute::client::OmniRouteClient::new(
+                    crate::integrations::omniroute::client::OmniRouteClientConfig::new(
+                        base_url,
+                        &routing.mail_intelligence,
+                        &routing.embeddings,
+                        api_key,
+                    )
+                    .with_timeout_seconds(settings.timeout_seconds),
+                )
+                .map_err(crate::integrations::ai_runtime::AiRuntimeError::from)?,
+            ))
+        }
+        _ => Err(MailAiRuntimeBuildError::UnsupportedProvider {
+            provider_kind: provider.provider_kind.clone(),
+            provider_key: provider.provider_key.clone(),
+        }),
+    }
+}
+
+async fn mail_ai_provider_api_key(
+    pool: &PgPool,
+    store: &crate::ai::control_center::AiControlCenterStore,
+    vault: &HostVault,
+    provider_id: &str,
+) -> Result<crate::platform::secrets::ResolvedSecret, MailAiRuntimeBuildError> {
+    let secret_ref = store
+        .api_key_secret_ref(provider_id)
+        .await?
+        .ok_or_else(|| MailAiRuntimeBuildError::MissingApiKey(provider_id.to_owned()))?;
+    let reference = crate::platform::secrets::SecretReferenceStore::new(pool.clone())
+        .secret_reference(&secret_ref)
+        .await?
+        .ok_or_else(|| MailAiRuntimeBuildError::MissingSecretReference(secret_ref.clone()))?;
+    Ok(vault.resolve_host_secret(&reference)?)
+}
+
+fn mail_ai_provider_base_url(
+    provider: &crate::ai::control_center::AiProviderAccount,
+) -> Option<String> {
+    provider
+        .config
+        .get("base_url")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+#[derive(Debug, thiserror::Error)]
+enum MailAiRuntimeBuildError {
+    #[error("AI provider is not supported by mail AI runtime: {provider_kind}:{provider_key}")]
+    UnsupportedProvider {
+        provider_kind: String,
+        provider_key: String,
+    },
+
+    #[error("AI API provider base_url is missing: {0}")]
+    MissingBaseUrl(String),
+
+    #[error("AI API provider key is not configured: {0}")]
+    MissingApiKey(String),
+
+    #[error("AI API provider secret reference is missing: {0}")]
+    MissingSecretReference(String),
+
+    #[error(transparent)]
+    ControlCenter(#[from] crate::ai::control_center::AiControlCenterError),
+
+    #[error(transparent)]
+    SecretReference(#[from] crate::platform::secrets::SecretReferenceError),
+
+    #[error(transparent)]
+    SecretResolution(#[from] crate::platform::secrets::SecretResolutionError),
+
+    #[error(transparent)]
+    Runtime(#[from] crate::integrations::ai_runtime::AiRuntimeError),
+}
+
+async fn mail_ai_target_language(pool: &PgPool) -> String {
+    let language = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT language
+        FROM persons
+        WHERE is_self = true
+          AND language IS NOT NULL
+          AND length(trim(language)) > 0
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .fetch_optional(pool)
+    .await;
+
+    let Ok(language) = language else {
+        return "ru".to_owned();
+    };
+    language
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "ru".to_owned())
 }
 
 fn register_zoom_token_maintenance_scheduler(database_url: &str) -> bool {

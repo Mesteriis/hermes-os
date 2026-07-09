@@ -873,7 +873,7 @@ impl CommunicationsService for CommunicationsConnectService {
             .ok_or_else(|| {
                 ConnectError::new(ErrorCode::NotFound, "communication message was not found")
             })?;
-        let runtime = thread_ai_runtime_port_optional(&self.pool, &self.config)
+        let runtime = thread_ai_hub_optional(&self.pool, &self.config)
             .await
             .map_err(api_error_connect_error)?;
         let service = crate::domains::communications::ai_reply::AiReplyService::new(runtime);
@@ -954,7 +954,7 @@ impl CommunicationsService for CommunicationsConnectService {
             .ok_or_else(|| {
                 ConnectError::new(ErrorCode::NotFound, "communication message was not found")
             })?;
-        let runtime = thread_ai_runtime_port_optional(&self.pool, &self.config)
+        let runtime = thread_ai_hub_optional(&self.pool, &self.config)
             .await
             .map_err(api_error_connect_error)?;
         let service = crate::domains::communications::ai_reply::AiReplyService::new(runtime);
@@ -1443,7 +1443,7 @@ impl CommunicationsService for CommunicationsConnectService {
                 text: None,
                 target: Some(target_language.to_owned()),
                 model: None,
-                reason: Some("no LLM configured".to_owned()),
+                reason: Some("translation runtime unavailable".to_owned()),
                 ..Default::default()
             }),
             Err(error) => {
@@ -1482,7 +1482,7 @@ impl CommunicationsService for CommunicationsConnectService {
                 ConnectError::new(ErrorCode::NotFound, "communication message was not found")
             })?;
         let service = crate::domains::communications::extract::EmailExtractService::new(
-            thread_ai_runtime_port_optional(&self.pool, &self.config)
+            thread_ai_hub_optional(&self.pool, &self.config)
                 .await
                 .map_err(api_error_connect_error)?,
         );
@@ -1490,8 +1490,11 @@ impl CommunicationsService for CommunicationsConnectService {
             .extract_tasks(&message)
             .await
             .map_err(extract_connect_error)?;
-        let llm_task_count = tasks.iter().filter(|task| task.source == "llm").count();
-        if llm_task_count > 0 {
+        let external_llm_task_count = tasks
+            .iter()
+            .filter(|task| task.source == "ai_hub.external_llm")
+            .count();
+        if external_llm_task_count > 0 {
             crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
                 self.pool.clone(),
                 "message_task_extraction",
@@ -1504,7 +1507,7 @@ impl CommunicationsService for CommunicationsConnectService {
                 }),
                 serde_json::json!({
                     "task_count": tasks.len(),
-                    "llm_task_count": llm_task_count,
+                    "external_llm_task_count": external_llm_task_count,
                 }),
                 serde_json::json!({
                     "source": "communication_message_task_extraction",
@@ -1683,7 +1686,7 @@ impl CommunicationsService for CommunicationsConnectService {
                     text: None,
                     target: target_language.to_owned(),
                     model: None,
-                    reason: Some("no LLM configured".to_owned()),
+                    reason: Some("translation runtime unavailable".to_owned()),
                     ..Default::default()
                 }),
                 Err(error) => {
@@ -2513,7 +2516,7 @@ impl CommunicationsService for CommunicationsConnectService {
                 text: None,
                 target: target_language.to_owned(),
                 model: None,
-                reason: Some("no LLM configured".to_owned()),
+                reason: Some("translation runtime unavailable".to_owned()),
                 source: ATTACHMENT_TRANSLATION_SOURCE.to_owned(),
                 ..Default::default()
             }),
@@ -3778,15 +3781,15 @@ async fn thread_multilingual_service(
 ) -> Result<crate::domains::communications::multilingual::MultilingualService, ApiError> {
     Ok(
         crate::domains::communications::multilingual::MultilingualService::new(
-            thread_ai_runtime_port_optional(pool, config).await?,
+            thread_ai_hub_optional(pool, config).await?,
         ),
     )
 }
 
-async fn thread_ai_runtime_port_optional(
+async fn thread_ai_hub_optional(
     pool: &PgPool,
     config: &AppConfig,
-) -> Result<Option<crate::platform::ai_runtime::SharedAiRuntimePort>, ApiError> {
+) -> Result<Option<crate::ai::hub::SharedAiHub>, ApiError> {
     if !thread_ai_requests_allowed(pool).await? {
         return Ok(None);
     }
@@ -3794,7 +3797,16 @@ async fn thread_ai_runtime_port_optional(
     let settings = ApplicationSettingsStore::new(pool.clone())
         .ai_runtime_settings(config)
         .await?;
-    Ok(thread_ai_runtime_port(config, &settings))
+    match thread_ai_model_routing(pool, &settings).await {
+        Ok(model_routing) => Ok(thread_ai_hub(pool, config, &settings, model_routing)),
+        Err(error) => {
+            tracing::warn!(
+                error = ?error,
+                "AI Hub routing unavailable for communications helper surface; continuing without AI runtime"
+            );
+            Ok(None)
+        }
+    }
 }
 
 async fn thread_ai_requests_allowed(pool: &PgPool) -> Result<bool, ApiError> {
@@ -3815,13 +3827,122 @@ async fn thread_ai_requests_allowed(pool: &PgPool) -> Result<bool, ApiError> {
     .map_err(ApiError::from)
 }
 
-fn thread_ai_runtime_port(
+async fn thread_ai_model_routing(
+    pool: &PgPool,
+    settings: &crate::platform::settings::AiRuntimeSettings,
+) -> Result<crate::ai::core::AiModelRouting, ApiError> {
+    let store = crate::ai::control_center::AiControlCenterStore::new(pool.clone());
+    thread_resolve_ai_model_routing(&store, settings)
+        .await
+        .map_err(ApiError::from)
+}
+
+async fn thread_resolve_ai_model_routing(
+    store: &crate::ai::control_center::AiControlCenterStore,
+    settings: &crate::platform::settings::AiRuntimeSettings,
+) -> Result<crate::ai::core::AiModelRouting, crate::ai::control_center::AiControlCenterError> {
+    let default_chat = thread_resolve_ai_slot_model(store, settings, "default_chat").await?;
+    let reasoning = thread_resolve_ai_slot_model(store, settings, "reasoning").await?;
+    let summarization = thread_resolve_ai_slot_model(store, settings, "summarization").await?;
+    let mail_intelligence =
+        thread_resolve_ai_slot_model(store, settings, "mail_intelligence").await?;
+    let reply_draft = thread_resolve_ai_slot_model(store, settings, "reply_draft").await?;
+    let extraction = thread_resolve_ai_slot_model(store, settings, "extraction").await?;
+    let embeddings = thread_resolve_ai_slot_model(store, settings, "embeddings").await?;
+    let meeting_prep = thread_resolve_ai_slot_model(store, settings, "meeting_prep").await?;
+
+    Ok(crate::ai::core::AiModelRouting {
+        default_chat: default_chat.model_key.clone(),
+        reasoning: reasoning.model_key.clone(),
+        summarization: summarization.model_key.clone(),
+        mail_intelligence: mail_intelligence.model_key.clone(),
+        reply_draft: reply_draft.model_key.clone(),
+        extraction: extraction.model_key.clone(),
+        embeddings: embeddings.model_key.clone(),
+        meeting_prep: meeting_prep.model_key.clone(),
+        targets: vec![
+            default_chat,
+            reasoning,
+            summarization,
+            mail_intelligence,
+            reply_draft,
+            extraction,
+            embeddings,
+            meeting_prep,
+        ],
+    })
+}
+
+async fn thread_resolve_ai_slot_model(
+    store: &crate::ai::control_center::AiControlCenterStore,
+    settings: &crate::platform::settings::AiRuntimeSettings,
+    slot: &str,
+) -> Result<crate::ai::core::AiModelRouteTarget, crate::ai::control_center::AiControlCenterError> {
+    let Some(route) = store.route_for_slot(slot).await? else {
+        return Err(
+            crate::ai::control_center::AiControlCenterError::InvalidRequest(format!(
+                "route_not_configured:{slot}: use Hub route settings"
+            )),
+        );
+    };
+    let Some(provider) = store.provider(&route.provider_id).await? else {
+        return Err(
+            crate::ai::control_center::AiControlCenterError::InvalidRequest(format!(
+                "route_provider_missing:{}",
+                route.provider_id
+            )),
+        );
+    };
+    if !thread_ai_provider_matches_runtime(&provider, settings.provider) {
+        return Err(
+            crate::ai::control_center::AiControlCenterError::InvalidRequest(
+                "route_provider_mismatch: runtime and route provider kinds diverge".to_owned(),
+            ),
+        );
+    }
+
+    store
+        .ensure_model_ready_for_private_context(&route.provider_id, &route.model_key)
+        .await?;
+
+    Ok(crate::ai::core::AiModelRouteTarget {
+        capability_slot: slot.to_owned(),
+        provider_id: route.provider_id,
+        model_key: route.model_key,
+    })
+}
+
+fn thread_ai_provider_matches_runtime(
+    provider: &crate::ai::control_center::AiProviderAccount,
+    runtime_provider: AiRuntimeProvider,
+) -> bool {
+    match runtime_provider {
+        AiRuntimeProvider::Ollama => {
+            provider.provider_kind == "built_in" && provider.provider_key == "ollama"
+        }
+        AiRuntimeProvider::OmniRoute => {
+            provider.provider_kind == "api" && provider.provider_key == "omniroute"
+        }
+    }
+}
+
+fn thread_ai_hub(
+    pool: &PgPool,
     config: &AppConfig,
     settings: &crate::platform::settings::AiRuntimeSettings,
-) -> Option<crate::platform::ai_runtime::SharedAiRuntimePort> {
+    model_routing: crate::ai::core::AiModelRouting,
+) -> Option<crate::ai::hub::SharedAiHub> {
     thread_ai_runtime_client(config, settings)
         .ok()
-        .map(|runtime| Arc::new(runtime) as crate::platform::ai_runtime::SharedAiRuntimePort)
+        .map(|runtime| {
+            crate::ai::hub::AiHub::shared_with_usage_recorder(
+                Arc::new(runtime) as crate::platform::ai_runtime::SharedAiRuntimePort,
+                model_routing,
+                Arc::new(crate::ai::control_center::AiControlCenterStore::new(
+                    pool.clone(),
+                )) as crate::ai::hub::SharedAiHubUsageRecorder,
+            )
+        })
 }
 
 fn thread_ai_runtime_client(
@@ -3839,9 +3960,7 @@ fn thread_ai_runtime_client(
         )?)),
         AiRuntimeProvider::OmniRoute => {
             let api_key = config.omniroute_api_key().cloned().ok_or_else(|| {
-                ApiError::Ai(crate::ai::core::AiError::Runtime(
-                    AiRuntimeError::OmniRoute(OmniRouteError::MissingApiKey),
-                ))
+                ApiError::from(AiRuntimeError::OmniRoute(OmniRouteError::MissingApiKey))
             })?;
             Ok(AiRuntimeClient::OmniRoute(OmniRouteClient::new(
                 OmniRouteClientConfig::new(

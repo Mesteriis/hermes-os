@@ -1,7 +1,10 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
+use axum::routing::post;
+use axum::{Json, Router};
 use serde_json::{Value, json};
 use sqlx::Row;
+use std::net::SocketAddr;
 use tower::ServiceExt;
 
 use hermes_hub_backend::ai::control_center::{
@@ -15,6 +18,7 @@ use hermes_hub_backend::platform::secrets::{
 };
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
+use tokio::net::TcpListener;
 
 const LOCAL_API_TOKEN: &str = "ai-control-center-test-token";
 
@@ -65,6 +69,158 @@ fn vault_entropy_events(count: usize) -> Vec<Value> {
                 "interval_ms": 5.0
             })
         })
+        .collect()
+}
+
+async fn spawn_fake_ollama() -> String {
+    let app = Router::new().route(
+        "/api/pull",
+        post(|Json(body): Json<Value>| async move {
+            let model = body
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            Json(json!({
+                "status": format!("downloaded {model}")
+            }))
+        }),
+    );
+
+    let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+        .await
+        .expect("listener");
+    let address = listener.local_addr().expect("local address");
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("fake ollama");
+    });
+
+    format!("http://{address}")
+}
+
+async fn spawn_failing_fake_ollama() -> String {
+    let app = Router::new().route(
+        "/api/pull",
+        post(|| async move {
+            Json(json!({
+                "error": "pull failed"
+            }))
+        }),
+    );
+
+    let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+        .await
+        .expect("listener");
+    let address = listener.local_addr().expect("local address");
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("fake ollama");
+    });
+
+    format!("http://{address}")
+}
+
+async fn spawn_syncable_fake_ollama() -> String {
+    let app = Router::new()
+        .route(
+            "/api/tags",
+            post(|| async move {
+                Json(json!({
+                    "models": [
+                        {
+                            "name": "qwen3:4b",
+                            "model": "qwen3:4b",
+                            "details": {"family": "qwen3"}
+                        },
+                        {
+                            "name": "qwen3-embedding:4b",
+                            "model": "qwen3-embedding:4b",
+                            "details": {"family": "qwen3"}
+                        }
+                    ]
+                }))
+            }),
+        )
+        .route(
+            "/api/tags",
+            axum::routing::get(|| async move {
+                Json(json!({
+                    "models": [
+                        {
+                            "name": "qwen3:4b",
+                            "model": "qwen3:4b",
+                            "details": {"family": "qwen3"}
+                        },
+                        {
+                            "name": "qwen3-embedding:4b",
+                            "model": "qwen3-embedding:4b",
+                            "details": {"family": "qwen3"}
+                        }
+                    ]
+                }))
+            }),
+        )
+        .route(
+            "/api/show",
+            post(|Json(body): Json<Value>| async move {
+                let model = body
+                    .get("model")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let response = match model {
+                    "qwen3-embedding:4b" => json!({
+                        "capabilities": ["embedding"],
+                        "model_info": {
+                            "qwen3.embedding_length": 2560
+                        }
+                    }),
+                    _ => json!({
+                        "capabilities": ["completion"],
+                        "model_info": {
+                            "qwen3.context_length": 32768,
+                            "qwen3.embedding_length": 2560
+                        }
+                    }),
+                };
+                Json(response)
+            }),
+        );
+
+    let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+        .await
+        .expect("listener");
+    let address = listener.local_addr().expect("local address");
+    tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("syncable fake ollama");
+    });
+
+    format!("http://{address}")
+}
+
+async fn model_download_event_types(
+    ctx: &TestContext,
+    provider_id: &str,
+    model_key: &str,
+) -> Vec<String> {
+    let rows = sqlx::query(
+        r#"
+        SELECT event_type
+        FROM event_log
+        WHERE subject->>'kind' = 'ai_model_download'
+          AND subject->>'provider_id' = $1
+          AND subject->>'model_key' = $2
+        ORDER BY position ASC
+        "#,
+    )
+    .bind(provider_id)
+    .bind(model_key)
+    .fetch_all(ctx.pool())
+    .await
+    .expect("model download events");
+
+    rows.into_iter()
+        .map(|row| row.get::<String, _>("event_type"))
         .collect()
 }
 
@@ -132,6 +288,14 @@ async fn ai_settings_write_endpoints_exist_without_database() {
                 "provider_id": "provider:missing",
                 "model_key": "model:missing",
                 "is_available": true
+            }),
+        ),
+        json_request(
+            Method::POST,
+            "/api/v1/ai/model-downloads",
+            json!({
+                "provider_id": "provider:missing",
+                "model_key": "model:missing"
             }),
         ),
         json_request(
@@ -257,6 +421,251 @@ async fn model_availability_toggle_removes_disabled_routes() {
         .expect("enable model");
 
     assert!(enabled.is_available);
+}
+
+#[tokio::test]
+async fn model_route_delete_leaves_slot_unassigned() {
+    let ctx = TestContext::new().await;
+    let store = AiControlCenterStore::new(ctx.pool().clone());
+    store
+        .update_model_availability(
+            &AiModelAvailabilityUpdateRequest {
+                provider_id: "provider:built_in:ollama".to_owned(),
+                model_key: "qwen3:4b".to_owned(),
+                is_available: true,
+            },
+            "test",
+        )
+        .await
+        .expect("enable model");
+    store
+        .put_model_route(
+            "default_chat",
+            &AiModelRouteUpdateRequest {
+                provider_id: "provider:built_in:ollama".to_owned(),
+                model_key: "qwen3:4b".to_owned(),
+            },
+        )
+        .await
+        .expect("route model");
+
+    store
+        .delete_model_route("default_chat")
+        .await
+        .expect("delete route");
+
+    assert!(
+        store
+            .route_for_slot("default_chat")
+            .await
+            .expect("route lookup")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn curated_ollama_models_start_not_downloaded_and_unrouted() {
+    let ctx = TestContext::new().await;
+    let store = AiControlCenterStore::new(ctx.pool().clone());
+
+    let chat_model = store
+        .model("provider:built_in:ollama", "qwen3:4b")
+        .await
+        .expect("chat model lookup")
+        .expect("chat model");
+    let embedding_model = store
+        .model("provider:built_in:ollama", "qwen3-embedding:4b")
+        .await
+        .expect("embedding model lookup")
+        .expect("embedding model");
+
+    assert!(!chat_model.is_available);
+    assert!(!embedding_model.is_available);
+    assert!(
+        store
+            .route_for_slot("default_chat")
+            .await
+            .expect("default_chat route lookup")
+            .is_none()
+    );
+    assert!(
+        store
+            .route_for_slot("embeddings")
+            .await
+            .expect("embeddings route lookup")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn ollama_model_sync_preserves_user_availability_state() {
+    let ctx = TestContext::new().await;
+    let store = AiControlCenterStore::new(ctx.pool().clone());
+    let ollama_base_url = spawn_syncable_fake_ollama().await;
+
+    store
+        .update_provider(
+            "provider:built_in:ollama",
+            &hermes_hub_backend::ai::control_center::AiProviderPatchRequest {
+                display_name: None,
+                base_url: Some(ollama_base_url),
+                config: None,
+                enabled: None,
+                api_key: None,
+            },
+        )
+        .await
+        .expect("patch provider base url");
+
+    store
+        .update_model_availability(
+            &AiModelAvailabilityUpdateRequest {
+                provider_id: "provider:built_in:ollama".to_owned(),
+                model_key: "qwen3:4b".to_owned(),
+                is_available: true,
+            },
+            "test",
+        )
+        .await
+        .expect("enable curated chat model");
+
+    let provider = store
+        .provider("provider:built_in:ollama")
+        .await
+        .expect("provider lookup")
+        .expect("provider");
+    let synced = store
+        .sync_ollama_provider_models(&provider, "test")
+        .await
+        .expect("sync models");
+
+    assert_eq!(synced, 2);
+    assert!(
+        store
+            .model("provider:built_in:ollama", "qwen3:4b")
+            .await
+            .expect("chat model lookup")
+            .expect("chat model")
+            .is_available
+    );
+    assert!(
+        !store
+            .model("provider:built_in:ollama", "qwen3-embedding:4b")
+            .await
+            .expect("embedding model lookup")
+            .expect("embedding model")
+            .is_available
+    );
+}
+
+#[tokio::test]
+async fn ollama_model_download_marks_model_available_without_creating_route() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let ollama_base_url = spawn_fake_ollama().await;
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let store = AiControlCenterStore::new(pool);
+    store
+        .update_provider(
+            "provider:built_in:ollama",
+            &hermes_hub_backend::ai::control_center::AiProviderPatchRequest {
+                display_name: None,
+                base_url: Some(ollama_base_url),
+                config: None,
+                enabled: None,
+                api_key: None,
+            },
+        )
+        .await
+        .expect("patch provider base url");
+    let app = build_router_with_database(
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        database,
+    );
+    let response = app
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/ai/model-downloads",
+            json!({
+                "provider_id": "provider:built_in:ollama",
+                "model_key": "qwen3:4b"
+            }),
+        ))
+        .await
+        .expect("response");
+    let status = response.status();
+    let body = response_json(response).await;
+    assert_eq!(status, StatusCode::OK, "body={body}");
+    assert_eq!(body["provider_id"], json!("provider:built_in:ollama"));
+    assert_eq!(body["model_key"], json!("qwen3:4b"));
+    assert_eq!(body["is_available"], json!(true));
+
+    let route = store
+        .route_for_slot("default_chat")
+        .await
+        .expect("route lookup");
+    assert!(route.is_none());
+
+    assert_eq!(
+        model_download_event_types(&ctx, "provider:built_in:ollama", "qwen3:4b").await,
+        vec![
+            "ai.hub.model_download.requested".to_owned(),
+            "ai.hub.model_download.completed".to_owned(),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn ollama_model_download_failure_appends_failed_event() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let ollama_base_url = spawn_failing_fake_ollama().await;
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let store = AiControlCenterStore::new(pool);
+    store
+        .update_provider(
+            "provider:built_in:ollama",
+            &hermes_hub_backend::ai::control_center::AiProviderPatchRequest {
+                display_name: None,
+                base_url: Some(ollama_base_url),
+                config: None,
+                enabled: None,
+                api_key: None,
+            },
+        )
+        .await
+        .expect("patch provider base url");
+    let app = build_router_with_database(
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        database,
+    );
+    let response = app
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/ai/model-downloads",
+            json!({
+                "provider_id": "provider:built_in:ollama",
+                "model_key": "qwen3:4b"
+            }),
+        ))
+        .await
+        .expect("response");
+    let status = response.status();
+    let body = response_json(response).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY, "body={body}");
+    assert_eq!(
+        model_download_event_types(&ctx, "provider:built_in:ollama", "qwen3:4b").await,
+        vec![
+            "ai.hub.model_download.requested".to_owned(),
+            "ai.hub.model_download.failed".to_owned(),
+        ]
+    );
 }
 
 #[tokio::test]

@@ -138,11 +138,35 @@ impl AiRuntimePort for AiRuntimeClient {
         AiRuntimeClient::runtime_name(self)
     }
 
+    fn version<'a>(
+        &'a self,
+    ) -> Pin<Box<dyn Future<Output = Result<Option<String>, AiRuntimePortError>> + Send + 'a>> {
+        Box::pin(async move { self.version().await.map_err(Into::into) })
+    }
+
+    fn models<'a>(
+        &'a self,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<String>, AiRuntimePortError>> + Send + 'a>> {
+        Box::pin(async move { self.models().await.map_err(Into::into) })
+    }
+
     fn chat<'a>(
         &'a self,
         prompt: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<AiChatResult, AiRuntimePortError>> + Send + 'a>> {
         Box::pin(async move { self.chat(prompt).await.map_err(Into::into) })
+    }
+
+    fn chat_with_model<'a>(
+        &'a self,
+        prompt: &'a str,
+        model: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<AiChatResult, AiRuntimePortError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.chat_with_model(prompt, model)
+                .await
+                .map_err(Into::into)
+        })
     }
 
     fn embed_with_model<'a>(

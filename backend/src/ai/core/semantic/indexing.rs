@@ -3,12 +3,12 @@ use super::super::errors::AiError;
 use super::super::helpers::content_hash;
 use super::models::{NewSemanticEmbedding, SemanticIndexReport};
 use super::store::SemanticEmbeddingStore;
-use crate::integrations::ai_runtime::AiRuntimeClient;
+use crate::ai::hub::AiHub;
 
 impl SemanticEmbeddingStore {
     pub async fn index_canonical_sources(
         &self,
-        runtime: &AiRuntimeClient,
+        hub: &AiHub,
         embedding_model: &str,
     ) -> Result<SemanticIndexReport, AiError> {
         let sources = self.canonical_sources().await?;
@@ -30,9 +30,7 @@ impl SemanticEmbeddingStore {
                 continue;
             }
 
-            let embedding = runtime
-                .embed_with_model(&source.source_text, embedding_model)
-                .await?;
+            let embedding = hub.embed(&source.source_text).await?;
             if embedding.embedding.len() != AI_EMBEDDING_DIMENSION {
                 return Err(AiError::InvalidEmbeddingDimension {
                     expected: AI_EMBEDDING_DIMENSION,

@@ -44,7 +44,7 @@ impl AiService {
             "details": event.payload,
         }))
         .provenance(json!({
-            "runtime": self.runtime.runtime_name(),
+            "runtime": self.hub.runtime_name(),
             "chat_model": self.chat_model,
             "embedding_model": self.embedding_model,
             "prompt_template_version": AI_PROMPT_TEMPLATE_VERSION,
@@ -87,7 +87,7 @@ impl AiService {
             json!({
                 "source": "ai_run_event",
                 "source_code": "ai",
-                "runtime": self.runtime.runtime_name(),
+                "runtime": self.hub.runtime_name(),
                 "chat_model": self.chat_model,
                 "embedding_model": self.embedding_model,
                 "prompt_template_version": AI_PROMPT_TEMPLATE_VERSION,
@@ -104,6 +104,7 @@ fn ai_raw_signal_event_kind(event_type: &str) -> Option<&'static str> {
     match event_type {
         "ai.run.requested" => Some("run_requested"),
         "ai.run.completed" => Some("run_completed"),
+        "ai.run.failed" => Some("run_failed"),
         "ai.task_extraction.completed" => Some("task_extraction"),
         _ => None,
     }

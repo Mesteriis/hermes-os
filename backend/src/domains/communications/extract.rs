@@ -1,6 +1,6 @@
 // §20-21: Task + Note extraction from email via LLM + heuristics
+use crate::ai::hub::{AiHubError, AiModelRoute, SharedAiHub};
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::platform::ai_runtime::{AiRuntimePortError, SharedAiRuntimePort};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -10,6 +10,7 @@ pub struct ExtractedTask {
     pub due_date: Option<String>,
     pub assignee: Option<String>,
     pub priority: Option<String>,
+    #[serde(default)]
     pub source: String,
 }
 
@@ -18,17 +19,18 @@ pub struct ExtractedNote {
     pub title: String,
     pub content: String,
     pub tags: Vec<String>,
+    #[serde(default)]
     pub source: String,
 }
 
 #[derive(Clone)]
 pub struct EmailExtractService {
-    runtime: Option<SharedAiRuntimePort>,
+    hub: Option<SharedAiHub>,
 }
 
 impl EmailExtractService {
-    pub fn new(runtime: Option<SharedAiRuntimePort>) -> Self {
-        Self { runtime }
+    pub fn new(hub: Option<SharedAiHub>) -> Self {
+        Self { hub }
     }
 
     pub async fn extract_tasks(
@@ -66,18 +68,18 @@ impl EmailExtractService {
         }
 
         // LLM extraction if available
-        if let Some(ref runtime) = self.runtime {
+        if let Some(ref hub) = self.hub {
             let prompt = format!(
                 "Extract tasks from this email. Return a JSON array of objects with fields: title, due_date (ISO date or null), assignee (or null), priority (high/medium/low).\n\nEmail:\nSubject: {}\nBody:\n{}",
                 message.subject,
                 truncate(body, 3000)
             );
-            if let Ok(result) = runtime.chat(&prompt).await
+            if let Ok(result) = hub.chat(AiModelRoute::Extraction, &prompt).await
                 && let Ok(mut llm_tasks) =
                     serde_json::from_str::<Vec<ExtractedTask>>(result.content.trim())
             {
                 for t in &mut llm_tasks {
-                    t.source = "llm".into();
+                    t.source = "ai_hub.external_llm".into();
                 }
                 tasks.extend(llm_tasks);
             }
@@ -151,7 +153,7 @@ fn truncate(s: &str, max: usize) -> &str {
 #[derive(Debug, Error)]
 pub enum ExtractError {
     #[error(transparent)]
-    Runtime(#[from] AiRuntimePortError),
+    Hub(#[from] AiHubError),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
 }

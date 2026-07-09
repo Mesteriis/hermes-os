@@ -128,6 +128,8 @@ Key functions:
 - source-backed AI search answers
 - task extraction review
 - meeting preparation
+- future Rust-native embedded small-model backend for offline translation,
+  categorization and lightweight extraction through AI Hub routes
 
 Architectural changes:
 
@@ -135,6 +137,7 @@ Architectural changes:
 - tool permission model
 - Ollama provider
 - embedding provider
+- embedded local model runtime research and ADR before implementation
 - prompt provenance logging
 
 Risks:
@@ -142,10 +145,12 @@ Risks:
 - prompt injection
 - hallucinated links
 - latency on local models
+- embedded runtime memory, model quality and packaging complexity
 
 Dependencies:
 
 - local AI model evaluation
+- embedded inference runtime selection
 - permission model
 - graph/search retrieval planner
 

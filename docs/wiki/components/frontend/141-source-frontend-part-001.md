@@ -99,10 +99,10 @@ generated_by: code-wiki-ru
 
 ### Agents (агенты AI)
 
-- **API** (`domains/agents/api/agents.ts`): запросы на `/api/v1/ai/status`, `/api/v1/ai/agents`, `/api/v1/ai/runs`, `/api/v1/persons/owner`, `/api/v1/ai/answers`, `/api/v1/ai/meeting-prep`, `/api/v1/ai/task-candidates/refresh`.
+- **API** (`domains/agents/api/agents.ts`): запросы на `/api/v1/ai/status`, `/api/v1/ai/agents`, `/api/v1/ai/runs`, `/api/v1/ai/runs/{run_id}`, `/api/v1/persons/owner`, `/api/v1/ai/answers`, `/api/v1/ai/meeting-prep`, `/api/v1/ai/task-candidates/refresh`.
 - **Queries** (`domains/agents/queries/useAgentsQuery.ts`): `useAiWorkspaceQuery` (объединяет агентов, runs и owner persona, пытается получить статус AI), `useAiRunsQuery`. Используют `@tanstack/vue-query` с `staleTime=30_000` и `10_000`.
-- **Store** (`domains/agents/stores/agents.ts`): Pinia-хранилище `useAgentsStore` управляет выбором агента, отправкой вопроса (`submitAiAnswer`), подготовкой брифа (`prepareAiBrief`) и обновлением кандидатов задач (`refreshTasksFromAi`). Включает утилиты `agentCardView`, `aiAgentPersonaEmail`, `agentVisual`, `aiRuntimeSummary`, `runStatusLabel`, `formatDuration`, `formatDateTime`, `safeCitations`.
-- **Types** (`domains/agents/types/agents.ts`): интерфейсы `AiStatus`, `AiAgent`, `AiRun`, `OwnerPersona`, запросы/ответы для AI-операций, `AgentCard` для отображения.
+- **Store** (`domains/agents/stores/agents.ts`): Pinia-хранилище `useAgentsStore` управляет выбором агента, отправкой вопроса (`submitAiAnswer`), подготовкой брифа (`prepareAiBrief`) и обновлением кандидатов задач (`refreshTasksFromAi`). Public POST-операции принимают `AiHubRequestAcceptedResponse`, затем store ждёт completion через polling `fetchAiRun(run_id)` и преобразует итоговый `AiRun` в UI-friendly answer / briefing / task-refresh result. Включает утилиты `agentCardView`, `aiAgentPersonaEmail`, `agentVisual`, `aiRuntimeSummary`, `runStatusLabel`, `formatDuration`, `formatDateTime`, `safeCitations`.
+- **Types** (`domains/agents/types/agents.ts`): интерфейсы `AiStatus`, `AiAgent`, `AiRun`, `AiHubRequestAcceptedResponse`, `OwnerPersona`, запросы/ответы для AI-операций, `AgentCard` для отображения.
 
 ### Calendar (календарь)
 

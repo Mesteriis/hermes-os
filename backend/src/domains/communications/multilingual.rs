@@ -1,4 +1,4 @@
-use crate::platform::ai_runtime::{AiRuntimePortError, SharedAiRuntimePort};
+use crate::ai::hub::{AiHub, AiHubError, SharedAiHub};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -19,119 +19,21 @@ pub struct Translation {
 
 #[derive(Clone)]
 pub struct MultilingualService {
-    runtime: Option<SharedAiRuntimePort>,
+    hub: Option<SharedAiHub>,
 }
 
 impl MultilingualService {
-    pub fn new(runtime: Option<SharedAiRuntimePort>) -> Self {
-        Self { runtime }
+    pub fn new(hub: Option<SharedAiHub>) -> Self {
+        Self { hub }
     }
 
-    /// Heuristic language detection based on character sets and common words.
+    /// Heuristic language detection based on local Rust guards.
     pub fn detect_language(text: &str) -> LanguageDetection {
-        let text = text.trim();
-        if text.is_empty() {
-            return LanguageDetection {
-                language: "unknown".into(),
-                confidence: 0.0,
-                script: None,
-            };
-        }
-
-        let has_cyrillic = text.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c));
-        let has_spanish = text.to_lowercase().contains('ñ');
-        let has_latin = text.chars().any(|c| c.is_ascii_alphabetic());
-        let has_cjk = text.chars().any(|c| ('\u{4E00}'..='\u{9FFF}').contains(&c));
-
-        let lower = text.to_lowercase();
-
-        if has_cyrillic {
-            // Distinguish Russian vs Ukrainian
-            if lower.contains('ї') || lower.contains('є') {
-                return LanguageDetection {
-                    language: "uk".into(),
-                    confidence: 0.85,
-                    script: Some("cyrillic".into()),
-                };
-            }
-            return LanguageDetection {
-                language: "ru".into(),
-                confidence: 0.90,
-                script: Some("cyrillic".into()),
-            };
-        }
-        if has_spanish {
-            return LanguageDetection {
-                language: "es".into(),
-                confidence: 0.85,
-                script: Some("latin".into()),
-            };
-        }
-        if has_cjk {
-            return LanguageDetection {
-                language: "zh".into(),
-                confidence: 0.70,
-                script: Some("cjk".into()),
-            };
-        }
-
-        // Check common words
-        let spanish_words = [
-            "hola",
-            "gracias",
-            "para",
-            "como",
-            "que",
-            "por favor",
-            "saludos",
-            "adjunto",
-        ];
-        let russian_latin = ["privet", "spasibo", "pozhaluysta"];
-        let german_words = [
-            "mit", "und", "der", "die", "das", "ist", "von", "für", "danke", "bitte",
-        ];
-
-        let spanish_score = spanish_words.iter().filter(|w| lower.contains(*w)).count() as f32
-            / spanish_words.len() as f32;
-        let russian_latin_score = russian_latin.iter().filter(|w| lower.contains(*w)).count()
-            as f32
-            / russian_latin.len() as f32;
-        let german_score = german_words.iter().filter(|w| lower.contains(*w)).count() as f32
-            / german_words.len() as f32;
-
-        if spanish_score > 0.1 {
-            return LanguageDetection {
-                language: "es".into(),
-                confidence: 0.70,
-                script: Some("latin".into()),
-            };
-        }
-        if russian_latin_score > 0.1 {
-            return LanguageDetection {
-                language: "ru".into(),
-                confidence: 0.55,
-                script: Some("latin".into()),
-            };
-        }
-        if german_score > 0.1 {
-            return LanguageDetection {
-                language: "de".into(),
-                confidence: 0.65,
-                script: Some("latin".into()),
-            };
-        }
-        if has_latin {
-            return LanguageDetection {
-                language: "en".into(),
-                confidence: 0.50,
-                script: Some("latin".into()),
-            };
-        }
-
+        let detection = AiHub::detect_language(text);
         LanguageDetection {
-            language: "unknown".into(),
-            confidence: 0.0,
-            script: None,
+            language: detection.language,
+            confidence: detection.confidence,
+            script: detection.script,
         }
     }
 
@@ -141,13 +43,10 @@ impl MultilingualService {
         text: &str,
         target_lang: &str,
     ) -> Result<Option<Translation>, MultilingualError> {
-        let Some(ref runtime) = self.runtime else {
+        let Some(ref hub) = self.hub else {
             return Ok(None);
         };
-        let prompt = format!(
-            "Translate the following text to {target_lang}. Return ONLY the translated text, no explanations:\n\n{text}"
-        );
-        let result = runtime.chat(&prompt).await?;
+        let result = hub.translate_text(text, target_lang).await?;
         Ok(Some(Translation {
             original_language: "detected".into(),
             target_language: target_lang.into(),
@@ -160,7 +59,7 @@ impl MultilingualService {
 #[derive(Debug, Error)]
 pub enum MultilingualError {
     #[error(transparent)]
-    Runtime(#[from] AiRuntimePortError),
+    Hub(#[from] AiHubError),
 }
 
 #[cfg(test)]

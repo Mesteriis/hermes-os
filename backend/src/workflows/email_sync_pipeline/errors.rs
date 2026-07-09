@@ -10,7 +10,6 @@ use crate::domains::communications::storage::{
 use crate::domains::decisions::DecisionReviewPortError;
 use crate::domains::organizations::api::OrganizationError;
 use crate::domains::organizations::core::OrgCoreError;
-use crate::domains::persons::api::PersonProjectionError;
 use crate::domains::persons::memory::PersonMemoryError;
 use crate::domains::relationships::RelationshipReviewPortError;
 use crate::domains::signal_hub::SignalHubError;
@@ -58,9 +57,6 @@ pub enum EmailSyncPipelineError {
 
     #[error(transparent)]
     SignalProjection(#[from] CommunicationSignalProjectionError),
-
-    #[error(transparent)]
-    Contact(#[from] PersonProjectionError),
 
     #[error(transparent)]
     PersonMemory(#[from] PersonMemoryError),

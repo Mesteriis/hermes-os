@@ -154,6 +154,10 @@ impl AiControlCenterStore {
     ) -> Result<(), AiControlCenterError> {
         let mut transaction = self.pool.begin().await?;
         for model in curated_models_for(provider) {
+            let is_available = match model.metadata.get("pull_required").and_then(Value::as_bool) {
+                Some(required) => !required,
+                None => true,
+            };
             let row = sqlx::query(
                 r#"
                 INSERT INTO ai_model_catalog (
@@ -170,7 +174,7 @@ impl AiControlCenterStore {
                     created_at,
                     updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, now(), now())
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now())
                 ON CONFLICT (provider_id, model_key)
                 DO UPDATE SET
                     display_name = EXCLUDED.display_name,
@@ -179,7 +183,6 @@ impl AiControlCenterStore {
                     capabilities = EXCLUDED.capabilities,
                     context_window = EXCLUDED.context_window,
                     embedding_dimension = EXCLUDED.embedding_dimension,
-                    is_available = true,
                     metadata = EXCLUDED.metadata,
                     updated_at = now()
                 RETURNING
@@ -205,6 +208,7 @@ impl AiControlCenterStore {
             .bind(json!(model.capabilities))
             .bind(model.context_window)
             .bind(model.embedding_dimension)
+            .bind(is_available)
             .bind(model.metadata)
             .fetch_one(&mut *transaction)
             .await?;

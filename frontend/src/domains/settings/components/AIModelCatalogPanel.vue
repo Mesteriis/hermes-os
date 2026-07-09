@@ -26,7 +26,7 @@ const props = defineProps<{
 const { t } = useI18n()
 const activeModelProviderId = ref<string | null>(null)
 const modelCatalogSearch = ref('')
-const showAvailableModelsOnly = ref(true)
+const showAvailableModelsOnly = ref(false)
 
 const providerModelGroups = computed<AiProviderModelGroup[]>(() => {
   const groups: AiProviderModelGroup[] = []
@@ -90,6 +90,18 @@ function syncModels(provider: AiProviderAccount) {
 
 function toggleModelAvailability(model: AiModelCatalogItem, event: Event) {
   void props.surface.handleModelAvailability(model, eventChecked(event))
+}
+
+function downloadModel(model: AiModelCatalogItem) {
+  void props.surface.handleModelDownload(model)
+}
+
+function modelProgress(model: AiModelCatalogItem): number {
+  return props.surface.modelDownloadProgressValue(model) ?? 0
+}
+
+function modelProgressLabel(model: AiModelCatalogItem): string {
+  return props.surface.modelDownloadProgressLabel(model) ?? t('Downloading model')
 }
 
 function selectModelProvider(providerId: string): void {
@@ -177,23 +189,71 @@ function selectModelProvider(providerId: string): void {
           class="settings-ai-model-card"
           :class="{ 'is-unavailable': !model.is_available }"
         >
-          <label class="settings-ai-model-checkbox">
-            <input
-              type="checkbox"
-              :checked="model.is_available"
-              :disabled="surface.isBusy.value"
-              @change="toggleModelAvailability(model, $event)"
-            >
-            <span>
-              <strong>{{ model.is_available ? t('Enabled in Hermes') : t('Disabled in Hermes') }}</strong>
-              <small>{{ t('Controls whether this model appears in action routing.') }}</small>
-            </span>
-          </label>
+          <div class="settings-ai-model-checkbox">
+            <template v-if="surface.modelIsDownloading(model)">
+              <span>
+                <strong>{{ t('Download queued') }}</strong>
+                <small>{{ t('Hermes is pulling the model before it can be used in routing.') }}</small>
+              </span>
+            </template>
+            <template v-else-if="!model.is_available && surface.modelRequiresDownload(model)">
+              <span>
+                <strong>{{ t('Not downloaded') }}</strong>
+                <small>{{ t('Download this local model before Hermes can route work to it.') }}</small>
+              </span>
+              <button
+                type="button"
+                class="secondary-button"
+                :disabled="surface.isBusy.value"
+                @click="downloadModel(model)"
+              >
+                <Icon icon="tabler:download" />
+                {{ t('Download') }}
+              </button>
+            </template>
+            <template v-else>
+              <label class="settings-ai-model-checkbox">
+                <input
+                  type="checkbox"
+                  :checked="model.is_available"
+                  :disabled="surface.isBusy.value"
+                  @change="toggleModelAvailability(model, $event)"
+                >
+                <span>
+                  <strong>
+                    {{
+                      surface.modelIsUsedByRoute(model)
+                        ? t('Used by route')
+                        : model.is_available
+                          ? t('Available')
+                          : t('Not available')
+                    }}
+                  </strong>
+                  <small>
+                    {{
+                      model.is_available
+                        ? t('Available models can be selected in AI Hub routing.')
+                        : t('Unavailable models stay out of route selection until enabled again.')
+                    }}
+                  </small>
+                </span>
+              </label>
+            </template>
+          </div>
 
           <div class="settings-ai-model-card__body">
             <div class="settings-ai-model-card__title">
               <strong>{{ model.display_name }}</strong>
               <small>{{ modelDetail(model) }}</small>
+            </div>
+            <div v-if="surface.modelIsDownloading(model)" class="settings-ai-model-progress">
+              <progress
+                class="settings-ai-model-progress-bar"
+                max="100"
+                :value="modelProgress(model)"
+                :aria-label="modelProgressLabel(model)"
+              />
+              <small>{{ modelProgressLabel(model) }}</small>
             </div>
             <div class="settings-ai-capability-row">
               <span

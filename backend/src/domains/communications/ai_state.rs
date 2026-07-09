@@ -75,6 +75,8 @@ pub struct CommunicationAiStateStore {
     pool: PgPool,
 }
 
+pub type CommunicationAiStatePort = CommunicationAiStateStore;
+
 impl CommunicationAiStateStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
@@ -113,6 +115,30 @@ impl CommunicationAiStateStore {
     ) -> Result<Option<CommunicationAiStateRecord>, CommunicationAiStateError> {
         self.transition_with_observation(message_id, request, None, "ai_state_transition", None)
             .await
+    }
+
+    pub async fn pending_mail_message_ids(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<String>, CommunicationAiStateError> {
+        let limit = limit.clamp(1, 100);
+        let rows = sqlx::query_scalar::<_, String>(
+            r#"
+            SELECT m.message_id
+            FROM communication_messages m
+            LEFT JOIN communication_ai_states s ON s.message_id = m.message_id
+            WHERE m.local_state = 'active'
+              AND m.channel_kind IN ('mail', 'email')
+              AND COALESCE(s.ai_state, 'NEW') = 'NEW'
+            ORDER BY COALESCE(m.occurred_at, m.projected_at) ASC, m.message_id ASC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
     }
 
     pub async fn transition_with_observation(

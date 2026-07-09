@@ -7,6 +7,7 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             "/api/v1/ai/settings/overview",
             get(get_ai_settings_overview),
         )
+        .route("/api/v1/ai/usage/stats", get(get_ai_usage_stats))
         .route(
             "/api/v1/ai/providers",
             get(get_ai_providers).post(post_ai_provider),
@@ -36,11 +37,15 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_ai_provider_auth_status),
         )
         .route("/api/v1/ai/models", get(get_ai_models))
+        .route("/api/v1/ai/model-downloads", post(post_ai_model_download))
         .route(
             "/api/v1/ai/models/availability",
             patch(patch_ai_model_availability),
         )
-        .route("/api/v1/ai/model-routes/{slot}", put(put_ai_model_route))
+        .route(
+            "/api/v1/ai/model-routes/{slot}",
+            put(put_ai_model_route).delete(delete_ai_model_route),
+        )
         .route(
             "/api/v1/ai/prompts",
             get(get_ai_prompts).post(post_ai_prompt),

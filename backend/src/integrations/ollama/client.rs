@@ -5,6 +5,7 @@ use reqwest::Url;
 mod catalog;
 mod chat;
 mod config;
+mod download;
 mod embeddings;
 mod error;
 mod models;

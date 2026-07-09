@@ -106,12 +106,12 @@ export function useSettingsPageSurface() {
       ]
     },
     {
-      label: 'Intelligence',
+      label: 'Hub',
       items: [
         {
           id: 'ai',
-          label: 'AI Control Center',
-          description: 'Providers, model catalog and action routing',
+          label: 'AI Hub',
+          description: 'Providers, downloads, model catalog and action routing',
           icon: 'tabler:sparkles',
           meta: String(aiProviderCount.value)
         },
@@ -166,7 +166,7 @@ export function useSettingsPageSurface() {
       icon: 'tabler:sparkles',
       label: 'AI providers',
       value: aiSettings.isLoading.value ? t('Loading...') : String(aiProviderCount.value),
-      detail: t('Provider accounts, model inventory and routes are owned by AI Control Center'),
+      detail: t('Provider accounts, model inventory and routes are owned by AI Hub'),
       tone: aiProviderCount.value > 0 ? 'success' : 'neutral'
     }
   ])

@@ -20,6 +20,52 @@ pub struct AiSettingsOverviewResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AiHubUsageStatsResponse {
+    pub generated_at: DateTime<Utc>,
+    pub window_hours: i32,
+    pub totals: AiHubUsageTotals,
+    pub providers: Vec<AiHubProviderUsageStats>,
+    pub hourly: Vec<AiHubHourlyUsageStats>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AiHubUsageTotals {
+    pub request_count: i64,
+    pub completed_count: i64,
+    pub failed_count: i64,
+    pub estimated_tokens: i64,
+    pub estimated_cost_usd: Option<f64>,
+    pub avg_latency_ms: Option<f64>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AiHubProviderUsageStats {
+    pub provider_id: String,
+    pub provider_kind: String,
+    pub provider_key: String,
+    pub display_name: String,
+    pub status: String,
+    pub request_count: i64,
+    pub completed_count: i64,
+    pub failed_count: i64,
+    pub estimated_tokens: i64,
+    pub estimated_cost_usd: Option<f64>,
+    pub avg_latency_ms: Option<f64>,
+    pub balance_remaining_usd: Option<f64>,
+    pub token_quota_remaining: Option<i64>,
+    pub last_request_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AiHubHourlyUsageStats {
+    pub hour: DateTime<Utc>,
+    pub provider_id: String,
+    pub request_count: i64,
+    pub failed_count: i64,
+    pub estimated_tokens: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AiCapabilitySlot {
     pub slot: String,
     pub label: String,
@@ -280,6 +326,12 @@ pub struct AiModelAvailabilityUpdateRequest {
     pub provider_id: String,
     pub model_key: String,
     pub is_available: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AiModelDownloadRequest {
+    pub provider_id: String,
+    pub model_key: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

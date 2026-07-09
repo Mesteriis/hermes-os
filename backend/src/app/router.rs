@@ -50,6 +50,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             pool: state.database.pool().cloned(),
             database_url: state.database.database_url().map(ToOwned::to_owned),
             nats_server_url,
+            config: state.config.clone(),
             zoom_token_maintenance_scheduler_enabled: state
                 .config
                 .zoom_token_maintenance_scheduler_enabled(),

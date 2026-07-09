@@ -10,12 +10,9 @@ impl AiService {
         let semantic_store = SemanticEmbeddingStore::new(self.pool.clone());
         let embedding_model = &self.model_routing.embeddings;
         semantic_store
-            .index_canonical_sources(&self.runtime, embedding_model)
+            .index_canonical_sources(&self.hub, embedding_model)
             .await?;
-        let query_embedding = self
-            .runtime
-            .embed_with_model(query, embedding_model)
-            .await?;
+        let query_embedding = self.hub.embed(query).await?;
         if query_embedding.embedding.len() != AI_EMBEDDING_DIMENSION {
             return Err(AiError::InvalidEmbeddingDimension {
                 expected: AI_EMBEDDING_DIMENSION,

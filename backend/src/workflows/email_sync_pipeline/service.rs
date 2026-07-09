@@ -4,10 +4,8 @@ use crate::domains::communications::core::CommunicationIngestionPort;
 use crate::domains::communications::storage::{
     CommunicationBlobMetadataPort, HeuristicAttachmentSafetyScanner, LocalCommunicationBlobPort,
 };
-use crate::domains::persons::api::PersonProjectionPort;
 use crate::platform::communications::EmailSyncBatch;
 
-use super::candidates::refresh_message_context_candidates;
 use super::errors::EmailSyncPipelineError;
 use super::knowledge::project_message_knowledge;
 use super::raw_records::project_raw_records;
@@ -23,7 +21,6 @@ pub async fn project_email_sync_batch_with_mail_blobs(
 ) -> Result<EmailSyncPipelineReport, EmailSyncPipelineError> {
     let communication_store = CommunicationIngestionPort::new(pool.clone());
     let mail_store = CommunicationBlobMetadataPort::new(pool.clone());
-    let person_store = PersonProjectionPort::new(pool.clone());
     let attachment_scanner = HeuristicAttachmentSafetyScanner;
     let import_report = record_email_sync_batch_with_mail_blobs(
         &communication_store,
@@ -44,11 +41,7 @@ pub async fn project_email_sync_batch_with_mail_blobs(
     )
     .await?;
     let knowledge_report =
-        project_message_knowledge(&pool, &person_store, &projection_report.projected_messages)
-            .await?;
-    let candidate_report =
-        refresh_message_context_candidates(&pool, &projection_report.projected_messages).await?;
-
+        project_message_knowledge(&pool, &projection_report.projected_messages).await?;
     Ok(EmailSyncPipelineReport {
         imported_records: import_report.inserted_or_existing_records,
         raw_blobs_upserted: import_report.blobs_upserted,
@@ -62,9 +55,9 @@ pub async fn project_email_sync_batch_with_mail_blobs(
         upserted_relationship_events: knowledge_report.upserted_relationship_events,
         upserted_organizations: knowledge_report.upserted_organizations,
         upserted_organization_contact_links: knowledge_report.upserted_organization_contact_links,
-        refreshed_decision_candidates: candidate_report.refreshed_decision_candidates,
-        refreshed_knowledge_candidates: candidate_report.refreshed_knowledge_candidates,
-        refreshed_task_candidates: candidate_report.refreshed_task_candidates,
+        refreshed_decision_candidates: 0,
+        refreshed_knowledge_candidates: 0,
+        refreshed_task_candidates: 0,
         checkpoint_saved: import_report.checkpoint_saved,
     })
 }

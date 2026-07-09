@@ -2,6 +2,12 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { loadFrontendConfig } from '../../../platform/config/env'
 import { useI18n } from '../../../platform/i18n'
 import { useSettingsStore } from '../stores/settings'
+import {
+  DEFAULT_API_PROVIDER_PRESETS,
+  DEFAULT_OPENAI_BASE_URL,
+  SLOT_DESCRIPTIONS,
+  SLOT_LABELS,
+} from './aiSettingsCatalog'
 import type {
   AiCapabilitySlot,
   AiModelCatalogItem,
@@ -15,7 +21,10 @@ import type {
 import type { SelectOption } from '../../../shared/ui/Selection.types'
 import {
   useAiSettingsOverviewQuery,
+  useAiHubUsageStatsQuery,
   useCreateAiProviderMutation,
+  useDeleteAiModelRouteMutation,
+  useDownloadAiModelMutation,
   useFetchAiProviderAuthStatusMutation,
   useStartAiProviderAuthMutation,
   useSyncAiProviderModelsMutation,
@@ -41,125 +50,27 @@ export interface AiModelRouteOption {
   detail: string
 }
 
-const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
 const ROUTE_OPTION_SEPARATOR = '|'
 const LOCAL_AUTH_POLL_INTERVAL_MS = 2500
+const DOWNLOAD_PROGRESS_MAX_BEFORE_COMPLETION = 92
 
 type AiProviderAuthFlow = AiProviderAuthStartResponse | AiProviderAuthStatusResponse
-
-const DEFAULT_API_PROVIDER_PRESETS: AiProviderPreset[] = [
-  apiProviderPreset('raw', 'Raw OpenAI-compatible API', null, [
-    'chat',
-    'reasoning',
-    'summarization',
-    'embeddings',
-    'extraction',
-  ]),
-  apiProviderPreset('openai', 'OpenAI', 'https://api.openai.com/v1', [
-    'chat',
-    'reasoning',
-    'embeddings',
-  ]),
-  apiProviderPreset('deepseek', 'DeepSeek', 'https://api.deepseek.com/v1', [
-    'chat',
-    'reasoning',
-  ]),
-  apiProviderPreset('openrouter', 'OpenRouter', 'https://openrouter.ai/api/v1', [
-    'chat',
-    'reasoning',
-    'routing',
-  ]),
-  apiProviderPreset('groq', 'Groq', 'https://api.groq.com/openai/v1', [
-    'chat',
-    'reasoning',
-  ]),
-  apiProviderPreset('together', 'Together AI', 'https://api.together.xyz/v1', [
-    'chat',
-    'reasoning',
-    'embeddings',
-  ]),
-  apiProviderPreset('fireworks', 'Fireworks AI', 'https://api.fireworks.ai/inference/v1', [
-    'chat',
-    'reasoning',
-    'embeddings',
-  ]),
-  apiProviderPreset('mistral', 'Mistral AI', 'https://api.mistral.ai/v1', [
-    'chat',
-    'reasoning',
-    'embeddings',
-  ]),
-  apiProviderPreset('xai', 'xAI', 'https://api.x.ai/v1', [
-    'chat',
-    'reasoning',
-  ]),
-  apiProviderPreset(
-    'gemini-openai',
-    'Google Gemini OpenAI-compatible',
-    'https://generativelanguage.googleapis.com/v1beta/openai',
-    ['chat', 'reasoning', 'embeddings']
-  ),
-  apiProviderPreset('perplexity', 'Perplexity', 'https://api.perplexity.ai', [
-    'chat',
-    'reasoning',
-  ]),
-  apiProviderPreset('nvidia-nim', 'NVIDIA NIM', 'https://integrate.api.nvidia.com/v1', [
-    'chat',
-    'reasoning',
-    'embeddings',
-  ]),
-  apiProviderPreset('cerebras', 'Cerebras', 'https://api.cerebras.ai/v1', [
-    'chat',
-    'reasoning',
-  ]),
-  apiProviderPreset('lm-studio', 'LM Studio', 'http://127.0.0.1:1234/v1', [
-    'chat',
-    'local_runtime',
-  ]),
-  apiProviderPreset('vllm-local', 'vLLM local', 'http://127.0.0.1:8000/v1', [
-    'chat',
-    'local_runtime',
-  ]),
-  apiProviderPreset('omniroute', 'OmniRoute', 'https://ai.sh-inc.ru/v1', [
-    'chat',
-    'embeddings',
-    'routing',
-  ]),
-]
-
-const SLOT_LABELS: Record<string, string> = {
-  default_chat: 'Translation and general chat',
-  reasoning: 'Reasoning',
-  summarization: 'Summaries',
-  mail_intelligence: 'Mail analysis',
-  reply_draft: 'Reply drafts',
-  extraction: 'Extraction and categorization',
-  embeddings: 'Embeddings',
-  meeting_prep: 'Meeting preparation',
-}
-
-const SLOT_DESCRIPTIONS: Record<string, string> = {
-  default_chat: 'Default text generation, translation and short assistant actions.',
-  reasoning: 'Deep reasoning and multi-step analysis.',
-  summarization: 'Summaries for messages, documents and context packs.',
-  mail_intelligence: 'Mail triage, sentiment, urgency and signal extraction.',
-  reply_draft: 'Drafting replies for mail and messaging flows.',
-  extraction: 'Entity extraction, classification and categorization.',
-  embeddings: 'Semantic index embeddings. Dimension must match backend requirements.',
-  meeting_prep: 'Meeting prep, agendas and follow-up intelligence.',
-}
 
 export function useAISettingsSurface() {
   const { t } = useI18n()
   const store = useSettingsStore()
   const frontendConfig = loadFrontendConfig()
   const overviewQuery = useAiSettingsOverviewQuery()
+  const usageStatsQuery = useAiHubUsageStatsQuery(24)
   const createProvider = useCreateAiProviderMutation()
   const updateProvider = useUpdateAiProviderMutation()
   const syncModels = useSyncAiProviderModelsMutation()
   const testProvider = useTestAiProviderMutation()
   const updateModelAvailability = useUpdateAiModelAvailabilityMutation()
+  const downloadModel = useDownloadAiModelMutation()
   const updateConsent = useUpdateAiProviderConsentMutation()
   const updateRoute = useUpdateAiModelRouteMutation()
+  const deleteRoute = useDeleteAiModelRouteMutation()
   const startProviderAuth = useStartAiProviderAuthMutation()
   const fetchProviderAuthStatus = useFetchAiProviderAuthStatusMutation()
 
@@ -171,7 +82,9 @@ export function useAISettingsSurface() {
   const apiConsent = ref(true)
   const activeApiPresetKey = ref('openai')
   const activeLocalAuth = ref<AiProviderAuthFlow | null>(null)
+  const downloadingModelProgress = ref<Record<string, number>>({})
   let localAuthPollId: number | null = null
+  const modelDownloadTimers = new Map<string, number>()
 
   const overview = computed(() => overviewQuery.data.value ?? null)
   const providers = computed(() => overview.value?.providers ?? [])
@@ -179,6 +92,9 @@ export function useAISettingsSurface() {
   const routes = computed(() => overview.value?.routes ?? [])
   const capabilitySlots = computed(() => overview.value?.capability_slots ?? [])
   const providerPresets = computed(() => overview.value?.provider_presets ?? [])
+  const usageStats = computed(() => usageStatsQuery.data.value ?? null)
+  const providerUsageRows = computed(() => usageStats.value?.providers ?? [])
+  const hourlyUsageRows = computed(() => usageStats.value?.hourly ?? [])
   const selectedProvider = computed(() => {
     return providers.value.find((provider) => provider.provider_id === selectedProviderId.value) ?? null
   })
@@ -398,7 +314,39 @@ export function useAISettingsSurface() {
     }
   }
 
+  async function handleModelDownload(model: AiModelCatalogItem): Promise<AiModelCatalogItem | null> {
+    const key = modelStateKey(model)
+    if (downloadingModelProgress.value[key] !== undefined) return null
+
+    startModelDownloadProgress(key)
+    try {
+      const updated = await downloadModel.mutateAsync({
+        provider_id: model.provider_id,
+        model_key: model.model_key,
+      })
+      finishModelDownloadProgress(key)
+      await overviewQuery.refetch()
+      store.setActionMessage(t('AI model downloaded'))
+      return updated
+    } catch (error) {
+      clearModelDownloadProgress(key)
+      store.setError(errorMessage(error, t('AI model download failed')))
+      return null
+    }
+  }
+
   async function handleRouteSelection(slot: string, value: string) {
+    if (!value) {
+      try {
+        await deleteRoute.mutateAsync(slot)
+        await overviewQuery.refetch()
+        store.setActionMessage(t('AI model route cleared'))
+      } catch (error) {
+        store.setError(errorMessage(error, t('AI model route delete failed')))
+      }
+      return
+    }
+
     const parsed = parseRouteOptionValue(value)
     if (!parsed) return
 
@@ -422,6 +370,11 @@ export function useAISettingsSurface() {
     store.setActionMessage(t('AI model list refreshed'))
   }
 
+  async function handleRefreshUsageStats() {
+    await usageStatsQuery.refetch()
+    store.setActionMessage(t('AI Hub usage stats refreshed'))
+  }
+
   function routeForSlot(slot: string): AiModelRoute | null {
     return routes.value.find((route) => route.capability_slot === slot) ?? null
   }
@@ -434,6 +387,40 @@ export function useAISettingsSurface() {
         label: modelLabel(model.provider_id, model.model_key),
         detail: `${model.privacy} · ${model.category}`,
       }))
+  }
+
+  function modelRequiresDownload(model: AiModelCatalogItem): boolean {
+    return metadataBoolean(model.metadata, 'pull_required') && providerIsBuiltInOllama(model.provider_id)
+  }
+
+  function modelDownloadProgressValue(model: AiModelCatalogItem): number | null {
+    const progress = downloadingModelProgress.value[modelStateKey(model)]
+    return typeof progress === 'number' ? progress : null
+  }
+
+  function modelDownloadProgressLabel(model: AiModelCatalogItem): string | null {
+    const progress = modelDownloadProgressValue(model)
+    if (progress === null) return null
+    if (progress >= 100) return t('Finalizing model')
+    if (progress >= 70) return t('Preparing model for routing')
+    if (progress >= 30) return t('Downloading model')
+    return t('Starting download')
+  }
+
+  function modelIsDownloading(model: AiModelCatalogItem): boolean {
+    return modelDownloadProgressValue(model) !== null
+  }
+
+  function modelRouteUsageCount(model: AiModelCatalogItem): number {
+    let count = 0
+    for (const route of routes.value) {
+      if (route.provider_id === model.provider_id && route.model_key === model.model_key) count += 1
+    }
+    return count
+  }
+
+  function modelIsUsedByRoute(model: AiModelCatalogItem): boolean {
+    return modelRouteUsageCount(model) > 0
   }
 
   function modelLabel(providerId: string, modelKey: string): string {
@@ -483,6 +470,58 @@ export function useAISettingsSurface() {
     localAuthPollId = null
   }
 
+  function startModelDownloadProgress(key: string) {
+    clearModelDownloadProgress(key)
+    downloadingModelProgress.value = {
+      ...downloadingModelProgress.value,
+      [key]: 8,
+    }
+    if (typeof window === 'undefined') return
+    const timerId = window.setInterval(() => {
+      const current = downloadingModelProgress.value[key]
+      if (typeof current !== 'number') return
+      const next = Math.min(current + Math.max(3, Math.round((100 - current) / 6)), DOWNLOAD_PROGRESS_MAX_BEFORE_COMPLETION)
+      downloadingModelProgress.value = {
+        ...downloadingModelProgress.value,
+        [key]: next,
+      }
+    }, 500)
+    modelDownloadTimers.set(key, timerId)
+  }
+
+  function finishModelDownloadProgress(key: string) {
+    if (typeof window !== 'undefined') {
+      const timerId = modelDownloadTimers.get(key)
+      if (timerId !== undefined) {
+        window.clearInterval(timerId)
+        modelDownloadTimers.delete(key)
+      }
+      downloadingModelProgress.value = {
+        ...downloadingModelProgress.value,
+        [key]: 100,
+      }
+      window.setTimeout(() => {
+        clearModelDownloadProgress(key)
+      }, 400)
+      return
+    }
+    clearModelDownloadProgress(key)
+  }
+
+  function clearModelDownloadProgress(key: string) {
+    if (typeof window !== 'undefined') {
+      const timerId = modelDownloadTimers.get(key)
+      if (timerId !== undefined) {
+        window.clearInterval(timerId)
+        modelDownloadTimers.delete(key)
+      }
+    }
+    if (downloadingModelProgress.value[key] === undefined) return
+    const next = { ...downloadingModelProgress.value }
+    delete next[key]
+    downloadingModelProgress.value = next
+  }
+
   function aiProviderCallbackBaseUrl(): string {
     return `${frontendConfig.apiBaseUrl.replace(/\/+$/, '')}/api/v1/ai/provider-auth/callback`
   }
@@ -519,6 +558,12 @@ export function useAISettingsSurface() {
       window.removeEventListener('message', handleProviderCallbackMessage)
     }
     stopLocalAuthPolling()
+    if (typeof window !== 'undefined') {
+      for (const timerId of modelDownloadTimers.values()) {
+        window.clearInterval(timerId)
+      }
+    }
+    modelDownloadTimers.clear()
   })
 
   const isBusy = computed(() =>
@@ -527,8 +572,10 @@ export function useAISettingsSurface() {
     syncModels.isPending.value ||
     testProvider.isPending.value ||
     updateModelAvailability.isPending.value ||
+    downloadModel.isPending.value ||
     updateConsent.isPending.value ||
     updateRoute.isPending.value ||
+    deleteRoute.isPending.value ||
     startProviderAuth.isPending.value ||
     fetchProviderAuthStatus.isPending.value
   )
@@ -547,29 +594,41 @@ export function useAISettingsSurface() {
     handleCreateApiProvider,
     handleConnectLocalPreset,
     handleGrantConsent,
+    handleModelDownload,
     handleModelAvailability,
     handleOpenLocalAuthCallback,
     handlePresetSelect,
     handleRefreshLocalAuth,
     handleRefreshModelRoutes,
+    handleRefreshUsageStats,
     handleRouteSelection,
     handleSyncModels,
     handleTestProvider,
     handleToggleProvider,
+    hourlyUsageRows,
     isBusy,
     isLoading: overviewQuery.isLoading,
     localPresets,
+    modelDownloadProgressValue,
+    modelDownloadProgressLabel,
+    modelIsDownloading,
+    modelIsUsedByRoute,
+    modelRequiresDownload,
+    modelRouteUsageCount,
     models,
     overview,
     providers,
     providerBaseUrl,
     providerForPreset,
+    providerUsageRows,
     routeRows,
     routes,
     selectProvider,
     selectedProvider,
     selectedProviderId,
     selectedProviderModels,
+    usageStats,
+    usageStatsQuery,
   }
 }
 
@@ -609,23 +668,6 @@ function modelUsableForSlot(model: AiModelCatalogItem, slot: AiCapabilitySlot): 
   return model.capabilities.includes('chat') || model.category === 'chat' || model.category === 'reasoning'
 }
 
-function apiProviderPreset(
-  providerKey: string,
-  displayName: string,
-  baseUrl: string | null,
-  capabilities: string[]
-): AiProviderPreset {
-  return {
-    provider_kind: 'api',
-    provider_key: providerKey,
-    display_name: displayName,
-    privacy: 'remote',
-    base_url: baseUrl,
-    command_preset: null,
-    capabilities,
-  }
-}
-
 function mergedApiPresets(providerPresets: AiProviderPreset[]): AiProviderPreset[] {
   const presetsByKey = new Map<string, AiProviderPreset>()
   for (const preset of DEFAULT_API_PROVIDER_PRESETS) {
@@ -641,13 +683,12 @@ function mergedApiPresets(providerPresets: AiProviderPreset[]): AiProviderPreset
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof error.message === 'string'
-  ) {
-    return error.message
-  }
-  return fallback
+  const message = typeof error === 'object' && error !== null && 'message' in error ? error.message : null
+  return typeof message === 'string' ? message : fallback
 }
+
+function metadataBoolean(metadata: Record<string, unknown>, key: string): boolean { return metadata[key] === true }
+
+function modelStateKey(model: AiModelCatalogItem): string { return `${model.provider_id}:${model.model_key}` }
+
+function providerIsBuiltInOllama(providerId: string): boolean { return providerId === 'provider:built_in:ollama' }

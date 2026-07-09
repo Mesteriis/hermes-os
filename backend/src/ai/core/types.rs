@@ -15,23 +15,14 @@ pub struct AiModelRouting {
     pub extraction: String,
     pub embeddings: String,
     pub meeting_prep: String,
+    pub targets: Vec<AiModelRouteTarget>,
 }
 
-impl AiModelRouting {
-    pub fn fallback(chat_model: impl Into<String>, embedding_model: impl Into<String>) -> Self {
-        let chat_model = chat_model.into();
-        let embedding_model = embedding_model.into();
-        Self {
-            default_chat: chat_model.clone(),
-            reasoning: chat_model.clone(),
-            summarization: chat_model.clone(),
-            mail_intelligence: chat_model.clone(),
-            reply_draft: chat_model.clone(),
-            extraction: chat_model.clone(),
-            embeddings: embedding_model,
-            meeting_prep: chat_model,
-        }
-    }
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AiModelRouteTarget {
+    pub capability_slot: String,
+    pub provider_id: String,
+    pub model_key: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -59,6 +50,15 @@ pub struct AiMeetingPrepRequest {
     pub person_id: Option<String>,
     pub causation_id: Option<String>,
     pub correlation_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct AiHubRequestAcceptedResponse {
+    pub request_id: String,
+    pub run_id: String,
+    pub status: String,
+    pub event_id: String,
+    pub correlation_id: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

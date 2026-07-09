@@ -10,6 +10,7 @@ AI output is never source of truth.
 
 ## Packages
 
+- [AI Hub](hub.md)
 - [Agent Architecture](agents/agent-architecture.md)
 - [Local AI Architecture](agents/local-ai-architecture.md)
 

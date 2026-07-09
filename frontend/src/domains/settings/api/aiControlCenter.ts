@@ -1,7 +1,9 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
 import type {
   AiModelAvailabilityUpdateRequest,
+  AiHubUsageStatsResponse,
   AiModelCatalogItem,
+  AiModelDownloadRequest,
   AiModelRoute,
   AiModelRouteUpdateRequest,
   AiProviderAuthStartRequest,
@@ -22,6 +24,15 @@ export async function fetchAiSettingsOverview(): Promise<AiSettingsOverviewRespo
   )
 }
 
+export async function fetchAiHubUsageStats(
+  windowHours = 24
+): Promise<AiHubUsageStatsResponse> {
+  return ApiClient.instance.get<AiHubUsageStatsResponse>(
+    `/api/v1/ai/usage/stats?window_hours=${encodeURIComponent(String(windowHours))}`,
+    'AI Hub usage stats request failed'
+  )
+}
+
 export async function fetchAiModels(): Promise<{ items: AiModelCatalogItem[] }> {
   return ApiClient.instance.get<{ items: AiModelCatalogItem[] }>(
     '/api/v1/ai/models',
@@ -36,6 +47,16 @@ export async function updateAiModelAvailability(
     '/api/v1/ai/models/availability',
     request,
     'AI model availability update failed'
+  )
+}
+
+export async function downloadAiModel(
+  request: AiModelDownloadRequest
+): Promise<AiModelCatalogItem> {
+  return ApiClient.instance.post<AiModelCatalogItem>(
+    '/api/v1/ai/model-downloads',
+    request,
+    'AI model download failed'
   )
 }
 
@@ -114,5 +135,12 @@ export async function updateAiModelRoute(
     `/api/v1/ai/model-routes/${encodeURIComponent(slot)}`,
     request,
     'AI model route update failed'
+  )
+}
+
+export async function deleteAiModelRoute(slot: string): Promise<void> {
+  return ApiClient.instance.delete<void>(
+    `/api/v1/ai/model-routes/${encodeURIComponent(slot)}`,
+    'AI model route delete failed'
   )
 }

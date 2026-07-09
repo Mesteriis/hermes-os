@@ -1234,6 +1234,41 @@ function aiModelRouteMutationFailures(fileContents) {
 	return errors;
 }
 
+function aiHubBoundaryFailures(fileContents) {
+	const errors = [];
+	const forbiddenImportPatterns = [
+		/\buse\s+crate::integrations::ai_runtime::AiRuntimeClient\b/g,
+		/\buse\s+crate::platform::ai_runtime::SharedAiRuntimePort\b/g
+	];
+	const forbiddenInferencePatterns = [/\.\s*chat_with_model\s*\(/g, /\.\s*embed_with_model\s*\(/g];
+	for (const [file, content] of fileContents.entries()) {
+		if (
+			!file.startsWith('backend/src/domains/') &&
+			!file.startsWith('backend/src/workflows/') &&
+			!file.startsWith('backend/src/app/handlers/')
+		) {
+			continue;
+		}
+		for (const pattern of forbiddenImportPatterns) {
+			if (pattern.test(content)) {
+				errors.push(
+					`${file}: direct AI runtime imports are forbidden in domains, workflows and app handlers; route inference through crate::ai::hub::SharedAiHub`
+				);
+				break;
+			}
+		}
+		for (const pattern of forbiddenInferencePatterns) {
+			if (pattern.test(content)) {
+				errors.push(
+					`${file}: direct runtime inference calls are forbidden in domains, workflows and app handlers; use crate::ai::hub::AiHub instead`
+				);
+				break;
+			}
+		}
+	}
+	return errors;
+}
+
 function aiSemanticEmbeddingMutationFailures(fileContents) {
 	const errors = [];
 	const directMutationPattern = /\b(?:INSERT\s+INTO|UPDATE)\s+semantic_embeddings\b/gi;
@@ -1943,6 +1978,7 @@ async function checkCanonicalEvidenceBoundaries() {
 	failures.push(...aiPromptMutationFailures(fileContents));
 	failures.push(...aiModelCatalogMutationFailures(fileContents));
 	failures.push(...aiModelRouteMutationFailures(fileContents));
+	failures.push(...aiHubBoundaryFailures(fileContents));
 	failures.push(...aiSemanticEmbeddingMutationFailures(fileContents));
 	failures.push(...documentProcessingJobMutationFailures(fileContents));
 	failures.push(...whatsappSessionMutationFailures(fileContents));

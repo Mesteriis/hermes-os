@@ -1,5 +1,5 @@
+use crate::ai::hub::{AiHubError, AiModelRoute, SharedAiHub};
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::platform::ai_runtime::{AiRuntimePortError, SharedAiRuntimePort};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -20,12 +20,12 @@ pub struct AiReplyOptions {
 
 #[derive(Clone)]
 pub struct AiReplyService {
-    runtime: Option<SharedAiRuntimePort>,
+    hub: Option<SharedAiHub>,
 }
 
 impl AiReplyService {
-    pub fn new(runtime: Option<SharedAiRuntimePort>) -> Self {
-        Self { runtime }
+    pub fn new(hub: Option<SharedAiHub>) -> Self {
+        Self { hub }
     }
 
     pub async fn generate_reply(
@@ -33,7 +33,7 @@ impl AiReplyService {
         message: &ProjectedMessage,
         options: &AiReplyOptions,
     ) -> Result<Option<AiReplyDraft>, AiReplyError> {
-        let Some(ref runtime) = self.runtime else {
+        let Some(ref hub) = self.hub else {
             return Ok(None);
         };
         let tone = options.tone.as_deref().unwrap_or("professional");
@@ -52,7 +52,7 @@ impl AiReplyService {
             },
         );
 
-        let result = runtime.chat(&prompt).await?;
+        let result = hub.chat(AiModelRoute::ReplyDraft, &prompt).await?;
         let body = result.content.trim().to_owned();
 
         let subject = if message.subject.to_lowercase().starts_with("re:") {
@@ -104,7 +104,7 @@ fn truncate(s: &str, max: usize) -> &str {
 #[derive(Debug, Error)]
 pub enum AiReplyError {
     #[error(transparent)]
-    Runtime(#[from] AiRuntimePortError),
+    Hub(#[from] AiHubError),
 }
 
 #[cfg(test)]

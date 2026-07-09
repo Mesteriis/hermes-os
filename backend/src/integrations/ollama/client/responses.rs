@@ -34,3 +34,9 @@ pub(in crate::integrations::ollama::client) struct EmbedResponse {
     pub embedding: Option<Vec<f32>>,
     pub total_duration: Option<u64>,
 }
+
+#[derive(Deserialize)]
+pub(in crate::integrations::ollama::client) struct PullResponse {
+    pub status: Option<String>,
+    pub error: Option<String>,
+}

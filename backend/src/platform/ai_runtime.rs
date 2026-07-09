@@ -39,9 +39,23 @@ pub type SharedAiRuntimePort = Arc<dyn AiRuntimePort>;
 pub trait AiRuntimePort: Send + Sync {
     fn runtime_name(&self) -> &'static str;
 
+    fn version<'a>(
+        &'a self,
+    ) -> Pin<Box<dyn Future<Output = Result<Option<String>, AiRuntimePortError>> + Send + 'a>>;
+
+    fn models<'a>(
+        &'a self,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<String>, AiRuntimePortError>> + Send + 'a>>;
+
     fn chat<'a>(
         &'a self,
         prompt: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<AiChatResult, AiRuntimePortError>> + Send + 'a>>;
+
+    fn chat_with_model<'a>(
+        &'a self,
+        prompt: &'a str,
+        model: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<AiChatResult, AiRuntimePortError>> + Send + 'a>>;
 
     fn embed_with_model<'a>(

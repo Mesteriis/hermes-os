@@ -6,6 +6,9 @@ pub(crate) use axum::body::{Body, to_bytes};
 pub(crate) use axum::http::{Request, StatusCode, header};
 pub(crate) use axum::routing::{get, post};
 pub(crate) use axum::{Json, Router};
+pub(crate) use hermes_hub_backend::ai::control_center::{
+    AiControlCenterStore, AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest,
+};
 pub(crate) use hermes_hub_backend::ai::core::{
     AiRunStore, NewSemanticEmbedding, SemanticEmbeddingStore, SemanticSourceKind,
 };
@@ -109,6 +112,67 @@ pub(crate) async fn configure_fake_ollama_setting(pool: &PgPool, ollama_base_url
         )
         .await
         .expect("fake Ollama setting");
+
+    let store = AiControlCenterStore::new(pool.clone());
+    let provider_id = "provider:built_in:ollama";
+    let chat_model = "qwen3:4b";
+    let embedding_model = "qwen3-embedding:4b";
+
+    store
+        .update_model_availability(
+            &AiModelAvailabilityUpdateRequest {
+                provider_id: provider_id.to_owned(),
+                model_key: chat_model.to_owned(),
+                is_available: true,
+            },
+            "hermes-frontend",
+        )
+        .await
+        .expect("fake Ollama chat model availability");
+
+    store
+        .update_model_availability(
+            &AiModelAvailabilityUpdateRequest {
+                provider_id: provider_id.to_owned(),
+                model_key: embedding_model.to_owned(),
+                is_available: true,
+            },
+            "hermes-frontend",
+        )
+        .await
+        .expect("fake Ollama embedding model availability");
+
+    for slot in [
+        "default_chat",
+        "reasoning",
+        "summarization",
+        "mail_intelligence",
+        "reply_draft",
+        "extraction",
+        "meeting_prep",
+    ] {
+        store
+            .put_model_route(
+                slot,
+                &AiModelRouteUpdateRequest {
+                    provider_id: provider_id.to_owned(),
+                    model_key: chat_model.to_owned(),
+                },
+            )
+            .await
+            .expect("fake Ollama model route");
+    }
+
+    store
+        .put_model_route(
+            "embeddings",
+            &AiModelRouteUpdateRequest {
+                provider_id: provider_id.to_owned(),
+                model_key: embedding_model.to_owned(),
+            },
+        )
+        .await
+        .expect("fake Ollama embedding route");
 }
 
 pub(crate) fn unit_embedding(active_index: usize) -> Vec<f32> {
@@ -192,6 +256,65 @@ pub(crate) async fn seed_document(
 
 pub(crate) fn config_with_api_token() -> AppConfig {
     testkit::app::config_with_secret(LOCAL_API_TOKEN)
+}
+
+pub(crate) async fn wait_for_run_status(
+    pool: &PgPool,
+    run_id: &str,
+    expected_status: &str,
+) -> hermes_hub_backend::ai::core::AiAgentRun {
+    for _ in 0..80 {
+        if let Some(run) = AiRunStore::new(pool.clone())
+            .get_run(run_id)
+            .await
+            .expect("load run")
+            && run.status == expected_status
+        {
+            return run;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("timed out waiting for run {run_id} to reach status {expected_status}");
+}
+
+pub(crate) async fn wait_for_event_types(
+    pool: &PgPool,
+    correlation_id: &str,
+    run_id: &str,
+    event_types: &[&str],
+) -> i64 {
+    let expected = i64::try_from(event_types.len()).expect("event type count");
+    let event_types = event_types
+        .iter()
+        .map(|value| (*value).to_owned())
+        .collect::<Vec<_>>();
+
+    for _ in 0..80 {
+        let count: i64 = sqlx::query_scalar(
+            r#"
+            SELECT count(DISTINCT event_type)::bigint
+            FROM event_log
+            WHERE correlation_id = $1
+              AND subject->>'run_id' = $2
+              AND event_type = ANY($3)
+            "#,
+        )
+        .bind(correlation_id)
+        .bind(run_id)
+        .bind(&event_types)
+        .fetch_one(pool)
+        .await
+        .expect("event type count");
+        if count >= expected {
+            return count;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    panic!(
+        "timed out waiting for events {:?} for run {run_id} correlation {correlation_id}",
+        event_types
+    );
 }
 
 pub(crate) fn get_request(path: &str) -> Request<Body> {

@@ -142,10 +142,12 @@ HERMES_API_SECRET=... pytest backend/e2e/test_api.py -v
 
 Файл: `ai/answers.rs`
 
-- `POST /api/v1/ai/answers` с агентом `MNEMOSYNE` возвращает ответ на основе источников. Ответ содержит `agent_id`, `agent_persona_id`, `owner_persona_id`, модель, `embedding_model`, `duration_ms` и список цитирований (`citations`) с `source_kind` и `source_id`.
-- Сохраняются записи в `ai_agent_runs`, `observation_links`, `event_log` (4 события: raw/accepted run_requested и run_completed).
+- `POST /api/v1/ai/answers` с агентом `MNEMOSYNE` возвращает `202 Accepted` и `run_id`; итоговый ответ читается из `ai_agent_runs` / `GET /api/v1/ai/runs/{run_id}`. Там сохраняются `agent_id`, `agent_persona_id`, `owner_persona_id`, модель, `embedding_model`, `duration_ms` и список цитирований (`citations`) с `source_kind` и `source_id`.
+- В `event_log` появляются канонические `ai.run.requested` / `ai.run.completed` и `ai.hub.requested` / `ai.hub.completed`.
 - Если Signal Hub содержит политику `Muted` для источника `ai`, запрос блокируется с `412 PRECONDITION_FAILED` и сообщением «AI runtime is disabled by Signal Hub policy».
-- `POST /api/v1/ai/task-candidates/refresh` создаёт кандидатов задач (`task_candidates`) со статусом `suggested`, не создавая активных задач. Также создаются `review_items` с kind `potential_task`.
+- При отсутствии route публичный запрос всё равно принимается, но завершается failed run с причиной `route_not_configured`.
+- `POST /api/v1/ai/task-candidates/refresh` тоже возвращает `202 Accepted`, а затем создаёт кандидатов задач (`task_candidates`) со статусом `suggested`, не создавая активных задач. Также создаются `review_items` с kind `potential_task`.
+- `POST /api/v1/ai/model-downloads` для встроенной Ollama-модели помечает модель доступной без автосоздания route и пишет `ai.hub.model_download.requested` / `ai.hub.model_download.completed`; при ошибке pull пишет `ai.hub.model_download.failed`.
 
 ### Agents API
 
@@ -239,7 +241,7 @@ HERMES_API_SECRET=... pytest backend/e2e/test_api.py -v
 | `request_builders.rs` | Построение TDLib‑запросов: `set_tdlib_parameters_request`, `check_database_encryption_key_request`, `tdlib_send_text_message_request`, `tdlib_send_media_message_request` (reject пустого пути), `tdlib_get_chat_history_request` (лимит 100), `tdlib_download_file_request` (синхронный), `tdlib_create_forum_topic_request` (reject пустого названия), `tdlib_edit_chat_folder_remove_chat_request`, `tdlib_toggle_forum_topic_is_closed_request`, `tdlib_edit_message_text_request` (reject пустого текста), `tdlib_delete_messages_request`, `tdlib_add_message_reaction_request`, `tdlib_remove_message_reaction_request`, `tdlib_pin_chat_message_request`, `tdlib_unpin_chat_message_request`. |
 | `app_config/test_support.rs` | Методы `test_with_api_secret`, `test_with_api_secret_and_database_url`, `with_test_*`; управление параметрами конфигурации для тестов. |
 | `test_support.rs` | Фабрики `communication_provider_account_store`, `telegram_store`, `whatsapp_web_store`; `upsert_telegram_runtime_account`, `restore_signal_hub_system_sources`, `set_signal_runtime_state`, `load_communication_raw_record`. |
-| `ai/answers.rs` | Ответ `/api/v1/ai/answers` содержит поля `agent_id`, `citations`, `run_id`; сохранение в `ai_agent_runs`, `observation_links`, `event_log`; блокировка при Signal Hub политике `Muted` для источника `ai` (412); `/api/v1/ai/task-candidates/refresh` создаёт кандидатов задач и `review_items` с kind `potential_task`. |
+| `ai/answers.rs` | `/api/v1/ai/answers` и `/api/v1/ai/task-candidates/refresh` работают как accepted/run API: принимают запрос, возвращают `run_id`, затем материализуют completion или failure в `ai_agent_runs` и `event_log`; блокировка при Signal Hub политике `Muted` для источника `ai` (412); `task-candidates/refresh` создаёт кандидатов задач и `review_items` с kind `potential_task`. |
 | `ai/agents.rs` | `GET /api/v1/ai/agents` требует секрет; 5 агентов, включая `HESTIA` и `HEPHAESTUS`; материализация персон в `persons`, `person_identities`, `graph_nodes`. |
 | `ai/semantic_store.rs` | Установка расширения `vector`; upsert эмбеддингов (2560 dim), идемпотентность; создание observation‑записей `AI_SEMANTIC_EMBEDDING`; поиск с разницей в score. |
 | `ai/support.rs` | Fake Ollama (4 маршрута), хелперы `spawn_fake_ollama`, `unit_embedding`, `seed_message`, `seed_document`; `AI_RUNTIME_TEST_LOCK`. |

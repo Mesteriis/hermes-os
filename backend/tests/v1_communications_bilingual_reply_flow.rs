@@ -5,6 +5,9 @@ use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+use hermes_hub_backend::ai::control_center::{
+    AiControlCenterStore, AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest,
+};
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
@@ -56,10 +59,7 @@ async fn v1_bilingual_reply_flow_returns_review_contract_against_postgres() {
     assert_eq!(body["translation"]["translated"], false);
     assert_eq!(body["translation"]["text"], Value::Null);
     assert_eq!(body["translation"]["model"], Value::Null);
-    assert_eq!(
-        body["translation"]["reason"],
-        "translation runtime unavailable"
-    );
+    assert_eq!(body["translation"]["reason"], "no LLM configured");
     assert_eq!(body["reply"]["language"], "ru");
     assert_eq!(body["reply"]["tone"], "business");
     assert_eq!(
@@ -69,10 +69,7 @@ async fn v1_bilingual_reply_flow_returns_review_contract_against_postgres() {
     assert_eq!(body["back_translation"]["target"], "es");
     assert_eq!(body["back_translation"]["translated"], false);
     assert_eq!(body["back_translation"]["text"], Value::Null);
-    assert_eq!(
-        body["back_translation"]["reason"],
-        "translation runtime unavailable"
-    );
+    assert_eq!(body["back_translation"]["reason"], "no LLM configured");
 }
 
 #[tokio::test]
@@ -290,4 +287,65 @@ async fn configure_fake_ollama_setting(pool: &sqlx::PgPool, ollama_base_url: &st
         )
         .await
         .expect("fake Ollama setting");
+
+    let store = AiControlCenterStore::new(pool.clone());
+    let provider_id = "provider:built_in:ollama";
+    let chat_model = "qwen3:4b";
+    let embedding_model = "qwen3-embedding:4b";
+
+    store
+        .update_model_availability(
+            &AiModelAvailabilityUpdateRequest {
+                provider_id: provider_id.to_owned(),
+                model_key: chat_model.to_owned(),
+                is_available: true,
+            },
+            "hermes-frontend",
+        )
+        .await
+        .expect("fake Ollama chat model availability");
+
+    store
+        .update_model_availability(
+            &AiModelAvailabilityUpdateRequest {
+                provider_id: provider_id.to_owned(),
+                model_key: embedding_model.to_owned(),
+                is_available: true,
+            },
+            "hermes-frontend",
+        )
+        .await
+        .expect("fake Ollama embedding model availability");
+
+    for slot in [
+        "default_chat",
+        "reasoning",
+        "summarization",
+        "mail_intelligence",
+        "reply_draft",
+        "extraction",
+        "meeting_prep",
+    ] {
+        store
+            .put_model_route(
+                slot,
+                &AiModelRouteUpdateRequest {
+                    provider_id: provider_id.to_owned(),
+                    model_key: chat_model.to_owned(),
+                },
+            )
+            .await
+            .expect("fake Ollama model route");
+    }
+
+    store
+        .put_model_route(
+            "embeddings",
+            &AiModelRouteUpdateRequest {
+                provider_id: provider_id.to_owned(),
+                model_key: embedding_model.to_owned(),
+            },
+        )
+        .await
+        .expect("fake Ollama embedding route");
 }

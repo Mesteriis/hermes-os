@@ -1,13 +1,10 @@
-use std::collections::BTreeSet;
-
 use sqlx::postgres::PgPool;
 
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::domains::persons::api::PersonProjectionPort;
 
 use super::errors::EmailSyncPipelineError;
 use super::organizations::project_email_participant_organization;
-use super::participants::{parse_email_participant, upsert_message_participant};
+use super::participants::{EmailParticipant, parse_email_participant, upsert_message_participant};
 use super::relationships::insert_relationship_event;
 
 #[derive(Default)]
@@ -22,11 +19,9 @@ pub(crate) struct MessageKnowledgeReport {
 
 pub(crate) async fn project_message_knowledge(
     pool: &PgPool,
-    person_store: &PersonProjectionPort,
     messages: &[ProjectedMessage],
 ) -> Result<MessageKnowledgeReport, EmailSyncPipelineError> {
     let mut report = MessageKnowledgeReport::default();
-    let mut seen_persons = BTreeSet::new();
 
     for message in messages {
         let mut participants = Vec::new();
@@ -36,30 +31,20 @@ pub(crate) async fn project_message_knowledge(
         }
 
         for participant in participants {
-            let person = person_store
-                .upsert_email_person_with_observation(
-                    &participant.email_address,
-                    &message.observation_id,
-                )
-                .await?;
-            if seen_persons.insert(person.person_id.clone()) {
-                report.upserted_persons += 1;
-                report.upserted_person_identities += 1;
-            }
-            if upsert_message_participant(pool, message, &person.person_id, &participant).await? {
+            let Some(person_id) = confirmed_person_id_for_participant(pool, &participant).await?
+            else {
+                continue;
+            };
+            if upsert_message_participant(pool, message, &person_id, &participant).await? {
                 report.upserted_message_participants += 1;
             }
-            if insert_relationship_event(pool, message, &person.person_id, &participant).await? {
+            if insert_relationship_event(pool, message, &person_id, &participant).await? {
                 report.upserted_relationship_events += 1;
             }
 
-            let organization_report = project_email_participant_organization(
-                pool,
-                &person.person_id,
-                message,
-                &participant,
-            )
-            .await?;
+            let organization_report =
+                project_email_participant_organization(pool, &person_id, message, &participant)
+                    .await?;
             report.upserted_organizations += organization_report.upserted_organizations;
             report.upserted_organization_contact_links +=
                 organization_report.upserted_organization_contact_links;
@@ -67,4 +52,28 @@ pub(crate) async fn project_message_knowledge(
     }
 
     Ok(report)
+}
+
+async fn confirmed_person_id_for_participant(
+    pool: &PgPool,
+    participant: &EmailParticipant,
+) -> Result<Option<String>, EmailSyncPipelineError> {
+    let person_id = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT person_id
+        FROM person_identities
+        WHERE identity_type = 'email'
+          AND lower(identity_value) = $1
+          AND status = 'active'
+          AND person_id IS NOT NULL
+          AND source <> 'email_sync'
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&participant.email_address)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(person_id)
 }

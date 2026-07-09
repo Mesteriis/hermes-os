@@ -1,5 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
+use testkit::factories::contact::ContactFactory;
 
 use base64::Engine as _;
 use chrono::{TimeZone, Utc};
@@ -17,7 +18,8 @@ use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::email_sync_pipeline::project_email_sync_batch_with_mail_blobs;
 
 #[tokio::test]
-async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_against_postgres() {
+async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_participants_against_postgres()
+ {
     let test_context = TestContext::new().await;
     let database_url = test_context.connection_string();
 
@@ -45,6 +47,12 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
         ))
         .await
         .expect("store provider account");
+    ContactFactory::new(&pool)
+        .with_name("Confirmed Sender")
+        .with_email(sender_email.clone())
+        .create()
+        .await
+        .expect("confirmed sender contact");
 
     let raw_rfc822 = format!(
         "Subject: Sync Pipeline\r\n\
@@ -87,12 +95,12 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     assert_eq!(report.attachment_blobs_upserted, 0);
     assert_eq!(report.attachments_extracted, 0);
     assert_eq!(report.attachments_not_scanned, 0);
-    assert_eq!(report.upserted_persons, 2);
-    assert_eq!(report.upserted_person_identities, 2);
-    assert_eq!(report.upserted_message_participants, 2);
-    assert_eq!(report.upserted_relationship_events, 2);
-    assert_eq!(report.upserted_organizations, 2);
-    assert_eq!(report.upserted_organization_contact_links, 2);
+    assert_eq!(report.upserted_persons, 0);
+    assert_eq!(report.upserted_person_identities, 0);
+    assert_eq!(report.upserted_message_participants, 1);
+    assert_eq!(report.upserted_relationship_events, 1);
+    assert_eq!(report.upserted_organizations, 1);
+    assert_eq!(report.upserted_organization_contact_links, 1);
 
     let projected = sqlx::query(
         r#"
@@ -151,7 +159,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .fetch_one(&pool)
     .await
     .expect("person email identities");
-    assert_eq!(identity_count, 2);
+    assert_eq!(identity_count, 0);
 
     let persona_observation_link_count: i64 = sqlx::query_scalar(
         r#"
@@ -167,7 +175,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .fetch_one(&pool)
     .await
     .expect("persona observation links");
-    assert_eq!(persona_observation_link_count, 2);
+    assert_eq!(persona_observation_link_count, 0);
 
     let identity_observation_link_count: i64 = sqlx::query_scalar(
         r#"
@@ -183,7 +191,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .fetch_one(&pool)
     .await
     .expect("identity observation links");
-    assert_eq!(identity_observation_link_count, 2);
+    assert_eq!(identity_observation_link_count, 0);
 
     let participant_count: i64 = sqlx::query_scalar(
         r#"
@@ -194,18 +202,17 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
             FROM communication_messages
             WHERE account_id = $1 AND provider_record_id = $2
         )
-          AND email_address = ANY($3)
-          AND role = ANY($4)
+          AND email_address = $3
+          AND role = 'sender'
         "#,
     )
     .bind(&account_id)
     .bind(&provider_record_id)
-    .bind(vec![sender_email.as_str(), recipient_email.as_str()])
-    .bind(vec!["sender", "recipient"])
+    .bind(&sender_email)
     .fetch_one(&pool)
     .await
     .expect("message participants");
-    assert_eq!(participant_count, 2);
+    assert_eq!(participant_count, 1);
 
     let participant_observation_link_count: i64 = sqlx::query_scalar(
         r#"
@@ -221,7 +228,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .fetch_one(&pool)
     .await
     .expect("message participant observation links");
-    assert_eq!(participant_observation_link_count, 2);
+    assert_eq!(participant_observation_link_count, 1);
 
     let relationship_count: i64 = sqlx::query_scalar(
         r#"
@@ -241,7 +248,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .fetch_one(&pool)
     .await
     .expect("relationship events");
-    assert_eq!(relationship_count, 2);
+    assert_eq!(relationship_count, 1);
 
     let relationship_event_observation_link_count: i64 = sqlx::query_scalar(
         r#"
@@ -257,7 +264,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .fetch_one(&pool)
     .await
     .expect("relationship event observation links");
-    assert_eq!(relationship_event_observation_link_count, 2);
+    assert_eq!(relationship_event_observation_link_count, 1);
 
     let organization_link_count: i64 = sqlx::query_scalar(
         r#"
@@ -266,15 +273,15 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
         JOIN organization_domains domain ON domain.organization_id = link.organization_id
         JOIN person_identities identity ON identity.person_id = link.person_id
         WHERE domain.domain = ANY($1)
-          AND identity.identity_value = ANY($2)
+          AND identity.identity_value = $2
         "#,
     )
-    .bind(vec![sender_domain.as_str(), recipient_domain.as_str()])
-    .bind(vec![sender_email.as_str(), recipient_email.as_str()])
+    .bind(vec![sender_domain.as_str()])
+    .bind(&sender_email)
     .fetch_one(&pool)
     .await
     .expect("organization contact links");
-    assert_eq!(organization_link_count, 2);
+    assert_eq!(organization_link_count, 1);
 
     let organization_relationship_count: i64 = sqlx::query_scalar(
         r#"
@@ -294,17 +301,17 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
           AND relationship.metadata->>'source' = 'email_sync'
           AND evidence.source_kind = 'communication'
           AND evidence.source_id = $1
-          AND domain.domain = ANY($2)
-          AND identity.identity_value = ANY($3)
+          AND domain.domain = $2
+          AND identity.identity_value = $3
         "#,
     )
     .bind(&message_id)
-    .bind(vec![sender_domain.as_str(), recipient_domain.as_str()])
-    .bind(vec![sender_email.as_str(), recipient_email.as_str()])
+    .bind(&sender_domain)
+    .bind(&sender_email)
     .fetch_one(&pool)
     .await
     .expect("organization relationships");
-    assert_eq!(organization_relationship_count, 2);
+    assert_eq!(organization_relationship_count, 1);
 
     let organization_projection_observation_link_count: i64 = sqlx::query_scalar(
         r#"
@@ -320,7 +327,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .fetch_one(&pool)
     .await
     .expect("organization observation links");
-    assert_eq!(organization_projection_observation_link_count, 2);
+    assert_eq!(organization_projection_observation_link_count, 1);
 
     let organization_domain_projection_observation_link_count: i64 = sqlx::query_scalar(
         r#"
@@ -336,7 +343,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .fetch_one(&pool)
     .await
     .expect("organization domain observation links");
-    assert_eq!(organization_domain_projection_observation_link_count, 2);
+    assert_eq!(organization_domain_projection_observation_link_count, 1);
 
     let organization_identity_projection_observation_link_count: i64 = sqlx::query_scalar(
         r#"
@@ -352,11 +359,11 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .fetch_one(&pool)
     .await
     .expect("organization identity observation links");
-    assert_eq!(organization_identity_projection_observation_link_count, 2);
+    assert_eq!(organization_identity_projection_observation_link_count, 1);
 }
 
 #[tokio::test]
-async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_against_postgres() {
+async fn email_sync_pipeline_does_not_create_ai_candidates_directly_against_postgres() {
     let test_context = TestContext::new().await;
     let database_url = test_context.connection_string();
 
@@ -423,9 +430,9 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
     .expect("project email sync batch");
 
     assert_eq!(report.projected_messages, 1);
-    assert_eq!(report.refreshed_decision_candidates, 1);
+    assert_eq!(report.refreshed_decision_candidates, 0);
     assert_eq!(report.refreshed_knowledge_candidates, 0);
-    assert_eq!(report.refreshed_task_candidates, 1);
+    assert_eq!(report.refreshed_task_candidates, 0);
 
     let message_id: String = sqlx::query_scalar(
         r#"
@@ -448,9 +455,9 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
     .await
     .expect("message observation id");
 
-    let decision_row: (String, String, String, String) = sqlx::query_as(
+    let decision_count: i64 = sqlx::query_scalar(
         r#"
-        SELECT decision.decision_id, decision.title, decision.rationale, decision.review_state
+        SELECT count(*)::BIGINT
         FROM decisions decision
         JOIN decision_impacted_entities impacted
           ON impacted.decision_id = decision.decision_id
@@ -461,52 +468,10 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
     .bind(&message_id)
     .fetch_one(&pool)
     .await
-    .expect("decision candidate");
-    assert_eq!(decision_row.1, decision_title);
-    assert_eq!(decision_row.2, decision_rationale);
-    assert_eq!(decision_row.3, "suggested");
+    .expect("decision candidate count");
+    assert_eq!(decision_count, 0);
 
-    let mirrored_decision_review_row = sqlx::query(
-        r#"
-        SELECT item_kind, status, metadata
-        FROM review_items
-        WHERE review_item_id IN (
-            SELECT review_item_id
-            FROM review_item_evidence
-            WHERE observation_id = $1
-        )
-          AND metadata->>'mirrored_from' = 'decisions'
-        "#,
-    )
-    .bind(&message_observation_id)
-    .fetch_one(&pool)
-    .await
-    .expect("mirrored decision review row");
-    assert_eq!(
-        mirrored_decision_review_row
-            .try_get::<String, _>("item_kind")
-            .expect("item kind"),
-        "potential_decision"
-    );
-    assert_eq!(
-        mirrored_decision_review_row
-            .try_get::<String, _>("status")
-            .expect("status"),
-        "new"
-    );
-    let mirrored_decision_metadata: serde_json::Value = mirrored_decision_review_row
-        .try_get("metadata")
-        .expect("metadata");
-    assert_eq!(
-        mirrored_decision_metadata["mirrored_from"],
-        json!("decisions")
-    );
-    assert_eq!(
-        mirrored_decision_metadata["decision_id"],
-        json!(decision_row.0)
-    );
-
-    let mirrored_knowledge_count: i64 = sqlx::query_scalar(
+    let mirrored_review_count: i64 = sqlx::query_scalar(
         r#"
         SELECT count(*)::BIGINT
         FROM review_items
@@ -515,18 +480,18 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
             FROM review_item_evidence
             WHERE observation_id = $1
         )
-          AND item_kind = 'knowledge_candidate'
+          AND item_kind IN ('potential_decision', 'potential_task', 'knowledge_candidate')
         "#,
     )
     .bind(&message_observation_id)
     .fetch_one(&pool)
     .await
-    .expect("mirrored knowledge review count");
-    assert_eq!(mirrored_knowledge_count, 0);
+    .expect("mirrored review candidate count");
+    assert_eq!(mirrored_review_count, 0);
 
-    let task_candidate_row: (String, String, String, Option<String>) = sqlx::query_as(
+    let task_candidate_count: i64 = sqlx::query_scalar(
         r#"
-        SELECT title, candidate_kind, review_state, due_text
+        SELECT count(*)::BIGINT
         FROM task_candidates
         WHERE source_kind = 'observation'
           AND source_id = $1
@@ -535,47 +500,8 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
     .bind(&message_observation_id)
     .fetch_one(&pool)
     .await
-    .expect("obligation task candidate");
-    assert_eq!(task_candidate_row.0, obligation_statement);
-    assert_eq!(task_candidate_row.1, "obligation_task");
-    assert_eq!(task_candidate_row.2, "suggested");
-    assert_eq!(task_candidate_row.3.as_deref(), Some("Friday 5pm"));
-
-    let mirrored_review_row = sqlx::query(
-        r#"
-        SELECT item_kind, status, metadata
-        FROM review_items
-        WHERE review_item_id IN (
-            SELECT review_item_id
-            FROM review_item_evidence
-            WHERE observation_id = $1
-        )
-          AND item_kind = 'potential_task'
-        "#,
-    )
-    .bind(&message_observation_id)
-    .fetch_one(&pool)
-    .await
-    .expect("mirrored review row");
-    assert_eq!(
-        mirrored_review_row
-            .try_get::<String, _>("item_kind")
-            .expect("item kind"),
-        "potential_task"
-    );
-    assert_eq!(
-        mirrored_review_row
-            .try_get::<String, _>("status")
-            .expect("status"),
-        "new"
-    );
-    let mirrored_metadata: serde_json::Value =
-        mirrored_review_row.try_get("metadata").expect("metadata");
-    assert_eq!(mirrored_metadata["mirrored_from"], json!("task_candidates"));
-    assert_eq!(
-        mirrored_metadata["candidate_kind"],
-        json!("obligation_task")
-    );
+    .expect("task candidate count");
+    assert_eq!(task_candidate_count, 0);
 
     let task_count =
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM tasks WHERE source_id = $1")

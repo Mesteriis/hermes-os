@@ -2,13 +2,12 @@ import { ApiClient } from '../../../platform/api/ApiClient'
 import type {
 	AiStatus,
 	AiAgentListResponse,
+	AiHubRequestAcceptedResponse,
+	AiRun,
 	AiRunListResponse,
 	AiAnswerRequest,
-	AiAnswerResponse,
 	AiMeetingPrepRequest,
-	AiMeetingPrepResponse,
 	AiTaskCandidateRefreshRequest,
-	AiTaskCandidateRefreshResponse,
 	OwnerPersonaResponse
 } from '../types/agents'
 
@@ -28,6 +27,13 @@ export async function fetchAiRuns(limit = 25): Promise<AiRunListResponse> {
 	)
 }
 
+export async function fetchAiRun(runId: string): Promise<AiRun> {
+	return ApiClient.instance.get<AiRun>(
+		`/api/v1/ai/runs/${encodeURIComponent(runId)}`,
+		'AI run request failed'
+	)
+}
+
 export async function fetchOwnerPersona(): Promise<OwnerPersonaResponse> {
 	return ApiClient.instance.get<OwnerPersonaResponse>(
 		'/api/v1/persons/owner',
@@ -35,12 +41,16 @@ export async function fetchOwnerPersona(): Promise<OwnerPersonaResponse> {
 	)
 }
 
-export async function requestAiAnswer(request: AiAnswerRequest): Promise<AiAnswerResponse> {
-	return ApiClient.instance.post<AiAnswerResponse>('/api/v1/ai/answers', request, 'AI answer request failed')
+export async function requestAiAnswer(request: AiAnswerRequest): Promise<AiHubRequestAcceptedResponse> {
+	return ApiClient.instance.post<AiHubRequestAcceptedResponse>(
+		'/api/v1/ai/answers',
+		request,
+		'AI answer request failed'
+	)
 }
 
-export async function requestAiMeetingPrep(request: AiMeetingPrepRequest): Promise<AiMeetingPrepResponse> {
-	return ApiClient.instance.post<AiMeetingPrepResponse>(
+export async function requestAiMeetingPrep(request: AiMeetingPrepRequest): Promise<AiHubRequestAcceptedResponse> {
+	return ApiClient.instance.post<AiHubRequestAcceptedResponse>(
 		'/api/v1/ai/meeting-prep',
 		request,
 		'AI meeting prep request failed'
@@ -49,8 +59,8 @@ export async function requestAiMeetingPrep(request: AiMeetingPrepRequest): Promi
 
 export async function refreshAiTaskCandidates(
 	request: AiTaskCandidateRefreshRequest
-): Promise<AiTaskCandidateRefreshResponse> {
-	return ApiClient.instance.post<AiTaskCandidateRefreshResponse>(
+): Promise<AiHubRequestAcceptedResponse> {
+	return ApiClient.instance.post<AiHubRequestAcceptedResponse>(
 		'/api/v1/ai/task-candidates/refresh',
 		request,
 		'AI task candidate refresh request failed'

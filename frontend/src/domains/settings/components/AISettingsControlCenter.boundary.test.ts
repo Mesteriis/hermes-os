@@ -2,16 +2,25 @@ import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 
 describe('AISettingsControlCenter boundary', () => {
-  it('renders AI Control Center from SettingsPage through explicit AI contracts', () => {
+  it('renders AI Hub from SettingsPage through explicit AI contracts', () => {
     const page = readFileSync(
       new URL('../views/SettingsPage.vue', import.meta.url),
       'utf8'
     )
     const panel = readFileSync(new URL('./AISettingsPanel.vue', import.meta.url), 'utf8')
     const modelCatalog = readFileSync(new URL('./AIModelCatalogPanel.vue', import.meta.url), 'utf8')
+    const modelPicker = readFileSync(new URL('./AIModelPickerDialog.vue', import.meta.url), 'utf8')
     const wizard = readFileSync(new URL('./AIProviderConnectionWizard.vue', import.meta.url), 'utf8')
     const surface = readFileSync(
       new URL('../queries/useAISettingsSurface.ts', import.meta.url),
+      'utf8'
+    )
+    const catalog = readFileSync(
+      new URL('../queries/aiSettingsCatalog.ts', import.meta.url),
+      'utf8'
+    )
+    const pageSurface = readFileSync(
+      new URL('../queries/useSettingsPageSurface.ts', import.meta.url),
       'utf8'
     )
     const api = readFileSync(
@@ -25,6 +34,8 @@ describe('AISettingsControlCenter boundary', () => {
     expect(page).toContain('import AISettingsPanel')
     expect(page).toContain('<AISettingsPanel')
     expect(page).toContain("store.selectedSection === 'ai'")
+    expect(pageSurface).toContain("label: 'Hub'")
+    expect(pageSurface).toContain("label: 'AI Hub'")
     expect(panel).toContain('settings-ai-tabs')
     expect(panel).not.toContain('settings-ai-tabs--side')
     expect(panel).not.toContain('settings-ai-workbench')
@@ -45,10 +56,7 @@ describe('AISettingsControlCenter boundary', () => {
     expect(panel).toContain('Capability access')
     expect(panel).toContain('Choose models')
     expect(panel).toContain('isModelPickerOpen')
-    expect(panel).toContain('Choose models for Hermes')
-    expect(panel).toContain('settings-ai-model-picker-dialog')
-    expect(panel).toContain('settings-ai-model-picker__list')
-    expect(panel).toContain('surface.selectedProviderModels.value')
+    expect(panel).toContain('AIModelPickerDialog')
     expect(panel).not.toContain('settings-ai-compact-model-list')
     expect(panel).not.toContain('Open catalog')
     expect(panel).not.toContain('settings-ai-connect-summary')
@@ -60,15 +68,24 @@ describe('AISettingsControlCenter boundary', () => {
     expect(modelCatalog).toContain('settings-ai-model-provider-tab')
     expect(modelCatalog).toContain('SearchInput')
     expect(modelCatalog).toContain('modelCatalogSearch')
-    expect(modelCatalog).toContain('showAvailableModelsOnly = ref(true)')
+    expect(modelCatalog).toContain('showAvailableModelsOnly = ref(false)')
     expect(modelCatalog).toContain('settings-ai-model-availability-filter')
     expect(modelCatalog).toContain('Show only available models')
+    expect(modelCatalog).toContain('Download queued')
+    expect(modelCatalog).toContain('Not downloaded')
+    expect(modelCatalog).toContain('settings-ai-model-progress-bar')
     expect(modelCatalog).toContain('class="icon-button"')
     expect(modelCatalog).toContain(':aria-label="t(\'Sync models\')"')
     expect(modelCatalog).toContain('selectedModelGroupModels')
     expect(modelCatalog).toContain('settings-ai-model-checkbox')
     expect(modelCatalog).toContain('modelCapabilityBadges')
     expect(modelCatalog).toContain('modelRuntimeFacts')
+    expect(modelPicker).toContain('Choose models for Hermes')
+    expect(modelPicker).toContain('settings-ai-model-picker-dialog')
+    expect(modelPicker).toContain('settings-ai-model-picker__list')
+    expect(modelPicker).toContain('surface.selectedProviderModels.value')
+    expect(modelPicker).toContain('Download queued')
+    expect(modelPicker).toContain('Not downloaded')
     expect(panel).not.toContain('function modelCapabilities(')
     expect(panel).not.toContain('modelCapabilities(model)')
     expect(panel).toContain('settings-ai-route-board')
@@ -100,14 +117,17 @@ describe('AISettingsControlCenter boundary', () => {
     expect(surface).toContain('await overviewQuery.refetch()')
     expect(surface).toContain('useStartAiProviderAuthMutation')
     expect(surface).toContain('hermes:ai-provider-connected')
-    expect(surface).toContain('Extraction and categorization')
-    expect(surface).toContain('Raw OpenAI-compatible API')
-    expect(surface).toContain('openrouter')
-    expect(surface).toContain('groq')
+    expect(surface).toContain('DEFAULT_API_PROVIDER_PRESETS')
+    expect(surface).toContain('SLOT_DESCRIPTIONS')
+    expect(catalog).toContain('Extraction and categorization')
+    expect(catalog).toContain('Raw OpenAI-compatible API')
+    expect(catalog).toContain('openrouter')
+    expect(catalog).toContain('groq')
     expect(surface).not.toContain('selectedApiPresetKeys')
     expect(surface).not.toContain('handlePresetSelection')
     expect(api).toContain('/api/v1/ai/providers')
     expect(api).toContain('/api/v1/ai/models/availability')
+    expect(api).toContain('/api/v1/ai/model-downloads')
     expect(api).toContain('/api/v1/ai/provider-auth/start')
     expect(api).toContain('/api/v1/ai/model-routes/')
   })

@@ -102,4 +102,18 @@ impl AiControlCenterStore {
         transaction.commit().await?;
         Ok(route)
     }
+
+    pub async fn delete_model_route(&self, slot: &str) -> Result<(), AiControlCenterError> {
+        validate_capability_slot(slot)?;
+        sqlx::query(
+            r#"
+            DELETE FROM ai_model_routes
+            WHERE capability_slot = $1
+            "#,
+        )
+        .bind(slot.trim())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
 }

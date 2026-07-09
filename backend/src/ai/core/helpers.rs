@@ -82,11 +82,11 @@ pub(super) fn semantic_embedding_id(
     )
 }
 
-pub(super) fn run_id_from_command(workflow: &str, command_id: &str) -> String {
+pub(crate) fn run_id_from_command(workflow: &str, command_id: &str) -> String {
     format!("ai_run:v3:{workflow}:{}", sha256_hex(command_id.as_bytes()))
 }
 
-pub(super) fn event_id_from_command(event_type: &str, command_id: &str) -> String {
+pub(crate) fn event_id_from_command(event_type: &str, command_id: &str) -> String {
     format!("{event_type}:{}", sha256_hex(command_id.as_bytes()))
 }
 
@@ -134,7 +134,7 @@ pub(super) fn validate_limit(limit: i64) -> Result<i64, AiError> {
     Ok(limit)
 }
 
-pub(super) fn text_preview(value: &str, max_chars: usize) -> String {
+pub(crate) fn text_preview(value: &str, max_chars: usize) -> String {
     let trimmed = value.trim();
     let mut preview = String::new();
     for character in trimmed.chars().take(max_chars) {

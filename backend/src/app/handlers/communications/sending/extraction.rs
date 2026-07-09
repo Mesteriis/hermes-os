@@ -10,11 +10,14 @@ pub(crate) async fn post_v1_extract_tasks(
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
     let svc = crate::domains::communications::extract::EmailExtractService::new(
-        ai_runtime_port_optional(&state).await?,
+        ai_hub_optional(&state).await?,
     );
     let tasks = svc.extract_tasks(&msg).await?;
-    let llm_task_count = tasks.iter().filter(|task| task.source == "llm").count();
-    if llm_task_count > 0
+    let external_llm_task_count = tasks
+        .iter()
+        .filter(|task| task.source == "ai_hub.external_llm")
+        .count();
+    if external_llm_task_count > 0
         && let Some(pool) = state.database.pool()
     {
         crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
@@ -29,7 +32,7 @@ pub(crate) async fn post_v1_extract_tasks(
             }),
             serde_json::json!({
                 "task_count": tasks.len(),
-                "llm_task_count": llm_task_count,
+                "external_llm_task_count": external_llm_task_count,
             }),
             serde_json::json!({
                 "source": "communication_message_task_extraction",

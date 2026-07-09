@@ -15,6 +15,7 @@ import {
 	requestAiAnswer,
 	requestAiMeetingPrep,
 	refreshAiTaskCandidates,
+	fetchAiRun,
 	fetchAiRuns
 } from '../api/agents'
 
@@ -79,7 +80,8 @@ export const useAgentsStore = defineStore('agents-ui', () => {
 				query,
 				agent_id: selectedAgent.value?.agentId ?? 'MNEMOSYNE'
 			})
-			aiAnswerResult.value = result
+			const run = await waitForAiRun(result.run_id)
+			aiAnswerResult.value = aiAnswerResponseFromRun(run)
 			aiError.value = ''
 			await loadAiRunsOnly()
 		} catch (error) {
@@ -99,7 +101,8 @@ export const useAgentsStore = defineStore('agents-ui', () => {
 				command_id: `ai-meeting-prep-${crypto.randomUUID()}`,
 				topic
 			})
-			aiMeetingPrepResult.value = result
+			const run = await waitForAiRun(result.run_id)
+			aiMeetingPrepResult.value = aiMeetingPrepResponseFromRun(run)
 			aiError.value = ''
 			await loadAiRunsOnly()
 		} catch (error) {
@@ -119,7 +122,8 @@ export const useAgentsStore = defineStore('agents-ui', () => {
 				command_id: `ai-task-refresh-${crypto.randomUUID()}`,
 				query
 			})
-			aiTaskRefreshResult.value = result
+			const run = await waitForAiRun(result.run_id)
+			aiTaskRefreshResult.value = aiTaskRefreshResponseFromRun(run)
 			aiError.value = ''
 			await loadAiRunsOnly()
 		} catch (error) {
@@ -137,6 +141,19 @@ export const useAgentsStore = defineStore('agents-ui', () => {
 		} catch (error) {
 			aiError.value = error instanceof Error ? error.message : 'Unknown AI run history error'
 		}
+	}
+
+	async function waitForAiRun(runId: string) {
+		const maxAttempts = 40
+		for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+			const run = await fetchAiRun(runId)
+			if (run.status === 'completed') return run
+			if (run.status === 'failed') {
+				throw new Error(run.error_summary ?? 'AI run failed')
+			}
+			await delay(500)
+		}
+		throw new Error('AI run did not complete in time')
 	}
 
 	return {
@@ -253,4 +270,53 @@ function isAiCitation(value: unknown): value is AiCitation {
 		typeof (value as Record<string, unknown>).title === 'string' &&
 		typeof (value as Record<string, unknown>).excerpt === 'string'
 	)
+}
+
+function aiAnswerResponseFromRun(run: AiRun): AiAnswerResponse {
+	return {
+		run_id: run.run_id,
+		agent_id: run.agent_id,
+		status: run.status,
+		answer: run.answer ?? '',
+		citations: safeCitations(run.citations),
+		model: run.chat_model,
+		embedding_model: run.embedding_model,
+		created_at: run.created_at,
+		duration_ms: run.duration_ms ?? 0
+	}
+}
+
+function aiMeetingPrepResponseFromRun(run: AiRun): AiMeetingPrepResponse {
+	return {
+		run_id: run.run_id,
+		agent_id: run.agent_id,
+		status: run.status,
+		briefing: run.answer ?? '',
+		citations: safeCitations(run.citations),
+		model: run.chat_model,
+		embedding_model: run.embedding_model,
+		created_at: run.created_at,
+		duration_ms: run.duration_ms ?? 0
+	}
+}
+
+function aiTaskRefreshResponseFromRun(run: AiRun): AiTaskCandidateRefreshResponse {
+	const createdCount = Number.parseInt(run.answer?.match(/\d+/)?.[0] ?? '0', 10)
+	return {
+		run_id: run.run_id,
+		agent_id: run.agent_id,
+		status: run.status,
+		created_count: Number.isFinite(createdCount) ? createdCount : 0,
+		citations: safeCitations(run.citations),
+		model: run.chat_model,
+		embedding_model: run.embedding_model,
+		created_at: run.created_at,
+		duration_ms: run.duration_ms ?? 0
+	}
+}
+
+function delay(ms: number) {
+	return new Promise((resolve) => {
+		globalThis.setTimeout(resolve, ms)
+	})
 }

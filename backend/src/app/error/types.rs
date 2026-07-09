@@ -32,6 +32,7 @@ use crate::platform::settings::SettingsError;
 use crate::platform::storage::StorageError;
 use crate::vault::HostVaultError;
 
+#[derive(Debug)]
 pub enum ApiError {
     DatabaseNotConfigured,
     InvalidEnvelope(EventEnvelopeError),

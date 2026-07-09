@@ -62,6 +62,14 @@ export interface AiRunListResponse {
 	items: AiRun[]
 }
 
+export interface AiHubRequestAcceptedResponse {
+	request_id: string
+	run_id: string
+	status: string
+	event_id: string
+	correlation_id: string
+}
+
 export interface OwnerPersona {
 	person_id: string
 	display_name: string

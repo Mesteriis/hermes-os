@@ -1,6 +1,11 @@
 # ADR-0082 AI Settings Control Center
 
-Status: Proposed
+Status: Superseded by ADR-0106
+
+This decision was superseded by [ADR-0106](ADR-0106-ai-hub-local-agents-and-external-models.md).
+The original motivation remains valid, but the implemented surface is now `AI Hub`
+inside the `Hub` settings group, with explicit route assignment and download-first
+local model lifecycle instead of bootstrap-enabled local defaults.
 
 ## Context
 
@@ -10,7 +15,7 @@ Hermes Hub handles private communications and documents. AI provider configurati
 
 ## Decision
 
-Add an AI Control Center domain surfaced from Settings as a first-class `AI` section.
+Add an AI Hub domain surfaced from Settings inside the `Hub` section.
 
 Rules:
 
@@ -19,7 +24,7 @@ Rules:
 - API provider secrets are stored only through host-vault secret references. Environment-backed OmniRoute remains a legacy/bootstrap fallback.
 - Remote/API providers require explicit provider-level consent before they can be used for private-context workflows.
 - CLI agents are provider bridges only. They may execute only allowlisted fixed command/argument presets and must not become autonomous workflow actors in this slice.
-- Built-in Ollama runtime management is desktop/macOS-first. Hermes may install/start/update the runtime automatically, but model downloads require explicit user confirmation.
+- Built-in Ollama runtime management is desktop/macOS-first. Hermes may install/start/update the runtime automatically, but curated local model downloads require explicit user confirmation and do not auto-assign routes.
 - Model routing uses stable capability slots instead of one global chat model. Embedding routes must keep the current 2560-dimension constraint until a future ADR changes the semantic index shape.
 - Prompt templates are versioned. System prompts are seeded/read-only, while user prompts and active versions are stored as domain records.
 - Prompt evaluation runs may persist model output and metadata, but audit/event payloads must not store raw private source text, API keys or provider secret values.

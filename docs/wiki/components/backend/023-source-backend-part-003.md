@@ -35,8 +35,8 @@ generated_by: code-wiki-ru
 
 Модуль: `backend/src/ai/core/service/core.rs`
 
-- `AiService::new(pool, runtime, chat_model, embedding_model)` – создаёт сервис с маршрутизацией моделей `AiModelRouting::fallback`, где chat-модель используется для всех маршрутов, кроме эмбеддингов.
-- `new_with_routing(pool, runtime, model_routing)` – принимает готовый `AiModelRouting`.
+- `new_with_routing(pool, runtime, model_routing)` – принимает готовый `AiModelRouting` и строит `AiHub` поверх runtime-порта.
+- `new_with_hub(pool, hub)` – принимает уже собранный `SharedAiHub`.
 - `with_persona_attribution(persona_attribution)` – устанавливает порт атрибуции персон для AI-агентов.
 
 ### Маршрутизация моделей (AiModelRouting)
@@ -45,7 +45,7 @@ generated_by: code-wiki-ru
 
 Структура `AiModelRouting` содержит отдельные поля для каждой роли:
 - `default_chat`, `reasoning`, `summarization`, `mail_intelligence`, `reply_draft`, `extraction`, `meeting_prep`, `embeddings`.
-- `AiModelRouting::fallback` заполняет все chat-роли значением `chat_model`, а `embeddings` – значением `embedding_model`.
+- Маршруты больше не собираются через legacy fallback: каждый слот должен быть явно назначен в AI Hub settings, иначе запрос завершается ошибкой маршрутизации.
 
 ### Конфигурация моделей для записей о запусках
 
@@ -68,7 +68,7 @@ generated_by: code-wiki-ru
 
 Метод `retrieve_citations(query)` выполняет:
 1. Создание `SemanticEmbeddingStore` и индексацию канонических источников (вызов `index_canonical_sources`).
-2. Эмбеддинг запроса через `runtime.embed_with_model`.
+2. Эмбеддинг запроса через `AiHub`, который резолвит слот `embeddings` и вызывает runtime-порт.
 3. Проверку размерности эмбеддинга (должна совпадать с `AI_EMBEDDING_DIMENSION`).
 4. Векторный поиск (`search`) и текстовый поиск (`text_search`) с лимитом `DEFAULT_RETRIEVAL_LIMIT`.
 5. Объединение результатов (функция `merge_retrieval_results`), усечение до лимита и преобразование в `Vec<AiCitation>`.
@@ -81,9 +81,12 @@ generated_by: code-wiki-ru
 - Создаётся запись в `AiRunStore` о начале запуска.
 - Генерируется событие `ai.run.requested`.
 - По завершении – событие `ai.run.completed`.
+- При ошибке выполнения или маршрутизации фиксируется `ai.run.failed`.
 - Для `refresh_task_candidates` дополнительно генерируется `ai.task_extraction.completed`.
 - `append_run_event` пишет событие в `EventStore` с payload, содержащим preview запроса (до 160 символов) и детали, provenance (информация о рантайме и моделях), correlation_id.
-- `append_ai_signal_event` диспатчит сигнал `dispatch_ai_runtime_signal` для событий с типами: `ai.run.requested` → сигнал `run_requested`, `ai.run.completed` → `run_completed`, `ai.task_extraction.completed` → `task_extraction`. При этом из payload сигнала исключаются поля `query`, `answer`, `briefing`.
+- `append_ai_signal_event` диспатчит сигнал `dispatch_ai_runtime_signal` для событий с типами: `ai.run.requested` → сигнал `run_requested`, `ai.run.completed` → `run_completed`, `ai.run.failed` → `run_failed`, `ai.task_extraction.completed` → `task_extraction`. При этом из payload сигнала исключаются поля `query`, `answer`, `briefing`.
+- Публичные HTTP-эндпоинты `/api/v1/ai/answers`, `/api/v1/ai/task-candidates/refresh`, `/api/v1/ai/meeting-prep` не возвращают итоговый payload синхронно: они отвечают `202 Accepted` с `AiHubRequestAcceptedResponse { request_id, run_id, status, event_id, correlation_id }`, пишут `ai.hub.requested`, а итог результата читается через `GET /api/v1/ai/runs/{run_id}`.
+- `POST /api/v1/ai/model-downloads` обслуживает явный lifecycle скачивания встроенных Ollama-моделей: пишет `ai.hub.model_download.requested`, затем `ai.hub.model_download.completed` или `ai.hub.model_download.failed`. Успех только переводит модель в `is_available = true`, но не создаёт `ai_model_routes`.
 
 ### Рабочий процесс Answer
 
@@ -95,9 +98,9 @@ generated_by: code-wiki-ru
   1. Валидация `command_id`, `query`, `agent_id`.
   2. Запуск run, атрибуция персон.
   3. Извлечение цитат (`retrieve_citations`).
-  4. Формирование промпта (`answer_prompt`) и вызов chat-модели (`runtime.chat_with_model`).
-  5. Завершение run и запись событий.
-- Ответ (`AiAnswerResponse`) содержит: `run_id`, `agent_id`, `agent_persona_id`, `owner_persona_id`, `status`, `answer`, `citations`, `model`, `embedding_model`, `created_at`, `duration_ms`.
+  4. Формирование промпта (`answer_prompt`) и вызов chat-модели через `AiHub`.
+  5. Завершение run или перевод в failed run и запись событий.
+- Внутренний результат сервиса описывается `AiAnswerResponse`, но наружу public API возвращает accepted-ответ и требует читать итог через `AiRun`.
 
 ### Рабочий процесс Meeting Prep
 
@@ -108,7 +111,7 @@ generated_by: code-wiki-ru
 - Формируется скоупированный запрос (`scoped_meeting_query`) с учётом `project_id`/`person_id`.
 - Используется модель `self.model_routing.meeting_prep` для чата.
 - Промпт генерируется через `meeting_prep_prompt`.
-- Ответ (`AiMeetingPrepResponse`) вместо `answer` содержит поле `briefing`.
+- Внутренний результат сервиса описывается `AiMeetingPrepResponse`, где вместо `answer` используется `briefing`, но public API отдаёт только accepted-ответ и хранит итог в run-проекции.
 
 ### Рабочий процесс обновления кандидатов задач (Task Candidates)
 
@@ -120,7 +123,7 @@ generated_by: code-wiki-ru
 - После получения цитат генерируется промпт `task_candidate_prompt`, ответ парсится в черновики кандидатов (`parse_task_candidate_drafts`).
 - Черновики сохраняются через `upsert_ai_task_candidates`.
 - Вызывается синхронизация с инбоксом ревью (`sync_ai_run_task_candidates_to_review`).
-- Ответ (`AiTaskCandidateRefreshResponse`) включает `created_count` – количество созданных кандидатов.
+- Внутренний результат сервиса описывается `AiTaskCandidateRefreshResponse` с `created_count`, но public API отдаёт accepted-ответ и требует читать durable run/result отдельно.
 
 ### Сохранение кандидатов задач в БД
 

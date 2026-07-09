@@ -11,7 +11,9 @@ mod types;
 
 pub use agents::{AiAgentDescriptor, AiAgentListResponse, v3_agents};
 pub use constants::AI_EMBEDDING_DIMENSION;
+pub(crate) use constants::AI_PROMPT_TEMPLATE_VERSION;
 pub use errors::AiError;
+pub(crate) use helpers::{event_id_from_command, run_id_from_command, text_preview};
 pub use runs::{AiAgentRun, AiRunStore, NewAiRun};
 pub use semantic::{
     NewSemanticEmbedding, SemanticEmbedding, SemanticEmbeddingStore, SemanticIndexReport,
@@ -22,7 +24,7 @@ pub use service::{
     SharedAiPersonaAttributionPort,
 };
 pub use types::{
-    AiAnswerRequest, AiAnswerResponse, AiCitation, AiMeetingPrepRequest, AiMeetingPrepResponse,
-    AiModelRouting, AiStatusResponse, AiTaskCandidateRefreshRequest,
-    AiTaskCandidateRefreshResponse,
+    AiAnswerRequest, AiAnswerResponse, AiCitation, AiHubRequestAcceptedResponse,
+    AiMeetingPrepRequest, AiMeetingPrepResponse, AiModelRouteTarget, AiModelRouting,
+    AiStatusResponse, AiTaskCandidateRefreshRequest, AiTaskCandidateRefreshResponse,
 };

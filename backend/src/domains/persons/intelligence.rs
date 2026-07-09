@@ -1,4 +1,4 @@
-use crate::platform::ai_runtime::{AiRuntimePortError, SharedAiRuntimePort};
+use crate::ai::hub::{AiHub, AiHubError, AiModelRoute, SharedAiHub};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -23,12 +23,12 @@ pub struct PersonInsight {
 
 #[derive(Clone)]
 pub struct PersonIntelligenceService {
-    runtime: Option<SharedAiRuntimePort>,
+    hub: Option<SharedAiHub>,
 }
 
 impl PersonIntelligenceService {
-    pub fn new(runtime: Option<SharedAiRuntimePort>) -> Self {
-        Self { runtime }
+    pub fn new(hub: Option<SharedAiHub>) -> Self {
+        Self { hub }
     }
 
     pub fn heuristic_fingerprint(messages: &[PersonMessage]) -> CommunicationFingerprint {
@@ -79,7 +79,7 @@ impl PersonIntelligenceService {
             Some("neutral".into())
         };
 
-        let detected_language = detect_language(&combined_text);
+        let detected_language = AiHub::detect_language(&combined_text).language;
 
         let trust = 50i16
             .saturating_add((messages.len() as i16 * 2).min(30))
@@ -107,7 +107,7 @@ impl PersonIntelligenceService {
         &self,
         messages: &[PersonMessage],
     ) -> Result<Option<CommunicationFingerprint>, PersonIntelligenceError> {
-        let Some(ref runtime) = self.runtime else {
+        let Some(ref hub) = self.hub else {
             return Ok(None);
         };
         let sample: String = messages
@@ -119,7 +119,7 @@ impl PersonIntelligenceService {
         let prompt = format!(
             "Analyze communication patterns from these email samples. Return JSON with: frequent_topics (array of strings), typical_tone (one word), detected_language (code), writing_style (verbose/concise/balanced), preferred_time_of_day (morning/afternoon/evening or null).\n\nSamples:\n{sample}"
         );
-        let result = runtime.chat(&prompt).await?;
+        let result = hub.chat(AiModelRoute::Reasoning, &prompt).await?;
         let content = result
             .content
             .trim()
@@ -154,59 +154,6 @@ impl PersonIntelligenceService {
     }
 }
 
-fn detect_language(text: &str) -> String {
-    let text = text.trim();
-    if text.is_empty() {
-        return "unknown".to_owned();
-    }
-
-    let lower = text.to_lowercase();
-    if text.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c)) {
-        if lower.contains('ї') || lower.contains('є') {
-            return "uk".to_owned();
-        }
-        return "ru".to_owned();
-    }
-    if text.chars().any(|c| ('\u{4E00}'..='\u{9FFF}').contains(&c)) {
-        return "zh".to_owned();
-    }
-    if lower.contains('ñ')
-        || [
-            "hola",
-            "gracias",
-            "para",
-            "como",
-            "que",
-            "por favor",
-            "saludos",
-            "adjunto",
-        ]
-        .iter()
-        .any(|word| lower.contains(word))
-    {
-        return "es".to_owned();
-    }
-    if ["privet", "spasibo", "pozhaluysta"]
-        .iter()
-        .any(|word| lower.contains(word))
-    {
-        return "ru".to_owned();
-    }
-    if [
-        "mit", "und", "der", "die", "das", "ist", "von", "für", "danke", "bitte",
-    ]
-    .iter()
-    .any(|word| lower.contains(word))
-    {
-        return "de".to_owned();
-    }
-    if text.chars().any(|c| c.is_ascii_alphabetic()) {
-        return "en".to_owned();
-    }
-
-    "unknown".to_owned()
-}
-
 #[derive(Clone, Debug)]
 pub struct PersonMessage {
     pub subject: String,
@@ -217,7 +164,7 @@ pub struct PersonMessage {
 #[derive(Debug, Error)]
 pub enum PersonIntelligenceError {
     #[error(transparent)]
-    Runtime(#[from] AiRuntimePortError),
+    Hub(#[from] AiHubError),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
 }

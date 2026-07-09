@@ -6,7 +6,7 @@ use super::core::AiService;
 impl AiService {
     pub(super) fn model_config(&self) -> Value {
         json!({
-            "runtime": self.runtime.runtime_name(),
+            "runtime": self.hub.runtime_name(),
             "chat_model": &self.model_routing.default_chat,
             "embedding_model": &self.model_routing.embeddings,
             "embedding_dimension": AI_EMBEDDING_DIMENSION,

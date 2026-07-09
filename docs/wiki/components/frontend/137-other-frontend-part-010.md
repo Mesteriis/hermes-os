@@ -168,7 +168,7 @@ generated_by: code-wiki-ru
 
 ### `SettingsPage`
 
-Основная страница настроек. Содержит навигационное дерево с группами (General, Interface, Sources, AI) и пунктами (Application, Language, Appearance, Sidebar, Integrations, Signal Hub, AI Control Center). Для Integrations показывается счётчик провайдеров. При выборе раздела рендерится соответствующий компонент: `AppearanceSettings`, `LanguageSettings`, `ApplicationSettings`, `SidebarSettings`, `IntegrationsSettings`, `SignalHubSettings`, `AISettingsControlCenter`. Отображает сообщения об успехе (`store.actionMessage`) и ошибке (`store.errorMessage`).
+Основная страница настроек. Содержит навигационное дерево с группами (General, Interface, Sources, Hub) и пунктами (Application, Language, Appearance, Sidebar, Integrations, Signal Hub, AI Hub). Для Integrations показывается счётчик провайдеров. При выборе раздела рендерится соответствующий компонент: `AppearanceSettings`, `LanguageSettings`, `ApplicationSettings`, `SidebarSettings`, `IntegrationsSettings`, `SignalHubSettings`, `AISettingsPanel`. Отображает сообщения об успехе (`store.actionMessage`) и ошибке (`store.errorMessage`).
 
 - **Файл:** `frontend/src/domains/settings/views/SettingsPage.vue`
 - **Хранилище:** `useSettingsStore` (управляет выбранным разделом).

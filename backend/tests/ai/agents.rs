@@ -58,35 +58,34 @@ async fn ai_meeting_prep_returns_briefing_without_calendar_dependency() {
 
     let status = response.status();
     let body = json_body(response).await;
-    assert_eq!(status, StatusCode::OK, "body={body}");
-    assert_eq!(body["agent_id"], json!("HESTIA"));
-    assert_eq!(body["status"], json!("completed"));
-    assert_eq!(
-        body["briefing"],
-        json!("Discuss V3 risks and validation evidence.")
-    );
-    assert!(!body["citations"].as_array().expect("citations").is_empty());
+    assert_eq!(status, StatusCode::ACCEPTED, "body={body}");
+    assert_eq!(body["status"], json!("accepted"));
     let run_id = body["run_id"].as_str().expect("run id");
+    let stored = wait_for_run_status(&pool, run_id, "completed").await;
+    assert_eq!(stored.agent_id, "HESTIA");
+    assert_eq!(
+        stored.answer.as_deref(),
+        Some("Discuss V3 risks and validation evidence.")
+    );
+    assert!(!stored.citations.as_array().expect("citations").is_empty());
 
-    let raw_signal_count: i64 = sqlx::query_scalar(
-        r#"
-        SELECT count(*)::bigint
-        FROM event_log
-        WHERE correlation_id = $1
-          AND event_type IN (
-            'signal.raw.ai.run_requested.observed',
-            'signal.raw.ai.run_completed.observed',
-            'signal.accepted.ai.run_requested',
-            'signal.accepted.ai.run_completed'
-          )
-          AND subject->>'run_id' = $1
-        "#,
+    let run_event_count = wait_for_event_types(
+        &pool,
+        run_id,
+        run_id,
+        &["ai.run.requested", "ai.run.completed"],
     )
-    .bind(run_id)
-    .fetch_one(&pool)
-    .await
-    .expect("ai meeting prep signal hub event count");
-    assert_eq!(raw_signal_count, 4);
+    .await;
+    assert_eq!(run_event_count, 2);
+
+    let hub_event_count = wait_for_event_types(
+        &pool,
+        run_id,
+        run_id,
+        &["ai.hub.requested", "ai.hub.completed"],
+    )
+    .await;
+    assert_eq!(hub_event_count, 2);
 }
 
 #[tokio::test]

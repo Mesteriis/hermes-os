@@ -36,7 +36,7 @@ AI‑подсистема состоит из двух крупных модул
 
 ---
 
-## AI Control Center (`backend/src/ai/control_center/`)
+## AI Hub settings store (`backend/src/ai/control_center/`)
 
 ### Центральное хранилище – `AiControlCenterStore`
 

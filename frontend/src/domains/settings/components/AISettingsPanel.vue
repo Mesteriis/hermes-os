@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from '../../../platform/i18n'
-import Dialog from '../../../shared/ui/Dialog.vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import type { AISettingsSurface, AiModelRouteRow } from '../queries/useAISettingsSurface'
-import type { AiModelCatalogItem, AiProviderAccount, AiProviderPreset } from '../types/aiControlCenter'
+import type { AiProviderAccount, AiProviderPreset } from '../types/aiControlCenter'
 import AIModelCatalogPanel from './AIModelCatalogPanel.vue'
+import AIModelPickerDialog from './AIModelPickerDialog.vue'
 import AIProviderConnectionWizard from './AIProviderConnectionWizard.vue'
-import { modelCapabilityBadges, modelDetail, modelRuntimeFacts } from './aiModelCatalogPresentation'
+import AIUsageStatsPanel from './AIUsageStatsPanel.vue'
 import { aiProviderBrand, providerBrandClass } from './providerBranding'
 
-type AiSettingsTab = 'providers' | 'models' | 'routes'
+type AiSettingsTab = 'providers' | 'models' | 'routes' | 'stats'
 
 interface AiProviderListItem {
   id: string
@@ -61,6 +61,12 @@ const tabs = computed(() => [
     icon: 'tabler:route',
     label: t('Action routing'),
     count: props.surface.routeRows.value.length,
+  },
+  {
+    id: 'stats' as const,
+    icon: 'tabler:chart-histogram',
+    label: t('Usage statistics'),
+    count: props.surface.usageStats.value?.totals.request_count ?? 0,
   },
 ])
 
@@ -123,11 +129,6 @@ const selectedRouteCount = computed(() => {
   return count
 })
 
-const modelPickerDescription = computed(() => {
-  const provider = props.surface.selectedProvider.value
-  if (!provider) return t('Select a provider before choosing models.')
-  return `${provider.display_name} · ${selectedAvailableModelCount.value}/${props.surface.selectedProviderModels.value.length} ${t('available')}`
-})
 
 function providerGroupId(providerKind: string): 'local' | 'cli' | 'api' {
   if (providerKind === 'built_in') return 'local'
@@ -216,9 +217,6 @@ function refreshModelRoutes() {
   void props.surface.handleRefreshModelRoutes()
 }
 
-function toggleModelAvailability(model: AiModelCatalogItem, event: Event) {
-  void props.surface.handleModelAvailability(model, eventChecked(event))
-}
 
 function selectProviderListItem(item: AiProviderListItem): void {
   if (item.provider) {
@@ -240,14 +238,14 @@ function refreshLocalAuth() {
   <section class="settings-section settings-ai-section">
     <header class="settings-section-toolbar">
       <div>
-        <h3>{{ t('AI Control Center') }}</h3>
-        <p>{{ t('AI providers, OpenAI-compatible APIs, model catalog and action routing.') }}</p>
+        <h3>{{ t('AI Hub') }}</h3>
+        <p>{{ t('AI providers, local model downloads, model catalog and route selection.') }}</p>
       </div>
     </header>
 
     <nav
       class="settings-ai-tabs"
-      :aria-label="t('AI Control Center sections')"
+      :aria-label="t('AI Hub sections')"
       role="tablist"
     >
       <button
@@ -525,7 +523,7 @@ function refreshLocalAuth() {
     </section>
 
     <section
-      v-else
+      v-else-if="activeTab === 'routes'"
       id="settings-ai-panel-routes"
       class="settings-ai-tab-panel settings-ai-tab-panel--routes"
       role="tabpanel"
@@ -567,10 +565,10 @@ function refreshLocalAuth() {
             </div>
             <select
               :value="row.selectedValue"
-              :disabled="surface.isBusy.value || row.options.length === 0"
+              :disabled="surface.isBusy.value"
               @change="updateRoute(row, $event)"
             >
-              <option value="" disabled>{{ t('Select model') }}</option>
+              <option value="">{{ t('Not routed') }}</option>
               <option
                 v-for="option in row.options"
                 :key="option.value"
@@ -584,114 +582,25 @@ function refreshLocalAuth() {
       </section>
     </section>
 
+    <section
+      v-else
+      id="settings-ai-panel-stats"
+      class="settings-ai-tab-panel settings-ai-tab-panel--stats"
+      role="tabpanel"
+      aria-labelledby="settings-ai-tab-stats"
+    >
+      <AIUsageStatsPanel :surface="surface" />
+    </section>
+
     <AIProviderConnectionWizard
       v-model:open="isProviderWizardOpen"
       :surface="surface"
     />
 
-    <Dialog
+    <AIModelPickerDialog
       :open="isModelPickerOpen"
-      :title="t('Choose models for Hermes')"
-      :description="modelPickerDescription"
-      :close-label="t('Close model picker')"
-      content-class="settings-ai-model-picker-dialog"
+      :surface="surface"
       @update:open="(value) => { isModelPickerOpen = value }"
-    >
-      <section class="settings-ai-model-picker">
-        <header
-          v-if="surface.selectedProvider.value"
-          class="settings-ai-model-picker__toolbar"
-        >
-          <div>
-            <span>{{ t('Models enabled in Hermes') }}</span>
-            <strong>
-              {{ selectedAvailableModelCount }}/{{ surface.selectedProviderModels.value.length }}
-              {{ t('available') }}
-            </strong>
-            <small>
-              {{ t('Use the checkboxes to decide which synced models Hermes can route actions to.') }}
-            </small>
-          </div>
-          <button
-            type="button"
-            class="secondary-button"
-            :disabled="surface.isBusy.value"
-            @click="syncModels(surface.selectedProvider.value)"
-          >
-            <Icon icon="tabler:refresh" />
-            {{ t('Sync models') }}
-          </button>
-        </header>
-
-        <div
-          v-if="surface.selectedProviderModels.value.length"
-          class="settings-ai-model-picker__list"
-        >
-          <article
-            v-for="model in surface.selectedProviderModels.value"
-            :key="`${model.provider_id}:${model.model_key}`"
-            class="settings-ai-model-card"
-            :class="{ 'is-unavailable': !model.is_available }"
-          >
-            <label class="settings-ai-model-checkbox">
-              <input
-                type="checkbox"
-                :checked="model.is_available"
-                :disabled="surface.isBusy.value"
-                @change="toggleModelAvailability(model, $event)"
-              >
-              <span>
-                <strong>{{ model.is_available ? t('Enabled in Hermes') : t('Disabled in Hermes') }}</strong>
-                <small>{{ t('Controls whether this model appears in action routing.') }}</small>
-              </span>
-            </label>
-
-            <div class="settings-ai-model-card__body">
-              <div class="settings-ai-model-card__title">
-                <strong>{{ model.display_name }}</strong>
-                <small>{{ modelDetail(model) }}</small>
-              </div>
-              <div class="settings-ai-capability-row">
-                <span
-                  v-for="capability in modelCapabilityBadges(model, t)"
-                  :key="`${model.provider_id}:${model.model_key}:picker:${capability.key}`"
-                  :class="{ 'is-muted': capability.muted }"
-                >
-                  {{ capability.label }}
-                </span>
-              </div>
-              <div
-                v-if="modelRuntimeFacts(model, t).length"
-                class="settings-ai-model-facts"
-              >
-                <span
-                  v-for="fact in modelRuntimeFacts(model, t)"
-                  :key="`${model.provider_id}:${model.model_key}:picker:${fact.key}`"
-                >
-                  <strong>{{ fact.label }}</strong>
-                  {{ fact.value }}
-                </span>
-              </div>
-            </div>
-          </article>
-        </div>
-
-        <div v-else class="settings-empty-state">
-          <Icon icon="tabler:list-search" />
-          <strong>{{ t('No models synced') }}</strong>
-          <span>{{ t('Sync provider models and then enable the models Hermes should use.') }}</span>
-        </div>
-      </section>
-
-      <template #footer>
-        <button
-          type="button"
-          class="primary-button"
-          @click="isModelPickerOpen = false"
-        >
-          {{ t('Done') }}
-        </button>
-      </template>
-    </Dialog>
+    />
   </section>
 </template>
