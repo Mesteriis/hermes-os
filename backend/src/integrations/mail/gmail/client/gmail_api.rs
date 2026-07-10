@@ -278,6 +278,29 @@ impl GmailApiClient {
         })
     }
 
+    pub async fn mark_message_read(
+        &self,
+        access_token: &ResolvedSecret,
+        message_id: &str,
+    ) -> Result<(), EmailProviderNetworkError> {
+        validate_non_empty("base_url", &self.base_url)?;
+        validate_non_empty("user_id", &self.user_id)?;
+        validate_non_empty("gmail_message_id", message_id)?;
+
+        let modify_url = format!(
+            "{}/gmail/v1/users/{}/messages/{}/modify",
+            self.base_url, self.user_id, message_id
+        );
+        self.http
+            .post(modify_url)
+            .bearer_auth(access_token.expose_for_runtime())
+            .json(&json!({ "removeLabelIds": ["UNREAD"] }))
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
     pub async fn fetch_entries(
         &self,
         access_token: &ResolvedSecret,

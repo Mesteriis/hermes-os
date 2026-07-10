@@ -663,7 +663,7 @@ impl CommunicationCommandService {
         })
     }
 
-    pub async fn mark_message_imap_read(
+    pub async fn mark_message_read_local(
         &self,
         message_id: &str,
     ) -> Result<ProjectedMessage, CommunicationCommandServiceError> {
@@ -674,18 +674,18 @@ impl CommunicationCommandService {
             .ok_or(MessageProjectionError::MessageNotFound)?;
         let observation = self
             .capture_observation(
-                "imap mark read",
+                "local mark read",
                 "COMMUNICATION_MESSAGE",
                 json!({
                     "message_id": message_id,
                     "previous_workflow_state": current.workflow_state.as_str(),
                     "workflow_state": WorkflowState::Reviewed.as_str(),
-                    "operation": "imap_mark_read",
+                    "operation": "local_mark_read",
                 }),
-                format!("message://{message_id}/imap-mark-read"),
+                format!("message://{message_id}/local-mark-read"),
                 json!({
-                    "captured_by": "mail_service.mark_message_imap_read",
-                    "operation": "imap_mark_read",
+                    "captured_by": "mail_service.mark_message_read_local",
+                    "operation": "local_mark_read",
                 }),
             )
             .await?;

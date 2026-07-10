@@ -574,64 +574,86 @@ fn detect_secret_assignments(text: &str, findings: &mut Vec<SensitiveFinding>) {
 }
 
 fn detect_token_shapes(text: &str, findings: &mut Vec<SensitiveFinding>) {
-    for raw_token in text.split(|c: char| c.is_whitespace() || "'\"`<>()[]{};,".contains(c)) {
-        let token = raw_token.trim_matches(|c: char| {
-            !(c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | '+' | '='))
-        });
-        if token.len() < 8 {
-            continue;
-        }
+    for line in text.lines() {
+        let has_secret_context = has_secret_context(line);
+        for raw_token in line.split(|c: char| c.is_whitespace() || "'\"`<>()[]{};,".contains(c)) {
+            let token = raw_token.trim_matches(|c: char| {
+                !(c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | '+' | '='))
+            });
+            if token.len() < 8 {
+                continue;
+            }
 
-        if looks_like_github_token(token) {
-            push_finding(
-                findings,
-                "github_token",
-                SensitivityLevel::Critical,
-                0.95,
-                &masked_token(token),
-            );
-            continue;
-        }
-        if looks_like_aws_access_key(token) {
-            push_finding(
-                findings,
-                "aws_access_key_id",
-                SensitivityLevel::Critical,
-                0.95,
-                &masked_token(token),
-            );
-            continue;
-        }
-        if looks_like_google_api_key(token) {
-            push_finding(
-                findings,
-                "google_api_key",
-                SensitivityLevel::Critical,
-                0.90,
-                &masked_token(token),
-            );
-            continue;
-        }
-        if looks_like_jwt(token) {
-            push_finding(
-                findings,
-                "jwt",
-                SensitivityLevel::High,
-                0.85,
-                &masked_token(token),
-            );
-            continue;
-        }
-        if looks_like_high_entropy_secret(token) {
-            push_finding(
-                findings,
-                "high_entropy_token",
-                SensitivityLevel::High,
-                0.70,
-                &masked_token(token),
-            );
+            if looks_like_github_token(token) {
+                push_finding(
+                    findings,
+                    "github_token",
+                    SensitivityLevel::Critical,
+                    0.95,
+                    &masked_token(token),
+                );
+                continue;
+            }
+            if looks_like_aws_access_key(token) {
+                push_finding(
+                    findings,
+                    "aws_access_key_id",
+                    SensitivityLevel::Critical,
+                    0.95,
+                    &masked_token(token),
+                );
+                continue;
+            }
+            if looks_like_google_api_key(token) {
+                push_finding(
+                    findings,
+                    "google_api_key",
+                    SensitivityLevel::Critical,
+                    0.90,
+                    &masked_token(token),
+                );
+                continue;
+            }
+            if looks_like_jwt(token) {
+                push_finding(
+                    findings,
+                    "jwt",
+                    SensitivityLevel::High,
+                    0.85,
+                    &masked_token(token),
+                );
+                continue;
+            }
+            if has_secret_context && looks_like_high_entropy_secret(token) {
+                push_finding(
+                    findings,
+                    "high_entropy_token",
+                    SensitivityLevel::High,
+                    0.70,
+                    &masked_token(token),
+                );
+            }
         }
     }
+}
+
+fn has_secret_context(line: &str) -> bool {
+    let line = line.to_ascii_lowercase();
+    contains_any(
+        &line,
+        &[
+            "api_key",
+            "apikey",
+            "access_token",
+            "client_secret",
+            "private_key",
+            "authorization",
+            "bearer ",
+            "password",
+            "passwd",
+            "secret",
+        ],
+    )
 }
 
 fn detect_financial_identifiers(text: &str, findings: &mut Vec<SensitiveFinding>) {
@@ -853,6 +875,19 @@ mod tests {
             findings
                 .iter()
                 .any(|finding| finding.kind == "payment_card_number")
+        );
+    }
+
+    #[test]
+    fn does_not_classify_unlabelled_tracking_identifier_as_secret() {
+        let findings = AiHub::detect_sensitive_content(
+            "https://example.test/click?tracking=Abc9-Def8_Ghi7.Jkl6/Mno5Pqr4",
+        );
+
+        assert!(
+            !findings
+                .iter()
+                .any(|finding| finding.kind == "high_entropy_token")
         );
     }
 

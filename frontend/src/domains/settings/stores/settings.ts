@@ -4,6 +4,7 @@ import { useNotificationsStore, type NotificationItem } from '../../../shared/st
 
 export type SettingsSection =
   | 'accounts'
+  | 'communications'
   | 'language'
   | 'application'
   | 'background-jobs'

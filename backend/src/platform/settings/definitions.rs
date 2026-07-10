@@ -1,4 +1,5 @@
 mod ai;
+mod communications;
 mod frontend;
 mod privacy;
 mod server;
@@ -24,6 +25,7 @@ pub(crate) fn declared_setting(setting_key: &str) -> Option<DeclaredApplicationS
 pub(crate) fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
     let mut settings = Vec::new();
     settings.extend(server::declared_settings());
+    settings.extend(communications::declared_settings());
     settings.extend(frontend::declared_settings());
     settings.extend(privacy::declared_settings());
     settings.extend(ai::declared_settings());

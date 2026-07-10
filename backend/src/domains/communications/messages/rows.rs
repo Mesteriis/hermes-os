@@ -1,6 +1,8 @@
 use sqlx::Row;
 use sqlx::postgres::PgRow;
 
+use crate::domains::communications::ai_state::CommunicationAiState;
+
 use super::errors::MessageProjectionError;
 use super::models::{ProjectedMessage, ProjectedMessageSummary};
 use super::payload::recipients_from_value;
@@ -21,6 +23,7 @@ pub(crate) fn row_to_projected_message(
 ) -> Result<ProjectedMessage, MessageProjectionError> {
     let workflow_state: String = row.try_get("workflow_state")?;
     let local_state: String = row.try_get("local_state")?;
+    let ai_state: Option<String> = row.try_get("ai_state")?;
     Ok(ProjectedMessage {
         message_id: row.try_get("message_id")?,
         raw_record_id: row.try_get("raw_record_id")?,
@@ -45,6 +48,9 @@ pub(crate) fn row_to_projected_message(
         ai_category: row.try_get("ai_category")?,
         ai_summary: row.try_get("ai_summary")?,
         ai_summary_generated_at: row.try_get("ai_summary_generated_at")?,
+        ai_state: ai_state
+            .as_deref()
+            .and_then(|value| CommunicationAiState::try_from(value).ok()),
         local_state: local_state
             .parse::<LocalMessageState>()
             .unwrap_or(LocalMessageState::Active),

@@ -4,6 +4,7 @@ import { useRealtimeStatusStore } from '../../../shared/stores/realtimeStatus'
 import { useAISettingsSurface } from './useAISettingsSurface'
 import { useApplicationSettingsSurface } from './useApplicationSettingsSurface'
 import { useBackgroundJobsSettingsSurface } from './useBackgroundJobsSettingsSurface'
+import { useCommunicationsSettingsSurface } from './useCommunicationsSettingsSurface'
 import { useIntegrationsSettingsSurface } from './useIntegrationsSettingsSurface'
 import { useLanguageSettingsSurface } from './useLanguageSettingsSurface'
 import { useMaintenanceSettingsSurface } from './useMaintenanceSettingsSurface'
@@ -40,6 +41,7 @@ export function useSettingsPageSurface() {
   const applicationSettings = useApplicationSettingsSurface()
   const aiSettings = useAISettingsSurface()
   const integrationsSettings = useIntegrationsSettingsSurface()
+  const communicationsSettings = useCommunicationsSettingsSurface({ applicationSettings, integrationsSettings })
   const languageSettings = useLanguageSettingsSurface()
   const maintenanceSettings = useMaintenanceSettingsSurface()
   const signalHubSettings = useSignalHubSettingsSurface()
@@ -68,6 +70,13 @@ export function useSettingsPageSurface() {
           description: 'Provider identities and service capabilities',
           icon: 'tabler:id',
           meta: String(integrationCount.value)
+        },
+        {
+          id: 'communications',
+          label: 'Communications',
+          description: 'Mail sync reliability and provider polling settings',
+          icon: 'tabler:mail-cog',
+          meta: String(communicationsSettings.mailAccounts.value.length)
         },
         {
           id: 'application',
@@ -176,6 +185,7 @@ export function useSettingsPageSurface() {
     applicationSettings,
     applicationSettingsCount,
     backgroundJobsSettings,
+    communicationsSettings,
     integrationCount,
     integrationsSettings,
     languageSettings,

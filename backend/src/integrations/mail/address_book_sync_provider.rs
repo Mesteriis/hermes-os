@@ -6,6 +6,8 @@ use sqlx::postgres::PgPool;
 
 use crate::integrations::mail::accounts::EmailAccountSetupService;
 use crate::integrations::mail::gmail::client::{GmailApiClient, GmailContactFetchOptions};
+use crate::integrations::mail::icloud_carddav::IcloudCardDavClient;
+use crate::integrations::mail::sync_provider::read_provider_secret;
 use crate::platform::communications::{
     AddressBookProviderBatch, AddressBookProviderEntry, AddressBookProviderFetchRequest,
     AddressBookProviderSyncError, AddressBookProviderSyncPort, AddressBookProviderUpsertRequest,
@@ -73,9 +75,29 @@ impl AddressBookProviderSyncPort for LiveAddressBookProviderSyncPort {
     > {
         Box::pin(async move {
             if request.provider_kind != CommunicationProviderKind::Gmail {
-                return Err(AddressBookProviderSyncError::UnsupportedProvider(
-                    request.provider_kind.as_str().to_owned(),
-                ));
+                if request.provider_kind != CommunicationProviderKind::Icloud {
+                    return Err(AddressBookProviderSyncError::UnsupportedProvider(
+                        request.provider_kind.as_str().to_owned(),
+                    ));
+                }
+
+                let secret_store = SecretReferenceStore::new(self.pool.clone());
+                let password = read_provider_secret(
+                    self.provider_secret_binding_store.as_ref(),
+                    &secret_store,
+                    &self.vault,
+                    &request.account_id,
+                    ProviderAccountSecretPurpose::ImapPassword,
+                )
+                .await
+                .map_err(|error| AddressBookProviderSyncError::Credential(error.to_string()))?;
+                let client = IcloudCardDavClient::from_config(&request.provider_config, &password)
+                    .map_err(|error| {
+                        AddressBookProviderSyncError::ProviderNetwork(error.to_string())
+                    })?;
+                return client.fetch_entries().await.map_err(|error| {
+                    AddressBookProviderSyncError::ProviderNetwork(error.to_string())
+                });
             }
 
             let access_token = self.gmail_access_token(&request.account_id).await?;

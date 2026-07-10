@@ -61,7 +61,7 @@ impl LiveEmailProviderSyncPort {
     }
 }
 
-async fn read_provider_secret(
+pub(crate) async fn read_provider_secret(
     binding_store: &dyn ProviderSecretBindingLookupPort,
     secret_store: &SecretReferenceStore,
     resolver: &(impl SecretResolver + Sync + ?Sized),

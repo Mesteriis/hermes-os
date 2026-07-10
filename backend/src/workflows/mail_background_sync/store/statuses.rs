@@ -52,6 +52,7 @@ impl MailSyncStore {
                 ) AS next_run_at,
                 latest.error_code AS last_error_code,
                 latest.error_message AS last_error_message,
+                COALESCE(failures.consecutive_failures, 0) AS consecutive_failures,
                 COALESCE(latest.fetched_messages, 0) AS last_fetched_messages,
                 COALESCE(latest.projected_messages, 0) AS last_projected_messages,
                 COALESCE(latest.upserted_personas, 0) AS last_upserted_personas,
@@ -59,6 +60,22 @@ impl MailSyncStore {
             FROM communication_provider_accounts a
             LEFT JOIN communication_account_sync_settings settings ON settings.account_id = a.account_id
             LEFT JOIN latest ON latest.account_id = a.account_id
+            LEFT JOIN LATERAL (
+                SELECT count(*)::BIGINT AS consecutive_failures
+                FROM (
+                    SELECT
+                        status,
+                        count(*) FILTER (WHERE status <> 'failed') OVER (
+                            ORDER BY started_at DESC
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                        ) AS terminal_run_seen
+                    FROM communication_mail_sync_runs
+                    WHERE account_id = a.account_id
+                    ORDER BY started_at DESC
+                ) runs
+                WHERE runs.status = 'failed'
+                  AND runs.terminal_run_seen = 0
+            ) failures ON true
             WHERE a.provider_kind IN ('gmail', 'icloud', 'imap')
               AND COALESCE(a.config->>'auth_state', '') <> 'deleted'
               AND NOT (a.config ? 'deleted_at')

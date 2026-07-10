@@ -205,7 +205,7 @@ fn start_mail_background_sync(context: ApplicationBootstrapContext) {
                 ),
             ),
         );
-        if let Err(error) = store.mark_orphaned_active_runs_failed(Utc::now()).await {
+        if let Err(error) = store.recover_interrupted_runs(Utc::now()).await {
             tracing::warn!(error = %error, "mail background sync startup recovery failed");
         }
         let mut tick = tokio::time::interval(Duration::from_secs(30));

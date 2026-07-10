@@ -2884,6 +2884,27 @@
 	color: var(--mail-marker-color);
 }
 
+.mail-list-item__ai-chip.hermes-badge {
+	display: inline-flex;
+	align-items: center;
+	border: 0;
+	background: transparent;
+	padding: 0;
+}
+
+.mail-list-item__ai-indicator {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	color: var(--h-color-accent);
+}
+
+.mail-list-item__ai-indicator--warning {
+	color: var(--h-color-warning);
+}
+
 .mail-list-item__action-icon {
 	color: var(--h-color-warning);
 }
@@ -3675,6 +3696,10 @@
 .communication-email-message__body-preview .hermes-html-preview__content img {
 	max-width: 100%;
 	height: auto;
+}
+
+.communication-email-message__body-preview .hermes-html-preview__frame {
+	min-height: 72vh;
 }
 
 @media (max-width: 980px) {

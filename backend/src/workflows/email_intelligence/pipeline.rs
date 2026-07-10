@@ -512,7 +512,6 @@ fn is_spam_category(category: &str) -> bool {
 fn failure_reason(error: &EmailIntelligenceError) -> &'static str {
     match error {
         EmailIntelligenceError::RouteNotConfigured(_) => "route_not_configured",
-        EmailIntelligenceError::LocalModelRequired { .. } => "local_model_required",
         EmailIntelligenceError::Hub(_) => "model_unavailable",
         EmailIntelligenceError::ParseError(_) => "parse_error",
         _ => "mail_ai_pipeline_failed",

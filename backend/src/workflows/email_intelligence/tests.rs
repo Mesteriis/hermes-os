@@ -28,6 +28,7 @@ fn test_message(subject: &str, body: &str) -> ProjectedMessage {
         ai_category: None,
         ai_summary: None,
         ai_summary_generated_at: None,
+        ai_state: None,
         local_state: LocalMessageState::Active,
         local_state_changed_at: None,
         local_state_reason: None,
@@ -83,6 +84,24 @@ fn heuristic_category_legal() {
 fn heuristic_category_none() {
     let msg = test_message("Hello", "Just checking in");
     assert!(EmailIntelligenceService::heuristic_category(&msg).is_none());
+}
+
+#[test]
+fn email_analysis_accepts_model_output_without_runtime_metadata() {
+    let analysis: EmailAnalysis = serde_json::from_value(json!({
+        "category": "work",
+        "summary": "Follow up with the sender.",
+        "importance_score": 42,
+        "is_spam": false,
+        "is_phishing": false,
+        "suggested_action": null,
+        "extracted_deadline": null,
+        "language": "en"
+    }))
+    .expect("runtime metadata is owned by Hermes, not requested from the model");
+
+    assert!(analysis.model.is_empty());
+    assert!(analysis.prompt_version.is_empty());
 }
 
 #[test]

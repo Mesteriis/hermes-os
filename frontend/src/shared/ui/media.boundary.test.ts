@@ -54,6 +54,9 @@ describe('Hermes UI media component contracts', () => {
 		expect(htmlSource).toContain('sanitizeHtml')
 		expect(htmlSource).toContain('sanitized')
 		expect(htmlSource).toContain('v-html')
+		expect(htmlSource).toContain('isolated')
+		expect(htmlSource).toContain('sandbox="allow-same-origin"')
+		expect(htmlSource).toContain('srcdoc')
 	})
 
 	it('keeps media components represented in Storybook', () => {

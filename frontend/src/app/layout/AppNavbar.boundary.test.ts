@@ -154,6 +154,21 @@ describe('AppNavbar boundary', () => {
     )
   })
 
+  it('does not reserve a rail column at tablet widths when no rail slot exists', () => {
+    const layoutCss = readFileSync(
+      new URL('./app-layout.css', import.meta.url),
+      'utf8'
+    )
+    const tabletStyles = layoutCss.slice(
+      layoutCss.indexOf('@media (max-width: 1100px)'),
+      layoutCss.indexOf('@media (max-width: 700px)')
+    )
+
+    expect(tabletStyles).toContain("grid-template-areas: 'workspace'")
+    expect(tabletStyles).toContain('.hermes-app-layout--has-rail')
+    expect(tabletStyles).toContain("grid-template-areas: 'rail workspace'")
+  })
+
   it('mounts the navbar in the main AppLayout root', () => {
     const root = readFileSync(
       new URL('./AppLayoutRoot.vue', import.meta.url),

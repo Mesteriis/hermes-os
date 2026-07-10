@@ -140,6 +140,7 @@ impl AddressBookSyncService {
                 .fetch_entries(AddressBookProviderFetchRequest {
                     account_id: account.account_id.clone(),
                     provider_kind: platform_provider_kind(account.provider_kind),
+                    provider_config: account.config.clone(),
                     page_token,
                     page_size: ADDRESS_BOOK_SYNC_PAGE_SIZE,
                 })
@@ -496,7 +497,7 @@ async fn due_account_ids(pool: &PgPool) -> Result<Vec<String>, sqlx::Error> {
         SELECT a.account_id
         FROM communication_provider_accounts a
         LEFT JOIN latest ON latest.account_id = a.account_id
-        WHERE a.provider_kind = 'gmail'
+        WHERE a.provider_kind IN ('gmail', 'icloud')
           AND COALESCE(a.config->>'auth_state', '') <> 'deleted'
           AND NOT (a.config ? 'deleted_at')
           AND (a.config->'connected_services') ? 'contacts'

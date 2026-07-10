@@ -527,6 +527,7 @@ pub struct EmailSyncBatch {
 pub struct AddressBookProviderFetchRequest {
     pub account_id: String,
     pub provider_kind: CommunicationProviderKind,
+    pub provider_config: Value,
     pub page_token: Option<String>,
     pub page_size: u16,
 }

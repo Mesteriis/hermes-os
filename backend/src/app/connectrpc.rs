@@ -9,14 +9,16 @@ use sqlx::postgres::PgPool;
 use crate::app::guard;
 use crate::app::state::AppState;
 use crate::platform::config::AppConfig;
+use crate::vault::HostVault;
 
 pub(crate) fn protected_routes(
     pool: Option<PgPool>,
     config: AppConfig,
+    vault: HostVault,
     api_secret: String,
 ) -> Router<AppState> {
     let connect_router = signal_hub::register(
-        communications::register(ConnectRouter::new(), pool.clone(), config.clone()),
+        communications::register(ConnectRouter::new(), pool.clone(), config.clone(), vault),
         pool,
         config,
     );

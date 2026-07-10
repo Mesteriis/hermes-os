@@ -6,6 +6,7 @@ import Icon from '../../../shared/ui/Icon.vue'
 import { useToast } from '../../../shared/ui'
 import AISettingsPanel from '../components/AISettingsPanel.vue'
 import BackgroundJobsSettingsPanel from '../components/BackgroundJobsSettingsPanel.vue'
+import CommunicationsSettingsPanel from '../components/CommunicationsSettingsPanel.vue'
 import MaintenanceSettingsPanel from '../components/MaintenanceSettingsPanel.vue'
 import SettingsNavigationTree from '../components/SettingsNavigationTree.vue'
 import SettingsOverviewStrip from '../components/SettingsOverviewStrip.vue'
@@ -27,6 +28,7 @@ const {
   aiSettings,
   applicationSettings,
   backgroundJobsSettings,
+  communicationsSettings,
   integrationsSettings,
   languageSettings,
   maintenanceSettings,
@@ -316,6 +318,13 @@ function signalTargetIcon(kind: SignalRouteTargetKind): string {
               </div>
             </section>
           </div>
+        </section>
+
+        <section
+          v-else-if="store.selectedSection === 'communications'"
+          class="settings-section-slot"
+        >
+          <CommunicationsSettingsPanel :surface="communicationsSettings" />
         </section>
 
         <section

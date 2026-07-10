@@ -17,6 +17,7 @@ pub struct MailSyncStatus {
     pub next_run_at: Option<DateTime<Utc>>,
     pub last_error_code: Option<String>,
     pub last_error_message: Option<String>,
+    pub consecutive_failures: i64,
     pub last_fetched_messages: i64,
     pub last_projected_messages: i64,
     pub last_upserted_personas: i64,

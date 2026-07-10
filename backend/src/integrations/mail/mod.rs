@@ -1,8 +1,10 @@
 pub mod accounts;
 pub mod address_book_sync_provider;
 pub mod gmail;
+pub mod icloud_carddav;
 pub mod imap_write;
 pub mod outbox;
+pub mod read_state;
 pub mod rfc822;
 pub mod send;
 pub mod sync;

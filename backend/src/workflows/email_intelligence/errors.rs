@@ -39,9 +39,4 @@ pub enum EmailIntelligenceError {
 
     #[error("AI route is not configured: {0}")]
     RouteNotConfigured(String),
-
-    #[error(
-        "local model required for sensitive mail intelligence route {route}, got provider {provider_id}"
-    )]
-    LocalModelRequired { route: String, provider_id: String },
 }

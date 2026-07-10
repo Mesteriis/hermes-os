@@ -69,6 +69,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
     let connect_routes = crate::app::connectrpc::protected_routes(
         state.database.pool().cloned(),
         state.config.clone(),
+        state.vault.clone(),
         api_secret.clone(),
     );
 

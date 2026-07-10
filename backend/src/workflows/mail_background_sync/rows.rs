@@ -30,6 +30,7 @@ pub(super) fn row_to_status(row: PgRow) -> Result<MailSyncStatus, MailSyncError>
         next_run_at: row.try_get("next_run_at")?,
         last_error_code: row.try_get("last_error_code")?,
         last_error_message: row.try_get("last_error_message")?,
+        consecutive_failures: row.try_get("consecutive_failures")?,
         last_fetched_messages: row.try_get("last_fetched_messages")?,
         last_projected_messages: row.try_get("last_projected_messages")?,
         last_upserted_personas: row.try_get("last_upserted_personas")?,

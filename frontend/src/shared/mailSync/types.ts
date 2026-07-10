@@ -27,6 +27,7 @@ export type MailSyncStatus = {
   next_run_at: string | null
   last_error_code: string | null
   last_error_message: string | null
+  consecutive_failures: number
   last_fetched_messages: number
   last_projected_messages: number
   last_upserted_personas: number

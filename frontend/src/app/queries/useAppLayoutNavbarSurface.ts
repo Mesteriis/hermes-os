@@ -15,6 +15,7 @@ import { fetchProviderAccounts } from '../../domains/settings/api/settings'
 import { fetchTelegramAccounts } from '../../integrations/telegram/api/telegram'
 import { fetchWhatsappAccounts } from '../../integrations/whatsapp/api/whatsapp'
 import { ApiClient } from '../../platform/api/ApiClient'
+import { fetchApplicationSettings } from '../../platform/settings/applicationSettingsClient'
 import { fetchMailSyncStatus } from '../../shared/mailSync/syncApi'
 import {
   useNotificationsStore,
@@ -29,6 +30,7 @@ import {
   integrationAccountHealthChecks,
   mailSyncErrorHealthCheck,
   mailSyncStatusHealthChecks,
+  DEFAULT_CONSECUTIVE_PROVIDER_FAILURES_BEFORE_DEGRADED,
   type AppLayoutNavbarHealthCheck,
   type BackendReadinessResponse,
 } from './appLayoutHealthChecks'
@@ -395,10 +397,15 @@ export function useAppLayoutNavbarSurface() {
   }
 
   async function refreshHealthChecks(): Promise<void> {
-    const [readinessResult, mailSyncResult] = await Promise.allSettled([
+    const [readinessResult, mailSyncResult, applicationSettingsResult] = await Promise.allSettled([
       fetchBackendReadiness(),
       fetchMailSyncStatusSafely(),
+      fetchApplicationSettings(),
     ])
+    const consecutiveFailuresBeforeDegraded =
+      applicationSettingsResult.status === 'fulfilled'
+        ? mailDegradationThreshold(applicationSettingsResult.value.items)
+        : DEFAULT_CONSECUTIVE_PROVIDER_FAILURES_BEFORE_DEGRADED
 
     backendHealthChecks.value =
       readinessResult.status === 'fulfilled'
@@ -406,7 +413,7 @@ export function useAppLayoutNavbarSurface() {
         : [backendErrorHealthCheck(readinessResult.reason)]
     mailSyncHealthChecks.value =
       mailSyncResult.status === 'fulfilled'
-        ? mailSyncStatusHealthChecks(mailSyncResult.value.items)
+        ? mailSyncStatusHealthChecks(mailSyncResult.value.items, consecutiveFailuresBeforeDegraded)
         : [mailSyncErrorHealthCheck(mailSyncResult.reason)]
   }
 
@@ -421,6 +428,17 @@ export function useAppLayoutNavbarSurface() {
     Awaited<ReturnType<typeof fetchMailSyncStatus>>
   > {
     return fetchMailSyncStatus()
+  }
+
+  function mailDegradationThreshold(
+    settings: Awaited<ReturnType<typeof fetchApplicationSettings>>['items']
+  ): number {
+    const value = settings.find(
+      (setting) => setting.setting_key === 'communications.mail.consecutive_failures_before_degraded'
+    )?.value
+    return typeof value === 'number' && Number.isInteger(value) && value >= 1
+      ? value
+      : DEFAULT_CONSECUTIVE_PROVIDER_FAILURES_BEFORE_DEGRADED
   }
 
   function scheduleHealthRefresh(delayMs: number): void {

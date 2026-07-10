@@ -206,6 +206,14 @@
 	line-height: var(--h-line-height-default);
 }
 
+.hermes-html-preview__frame {
+	display: block;
+	width: 100%;
+	min-height: 38rem;
+	border: 0;
+	background: var(--h-color-surface);
+}
+
 .hermes-markdown-viewer__content > *,
 .hermes-html-preview__content > * {
 	margin-block: 0;

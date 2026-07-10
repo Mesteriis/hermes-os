@@ -51,11 +51,13 @@ impl MessageProjectionStore {
                 m.ai_category,
                 m.ai_summary,
                 m.ai_summary_generated_at,
+                s.ai_state,
                 m.local_state,
                 m.local_state_changed_at,
                 m.local_state_reason,
                 count(a.attachment_id)::BIGINT AS attachment_count
             FROM communication_messages m
+            LEFT JOIN communication_ai_states s ON s.message_id = m.message_id
             LEFT JOIN communication_attachments a ON a.message_id = m.message_id
             WHERE m.local_state = 'active'
             GROUP BY
@@ -80,6 +82,7 @@ impl MessageProjectionStore {
                 m.ai_category,
                 m.ai_summary,
                 m.ai_summary_generated_at,
+                s.ai_state,
                 m.local_state,
                 m.local_state_changed_at,
                 m.local_state_reason
@@ -129,6 +132,7 @@ impl MessageProjectionStore {
                 ai_category,
                 ai_summary,
                 ai_summary_generated_at,
+                (SELECT s.ai_state FROM communication_ai_states s WHERE s.message_id = communication_messages.message_id) AS ai_state,
                 local_state,
                 local_state_changed_at,
                 local_state_reason
@@ -204,10 +208,11 @@ impl MessageProjectionStore {
                 m.occurred_at, m.projected_at, m.channel_kind, m.conversation_id,
                 m.sender_display_name, m.delivery_state, m.message_metadata,
                 m.workflow_state, m.importance_score, m.ai_category,
-                m.ai_summary, m.ai_summary_generated_at,
+                m.ai_summary, m.ai_summary_generated_at, s.ai_state,
                 m.local_state, m.local_state_changed_at, m.local_state_reason,
                 count(a.attachment_id)::BIGINT AS attachment_count
             FROM communication_messages m
+            LEFT JOIN communication_ai_states s ON s.message_id = m.message_id
             LEFT JOIN communication_attachments a ON a.message_id = m.message_id
             WHERE 1 = 1
             "#,
@@ -255,7 +260,7 @@ impl MessageProjectionStore {
                 m.occurred_at, m.projected_at, m.channel_kind, m.conversation_id,
                 m.sender_display_name, m.delivery_state, m.message_metadata,
                 m.workflow_state, m.importance_score, m.ai_category,
-                m.ai_summary, m.ai_summary_generated_at,
+                m.ai_summary, m.ai_summary_generated_at, s.ai_state,
                 m.local_state, m.local_state_changed_at, m.local_state_reason
             ORDER BY COALESCE(m.occurred_at, m.projected_at) DESC, m.projected_at DESC, m.message_id ASC
             LIMIT 

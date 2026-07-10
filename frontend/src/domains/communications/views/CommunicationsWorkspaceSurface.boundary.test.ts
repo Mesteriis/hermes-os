@@ -282,6 +282,7 @@ describe('Communications workspace surface', () => {
     expect(mailWorkspaceModelsSource).toContain('message.message_metadata.mailbox')
     expect(mailWorkspaceModelsSource).toContain("normalized.includes('junk')")
     expect(mailWorkspaceModelsSource).toContain("normalized.includes('spam')")
+    expect(mailWorkspaceModelsSource).toContain("message.ai_state === 'PROCESSED'")
     expect(mailWorkspaceModelsSource).toContain('mailboxIsSent(mailbox)')
     expect(mailWorkspaceModelsSource).toContain('mailboxIsDrafts(mailbox)')
     expect(mailWorkspaceModelsSource).toContain('mailboxIsTrash(mailbox)')

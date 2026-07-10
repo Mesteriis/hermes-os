@@ -3,6 +3,7 @@ import { Badge, Icon, ProviderIcon, Tooltip } from '@/shared/ui'
 import '../communicationDomainElements.css'
 import type { MailListItemDensity, MailListItemModel } from './mailElements'
 import {
+  mailListItemAiIndicator,
   mailListItemAriaLabel,
   mailListItemAttachmentLabel,
   mailListItemHasSignal,
@@ -76,6 +77,22 @@ function statusChipClass(item: MailListItemModel): string {
 							:variant="mailListItemStatus(item).badgeTone"
 						>
 							{{ mailListItemStatus(item).label }}
+						</Badge>
+						<Badge
+							v-if="mailListItemAiIndicator(item)"
+							class="mail-list-item__ai-chip"
+						>
+							<Tooltip :content="mailListItemAiIndicator(item)?.detail ?? ''">
+								<template #trigger>
+									<span
+										:class="['mail-list-item__ai-indicator', `mail-list-item__ai-indicator--${mailListItemAiIndicator(item)?.tone ?? 'info'}`]"
+										role="img"
+										:aria-label="mailListItemAiIndicator(item)?.detail"
+									>
+										<Icon :icon="mailListItemAiIndicator(item)?.icon ?? 'tabler:sparkles'" size="0.9rem" />
+									</span>
+								</template>
+							</Tooltip>
 						</Badge>
 						<span v-if="item.attachmentCount" class="mail-list-item__attachment">
 							<Icon icon="tabler:paperclip" size="0.9rem" />

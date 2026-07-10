@@ -6,25 +6,23 @@ use super::super::rows::row_to_run;
 use super::MailSyncStore;
 
 impl MailSyncStore {
-    pub async fn mark_orphaned_active_runs_failed(
-        &self,
-        now: DateTime<Utc>,
-    ) -> Result<u64, MailSyncError> {
+    pub async fn recover_interrupted_runs(&self, now: DateTime<Utc>) -> Result<u64, MailSyncError> {
         let mut transaction = self.pool.begin().await?;
         let rows = sqlx::query(
             r#"
             UPDATE communication_mail_sync_runs
             SET
-                status = 'failed',
-                phase = 'failed',
+                status = 'skipped',
+                phase = 'skipped',
                 progress_mode = 'none',
                 progress_percent = NULL,
-                error_code = 'backend_restarted',
-                error_message = 'Mail sync run was interrupted by backend restart',
+                error_code = NULL,
+                error_message = NULL,
                 completed_at = $1,
                 next_run_at = $1,
                 updated_at = $1
             WHERE status IN ('queued', 'running', 'recoverable_full_resync_needed')
+               OR (status = 'failed' AND error_code = 'backend_restarted')
             RETURNING
                 run_id,
                 account_id,
@@ -60,9 +58,9 @@ impl MailSyncStore {
                 &mut transaction,
                 &run,
                 "COMMUNICATION_MAIL_SYNC_RUN_STATUS",
-                "orphaned_failed",
+                "interrupted_requeued",
                 now,
-                "mail.background_sync.mark_orphaned_active_runs_failed",
+                "mail.background_sync.recover_interrupted_runs",
             )
             .await?;
         }

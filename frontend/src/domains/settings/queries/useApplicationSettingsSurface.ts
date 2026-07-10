@@ -14,6 +14,7 @@ export function useApplicationSettingsSurface() {
   const applicationSettings = computed(() => {
     return (appSettingsData.value?.items ?? []).filter(isPublicApplicationSetting)
   })
+  const allApplicationSettings = computed(() => appSettingsData.value?.items ?? [])
   const settingsByCategory = computed(() => groupSettingsByCategory(applicationSettings.value))
 
   function settingDraftValue(setting: ApplicationSetting): string {
@@ -82,6 +83,7 @@ export function useApplicationSettingsSurface() {
 
   return {
     applicationSettings,
+    allApplicationSettings,
     isLoading,
     savingSettingKey,
     settingDrafts,
@@ -99,7 +101,11 @@ export function useApplicationSettingsSurface() {
 }
 
 function isPublicApplicationSetting(setting: ApplicationSetting): boolean {
-  return setting.category !== 'ai' && !setting.setting_key.startsWith('ai.')
+  return (
+    setting.category !== 'ai' &&
+    setting.category !== 'communications' &&
+    !setting.setting_key.startsWith('ai.')
+  )
 }
 
 function coerceValue(draft: string, kind: string): ApplicationSetting['value'] {

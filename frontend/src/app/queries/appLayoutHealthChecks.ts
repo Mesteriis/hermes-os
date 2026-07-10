@@ -31,6 +31,7 @@ export type BackendReadinessResponse = {
 }
 
 const STALE_SYNC_AFTER_MS = 2 * 60 * 1000
+export const DEFAULT_CONSECUTIVE_PROVIDER_FAILURES_BEFORE_DEGRADED = 3
 
 export function frontendRuntimeHealthChecks(
   realtime: RealtimeStatusSnapshot | null
@@ -87,7 +88,8 @@ export function backendErrorHealthCheck(error: unknown): AppLayoutNavbarHealthCh
 }
 
 export function mailSyncStatusHealthChecks(
-  statuses: readonly MailSyncStatus[]
+  statuses: readonly MailSyncStatus[],
+  consecutiveFailuresBeforeDegraded = DEFAULT_CONSECUTIVE_PROVIDER_FAILURES_BEFORE_DEGRADED
 ): readonly AppLayoutNavbarHealthCheck[] {
   if (statuses.length === 0) {
     return [
@@ -105,8 +107,8 @@ export function mailSyncStatusHealthChecks(
     return {
       id: `mail-sync-${status.account_id}`,
       label: `Mail sync: ${status.account_id}`,
-      status: mailSyncHealthStatus(status, stale),
-      detail: mailSyncDetail(status, stale),
+      status: mailSyncHealthStatus(status, stale, consecutiveFailuresBeforeDegraded),
+      detail: mailSyncDetail(status, stale, consecutiveFailuresBeforeDegraded),
     }
   })
 }
@@ -246,9 +248,16 @@ function whatsappAccountsHealthCheck(
 
 function mailSyncHealthStatus(
   status: MailSyncStatus,
-  stale: boolean
+  stale: boolean,
+  consecutiveFailuresBeforeDegraded: number
 ): AppLayoutNavbarHealthStatus {
-  if (status.status === 'failed' || stale) return 'unhealthy'
+  if (stale) return 'unhealthy'
+  if (
+    status.status === 'failed' &&
+    status.consecutive_failures >= consecutiveFailuresBeforeDegraded
+  ) {
+    return 'degraded'
+  }
   if (status.status === 'recoverable_full_resync_needed') return 'degraded'
   return 'healthy'
 }
@@ -269,13 +278,22 @@ function mailSyncStatusIsStale(status: MailSyncStatus): boolean {
   return Date.now() - lastMovement > STALE_SYNC_AFTER_MS
 }
 
-function mailSyncDetail(status: MailSyncStatus, stale: boolean): string {
+function mailSyncDetail(
+  status: MailSyncStatus,
+  stale: boolean,
+  consecutiveFailuresBeforeDegraded: number
+): string {
   const fragments = [
     `${status.status}/${status.phase}`,
     `processed ${status.processed_messages}`,
   ]
   if (status.current_batch_size > 0) {
     fragments.push(`batch ${status.current_batch_size}`)
+  }
+  if (status.status === 'failed') {
+    fragments.push(
+      `failure ${status.consecutive_failures}/${consecutiveFailuresBeforeDegraded}`
+    )
   }
   if (stale) fragments.push('no recent progress')
   if (status.last_error_message) fragments.push(status.last_error_message)

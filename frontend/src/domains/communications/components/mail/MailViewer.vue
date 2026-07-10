@@ -227,6 +227,7 @@ function toggleRecipients(): void {
 					:content="bodyPreviewContent"
 					:format="bodyPreviewFormat"
 					:sanitized="bodyPreviewSanitized"
+					:isolated="bodyPreviewFormat === 'html'"
 					:unsafe-label="t('HTML preview requires sanitized content')"
 					:empty-label="t('No message body')"
 				/>

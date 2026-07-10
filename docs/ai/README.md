@@ -8,6 +8,10 @@ AI components provide local model access, control-center configuration,
 semantic retrieval support, prompt/runtime contracts and agent-facing services.
 AI output is never source of truth.
 
+Remote AI routes may process private context only when the selected provider has
+explicitly granted content consent in the AI Control Center. Local and remote
+routes are selected through the same consent-validated model routing boundary.
+
 ## Packages
 
 - [AI Hub](hub.md)

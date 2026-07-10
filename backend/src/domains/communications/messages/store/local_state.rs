@@ -46,6 +46,7 @@ impl MessageProjectionStore {
                 sender_display_name, delivery_state, message_metadata,
                 workflow_state, importance_score, ai_category,
                 ai_summary, ai_summary_generated_at,
+                (SELECT s.ai_state FROM communication_ai_states s WHERE s.message_id = communication_messages.message_id) AS ai_state,
                 local_state, local_state_changed_at, local_state_reason"#,
         )
         .bind(message_id.trim())
@@ -111,6 +112,7 @@ impl MessageProjectionStore {
                 sender_display_name, delivery_state, message_metadata,
                 workflow_state, importance_score, ai_category,
                 ai_summary, ai_summary_generated_at,
+                (SELECT s.ai_state FROM communication_ai_states s WHERE s.message_id = communication_messages.message_id) AS ai_state,
                 local_state, local_state_changed_at, local_state_reason"#,
         )
         .bind(message_id.trim())

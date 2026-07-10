@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::domains::communications::ai_state::CommunicationAiState;
+
 use super::errors::MessageProjectionError;
 use super::search::MessageSearchExpression;
 use super::states::{LocalMessageState, WorkflowState};
@@ -79,6 +81,7 @@ pub struct ProjectedMessage {
     pub ai_category: Option<String>,
     pub ai_summary: Option<String>,
     pub ai_summary_generated_at: Option<DateTime<Utc>>,
+    pub ai_state: Option<CommunicationAiState>,
     pub local_state: LocalMessageState,
     pub local_state_changed_at: Option<DateTime<Utc>>,
     pub local_state_reason: Option<String>,

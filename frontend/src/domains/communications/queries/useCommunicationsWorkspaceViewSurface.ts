@@ -6,6 +6,7 @@ import {
   senderEmail,
   senderLabel,
 } from '../stores/communications'
+import { aiSummaryContractFromMetadata } from '../helpers/communicationPageModels'
 import type {
   CommunicationAttachment,
   CommunicationMessageDetailItem,
@@ -55,6 +56,8 @@ import {
   useWhatsappBusinessConversationsQuery,
   useWhatsappBusinessMessagesQuery,
 } from './whatsappBusinessQueries'
+import { useMarkMessageReadMutation } from './mailActionQueries'
+import { useDelayedMessageRead } from './useDelayedMessageRead'
 
 export function useCommunicationsWorkspaceViewSurface(
   selectedRouteId?: MaybeRefOrGetter<string | undefined>
@@ -79,6 +82,23 @@ export function useCommunicationsWorkspaceViewSurface(
       ? selectedRouteAccountId.value ?? null
       : null
   )
+  const markMessageReadMutation = useMarkMessageReadMutation()
+  const selectedMailMessageId = computed(() =>
+    activeChannelId.value === 'mail'
+      ? pageSurface.store.selectedCommunicationMessageId
+      : ''
+  )
+
+  useDelayedMessageRead(selectedMailMessageId, async (messageId) => {
+    const message = pageSurface.visibleMailList.value.find(
+      (item) => item.message_id === messageId
+    )
+    if (!message || message.workflow_state === 'reviewed') return
+    await markMessageReadMutation.mutateAsync(messageId)
+  }, (error) => {
+    const message = error instanceof Error ? error.message : 'Provider read-state sync failed'
+    pageSurface.store.setMailActionError(message)
+  })
 
   watch(
     selectedRouteAccountId,
@@ -159,6 +179,7 @@ export function useCommunicationsWorkspaceViewSurface(
       workflowState: source.workflow_state,
       facts: [
         { label: 'workflow', value: source.workflow_state },
+        ...(source.ai_state ? [{ label: 'ai', value: source.ai_state }] : []),
         {
           label: 'attachments',
           value: attachmentCount(source, attachments.length),
@@ -497,9 +518,7 @@ function mailInspectorModel(
       score: importanceScore,
       maxScore: 100,
       label: 'Projected importance',
-      summary:
-        message.ai_summary ??
-        'No backend summary is available for this message.',
+      summary: mailInspectorSummary(message),
       checks: [
         {
           id: 'raw-record',
@@ -530,6 +549,21 @@ function mailInspectorModel(
     suggestedActions: [],
     relatedContext: [],
   }
+}
+
+export function mailInspectorSummary(
+  message: Pick<CommunicationMessageDetailItem | CommunicationMessageSummary, 'ai_summary' | 'message_metadata'>
+): string {
+  const backendSummary = message.ai_summary?.trim()
+  if (backendSummary) return backendSummary
+
+  const contract = aiSummaryContractFromMetadata(message.message_metadata)
+  const structuredSummary = [...contract?.key_points ?? [], ...contract?.action_items ?? []]
+    .join(' ')
+    .trim()
+  if (structuredSummary) return structuredSummary
+
+  return 'No backend summary is available for this message.'
 }
 
 function emptyMailInspector(): MailInspectorModel {

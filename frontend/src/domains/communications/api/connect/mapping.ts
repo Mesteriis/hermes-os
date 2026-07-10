@@ -9,6 +9,7 @@ import type {
   DraftListResponse,
   MessageAnalyzeResponse
 } from '../../types/communications'
+import type { CommunicationAiState } from '../../types/aiState'
 import type { AttachmentScanStatus, AttachmentSearchResponse } from '../../types/attachments'
 import type { CommunicationSavedSearch as DomainCommunicationSavedSearch } from '../../types/savedSearches'
 import type { CommunicationFolder, FolderMessage, FolderMessageActionResponse } from '../../types/folders'
@@ -35,6 +36,7 @@ export function mapMessageSummary(item: {
   aiCategory?: string
   aiSummary?: string
   aiSummaryGeneratedAt?: string
+  aiState?: string
   localState: string
   localStateChangedAt?: string
   attachmentCount: number | bigint
@@ -60,6 +62,7 @@ export function mapMessageSummary(item: {
     ai_category: item.aiCategory ?? null,
     ai_summary: item.aiSummary ?? null,
     ai_summary_generated_at: item.aiSummaryGeneratedAt ?? null,
+    ai_state: normalizeAiState(item.aiState),
     message_metadata: parseJsonObject(item.messageMetadataJson),
     attachment_count: toNumber(item.attachmentCount),
     local_state: normalizeLocalState(item.localState),
@@ -443,6 +446,22 @@ export function normalizeLocalState(
     case 'active':
     default:
       return 'active'
+  }
+}
+
+export function normalizeAiState(
+  value: string | undefined
+): CommunicationAiState | null {
+  switch (value) {
+    case 'NEW':
+    case 'PROCESSING':
+    case 'PROCESSED':
+    case 'REVIEW_REQUIRED':
+    case 'FAILED':
+    case 'ARCHIVED':
+      return value
+    default:
+      return null
   }
 }
 

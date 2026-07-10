@@ -5,7 +5,7 @@ import type { ProviderIconKind } from '@/shared/ui'
 export type MailListItemConfidence = 'high' | 'medium' | 'low'
 export type MailListItemCounterKind = 'attachments' | 'messages' | 'insights' | 'calendar'
 export type MailListItemDensity = 'compact' | 'comfortable' | 'cozy'
-export type MailListItemMarker = 'spam' | 'phishing' | 'important' | 'blocked' | 'archived'
+export type MailListItemMarker = 'spam' | 'phishing' | 'important' | 'blocked' | 'archived' | 'ai-processed'
 export type MailListSearchField = 'subject' | 'body' | 'sender' | 'all'
 export type MailListSearchBuilderField = 'all' | 'from' | 'subject' | 'body'
 export type MailListSearchBuilderOperator = 'contains' | 'equals'
@@ -82,6 +82,7 @@ export type MailListItemModel = {
   workflowState: string
   localState?: string
   deliveryState?: string
+  aiState?: string
   aiCategory?: string
   importanceScore?: number
   unreadCount?: number
@@ -115,6 +116,13 @@ export type MailListItemMarkerPresentation = {
   icon: string
   label: string
   tone: 'default' | 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'neutral'
+}
+
+export type MailListItemAiIndicatorPresentation = {
+  icon: string
+  label: string
+  detail: string
+  tone: 'info' | 'warning'
 }
 
 export const mailListItemDensityOptions: readonly MailListItemDensity[] = ['compact', 'comfortable', 'cozy']
@@ -190,6 +198,11 @@ const markerPresentation: Record<MailListItemMarker, MailListItemMarkerPresentat
     icon: 'tabler:archive',
     label: 'Archived',
     tone: 'neutral'
+  },
+  'ai-processed': {
+    icon: 'tabler:sparkles',
+    label: 'AI processed',
+    tone: 'info'
   }
 }
 
@@ -249,6 +262,34 @@ export function mailListItemMarkerClass(marker: MailListItemMarker): string {
 
 export function mailListItemMarkers(item: MailListItemModel): readonly MailListItemMarker[] {
   return item.markers ?? []
+}
+
+export function mailListItemAiIndicator(
+  item: MailListItemModel
+): MailListItemAiIndicatorPresentation | null {
+  if (item.aiState === 'FAILED') {
+    return {
+      icon: 'tabler:brain',
+      label: 'AI retry',
+      detail: 'AI processing needs another attempt. Open the message to review the available evidence.',
+      tone: 'warning'
+    }
+  }
+
+  if (
+    item.aiState === 'PROCESSED' ||
+    typeof item.aiCategory === 'string' ||
+    item.importanceScore !== undefined
+  ) {
+    return {
+      icon: 'tabler:sparkles',
+      label: 'AI',
+      detail: 'AI processing is available. Open the message to review its summary, category, and evidence.',
+      tone: 'info'
+    }
+  }
+
+  return null
 }
 
 export function mailListItemMarkerSummary(item: MailListItemModel): string {

@@ -22,6 +22,7 @@ describe('ApplicationSettings boundary', () => {
     expect(surface).toContain('useApplicationSettingsQuery')
     expect(surface).toContain('useSaveApplicationSettingMutation')
     expect(surface).toContain('isPublicApplicationSetting')
+    expect(surface).toContain('allApplicationSettings')
     expect(surface).toContain("setting.category !== 'ai'")
     expect(surface).toContain("!setting.setting_key.startsWith('ai.')")
     expect(surface).toContain('groupSettingsByCategory')

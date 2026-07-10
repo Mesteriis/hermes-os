@@ -6,6 +6,7 @@ const props = withDefaults(defineProps<{
 	content?: string
 	format?: 'html' | 'text'
 	sanitized?: boolean
+	isolated?: boolean
 	title?: string
 	unsafeLabel?: string
 	emptyLabel?: string
@@ -14,6 +15,7 @@ const props = withDefaults(defineProps<{
 	content: '',
 	format: 'text',
 	sanitized: false,
+	isolated: false,
 	unsafeLabel: 'HTML preview requires sanitized content',
 	emptyLabel: 'No preview content'
 })
@@ -28,6 +30,7 @@ const classes = computed(() => [
 ])
 const hasContent = computed(() => props.content.trim().length > 0)
 const canRenderHtml = computed(() => props.format === 'html' && props.sanitized && hasContent.value)
+const shouldIsolateHtml = computed(() => canRenderHtml.value && props.isolated)
 const safeHtml = computed(() => {
 	if (!canRenderHtml.value) {
 		return ''
@@ -39,7 +42,14 @@ const safeHtml = computed(() => {
 <template>
 	<article :class="classes">
 		<h3 v-if="title" class="hermes-media-title">{{ title }}</h3>
-		<div v-if="canRenderHtml" class="hermes-html-preview__content" v-html="safeHtml" />
+		<iframe
+			v-if="shouldIsolateHtml"
+			class="hermes-html-preview__frame"
+			sandbox="allow-same-origin"
+			:srcdoc="safeHtml"
+			:title="title || 'HTML preview'"
+		/>
+		<div v-else-if="canRenderHtml" class="hermes-html-preview__content" v-html="safeHtml" />
 		<pre v-else-if="hasContent" class="hermes-html-preview__text">{{ content }}</pre>
 		<p v-else class="hermes-media-empty">{{ emptyLabel }}</p>
 		<p v-if="format === 'html' && hasContent && !sanitized" class="hermes-html-preview__safety">

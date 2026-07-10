@@ -60,6 +60,20 @@ Decisions or Polygraph.
 
 **§3 (80%)**: Gmail, iCloud, IMAP работают. Exchange, Proton, Fastmail, Maildir — требуют отдельных провайдер-адаптеров.
 
+**iCloud Contacts**: iCloud address books are imported read-only through CardDAV
+using the existing iCloud account identity and app-specific password from the
+host vault. The adapter performs standard CardDAV discovery and projects vCard
+entries through the existing address-book workflow. Remote iCloud contact writes
+remain unsupported.
+
+**§5 (100%)**: После открытия письма UI ждёт 2 секунды и сразу переводит
+локальную проекцию Hermes в `reviewed`. Синхронизация с провайдером выполняется
+best-effort: Gmail снимает label `UNREAD` через Gmail API; iCloud и generic IMAP
+устанавливают `\\Seen` по сохранённым `mailbox` и `UID`. Ошибка provider-write
+не откатывает локальный результат и записывается как sanitised warning. Gmail-
+аккаунты, выданные до добавления OAuth scope `gmail.modify`, должны быть
+переподключены, чтобы пользователь подтвердил обновлённое разрешение.
+
 **§4.2 (85%)**: Черновики, отправка, durable redirect enqueue,
 scheduled-send foundation and undo-send foundation work. Compose now exposes
 scheduled send time and undo-send window controls that pass through the existing

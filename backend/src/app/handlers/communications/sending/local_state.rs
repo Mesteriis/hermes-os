@@ -11,7 +11,7 @@ pub(crate) async fn post_v1_imap_mark_read(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     CommunicationCommandService::new(pool)
-        .mark_message_imap_read(&message_id)
+        .mark_message_read_local(&message_id)
         .await?;
     Ok(Json(serde_json::json!({"marked_read": true})))
 }

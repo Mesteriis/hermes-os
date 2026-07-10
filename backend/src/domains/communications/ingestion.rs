@@ -190,6 +190,7 @@ mod tests {
             ai_category: None,
             ai_summary: None,
             ai_summary_generated_at: None,
+            ai_state: None,
             local_state: LocalMessageState::Active,
             local_state_changed_at: None,
             local_state_reason: None,

@@ -39,7 +39,9 @@ pub struct EmailAnalysis {
     pub suggested_action: Option<String>,
     pub extracted_deadline: Option<String>,
     pub language: Option<String>,
+    #[serde(default)]
     pub model: String,
+    #[serde(default)]
     pub prompt_version: String,
 }
 

@@ -5,6 +5,20 @@ use super::*;
 use crate::platform::settings::SettingsError;
 
 #[test]
+fn mail_degradation_threshold_is_declared_as_a_bounded_integer() {
+    let setting = declared_setting("communications.mail.consecutive_failures_before_degraded")
+        .expect("mail degradation threshold setting");
+
+    assert_eq!(setting.category, "communications");
+    assert_eq!(setting.value_kind, SettingValueKind::Integer);
+    assert!(setting.is_editable);
+    assert_eq!(setting.default_value, json!(3));
+    assert_eq!(setting.metadata["min"], json!(1));
+    assert_eq!(setting.metadata["max"], json!(10));
+    assert_eq!(setting.metadata["stores_private_content"], json!(false));
+}
+
+#[test]
 fn frontend_locale_setting_is_declared_as_editable_string() {
     let setting = declared_setting("frontend.locale").expect("frontend locale setting");
 

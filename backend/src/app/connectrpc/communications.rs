@@ -108,6 +108,9 @@ use crate::domains::communications::attachment_search::{
 use crate::domains::communications::bulk_actions::{
     BulkMessageAction, BulkMessageActionError, BulkMessageActionOutcome, BulkMessageActionStore,
 };
+use crate::domains::communications::core::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
 use crate::domains::communications::drafts::{
     CommunicationDraft, CommunicationDraftError, CommunicationDraftStore, DraftStatus,
 };
@@ -150,6 +153,7 @@ use crate::domains::communications::threads::{
     ThreadMessageAttachment,
 };
 use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
+use crate::integrations::mail::read_state::{EmailReadStateRequest, LiveEmailReadStateService};
 use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
 use crate::integrations::omniroute::client::{
     OmniRouteClient, OmniRouteClientConfig, OmniRouteError,
@@ -157,6 +161,7 @@ use crate::integrations::omniroute::client::{
 use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
 use crate::platform::config::{AiRuntimeProvider, AppConfig};
 use crate::platform::settings::ApplicationSettingsStore;
+use crate::vault::HostVault;
 
 const AI_REQUEST_RUNTIME: &str = "ai_request_runtime";
 const ATTACHMENT_TRANSLATION_SOURCE: &str = "caller_provided_extracted_text";
@@ -171,18 +176,21 @@ pub(crate) fn register(
     router: ConnectRouter,
     pool: Option<PgPool>,
     config: AppConfig,
+    vault: HostVault,
 ) -> ConnectRouter {
     let Some(pool) = pool else {
         return router;
     };
 
-    Arc::new(CommunicationsConnectService::new(pool, config)).register(router)
+    Arc::new(CommunicationsConnectService::new(pool, config, vault)).register(router)
 }
 
 struct CommunicationsConnectService {
     config: AppConfig,
     pool: PgPool,
+    vault: HostVault,
     message_store: MessageProjectionStore,
+    provider_account_store: CommunicationProviderAccountStore,
     analytics_store: EmailAnalyticsStore,
     subscription_store: SubscriptionStore,
     persona_store: CommunicationPersonaStore,
@@ -198,11 +206,13 @@ struct CommunicationsConnectService {
 }
 
 impl CommunicationsConnectService {
-    fn new(pool: PgPool, config: AppConfig) -> Self {
+    fn new(pool: PgPool, config: AppConfig, vault: HostVault) -> Self {
         Self {
             config,
             pool: pool.clone(),
+            vault,
             message_store: MessageProjectionStore::new(pool.clone()),
+            provider_account_store: CommunicationProviderAccountStore::new(pool.clone()),
             analytics_store: EmailAnalyticsStore::new(pool.clone()),
             subscription_store: SubscriptionStore::new(pool.clone()),
             persona_store: CommunicationPersonaStore::new(pool.clone()),
@@ -396,10 +406,53 @@ impl CommunicationsService for CommunicationsConnectService {
         if req.message_id.trim().is_empty() {
             return Err(invalid_argument_error("message_id must not be empty"));
         }
+        let message = self
+            .message_store
+            .message(&req.message_id)
+            .await
+            .map_err(message_connect_error)?
+            .ok_or_else(|| ConnectError::new(ErrorCode::NotFound, "message was not found"))?;
+        let account = self
+            .provider_account_store
+            .get(&message.account_id)
+            .await
+            .map_err(|error| ConnectError::new(ErrorCode::Internal, error.to_string()))?
+            .ok_or_else(|| {
+                ConnectError::new(
+                    ErrorCode::FailedPrecondition,
+                    "provider account was not found",
+                )
+            })?;
+        // Hermes owns local read state. Provider sync is best-effort and must
+        // never undo or block the owner's action in the local workspace.
         let updated = CommunicationCommandService::new(self.pool.clone())
-            .mark_message_imap_read(&req.message_id)
+            .mark_message_read_local(&req.message_id)
             .await
             .map_err(command_connect_error)?;
+
+        let provider_sync = LiveEmailReadStateService::new(
+            self.pool.clone(),
+            self.vault.clone(),
+            Arc::new(CommunicationProviderSecretBindingStore::new(
+                self.pool.clone(),
+            )),
+            crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+        )
+        .mark_message_read(EmailReadStateRequest {
+            account: &account,
+            provider_record_id: &message.provider_record_id,
+            message_metadata: &message.message_metadata,
+        })
+        .await;
+        if let Err(error) = provider_sync {
+            tracing::warn!(
+                message_id = %updated.message_id,
+                account_id = %account.account_id,
+                provider_kind = account.provider_kind.as_str(),
+                error = %error,
+                "provider read-state synchronization failed after local read state was committed"
+            );
+        }
 
         Response::ok(MarkMessageReadResponse {
             message_id: updated.message_id,
@@ -2601,6 +2654,7 @@ fn proto_message_with_body_html(
         ai_category: message.ai_category,
         ai_summary: message.ai_summary,
         ai_summary_generated_at: message.ai_summary_generated_at.map(timestamp_string),
+        ai_state: message.ai_state.map(|state| state.as_str().to_owned()),
         local_state: message.local_state.as_str().to_owned(),
         local_state_changed_at: message.local_state_changed_at.map(timestamp_string),
         local_state_reason: message.local_state_reason,

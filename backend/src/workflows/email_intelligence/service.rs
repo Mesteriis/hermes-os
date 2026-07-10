@@ -1,4 +1,4 @@
-use crate::ai::hub::{AiHub, AiModelRoute, LocalAiInspection, SensitivityLevel, SharedAiHub};
+use crate::ai::hub::{AiHub, AiModelRoute, LocalAiInspection, SharedAiHub};
 use crate::domains::communications::messages::{
     CommunicationMessageProjectionPort, ProjectedMessage, WorkflowState,
 };
@@ -37,8 +37,6 @@ impl EmailIntelligenceService {
         let Some(ref hub) = self.hub else {
             return Ok(None);
         };
-        ensure_route_allowed_for_inspection(hub, inspection)?;
-
         let prompt = build_email_analysis_prompt(message, target_language, inspection);
         let result = hub.chat(AiModelRoute::MailIntelligence, &prompt).await?;
         let mut analysis: EmailAnalysis =
@@ -202,35 +200,6 @@ fn candidate_fallback<T>(allow: bool, fallback: Vec<T>) -> Vec<T> {
     if allow { fallback } else { Vec::new() }
 }
 
-fn ensure_route_allowed_for_inspection(
-    hub: &AiHub,
-    inspection: &LocalAiInspection,
-) -> Result<(), EmailIntelligenceError> {
-    if !inspection_requires_local_model(inspection) {
-        return Ok(());
-    }
-    let Some(target) = hub.target_for_route(AiModelRoute::MailIntelligence) else {
-        return Err(EmailIntelligenceError::RouteNotConfigured(
-            AiModelRoute::MailIntelligence.as_str().to_owned(),
-        ));
-    };
-    if !is_local_ollama_provider(&target.provider_id) {
-        return Err(EmailIntelligenceError::LocalModelRequired {
-            route: AiModelRoute::MailIntelligence.as_str().to_owned(),
-            provider_id: target.provider_id.clone(),
-        });
-    }
-    Ok(())
-}
-
-fn inspection_requires_local_model(inspection: &LocalAiInspection) -> bool {
-    inspection.sensitivity >= SensitivityLevel::High
-}
-
-fn is_local_ollama_provider(provider_id: &str) -> bool {
-    provider_id == "provider:built_in:ollama" || provider_id.ends_with(":ollama")
-}
-
 fn is_spam_category(category: &str) -> bool {
     matches!(
         category.trim().to_ascii_lowercase().as_str(),
@@ -312,22 +281,5 @@ mod policy_tests {
         clear_candidate_arrays(&mut analysis);
 
         assert!(analysis.persona_candidates.is_empty());
-    }
-
-    #[test]
-    fn local_model_required_for_high_sensitivity() {
-        let inspection = LocalAiInspection {
-            source: "test".to_owned(),
-            language: crate::ai::hub::LocalLanguageDetection {
-                language: "en".to_owned(),
-                confidence: 0.9,
-                script: Some("latin".to_owned()),
-                source: "test".to_owned(),
-            },
-            sensitivity: SensitivityLevel::High,
-            sensitive_findings: Vec::new(),
-        };
-
-        assert!(inspection_requires_local_model(&inspection));
     }
 }
