@@ -441,7 +441,7 @@ export const ChannelViewer: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		await expect(canvas.getByRole('region', { name: 'Channel stream' })).toBeVisible()
-		await expect(canvas.getByText('Export SLA')).toBeVisible()
+		await expect(canvas.getAllByText('Export SLA')[0]).toBeVisible()
 		await expect(canvas.getByRole('textbox', { name: 'Channel message' })).toBeVisible()
 	}
 }
@@ -485,7 +485,7 @@ export const ChannelMessage: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		await expect(canvas.getByRole('navigation', { name: 'Channel actions' })).toBeVisible()
-		await expect(canvas.getByText('risk-review')).toBeVisible()
+		await expect(canvas.getByText('#risk-review')).toBeVisible()
 	}
 }
 

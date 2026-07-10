@@ -10,16 +10,16 @@ pub(super) async fn append_persona_sources(
 ) -> Result<(), AiError> {
     let rows = sqlx::query(
         r#"
-        SELECT person_id, display_name, email_address
+        SELECT persona_id, display_name, email_address
         FROM personas
-        ORDER BY updated_at DESC, person_id
+        ORDER BY updated_at DESC, persona_id
         "#,
     )
     .fetch_all(pool)
     .await?;
 
     for row in rows {
-        let person_id: String = row.try_get("person_id")?;
+        let persona_id: String = row.try_get("persona_id")?;
         let display_name: String = row.try_get("display_name")?;
         let email_address: Option<String> = row.try_get("email_address")?;
         let source_text = if let Some(email_address) = email_address {
@@ -29,7 +29,7 @@ pub(super) async fn append_persona_sources(
         };
         sources.push(SemanticSource {
             source_kind: SemanticSourceKind::Persona,
-            source_id: person_id,
+            source_id: persona_id,
             observation_id: None,
             title: display_name.clone(),
             source_text,

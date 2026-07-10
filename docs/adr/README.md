@@ -59,3 +59,7 @@ ADR status vocabulary:
 
 - [ADR-0172 Hermes UI Kit на базе shadcn-vue / Reka UI](ADR-0172-frontend-ui-kit-shadcn-vue.md)
 - [ADR-0173 Frontend Capability Surfaces and Thin Vue Components](ADR-0173-frontend-capability-surfaces-and-thin-vue-components.md)
+
+## Recent Domain ADRs
+
+- [ADR-0174 Persona-Native Physical Identifier Columns](ADR-0174-persona-native-physical-identifier-columns.md)

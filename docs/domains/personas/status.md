@@ -56,7 +56,7 @@ do not yet fully implement the target model.
 | Dossier read/cache model | Backend/API/UI baseline | Persona investigator code now emits generated dossier sections for summary, interests, projects, organizations, skills, communication patterns, AI observations, source refs and `generated_at`; `/api/v1/personas/{persona_id}/dossier` persists a reviewable snapshot, `/dossier/review` updates review state, and Personas UI reads/displays the generated dossier. |
 | Persona Intelligence | Partially implemented | Consolidate fingerprint/profile/trust/analytics/investigator into one concept. |
 | API migration | Backend/frontend baseline | `/api/v1/personas` list/detail/owner routes, narrow `PUT /api/v1/personas/{persona_id}` update route, dossier/profile subresources, frontend client types and ADR-0090 exist over the transitional projection; `/api/v1/persons/*` is retired. |
-| Schema migration | Storage naming baseline | Active Persona storage uses `personas` / `persona_*` tables and `persona_metadata`; internal `person_id` columns remain until a dedicated physical identifier migration plan. |
+| Schema migration | Storage naming baseline | Active Persona storage uses `personas` / `persona_*` tables, `persona_metadata`, and Persona-native `persona_id` identifier columns. |
 
 ## Removed Scorecard
 

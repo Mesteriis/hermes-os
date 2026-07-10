@@ -16,13 +16,13 @@ pub(super) async fn active_persona_fact_claims(
         r#"
         SELECT
             fact.id::text AS fact_id,
-            fact.person_id,
+            fact.persona_id,
             fact.fact_type,
             fact.value,
             fact.confidence::float8 AS confidence,
             person.email_address
         FROM persona_facts fact
-        JOIN personas person ON person.person_id = fact.person_id
+        JOIN personas person ON person.persona_id = fact.persona_id
         WHERE fact.is_active = true
           AND length(trim(person.email_address)) > 0
         ORDER BY fact.updated_at DESC, fact.id
@@ -69,7 +69,7 @@ pub(super) async fn recent_channel_message_evidence(
         r#"
         SELECT
             message.message_id,
-            identity.person_id,
+            identity.persona_id,
             message.subject,
             message.body_text
         FROM communication_messages message
@@ -155,13 +155,13 @@ pub(super) async fn recent_meeting_note_evidence(
         r#"
         SELECT
             note.id::text AS note_id,
-            participant.person_id,
+            participant.persona_id,
             event.title,
             note.content
         FROM meeting_notes note
         JOIN calendar_events event ON event.event_id = note.event_id
         JOIN event_participants participant ON participant.event_id = note.event_id
-        WHERE participant.person_id IS NOT NULL
+        WHERE participant.persona_id IS NOT NULL
           AND length(trim(note.content)) > 0
         ORDER BY note.updated_at DESC, note.id
         LIMIT $1
@@ -182,7 +182,7 @@ pub(super) async fn recent_call_transcript_evidence(
         r#"
         SELECT
             transcript.transcript_id,
-            identity.person_id,
+            identity.persona_id,
             transcript.transcript_text
         FROM call_transcripts transcript
         JOIN persona_identities identity

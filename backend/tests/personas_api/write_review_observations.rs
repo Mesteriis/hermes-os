@@ -13,7 +13,7 @@ use super::support::{
 };
 
 #[tokio::test]
-async fn person_enrichment_review_entrypoints_capture_observations_against_postgres() {
+async fn persona_enrichment_review_entrypoints_capture_observations_against_postgres() {
     let Some(database_url) =
         super::support::live_database_url("person enrichment review observations").await
     else {
@@ -31,7 +31,7 @@ async fn person_enrichment_review_entrypoints_capture_observations_against_postg
         .expect("upsert person");
     let enrichment = EnrichmentResultStore::new(pool.clone())
         .upsert(
-            &person.person_id,
+            &person.persona_id,
             "linkedin",
             json!({
                 "extracted_claim": "Works on canonical evidence architecture"
@@ -41,7 +41,7 @@ async fn person_enrichment_review_entrypoints_capture_observations_against_postg
         .await
         .expect("create enrichment result");
     let app = build_personas_app_with_database(&database_url, database);
-    let encoded_person_id = urlencoding_percent_encode(&person.person_id);
+    let encoded_person_id = urlencoding_percent_encode(&person.persona_id);
 
     let response = app
         .clone()
@@ -72,7 +72,7 @@ async fn person_enrichment_review_entrypoints_capture_observations_against_postg
 
     let enrichment_rejected = EnrichmentResultStore::new(pool.clone())
         .upsert(
-            &person.person_id,
+            &person.persona_id,
             "telegram",
             json!({
                 "extracted_claim": "Prefers async communication"
@@ -127,7 +127,7 @@ async fn persona_entrypoints_capture_observations_against_postgres() {
         .await
         .expect("upsert persona");
     let app = build_personas_app_with_database(&database_url, database);
-    let encoded_persona_id = urlencoding_percent_encode(&person.person_id);
+    let encoded_persona_id = urlencoding_percent_encode(&person.persona_id);
 
     let role_response = app
         .clone()
@@ -173,9 +173,9 @@ async fn persona_entrypoints_capture_observations_against_postgres() {
         .await
         .expect("persona response");
     assert_eq!(persona_response.status(), axum::http::StatusCode::OK);
-    let persona_id = json_body(persona_response).await["persona_id"]
+    let interaction_context_id = json_body(persona_response).await["interaction_context_id"]
         .as_str()
-        .expect("persona id")
+        .expect("interaction context id")
         .to_owned();
     let persona_observation_id: String = sqlx::query_scalar(
         "SELECT observation_id
@@ -187,19 +187,19 @@ async fn persona_entrypoints_capture_observations_against_postgres() {
          ORDER BY created_at DESC
          LIMIT 1",
     )
-    .bind(&persona_id)
+    .bind(&interaction_context_id)
     .fetch_one(&pool)
     .await
     .expect("persona observation link");
     let persona_pref_source: String = sqlx::query_scalar(
         "SELECT source
          FROM persona_preferences
-         WHERE person_id = $1
+         WHERE persona_id = $1
            AND preference_type = $2",
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .bind(format!(
-        "interaction_context:{persona_id}:preferred_channel"
+        "interaction_context:{interaction_context_id}:preferred_channel"
     ))
     .fetch_one(&pool)
     .await
@@ -211,7 +211,7 @@ async fn persona_entrypoints_capture_observations_against_postgres() {
         .oneshot(delete_request_with_token(
             &format!(
                 "/api/v1/personas/{}/roles/colleague",
-                urlencoding_percent_encode(&person.person_id)
+                urlencoding_percent_encode(&person.persona_id)
             ),
             LOCAL_API_TOKEN,
         ))
@@ -228,7 +228,7 @@ async fn persona_entrypoints_capture_observations_against_postgres() {
          ORDER BY created_at DESC
          LIMIT 1",
     )
-    .bind(format!("{}:{}", person.person_id, "colleague"))
+    .bind(format!("{}:{}", person.persona_id, "colleague"))
     .fetch_one(&pool)
     .await
     .expect("role delete observation link");
@@ -237,8 +237,8 @@ async fn persona_entrypoints_capture_observations_against_postgres() {
         .oneshot(delete_request_with_token(
             &format!(
                 "/api/v1/personas/{}/interaction-contexts/{}",
-                urlencoding_percent_encode(&person.person_id),
-                urlencoding_percent_encode(&persona_id)
+                urlencoding_percent_encode(&person.persona_id),
+                urlencoding_percent_encode(&interaction_context_id)
             ),
             LOCAL_API_TOKEN,
         ))
@@ -255,7 +255,7 @@ async fn persona_entrypoints_capture_observations_against_postgres() {
          ORDER BY created_at DESC
          LIMIT 1",
     )
-    .bind(&persona_id)
+    .bind(&interaction_context_id)
     .fetch_one(&pool)
     .await
     .expect("persona delete observation link");
@@ -320,12 +320,12 @@ async fn identity_candidate_review_captures_observation_against_postgres() {
         r#"
         UPDATE personas
         SET display_name = $1
-        WHERE person_id = $2 OR person_id = $3
+        WHERE persona_id = $2 OR persona_id = $3
         "#,
     )
     .bind(&shared_name)
-    .bind(&left.person_id)
-    .bind(&right.person_id)
+    .bind(&left.persona_id)
+    .bind(&right.persona_id)
     .execute(&pool)
     .await
     .expect("seed display names");
@@ -334,13 +334,13 @@ async fn identity_candidate_review_captures_observation_against_postgres() {
         .refresh_candidates(100)
         .await
         .expect("refresh identity candidates");
-    let (left_person_id, right_person_id) = if left.person_id <= right.person_id {
-        (left.person_id.clone(), right.person_id.clone())
+    let (left_persona_id, right_persona_id) = if left.persona_id <= right.persona_id {
+        (left.persona_id.clone(), right.persona_id.clone())
     } else {
-        (right.person_id.clone(), left.person_id.clone())
+        (right.persona_id.clone(), left.persona_id.clone())
     };
     let identity_candidate_id =
-        format!("identity_candidate:v1:merge_personas:{left_person_id}:{right_person_id}");
+        format!("identity_candidate:v1:merge_personas:{left_persona_id}:{right_persona_id}");
 
     let app = build_personas_app_with_database(&database_url, database);
     let response = app

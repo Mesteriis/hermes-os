@@ -34,7 +34,7 @@ async fn persona_dossier_get_persists_snapshot_and_review_state_against_postgres
         .oneshot(get_request_with_token(
             &format!(
                 "/api/v1/personas/{}/dossier",
-                urlencoding_percent_encode(&persona.person_id)
+                urlencoding_percent_encode(&persona.persona_id)
             ),
             LOCAL_API_TOKEN,
         ))
@@ -47,7 +47,7 @@ async fn persona_dossier_get_persists_snapshot_and_review_state_against_postgres
         .expect("dossier snapshot id")
         .to_owned();
     assert_eq!(body["review_state"], "suggested");
-    assert_eq!(body["persona"]["persona_id"], persona.person_id);
+    assert_eq!(body["persona"]["persona_id"], persona.persona_id);
     assert!(body.get("person").is_none());
     assert!(body["persona"].get("person_id").is_none());
 
@@ -64,7 +64,7 @@ async fn persona_dossier_get_persists_snapshot_and_review_state_against_postgres
     .expect("stored dossier snapshot");
     assert_eq!(
         row.try_get::<String, _>("persona_id").expect("persona id"),
-        persona.person_id
+        persona.persona_id
     );
     assert_eq!(
         row.try_get::<String, _>("review_state")
@@ -72,7 +72,7 @@ async fn persona_dossier_get_persists_snapshot_and_review_state_against_postgres
         "suggested"
     );
     let stored_dossier = row.try_get::<Value, _>("dossier").expect("dossier json");
-    assert_eq!(stored_dossier["persona"]["persona_id"], persona.person_id);
+    assert_eq!(stored_dossier["persona"]["persona_id"], persona.persona_id);
     assert!(stored_dossier.get("person").is_none());
     assert!(stored_dossier["persona"].get("person_id").is_none());
 
@@ -93,7 +93,7 @@ async fn persona_dossier_get_persists_snapshot_and_review_state_against_postgres
         .oneshot(put_request_with_token(
             &format!(
                 "/api/v1/personas/{}/dossier/review",
-                urlencoding_percent_encode(&persona.person_id)
+                urlencoding_percent_encode(&persona.persona_id)
             ),
             json!({ "review_state": "user_confirmed" }),
             LOCAL_API_TOKEN,
@@ -143,7 +143,7 @@ async fn persona_investigate_captures_observation_and_links_snapshot_against_pos
         .oneshot(post_request_with_token(
             &format!(
                 "/api/v1/personas/{}/investigate",
-                urlencoding_percent_encode(&person.person_id)
+                urlencoding_percent_encode(&person.persona_id)
             ),
             json!({ "query": "refresh dossier" }),
             LOCAL_API_TOKEN,
@@ -180,7 +180,7 @@ async fn persona_investigate_captures_observation_and_links_snapshot_against_pos
 }
 
 #[tokio::test]
-async fn person_detail_not_found_returns_404() {
+async fn persona_detail_not_found_returns_404() {
     let Some(database_url) = super::support::live_database_url("person detail").await else {
         return;
     };
@@ -238,14 +238,14 @@ async fn persona_owner_get_and_put_uses_owner_persona_against_postgres() {
         .clone()
         .oneshot(put_request_with_token(
             "/api/v1/personas/owner",
-            json!({ "persona_id": owner.person_id }),
+            json!({ "persona_id": owner.persona_id }),
             LOCAL_API_TOKEN,
         ))
         .await
         .expect("set owner response");
     assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
-    assert_eq!(body["owner_persona"]["persona_id"], owner.person_id);
+    assert_eq!(body["owner_persona"]["persona_id"], owner.persona_id);
     assert!(body["owner_persona"].get("person_id").is_none());
     assert_eq!(body["owner_persona"]["is_self"], true);
     assert_eq!(body["owner_persona"]["persona_type"], "human");
@@ -264,7 +264,7 @@ async fn persona_owner_get_and_put_uses_owner_persona_against_postgres() {
          ORDER BY link.created_at DESC
          LIMIT 1",
     )
-    .bind(&owner.person_id)
+    .bind(&owner.persona_id)
     .fetch_one(&pool)
     .await
     .expect("owner assignment observation");
@@ -280,7 +280,7 @@ async fn persona_owner_get_and_put_uses_owner_persona_against_postgres() {
         .expect("owner response");
     assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
-    assert_eq!(body["owner_persona"]["persona_id"], owner.person_id);
-    assert_ne!(body["owner_persona"]["persona_id"], other.person_id);
+    assert_eq!(body["owner_persona"]["persona_id"], owner.persona_id);
+    assert_ne!(body["owner_persona"]["persona_id"], other.persona_id);
     assert!(body["owner_persona"].get("person_id").is_none());
 }

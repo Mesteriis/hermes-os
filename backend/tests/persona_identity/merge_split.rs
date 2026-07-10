@@ -16,17 +16,17 @@ async fn persona_identity_refresh_creates_conservative_merge_candidate_against_p
     let shared_name = format!("Alex Meridian {suffix}");
 
     let left = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("alex.left-{suffix}@example.com"))
         .await
         .expect("upsert left person");
     let right = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("alex.right-{suffix}@example.com"))
         .await
         .expect("upsert right person");
 
-    seed_normalized_personas(&context, &left.person_id, &right.person_id, &shared_name)
+    seed_normalized_personas(&context, &left.persona_id, &right.persona_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -37,7 +37,7 @@ async fn persona_identity_refresh_creates_conservative_merge_candidate_against_p
         .expect("refresh candidates");
     assert!(created >= 1);
 
-    let (left_id, right_id) = ordered_persona_ids(&left.person_id, &right.person_id);
+    let (left_id, right_id) = ordered_persona_ids(&left.persona_id, &right.persona_id);
     let candidate_id = format!("identity_candidate:v1:merge_personas:{left_id}:{right_id}");
     let row: (String, String, String) = sqlx::query_as(
         r#"
@@ -64,17 +64,17 @@ async fn persona_identity_confirm_records_review_without_mutating_personas_again
     let shared_name = format!("Jordan Candidate {suffix}");
 
     let left = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("jordan.left-{suffix}@example.com"))
         .await
         .expect("upsert left person");
     let right = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("jordan.right-{suffix}@example.com"))
         .await
         .expect("upsert right person");
 
-    seed_normalized_personas(&context, &left.person_id, &right.person_id, &shared_name)
+    seed_normalized_personas(&context, &left.persona_id, &right.persona_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -85,7 +85,7 @@ async fn persona_identity_confirm_records_review_without_mutating_personas_again
         .expect("refresh");
 
     let identity_candidate_id =
-        identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+        identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
     let command = PersonaIdentityReviewCommand {
         command_id: format!("identity-confirm-{suffix}"),
         identity_candidate_id: identity_candidate_id.clone(),
@@ -113,9 +113,9 @@ async fn persona_identity_confirm_records_review_without_mutating_personas_again
     assert_eq!(state, "user_confirmed");
 
     let personas =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM personas WHERE person_id IN ($1, $2)")
-            .bind(&left.person_id)
-            .bind(&right.person_id)
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM personas WHERE persona_id IN ($1, $2)")
+            .bind(&left.persona_id)
+            .bind(&right.persona_id)
             .fetch_one(&context.pool)
             .await
             .expect("personas remain");
@@ -131,17 +131,17 @@ async fn persona_identity_confirm_materializes_split_candidate_against_postgres(
     let shared_name = format!("Morgan Split Candidate {suffix}");
 
     let left = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("morgan.left-{suffix}@example.com"))
         .await
         .expect("upsert left person");
     let right = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("morgan.right-{suffix}@example.com"))
         .await
         .expect("upsert right person");
 
-    seed_normalized_personas(&context, &left.person_id, &right.person_id, &shared_name)
+    seed_normalized_personas(&context, &left.persona_id, &right.persona_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -150,7 +150,8 @@ async fn persona_identity_confirm_materializes_split_candidate_against_postgres(
         .refresh_candidates(100)
         .await
         .expect("refresh merge candidates");
-    let merge_candidate_id = identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+    let merge_candidate_id =
+        identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
 
     let _ = context
         .store
@@ -164,7 +165,7 @@ async fn persona_identity_confirm_materializes_split_candidate_against_postgres(
         .expect("confirm merge candidate");
 
     let split_candidate_id =
-        split_identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+        split_identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
     let row: (String, String, String, f64) = sqlx::query_as(
         r#"
         SELECT candidate_kind, review_state, evidence_summary, confidence
@@ -195,17 +196,17 @@ async fn persona_identity_confirmed_split_removes_merge_from_detail_against_post
     let shared_name = format!("Taylor Split Detail {suffix}");
 
     let left = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("taylor.left-{suffix}@example.com"))
         .await
         .expect("upsert left person");
     let right = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("taylor.right-{suffix}@example.com"))
         .await
         .expect("upsert right person");
 
-    seed_normalized_personas(&context, &left.person_id, &right.person_id, &shared_name)
+    seed_normalized_personas(&context, &left.persona_id, &right.persona_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -214,7 +215,8 @@ async fn persona_identity_confirmed_split_removes_merge_from_detail_against_post
         .refresh_candidates(100)
         .await
         .expect("refresh merge candidates");
-    let merge_candidate_id = identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+    let merge_candidate_id =
+        identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
 
     let _ = context
         .store
@@ -229,7 +231,7 @@ async fn persona_identity_confirmed_split_removes_merge_from_detail_against_post
 
     let detail = context
         .store
-        .persona_identity(&left.person_id)
+        .persona_identity(&left.persona_id)
         .await
         .expect("persona identity detail");
     assert!(
@@ -245,7 +247,7 @@ async fn persona_identity_confirmed_split_removes_merge_from_detail_against_post
         .await
         .expect("refresh split candidates");
     let split_candidate_id =
-        split_identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+        split_identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
 
     let _ = context
         .store
@@ -260,7 +262,7 @@ async fn persona_identity_confirmed_split_removes_merge_from_detail_against_post
 
     let detail = context
         .store
-        .persona_identity(&left.person_id)
+        .persona_identity(&left.persona_id)
         .await
         .expect("persona identity detail after split");
     assert!(!detail.items.iter().any(|item| {

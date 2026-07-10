@@ -100,7 +100,8 @@ async fn identity_traces_create_list_and_attach_unattached_trace() {
                 "/api/v1/identity-traces/{}/assignment",
                 urlencoding_percent_encode(&identity_id)
             ),
-            json!({ "persona_id": person.person_id }),
+            // Legacy input remains readable while the response stays Persona-native.
+            json!({ "person_id": person.persona_id }),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -108,7 +109,7 @@ async fn identity_traces_create_list_and_attach_unattached_trace() {
     assert_eq!(attach.status(), StatusCode::OK);
     let attach_body = json_body(attach).await;
     assert_eq!(attach_body["id"], identity_id);
-    assert_eq!(attach_body["persona_id"], person.person_id);
+    assert_eq!(attach_body["persona_id"], person.persona_id);
     assert!(attach_body.get("person_id").is_none());
     assert_eq!(attach_body["status"], "active");
 

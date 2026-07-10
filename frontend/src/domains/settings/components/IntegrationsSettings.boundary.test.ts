@@ -41,6 +41,7 @@ describe('IntegrationsSettings boundary', () => {
     expect(surface).toContain('openCredentialRecovery')
     expect(surface).toContain('serviceRowsForAccount')
     expect(surface).toContain('accountContactsSyncEnabled')
+    expect(surface).toContain("accountConfigBoolean(account, 'address_book_sync_enabled') ?? true")
     expect(surface).toContain('handleToggleContactsService')
     expect(surface).toContain('handleRunSelectedServiceNow')
     expect(surface).toContain('handleEnableSelectedContactsBidirectional')

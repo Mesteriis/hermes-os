@@ -88,8 +88,9 @@ implementation evidence:
 - `backend/migrations/0059_persona_owner_type_constraints.sql`,
   later Persona rename migrations and `backend/src/domains/personas/api.rs`
   now provide `PersonaType` and single Owner Persona semantics on native
-  `personas` storage while physical `person_id` columns remain compatibility
-  debt.
+  `personas` storage. ADR-0174 and migration `0202` provide Persona-native
+  physical identifiers while bounded historical input aliases remain
+  compatibility debt.
 - `backend/src/app/router/routes/personas.rs` exposes GET/PUT
   `/api/v1/personas/owner` as the Persona-native compatibility bridge for
   reading and assigning the current Owner Persona; legacy `/api/v1/persons/*`
@@ -295,7 +296,7 @@ implementation evidence:
 |---|---|---|---|
 | Communications domain | `/api/v1/communications/*`, `backend/src/domains/communications/*`, Gmail/Telegram/WhatsApp integrations, communication migrations | Public API is communication-shaped, implementation module is still email/mail-shaped. | Communications migration plan before any module rename. |
 | Email channel | `docs/integrations/mail/*`, email account routes, mail blob migrations | Email is a channel but still has broad module ownership. | Keep channel docs; do not promote Mail to product domain. |
-| Persona Intelligence | `backend/src/domains/personas/*`, `/api/v1/personas/*`, ADR-0084, ADR-0090, Persona migrations, migration `0059` for `is_self` and `person_type` constraints | Target entity is Persona; the active module/table/API naming is Persona-native, while physical `person_id` storage columns and historical event/request aliases remain compatibility details. Owner Persona storage, Persona-native owner/list/detail/profile/dossier routes, AI workspace Owner Persona display, AI run Owner Persona attribution, PersonaType, role-to-Relationship, interaction-context-to-Preference, trust-to-Relationship, notes-to-memory-card, favorite-to-preference, watchlist-to-preference, risk-to-health-cache, Dossier section adapters, reviewable Dossier snapshots and Personas UI Dossier display have baselines. Downstream engine projections and eventual physical identifier migration remain incremental. | Keep compatibility aliases explicit; remove remaining legacy naming only when each event/schema migration has evidence and replay safety. |
+| Persona Intelligence | `backend/src/domains/personas/*`, `/api/v1/personas/*`, ADR-0084, ADR-0090, ADR-0174, Persona migrations, migration `0059` for `is_self` and `person_type` constraints | Target entity is Persona; active module/table/API naming and the physical identifiers scoped by migration `0202` are Persona-native. Historical event/request aliases and explicitly out-of-scope cross-domain identifiers remain compatibility details. Owner Persona storage, Persona-native owner/list/detail/profile/dossier routes, AI workspace Owner Persona display, AI run Owner Persona attribution, PersonaType, role-to-Relationship, interaction-context-to-Preference, trust-to-Relationship, notes-to-memory-card, favorite-to-preference, watchlist-to-preference, risk-to-health-cache, Dossier section adapters, reviewable Dossier snapshots and Personas UI Dossier display have baselines. Downstream engine projections remain incremental. | Keep compatibility aliases explicit; remove remaining legacy naming only when each event/schema migration has evidence and replay safety. |
 | Relationships | `backend/src/domains/relationships/mod.rs`, `backend/src/domains/relationships/api.rs`, migrations `0060`, `0061` and `0068`, graph core, Persona roles, Organization-Persona links, task relations, project link reviews, Personas workspace review panel, Review workspace | First-class Relationship persistence, graph projection for all current `RelationshipEntityKind` endpoints, guarded entity/global review routes, Persona role adapters, Organization-Persona link adapters for manual/API and email-sync paths, manual task relation adapters, project link review adapters, Personas workspace global suggested review, cross-domain Review workspace placement and shared Review action dispatch have a baseline, but downstream engine projections are incomplete. | Migrate remaining relationship-shaped read-model semantics behind compatibility boundaries and keep review routing in the cross-domain workflow shell. |
 | Memory Engine | `backend/src/engines/memory.rs`, Persona memory, organization memory, project memory docs | A shared Memory Engine baseline now converts deprecated Persona compatibility notes into source-backed memory-card drafts, normalizes source-backed accepted Persona fact drafts before compatibility `persona_facts` writes, assembles bounded source-backed context packs with source citations, detects required fact gaps as `suggested` review candidates and emits stale-memory review candidates for unverified or outdated facts. Broader review workflow and cross-domain context assembly remain incomplete. | Expand shared Memory Engine behavior after domain source boundaries are stable. |
 | Timeline Engine | `backend/src/engines/timeline.rs`, calendar events, person timeline, organization timeline, project timelines, frontend timeline page | A shared Timeline Engine baseline now owns bounded entity timeline limits, source-backed event validation for Persona, Organization and Project compatibility timeline producers, source-backed period summaries, source-backed entity recency signals, source-backed entity gap detection, source-backed entity snapshot diffs, bounded cross-domain timeline assembly, canonical event-log replay mapping and cursor-backed projection-runner wiring from `EventStore::list_after_position` through `ProjectionCursorStore`. Durable read-model storage for projected Timeline views remains incomplete. | Define durable Timeline read-model storage only after a follow-up schema/API decision while keeping Calendar as the scheduled event domain. |
@@ -333,13 +334,14 @@ Validation for future code work:
 ### Slice 2: Persona Compatibility Boundary
 
 Goal: migrate remaining compatibility language toward Persona without corrupting
-existing `person_id` storage contracts.
+historical payloads or explicitly out-of-scope cross-domain identifier contracts.
 
 Work items:
 
 - keep ADR-0084 as the target model;
-- keep an explicit inventory of remaining `person_id`, retired `/persons`, legacy
-  event aliases and compatibility DTOs before removing any alias;
+- keep an explicit inventory of remaining legacy event/request aliases,
+  out-of-scope `linked_person_id` / `owner_person_id` fields, retired `/persons`
+  routes and compatibility DTOs before removing any alias;
 - keep development command docs aligned with the current Makefile surface;
 - separate compatibility names from product language in docs and UI labels;
 - keep the migration `0059` Owner Persona uniqueness and PersonaType validation

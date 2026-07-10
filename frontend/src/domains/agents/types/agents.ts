@@ -107,7 +107,7 @@ export interface AiMeetingPrepRequest {
 	command_id: string
 	topic: string
 	project_id?: string
-	person_id?: string
+	persona_id?: string
 	correlation_id?: string
 }
 

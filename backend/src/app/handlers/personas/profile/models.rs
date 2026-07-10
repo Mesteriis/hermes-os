@@ -35,7 +35,7 @@ pub(crate) struct PersonaCommunicationReadModel {
 
 pub(super) fn persona_read_model(person: Persona) -> PersonaReadModel {
     PersonaReadModel {
-        persona_id: person.person_id.clone(),
+        persona_id: person.persona_id.clone(),
         persona_type: person.persona_type,
         is_self: person.is_self,
         is_address_book: person.is_address_book,

@@ -38,19 +38,19 @@ impl PersonaIdentityReviewStore {
 
         let rows = sqlx::query(
             r#"
-            SELECT person.person_id
+            SELECT person.persona_id
             FROM personas person
             WHERE lower(trim(person.display_name)) = $1
               AND position('@' in lower(trim(person.display_name))) = 0
               AND NOT EXISTS (
                     SELECT 1
                     FROM persona_identities identity_trace
-                    WHERE identity_trace.person_id = person.person_id
+                    WHERE identity_trace.persona_id = person.persona_id
                       AND identity_trace.identity_type = 'email'
                       AND lower(trim(identity_trace.identity_value)) = $2
                       AND identity_trace.status = 'active'
               )
-            ORDER BY person.person_id ASC
+            ORDER BY person.persona_id ASC
             LIMIT $3
             "#,
         )
@@ -64,7 +64,7 @@ impl PersonaIdentityReviewStore {
         for row in rows {
             let candidate = PersonaIdentityCandidatePayload {
                 candidate_kind: PersonaIdentityCandidateKind::AttachEmailAddress,
-                left_persona_id: row.try_get("person_id")?,
+                left_persona_id: row.try_get("persona_id")?,
                 right_persona_id: None,
                 email_address: Some(normalized_email.clone()),
                 evidence_summary: evidence_summary.trim().to_owned(),

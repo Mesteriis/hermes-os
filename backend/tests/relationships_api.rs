@@ -247,8 +247,8 @@ async fn seed_persona_relationship_with_state(
         .await
         .expect("target persona");
     let relationship = NewRelationship::between_personas(
-        &source.person_id,
-        &target.person_id,
+        &source.persona_id,
+        &target.persona_id,
         relationship_type,
         0.72,
         0.66,

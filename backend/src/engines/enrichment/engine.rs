@@ -9,7 +9,7 @@ pub struct EnrichmentEngine;
 
 impl EnrichmentEngine {
     pub fn persona_favorite_preference(
-        person_id: &str,
+        persona_id: &str,
         is_favorite: bool,
     ) -> Option<PreferenceDraft> {
         if !is_favorite {
@@ -19,19 +19,19 @@ impl EnrichmentEngine {
         Some(PreferenceDraft {
             preference_type: "ui:favorite".to_owned(),
             value: "true".to_owned(),
-            source: format!("personas.is_favorite:{person_id}"),
+            source: format!("personas.is_favorite:{persona_id}"),
             confidence: 1.0,
         })
     }
 
     pub fn persona_observation_candidate(
-        person_id: &str,
+        persona_id: &str,
         source: &str,
         extracted_claim: &str,
         data: Value,
         confidence: f64,
     ) -> Result<EnrichmentCandidateDraft, EnrichmentEngineError> {
-        validate_non_empty("affected entity", person_id)?;
+        validate_non_empty("affected entity", persona_id)?;
         validate_non_empty("source", source)?;
         validate_non_empty("extracted claim", extracted_claim)?;
         validate_confidence(confidence)?;
@@ -49,7 +49,7 @@ impl EnrichmentEngine {
             "_enrichment".to_owned(),
             json!({
                 "affected_entity_kind": "persona",
-                "affected_entity_id": person_id,
+                "affected_entity_id": persona_id,
                 "extracted_claim": extracted_claim,
                 "source": source,
                 "review_state": "pending",
@@ -60,7 +60,7 @@ impl EnrichmentEngine {
 
         Ok(EnrichmentCandidateDraft {
             entity_kind: "persona".to_owned(),
-            entity_id: person_id.to_owned(),
+            entity_id: persona_id.to_owned(),
             source: source.to_owned(),
             extracted_claim: extracted_claim.to_owned(),
             data: Value::Object(data_object),

@@ -220,7 +220,7 @@ impl SenderReputationStore {
                 WHERE identity_trace.identity_type = 'email'
                   AND lower(identity_trace.identity_value) = $1
                   AND identity_trace.status = 'active'
-                  AND identity_trace.person_id IS NOT NULL
+                  AND identity_trace.persona_id IS NOT NULL
                   AND identity_trace.source <> 'email_sync'
                 LIMIT 1
             )

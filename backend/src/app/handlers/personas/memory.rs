@@ -205,7 +205,7 @@ pub(crate) async fn post_relationship_event(
     Ok(Json(
         crate::domains::personas::service::PersonaCommandService::new(pool)
             .add_relationship_event_manual(&NewRelationshipEvent {
-                person_id: persona_id,
+                persona_id,
                 event_type: req.event_type,
                 title: req.title,
                 description: req.description,

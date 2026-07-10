@@ -177,6 +177,14 @@ describe('AppNavbar boundary', () => {
       new URL('../queries/appLayoutAccountNavigation.ts', import.meta.url),
       'utf8'
     )
+    const sidebarStore = readFileSync(
+      new URL('../../shared/stores/sidebar.ts', import.meta.url),
+      'utf8'
+    )
+    const layoutEditorStore = readFileSync(
+      new URL('../../shared/stores/layoutEditor.ts', import.meta.url),
+      'utf8'
+    )
 
     expect(app).toContain(
       "import AppLayoutRoot from './layout/AppLayoutRoot.vue'"
@@ -260,6 +268,13 @@ describe('AppNavbar boundary', () => {
     expect(root).toContain(
       'v-else-if="selectedTopLevelRouteId === \'personas\'"'
     )
+    expect(sidebarStore).toContain("{ id: 'personas', label: 'Personas'")
+    expect(sidebarStore).not.toContain("{ id: 'persons'")
+    expect(sidebarStore).toContain("if (itemId === 'persons') return 'personas'")
+    expect(sidebarStore).toContain("if (rootId === 'persons') return 'personas'")
+    expect(layoutEditorStore).toContain("viewScope: ['personas']")
+    expect(layoutEditorStore).not.toContain("viewScope: ['persons']")
+    expect(layoutEditorStore).toContain("if (viewId === 'persons') return 'personas'")
     expect(root).not.toContain('@route-select="navbar.selectNavigationItem"')
     expect(surface).toContain('Main menu')
     expect(surface).toContain('Sub menu')

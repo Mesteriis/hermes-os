@@ -76,8 +76,16 @@ Negative:
 
 ## Follow-Up
 
-- Design a physical identifier migration ADR before renaming remaining
-  `person_id` columns or changing email-derived `person:v1:email:*` values.
+- Physical column renaming is completed under ADR-0174; changing email-derived
+  `person:v1:email:*` values remains a separate future decision.
 - Expand write support only for fields with clear source-of-truth ownership and
   review semantics.
 - Keep compatibility gaps visible in `docs/refactoring/implementation-alignment-plan.md`.
+
+## Implementation Update: 2026-07-10
+
+ADR-0174 completes the scoped physical rename from `person_id` columns to
+Persona-native column names. This ADR remains the active API bridge decision;
+references above to physical compatibility columns describe its pre-0202
+baseline. Historical payloads and established request aliases remain readable,
+while responses and newly emitted payloads use Persona-native names only.

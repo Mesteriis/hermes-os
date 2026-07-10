@@ -16,8 +16,8 @@ impl PersonaIdentityReviewStore {
             SELECT
                 identity_candidate_id,
                 candidate_kind,
-                left_person_id,
-                right_person_id,
+                left_persona_id,
+                right_persona_id,
                 email_address,
                 evidence_summary,
                 confidence,
@@ -41,17 +41,17 @@ impl PersonaIdentityReviewStore {
 
     pub async fn persona_identity(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<PersonaIdentityDetail, PersonaIdentityError> {
-        let person_id = validate_non_empty("person_id", person_id)?;
+        let persona_id = validate_non_empty("persona_id", persona_id)?;
 
         let rows = sqlx::query(
             r#"
             SELECT
                 identity_candidate_id,
                 candidate_kind,
-                left_person_id,
-                right_person_id,
+                left_persona_id,
+                right_persona_id,
                 email_address,
                 evidence_summary,
                 confidence,
@@ -60,7 +60,7 @@ impl PersonaIdentityReviewStore {
                 reviewed_at,
                 updated_at
             FROM persona_identity_candidates merge
-            WHERE (merge.left_person_id = $1 OR merge.right_person_id = $1)
+            WHERE (merge.left_persona_id = $1 OR merge.right_persona_id = $1)
               AND merge.candidate_kind IN ('merge_personas', 'merge_persons')
               AND merge.review_state = 'user_confirmed'
               AND NOT EXISTS (
@@ -68,15 +68,15 @@ impl PersonaIdentityReviewStore {
                   FROM persona_identity_candidates split
                   WHERE split.candidate_kind IN ('split_persona', 'split_person')
                     AND split.review_state = 'user_confirmed'
-                    AND LEAST(split.left_person_id, split.right_person_id) =
-                        LEAST(merge.left_person_id, merge.right_person_id)
-                    AND GREATEST(split.left_person_id, split.right_person_id) =
-                        GREATEST(merge.left_person_id, merge.right_person_id)
+                    AND LEAST(split.left_persona_id, split.right_persona_id) =
+                        LEAST(merge.left_persona_id, merge.right_persona_id)
+                    AND GREATEST(split.left_persona_id, split.right_persona_id) =
+                        GREATEST(merge.left_persona_id, merge.right_persona_id)
               )
             ORDER BY updated_at DESC, identity_candidate_id
             "#,
         )
-        .bind(&person_id)
+        .bind(&persona_id)
         .fetch_all(self.pool())
         .await?;
 

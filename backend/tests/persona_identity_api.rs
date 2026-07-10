@@ -66,7 +66,7 @@ async fn identity_candidates_returns_safe_candidate_payload() {
         .upsert_email_persona(&format!("right-{suffix}@example.com"))
         .await
         .expect("upsert right person");
-    seed_normalized_personas(&pool, &left.person_id, &right.person_id, &shared_name)
+    seed_normalized_personas(&pool, &left.persona_id, &right.persona_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -75,7 +75,7 @@ async fn identity_candidates_returns_safe_candidate_payload() {
         .refresh_candidates(100)
         .await
         .expect("refresh candidates");
-    let candidate_id = identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+    let candidate_id = identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
     promote_identity_candidate(&pool, &candidate_id)
         .await
         .expect("promote candidate");
@@ -106,8 +106,8 @@ async fn identity_candidates_returns_safe_candidate_payload() {
 
     assert_eq!(item["candidate_kind"], "merge_personas");
     assert_eq!(item["review_state"], "suggested");
-    assert_eq!(item["left_persona_id"], json!(left.person_id));
-    assert_eq!(item["right_persona_id"], json!(right.person_id));
+    assert_eq!(item["left_persona_id"], json!(left.persona_id));
+    assert_eq!(item["right_persona_id"], json!(right.persona_id));
     assert!(item.get("left_person_id").is_none());
     assert!(item.get("right_person_id").is_none());
     assert!(item["evidence_summary"].is_string());
@@ -175,7 +175,7 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
         .upsert_email_persona(&format!("split-right-{suffix}@example.com"))
         .await
         .expect("upsert right person");
-    seed_normalized_personas(&pool, &left.person_id, &right.person_id, &shared_name)
+    seed_normalized_personas(&pool, &left.persona_id, &right.persona_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -184,7 +184,8 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
         .refresh_candidates(100)
         .await
         .expect("refresh candidates");
-    let merge_candidate_id = identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+    let merge_candidate_id =
+        identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
     let command_id = format!("identity-api-split-confirm-{suffix}");
 
     let app = build_router_with_database(
@@ -208,7 +209,7 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
     run_persona_identity_review_inbox_consumer(pool.clone()).await;
 
     let split_candidate_id =
-        split_identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+        split_identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
     promote_identity_candidate(&pool, &split_candidate_id)
         .await
         .expect("promote split candidate");
@@ -235,8 +236,8 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
         .as_str()
         .expect("evidence summary");
     assert!(evidence_summary.starts_with("Previously confirmed merge can be split:"));
-    assert!(evidence_summary.contains(&left.person_id));
-    assert!(evidence_summary.contains(&right.person_id));
+    assert!(evidence_summary.contains(&left.persona_id));
+    assert!(evidence_summary.contains(&right.persona_id));
 }
 
 #[tokio::test]
@@ -260,7 +261,7 @@ async fn put_identity_candidate_review_confirms_candidate() {
         .upsert_email_persona(&format!("review-right-{suffix}@example.com"))
         .await
         .expect("upsert right person");
-    seed_normalized_personas(&pool, &left.person_id, &right.person_id, &shared_name)
+    seed_normalized_personas(&pool, &left.persona_id, &right.persona_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -270,7 +271,7 @@ async fn put_identity_candidate_review_confirms_candidate() {
         .await
         .expect("refresh candidates");
     let identity_candidate_id =
-        identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+        identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
     let command_id = format!("identity-api-confirm-{suffix}");
 
     let app = build_router_with_database(
@@ -361,7 +362,7 @@ async fn persona_identity_returns_confirmed_links_for_person() {
         .upsert_email_persona(&format!("detail-right-{suffix}@example.com"))
         .await
         .expect("upsert right person");
-    seed_normalized_personas(&pool, &left.person_id, &right.person_id, &shared_name)
+    seed_normalized_personas(&pool, &left.persona_id, &right.persona_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -371,7 +372,7 @@ async fn persona_identity_returns_confirmed_links_for_person() {
         .await
         .expect("refresh candidates");
     let identity_candidate_id =
-        identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+        identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
 
     let app = build_router_with_database(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
@@ -394,7 +395,7 @@ async fn persona_identity_returns_confirmed_links_for_person() {
 
     let response = app
         .oneshot(get_request_with_token(
-            &format!("/api/v1/personas/{}/identity", left.person_id),
+            &format!("/api/v1/personas/{}/identity", left.persona_id),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -409,8 +410,8 @@ async fn persona_identity_returns_confirmed_links_for_person() {
         .find(|value| value["identity_candidate_id"] == json!(identity_candidate_id))
         .expect("confirmed identity candidate");
     assert_eq!(item["review_state"], "user_confirmed");
-    assert_eq!(item["left_persona_id"], json!(left.person_id));
-    assert_eq!(item["right_persona_id"], json!(right.person_id));
+    assert_eq!(item["left_persona_id"], json!(left.persona_id));
+    assert_eq!(item["right_persona_id"], json!(right.persona_id));
     assert!(item.get("left_person_id").is_none());
     assert!(item.get("right_person_id").is_none());
 }
@@ -430,7 +431,7 @@ async fn persona_identity_manual_create_paths_capture_observations_against_postg
         .upsert_email_persona(&format!("identity-write-{suffix}@example.com"))
         .await
         .expect("upsert person");
-    let encoded_person_id = urlencoding_percent_encode(&person.person_id);
+    let encoded_person_id = urlencoding_percent_encode(&person.persona_id);
 
     let app = build_router_with_database(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
@@ -578,20 +579,20 @@ async fn json_body(response: axum::response::Response) -> Value {
 
 async fn seed_normalized_personas(
     pool: &PgPool,
-    left_person_id: &str,
-    right_person_id: &str,
+    left_persona_id: &str,
+    right_persona_id: &str,
     display_name: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE personas
         SET display_name = $1
-        WHERE person_id = $2 OR person_id = $3
+        WHERE persona_id = $2 OR persona_id = $3
         "#,
     )
     .bind(display_name)
-    .bind(left_person_id)
-    .bind(right_person_id)
+    .bind(left_persona_id)
+    .bind(right_persona_id)
     .execute(pool)
     .await?;
 
@@ -624,13 +625,13 @@ async fn promote_identity_candidate(
 }
 
 fn identity_candidate_id_from_personas(left_id: &str, right_id: &str) -> String {
-    let (left_person_id, right_person_id) = ordered_persona_ids(left_id, right_id);
-    format!("identity_candidate:v1:merge_personas:{left_person_id}:{right_person_id}")
+    let (left_persona_id, right_persona_id) = ordered_persona_ids(left_id, right_id);
+    format!("identity_candidate:v1:merge_personas:{left_persona_id}:{right_persona_id}")
 }
 
 fn split_identity_candidate_id_from_personas(left_id: &str, right_id: &str) -> String {
-    let (left_person_id, right_person_id) = ordered_persona_ids(left_id, right_id);
-    format!("identity_candidate:v1:split_persona:{left_person_id}:{right_person_id}")
+    let (left_persona_id, right_persona_id) = ordered_persona_ids(left_id, right_id);
+    format!("identity_candidate:v1:split_persona:{left_persona_id}:{right_persona_id}")
 }
 
 fn ordered_persona_ids(left_id: &str, right_id: &str) -> (String, String) {

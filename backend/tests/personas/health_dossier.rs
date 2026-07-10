@@ -8,7 +8,7 @@ use hermes_hub_backend::domains::personas::trust::PersonaRiskStore;
 use super::support::{live_personas_pool, unique_suffix};
 
 #[tokio::test]
-async fn person_risk_report_and_resolve_materializes_health_status_cache_against_postgres() {
+async fn persona_risk_report_and_resolve_materializes_health_status_cache_against_postgres() {
     let Some(pool) = live_personas_pool("person risk health adapter").await else {
         return;
     };
@@ -23,7 +23,7 @@ async fn person_risk_report_and_resolve_materializes_health_status_cache_against
 
     let risk = risk_store
         .report(
-            &person.person_id,
+            &person.persona_id,
             "relationship_attention",
             "Open evidence-backed relationship risk requires owner review.",
             "high",
@@ -53,7 +53,7 @@ async fn person_risk_report_and_resolve_materializes_health_status_cache_against
     assert_eq!(stored_risk.4, 0.5);
 
     let health = health_store
-        .get(&person.person_id)
+        .get(&person.persona_id)
         .await
         .expect("load health")
         .expect("health row");
@@ -66,7 +66,7 @@ async fn person_risk_report_and_resolve_materializes_health_status_cache_against
         .expect("resolve risk");
 
     let health = health_store
-        .get(&person.person_id)
+        .get(&person.persona_id)
         .await
         .expect("load health after resolve")
         .expect("health row after resolve");
@@ -75,7 +75,7 @@ async fn person_risk_report_and_resolve_materializes_health_status_cache_against
 }
 
 #[tokio::test]
-async fn person_dossier_includes_target_sections_and_source_refs_against_postgres() {
+async fn persona_dossier_includes_target_sections_and_source_refs_against_postgres() {
     let Some(pool) = live_personas_pool("person dossier read-model").await else {
         return;
     };
@@ -92,7 +92,7 @@ async fn person_dossier_includes_target_sections_and_source_refs_against_postgre
 
     fact_store
         .upsert(
-            &person.person_id,
+            &person.persona_id,
             "interest",
             "local-first systems",
             "message:dossier-interest",
@@ -102,7 +102,7 @@ async fn person_dossier_includes_target_sections_and_source_refs_against_postgre
         .expect("insert interest fact");
     fact_store
         .upsert(
-            &person.person_id,
+            &person.persona_id,
             "project",
             "Hermes Memory Graph",
             "document:dossier-project",
@@ -112,7 +112,7 @@ async fn person_dossier_includes_target_sections_and_source_refs_against_postgre
         .expect("insert project fact");
     fact_store
         .upsert(
-            &person.person_id,
+            &person.persona_id,
             "organization",
             "Hermes Lab",
             "relationship:dossier-organization",
@@ -122,7 +122,7 @@ async fn person_dossier_includes_target_sections_and_source_refs_against_postgre
         .expect("insert organization fact");
     preference_store
         .upsert(
-            &person.person_id,
+            &person.persona_id,
             "communication:preferred_channel",
             "telegram",
             "message:dossier-preference",
@@ -131,7 +131,7 @@ async fn person_dossier_includes_target_sections_and_source_refs_against_postgre
         .expect("insert communication preference");
     expertise_store
         .upsert(
-            &person.person_id,
+            &person.persona_id,
             "Rust backend architecture",
             Some("software"),
             "document:dossier-skill",
@@ -141,7 +141,7 @@ async fn person_dossier_includes_target_sections_and_source_refs_against_postgre
         .expect("insert expertise");
 
     let dossier = investigator
-        .assemble_dossier(&person.person_id)
+        .assemble_dossier(&person.persona_id)
         .await
         .expect("assemble dossier");
     let dossier_json = serde_json::to_value(&dossier).expect("dossier json");

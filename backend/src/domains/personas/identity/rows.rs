@@ -10,8 +10,8 @@ pub(super) fn row_to_persona_identity_candidate(
     Ok(PersonaIdentityCandidate {
         identity_candidate_id: row.try_get("identity_candidate_id")?,
         candidate_kind: row.try_get("candidate_kind")?,
-        left_persona_id: row.try_get("left_person_id")?,
-        right_persona_id: row.try_get("right_person_id")?,
+        left_persona_id: row.try_get("left_persona_id")?,
+        right_persona_id: row.try_get("right_persona_id")?,
         email_address: row.try_get("email_address")?,
         evidence_summary: row.try_get("evidence_summary")?,
         confidence: row.try_get("confidence")?,

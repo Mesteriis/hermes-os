@@ -250,7 +250,7 @@ impl CalendarCommandService {
         email: &str,
         display_name: Option<&str>,
         role: Option<&str>,
-        person_id: Option<&str>,
+        persona_id: Option<&str>,
         organization_id: Option<&str>,
     ) -> Result<EventParticipant, CalendarCommandServiceError> {
         let observation = self
@@ -261,7 +261,7 @@ impl CalendarCommandService {
                     "email": email,
                     "display_name": display_name,
                     "role": role,
-                    "person_id": person_id,
+                    "persona_id": persona_id,
                     "organization_id": organization_id,
                     "action": "add_participant",
                 }),
@@ -280,7 +280,7 @@ impl CalendarCommandService {
                 email,
                 display_name,
                 role,
-                person_id,
+                persona_id,
                 organization_id,
                 &format!("observation:{}", observation.observation_id),
                 Some(&observation.observation_id),

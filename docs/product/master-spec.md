@@ -259,7 +259,7 @@ Current migrations include storage for:
 - first-class obligations, obligation evidence and task links;
 - projects and project link reviews;
 - task candidates and tasks;
-- personas storage, persona memory tables, and physical `person_id` compatibility columns;
+- personas storage, persona memory tables, and Persona-native identifier columns;
 - organizations and organization memory/workflow tables;
 - calendar accounts, events, meetings, deadlines, focus blocks and rules;
 - Telegram accounts, chats, messages, policies, calls and transcripts;

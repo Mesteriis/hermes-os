@@ -381,7 +381,7 @@ async fn workflow_action_create_persona_can_create_persona_without_email() {
         .to_owned();
 
     let row: (String, Option<String>, bool) = sqlx::query_as(
-        "SELECT display_name, email_address, is_address_book FROM personas WHERE person_id = $1",
+        "SELECT display_name, email_address, is_address_book FROM personas WHERE persona_id = $1",
     )
     .bind(&persona_id)
     .fetch_one(&pool)
@@ -392,7 +392,7 @@ async fn workflow_action_create_persona_can_create_persona_without_email() {
     assert!(!row.2);
 
     let identity_count: i64 =
-        sqlx::query_scalar("SELECT count(*)::BIGINT FROM persona_identities WHERE person_id = $1")
+        sqlx::query_scalar("SELECT count(*)::BIGINT FROM persona_identities WHERE persona_id = $1")
             .bind(&persona_id)
             .fetch_one(&pool)
             .await

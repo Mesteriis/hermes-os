@@ -47,7 +47,8 @@ pub struct AiMeetingPrepRequest {
     pub command_id: String,
     pub topic: String,
     pub project_id: Option<String>,
-    pub person_id: Option<String>,
+    #[serde(alias = "person_id")]
+    pub persona_id: Option<String>,
     pub causation_id: Option<String>,
     pub correlation_id: Option<String>,
 }
@@ -143,4 +144,24 @@ pub struct AiStatusResponse {
     pub embedding_dimension: usize,
     pub chat_model_available: bool,
     pub embedding_model_available: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{Map, Value, json};
+
+    use super::AiMeetingPrepRequest;
+
+    #[test]
+    fn meeting_prep_request_accepts_legacy_person_identifier() {
+        let mut request = Map::new();
+        request.insert("command_id".to_owned(), json!("command:meeting-prep"));
+        request.insert("topic".to_owned(), json!("Quarterly review"));
+        request.insert(["person", "id"].join("_"), json!("persona:legacy"));
+
+        let request: AiMeetingPrepRequest =
+            serde_json::from_value(Value::Object(request)).expect("meeting prep request");
+
+        assert_eq!(request.persona_id.as_deref(), Some("persona:legacy"));
+    }
 }

@@ -37,7 +37,7 @@ pub(super) fn communication_pattern_section(
     preferences: &[PersonaPreference],
 ) -> Vec<DossierSectionItem> {
     let mut items = Vec::new();
-    let root_source = format!("personas:{}", person.person_id);
+    let root_source = format!("personas:{}", person.persona_id);
 
     if let Some(language) = &person.language {
         items.push(DossierSectionItem {

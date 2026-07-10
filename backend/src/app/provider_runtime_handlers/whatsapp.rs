@@ -2894,6 +2894,7 @@ pub(crate) async fn post_whatsapp_fixture_message(
         &result.message_id,
         Some(&request.provider_chat_id),
         Some(&request.provider_message_id),
+        request.occurred_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -2926,6 +2927,7 @@ pub(crate) async fn post_whatsapp_fixture_reaction(
         &result.message_id,
         Some(&request.provider_chat_id),
         Some(&request.provider_message_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -2960,6 +2962,7 @@ pub(crate) async fn post_whatsapp_fixture_message_update(
         &result.message_id,
         Some(&request.provider_chat_id),
         Some(&request.provider_message_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -2991,6 +2994,7 @@ pub(crate) async fn post_whatsapp_fixture_message_delete(
         &result.message_id,
         Some(&request.provider_chat_id),
         Some(&request.provider_message_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -3023,6 +3027,7 @@ pub(crate) async fn post_whatsapp_fixture_receipt(
         &result.message_id,
         Some(&request.provider_chat_id),
         Some(&request.provider_message_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -3065,6 +3070,7 @@ pub(crate) async fn post_whatsapp_fixture_status(
         &result.message_id,
         Some(&format!("whatsapp_status_feed:{}", request.account_id)),
         Some(&request.provider_status_id),
+        request.occurred_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -3099,6 +3105,7 @@ pub(crate) async fn post_whatsapp_fixture_status_view(
         &result.message_id,
         Some(&format!("whatsapp_status_feed:{}", request.account_id)),
         Some(&request.provider_status_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -3130,6 +3137,7 @@ pub(crate) async fn post_whatsapp_fixture_status_delete(
         &result.message_id,
         Some(&format!("whatsapp_status_feed:{}", request.account_id)),
         Some(&request.provider_status_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -3165,6 +3173,7 @@ pub(crate) async fn post_whatsapp_fixture_presence(
             .unwrap_or(request.provider_identity_id.as_str()),
         Some(&request.provider_chat_id),
         None,
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "identity_id": result.identity_id,
@@ -3198,6 +3207,7 @@ pub(crate) async fn post_whatsapp_fixture_call(
         &result.call_id,
         Some(&request.provider_chat_id),
         Some(&request.provider_call_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "call_id": result.call_id,
@@ -3289,6 +3299,7 @@ pub(crate) async fn post_whatsapp_fixture_dialog(
         &result.conversation_id,
         Some(&request.provider_chat_id),
         None,
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "conversation_id": result.conversation_id,
@@ -3335,6 +3346,7 @@ pub(crate) async fn post_whatsapp_fixture_participant(
         &result.participant_id,
         Some(&request.provider_chat_id),
         Some(provider_member_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "conversation_id": result.conversation_id,
@@ -3410,6 +3422,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_message(
         &result.message_id,
         Some(&request.provider_chat_id),
         Some(&request.provider_message_id),
+        request.occurred_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -3441,6 +3454,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_reaction(
         &result.message_id,
         Some(&request.provider_chat_id),
         Some(&request.provider_message_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -3474,6 +3488,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_message_update(
         &result.message_id,
         Some(&request.provider_chat_id),
         Some(&request.provider_message_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -3504,6 +3519,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_message_delete(
         &result.message_id,
         Some(&request.provider_chat_id),
         Some(&request.provider_message_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -3535,6 +3551,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_receipt(
         &result.message_id,
         Some(&request.provider_chat_id),
         Some(&request.provider_message_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -3715,6 +3732,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_business_cloud_webhook(
                 &result.message_id,
                 Some(&request.provider_chat_id),
                 Some(&request.provider_message_id),
+                request.occurred_at,
                 json!({
                     "account_id": request.account_id,
                     "message_id": result.message_id,
@@ -3764,6 +3782,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_business_cloud_webhook(
                 &result.message_id,
                 Some(&request.provider_chat_id),
                 Some(&request.provider_message_id),
+                request.observed_at,
                 json!({
                     "account_id": request.account_id,
                     "message_id": result.message_id,
@@ -4625,6 +4644,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_status(
         &result.message_id,
         Some(&format!("whatsapp_status_feed:{}", request.account_id)),
         Some(&request.provider_status_id),
+        request.occurred_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -4658,6 +4678,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_status_view(
         &result.message_id,
         Some(&format!("whatsapp_status_feed:{}", request.account_id)),
         Some(&request.provider_status_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -4688,6 +4709,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_status_delete(
         &result.message_id,
         Some(&format!("whatsapp_status_feed:{}", request.account_id)),
         Some(&request.provider_status_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "message_id": result.message_id,
@@ -4722,6 +4744,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_presence(
             .unwrap_or(request.provider_identity_id.as_str()),
         Some(&request.provider_chat_id),
         None,
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "identity_id": result.identity_id,
@@ -4754,6 +4777,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_call(
         &result.call_id,
         Some(&request.provider_chat_id),
         Some(&request.provider_call_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "call_id": result.call_id,
@@ -4814,6 +4838,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_dialog(
         &result.conversation_id,
         Some(&request.provider_chat_id),
         None,
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "conversation_id": result.conversation_id,
@@ -4859,6 +4884,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_participant(
         &result.participant_id,
         Some(&request.provider_chat_id),
         Some(provider_member_id),
+        request.observed_at,
         json!({
             "account_id": request.account_id,
             "conversation_id": result.conversation_id,
@@ -5022,6 +5048,7 @@ async fn publish_whatsapp_sync_event(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn publish_whatsapp_projection_event(
     state: &AppState,
     event_type: &str,
@@ -5029,9 +5056,9 @@ async fn publish_whatsapp_projection_event(
     subject_id: &str,
     provider_chat_id: Option<&str>,
     provider_message_id: Option<&str>,
+    occurred_at: DateTime<Utc>,
     payload: serde_json::Value,
 ) -> Result<(), ApiError> {
-    let now = Utc::now();
     let source_id = payload
         .get("raw_record_id")
         .and_then(Value::as_str)
@@ -5046,9 +5073,9 @@ async fn publish_whatsapp_projection_event(
         "whatsapp_projection_events"
     };
     let event = NewEventEnvelope::builder(
-        whatsapp_event_id("projection", subject_id, now),
+        whatsapp_event_id("projection", subject_id, occurred_at),
         event_type.to_owned(),
-        now,
+        occurred_at,
         json!({
             "channel": "whatsapp",
             "actor_id": AUDIT_ACTOR_ID,

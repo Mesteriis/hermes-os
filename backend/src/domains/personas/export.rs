@@ -53,11 +53,11 @@ impl PersonaExportService {
     /// Export a Persona dossier in the requested format.
     pub async fn export(
         &self,
-        person_id: &str,
+        persona_id: &str,
         format: ExportFormat,
     ) -> Result<String, ExportError> {
         let investigator = PersonaInvestigator::new(self.pool.clone());
-        let dossier = investigator.assemble_dossier(person_id).await?;
+        let dossier = investigator.assemble_dossier(persona_id).await?;
         match format {
             ExportFormat::Json => Ok(serde_json::to_string_pretty(&dossier)?),
             ExportFormat::Markdown => Ok(render_markdown(&dossier)),

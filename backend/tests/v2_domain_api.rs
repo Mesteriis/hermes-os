@@ -113,7 +113,7 @@ async fn persona_health_endpoint_returns_single_persona_health_against_postgres(
         .upsert_email_persona(&format!("health-{suffix}@example.com"))
         .await
         .expect("seed persona");
-    seed_person_health(&pool, &person.person_id).await;
+    seed_person_health(&pool, &person.persona_id).await;
 
     let app = build_router_with_database(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
@@ -122,7 +122,7 @@ async fn persona_health_endpoint_returns_single_persona_health_against_postgres(
 
     let response = app
         .oneshot(get_request_with_token_and_actor(
-            &format!("/api/v1/personas/{}/health", person.person_id),
+            &format!("/api/v1/personas/{}/health", person.persona_id),
             LOCAL_API_TOKEN,
             "hermes-frontend",
         ))
@@ -131,7 +131,7 @@ async fn persona_health_endpoint_returns_single_persona_health_against_postgres(
 
     assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
-    assert_eq!(body["persona_id"], json!(person.person_id));
+    assert_eq!(body["persona_id"], json!(person.persona_id));
     assert!(body.get("person_id").is_none());
     assert_eq!(body["health_status"], json!("at_risk"));
     assert_eq!(body["communication_gap_days"], json!(42));
@@ -172,11 +172,11 @@ async fn json_body(response: axum::response::Response) -> Value {
     serde_json::from_slice(&body).expect("json body")
 }
 
-async fn seed_person_health(pool: &PgPool, person_id: &str) {
+async fn seed_person_health(pool: &PgPool, persona_id: &str) {
     sqlx::query(
-        "UPDATE personas SET health_status = 'at_risk', communication_gap_days = 42, watchlist = true WHERE person_id = $1",
+        "UPDATE personas SET health_status = 'at_risk', communication_gap_days = 42, watchlist = true WHERE persona_id = $1",
     )
-    .bind(person_id)
+    .bind(persona_id)
     .execute(pool)
     .await
     .expect("update person health");

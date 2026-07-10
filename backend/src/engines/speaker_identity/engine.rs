@@ -12,7 +12,7 @@ impl SpeakerIdentityEngine {
         let mut grouped: BTreeMap<String, Vec<&SpeakerEvidence>> = BTreeMap::new();
         for item in evidence {
             let key = item
-                .person_id
+                .persona_id
                 .clone()
                 .unwrap_or_else(|| normalize_label(&item.label));
             grouped.entry(key).or_default().push(item);
@@ -40,7 +40,7 @@ impl SpeakerIdentityEngine {
                 SpeakerIdentityCandidate {
                     speaker_key: key,
                     display_label,
-                    person_id: items.iter().find_map(|item| item.person_id.clone()),
+                    persona_id: items.iter().find_map(|item| item.persona_id.clone()),
                     confidence,
                     evidence_count,
                     requires_review: confidence < 0.8,
@@ -49,7 +49,7 @@ impl SpeakerIdentityEngine {
             .collect::<Vec<_>>();
         let unknown_speaker_count = candidates
             .iter()
-            .filter(|candidate| candidate.person_id.is_none())
+            .filter(|candidate| candidate.persona_id.is_none())
             .count();
         SpeakerIdentityMergePlan {
             candidates,

@@ -12,7 +12,7 @@ pub struct GraphProjectionReport {
 }
 
 pub(super) struct PersonaRow {
-    pub(super) person_id: String,
+    pub(super) persona_id: String,
     pub(super) display_name: String,
     pub(super) email_address: Option<String>,
 }

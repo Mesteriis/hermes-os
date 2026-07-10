@@ -18,13 +18,13 @@ impl PersonaRiskStore {
         Self { pool }
     }
 
-    pub async fn list(&self, person_id: &str) -> Result<Vec<PersonaRisk>, PersonaTrustError> {
+    pub async fn list(&self, persona_id: &str) -> Result<Vec<PersonaRisk>, PersonaTrustError> {
         let rows = sqlx::query(
-            "SELECT id::text, person_id, risk_type, description, severity, source, confidence::float8 AS confidence,
+            "SELECT id::text, persona_id, risk_type, description, severity, source, confidence::float8 AS confidence,
              created_at, resolved_at, resolution
-             FROM persona_risks WHERE person_id = $1 ORDER BY created_at DESC",
+             FROM persona_risks WHERE persona_id = $1 ORDER BY created_at DESC",
         )
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter().map(row_to_risk).collect()
@@ -32,19 +32,19 @@ impl PersonaRiskStore {
 
     pub async fn report(
         &self,
-        person_id: &str,
+        persona_id: &str,
         risk_type: &str,
         description: &str,
         severity: &str,
         source: &str,
     ) -> Result<PersonaRisk, PersonaTrustError> {
         let observation =
-            RiskEngine::persona_observation(person_id, risk_type, description, severity, source)?;
+            RiskEngine::persona_observation(persona_id, risk_type, description, severity, source)?;
         let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
-            "INSERT INTO persona_risks (person_id, risk_type, description, severity, source, confidence)
+            "INSERT INTO persona_risks (persona_id, risk_type, description, severity, source, confidence)
              VALUES ($1, $2, $3, $4, $5, $6)
-             RETURNING id::text, person_id, risk_type, description, severity, source, confidence::float8 AS confidence,
+             RETURNING id::text, persona_id, risk_type, description, severity, source, confidence::float8 AS confidence,
                        created_at, resolved_at, resolution",
         )
         .bind(&observation.affected_entity_id)
@@ -56,7 +56,7 @@ impl PersonaRiskStore {
         .fetch_one(&mut *transaction)
         .await?;
         let risk = row_to_risk(row)?;
-        sync_persona_health_status_in_transaction(&mut transaction, person_id).await?;
+        sync_persona_health_status_in_transaction(&mut transaction, persona_id).await?;
         transaction.commit().await?;
         Ok(risk)
     }
@@ -67,15 +67,15 @@ impl PersonaRiskStore {
             "UPDATE persona_risks
              SET resolved_at = now(), resolution = $2
              WHERE id::text = $1
-             RETURNING person_id",
+             RETURNING persona_id",
         )
         .bind(id)
         .bind(resolution)
         .fetch_optional(&mut *transaction)
         .await?;
         if let Some(row) = row {
-            let person_id: String = row.try_get("person_id")?;
-            sync_persona_health_status_in_transaction(&mut transaction, &person_id).await?;
+            let persona_id: String = row.try_get("persona_id")?;
+            sync_persona_health_status_in_transaction(&mut transaction, &persona_id).await?;
         }
         transaction.commit().await?;
         Ok(())

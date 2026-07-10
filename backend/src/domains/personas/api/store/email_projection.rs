@@ -103,12 +103,12 @@ impl PersonaProjectionStore {
         email_address: &str,
     ) -> Result<(Persona, String), PersonaProjectionError> {
         let normalized_email = normalize_email_address(email_address)?;
-        let person_id = persona_id_for_email(&normalized_email);
+        let persona_id = persona_id_for_email(&normalized_email);
 
         let row = sqlx::query(
             r#"
             INSERT INTO personas (
-                person_id,
+                persona_id,
                 display_name,
                 email_address
             )
@@ -118,7 +118,7 @@ impl PersonaProjectionStore {
                 display_name = EXCLUDED.display_name,
                 updated_at = now()
             RETURNING
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 person_type,
@@ -128,7 +128,7 @@ impl PersonaProjectionStore {
                 updated_at
             "#,
         )
-        .bind(&person_id)
+        .bind(&persona_id)
         .bind(&normalized_email)
         .bind(&normalized_email)
         .fetch_one(&mut **transaction)
@@ -137,11 +137,11 @@ impl PersonaProjectionStore {
         let person = row_to_persona(row)?;
         let identity_row = sqlx::query(
             r#"
-            INSERT INTO persona_identities (person_id, identity_type, identity_value, source, confidence, status)
+            INSERT INTO persona_identities (persona_id, identity_type, identity_value, source, confidence, status)
             VALUES ($1, 'email', $2, 'email_sync', 1.0, 'active')
             ON CONFLICT (identity_type, identity_value) WHERE status = 'active'
             DO UPDATE SET
-                person_id = EXCLUDED.person_id,
+                persona_id = EXCLUDED.persona_id,
                 source = EXCLUDED.source,
                 confidence = EXCLUDED.confidence,
                 last_verified_at = now(),
@@ -149,7 +149,7 @@ impl PersonaProjectionStore {
             RETURNING id::text
             "#,
         )
-        .bind(&person.person_id)
+        .bind(&person.persona_id)
         .bind(&normalized_email)
         .fetch_one(&mut **transaction)
         .await?;
@@ -171,12 +171,12 @@ impl PersonaProjectionStore {
             .transpose()?
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| fallback_display_name.to_owned());
-        let person_id = persona_id_for_email(&normalized_email);
+        let persona_id = persona_id_for_email(&normalized_email);
 
         let row = sqlx::query(
             r#"
             INSERT INTO personas (
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 is_address_book
@@ -193,7 +193,7 @@ impl PersonaProjectionStore {
                 is_address_book = true,
                 updated_at = now()
             RETURNING
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 person_type,
@@ -203,7 +203,7 @@ impl PersonaProjectionStore {
                 updated_at
             "#,
         )
-        .bind(&person_id)
+        .bind(&persona_id)
         .bind(&display_name)
         .bind(&normalized_email)
         .fetch_one(&mut **transaction)
@@ -212,11 +212,11 @@ impl PersonaProjectionStore {
         let person = row_to_persona(row)?;
         let identity_row = sqlx::query(
             r#"
-            INSERT INTO persona_identities (person_id, identity_type, identity_value, source, confidence, status)
+            INSERT INTO persona_identities (persona_id, identity_type, identity_value, source, confidence, status)
             VALUES ($1, 'email', $2, $3, 1.0, 'active')
             ON CONFLICT (identity_type, identity_value) WHERE status = 'active'
             DO UPDATE SET
-                person_id = EXCLUDED.person_id,
+                persona_id = EXCLUDED.persona_id,
                 source = EXCLUDED.source,
                 confidence = EXCLUDED.confidence,
                 last_verified_at = now(),
@@ -224,7 +224,7 @@ impl PersonaProjectionStore {
             RETURNING id::text
             "#,
         )
-        .bind(&person.person_id)
+        .bind(&person.persona_id)
         .bind(&normalized_email)
         .bind(identity_source)
         .fetch_one(&mut **transaction)
@@ -266,16 +266,16 @@ impl PersonaProjectionStore {
                         SELECT 1
                         FROM personas existing
                         WHERE existing.email_address = $3
-                          AND existing.person_id <> personas.person_id
+                          AND existing.persona_id <> personas.persona_id
                      )
                     THEN $3
                     ELSE personas.email_address
                 END,
                 is_address_book = true,
                 updated_at = now()
-            WHERE person_id = $1
+            WHERE persona_id = $1
             RETURNING
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 person_type,
@@ -295,7 +295,7 @@ impl PersonaProjectionStore {
         let person = row_to_persona(row)?;
         sqlx::query(
             r#"
-            INSERT INTO persona_identities (person_id, identity_type, identity_value, source, confidence, status)
+            INSERT INTO persona_identities (persona_id, identity_type, identity_value, source, confidence, status)
             VALUES ($1, 'email', $2, 'address_book_sync', 1.0, 'active')
             ON CONFLICT (identity_type, identity_value) WHERE status = 'active'
             DO UPDATE SET
@@ -305,7 +305,7 @@ impl PersonaProjectionStore {
                 updated_at = now()
             "#,
         )
-        .bind(&person.person_id)
+        .bind(&person.persona_id)
         .bind(&normalized_email)
         .execute(&mut **transaction)
         .await?;
@@ -348,13 +348,13 @@ impl PersonaProjectionStore {
         let row = sqlx::query(
             r#"
             INSERT INTO personas (
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 is_address_book
             )
             VALUES ($1, $2, NULL, $3)
-            ON CONFLICT (person_id)
+            ON CONFLICT (persona_id)
             DO UPDATE SET
                 display_name = CASE
                     WHEN trim(personas.display_name) = ''
@@ -364,7 +364,7 @@ impl PersonaProjectionStore {
                 is_address_book = personas.is_address_book OR EXCLUDED.is_address_book,
                 updated_at = now()
             RETURNING
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 person_type,
@@ -395,7 +395,7 @@ impl PersonaProjectionStore {
             transaction,
             observation_id,
             "persona",
-            person.person_id.clone(),
+            person.persona_id.clone(),
             Some(relationship_kind),
             Some(serde_json::json!({
                 "projection": "persona",
@@ -412,7 +412,7 @@ impl PersonaProjectionStore {
             Some(relationship_kind),
             Some(serde_json::json!({
                 "projection": "identity",
-                "persona_id": person.person_id,
+                "persona_id": person.persona_id,
                 "identity_type": "email",
                 "identity_value": identity_value,
             })),
@@ -431,7 +431,7 @@ impl PersonaProjectionStore {
             transaction,
             observation_id,
             "persona",
-            person.person_id.clone(),
+            person.persona_id.clone(),
             Some(relationship_kind),
             Some(serde_json::json!({
                 "projection": "persona",

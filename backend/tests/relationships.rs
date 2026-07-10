@@ -37,8 +37,8 @@ async fn relationship_store_upserts_persona_relationship_with_evidence_against_p
         .expect("target persona");
 
     let relationship = NewRelationship::between_personas(
-        &source.person_id,
-        &target.person_id,
+        &source.persona_id,
+        &target.persona_id,
         "collaborates_with",
         0.82,
         0.64,
@@ -71,9 +71,9 @@ async fn relationship_store_upserts_persona_relationship_with_evidence_against_p
 
     assert_eq!(first.relationship_id, second.relationship_id);
     assert_eq!(first.source_entity_kind, RelationshipEntityKind::Persona);
-    assert_eq!(first.source_entity_id, source.person_id);
+    assert_eq!(first.source_entity_id, source.persona_id);
     assert_eq!(first.target_entity_kind, RelationshipEntityKind::Persona);
-    assert_eq!(first.target_entity_id, target.person_id);
+    assert_eq!(first.target_entity_id, target.persona_id);
     assert_eq!(first.relationship_type, "collaborates_with");
     assert_eq!(first.trust_score, 0.82);
     assert_eq!(first.strength_score, 0.64);
@@ -101,11 +101,11 @@ async fn relationship_store_upserts_persona_relationship_with_evidence_against_p
     assert_eq!(metadata, json!({"channel": "email", "revision": 2}));
 
     let source_relationships = relationship_store
-        .list_for_entity(RelationshipEntityKind::Persona, &source.person_id, 10)
+        .list_for_entity(RelationshipEntityKind::Persona, &source.persona_id, 10)
         .await
         .expect("source relationships");
     let target_relationships = relationship_store
-        .list_for_entity(RelationshipEntityKind::Persona, &target.person_id, 10)
+        .list_for_entity(RelationshipEntityKind::Persona, &target.persona_id, 10)
         .await
         .expect("target relationships");
 
@@ -139,8 +139,8 @@ async fn relationship_store_projects_persona_relationship_into_graph_against_pos
         .expect("target persona");
 
     let relationship = NewRelationship::between_personas(
-        &source.person_id,
-        &target.person_id,
+        &source.persona_id,
+        &target.persona_id,
         "knows",
         0.77,
         0.58,
@@ -169,8 +169,8 @@ async fn relationship_store_projects_persona_relationship_into_graph_against_pos
           AND edge.valid_to IS NULL
         "#,
     )
-    .bind(node_id(GraphNodeKind::Persona, &source.person_id))
-    .bind(node_id(GraphNodeKind::Persona, &target.person_id))
+    .bind(node_id(GraphNodeKind::Persona, &source.persona_id))
+    .bind(node_id(GraphNodeKind::Persona, &target.persona_id))
     .fetch_one(&pool)
     .await
     .expect("relationship graph edge");
@@ -442,7 +442,7 @@ async fn organization_persona_link_materializes_member_of_relationship_against_p
     let link = persona_link_service
         .link_persona_manual(
             &organization.organization_id,
-            &person.person_id,
+            &person.persona_id,
             Some("advisor"),
             Some("strategy"),
             "manual",
@@ -451,14 +451,14 @@ async fn organization_persona_link_materializes_member_of_relationship_against_p
         .expect("organization-person link");
 
     let relationships = relationship_store
-        .list_for_entity(RelationshipEntityKind::Persona, &person.person_id, 20)
+        .list_for_entity(RelationshipEntityKind::Persona, &person.persona_id, 20)
         .await
         .expect("persona relationships");
     let relationship = relationships
         .iter()
         .find(|item| {
             item.source_entity_kind == RelationshipEntityKind::Persona
-                && item.source_entity_id == person.person_id
+                && item.source_entity_id == person.persona_id
                 && item.target_entity_kind == RelationshipEntityKind::Organization
                 && item.target_entity_id == organization.organization_id
                 && item.relationship_type == "member_of"
@@ -506,7 +506,7 @@ async fn organization_persona_link_materializes_member_of_relationship_against_p
         metadata["organization_id"],
         json!(organization.organization_id)
     );
-    assert_eq!(metadata["persona_id"], json!(person.person_id));
+    assert_eq!(metadata["persona_id"], json!(person.persona_id));
     assert!(metadata.get("person_id").is_none());
 }
 
@@ -652,8 +652,8 @@ async fn relationship_store_materializes_support_link_for_observation_evidence_a
     let stored = store
         .upsert_with_evidence(
             &NewRelationship::between_personas(
-                &source.person_id,
-                &target.person_id,
+                &source.persona_id,
+                &target.persona_id,
                 "collaborates_with",
                 0.73,
                 0.61,

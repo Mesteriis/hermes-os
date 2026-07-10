@@ -32,9 +32,9 @@ async fn zoom_participant_identity_candidates_flow_into_review_inbox() {
         .await
         .expect("upsert existing person");
     let display_name = format!("Zoom Person {suffix}");
-    sqlx::query("UPDATE personas SET display_name = $1 WHERE person_id = $2")
+    sqlx::query("UPDATE personas SET display_name = $1 WHERE persona_id = $2")
         .bind(&display_name)
-        .bind(&matched_person.person_id)
+        .bind(&matched_person.persona_id)
         .execute(&pool)
         .await
         .expect("seed display name");
@@ -115,7 +115,7 @@ async fn zoom_participant_identity_candidates_flow_into_review_inbox() {
 
     let expected_candidate_id = format!(
         "identity_candidate:v1:attach_email_address:{}:{}:{}",
-        matched_person.person_id,
+        matched_person.persona_id,
         participant_email.len(),
         participant_email
     );
@@ -124,8 +124,8 @@ async fn zoom_participant_identity_candidates_flow_into_review_inbox() {
         SELECT
             identity_candidate_id,
             candidate_kind,
-            left_person_id,
-            right_person_id,
+            left_persona_id,
+            right_persona_id,
             email_address,
             review_state,
             evidence_summary
@@ -145,13 +145,13 @@ async fn zoom_participant_identity_candidates_flow_into_review_inbox() {
     );
     assert_eq!(
         candidate
-            .try_get::<String, _>("left_person_id")
+            .try_get::<String, _>("left_persona_id")
             .expect("left person id"),
-        matched_person.person_id
+        matched_person.persona_id
     );
     assert_eq!(
         candidate
-            .try_get::<Option<String>, _>("right_person_id")
+            .try_get::<Option<String>, _>("right_persona_id")
             .expect("right person id"),
         None
     );
@@ -212,6 +212,9 @@ async fn zoom_participant_identity_candidates_flow_into_review_inbox() {
     );
     let metadata: serde_json::Value = review_item.try_get("metadata").expect("metadata");
     assert_eq!(metadata["candidate_kind"], json!("attach_email_address"));
-    assert_eq!(metadata["left_person_id"], json!(matched_person.person_id));
+    assert_eq!(
+        metadata["left_persona_id"],
+        json!(matched_person.persona_id)
+    );
     assert_eq!(metadata["email_address"], json!(participant_email));
 }

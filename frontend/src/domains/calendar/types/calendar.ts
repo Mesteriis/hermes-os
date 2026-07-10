@@ -63,7 +63,7 @@ export interface CalendarEventsResponse {
 export interface EventParticipant {
   id: string
   event_id: string
-  person_id: string | null
+  persona_id: string | null
   email: string
   display_name: string | null
   role: string

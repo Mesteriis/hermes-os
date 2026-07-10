@@ -87,7 +87,7 @@ impl PersonaCommandService {
     pub async fn assign_identity_trace_manual(
         &self,
         identity_id: &str,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<PersonaIdentity, PersonaCommandServiceError> {
         let observation = self
             .capture_manual_at(
@@ -95,7 +95,7 @@ impl PersonaCommandService {
                 Utc::now(),
                 json!({
                     "identity_id": identity_id,
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "action": "attach_identity_trace",
                 }),
                 format!("persona-identity://trace/{identity_id}/assignment"),
@@ -107,13 +107,17 @@ impl PersonaCommandService {
             .await?;
 
         Ok(PersonaIdentityStore::new(self.pool.clone())
-            .attach_to_persona_with_observation(identity_id, person_id, &observation.observation_id)
+            .attach_to_persona_with_observation(
+                identity_id,
+                persona_id,
+                &observation.observation_id,
+            )
             .await?)
     }
 
     pub async fn upsert_persona_identity_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
         identity_type: &str,
         identity_value: &str,
         requested_source: &str,
@@ -123,12 +127,12 @@ impl PersonaCommandService {
                 "PERSONA_RECORD_MUTATION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "identity_type": identity_type,
                     "identity_value": identity_value,
                     "source": requested_source,
                 }),
-                format!("persona://{person_id}/identities/{identity_type}"),
+                format!("persona://{persona_id}/identities/{identity_type}"),
                 json!({
                     "captured_by": "persona_service.upsert_persona_identity_manual",
                     "operation": "upsert_persona_identity_manual",
@@ -139,7 +143,7 @@ impl PersonaCommandService {
 
         Ok(PersonaIdentityStore::new(self.pool.clone())
             .upsert_with_observation(
-                person_id,
+                persona_id,
                 identity_type,
                 identity_value,
                 &manual_record_source(requested_source, &observation.observation_id),
@@ -150,7 +154,7 @@ impl PersonaCommandService {
 
     pub async fn delete_persona_identity_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
         identity_id: &str,
     ) -> Result<bool, PersonaCommandServiceError> {
         let observation = self
@@ -158,11 +162,11 @@ impl PersonaCommandService {
                 "PERSONA_RECORD_MUTATION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "identity_id": identity_id,
                     "action": "delete_identity",
                 }),
-                format!("persona://{person_id}/identities/{identity_id}/delete"),
+                format!("persona://{persona_id}/identities/{identity_id}/delete"),
                 json!({
                     "captured_by": "persona_service.delete_persona_identity_manual",
                     "operation": "delete_persona_identity_manual",
@@ -171,13 +175,13 @@ impl PersonaCommandService {
             .await?;
 
         Ok(PersonaIdentityStore::new(self.pool.clone())
-            .delete_with_observation(person_id, identity_id, &observation.observation_id)
+            .delete_with_observation(persona_id, identity_id, &observation.observation_id)
             .await?)
     }
 
     pub async fn assign_role_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
         role: &str,
     ) -> Result<PersonaRole, PersonaCommandServiceError> {
         let observation = self
@@ -185,11 +189,11 @@ impl PersonaCommandService {
                 "PERSONA_RECORD_MUTATION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "role": role,
                     "action": "assign_role",
                 }),
-                format!("persona://{person_id}/roles/{role}"),
+                format!("persona://{persona_id}/roles/{role}"),
                 json!({
                     "captured_by": "persona_service.assign_role_manual",
                     "operation": "assign_role_manual",
@@ -198,13 +202,13 @@ impl PersonaCommandService {
             .await?;
 
         Ok(PersonaRoleStore::new(self.pool.clone())
-            .assign_with_observation(person_id, role, None, Some(&observation.observation_id))
+            .assign_with_observation(persona_id, role, None, Some(&observation.observation_id))
             .await?)
     }
 
     pub async fn remove_role_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
         role: &str,
     ) -> Result<bool, PersonaCommandServiceError> {
         let observation = self
@@ -212,11 +216,11 @@ impl PersonaCommandService {
                 "PERSONA_RECORD_MUTATION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "role": role,
                     "action": "remove_role",
                 }),
-                format!("persona://{person_id}/roles/{role}/delete"),
+                format!("persona://{persona_id}/roles/{role}/delete"),
                 json!({
                     "captured_by": "persona_service.remove_role_manual",
                     "operation": "remove_role_manual",
@@ -225,7 +229,7 @@ impl PersonaCommandService {
             .await?;
 
         Ok(PersonaRoleStore::new(self.pool.clone())
-            .remove_with_observation(person_id, role, Some(&observation.observation_id))
+            .remove_with_observation(persona_id, role, Some(&observation.observation_id))
             .await?)
     }
 
@@ -238,8 +242,8 @@ impl PersonaCommandService {
                 "PERSONA_RECORD_MUTATION",
                 Utc::now(),
                 json!({
-                    "persona_id": persona.person_id,
-                    "interaction_context_id": persona.persona_id,
+                    "persona_id": persona.source_persona_id,
+                    "interaction_context_id": persona.interaction_context_id,
                     "name": persona.name,
                     "context": persona.context,
                     "default_tone": persona.default_tone,
@@ -249,7 +253,7 @@ impl PersonaCommandService {
                 }),
                 format!(
                     "persona://{}/interaction-contexts/{}",
-                    persona.person_id, persona.persona_id
+                    persona.source_persona_id, persona.interaction_context_id
                 ),
                 json!({
                     "captured_by": "persona_service.upsert_persona_interaction_context_manual",
@@ -269,19 +273,21 @@ impl PersonaCommandService {
 
     pub async fn delete_persona_interaction_context_manual(
         &self,
-        person_id: &str,
-        persona_id: &str,
+        source_persona_id: &str,
+        interaction_context_id: &str,
     ) -> Result<bool, PersonaCommandServiceError> {
         let observation = self
             .capture_manual_at(
                 "PERSONA_RECORD_MUTATION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
-                    "interaction_context_id": persona_id,
+                    "persona_id": source_persona_id,
+                    "interaction_context_id": interaction_context_id,
                     "action": "delete_interaction_context",
                 }),
-                format!("persona://{person_id}/interaction-contexts/{persona_id}/delete"),
+                format!(
+                    "persona://{source_persona_id}/interaction-contexts/{interaction_context_id}/delete"
+                ),
                 json!({
                     "captured_by": "persona_service.delete_persona_interaction_context_manual",
                     "operation": "delete_persona_interaction_context_manual",
@@ -291,8 +297,8 @@ impl PersonaCommandService {
 
         Ok(PersonaInteractionContextStore::new(self.pool.clone())
             .delete_with_observation(
-                person_id,
-                persona_id,
+                source_persona_id,
+                interaction_context_id,
                 Some(&format!("observation:{}", observation.observation_id)),
                 &observation.observation_id,
             )
@@ -301,7 +307,7 @@ impl PersonaCommandService {
 
     pub async fn upsert_persona_fact_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
         fact_type: &str,
         value: &str,
         requested_source: &str,
@@ -312,13 +318,13 @@ impl PersonaCommandService {
                 "PERSONA_RECORD_MUTATION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "fact_type": fact_type,
                     "value": value,
                     "source": requested_source,
                     "confidence": confidence,
                 }),
-                format!("persona://{person_id}/facts/{fact_type}"),
+                format!("persona://{persona_id}/facts/{fact_type}"),
                 json!({
                     "captured_by": "persona_service.upsert_persona_fact_manual",
                     "operation": "upsert_persona_fact_manual",
@@ -329,7 +335,7 @@ impl PersonaCommandService {
 
         Ok(PersonaFactStore::new(self.pool.clone())
             .upsert_with_observation(
-                person_id,
+                persona_id,
                 fact_type,
                 value,
                 &format!("observation:{}", observation.observation_id),
@@ -341,7 +347,7 @@ impl PersonaCommandService {
 
     pub async fn upsert_persona_memory_card_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
         title: &str,
         description: &str,
         requested_source: &str,
@@ -352,13 +358,13 @@ impl PersonaCommandService {
                 "PERSONA_MEMORY_CARD",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "title": title,
                     "description": description,
                     "source": requested_source,
                     "importance": importance,
                 }),
-                format!("persona://{person_id}/memory-cards/{title}"),
+                format!("persona://{persona_id}/memory-cards/{title}"),
                 json!({
                     "captured_by": "persona_service.upsert_persona_memory_card_manual",
                     "operation": "upsert_persona_memory_card_manual",
@@ -369,7 +375,7 @@ impl PersonaCommandService {
 
         Ok(PersonaMemoryCardStore::new(self.pool.clone())
             .upsert_with_observation(
-                person_id,
+                persona_id,
                 title,
                 description,
                 &format!("observation:{}", observation.observation_id),
@@ -381,7 +387,7 @@ impl PersonaCommandService {
 
     pub async fn upsert_persona_preference_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
         preference_type: &str,
         value: &str,
         requested_source: &str,
@@ -391,12 +397,12 @@ impl PersonaCommandService {
                 "PERSONA_RECORD_MUTATION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "preference_type": preference_type,
                     "value": value,
                     "source": requested_source,
                 }),
-                format!("persona://{person_id}/preferences/{preference_type}"),
+                format!("persona://{persona_id}/preferences/{preference_type}"),
                 json!({
                     "captured_by": "persona_service.upsert_persona_preference_manual",
                     "operation": "upsert_persona_preference_manual",
@@ -407,7 +413,7 @@ impl PersonaCommandService {
 
         Ok(PersonaPreferenceStore::new(self.pool.clone())
             .upsert_with_observation(
-                person_id,
+                persona_id,
                 preference_type,
                 value,
                 &format!("observation:{}", observation.observation_id),
@@ -425,7 +431,7 @@ impl PersonaCommandService {
                 "PERSONA_RECORD_MUTATION",
                 event.occurred_at,
                 json!({
-                    "persona_id": event.person_id,
+                    "persona_id": event.persona_id,
                     "event_type": event.event_type,
                     "title": event.title,
                     "description": event.description,
@@ -434,7 +440,7 @@ impl PersonaCommandService {
                     "related_entity_id": event.related_entity_id,
                     "related_entity_kind": event.related_entity_kind,
                 }),
-                format!("persona://{}/timeline", event.person_id),
+                format!("persona://{}/timeline", event.persona_id),
                 json!({
                     "captured_by": "persona_service.add_relationship_event_manual",
                     "operation": "add_relationship_event_manual",
@@ -446,7 +452,7 @@ impl PersonaCommandService {
         Ok(RelationshipEventStore::new(self.pool.clone())
             .add_with_observation(
                 &NewRelationshipEvent {
-                    person_id: event.person_id.clone(),
+                    persona_id: event.persona_id.clone(),
                     event_type: event.event_type.clone(),
                     title: event.title.clone(),
                     description: event.description.clone(),
@@ -462,7 +468,7 @@ impl PersonaCommandService {
 
     pub async fn apply_enrichment_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
         result_id: &str,
     ) -> Result<(), PersonaCommandServiceError> {
         let observation = self
@@ -470,11 +476,11 @@ impl PersonaCommandService {
                 "REVIEW_TRANSITION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "result_id": result_id,
                     "operation": "enrichment_apply",
                 }),
-                format!("persona://{person_id}/enrichment/{result_id}/apply"),
+                format!("persona://{persona_id}/enrichment/{result_id}/apply"),
                 json!({
                     "captured_by": "persona_service.apply_enrichment_manual",
                     "operation": "apply_enrichment_manual",
@@ -497,7 +503,7 @@ impl PersonaCommandService {
 
     pub async fn reject_enrichment_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
         result_id: &str,
     ) -> Result<(), PersonaCommandServiceError> {
         let observation = self
@@ -505,11 +511,11 @@ impl PersonaCommandService {
                 "REVIEW_TRANSITION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "result_id": result_id,
                     "operation": "enrichment_reject",
                 }),
-                format!("persona://{person_id}/enrichment/{result_id}/reject"),
+                format!("persona://{persona_id}/enrichment/{result_id}/reject"),
                 json!({
                     "captured_by": "persona_service.reject_enrichment_manual",
                     "operation": "reject_enrichment_manual",
@@ -532,17 +538,17 @@ impl PersonaCommandService {
 
     pub async fn toggle_watchlist_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<bool, PersonaCommandServiceError> {
         let observation = self
             .capture_manual_at(
                 "PERSONA_MUTATION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "action": "toggle_watchlist",
                 }),
-                format!("persona://{person_id}/watchlist"),
+                format!("persona://{persona_id}/watchlist"),
                 json!({
                     "captured_by": "persona_service.toggle_watchlist_manual",
                     "operation": "toggle_watchlist_manual",
@@ -552,7 +558,7 @@ impl PersonaCommandService {
 
         Ok(PersonaHealthStore::new(self.pool.clone())
             .toggle_watchlist_with_observation(
-                person_id,
+                persona_id,
                 &format!("observation:{}", observation.observation_id),
                 &observation.observation_id,
             )
@@ -561,7 +567,7 @@ impl PersonaCommandService {
 
     pub async fn fingerprint_persona_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
         person_messages: &[PersonaMessage],
     ) -> Result<Value, PersonaCommandServiceError> {
         let mut fingerprint = PersonaIntelligenceService::heuristic_fingerprint(person_messages);
@@ -574,7 +580,7 @@ impl PersonaCommandService {
                 "PERSONA_MUTATION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "action": "fingerprint_enrichment",
                     "detected_language": fingerprint.detected_language,
                     "typical_tone": fingerprint.typical_tone,
@@ -582,7 +588,7 @@ impl PersonaCommandService {
                     "avg_response_hours": fingerprint.avg_response_hours,
                     "writing_style": fingerprint.writing_style,
                 }),
-                format!("persona://{person_id}/fingerprint"),
+                format!("persona://{persona_id}/fingerprint"),
                 json!({
                     "captured_by": "persona_service.fingerprint_persona_manual",
                     "operation": "fingerprint_persona_manual",
@@ -591,7 +597,7 @@ impl PersonaCommandService {
             .await?;
 
         PersonaEnrichmentStore::new(self.pool.clone())
-            .enrich_persona_with_observation(person_id, &fingerprint, &observation.observation_id)
+            .enrich_persona_with_observation(persona_id, &fingerprint, &observation.observation_id)
             .await?;
 
         Ok(json!({
@@ -602,17 +608,17 @@ impl PersonaCommandService {
 
     pub async fn toggle_favorite_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<bool, PersonaCommandServiceError> {
         let observation = self
             .capture_manual_at(
                 "PERSONA_MUTATION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "action": "toggle_favorite",
                 }),
-                format!("persona://{person_id}/favorite"),
+                format!("persona://{persona_id}/favorite"),
                 json!({
                     "captured_by": "persona_service.toggle_favorite_manual",
                     "operation": "toggle_favorite_manual",
@@ -622,7 +628,7 @@ impl PersonaCommandService {
 
         Ok(PersonaEnrichmentStore::new(self.pool.clone())
             .toggle_favorite_with_observation(
-                person_id,
+                persona_id,
                 &format!("observation:{}", observation.observation_id),
                 &observation.observation_id,
             )
@@ -631,7 +637,7 @@ impl PersonaCommandService {
 
     pub async fn set_notes_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
         notes: &str,
     ) -> Result<(), PersonaCommandServiceError> {
         let observation = self
@@ -639,11 +645,11 @@ impl PersonaCommandService {
                 "PERSONA_MEMORY_CARD",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "title": "Persona notes",
                     "body": notes,
                 }),
-                format!("persona://{person_id}/notes"),
+                format!("persona://{persona_id}/notes"),
                 json!({
                     "captured_by": "persona_service.set_notes_manual",
                     "operation": "set_notes_manual",
@@ -653,7 +659,7 @@ impl PersonaCommandService {
 
         PersonaEnrichmentStore::new(self.pool.clone())
             .set_notes_with_observation(
-                person_id,
+                persona_id,
                 notes,
                 &format!("observation:{}", observation.observation_id),
                 &observation.observation_id,
@@ -664,17 +670,17 @@ impl PersonaCommandService {
 
     pub async fn set_owner_persona_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<Persona, PersonaCommandServiceError> {
         let observation = self
             .capture_manual_at(
                 "PERSONA_MUTATION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "operation": "set_owner_persona",
                 }),
-                format!("persona://{person_id}/owner"),
+                format!("persona://{persona_id}/owner"),
                 json!({
                     "captured_by": "persona_service.set_owner_persona_manual",
                     "operation": "set_owner_persona_manual",
@@ -683,7 +689,7 @@ impl PersonaCommandService {
             .await?;
 
         Ok(PersonaProjectionStore::new(self.pool.clone())
-            .set_owner_persona_with_observation(person_id, &observation.observation_id)
+            .set_owner_persona_with_observation(persona_id, &observation.observation_id)
             .await?)
     }
 
@@ -823,7 +829,7 @@ impl PersonaCommandService {
         for email_address in command.additional_emails {
             identity_store
                 .upsert_with_observation(
-                    &persona.person_id,
+                    &persona.persona_id,
                     "email",
                     &email_address,
                     "address_book_sync",
@@ -834,7 +840,7 @@ impl PersonaCommandService {
         for phone_number in phone_identities {
             identity_store
                 .upsert_with_observation(
-                    &persona.person_id,
+                    &persona.persona_id,
                     "phone",
                     &phone_number,
                     "address_book_sync",
@@ -886,7 +892,7 @@ impl PersonaCommandService {
 
     pub async fn review_dossier_manual(
         &self,
-        person_id: &str,
+        persona_id: &str,
         review_state: DossierReviewState,
     ) -> Result<DossierSnapshot, PersonaCommandServiceError> {
         let observation = self
@@ -894,11 +900,11 @@ impl PersonaCommandService {
                 "REVIEW_TRANSITION",
                 Utc::now(),
                 json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "review_state": review_state.as_str(),
                     "operation": "dossier_review",
                 }),
-                format!("persona://{person_id}/dossier/review"),
+                format!("persona://{persona_id}/dossier/review"),
                 json!({
                     "captured_by": "persona_service.review_dossier_manual",
                     "operation": "review_dossier_manual",
@@ -908,7 +914,7 @@ impl PersonaCommandService {
 
         Ok(PersonaInvestigator::new(self.pool.clone())
             .review_dossier_snapshot_with_observation(
-                person_id,
+                persona_id,
                 review_state,
                 Some(&observation.observation_id),
                 Some(json!({
@@ -978,11 +984,11 @@ async fn first_existing_identity_person_id(
     identity_values: &[String],
 ) -> Result<Option<String>, PersonaCommandServiceError> {
     for identity_value in identity_values {
-        if let Some(person_id) = identity_store
+        if let Some(persona_id) = identity_store
             .find_active_persona_id(identity_type, identity_value)
             .await?
         {
-            return Ok(Some(person_id));
+            return Ok(Some(persona_id));
         }
     }
     Ok(None)
@@ -995,7 +1001,7 @@ async fn existing_provider_address_book_link_person_id(
 ) -> Result<Option<String>, PersonaCommandServiceError> {
     let row = sqlx::query_scalar(
         r#"
-        SELECT person_id
+        SELECT persona_id
         FROM communication_provider_address_book_links
         WHERE account_id = $1
           AND provider_address_book_entry_id = $2

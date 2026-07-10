@@ -43,7 +43,7 @@ async fn personas_routes_return_persona_native_schema_against_postgres() {
         .await
         .expect("upsert owner persona");
     store
-        .set_owner_persona(&owner.person_id)
+        .set_owner_persona(&owner.persona_id)
         .await
         .expect("set owner persona");
 
@@ -63,7 +63,7 @@ async fn personas_routes_return_persona_native_schema_against_postgres() {
     assert!(
         items
             .iter()
-            .any(|item| item["persona_id"] == owner.person_id && item["is_self"] == true),
+            .any(|item| item["persona_id"] == owner.persona_id && item["is_self"] == true),
         "personas list should include owner Persona: {body}"
     );
 
@@ -71,7 +71,7 @@ async fn personas_routes_return_persona_native_schema_against_postgres() {
         .oneshot(get_request_with_token(
             &format!(
                 "/api/v1/personas/{}",
-                urlencoding_percent_encode(&owner.person_id)
+                urlencoding_percent_encode(&owner.persona_id)
             ),
             LOCAL_API_TOKEN,
         ))
@@ -79,7 +79,7 @@ async fn personas_routes_return_persona_native_schema_against_postgres() {
         .expect("persona detail response");
     assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
-    assert_eq!(body["persona_id"], owner.person_id);
+    assert_eq!(body["persona_id"], owner.persona_id);
     assert_eq!(body["persona_type"], "human");
     assert_eq!(body["is_self"], true);
     assert_eq!(body["identity"]["display_name"], owner.display_name);
@@ -127,7 +127,7 @@ async fn personas_put_updates_compatibility_projection_against_postgres() {
         .await
         .expect("upsert previous owner persona");
     store
-        .set_owner_persona(&previous_owner.person_id)
+        .set_owner_persona(&previous_owner.persona_id)
         .await
         .expect("set previous owner persona");
 
@@ -138,7 +138,7 @@ async fn personas_put_updates_compatibility_projection_against_postgres() {
         .oneshot(put_request_with_token(
             &format!(
                 "/api/v1/personas/{}",
-                urlencoding_percent_encode(&owner.person_id)
+                urlencoding_percent_encode(&owner.persona_id)
             ),
             json!({
                 "identity": {
@@ -152,7 +152,7 @@ async fn personas_put_updates_compatibility_projection_against_postgres() {
         .expect("persona update response");
     assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
-    assert_eq!(body["persona_id"], owner.person_id);
+    assert_eq!(body["persona_id"], owner.persona_id);
     assert_eq!(body["identity"]["display_name"], "Owner Persona");
     assert_eq!(body["is_self"], true);
 
@@ -160,10 +160,10 @@ async fn personas_put_updates_compatibility_projection_against_postgres() {
         r#"
         SELECT display_name, is_self
         FROM personas
-        WHERE person_id = $1
+        WHERE persona_id = $1
         "#,
     )
-    .bind(&owner.person_id)
+    .bind(&owner.persona_id)
     .fetch_one(&pool)
     .await
     .expect("updated persona row");
@@ -187,7 +187,7 @@ async fn personas_put_updates_compatibility_projection_against_postgres() {
          ORDER BY link.created_at DESC
          LIMIT 1",
     )
-    .bind(&owner.person_id)
+    .bind(&owner.persona_id)
     .fetch_one(&pool)
     .await
     .expect("persona update observation link");
@@ -195,8 +195,8 @@ async fn personas_put_updates_compatibility_projection_against_postgres() {
     assert_eq!(persona_update_observation.1, "PERSONA_MUTATION");
 
     let previous_is_self: bool =
-        sqlx::query_scalar("SELECT is_self FROM personas WHERE person_id = $1")
-            .bind(&previous_owner.person_id)
+        sqlx::query_scalar("SELECT is_self FROM personas WHERE persona_id = $1")
+            .bind(&previous_owner.persona_id)
             .fetch_one(&pool)
             .await
             .expect("previous owner row");
@@ -206,7 +206,7 @@ async fn personas_put_updates_compatibility_projection_against_postgres() {
         .oneshot(put_request_with_token(
             &format!(
                 "/api/v1/personas/{}",
-                urlencoding_percent_encode(&owner.person_id)
+                urlencoding_percent_encode(&owner.persona_id)
             ),
             json!({ "is_self": false }),
             LOCAL_API_TOKEN,
@@ -243,7 +243,7 @@ async fn personas_profile_aliases_cover_owner_and_dossier_against_postgres() {
         .clone()
         .oneshot(put_request_with_token(
             "/api/v1/personas/owner",
-            json!({ "persona_id": owner.person_id }),
+            json!({ "persona_id": owner.persona_id }),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -251,7 +251,7 @@ async fn personas_profile_aliases_cover_owner_and_dossier_against_postgres() {
     assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
     assert_eq!(
-        body["owner_persona"]["persona_id"], owner.person_id,
+        body["owner_persona"]["persona_id"], owner.persona_id,
         "unexpected owner update body: {body}"
     );
     assert!(body["owner_persona"].get("person_id").is_none());
@@ -267,14 +267,14 @@ async fn personas_profile_aliases_cover_owner_and_dossier_against_postgres() {
         .expect("persona owner response");
     assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
-    assert_eq!(body["owner_persona"]["persona_id"], owner.person_id);
+    assert_eq!(body["owner_persona"]["persona_id"], owner.persona_id);
     assert!(body["owner_persona"].get("person_id").is_none());
 
     let response = app
         .oneshot(get_request_with_token(
             &format!(
                 "/api/v1/personas/{}/dossier",
-                urlencoding_percent_encode(&owner.person_id)
+                urlencoding_percent_encode(&owner.persona_id)
             ),
             LOCAL_API_TOKEN,
         ))
@@ -282,6 +282,6 @@ async fn personas_profile_aliases_cover_owner_and_dossier_against_postgres() {
         .expect("persona dossier response");
     assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
-    assert_eq!(body["persona_id"], owner.person_id);
+    assert_eq!(body["persona_id"], owner.persona_id);
     assert!(body["dossier_snapshot_id"].as_str().is_some());
 }

@@ -12,8 +12,8 @@ use crate::engines::timeline::{TimelineEngine, TimelineEventDraft};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RelationshipEvent {
     pub id: String,
-    #[serde(rename = "persona_id", alias = "person_id")]
-    pub person_id: String,
+    #[serde(alias = "person_id")]
+    pub persona_id: String,
     pub event_type: String,
     pub title: String,
     pub description: Option<String>,
@@ -38,17 +38,17 @@ impl RelationshipEventStore {
 
     pub async fn timeline(
         &self,
-        person_id: &str,
+        persona_id: &str,
         limit: i64,
     ) -> Result<Vec<RelationshipEvent>, PersonaMemoryError> {
         let limit = TimelineEngine::bounded_entity_limit(limit);
         let rows = sqlx::query(
-            "SELECT id::text, person_id, event_type, title, description, occurred_at, source,
+            "SELECT id::text, persona_id, event_type, title, description, occurred_at, source,
              related_entity_id, related_entity_kind, confidence::float8 AS confidence, metadata, created_at
-             FROM relationship_events WHERE person_id = $1
+             FROM relationship_events WHERE persona_id = $1
              ORDER BY occurred_at DESC LIMIT $2",
         )
-        .bind(person_id)
+        .bind(persona_id)
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
@@ -61,7 +61,7 @@ impl RelationshipEventStore {
     ) -> Result<RelationshipEvent, PersonaMemoryError> {
         TimelineEngine::validate_event(&TimelineEventDraft {
             entity_kind: "persona",
-            entity_id: &event.person_id,
+            entity_id: &event.persona_id,
             event_type: &event.event_type,
             title: &event.title,
             occurred_at: event.occurred_at,
@@ -69,13 +69,13 @@ impl RelationshipEventStore {
         })?;
 
         let row = sqlx::query(
-            "INSERT INTO relationship_events (person_id, event_type, title, description,
+            "INSERT INTO relationship_events (persona_id, event_type, title, description,
              occurred_at, source, related_entity_id, related_entity_kind)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             RETURNING id::text, person_id, event_type, title, description, occurred_at, source,
+             RETURNING id::text, persona_id, event_type, title, description, occurred_at, source,
                        related_entity_id, related_entity_kind, confidence::float8 AS confidence, metadata, created_at",
         )
-        .bind(&event.person_id)
+        .bind(&event.persona_id)
         .bind(&event.event_type)
         .bind(&event.title)
         .bind(&event.description)
@@ -101,7 +101,7 @@ impl RelationshipEventStore {
             event_record.id.clone(),
             None,
             Some(json!({
-                "persona_id": event_record.person_id,
+                "persona_id": event_record.persona_id,
                 "event_type": event_record.event_type,
             })),
         )
@@ -115,14 +115,14 @@ impl RelationshipEventStore {
         observation_id: &str,
         message_id: &str,
         occurred_at: DateTime<Utc>,
-        person_id: &str,
+        persona_id: &str,
         event_type: &str,
         title: &str,
         description: Option<&str>,
     ) -> Result<bool, PersonaMemoryError> {
         TimelineEngine::validate_event(&TimelineEventDraft {
             entity_kind: "persona",
-            entity_id: person_id,
+            entity_id: persona_id,
             event_type,
             title,
             occurred_at,
@@ -133,7 +133,7 @@ impl RelationshipEventStore {
         let row = sqlx::query(
             r#"
             INSERT INTO relationship_events (
-                person_id,
+                persona_id,
                 event_type,
                 title,
                 description,
@@ -156,7 +156,7 @@ impl RelationshipEventStore {
             WHERE NOT EXISTS (
                 SELECT 1
                 FROM relationship_events
-                WHERE person_id = $1
+                WHERE persona_id = $1
                   AND event_type = $2
                   AND related_entity_id = $6
                   AND related_entity_kind = 'communication_message'
@@ -164,7 +164,7 @@ impl RelationshipEventStore {
             RETURNING id::text AS event_id
             "#,
         )
-        .bind(person_id)
+        .bind(persona_id)
         .bind(event_type)
         .bind(title)
         .bind(description)
@@ -185,7 +185,7 @@ impl RelationshipEventStore {
             event_id,
             Some("email_sync_relationship_event"),
             Some(json!({
-                "persona_id": person_id,
+                "persona_id": persona_id,
                 "event_type": event_type,
                 "related_entity_id": message_id,
                 "related_entity_kind": "communication_message",
@@ -200,8 +200,8 @@ impl RelationshipEventStore {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct NewRelationshipEvent {
-    #[serde(rename = "persona_id", alias = "person_id")]
-    pub person_id: String,
+    #[serde(alias = "person_id")]
+    pub persona_id: String,
     pub event_type: String,
     pub title: String,
     pub description: Option<String>,
@@ -214,7 +214,7 @@ pub struct NewRelationshipEvent {
 fn row_to_event(row: PgRow) -> Result<RelationshipEvent, PersonaMemoryError> {
     Ok(RelationshipEvent {
         id: row.try_get("id")?,
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         event_type: row.try_get("event_type")?,
         title: row.try_get("title")?,
         description: row.try_get("description")?,

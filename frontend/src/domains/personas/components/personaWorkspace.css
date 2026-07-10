@@ -590,6 +590,14 @@
 	background: var(--h-color-accent);
 }
 
+.personas-language-progress--primary {
+	--language-progress: 92%;
+}
+
+.personas-language-progress--secondary {
+	--language-progress: 68%;
+}
+
 .personas-dashboard-split {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));

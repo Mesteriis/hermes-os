@@ -193,7 +193,7 @@ impl AddressBookSyncService {
         upsert_provider_address_book_entry_link(
             &self.pool,
             account,
-            &persona.person_id,
+            &persona.persona_id,
             &provider_entry,
         )
         .await?;
@@ -228,7 +228,7 @@ impl AddressBookSyncService {
                 mark_provider_address_book_link_blocked(
                     &self.pool,
                     &account.account_id,
-                    &address_book_entry.person_id,
+                    &address_book_entry.persona_id,
                     "missing_provider_etag",
                 )
                 .await?;
@@ -254,14 +254,14 @@ impl AddressBookSyncService {
             upsert_provider_address_book_entry_link(
                 &self.pool,
                 account,
-                &address_book_entry.person_id,
+                &address_book_entry.persona_id,
                 &provider_entry,
             )
             .await?;
             mark_provider_address_book_link_pushed(
                 &self.pool,
                 &account.account_id,
-                &address_book_entry.person_id,
+                &address_book_entry.persona_id,
             )
             .await?;
             report.local_entries_pushed += 1;
@@ -395,7 +395,7 @@ pub struct AddressBookSyncRunResponse {
 
 #[derive(Clone)]
 struct LocalAddressBookEntry {
-    person_id: String,
+    persona_id: String,
     display_name: String,
     email_address: Option<String>,
     phone_numbers: Vec<String>,
@@ -604,14 +604,14 @@ async fn finish_run(
 async fn upsert_provider_address_book_entry_link(
     pool: &PgPool,
     account: &ProviderAccount,
-    person_id: &str,
+    persona_id: &str,
     provider_entry: &AddressBookProviderEntry,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         INSERT INTO communication_provider_address_book_links (
             account_id,
-            person_id,
+            persona_id,
             provider_address_book_entry_id,
             provider_etag,
             last_provider_seen_at,
@@ -620,7 +620,7 @@ async fn upsert_provider_address_book_entry_link(
         VALUES ($1, $2, $3, $4, now(), $5)
         ON CONFLICT (account_id, provider_address_book_entry_id)
         DO UPDATE SET
-            person_id = EXCLUDED.person_id,
+            persona_id = EXCLUDED.persona_id,
             provider_address_book_entry_id = EXCLUDED.provider_address_book_entry_id,
             provider_etag = EXCLUDED.provider_etag,
             last_provider_seen_at = EXCLUDED.last_provider_seen_at,
@@ -631,7 +631,7 @@ async fn upsert_provider_address_book_entry_link(
         "#,
     )
     .bind(&account.account_id)
-    .bind(person_id)
+    .bind(persona_id)
     .bind(&provider_entry.provider_address_book_entry_id)
     .bind(&provider_entry.etag)
     .bind(serde_json::json!({
@@ -645,17 +645,17 @@ async fn upsert_provider_address_book_entry_link(
 async fn mark_provider_address_book_link_pushed(
     pool: &PgPool,
     account_id: &str,
-    person_id: &str,
+    persona_id: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE communication_provider_address_book_links
         SET last_local_pushed_at = now(), updated_at = now()
-        WHERE account_id = $1 AND person_id = $2
+        WHERE account_id = $1 AND persona_id = $2
         "#,
     )
     .bind(account_id)
-    .bind(person_id)
+    .bind(persona_id)
     .execute(pool)
     .await?;
     Ok(())
@@ -664,7 +664,7 @@ async fn mark_provider_address_book_link_pushed(
 async fn mark_provider_address_book_link_blocked(
     pool: &PgPool,
     account_id: &str,
-    person_id: &str,
+    persona_id: &str,
     reason: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
@@ -674,11 +674,11 @@ async fn mark_provider_address_book_link_blocked(
             sync_state = 'blocked',
             metadata = metadata || jsonb_build_object('blocked_reason', $3),
             updated_at = now()
-        WHERE account_id = $1 AND person_id = $2
+        WHERE account_id = $1 AND persona_id = $2
         "#,
     )
     .bind(account_id)
-    .bind(person_id)
+    .bind(persona_id)
     .bind(reason)
     .execute(pool)
     .await?;
@@ -692,7 +692,7 @@ async fn local_address_book_entries_due_for_provider_sync(
     let rows = sqlx::query(
         r#"
         SELECT
-            p.person_id,
+            p.persona_id,
             p.display_name,
             p.email_address,
             COALESCE(
@@ -704,34 +704,34 @@ async fn local_address_book_entries_due_for_provider_sync(
             link.provider_etag
         FROM personas p
         LEFT JOIN persona_identities identity
-          ON identity.person_id = p.person_id
+          ON identity.persona_id = p.persona_id
          AND identity.identity_type = 'phone'
          AND identity.status = 'active'
         LEFT JOIN communication_provider_address_book_links link
           ON link.account_id = $1
-         AND link.person_id = p.person_id
+         AND link.persona_id = p.persona_id
         WHERE p.is_address_book = true
           AND (
               p.email_address IS NULL
               OR p.email_address NOT LIKE '%@hermes.invalid'
           )
           AND (
-              link.person_id IS NULL
+              link.persona_id IS NULL
               OR p.updated_at > COALESCE(link.last_synced_at, link.created_at)
           )
         GROUP BY
-            p.person_id,
+            p.persona_id,
             p.display_name,
             p.email_address,
             link.provider_address_book_entry_id,
             link.provider_etag,
-            link.person_id,
+            link.persona_id,
             link.last_synced_at,
             link.created_at
         HAVING p.email_address IS NOT NULL
             OR COUNT(identity.identity_value) > 0
             OR length(trim(p.display_name)) > 0
-        ORDER BY p.updated_at DESC, p.person_id
+        ORDER BY p.updated_at DESC, p.persona_id
         LIMIT 100
         "#,
     )
@@ -742,7 +742,7 @@ async fn local_address_book_entries_due_for_provider_sync(
     Ok(rows
         .into_iter()
         .map(|row| LocalAddressBookEntry {
-            person_id: row.try_get("person_id").unwrap_or_default(),
+            persona_id: row.try_get("persona_id").unwrap_or_default(),
             display_name: row.try_get("display_name").unwrap_or_default(),
             email_address: row.try_get("email_address").ok(),
             phone_numbers: row.try_get("phone_numbers").unwrap_or_default(),
@@ -971,12 +971,12 @@ mod tests {
             .unwrap_or_default()
             .unsigned_abs();
         let account_id = format!("account-name-only-outbound-{suffix}");
-        let person_id = format!("persona:test:name-only-outbound:{suffix}");
+        let persona_id = format!("persona:test:name-only-outbound:{suffix}");
 
         sqlx::query(
             r#"
             INSERT INTO personas (
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 is_address_book
@@ -984,7 +984,7 @@ mod tests {
             VALUES ($1, 'Name Only Outbound Persona', NULL, true)
             "#,
         )
-        .bind(&person_id)
+        .bind(&persona_id)
         .execute(&pool)
         .await
         .expect("insert name-only address-book persona");
@@ -995,7 +995,7 @@ mod tests {
 
         let entry = entries
             .iter()
-            .find(|entry| entry.person_id == person_id)
+            .find(|entry| entry.persona_id == persona_id)
             .expect("name-only address-book persona should be selected for provider sync");
         assert_eq!(entry.email_address, None);
         assert_eq!(entry.phone_numbers, Vec::<String>::new());

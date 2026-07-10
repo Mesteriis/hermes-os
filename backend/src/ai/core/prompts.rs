@@ -91,16 +91,16 @@ pub(super) fn citation_for_draft<'a>(
 pub(super) fn scoped_meeting_query(
     topic: &str,
     project_id: Option<&str>,
-    person_id: Option<&str>,
+    persona_id: Option<&str>,
 ) -> String {
     let mut query = topic.to_owned();
     if let Some(project_id) = project_id {
         query.push_str("\nProject: ");
         query.push_str(project_id);
     }
-    if let Some(person_id) = person_id {
+    if let Some(persona_id) = persona_id {
         query.push_str("\nContact: ");
-        query.push_str(person_id);
+        query.push_str(persona_id);
     }
     query
 }

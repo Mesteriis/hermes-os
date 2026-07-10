@@ -14,18 +14,18 @@ pub(super) async fn refresh_split_candidates(
     let rows = sqlx::query(
         r#"
         SELECT
-            merge.left_person_id,
-            merge.right_person_id
+            merge.left_persona_id,
+            merge.right_persona_id
         FROM persona_identity_candidates merge
         WHERE merge.candidate_kind IN ('merge_personas', 'merge_persons')
           AND merge.review_state = 'user_confirmed'
-          AND merge.right_person_id IS NOT NULL
+          AND merge.right_persona_id IS NOT NULL
           AND NOT EXISTS (
               SELECT 1
               FROM persona_identity_candidates split
               WHERE split.candidate_kind IN ('split_persona', 'split_person')
-                AND split.left_person_id = merge.left_person_id
-                AND split.right_person_id = merge.right_person_id
+                AND split.left_persona_id = merge.left_persona_id
+                AND split.right_persona_id = merge.right_persona_id
           )
         ORDER BY merge.updated_at DESC, merge.identity_candidate_id
         LIMIT $1
@@ -37,8 +37,8 @@ pub(super) async fn refresh_split_candidates(
 
     let mut count = 0usize;
     for row in rows {
-        let left = row.try_get::<String, _>("left_person_id")?;
-        let right = row.try_get::<String, _>("right_person_id")?;
+        let left = row.try_get::<String, _>("left_persona_id")?;
+        let right = row.try_get::<String, _>("right_persona_id")?;
         let candidate = split_candidate_payload(left, right);
         upsert_candidate(
             pool,
@@ -64,7 +64,7 @@ pub(super) async fn materialize_split_candidate_for_confirmed_merge_in_transacti
 
     let row = sqlx::query(
         r#"
-        SELECT candidate_kind, left_person_id, right_person_id
+        SELECT candidate_kind, left_persona_id, right_persona_id
         FROM persona_identity_candidates
         WHERE identity_candidate_id = $1
         "#,
@@ -78,8 +78,8 @@ pub(super) async fn materialize_split_candidate_for_confirmed_merge_in_transacti
         return Ok(());
     }
 
-    let left = row.try_get::<String, _>("left_person_id")?;
-    let Some(right) = row.try_get::<Option<String>, _>("right_person_id")? else {
+    let left = row.try_get::<String, _>("left_persona_id")?;
+    let Some(right) = row.try_get::<Option<String>, _>("right_persona_id")? else {
         return Ok(());
     };
     let candidate = split_candidate_payload(left, right);

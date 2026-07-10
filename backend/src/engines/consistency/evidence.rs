@@ -8,7 +8,7 @@ use crate::platform::observations::{ObservationStoreError, link_domain_entity_in
 
 pub(super) struct ActivePersonaFactClaim {
     pub(super) fact_id: String,
-    pub(super) person_id: String,
+    pub(super) persona_id: String,
     pub(super) claim_type: String,
     pub(super) value: String,
     pub(super) confidence: f64,
@@ -20,7 +20,7 @@ pub(super) fn row_to_active_persona_fact_claim(
 ) -> Result<ActivePersonaFactClaim, ConsistencyError> {
     Ok(ActivePersonaFactClaim {
         fact_id: row.try_get("fact_id")?,
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         claim_type: row.try_get("fact_type")?,
         value: row.try_get("value")?,
         confidence: row.try_get("confidence")?,
@@ -51,7 +51,7 @@ pub(super) fn row_to_message_evidence(row: PgRow) -> Result<MessageEvidence, Con
 
 pub(super) struct ChannelMessageEvidence {
     pub(super) message_id: String,
-    pub(super) person_id: String,
+    pub(super) persona_id: String,
     pub(super) text: String,
 }
 
@@ -63,7 +63,7 @@ pub(super) fn row_to_channel_message_evidence(
 
     Ok(ChannelMessageEvidence {
         message_id: row.try_get("message_id")?,
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         text: format!("{subject}\n{body_text}"),
     })
 }
@@ -96,7 +96,7 @@ pub(super) fn row_to_document_evidence(row: PgRow) -> Result<DocumentEvidence, C
 
 pub(super) struct MeetingNoteEvidence {
     pub(super) note_id: String,
-    pub(super) person_id: String,
+    pub(super) persona_id: String,
     pub(super) text: String,
 }
 
@@ -108,14 +108,14 @@ pub(super) fn row_to_meeting_note_evidence(
 
     Ok(MeetingNoteEvidence {
         note_id: row.try_get("note_id")?,
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         text: format!("{title}\n{content}"),
     })
 }
 
 pub(super) struct CallTranscriptEvidence {
     pub(super) transcript_id: String,
-    pub(super) person_id: String,
+    pub(super) persona_id: String,
     pub(super) text: String,
 }
 
@@ -124,7 +124,7 @@ pub(super) fn row_to_call_transcript_evidence(
 ) -> Result<CallTranscriptEvidence, ConsistencyError> {
     Ok(CallTranscriptEvidence {
         transcript_id: row.try_get("transcript_id")?,
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         text: row.try_get("transcript_text")?,
     })
 }

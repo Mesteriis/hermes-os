@@ -46,7 +46,7 @@ impl crate::ai::core::AiPersonaAttributionPort for PersonaProjectionAiPersonaAtt
                     })?;
 
             Ok(crate::ai::core::AiAgentPersonaAttribution {
-                persona_id: persona.person_id,
+                persona_id: persona.persona_id,
                 persona_type: persona.persona_type.as_str(),
                 persona_email: persona.email_address.ok_or_else(|| {
                     crate::ai::core::AiPersonaAttributionError::Store(
@@ -74,7 +74,7 @@ impl crate::ai::core::AiPersonaAttributionPort for PersonaProjectionAiPersonaAtt
                     .map_err(|error| {
                         crate::ai::core::AiPersonaAttributionError::Store(error.to_string())
                     })?
-                    .map(|persona| persona.person_id),
+                    .map(|persona| persona.persona_id),
             )
         })
     }

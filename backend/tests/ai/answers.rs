@@ -22,7 +22,7 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
         .await
         .expect("owner persona candidate");
     let owner = person_store
-        .set_owner_persona(&owner.person_id)
+        .set_owner_persona(&owner.persona_id)
         .await
         .expect("set owner persona");
     let retrieval_token = format!("V3AIAnswer{suffix}");
@@ -75,7 +75,7 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
     );
     assert_eq!(
         stored.owner_persona_id.as_deref(),
-        Some(owner.person_id.as_str())
+        Some(owner.persona_id.as_str())
     );
     assert_eq!(stored.chat_model, "qwen3:4b");
     assert_eq!(stored.embedding_model, "qwen3-embedding:4b");
@@ -155,7 +155,7 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
             .try_get::<Option<String>, _>("owner_persona_id")
             .unwrap()
             .as_deref(),
-        Some(owner.person_id.as_str())
+        Some(owner.persona_id.as_str())
     );
 }
 

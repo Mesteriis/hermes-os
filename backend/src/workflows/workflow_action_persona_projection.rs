@@ -51,7 +51,7 @@ pub(crate) async fn create_persona_projection_in_transaction(
             "workflow_action_projection",
         )
         .await?;
-        return Ok(person.person_id);
+        return Ok(person.persona_id);
     }
 
     let fallback_persona_id = workflow_action_persona_id(command_id);
@@ -69,7 +69,7 @@ pub(crate) async fn create_persona_projection_in_transaction(
         "workflow_action_projection",
     )
     .await?;
-    Ok(person.person_id)
+    Ok(person.persona_id)
 }
 
 fn workflow_action_persona_id(command_id: &str) -> String {

@@ -31,19 +31,19 @@ pub(crate) async fn project_message_knowledge(
         }
 
         for participant in participants {
-            let Some(person_id) = confirmed_person_id_for_participant(pool, &participant).await?
+            let Some(persona_id) = confirmed_person_id_for_participant(pool, &participant).await?
             else {
                 continue;
             };
-            if upsert_message_participant(pool, message, &person_id, &participant).await? {
+            if upsert_message_participant(pool, message, &persona_id, &participant).await? {
                 report.upserted_message_participants += 1;
             }
-            if insert_relationship_event(pool, message, &person_id, &participant).await? {
+            if insert_relationship_event(pool, message, &persona_id, &participant).await? {
                 report.upserted_relationship_events += 1;
             }
 
             let organization_report =
-                project_email_participant_organization(pool, &person_id, message, &participant)
+                project_email_participant_organization(pool, &persona_id, message, &participant)
                     .await?;
             report.upserted_organizations += organization_report.upserted_organizations;
             report.upserted_organization_persona_links +=
@@ -58,14 +58,14 @@ async fn confirmed_person_id_for_participant(
     pool: &PgPool,
     participant: &EmailParticipant,
 ) -> Result<Option<String>, EmailSyncPipelineError> {
-    let person_id = sqlx::query_scalar::<_, String>(
+    let persona_id = sqlx::query_scalar::<_, String>(
         r#"
-        SELECT person_id
+        SELECT persona_id
         FROM persona_identities
         WHERE identity_type = 'email'
           AND lower(identity_value) = $1
           AND status = 'active'
-          AND person_id IS NOT NULL
+          AND persona_id IS NOT NULL
           AND source <> 'email_sync'
         ORDER BY updated_at DESC
         LIMIT 1
@@ -75,5 +75,5 @@ async fn confirmed_person_id_for_participant(
     .fetch_optional(pool)
     .await?;
 
-    Ok(person_id)
+    Ok(persona_id)
 }

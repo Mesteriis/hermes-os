@@ -21,13 +21,13 @@ impl PersonaPromiseStore {
         Self { pool }
     }
 
-    pub async fn list(&self, person_id: &str) -> Result<Vec<PersonaPromise>, PersonaTrustError> {
+    pub async fn list(&self, persona_id: &str) -> Result<Vec<PersonaPromise>, PersonaTrustError> {
         let rows = sqlx::query(
-            "SELECT id::text, person_id, description, source_message_id, promised_at,
+            "SELECT id::text, persona_id, description, source_message_id, promised_at,
              due_at, fulfilled_at, status, created_at, updated_at
-             FROM persona_promises WHERE person_id = $1 ORDER BY promised_at DESC",
+             FROM persona_promises WHERE persona_id = $1 ORDER BY promised_at DESC",
         )
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter().map(row_to_promise).collect()
@@ -35,18 +35,18 @@ impl PersonaPromiseStore {
 
     pub async fn create(
         &self,
-        person_id: &str,
+        persona_id: &str,
         description: &str,
         due_at: Option<DateTime<Utc>>,
     ) -> Result<PersonaPromise, PersonaTrustError> {
         let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
-            "INSERT INTO persona_promises (person_id, description, due_at)
+            "INSERT INTO persona_promises (persona_id, description, due_at)
              VALUES ($1, $2, $3)
-             RETURNING id::text, person_id, description, source_message_id, promised_at,
+             RETURNING id::text, persona_id, description, source_message_id, promised_at,
                        due_at, fulfilled_at, status, created_at, updated_at",
         )
-        .bind(person_id)
+        .bind(persona_id)
         .bind(description)
         .bind(due_at)
         .fetch_one(&mut *transaction)
@@ -96,12 +96,12 @@ async fn append_promise_created_event(
         }),
         json!({
             "kind": "persona",
-            "persona_id": &promise.person_id,
+            "persona_id": &promise.persona_id,
         }),
     )
     .payload(json!({
         "promise_id": &promise.id,
-        "persona_id": &promise.person_id,
+        "persona_id": &promise.persona_id,
         "description": &promise.description,
         "due_at": promise.due_at,
     }))

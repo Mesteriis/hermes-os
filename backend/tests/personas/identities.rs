@@ -18,7 +18,7 @@ async fn persona_identities_accept_document_and_message_traces_against_postgres(
 
     let document_trace = identity_store
         .upsert(
-            &person.person_id,
+            &person.persona_id,
             "document_mention",
             &format!("document:v1:{suffix}:identity-trace"),
             "document_processing",
@@ -27,7 +27,7 @@ async fn persona_identities_accept_document_and_message_traces_against_postgres(
         .expect("upsert document mention identity trace");
     let message_trace = identity_store
         .upsert(
-            &person.person_id,
+            &person.persona_id,
             "message_participant",
             &format!("message:v1:{suffix}:identity-trace"),
             "communication_projection",
@@ -41,7 +41,7 @@ async fn persona_identities_accept_document_and_message_traces_against_postgres(
     assert_eq!(message_trace.source, "communication_projection");
 
     let identities = identity_store
-        .list_by_person(&person.person_id)
+        .list_by_person(&person.persona_id)
         .await
         .expect("list persona identities");
     assert!(
@@ -70,7 +70,7 @@ async fn persona_identities_accept_disputed_status_against_postgres() {
         .expect("upsert persona");
     let identity = identity_store
         .upsert(
-            &person.person_id,
+            &person.persona_id,
             "email",
             &format!("identity-disputed-trace-{suffix}@example.com"),
             "manual",
@@ -84,7 +84,7 @@ async fn persona_identities_accept_disputed_status_against_postgres() {
         .expect("mark identity as disputed");
 
     let identities = identity_store
-        .list_by_person(&person.person_id)
+        .list_by_person(&person.persona_id)
         .await
         .expect("list persona identities");
     let updated = identities
@@ -111,7 +111,7 @@ async fn persona_identities_support_unattached_trace_assignment_against_postgres
         )
         .await
         .expect("create unattached identity trace");
-    assert_eq!(trace.person_id.as_deref(), None);
+    assert_eq!(trace.persona_id.as_deref(), None);
     assert_eq!(trace.identity_type, "message_participant");
     assert_eq!(trace.source, "communication_projection");
 
@@ -120,22 +120,23 @@ async fn persona_identities_support_unattached_trace_assignment_against_postgres
         .await
         .expect("upsert persona");
     let attached = identity_store
-        .attach_to_persona(&trace.id, &person.person_id)
+        .attach_to_persona(&trace.id, &person.persona_id)
         .await
         .expect("attach identity trace to persona");
 
     assert_eq!(attached.id, trace.id);
     assert_eq!(
-        attached.person_id.as_deref(),
-        Some(person.person_id.as_str())
+        attached.persona_id.as_deref(),
+        Some(person.persona_id.as_str())
     );
     assert_eq!(attached.status, "active");
 
     let identities = identity_store
-        .list_by_person(&person.person_id)
+        .list_by_person(&person.persona_id)
         .await
         .expect("list persona identities");
     assert!(identities.iter().any(|identity| {
-        identity.id == trace.id && identity.person_id.as_deref() == Some(person.person_id.as_str())
+        identity.id == trace.id
+            && identity.persona_id.as_deref() == Some(person.persona_id.as_str())
     }));
 }

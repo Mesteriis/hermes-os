@@ -15,9 +15,10 @@ use super::preferences::{
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonaInteractionContext {
-    pub persona_id: String,
-    #[serde(rename = "source_persona_id", alias = "person_id")]
-    pub person_id: String,
+    #[serde(alias = "persona_id")]
+    pub interaction_context_id: String,
+    #[serde(alias = "person_id")]
+    pub source_persona_id: String,
     pub name: String,
     pub context: Option<String>,
     pub default_tone: Option<String>,
@@ -40,14 +41,14 @@ impl PersonaInteractionContextStore {
 
     pub async fn list_by_person(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<Vec<PersonaInteractionContext>, PersonaCoreError> {
         let rows = sqlx::query(
-            r#"SELECT persona_id, person_id, name, context, default_tone, default_language,
+            r#"SELECT interaction_context_id, source_persona_id, name, context, default_tone, default_language,
                preferred_channel, metadata, created_at, updated_at
-               FROM persona_interaction_contexts WHERE person_id = $1 ORDER BY name"#,
+               FROM persona_interaction_contexts WHERE source_persona_id = $1 ORDER BY name"#,
         )
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter().map(row_to_persona).collect()
@@ -84,10 +85,11 @@ impl PersonaInteractionContextStore {
             &mut transaction,
             observation_id,
             "persona",
-            persona.persona_id.clone(),
+            persona.interaction_context_id.clone(),
             None,
             Some(json!({
-                "persona_id": persona.person_id,
+                "interaction_context_id": persona.interaction_context_id,
+                "source_persona_id": persona.source_persona_id,
                 "action": "upsert",
             })),
         )
@@ -103,20 +105,20 @@ impl PersonaInteractionContextStore {
         source: Option<&str>,
     ) -> Result<PersonaInteractionContext, PersonaCoreError> {
         let row = sqlx::query(
-            r#"INSERT INTO persona_interaction_contexts (persona_id, person_id, name, context, default_tone,
+            r#"INSERT INTO persona_interaction_contexts (interaction_context_id, source_persona_id, name, context, default_tone,
                default_language, preferred_channel)
                VALUES ($1, $2, $3, $4, $5, $6, $7)
-               ON CONFLICT (persona_id)
+               ON CONFLICT (interaction_context_id)
                DO UPDATE SET name = EXCLUDED.name, context = EXCLUDED.context,
                              default_tone = EXCLUDED.default_tone,
                              default_language = EXCLUDED.default_language,
                              preferred_channel = EXCLUDED.preferred_channel,
                              updated_at = now()
-               RETURNING persona_id, person_id, name, context, default_tone, default_language,
+               RETURNING interaction_context_id, source_persona_id, name, context, default_tone, default_language,
                          preferred_channel, metadata, created_at, updated_at"#,
         )
-        .bind(&persona.persona_id)
-        .bind(&persona.person_id)
+        .bind(&persona.interaction_context_id)
+        .bind(&persona.source_persona_id)
         .bind(&persona.name)
         .bind(&persona.context)
         .bind(&persona.default_tone)
@@ -128,7 +130,7 @@ impl PersonaInteractionContextStore {
 
         let source = source
             .map(str::to_owned)
-            .unwrap_or_else(|| interaction_context_source(&persona.persona_id));
+            .unwrap_or_else(|| interaction_context_source(&persona.interaction_context_id));
         materialize_interaction_preferences_in_transaction(transaction, &persona, &source).await?;
 
         Ok(persona)
@@ -151,21 +153,23 @@ impl PersonaInteractionContextStore {
 
     pub async fn delete_with_observation(
         &self,
-        person_id: &str,
-        persona_id: &str,
+        source_persona_id: &str,
+        interaction_context_id: &str,
         source: Option<&str>,
         observation_id: &str,
     ) -> Result<bool, PersonaCoreError> {
         let mut transaction = self.pool.begin().await?;
-        let deleted = Self::delete_in_transaction(&mut transaction, persona_id, source).await?;
+        let deleted =
+            Self::delete_in_transaction(&mut transaction, interaction_context_id, source).await?;
         link_persona_entity_in_transaction(
             &mut transaction,
             observation_id,
             "persona",
-            persona_id.to_owned(),
+            interaction_context_id.to_owned(),
             None,
             Some(json!({
-                "persona_id": person_id,
+                "interaction_context_id": interaction_context_id,
+                "source_persona_id": source_persona_id,
                 "action": "delete",
                 "deleted": deleted,
             })),
@@ -181,10 +185,10 @@ impl PersonaInteractionContextStore {
         source: Option<&str>,
     ) -> Result<bool, PersonaCoreError> {
         let existing_persona = sqlx::query(
-            r#"SELECT persona_id, person_id, name, context, default_tone, default_language,
+            r#"SELECT interaction_context_id, source_persona_id, name, context, default_tone, default_language,
                preferred_channel, metadata, created_at, updated_at
                FROM persona_interaction_contexts
-               WHERE persona_id = $1
+               WHERE interaction_context_id = $1
                FOR UPDATE"#,
         )
         .bind(persona_id)
@@ -193,18 +197,20 @@ impl PersonaInteractionContextStore {
         .map(row_to_persona)
         .transpose()?;
 
-        let result = sqlx::query("DELETE FROM persona_interaction_contexts WHERE persona_id = $1")
-            .bind(persona_id)
-            .execute(&mut **transaction)
-            .await?;
+        let result = sqlx::query(
+            "DELETE FROM persona_interaction_contexts WHERE interaction_context_id = $1",
+        )
+        .bind(persona_id)
+        .execute(&mut **transaction)
+        .await?;
         let deleted = result.rows_affected() > 0;
 
         if let Some(existing_persona) = existing_persona
             && deleted
         {
-            let source = source
-                .map(str::to_owned)
-                .unwrap_or_else(|| interaction_context_source(&existing_persona.persona_id));
+            let source = source.map(str::to_owned).unwrap_or_else(|| {
+                interaction_context_source(&existing_persona.interaction_context_id)
+            });
             delete_interaction_preferences_in_transaction(transaction, &existing_persona, &source)
                 .await?;
         }
@@ -215,9 +221,10 @@ impl PersonaInteractionContextStore {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct NewPersonaInteractionContext {
-    pub persona_id: String,
-    #[serde(rename = "source_persona_id", alias = "person_id")]
-    pub person_id: String,
+    #[serde(alias = "persona_id")]
+    pub interaction_context_id: String,
+    #[serde(alias = "person_id")]
+    pub source_persona_id: String,
     pub name: String,
     pub context: Option<String>,
     pub default_tone: Option<String>,
@@ -227,8 +234,8 @@ pub struct NewPersonaInteractionContext {
 
 fn row_to_persona(row: PgRow) -> Result<PersonaInteractionContext, PersonaCoreError> {
     Ok(PersonaInteractionContext {
-        persona_id: row.try_get("persona_id")?,
-        person_id: row.try_get("person_id")?,
+        interaction_context_id: row.try_get("interaction_context_id")?,
+        source_persona_id: row.try_get("source_persona_id")?,
         name: row.try_get("name")?,
         context: row.try_get("context")?,
         default_tone: row.try_get("default_tone")?,

@@ -70,15 +70,20 @@ describe('Domain Vue boundary contract', () => {
       new URL('./settings/views/SettingsPage.vue', domainsRoot),
       'utf8'
     )
+    const settingsNavigationSource = readFileSync(
+      new URL('./settings/components/SettingsNavigationTree.vue', domainsRoot),
+      'utf8'
+    )
     const communicationsEmptyPageSource = readFileSync(
       new URL('./communications/views/CommunicationsEmptyPage.vue', domainsRoot),
       'utf8'
     )
 
     expect(settingsPageSource).toContain("useSettingsPageSurface")
-    expect(settingsPageSource).toContain("store.selectSection(item.id)")
+    expect(settingsPageSource).toContain('@select-section="store.selectSection"')
     expect(settingsPageSource).not.toContain("useSettingsStore")
     expect(settingsPageSource).not.toContain("useApplicationSettingsQuery")
+    expect(settingsNavigationSource).toContain("emit('selectSection', item.id)")
 
     expect(communicationsEmptyPageSource).toContain("communications.empty.title")
     expect(communicationsEmptyPageSource).not.toContain('fetch(')

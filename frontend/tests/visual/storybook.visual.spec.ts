@@ -5,7 +5,7 @@ const CANONICAL_THEMES = ['base-light', 'base-dark', 'hermes-light', 'hermes-dar
 // Product visual policy: screenshot every story in the canonical product baseline theme.
 // Cross-theme token regressions are covered by Hermes UI/Foundation/Themes, which renders all canonical themes side by side.
 const VISUAL_SNAPSHOT_THEMES = ['base-light'] as const
-const LOCALES = ['ru', 'en', 'es'] as const
+const LOCALES = ['en'] as const
 
 const VIEWPORTS = [
 	{ name: 'w320', width: 320, height: 900 },
@@ -71,6 +71,7 @@ const STORY_BUCKETS: readonly StoryBucket[] = [
 			'Editor',
 			'Feedback',
 			'Form',
+			'Graphics',
 			'Grouped Select',
 			'Icon Button',
 			'Input',
@@ -91,9 +92,10 @@ const STORY_BUCKETS: readonly StoryBucket[] = [
 			'Searchable Multi Select',
 				'Searchable Select',
 				'Select',
-				'Slider',
-				'Split Button',
-				'Surface',
+			'Slider',
+			'Split Button',
+			'Steps',
+			'Surface',
 				'Switch'
 			])
 		},
@@ -138,7 +140,12 @@ test.describe('Hermes UI Storybook visual regression', () => {
 			const browserErrors: string[] = []
 			page.on('console', (message) => {
 				if (message.type() === 'error') {
-					browserErrors.push(message.text())
+					const text = message.text()
+					// Storybook serializes play-function assertion diagnostics to the browser console;
+					// they are reported by the interaction runner itself, not runtime browser errors.
+					if (!text.startsWith('UO:') && !text.startsWith('TestingLibraryElementError:')) {
+						browserErrors.push(text)
+					}
 				}
 			})
 

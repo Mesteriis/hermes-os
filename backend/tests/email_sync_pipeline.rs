@@ -271,7 +271,7 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
         SELECT count(*)::BIGINT
         FROM organization_persona_links link
         JOIN organization_domains domain ON domain.organization_id = link.organization_id
-        JOIN persona_identities identity ON identity.person_id = link.person_id
+        JOIN persona_identities identity ON identity.persona_id = link.persona_id
         WHERE domain.domain = ANY($1)
           AND identity.identity_value = $2
         "#,
@@ -292,7 +292,7 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
         JOIN organization_domains domain
           ON domain.organization_id = relationship.target_entity_id
         JOIN persona_identities identity
-          ON identity.person_id = relationship.source_entity_id
+          ON identity.persona_id = relationship.source_entity_id
         WHERE relationship.source_entity_kind = 'persona'
           AND relationship.target_entity_kind = 'organization'
           AND relationship.relationship_type = 'member_of'

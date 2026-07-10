@@ -2683,7 +2683,7 @@ impl WhatsappFixtureIngestApplicationService {
         sqlx::query(
             r#"
             INSERT INTO communication_conversation_participants (
-                participant_id, conversation_id, identity_id, person_id, role,
+                participant_id, conversation_id, identity_id, persona_id, role,
                 display_name, address, metadata, created_at, updated_at
             )
             VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, now(), now())

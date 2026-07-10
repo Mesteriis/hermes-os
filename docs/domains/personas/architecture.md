@@ -55,10 +55,9 @@ Persona:
 ```
 
 The current implementation uses `/personas` routes and Persona-native read
-payloads over `personas` / `persona_*` storage. Some internal storage columns
-still use `person_id`; treat that as a physical schema compatibility detail, not
-as public API language. New documentation and future schema work must use
-Persona as the domain concept.
+payloads over `personas` / `persona_*` storage with `persona_id` identifier
+columns. New documentation and future schema work must use Persona as the domain
+concept.
 
 ## Self Persona
 

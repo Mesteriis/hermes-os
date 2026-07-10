@@ -20,7 +20,7 @@ use super::store::PersonaEnrichmentStore;
 impl PersonaEnrichmentStore {
     pub async fn enrich_person(
         &self,
-        person_id: &str,
+        persona_id: &str,
         fingerprint: &CommunicationFingerprint,
     ) -> Result<EnrichedPersona, PersonaEnrichmentError> {
         let mut transaction = self.pool.begin().await?;
@@ -32,10 +32,10 @@ impl PersonaEnrichmentStore {
              avg_response_hours = COALESCE($5, personas.avg_response_hours), \
              writing_style = COALESCE($6, personas.writing_style), \
              updated_at = now() \
-             WHERE person_id = $1 RETURNING {ENRICHED_PERSONA_COLUMNS}"
+             WHERE persona_id = $1 RETURNING {ENRICHED_PERSONA_COLUMNS}"
         );
         let row = sqlx::query(&sql)
-            .bind(person_id)
+            .bind(persona_id)
             .bind(fingerprint.detected_language.as_deref())
             .bind(fingerprint.typical_tone.as_deref())
             .bind(fingerprint.trust_score)
@@ -50,7 +50,7 @@ impl PersonaEnrichmentStore {
         let enriched = row_to_enriched(row)?;
         append_trust_score_changed_event(
             &mut transaction,
-            person_id,
+            persona_id,
             fingerprint.trust_score,
             None,
         )
@@ -62,7 +62,7 @@ impl PersonaEnrichmentStore {
 
     pub async fn enrich_persona_with_observation(
         &self,
-        person_id: &str,
+        persona_id: &str,
         fingerprint: &CommunicationFingerprint,
         observation_id: &str,
     ) -> Result<EnrichedPersona, PersonaEnrichmentError> {
@@ -75,10 +75,10 @@ impl PersonaEnrichmentStore {
              avg_response_hours = COALESCE($5, personas.avg_response_hours), \
              writing_style = COALESCE($6, personas.writing_style), \
              updated_at = now() \
-             WHERE person_id = $1 RETURNING {ENRICHED_PERSONA_COLUMNS}"
+             WHERE persona_id = $1 RETURNING {ENRICHED_PERSONA_COLUMNS}"
         );
         let row = sqlx::query(&sql)
-            .bind(person_id)
+            .bind(persona_id)
             .bind(fingerprint.detected_language.as_deref())
             .bind(fingerprint.typical_tone.as_deref())
             .bind(fingerprint.trust_score)
@@ -93,7 +93,7 @@ impl PersonaEnrichmentStore {
         let enriched = row_to_enriched(row)?;
         append_trust_score_changed_event(
             &mut transaction,
-            person_id,
+            persona_id,
             fingerprint.trust_score,
             Some(observation_id),
         )
@@ -102,7 +102,7 @@ impl PersonaEnrichmentStore {
             &mut transaction,
             observation_id,
             "persona",
-            person_id,
+            persona_id,
             Some("profile_enrichment"),
             Some(serde_json::json!({
                 "manual_entrypoint": "post_persona_fingerprint"
@@ -114,37 +114,37 @@ impl PersonaEnrichmentStore {
         Ok(enriched)
     }
 
-    pub async fn toggle_favorite(&self, person_id: &str) -> Result<bool, PersonaEnrichmentError> {
-        self.toggle_favorite_with_source(person_id, &format!("personas.is_favorite:{person_id}"))
+    pub async fn toggle_favorite(&self, persona_id: &str) -> Result<bool, PersonaEnrichmentError> {
+        self.toggle_favorite_with_source(persona_id, &format!("personas.is_favorite:{persona_id}"))
             .await
     }
 
     pub async fn toggle_favorite_with_source(
         &self,
-        person_id: &str,
+        persona_id: &str,
         source: &str,
     ) -> Result<bool, PersonaEnrichmentError> {
         let mut transaction = self.pool.begin().await?;
         let is_favorite =
-            Self::toggle_favorite_in_transaction(&mut transaction, person_id, source).await?;
+            Self::toggle_favorite_in_transaction(&mut transaction, persona_id, source).await?;
         transaction.commit().await?;
         Ok(is_favorite)
     }
 
     pub async fn toggle_favorite_with_observation(
         &self,
-        person_id: &str,
+        persona_id: &str,
         source: &str,
         observation_id: &str,
     ) -> Result<bool, PersonaEnrichmentError> {
         let mut transaction = self.pool.begin().await?;
         let is_favorite =
-            Self::toggle_favorite_in_transaction(&mut transaction, person_id, source).await?;
+            Self::toggle_favorite_in_transaction(&mut transaction, persona_id, source).await?;
         link_persona_entity_in_transaction(
             &mut transaction,
             observation_id,
             "favorite_toggle",
-            person_id,
+            persona_id,
             None,
             Some(serde_json::json!({
                 "is_favorite": is_favorite
@@ -157,60 +157,60 @@ impl PersonaEnrichmentStore {
 
     async fn toggle_favorite_in_transaction(
         transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        person_id: &str,
+        persona_id: &str,
         source: &str,
     ) -> Result<bool, PersonaEnrichmentError> {
         let row = sqlx::query(
             "UPDATE personas SET is_favorite = NOT is_favorite, updated_at = now() \
-             WHERE person_id = $1 RETURNING is_favorite",
+             WHERE persona_id = $1 RETURNING is_favorite",
         )
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_optional(&mut **transaction)
         .await?;
         let Some(row) = row else {
             return Ok(false);
         };
         let is_favorite = row.try_get("is_favorite").unwrap_or(false);
-        sync_favorite_preference_in_transaction(transaction, person_id, is_favorite, source)
+        sync_favorite_preference_in_transaction(transaction, persona_id, is_favorite, source)
             .await?;
         Ok(is_favorite)
     }
 
     pub async fn set_notes(
         &self,
-        person_id: &str,
+        persona_id: &str,
         notes: &str,
     ) -> Result<(), PersonaEnrichmentError> {
-        self.set_notes_with_source(person_id, notes, &format!("personas.notes:{person_id}"))
+        self.set_notes_with_source(persona_id, notes, &format!("personas.notes:{persona_id}"))
             .await
     }
 
     pub async fn set_notes_with_source(
         &self,
-        person_id: &str,
+        persona_id: &str,
         notes: &str,
         source: &str,
     ) -> Result<(), PersonaEnrichmentError> {
         let mut transaction = self.pool.begin().await?;
-        Self::set_notes_in_transaction(&mut transaction, person_id, notes, source).await?;
+        Self::set_notes_in_transaction(&mut transaction, persona_id, notes, source).await?;
         transaction.commit().await?;
         Ok(())
     }
 
     pub async fn set_notes_with_observation(
         &self,
-        person_id: &str,
+        persona_id: &str,
         notes: &str,
         source: &str,
         observation_id: &str,
     ) -> Result<(), PersonaEnrichmentError> {
         let mut transaction = self.pool.begin().await?;
-        Self::set_notes_in_transaction(&mut transaction, person_id, notes, source).await?;
+        Self::set_notes_in_transaction(&mut transaction, persona_id, notes, source).await?;
         link_persona_entity_in_transaction(
             &mut transaction,
             observation_id,
             "notes",
-            person_id,
+            persona_id,
             None,
             Some(serde_json::json!({
                 "manual_entrypoint": "put_person_notes"
@@ -223,23 +223,23 @@ impl PersonaEnrichmentStore {
 
     async fn set_notes_in_transaction(
         transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        person_id: &str,
+        persona_id: &str,
         notes: &str,
         source: &str,
     ) -> Result<(), PersonaEnrichmentError> {
-        sqlx::query("UPDATE personas SET notes = $2, updated_at = now() WHERE person_id = $1")
-            .bind(person_id)
+        sqlx::query("UPDATE personas SET notes = $2, updated_at = now() WHERE persona_id = $1")
+            .bind(persona_id)
             .bind(notes)
             .execute(&mut **transaction)
             .await?;
-        sync_notes_memory_card_in_transaction(transaction, person_id, notes, source).await?;
+        sync_notes_memory_card_in_transaction(transaction, persona_id, notes, source).await?;
         Ok(())
     }
 }
 
 async fn append_trust_score_changed_event(
     transaction: &mut Transaction<'_, Postgres>,
-    person_id: &str,
+    persona_id: &str,
     trust_score: Option<i16>,
     source_observation_id: Option<&str>,
 ) -> Result<(), PersonaEnrichmentError> {
@@ -254,15 +254,15 @@ async fn append_trust_score_changed_event(
         json!({
             "kind": "persona_enrichment",
             "provider": "hermes",
-            "source_id": person_id,
+            "source_id": persona_id,
         }),
         json!({
             "kind": "persona",
-            "persona_id": person_id,
+            "persona_id": persona_id,
         }),
     )
     .payload(json!({
-        "persona_id": person_id,
+        "persona_id": persona_id,
         "trust_score": trust_score,
         "source_observation_id": source_observation_id,
     }))

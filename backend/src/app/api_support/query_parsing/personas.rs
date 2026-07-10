@@ -52,7 +52,7 @@ pub(crate) fn validate_non_empty_persona_identity_field(
         return Err(ApiError::InvalidPersonaIdentityReview(match field {
             "command_id" => "command_id must not be empty",
             "identity_candidate_id" => "identity_candidate_id must not be empty",
-            "person_id" => "person_id must not be empty",
+            "persona_id" => "persona_id must not be empty",
             _ => "field must not be empty",
         }));
     }

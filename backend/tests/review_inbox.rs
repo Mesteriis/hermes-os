@@ -1525,10 +1525,10 @@ async fn identity_candidate_review_mirror_promotes_existing_candidate_against_po
         .upsert_email_persona(&format!("identity-mirror-right-{suffix}@example.com"))
         .await
         .expect("right persona");
-    sqlx::query("UPDATE personas SET display_name = $1 WHERE person_id = $2 OR person_id = $3")
+    sqlx::query("UPDATE personas SET display_name = $1 WHERE persona_id = $2 OR persona_id = $3")
         .bind(&display_name)
-        .bind(&left.person_id)
-        .bind(&right.person_id)
+        .bind(&left.persona_id)
+        .bind(&right.persona_id)
         .execute(&pool)
         .await
         .expect("seed display name");
@@ -1540,21 +1540,21 @@ async fn identity_candidate_review_mirror_promotes_existing_candidate_against_po
     assert!(refreshed >= 1);
     let _ = project_identity_review_events(&pool, 0).await;
 
-    let identity_candidate_id = if left.person_id <= right.person_id {
+    let identity_candidate_id = if left.persona_id <= right.persona_id {
         format!(
             "identity_candidate:v1:merge_personas:{}:{}",
-            left.person_id, right.person_id
+            left.persona_id, right.persona_id
         )
     } else {
         format!(
             "identity_candidate:v1:merge_personas:{}:{}",
-            right.person_id, left.person_id
+            right.persona_id, left.persona_id
         )
     };
-    let (left_persona_id, right_persona_id) = if left.person_id <= right.person_id {
-        (left.person_id.clone(), right.person_id.clone())
+    let (left_persona_id, right_persona_id) = if left.persona_id <= right.persona_id {
+        (left.persona_id.clone(), right.persona_id.clone())
     } else {
-        (right.person_id.clone(), left.person_id.clone())
+        (right.persona_id.clone(), left.persona_id.clone())
     };
 
     let review_item = review_store
@@ -1650,10 +1650,10 @@ async fn identity_candidate_review_mirror_reuses_review_item_and_attaches_new_ev
         .upsert_email_persona(&format!("identity-reuse-right-{suffix}@example.com"))
         .await
         .expect("right persona");
-    sqlx::query("UPDATE personas SET display_name = $1 WHERE person_id = $2 OR person_id = $3")
+    sqlx::query("UPDATE personas SET display_name = $1 WHERE persona_id = $2 OR persona_id = $3")
         .bind(&display_name)
-        .bind(&left.person_id)
-        .bind(&right.person_id)
+        .bind(&left.persona_id)
+        .bind(&right.persona_id)
         .execute(&pool)
         .await
         .expect("seed display name");
@@ -1666,15 +1666,15 @@ async fn identity_candidate_review_mirror_reuses_review_item_and_attaches_new_ev
     let mut event_position = 0;
     event_position = project_identity_review_events(&pool, event_position).await;
 
-    let identity_candidate_id = if left.person_id <= right.person_id {
+    let identity_candidate_id = if left.persona_id <= right.persona_id {
         format!(
             "identity_candidate:v1:merge_personas:{}:{}",
-            left.person_id, right.person_id
+            left.persona_id, right.persona_id
         )
     } else {
         format!(
             "identity_candidate:v1:merge_personas:{}:{}",
-            right.person_id, left.person_id
+            right.persona_id, left.persona_id
         )
     };
 
@@ -1853,7 +1853,7 @@ async fn assert_materialized_target(
     match domain {
         "personas" => {
             let count =
-                sqlx::query_scalar::<_, i64>("SELECT count(*) FROM personas WHERE person_id = $1")
+                sqlx::query_scalar::<_, i64>("SELECT count(*) FROM personas WHERE persona_id = $1")
                     .bind(target_id)
                     .fetch_one(pool)
                     .await

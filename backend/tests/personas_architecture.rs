@@ -434,10 +434,21 @@ fn persona_serialized_read_models_expose_persona_id() {
     for relative_path in checked_files {
         let content = fs::read_to_string(repo_root.join(relative_path))
             .unwrap_or_else(|error| panic!("failed to read {relative_path}: {error}"));
-        if content.contains("pub person_id:")
-            && !content.contains(r#"#[serde(rename = "persona_id""#)
-        {
-            violations.push(relative_path.to_owned());
+        let lines = content.lines().collect::<Vec<_>>();
+        for (index, line) in lines.iter().enumerate() {
+            if !line.trim_start().starts_with("pub person_id:") {
+                continue;
+            }
+            let previous = index
+                .checked_sub(1)
+                .and_then(|previous_index| lines.get(previous_index))
+                .copied()
+                .unwrap_or_default();
+            let renamed_to_persona_field = previous.contains(r#"#[serde(rename = "persona_id""#)
+                || previous.contains(r#"#[serde(rename = "source_persona_id""#);
+            if !renamed_to_persona_field {
+                violations.push(format!("{relative_path}:{}", index + 1));
+            }
         }
     }
 
@@ -520,7 +531,7 @@ fn persona_derived_evidence_events_and_observations_use_persona_id_payloads() {
         for forbidden in [
             r#""person_id":"#,
             r#""person_id": &"#,
-            r#""person_id": person_id"#,
+            r#""person_id": persona_id"#,
             r#""person_id": promise"#,
             "person_role_assigned:",
             "person_role_removed:",

@@ -24,13 +24,13 @@ impl RiskEngine {
     }
 
     pub fn persona_observation(
-        person_id: &str,
+        persona_id: &str,
         risk_type: &str,
         evidence: &str,
         severity: &str,
         source: &str,
     ) -> Result<RiskObservationDraft, RiskEngineError> {
-        validate_non_empty("affected entity", person_id)?;
+        validate_non_empty("affected entity", persona_id)?;
         validate_non_empty("risk type", risk_type)?;
         validate_non_empty("evidence", evidence)?;
         validate_non_empty("source", source)?;
@@ -39,7 +39,7 @@ impl RiskEngine {
 
         Ok(RiskObservationDraft {
             affected_entity_kind: "persona".to_owned(),
-            affected_entity_id: person_id.trim().to_owned(),
+            affected_entity_id: persona_id.trim().to_owned(),
             risk_type: risk_type.trim().to_owned(),
             evidence: evidence.trim().to_owned(),
             source: source.trim().to_owned(),

@@ -17,7 +17,7 @@ pub struct CommunicationFingerprint {
 #[derive(Clone, Debug, Serialize)]
 pub struct PersonaInsight {
     #[serde(rename = "persona_id")]
-    pub person_id: String,
+    pub persona_id: String,
     pub fingerprint: CommunicationFingerprint,
     pub suggested_actions: Vec<String>,
 }

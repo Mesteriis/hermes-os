@@ -25,23 +25,23 @@ async fn contradiction_refresh_detects_telegram_message_claim_against_active_per
         .expect("person");
     sqlx::query(
         r#"
-        INSERT INTO persona_identities (person_id, identity_type, identity_value, source, confidence, status)
+        INSERT INTO persona_identities (persona_id, identity_type, identity_value, source, confidence, status)
         VALUES ($1, 'telegram', $2, 'test', 1.0, 'active')
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .bind(&sender_id)
     .execute(&pool)
     .await
     .expect("telegram identity");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (persona_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("person fact");
@@ -71,7 +71,7 @@ async fn contradiction_refresh_detects_telegram_message_claim_against_active_per
     assert_eq!(observation.severity, ContradictionSeverity::Medium);
     assert_eq!(
         observation.affected_entities,
-        json!([{"entity_kind": "subject", "entity_id": person.person_id}])
+        json!([{"entity_kind": "subject", "entity_id": person.persona_id}])
     );
     assert_eq!(
         observation.metadata,
@@ -107,23 +107,23 @@ async fn contradiction_refresh_detects_whatsapp_message_claim_against_active_per
         .expect("person");
     sqlx::query(
         r#"
-        INSERT INTO persona_identities (person_id, identity_type, identity_value, source, confidence, status)
+        INSERT INTO persona_identities (persona_id, identity_type, identity_value, source, confidence, status)
         VALUES ($1, 'whatsapp', $2, 'test', 1.0, 'active')
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .bind(&sender_id)
     .execute(&pool)
     .await
     .expect("whatsapp identity");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (persona_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("person fact");
@@ -153,7 +153,7 @@ async fn contradiction_refresh_detects_whatsapp_message_claim_against_active_per
     assert_eq!(observation.severity, ContradictionSeverity::Medium);
     assert_eq!(
         observation.affected_entities,
-        json!([{"entity_kind": "subject", "entity_id": person.person_id}])
+        json!([{"entity_kind": "subject", "entity_id": person.persona_id}])
     );
     assert_eq!(
         observation.metadata,
@@ -189,23 +189,23 @@ async fn contradiction_refresh_detects_zulip_message_claim_against_active_person
         .expect("person");
     sqlx::query(
         r#"
-        INSERT INTO persona_identities (person_id, identity_type, identity_value, source, confidence, status)
+        INSERT INTO persona_identities (persona_id, identity_type, identity_value, source, confidence, status)
         VALUES ($1, 'zulip', $2, 'test', 1.0, 'active')
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .bind(&sender_email)
     .execute(&pool)
     .await
     .expect("zulip identity");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (persona_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("person fact");
@@ -235,7 +235,7 @@ async fn contradiction_refresh_detects_zulip_message_claim_against_active_person
     assert_eq!(observation.severity, ContradictionSeverity::Medium);
     assert_eq!(
         observation.affected_entities,
-        json!([{"entity_kind": "subject", "entity_id": person.person_id}])
+        json!([{"entity_kind": "subject", "entity_id": person.persona_id}])
     );
     assert_eq!(
         observation.metadata,

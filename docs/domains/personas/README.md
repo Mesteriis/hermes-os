@@ -58,9 +58,8 @@ Persona:
 
 `Persona.id` is the logical identity of the subject inside Hermes. Active API
 routes and read payloads use `/personas` and Persona-native identifier names.
-Physical storage currently uses `personas` / `persona_*` tables while retaining
-some internal `person_id` columns until a dedicated identifier migration. New
-domain language must use Persona.
+Physical storage uses `personas` / `persona_*` tables and Persona-native
+`persona_id` identifier columns. New domain language must use Persona.
 
 ## Persona Types
 

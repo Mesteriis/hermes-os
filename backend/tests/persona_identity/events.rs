@@ -16,17 +16,17 @@ async fn persona_identity_reject_suppresses_candidate_against_postgres() {
     let shared_name = format!("Sam Candidate {suffix}");
 
     let left = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("sam.left-{suffix}@example.com"))
         .await
         .expect("upsert left person");
     let right = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("sam.right-{suffix}@example.com"))
         .await
         .expect("upsert right person");
 
-    seed_normalized_personas(&context, &left.person_id, &right.person_id, &shared_name)
+    seed_normalized_personas(&context, &left.persona_id, &right.persona_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -36,7 +36,7 @@ async fn persona_identity_reject_suppresses_candidate_against_postgres() {
         .await
         .expect("refresh");
     let identity_candidate_id =
-        identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+        identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
 
     let _ = context
         .store
@@ -74,17 +74,17 @@ async fn legacy_person_identity_review_event_still_rebuilds_state_against_postgr
     let shared_name = format!("Legacy Candidate {suffix}");
 
     let left = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("legacy.left-{suffix}@example.com"))
         .await
         .expect("upsert left person");
     let right = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("legacy.right-{suffix}@example.com"))
         .await
         .expect("upsert right person");
 
-    seed_normalized_personas(&context, &left.person_id, &right.person_id, &shared_name)
+    seed_normalized_personas(&context, &left.persona_id, &right.persona_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -94,7 +94,7 @@ async fn legacy_person_identity_review_event_still_rebuilds_state_against_postgr
         .await
         .expect("refresh");
     let identity_candidate_id =
-        identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+        identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
 
     let legacy_event = build_legacy_review_event(
         &identity_candidate_id,
@@ -139,17 +139,17 @@ async fn persona_identity_review_event_rebuilds_state_against_postgres() {
     let shared_name = format!("Pat Candidate {suffix}");
 
     let left = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("pat.left-{suffix}@example.com"))
         .await
         .expect("upsert left person");
     let right = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("pat.right-{suffix}@example.com"))
         .await
         .expect("upsert right person");
 
-    seed_normalized_personas(&context, &left.person_id, &right.person_id, &shared_name)
+    seed_normalized_personas(&context, &left.persona_id, &right.persona_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -159,7 +159,7 @@ async fn persona_identity_review_event_rebuilds_state_against_postgres() {
         .await
         .expect("refresh");
     let identity_candidate_id =
-        identity_candidate_id_from_personas(&left.person_id, &right.person_id);
+        identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
 
     let confirm_event = build_review_event(
         &identity_candidate_id,

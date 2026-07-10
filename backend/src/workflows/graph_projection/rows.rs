@@ -7,7 +7,7 @@ use super::models::{DocumentRow, MessageRow, PersonaRow};
 
 pub(super) fn row_to_persona(row: PgRow) -> Result<PersonaRow, GraphProjectionError> {
     Ok(PersonaRow {
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         display_name: row.try_get("display_name")?,
         email_address: row.try_get("email_address")?,
     })

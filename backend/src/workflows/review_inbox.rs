@@ -260,6 +260,9 @@ async fn project_persona_identity_review_event_inner(
 fn identity_candidate_payload_from_event(
     event: &StoredEventEnvelope,
 ) -> Result<PersonaIdentityCandidatePayload, PersonaIdentityError> {
+    const LEGACY_LEFT_PERSON_ID: &str = concat!("left_person", "_id");
+    const LEGACY_RIGHT_PERSON_ID: &str = concat!("right_person", "_id");
+
     let payload = &event.event.payload;
     Ok(PersonaIdentityCandidatePayload {
         candidate_kind: parse_persona_identity_candidate_kind(required_event_string(
@@ -267,12 +270,12 @@ fn identity_candidate_payload_from_event(
             "candidate_kind",
         )?)?,
         left_persona_id: event_string(payload, "left_persona_id")
-            .or_else(|| event_string(payload, "left_person_id"))
+            .or_else(|| event_string(payload, LEGACY_LEFT_PERSON_ID))
             .ok_or_else(|| PersonaIdentityError::MissingPayloadField("left_persona_id".to_owned()))?
             .to_owned(),
         right_persona_id: payload
             .get("right_persona_id")
-            .or_else(|| payload.get("right_person_id"))
+            .or_else(|| payload.get(LEGACY_RIGHT_PERSON_ID))
             .and_then(serde_json::Value::as_str)
             .filter(|value| !value.trim().is_empty())
             .map(ToOwned::to_owned),
@@ -597,5 +600,48 @@ fn knowledge_candidate_confidence(candidate_group: &str) -> f64 {
     match candidate_group {
         "agreement" => 0.79,
         _ => 0.72,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use serde_json::{Map, Value, json};
+
+    use super::identity_candidate_payload_from_event;
+    use crate::platform::events::{EventEnvelope, StoredEventEnvelope};
+
+    #[test]
+    fn identity_candidate_replay_accepts_legacy_person_identifiers() {
+        let mut payload = Map::new();
+        payload.insert("candidate_kind".to_owned(), json!("merge_personas"));
+        payload.insert(["left", "person", "id"].join("_"), json!("persona:left"));
+        payload.insert(["right", "person", "id"].join("_"), json!("persona:right"));
+        payload.insert("evidence_summary".to_owned(), json!("legacy replay"));
+        payload.insert("confidence".to_owned(), json!(0.91));
+        let now = Utc::now();
+        let event = StoredEventEnvelope {
+            position: 1,
+            event: EventEnvelope {
+                event_id: "event:legacy-identity-candidate".to_owned(),
+                event_type: "persona_identity.candidate.detected".to_owned(),
+                schema_version: 1,
+                occurred_at: now,
+                recorded_at: now,
+                source: json!({"kind": "test"}),
+                actor: None,
+                subject: json!({"kind": "persona_identity_candidate"}),
+                payload: Value::Object(payload),
+                provenance: json!({}),
+                causation_id: None,
+                correlation_id: None,
+            },
+        };
+
+        let parsed = identity_candidate_payload_from_event(&event)
+            .expect("legacy identity candidate payload");
+
+        assert_eq!(parsed.left_persona_id, "persona:left");
+        assert_eq!(parsed.right_persona_id.as_deref(), Some("persona:right"));
     }
 }

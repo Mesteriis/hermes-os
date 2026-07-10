@@ -28,8 +28,8 @@ async fn persona_interaction_context_upsert_and_delete_materializes_interaction_
 
     let context = persona_store
         .upsert(&NewPersonaInteractionContext {
-            persona_id: persona_id.clone(),
-            person_id: person.person_id.clone(),
+            interaction_context_id: persona_id.clone(),
+            source_persona_id: person.persona_id.clone(),
             name: "Work Context".to_owned(),
             context: Some("Professional replies for project updates".to_owned()),
             default_tone: Some("concise".to_owned()),
@@ -44,11 +44,11 @@ async fn persona_interaction_context_upsert_and_delete_materializes_interaction_
         r#"
         SELECT preference_type, value, source
         FROM persona_preferences
-        WHERE person_id = $1 AND source = $2
+        WHERE persona_id = $1 AND source = $2
         ORDER BY preference_type
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .bind(&source)
     .fetch_all(&pool)
     .await
@@ -86,15 +86,15 @@ async fn persona_interaction_context_upsert_and_delete_materializes_interaction_
     );
 
     let deleted = persona_store
-        .delete(&context.persona_id)
+        .delete(&context.interaction_context_id)
         .await
         .expect("delete interaction context");
     assert!(deleted);
 
     let remaining_count: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM persona_preferences WHERE person_id = $1 AND source = $2",
+        "SELECT count(*) FROM persona_preferences WHERE persona_id = $1 AND source = $2",
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .bind(&source)
     .fetch_one(&pool)
     .await
@@ -103,7 +103,7 @@ async fn persona_interaction_context_upsert_and_delete_materializes_interaction_
 }
 
 #[tokio::test]
-async fn person_notes_materialize_persona_memory_card_against_postgres() {
+async fn persona_notes_materialize_memory_card_against_postgres() {
     let Some(pool) = live_personas_pool("person notes memory adapter").await else {
         return;
     };
@@ -114,18 +114,18 @@ async fn person_notes_materialize_persona_memory_card_against_postgres() {
         .upsert_email_persona(&format!("notes-memory-{suffix}@example.com"))
         .await
         .expect("upsert persona");
-    let source = format!("personas.notes:{}", person.person_id);
+    let source = format!("personas.notes:{}", person.persona_id);
 
     enrichment_store
         .set_notes(
-            &person.person_id,
+            &person.persona_id,
             "Remember that this Persona prefers concise written summaries.",
         )
         .await
         .expect("set notes");
 
-    let root_notes: String = sqlx::query_scalar("SELECT notes FROM personas WHERE person_id = $1")
-        .bind(&person.person_id)
+    let root_notes: String = sqlx::query_scalar("SELECT notes FROM personas WHERE persona_id = $1")
+        .bind(&person.persona_id)
         .fetch_one(&pool)
         .await
         .expect("root compatibility notes");
@@ -138,10 +138,10 @@ async fn person_notes_materialize_persona_memory_card_against_postgres() {
         r#"
         SELECT title, description, source, importance
         FROM persona_memory_cards
-        WHERE person_id = $1 AND source = $2
+        WHERE persona_id = $1 AND source = $2
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .bind(&source)
     .fetch_one(&pool)
     .await
@@ -156,7 +156,7 @@ async fn person_notes_materialize_persona_memory_card_against_postgres() {
 }
 
 #[tokio::test]
-async fn person_fact_upsert_uses_memory_engine_source_backed_draft_against_postgres() {
+async fn persona_fact_upsert_uses_memory_engine_source_backed_draft_against_postgres() {
     let Some(pool) = live_personas_pool("person fact memory engine adapter").await else {
         return;
     };
@@ -170,7 +170,7 @@ async fn person_fact_upsert_uses_memory_engine_source_backed_draft_against_postg
 
     let fact = fact_store
         .upsert(
-            &person.person_id,
+            &person.persona_id,
             " interest ",
             " local-first systems ",
             " communication_messages:message-1 ",
@@ -179,7 +179,7 @@ async fn person_fact_upsert_uses_memory_engine_source_backed_draft_against_postg
         .await
         .expect("upsert fact");
 
-    assert_eq!(fact.person_id, person.person_id);
+    assert_eq!(fact.persona_id, person.persona_id);
     assert_eq!(fact.fact_type, "interest");
     assert_eq!(fact.value, "local-first systems");
     assert_eq!(fact.source, "communication_messages:message-1");
@@ -204,7 +204,7 @@ async fn person_fact_upsert_uses_memory_engine_source_backed_draft_against_postg
 }
 
 #[tokio::test]
-async fn person_favorite_toggle_materializes_ui_preference_against_postgres() {
+async fn persona_favorite_toggle_materializes_ui_preference_against_postgres() {
     let Some(pool) = live_personas_pool("person favorite preference adapter").await else {
         return;
     };
@@ -215,10 +215,10 @@ async fn person_favorite_toggle_materializes_ui_preference_against_postgres() {
         .upsert_email_persona(&format!("favorite-preference-{suffix}@example.com"))
         .await
         .expect("upsert persona");
-    let source = format!("personas.is_favorite:{}", person.person_id);
+    let source = format!("personas.is_favorite:{}", person.persona_id);
 
     let is_favorite = enrichment_store
-        .toggle_favorite(&person.person_id)
+        .toggle_favorite(&person.persona_id)
         .await
         .expect("toggle favorite on");
     assert!(is_favorite);
@@ -227,10 +227,10 @@ async fn person_favorite_toggle_materializes_ui_preference_against_postgres() {
         r#"
         SELECT preference_type, value, source, confidence
         FROM persona_preferences
-        WHERE person_id = $1 AND preference_type = 'ui:favorite'
+        WHERE persona_id = $1 AND preference_type = 'ui:favorite'
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("favorite UI preference");
@@ -240,15 +240,15 @@ async fn person_favorite_toggle_materializes_ui_preference_against_postgres() {
     assert_eq!(preference.3, 1.0);
 
     let is_favorite = enrichment_store
-        .toggle_favorite(&person.person_id)
+        .toggle_favorite(&person.persona_id)
         .await
         .expect("toggle favorite off");
     assert!(!is_favorite);
 
     let preference_count: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM persona_preferences WHERE person_id = $1 AND preference_type = 'ui:favorite'",
+        "SELECT count(*) FROM persona_preferences WHERE persona_id = $1 AND preference_type = 'ui:favorite'",
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("remaining favorite preference count");
@@ -256,7 +256,7 @@ async fn person_favorite_toggle_materializes_ui_preference_against_postgres() {
 }
 
 #[tokio::test]
-async fn person_enrichment_result_upsert_materializes_pending_source_backed_candidate_against_postgres()
+async fn persona_enrichment_result_upsert_materializes_pending_source_backed_candidate_against_postgres()
  {
     let Some(pool) = live_personas_pool("person enrichment result candidate").await else {
         return;
@@ -271,7 +271,7 @@ async fn person_enrichment_result_upsert_materializes_pending_source_backed_cand
 
     let result = enrichment_result_store
         .upsert(
-            &person.person_id,
+            &person.persona_id,
             "communication_messages:message-1",
             json!({
                 "field": "communication_style",
@@ -283,7 +283,7 @@ async fn person_enrichment_result_upsert_materializes_pending_source_backed_cand
         .await
         .expect("upsert enrichment result");
 
-    assert_eq!(result.person_id, person.person_id);
+    assert_eq!(result.persona_id, person.persona_id);
     assert_eq!(result.source, "communication_messages:message-1");
     assert!((result.confidence - 0.82).abs() < 0.0001);
     assert_eq!(result.status, "pending");
@@ -294,7 +294,7 @@ async fn person_enrichment_result_upsert_materializes_pending_source_backed_cand
     );
     assert_eq!(
         result.data["_enrichment"]["affected_entity_id"],
-        person.person_id
+        person.persona_id
     );
     assert_eq!(
         result.data["_enrichment"]["extracted_claim"],
@@ -306,7 +306,7 @@ async fn person_enrichment_result_upsert_materializes_pending_source_backed_cand
 }
 
 #[tokio::test]
-async fn person_watchlist_toggle_materializes_ui_preference_against_postgres() {
+async fn persona_watchlist_toggle_materializes_ui_preference_against_postgres() {
     let Some(pool) = live_personas_pool("person watchlist preference adapter").await else {
         return;
     };
@@ -317,10 +317,10 @@ async fn person_watchlist_toggle_materializes_ui_preference_against_postgres() {
         .upsert_email_persona(&format!("watchlist-preference-{suffix}@example.com"))
         .await
         .expect("upsert persona");
-    let source = format!("personas.watchlist:{}", person.person_id);
+    let source = format!("personas.watchlist:{}", person.persona_id);
 
     let watchlist = health_store
-        .toggle_watchlist(&person.person_id)
+        .toggle_watchlist(&person.persona_id)
         .await
         .expect("toggle watchlist on");
     assert!(watchlist);
@@ -329,10 +329,10 @@ async fn person_watchlist_toggle_materializes_ui_preference_against_postgres() {
         r#"
         SELECT preference_type, value, source, confidence
         FROM persona_preferences
-        WHERE person_id = $1 AND preference_type = 'ui:watchlist'
+        WHERE persona_id = $1 AND preference_type = 'ui:watchlist'
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("watchlist UI preference");
@@ -342,15 +342,15 @@ async fn person_watchlist_toggle_materializes_ui_preference_against_postgres() {
     assert_eq!(preference.3, 1.0);
 
     let watchlist = health_store
-        .toggle_watchlist(&person.person_id)
+        .toggle_watchlist(&person.persona_id)
         .await
         .expect("toggle watchlist off");
     assert!(!watchlist);
 
     let preference_count: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM persona_preferences WHERE person_id = $1 AND preference_type = 'ui:watchlist'",
+        "SELECT count(*) FROM persona_preferences WHERE persona_id = $1 AND preference_type = 'ui:watchlist'",
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("remaining watchlist preference count");

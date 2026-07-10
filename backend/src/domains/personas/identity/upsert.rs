@@ -57,8 +57,8 @@ pub(super) async fn upsert_candidate_in_transaction(
         INSERT INTO persona_identity_candidates (
             identity_candidate_id,
             candidate_kind,
-            left_person_id,
-            right_person_id,
+            left_persona_id,
+            right_persona_id,
             email_address,
             evidence_summary,
             confidence,
@@ -71,8 +71,8 @@ pub(super) async fn upsert_candidate_in_transaction(
         ON CONFLICT (identity_candidate_id)
         DO UPDATE SET
             candidate_kind = EXCLUDED.candidate_kind,
-            left_person_id = EXCLUDED.left_person_id,
-            right_person_id = EXCLUDED.right_person_id,
+            left_persona_id = EXCLUDED.left_persona_id,
+            right_persona_id = EXCLUDED.right_persona_id,
             email_address = EXCLUDED.email_address,
             evidence_summary = EXCLUDED.evidence_summary,
             confidence = EXCLUDED.confidence,
@@ -173,8 +173,8 @@ pub(crate) async fn load_identity_candidate_payload(
         r#"
         SELECT
             candidate_kind,
-            left_person_id,
-            right_person_id,
+            left_persona_id,
+            right_persona_id,
             email_address,
             evidence_summary,
             confidence::float8 AS confidence
@@ -196,8 +196,8 @@ pub(crate) async fn load_identity_candidate_payload(
 
     Ok(PersonaIdentityCandidatePayload {
         candidate_kind,
-        left_persona_id: row.try_get("left_person_id")?,
-        right_persona_id: row.try_get("right_person_id")?,
+        left_persona_id: row.try_get("left_persona_id")?,
+        right_persona_id: row.try_get("right_persona_id")?,
         email_address: row.try_get("email_address")?,
         evidence_summary: row.try_get("evidence_summary")?,
         confidence: row.try_get("confidence")?,

@@ -6,7 +6,7 @@ use super::models::{Persona, PersonaType};
 
 pub(super) fn row_to_persona(row: PgRow) -> Result<Persona, PersonaProjectionError> {
     Ok(Persona {
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         display_name: row.try_get("display_name")?,
         email_address: row.try_get("email_address")?,
         persona_type: PersonaType::try_from(row.try_get::<String, _>("person_type")?.as_str())?,

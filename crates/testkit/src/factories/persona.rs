@@ -8,7 +8,7 @@ pub struct PersonaFactory<'a> {
     pool: &'a PgPool,
     display_name: String,
     email: Option<String>,
-    person_id: Option<String>,
+    persona_id: Option<String>,
 }
 
 impl<'a> PersonaFactory<'a> {
@@ -24,7 +24,7 @@ impl<'a> PersonaFactory<'a> {
                     .collect::<String>()
             ),
             email: None,
-            person_id: None,
+            persona_id: None,
         }
     }
 
@@ -39,26 +39,26 @@ impl<'a> PersonaFactory<'a> {
     }
 
     pub fn with_persona_id(mut self, id: impl Into<String>) -> Self {
-        self.person_id = Some(id.into());
+        self.persona_id = Some(id.into());
         self
     }
 
-    #[deprecated(note = "use with_persona_id; person_id is only the current storage column name")]
+    #[deprecated(note = "use with_persona_id; persona_id is only the current storage column name")]
     pub fn with_person_id(self, id: impl Into<String>) -> Self {
         self.with_persona_id(id)
     }
 
     /// Create a persona record, email identity, and default interaction context.
     ///
-    /// Returns the current schema's stable persona record identifier (`person_id`).
+    /// Returns the current schema's stable persona record identifier (`persona_id`).
     pub async fn create(
         self,
     ) -> Result<String, hermes_hub_backend::domains::personas::core::PersonaCoreError> {
         let identity_store = PersonaIdentityStore::new(self.pool.clone());
         let persona_store = PersonaInteractionContextStore::new(self.pool.clone());
 
-        let person_id = self
-            .person_id
+        let persona_id = self
+            .persona_id
             .unwrap_or_else(|| format!("persona:{}", Uuid::new_v4()));
         let email = self
             .email
@@ -67,19 +67,19 @@ impl<'a> PersonaFactory<'a> {
         sqlx::query(
             r#"
             INSERT INTO personas (
-                person_id,
+                persona_id,
                 display_name,
                 email_address
             )
             VALUES ($1, $2, $3)
-            ON CONFLICT (person_id)
+            ON CONFLICT (persona_id)
             DO UPDATE SET
                 display_name = EXCLUDED.display_name,
                 email_address = EXCLUDED.email_address,
                 updated_at = now()
             "#,
         )
-        .bind(&person_id)
+        .bind(&persona_id)
         .bind(&self.display_name)
         .bind(&email)
         .execute(self.pool)
@@ -87,13 +87,13 @@ impl<'a> PersonaFactory<'a> {
 
         // Create identity via upsert.
         identity_store
-            .upsert(&person_id, "email", &email, "testkit")
+            .upsert(&persona_id, "email", &email, "testkit")
             .await?;
 
         // Create a default interaction context for the persona record.
         let persona = NewPersonaInteractionContext {
-            persona_id: format!("persona:{}", Uuid::new_v4()),
-            person_id: person_id.clone(),
+            interaction_context_id: format!("persona:{}", Uuid::new_v4()),
+            source_persona_id: persona_id.clone(),
             name: self.display_name,
             context: Some("test".into()),
             default_tone: Some("neutral".into()),
@@ -102,6 +102,6 @@ impl<'a> PersonaFactory<'a> {
         };
         persona_store.upsert(&persona).await?;
 
-        Ok(person_id)
+        Ok(persona_id)
     }
 }

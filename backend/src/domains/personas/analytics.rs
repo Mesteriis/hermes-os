@@ -7,7 +7,7 @@ use thiserror::Error;
 #[derive(Clone, Debug, Serialize)]
 pub struct PersonaAnalytics {
     #[serde(rename = "persona_id")]
-    pub person_id: String,
+    pub persona_id: String,
     pub relationship_score: f64,
     pub intelligence_score: f64,
     pub interaction_heatmap: Vec<HeatmapEntry>,
@@ -47,15 +47,15 @@ impl PersonaAnalyticsService {
     }
 
     /// Compute full analytics for a Persona.
-    pub async fn compute(&self, person_id: &str) -> Result<PersonaAnalytics, AnalyticsError> {
-        let rel_score = self.relationship_score(person_id).await.unwrap_or(0.0);
-        let intel_score = self.intelligence_score(person_id).await.unwrap_or(0.0);
+    pub async fn compute(&self, persona_id: &str) -> Result<PersonaAnalytics, AnalyticsError> {
+        let rel_score = self.relationship_score(persona_id).await.unwrap_or(0.0);
+        let intel_score = self.intelligence_score(persona_id).await.unwrap_or(0.0);
         let heatmap = self
-            .interaction_heatmap(person_id)
+            .interaction_heatmap(persona_id)
             .await
             .unwrap_or_default();
         let costs = self
-            .communication_costs(person_id)
+            .communication_costs(persona_id)
             .await
             .unwrap_or(CommunicationCosts {
                 avg_thread_length: 0.0,
@@ -63,7 +63,7 @@ impl PersonaAnalyticsService {
                 follow_up_frequency: 0.0,
             });
         let ctx = self
-            .shared_context(person_id)
+            .shared_context(persona_id)
             .await
             .unwrap_or(SharedContext {
                 shared_projects: 0,
@@ -72,7 +72,7 @@ impl PersonaAnalyticsService {
             });
 
         Ok(PersonaAnalytics {
-            person_id: person_id.to_string(),
+            persona_id: persona_id.to_string(),
             relationship_score: rel_score,
             intelligence_score: intel_score,
             interaction_heatmap: heatmap,
@@ -82,10 +82,10 @@ impl PersonaAnalyticsService {
     }
 
     /// Relationship score: weighted from interaction recency, count, trust.
-    async fn relationship_score(&self, person_id: &str) -> Result<f64, AnalyticsError> {
+    async fn relationship_score(&self, persona_id: &str) -> Result<f64, AnalyticsError> {
         let row = sqlx::query(
-            "SELECT COALESCE(interaction_count, 0) as ic, COALESCE(trust_score, 50) as ts FROM personas WHERE person_id = $1"
-        ).bind(person_id).fetch_optional(&self.pool).await?;
+            "SELECT COALESCE(interaction_count, 0) as ic, COALESCE(trust_score, 50) as ts FROM personas WHERE persona_id = $1"
+        ).bind(persona_id).fetch_optional(&self.pool).await?;
         if let Some(r) = row {
             let ic: i32 = r.try_get("ic").unwrap_or(0);
             let ts: i16 = r.try_get("ts").unwrap_or(50);
@@ -96,7 +96,7 @@ impl PersonaAnalyticsService {
     }
 
     /// Intelligence score: completeness of Persona profile.
-    async fn intelligence_score(&self, person_id: &str) -> Result<f64, AnalyticsError> {
+    async fn intelligence_score(&self, persona_id: &str) -> Result<f64, AnalyticsError> {
         let row = sqlx::query(
             r#"SELECT
                 (CASE WHEN language IS NOT NULL THEN 10 ELSE 0 END +
@@ -109,9 +109,9 @@ impl PersonaAnalyticsService {
                  CASE WHEN primary_role IS NOT NULL THEN 10 ELSE 0 END +
                  CASE WHEN organization_reference IS NOT NULL THEN 10 ELSE 0 END +
                  CASE WHEN notes IS NOT NULL THEN 10 ELSE 0 END) as score
-             FROM personas WHERE person_id = $1"#,
+             FROM personas WHERE persona_id = $1"#,
         )
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_optional(&self.pool)
         .await?;
         Ok(row
@@ -122,7 +122,7 @@ impl PersonaAnalyticsService {
     /// Interaction heatmap: message count by day-of-week and hour.
     async fn interaction_heatmap(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<Vec<HeatmapEntry>, AnalyticsError> {
         let rows = sqlx::query(
             r#"SELECT
@@ -134,7 +134,7 @@ impl PersonaAnalyticsService {
                AND (sender like $1 || '%' OR recipients like '%' || $1 || '%')
              GROUP BY 1, 2 ORDER BY 1, 2 LIMIT 168"#,
         )
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_all(&self.pool)
         .await?;
         Ok(rows
@@ -150,12 +150,12 @@ impl PersonaAnalyticsService {
     /// Communication costs: avg thread length, response time, follow-up rate.
     async fn communication_costs(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<CommunicationCosts, AnalyticsError> {
         // Simplified: use existing avg_response_hours and interaction_count from personas table.
         let row = sqlx::query(
-            "SELECT COALESCE(avg_response_hours, 0.0) as arh, interaction_count FROM personas WHERE person_id = $1"
-        ).bind(person_id).fetch_optional(&self.pool).await?;
+            "SELECT COALESCE(avg_response_hours, 0.0) as arh, interaction_count FROM personas WHERE persona_id = $1"
+        ).bind(persona_id).fetch_optional(&self.pool).await?;
         if let Some(r) = row {
             let arh: f64 = r.try_get("arh").unwrap_or(0.0);
             let ic: i32 = r.try_get("interaction_count").unwrap_or(0);
@@ -178,11 +178,11 @@ impl PersonaAnalyticsService {
     }
 
     /// Shared context counts.
-    async fn shared_context(&self, person_id: &str) -> Result<SharedContext, AnalyticsError> {
+    async fn shared_context(&self, persona_id: &str) -> Result<SharedContext, AnalyticsError> {
         let proj_count = sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM graph_edges WHERE source_node_id = $1 AND relationship_type = 'project_involves_persona'",
         )
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_one(&self.pool)
         .await
         .unwrap_or(0);

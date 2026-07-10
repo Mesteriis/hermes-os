@@ -8,7 +8,7 @@ impl PersonaProjectionStore {
         let rows = sqlx::query(
             r#"
             SELECT
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 person_type,
@@ -17,7 +17,7 @@ impl PersonaProjectionStore {
                 created_at,
                 updated_at
             FROM personas
-            ORDER BY updated_at DESC, created_at DESC, person_id
+            ORDER BY updated_at DESC, created_at DESC, persona_id
             LIMIT $1
             "#,
         )
@@ -35,7 +35,7 @@ impl PersonaProjectionStore {
         let row = sqlx::query(
             r#"
             SELECT
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 person_type,
@@ -44,7 +44,7 @@ impl PersonaProjectionStore {
                 created_at,
                 updated_at
             FROM personas
-            WHERE person_id = $1
+            WHERE persona_id = $1
             "#,
         )
         .bind(persona_id)

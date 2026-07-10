@@ -29,7 +29,7 @@ impl From<PersonaIdentity> for PersonaIdentityApiResponse {
     fn from(identity: PersonaIdentity) -> Self {
         Self {
             id: identity.id,
-            persona_id: identity.person_id,
+            persona_id: identity.persona_id,
             identity_type: identity.identity_type,
             identity_value: identity.identity_value,
             source: identity.source,

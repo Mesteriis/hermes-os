@@ -4,7 +4,7 @@ use sqlx::postgres::PgRow;
 use super::errors::PersonaEnrichmentError;
 use super::models::EnrichedPersona;
 
-pub(in crate::domains::personas::enrichment) const ENRICHED_PERSONA_COLUMNS: &str = "person_id, display_name, email_address, language, tone, trust_score, avg_response_hours, \
+pub(in crate::domains::personas::enrichment) const ENRICHED_PERSONA_COLUMNS: &str = "persona_id, display_name, email_address, language, tone, trust_score, avg_response_hours, \
      preferred_channel, last_interaction_at, interaction_count, frequent_topics, writing_style, \
      persona_metadata, is_favorite, is_address_book, notes, created_at, updated_at";
 
@@ -12,7 +12,7 @@ pub(in crate::domains::personas::enrichment) fn row_to_enriched(
     row: PgRow,
 ) -> Result<EnrichedPersona, PersonaEnrichmentError> {
     Ok(EnrichedPersona {
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         display_name: row.try_get("display_name")?,
         email_address: row.try_get("email_address")?,
         language: row.try_get("language")?,

@@ -19,7 +19,7 @@ pub(crate) struct OrganizationProjectionReport {
 
 pub(crate) async fn project_email_participant_organization(
     pool: &PgPool,
-    person_id: &str,
+    persona_id: &str,
     message: &ProjectedMessage,
     participant: &EmailParticipant,
 ) -> Result<OrganizationProjectionReport, EmailSyncPipelineError> {
@@ -32,7 +32,7 @@ pub(crate) async fn project_email_participant_organization(
     let organization_inserted = organization_id.is_some();
     let organization_id = organization_id.unwrap_or_else(|| organization_id_for_domain(&domain));
     let persona_link_inserted =
-        upsert_organization_persona_link(pool, &organization_id, person_id, message, participant)
+        upsert_organization_persona_link(pool, &organization_id, persona_id, message, participant)
             .await?;
 
     Ok(OrganizationProjectionReport {
@@ -87,14 +87,14 @@ async fn upsert_email_domain_organization(
 async fn upsert_organization_persona_link(
     pool: &PgPool,
     organization_id: &str,
-    person_id: &str,
+    persona_id: &str,
     message: &ProjectedMessage,
     _participant: &EmailParticipant,
 ) -> Result<bool, EmailSyncPipelineError> {
     let (link, inserted) = OrganizationPersonaLinkPort::new(pool.clone())
         .link_email_participant_with_observation(
             organization_id,
-            person_id,
+            persona_id,
             &message.message_id,
             &message.observation_id,
         )
@@ -117,7 +117,7 @@ async fn materialize_email_participant_member_relationship(
 ) -> Result<(), EmailSyncPipelineError> {
     let relationship = NewRelationship {
         source_entity_kind: RelationshipEntityKind::Persona,
-        source_entity_id: link.person_id.clone(),
+        source_entity_id: link.persona_id.clone(),
         target_entity_kind: RelationshipEntityKind::Organization,
         target_entity_id: link.organization_id.clone(),
         relationship_type: "member_of".to_owned(),
@@ -131,7 +131,7 @@ async fn materialize_email_participant_member_relationship(
             "compatibility_table": "organization_persona_links",
             "compatibility_record_id": link.id,
             "organization_id": link.organization_id,
-            "person_id": link.person_id,
+            "persona_id": link.persona_id,
             "role": link.role,
             "department": link.department,
             "source": link.source,
@@ -149,7 +149,7 @@ async fn materialize_email_participant_member_relationship(
             "compatibility_table": "organization_persona_links",
             "compatibility_record_id": link.id,
             "organization_id": link.organization_id,
-            "person_id": link.person_id,
+            "persona_id": link.persona_id,
         }),
     };
     let _ = RelationshipReviewPort::new(pool.clone())

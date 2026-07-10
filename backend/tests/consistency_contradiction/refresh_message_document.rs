@@ -22,12 +22,12 @@ async fn contradiction_refresh_detects_message_claim_against_active_persona_fact
         .expect("person");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (persona_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("person fact");
@@ -66,7 +66,7 @@ async fn contradiction_refresh_detects_message_claim_against_active_persona_fact
     assert_eq!(observation.severity, ContradictionSeverity::Medium);
     assert_eq!(
         observation.affected_entities,
-        json!([{"entity_kind": "subject", "entity_id": person.person_id}])
+        json!([{"entity_kind": "subject", "entity_id": person.persona_id}])
     );
     assert_eq!(
         observation.metadata,
@@ -101,12 +101,12 @@ async fn contradiction_refresh_detects_natural_language_message_claim_against_ac
         .expect("person");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (persona_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("person fact");
@@ -168,12 +168,12 @@ async fn contradiction_refresh_detects_document_claim_against_active_persona_fac
         .expect("person");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (persona_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("person fact");
@@ -211,7 +211,7 @@ async fn contradiction_refresh_detects_document_claim_against_active_persona_fac
     assert_eq!(observation.severity, ContradictionSeverity::Medium);
     assert_eq!(
         observation.affected_entities,
-        json!([{"entity_kind": "subject", "entity_id": person.person_id}])
+        json!([{"entity_kind": "subject", "entity_id": person.persona_id}])
     );
     assert_eq!(
         observation.metadata,

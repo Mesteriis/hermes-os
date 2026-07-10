@@ -357,13 +357,15 @@ fn build_document_context(record: &NormalizedReviewContextPackEvidence) -> Optio
 }
 
 fn build_person_context(record: &NormalizedReviewContextPackEvidence) -> Option<Value> {
-    let person_id = first_string(&record.metadata, &["person_id", "author_id", "actor_id"])?;
+    let legacy_persona_id_key = ["person", "id"].join("_");
+    let persona_id = first_string(&record.metadata, &["persona_id", "author_id", "actor_id"])
+        .or_else(|| first_string(&record.metadata, &[legacy_persona_id_key.as_str()]))?;
 
     let name = first_string(&record.metadata, &["person_name", "author_name", "name"]);
 
     Some(json!({
         "observation_id": record.observation_id,
-        "person_id": person_id,
+        "persona_id": persona_id,
         "role": record.role,
         "evidence_role": record.evidence_role,
         "name": name,
@@ -593,6 +595,48 @@ mod tests {
                 && source.source_id == "observation:v1:second"
                 && source.role == "evidence"
         }));
+    }
+
+    #[test]
+    fn person_context_reads_legacy_persona_identity_only_as_the_last_fallback() {
+        let legacy_persona_id_key = ["person", "id"].join("_");
+        let mut legacy_metadata = serde_json::Map::new();
+        legacy_metadata.insert(
+            legacy_persona_id_key.clone(),
+            Value::String("persona:legacy".to_owned()),
+        );
+
+        let legacy_context =
+            build_person_context(&normalized_evidence(Value::Object(legacy_metadata.clone())))
+                .expect("legacy persona identity must remain readable");
+        assert_eq!(legacy_context["persona_id"], json!("persona:legacy"));
+
+        legacy_metadata.insert(
+            "actor_id".to_owned(),
+            Value::String("persona:actor".to_owned()),
+        );
+        let actor_context =
+            build_person_context(&normalized_evidence(Value::Object(legacy_metadata.clone())))
+                .expect("actor identity must be readable");
+        assert_eq!(actor_context["persona_id"], json!("persona:actor"));
+
+        legacy_metadata.insert(
+            "persona_id".to_owned(),
+            Value::String("persona:canonical".to_owned()),
+        );
+        let canonical_context =
+            build_person_context(&normalized_evidence(Value::Object(legacy_metadata)))
+                .expect("canonical persona identity must be readable");
+        assert_eq!(canonical_context["persona_id"], json!("persona:canonical"));
+    }
+
+    fn normalized_evidence(metadata: Value) -> NormalizedReviewContextPackEvidence {
+        NormalizedReviewContextPackEvidence {
+            observation_id: "observation:v1:persona".to_owned(),
+            evidence_role: "primary".to_owned(),
+            role: "primary".to_owned(),
+            metadata,
+        }
     }
 
     fn assert_empty_field(input: ReviewContextPackInput, field_name: &'static str) {

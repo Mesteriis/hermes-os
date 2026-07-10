@@ -128,9 +128,9 @@ async fn personas_projection_distinguishes_delimiter_bearing_email_identities_ag
         .await
         .expect("upsert non-delimiter person");
 
-    assert_ne!(left.person_id, right.person_id);
-    assert!(left.person_id.starts_with("person:v1:email:"));
-    assert!(right.person_id.starts_with("person:v1:email:"));
+    assert_ne!(left.persona_id, right.persona_id);
+    assert!(left.persona_id.starts_with("person:v1:email:"));
+    assert!(right.persona_id.starts_with("person:v1:email:"));
 }
 
 #[tokio::test]
@@ -159,10 +159,10 @@ async fn address_book_persona_can_be_phone_only_and_merge_by_phone_against_postg
     assert!(first.is_address_book);
     assert!(
         first
-            .person_id
+            .persona_id
             .starts_with("persona:v1:provider_address_book_entry:"),
         "new provider-address-book-only personas should use persona-native ids, got {}",
-        first.person_id
+        first.persona_id
     );
 
     let second = service
@@ -177,7 +177,7 @@ async fn address_book_persona_can_be_phone_only_and_merge_by_phone_against_postg
         .await
         .expect("merge phone-only address book persona by phone identity");
 
-    assert_eq!(second.person_id, first.person_id);
+    assert_eq!(second.persona_id, first.persona_id);
     assert_eq!(second.email_address, None);
     assert!(second.is_address_book);
 
@@ -193,7 +193,7 @@ async fn address_book_persona_can_be_phone_only_and_merge_by_phone_against_postg
         .await
         .expect("merge later email-bearing address book persona by phone identity");
 
-    assert_eq!(third.person_id, first.person_id);
+    assert_eq!(third.persona_id, first.persona_id);
     let expected_email = format!("phone-email-{suffix}@example.com");
     assert_eq!(
         third.email_address.as_deref(),
@@ -246,7 +246,7 @@ async fn address_book_persona_without_email_reuses_provider_link_against_postgre
         r#"
         INSERT INTO communication_provider_address_book_links (
             account_id,
-            person_id,
+            persona_id,
             provider_address_book_entry_id,
             provider_etag,
             last_provider_seen_at,
@@ -256,7 +256,7 @@ async fn address_book_persona_without_email_reuses_provider_link_against_postgre
         "#,
     )
     .bind(&source_account_id)
-    .bind(&first.person_id)
+    .bind(&first.persona_id)
     .bind(&provider_entry_id)
     .execute(&pool)
     .await
@@ -274,7 +274,7 @@ async fn address_book_persona_without_email_reuses_provider_link_against_postgre
         .await
         .expect("reuse provider link for name-only address book persona");
 
-    assert_eq!(second.person_id, first.person_id);
+    assert_eq!(second.persona_id, first.persona_id);
     assert_eq!(second.email_address, None);
     assert!(second.is_address_book);
 }
@@ -311,13 +311,13 @@ async fn personas_projection_tracks_single_owner_persona_against_postgres() {
         .expect("upsert second owner candidate");
 
     let first_owner = store
-        .set_owner_persona(&first.person_id)
+        .set_owner_persona(&first.persona_id)
         .await
         .expect("set first owner persona");
     assert!(first_owner.is_self);
 
     let second_owner = store
-        .set_owner_persona(&second.person_id)
+        .set_owner_persona(&second.persona_id)
         .await
         .expect("move owner persona");
     assert!(second_owner.is_self);
@@ -327,7 +327,7 @@ async fn personas_projection_tracks_single_owner_persona_against_postgres() {
         .await
         .expect("load owner persona")
         .expect("owner persona exists");
-    assert_eq!(owner.person_id, second.person_id);
+    assert_eq!(owner.persona_id, second.persona_id);
 }
 
 #[tokio::test]
@@ -342,7 +342,7 @@ async fn personas_projection_sets_supported_persona_type_against_postgres() {
         .expect("upsert persona");
 
     let updated = store
-        .set_persona_type(&person.person_id, PersonaType::AiAgent)
+        .set_persona_type(&person.persona_id, PersonaType::AiAgent)
         .await
         .expect("set persona type");
 
@@ -362,8 +362,8 @@ async fn personas_schema_rejects_invalid_persona_type_against_postgres() {
         .await
         .expect("upsert persona");
 
-    let error = sqlx::query("UPDATE personas SET person_type = 'lead' WHERE person_id = $1")
-        .bind(&person.person_id)
+    let error = sqlx::query("UPDATE personas SET person_type = 'lead' WHERE persona_id = $1")
+        .bind(&person.persona_id)
         .execute(&pool)
         .await
         .expect_err("invalid persona type must violate the check constraint");

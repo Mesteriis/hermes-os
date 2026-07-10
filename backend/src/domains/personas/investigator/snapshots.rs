@@ -10,7 +10,7 @@ pub(super) async fn cache_dossier_snapshot(
 ) -> Result<DossierSnapshot, InvestigatorError> {
     let dossier_value = serde_json::to_value(dossier)?;
     let source_refs = serde_json::to_value(&dossier.source_refs)?;
-    let snapshot_id = dossier_snapshot_id(&dossier.persona.person_id);
+    let snapshot_id = dossier_snapshot_id(&dossier.persona.persona_id);
     let row = sqlx::query(
         r#"
         INSERT INTO persona_dossier_snapshots (
@@ -43,7 +43,7 @@ pub(super) async fn cache_dossier_snapshot(
         "#,
     )
     .bind(&snapshot_id)
-    .bind(&dossier.persona.person_id)
+    .bind(&dossier.persona.persona_id)
     .bind(dossier_value)
     .bind(source_refs)
     .bind(dossier.generated_at)
@@ -55,7 +55,7 @@ pub(super) async fn cache_dossier_snapshot(
 
 pub(super) async fn review_dossier_snapshot(
     pool: &PgPool,
-    person_id: &str,
+    persona_id: &str,
     review_state: DossierReviewState,
 ) -> Result<DossierSnapshot, InvestigatorError> {
     let row = sqlx::query(
@@ -81,7 +81,7 @@ pub(super) async fn review_dossier_snapshot(
             updated_at
         "#,
     )
-    .bind(person_id)
+    .bind(persona_id)
     .bind(review_state.as_str())
     .fetch_optional(pool)
     .await?
@@ -90,8 +90,8 @@ pub(super) async fn review_dossier_snapshot(
     row_to_dossier_snapshot(row)
 }
 
-fn dossier_snapshot_id(person_id: &str) -> String {
-    format!("persona_dossier:v1:{person_id}")
+fn dossier_snapshot_id(persona_id: &str) -> String {
+    format!("persona_dossier:v1:{persona_id}")
 }
 
 fn row_to_dossier_snapshot(row: PgRow) -> Result<DossierSnapshot, InvestigatorError> {

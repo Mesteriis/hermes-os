@@ -77,7 +77,7 @@ async fn graph_projection_links_projects_to_keyword_messages_documents_and_peopl
     assert_eq!(counts_after_first, counts_after_second);
 
     let project_node_id = project_graph_node_id(&project_id);
-    let owner_node_id = node_id(GraphNodeKind::Persona, &owner.person_id);
+    let owner_node_id = node_id(GraphNodeKind::Persona, &owner.persona_id);
     let reviewer_node_id = node_id(
         GraphNodeKind::EmailAddress,
         &format!("graph-project-reviewer-{suffix}@example.com"),

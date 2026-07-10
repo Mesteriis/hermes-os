@@ -15,8 +15,8 @@ use crate::platform::observations::{
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichmentResult {
     pub id: String,
-    #[serde(rename = "persona_id", alias = "person_id")]
-    pub person_id: String,
+    #[serde(alias = "person_id")]
+    pub persona_id: String,
     pub source: String,
     pub url: Option<String>,
     pub data: Value,
@@ -39,18 +39,18 @@ impl EnrichmentResultStore {
 
     pub async fn list(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<Vec<EnrichmentResult>, EnrichmentEngineError> {
         let rows = sqlx::query(
-            "SELECT id::text, person_id, source, url, data, confidence::float8 AS confidence, status, last_checked_at, applied_at, created_at
-             FROM enrichment_results WHERE person_id = $1 ORDER BY created_at DESC"
-        ).bind(person_id).fetch_all(&self.pool).await?;
+            "SELECT id::text, persona_id, source, url, data, confidence::float8 AS confidence, status, last_checked_at, applied_at, created_at
+             FROM enrichment_results WHERE persona_id = $1 ORDER BY created_at DESC"
+        ).bind(persona_id).fetch_all(&self.pool).await?;
         rows.into_iter().map(row_to_enrichment).collect()
     }
 
     pub async fn upsert(
         &self,
-        person_id: &str,
+        persona_id: &str,
         source: &str,
         data: Value,
         confidence: f64,
@@ -59,7 +59,7 @@ impl EnrichmentResultStore {
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| source.to_owned());
         let candidate = EnrichmentEngine::persona_observation_candidate(
-            person_id,
+            persona_id,
             source,
             &extracted_claim,
             data,
@@ -67,11 +67,11 @@ impl EnrichmentResultStore {
         )?;
 
         let row = sqlx::query(
-            "INSERT INTO enrichment_results (person_id, source, data, confidence, status)
+            "INSERT INTO enrichment_results (persona_id, source, data, confidence, status)
              VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT DO NOTHING
-             RETURNING id::text, person_id, source, url, data, confidence::float8 AS confidence, status, last_checked_at, applied_at, created_at"
-        ).bind(person_id).bind(&candidate.source).bind(&candidate.data).bind(candidate.confidence).bind(&candidate.review_state).fetch_one(&self.pool).await?;
+             RETURNING id::text, persona_id, source, url, data, confidence::float8 AS confidence, status, last_checked_at, applied_at, created_at"
+        ).bind(persona_id).bind(&candidate.source).bind(&candidate.data).bind(candidate.confidence).bind(&candidate.review_state).fetch_one(&self.pool).await?;
         row_to_enrichment(row)
     }
 
@@ -142,7 +142,7 @@ fn extracted_claim_from_data(data: &Value) -> Option<&str> {
 fn row_to_enrichment(row: PgRow) -> Result<EnrichmentResult, EnrichmentEngineError> {
     Ok(EnrichmentResult {
         id: row.try_get("id")?,
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         source: row.try_get("source")?,
         url: row.try_get("url")?,
         data: row.try_get("data")?,

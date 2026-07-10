@@ -21,7 +21,7 @@ impl PersonaProjectionStore {
                 r#"
                 UPDATE personas
                 SET display_name = $2, updated_at = now()
-                WHERE person_id = $1
+                WHERE persona_id = $1
                 "#,
             )
             .bind(persona_id)
@@ -55,7 +55,7 @@ impl PersonaProjectionStore {
         let row = sqlx::query(
             r#"
             SELECT
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 person_type,
@@ -64,7 +64,7 @@ impl PersonaProjectionStore {
                 created_at,
                 updated_at
             FROM personas
-            WHERE person_id = $1
+            WHERE persona_id = $1
             "#,
         )
         .bind(persona_id)
@@ -92,7 +92,7 @@ impl PersonaProjectionStore {
                 r#"
                 UPDATE personas
                 SET display_name = $2, updated_at = now()
-                WHERE person_id = $1
+                WHERE persona_id = $1
                 "#,
             )
             .bind(persona_id)
@@ -126,7 +126,7 @@ impl PersonaProjectionStore {
         let row = sqlx::query(
             r#"
             SELECT
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 person_type,
@@ -135,7 +135,7 @@ impl PersonaProjectionStore {
                 created_at,
                 updated_at
             FROM personas
-            WHERE person_id = $1
+            WHERE persona_id = $1
             "#,
         )
         .bind(persona_id)
@@ -168,9 +168,9 @@ impl PersonaProjectionStore {
             r#"
             UPDATE personas
             SET is_address_book = $2, updated_at = now()
-            WHERE person_id = $1
+            WHERE persona_id = $1
             RETURNING
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 person_type,

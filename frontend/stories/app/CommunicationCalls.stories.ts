@@ -458,7 +458,7 @@ export const CallListItemStory: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		await expect(canvas.getByText('Retention review')).toBeVisible()
-		await expect(canvas.getByText('Zoom')).toBeVisible()
+		await expect(canvas.getAllByText('Zoom')[0]).toBeVisible()
 	}
 }
 
@@ -484,7 +484,7 @@ export const CallListStory: Story = {
 		const canvas = within(canvasElement)
 		await expect(canvas.getByText('Permanent meetings')).toBeVisible()
 		await expect(canvas.getByText('Today')).toBeVisible()
-		await expect(canvas.getByText('Yesterday')).toBeVisible()
+		await expect(canvas.getAllByText('Yesterday')[0]).toBeVisible()
 		await expect(canvas.getByText('Yandex Telemost')).toBeVisible()
 	}
 }
@@ -603,7 +603,7 @@ export const CallReview: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement)
 		await expect(canvas.getByLabelText('Calls workspace')).toBeVisible()
-		await expect(canvas.getByText('Zoom')).toBeVisible()
+		await expect(canvas.getAllByText('Zoom')[0]).toBeVisible()
 		await expect(canvas.getByText('Yandex Telemost')).toBeVisible()
 		await expect(canvas.getByText('Zulip')).toBeVisible()
 		await expect(canvas.getByText('Request written confirmation')).toBeVisible()

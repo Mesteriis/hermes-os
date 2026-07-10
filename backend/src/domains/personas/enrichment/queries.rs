@@ -6,11 +6,11 @@ use super::store::PersonaEnrichmentStore;
 impl PersonaEnrichmentStore {
     pub async fn get_enriched(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<Option<EnrichedPersona>, PersonaEnrichmentError> {
-        let sql = format!("SELECT {ENRICHED_PERSONA_COLUMNS} FROM personas WHERE person_id = $1");
+        let sql = format!("SELECT {ENRICHED_PERSONA_COLUMNS} FROM personas WHERE persona_id = $1");
         let row = sqlx::query(&sql)
-            .bind(person_id)
+            .bind(persona_id)
             .fetch_optional(&self.pool)
             .await?;
         row.map(row_to_enriched).transpose()

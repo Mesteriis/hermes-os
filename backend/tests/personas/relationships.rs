@@ -11,7 +11,7 @@ use hermes_hub_backend::domains::personas::trust::PersonaPromiseStore;
 use super::support::{live_personas_pool, run_persona_derived_evidence_consumer, unique_suffix};
 
 #[tokio::test]
-async fn person_role_assign_and_remove_materializes_relationship_against_postgres() {
+async fn persona_role_assign_and_remove_materializes_relationship_against_postgres() {
     let Some(pool) = live_personas_pool("person role relationship adapter").await else {
         return;
     };
@@ -25,7 +25,7 @@ async fn person_role_assign_and_remove_materializes_relationship_against_postgre
 
     let _role = role_store
         .assign(
-            &person.person_id,
+            &person.persona_id,
             "Technical Advisor",
             Some("persona:owner"),
         )
@@ -65,13 +65,13 @@ async fn person_role_assign_and_remove_materializes_relationship_against_postgre
           AND relationship_type = 'has_role'
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("role relationship");
 
     assert_eq!(relationship.1, "persona");
-    assert_eq!(relationship.2, person.person_id);
+    assert_eq!(relationship.2, person.persona_id);
     assert_eq!(relationship.3, "knowledge");
     assert_eq!(relationship.4, "persona_role:technical_advisor");
     assert_eq!(relationship.5, "user_confirmed");
@@ -117,11 +117,11 @@ async fn person_role_assign_and_remove_materializes_relationship_against_postgre
             .fetch_one(&pool)
             .await
             .expect("role observation payload");
-    assert_eq!(role_observation_payload["persona_id"], person.person_id);
+    assert_eq!(role_observation_payload["persona_id"], person.persona_id);
     assert!(role_observation_payload.get("person_id").is_none());
 
     let removed = role_store
-        .remove(&person.person_id, "Technical Advisor")
+        .remove(&person.persona_id, "Technical Advisor")
         .await
         .expect("remove person role");
     assert!(removed);
@@ -137,7 +137,7 @@ async fn person_role_assign_and_remove_materializes_relationship_against_postgre
 }
 
 #[tokio::test]
-async fn person_enrichment_trust_score_materializes_owner_relationship_against_postgres() {
+async fn persona_enrichment_trust_score_materializes_owner_relationship_against_postgres() {
     let Some(pool) = live_personas_pool("person enrichment trust relationship adapter").await
     else {
         return;
@@ -154,7 +154,7 @@ async fn person_enrichment_trust_score_materializes_owner_relationship_against_p
         .await
         .expect("upsert target persona");
     person_store
-        .set_owner_persona(&owner.person_id)
+        .set_owner_persona(&owner.persona_id)
         .await
         .expect("set owner persona");
 
@@ -170,7 +170,7 @@ async fn person_enrichment_trust_score_materializes_owner_relationship_against_p
     };
 
     enrichment_store
-        .enrich_person(&target.person_id, &fingerprint)
+        .enrich_person(&target.persona_id, &fingerprint)
         .await
         .expect("enrich target persona");
     run_persona_derived_evidence_consumer(pool.clone()).await;
@@ -203,14 +203,14 @@ async fn person_enrichment_trust_score_materializes_owner_relationship_against_p
           AND relationship_type = 'trusts'
         "#,
     )
-    .bind(&owner.person_id)
-    .bind(&target.person_id)
+    .bind(&owner.persona_id)
+    .bind(&target.persona_id)
     .fetch_one(&pool)
     .await
     .expect("owner trust relationship");
 
-    assert_eq!(relationship.1, owner.person_id);
-    assert_eq!(relationship.2, target.person_id);
+    assert_eq!(relationship.1, owner.persona_id);
+    assert_eq!(relationship.2, target.persona_id);
     assert_eq!(relationship.3, "suggested");
     assert_eq!(relationship.4, 0.82);
     assert_eq!(relationship.5, 0.5);
@@ -242,7 +242,7 @@ async fn person_enrichment_trust_score_materializes_owner_relationship_against_p
     );
     assert_eq!(
         evidence.3["trust_source_reliability"]["affected_source"],
-        format!("persona_enrichment:{}:trust_score", target.person_id)
+        format!("persona_enrichment:{}:trust_score", target.persona_id)
     );
     assert_eq!(
         evidence.3["trust_source_reliability"]["direction"],
@@ -290,7 +290,7 @@ async fn person_enrichment_trust_score_materializes_owner_relationship_against_p
 }
 
 #[tokio::test]
-async fn person_promise_create_materializes_user_confirmed_obligation_without_task_against_postgres()
+async fn persona_promise_create_materializes_user_confirmed_obligation_without_task_against_postgres()
  {
     let Some(pool) = live_personas_pool("person promise obligation adapter").await else {
         return;
@@ -307,13 +307,13 @@ async fn person_promise_create_materializes_user_confirmed_obligation_without_ta
     let description = format!("Send the persona promise evidence package {suffix}");
 
     let promise = promise_store
-        .create(&person.person_id, &description, Some(due_at))
+        .create(&person.persona_id, &description, Some(due_at))
         .await
         .expect("create person promise");
     run_persona_derived_evidence_consumer(pool.clone()).await;
 
     let obligations = obligation_store
-        .list_for_entity(ObligationEntityKind::Persona, &person.person_id, 10)
+        .list_for_entity(ObligationEntityKind::Persona, &person.persona_id, 10)
         .await
         .expect("persona obligations");
     let obligation = obligations

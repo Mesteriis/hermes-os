@@ -173,8 +173,8 @@ pub(crate) async fn get_org_persona_links(
 
 #[derive(Deserialize)]
 pub(crate) struct LinkOrgPersonaRequest {
-    #[serde(rename = "persona_id", alias = "person_id")]
-    person_id: String,
+    #[serde(alias = "person_id")]
+    persona_id: String,
     role: Option<String>,
     department: Option<String>,
     source: Option<String>,
@@ -190,7 +190,7 @@ pub(crate) async fn post_org_persona_link(
     let link = OrganizationPersonaLinkApplicationService::new(pool)
         .link_persona_manual(
             &org_id,
-            &req.person_id,
+            &req.persona_id,
             req.role.as_deref(),
             req.department.as_deref(),
             requested_source,

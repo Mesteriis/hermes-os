@@ -32,7 +32,7 @@ impl AiService {
         let query = scoped_meeting_query(
             &topic,
             request.project_id.as_deref(),
-            request.person_id.as_deref(),
+            request.persona_id.as_deref(),
         );
         let attribution = self.run_attribution(&agent_id).await?;
 
@@ -63,7 +63,7 @@ impl AiService {
             payload: json!({
                 "workflow": "meeting_prep",
                 "project_id": request.project_id,
-                "person_id": request.person_id,
+                "persona_id": request.persona_id,
             }),
             correlation_id: request.correlation_id.as_deref(),
         })

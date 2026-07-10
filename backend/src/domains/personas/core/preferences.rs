@@ -66,11 +66,11 @@ pub(super) async fn delete_interaction_preferences_in_transaction(
     ] {
         sqlx::query(
             "DELETE FROM persona_preferences
-             WHERE person_id = $1 AND preference_type = $2 AND source = $3",
+             WHERE persona_id = $1 AND preference_type = $2 AND source = $3",
         )
-        .bind(&persona.person_id)
+        .bind(&persona.source_persona_id)
         .bind(interaction_context_preference_type(
-            &persona.persona_id,
+            &persona.interaction_context_id,
             field,
         ))
         .bind(source)
@@ -88,13 +88,14 @@ async fn upsert_interaction_preference_in_transaction(
     value: Option<&str>,
     source: &str,
 ) -> Result<(), PersonaCoreError> {
-    let preference_type = interaction_context_preference_type(&persona.persona_id, field);
+    let preference_type =
+        interaction_context_preference_type(&persona.interaction_context_id, field);
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         sqlx::query(
             "DELETE FROM persona_preferences
-             WHERE person_id = $1 AND preference_type = $2 AND source = $3",
+             WHERE persona_id = $1 AND preference_type = $2 AND source = $3",
         )
-        .bind(&persona.person_id)
+        .bind(&persona.source_persona_id)
         .bind(preference_type)
         .bind(source)
         .execute(&mut **transaction)
@@ -103,12 +104,12 @@ async fn upsert_interaction_preference_in_transaction(
     };
 
     sqlx::query(
-        "INSERT INTO persona_preferences (person_id, preference_type, value, source)
+        "INSERT INTO persona_preferences (persona_id, preference_type, value, source)
          VALUES ($1, $2, $3, $4)
-         ON CONFLICT (person_id, preference_type)
+         ON CONFLICT (persona_id, preference_type)
          DO UPDATE SET value = EXCLUDED.value, source = EXCLUDED.source, updated_at = now()",
     )
-    .bind(&persona.person_id)
+    .bind(&persona.source_persona_id)
     .bind(preference_type)
     .bind(value)
     .bind(source)

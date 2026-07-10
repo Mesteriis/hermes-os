@@ -26,7 +26,8 @@ pub(crate) struct NewParticipantRequest {
     email: String,
     display_name: Option<String>,
     role: Option<String>,
-    person_id: Option<String>,
+    #[serde(alias = "person_id")]
+    persona_id: Option<String>,
     organization_id: Option<String>,
 }
 
@@ -46,7 +47,7 @@ pub(crate) async fn post_event_participant(
             &req.email,
             req.display_name.as_deref(),
             req.role.as_deref(),
-            req.person_id.as_deref(),
+            req.persona_id.as_deref(),
             req.organization_id.as_deref(),
         )
         .await

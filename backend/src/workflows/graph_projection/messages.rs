@@ -134,7 +134,7 @@ impl GraphProjectionService {
 
         if let Some(person) = person {
             return Ok(MessageEndpoint::Persona {
-                node_id: node_id(GraphNodeKind::Persona, &person.person_id),
+                node_id: node_id(GraphNodeKind::Persona, &person.persona_id),
             });
         }
 
@@ -160,7 +160,7 @@ impl GraphProjectionService {
         normalized_email: &str,
     ) -> Result<Option<PersonaRow>, GraphProjectionError> {
         let row = sqlx::query(
-            "SELECT person_id, display_name, email_address FROM personas WHERE email_address = $1",
+            "SELECT persona_id, display_name, email_address FROM personas WHERE email_address = $1",
         )
         .bind(normalized_email)
         .fetch_optional(&mut **transaction)

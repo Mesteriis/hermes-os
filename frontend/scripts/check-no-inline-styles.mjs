@@ -28,11 +28,13 @@ const dynamicLayoutStyleAllowlist = new Set([
 	'src/domains/documents/components/DocumentsList.vue',
 	'src/domains/knowledge/components/KnowledgeGraphCanvas.vue',
 	'src/domains/notes/components/NotesList.vue',
+	'src/domains/personas/components/PersonaRelationshipEdge.vue',
 	'src/domains/personas/components/PersonsList.vue',
 	'src/domains/tasks/components/TaskList.vue',
 	'src/integrations/telegram/components/TelegramChatList.vue',
 	'src/domains/timeline/components/TimelineStream.vue',
-	'src/integrations/whatsapp/components/WhatsAppSessionList.vue'
+	'src/integrations/whatsapp/components/WhatsAppSessionList.vue',
+	'src/shared/ui/Skeleton.vue'
 ]);
 
 async function collectSourceFiles(root) {

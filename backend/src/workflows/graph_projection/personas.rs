@@ -14,7 +14,7 @@ use super::service::GraphProjectionService;
 impl GraphProjectionService {
     pub(super) async fn list_personas(&self) -> Result<Vec<PersonaRow>, GraphProjectionError> {
         let rows = sqlx::query(
-            "SELECT person_id, display_name, email_address FROM personas ORDER BY person_id",
+            "SELECT persona_id, display_name, email_address FROM personas ORDER BY persona_id",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -36,7 +36,7 @@ impl GraphProjectionService {
             .upsert_node(
                 &NewGraphNode::new(
                     GraphNodeKind::Persona,
-                    &persona.person_id,
+                    &persona.persona_id,
                     &persona.display_name,
                 )
                 .properties(json!({ "email_address": normalized_email.clone() })),
@@ -69,7 +69,7 @@ impl GraphProjectionService {
                 ),
                 &[NewGraphEvidence::new(
                     GraphEvidenceSourceKind::Persona,
-                    persona.person_id.clone(),
+                    persona.persona_id.clone(),
                 )],
             )
             .await?;

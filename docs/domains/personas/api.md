@@ -5,9 +5,9 @@ This document intentionally does not design a new Persona API.
 The current backend exposes Persona-native `/api/v1/personas/*` routes. Active
 read payloads emit Persona-native identifiers such as `persona_id`,
 `left_persona_id` and `right_persona_id`; legacy `/api/v1/persons/*` routes are
-retired. A few request bodies may still accept old `person_id` aliases for
-compatibility, but those aliases are not the public read contract. The canonical
-domain language is defined in:
+retired. Existing legacy identifier aliases remain input-only where replay or an
+established request contract requires them; responses and newly emitted payloads
+use Persona-native names. The canonical domain language is defined in:
 
 - [Foundation Glossary](../../foundation/glossary.md)
 - [World Model](../../foundation/world-model.md)
@@ -18,7 +18,7 @@ domain language is defined in:
 | Existing API concept | Canonical interpretation |
 |---|---|
 | `person` | Legacy compatibility name for Persona |
-| `person_id` | Internal storage/request compatibility alias for `persona_id` |
+| `persona_id` | Persona identifier |
 | `identity` | Persona digital trace or identity-resolution state |
 | `roles` | Relationship candidates or compatibility projection |
 | `interaction-contexts` | Persona-specific communication context |
@@ -33,5 +33,4 @@ API reference files document existing implementation surfaces. They are not the
 canonical domain model.
 
 Do not infer new routes, payloads or migrations from this document. Any future
-physical column migration away from internal `person_id` storage fields requires
-a separate ADR and implementation plan.
+opaque identifier migration requires a separate ADR and implementation plan.

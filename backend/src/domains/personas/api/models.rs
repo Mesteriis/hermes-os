@@ -40,7 +40,7 @@ impl TryFrom<&str> for PersonaType {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Persona {
     #[serde(rename = "persona_id")]
-    pub person_id: String,
+    pub persona_id: String,
     pub display_name: String,
     pub email_address: Option<String>,
     pub persona_type: PersonaType,

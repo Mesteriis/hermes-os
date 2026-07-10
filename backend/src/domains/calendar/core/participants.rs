@@ -10,7 +10,7 @@ use super::link_calendar_entity;
 pub struct EventParticipant {
     pub id: String,
     pub event_id: String,
-    pub person_id: Option<String>,
+    pub persona_id: Option<String>,
     pub email: String,
     pub display_name: Option<String>,
     pub role: String,
@@ -33,14 +33,14 @@ impl EventParticipantStore {
     }
 
     pub async fn list(&self, event_id: &str) -> Result<Vec<EventParticipant>, CalendarCoreError> {
-        let rows = sqlx::query("SELECT id::text, event_id, person_id, email, display_name, role, response_status, source, organization_id, timezone, confidence, created_at FROM event_participants WHERE event_id=$1 ORDER BY role, email")
+        let rows = sqlx::query("SELECT id::text, event_id, persona_id, email, display_name, role, response_status, source, organization_id, timezone, confidence, created_at FROM event_participants WHERE event_id=$1 ORDER BY role, email")
             .bind(event_id).fetch_all(&self.pool).await?;
         rows.into_iter()
             .map(|r| {
                 Ok(EventParticipant {
                     id: r.try_get("id")?,
                     event_id: r.try_get("event_id")?,
-                    person_id: r.try_get("person_id")?,
+                    persona_id: r.try_get("persona_id")?,
                     email: r.try_get("email")?,
                     display_name: r.try_get("display_name")?,
                     role: r.try_get("role")?,
@@ -61,7 +61,7 @@ impl EventParticipantStore {
         email: &str,
         display_name: Option<&str>,
         role: Option<&str>,
-        person_id: Option<&str>,
+        persona_id: Option<&str>,
         org_id: Option<&str>,
     ) -> Result<EventParticipant, CalendarCoreError> {
         self.add_with_source(
@@ -69,7 +69,7 @@ impl EventParticipantStore {
             email,
             display_name,
             role,
-            person_id,
+            persona_id,
             org_id,
             "manual",
         )
@@ -83,7 +83,7 @@ impl EventParticipantStore {
         email: &str,
         display_name: Option<&str>,
         role: Option<&str>,
-        person_id: Option<&str>,
+        persona_id: Option<&str>,
         org_id: Option<&str>,
         source: &str,
     ) -> Result<EventParticipant, CalendarCoreError> {
@@ -92,7 +92,7 @@ impl EventParticipantStore {
             email,
             display_name,
             role,
-            person_id,
+            persona_id,
             org_id,
             source,
             None,
@@ -107,17 +107,17 @@ impl EventParticipantStore {
         email: &str,
         display_name: Option<&str>,
         role: Option<&str>,
-        person_id: Option<&str>,
+        persona_id: Option<&str>,
         org_id: Option<&str>,
         source: &str,
         observation_id: Option<&str>,
     ) -> Result<EventParticipant, CalendarCoreError> {
-        let row = sqlx::query("INSERT INTO event_participants (event_id, email, display_name, role, person_id, organization_id, source) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id::text, event_id, person_id, email, display_name, role, response_status, source, organization_id, timezone, confidence, created_at")
-            .bind(event_id).bind(email).bind(display_name).bind(role.unwrap_or("attendee")).bind(person_id).bind(org_id).bind(source).fetch_one(&self.pool).await?;
+        let row = sqlx::query("INSERT INTO event_participants (event_id, email, display_name, role, persona_id, organization_id, source) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id::text, event_id, persona_id, email, display_name, role, response_status, source, organization_id, timezone, confidence, created_at")
+            .bind(event_id).bind(email).bind(display_name).bind(role.unwrap_or("attendee")).bind(persona_id).bind(org_id).bind(source).fetch_one(&self.pool).await?;
         let participant = EventParticipant {
             id: row.try_get("id")?,
             event_id: row.try_get("event_id")?,
-            person_id: row.try_get("person_id")?,
+            persona_id: row.try_get("persona_id")?,
             email: row.try_get("email")?,
             display_name: row.try_get("display_name")?,
             role: row.try_get("role")?,

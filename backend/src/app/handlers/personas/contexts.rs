@@ -97,8 +97,8 @@ pub(crate) async fn post_persona_interaction_context(
     Ok(Json(
         crate::domains::personas::service::PersonaCommandService::new(pool)
             .upsert_persona_interaction_context_manual(&NewPersonaInteractionContext {
-                person_id: persona_id,
-                persona_id: req.persona_id,
+                source_persona_id: persona_id,
+                interaction_context_id: req.interaction_context_id,
                 name: req.name,
                 context: req.context,
                 default_tone: req.default_tone,
@@ -111,7 +111,8 @@ pub(crate) async fn post_persona_interaction_context(
 
 #[derive(Deserialize)]
 pub(crate) struct NewPersonaInteractionContextRequest {
-    persona_id: String,
+    #[serde(alias = "persona_id")]
+    interaction_context_id: String,
     name: String,
     context: Option<String>,
     default_tone: Option<String>,

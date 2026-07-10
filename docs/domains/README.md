@@ -80,9 +80,11 @@ The repository still contains historical naming and compatibility boundaries:
 
 - `communications` backend modules still contain some mail-heavy compatibility
   names because email was the first implemented channel.
-- Internal `person_id` columns remain compatibility storage boundaries, while
-  Persona-native code and API surfaces use `persona_id` and `/api/v1/personas/*`;
-  legacy `/api/v1/persons/*` routes are retired.
+- Persona-owned and resolved-reference storage covered by ADR-0174 uses
+  `persona_id`; bounded legacy input aliases and explicitly out-of-scope
+  cross-domain identifiers remain compatibility boundaries. Persona-native API
+  surfaces use `/api/v1/personas/*`; legacy `/api/v1/persons/*` routes are
+  retired.
 - `contacts` appears in migration history because the persistence model evolved
   from contact records into Personas.
 - `backend/src/domains/settings` is currently an exported but empty backend

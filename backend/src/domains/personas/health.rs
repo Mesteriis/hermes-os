@@ -11,7 +11,7 @@ use crate::platform::observations::ObservationStoreError;
 #[derive(Clone, Debug, Serialize)]
 pub struct PersonaHealth {
     #[serde(rename = "persona_id")]
-    pub person_id: String,
+    pub persona_id: String,
     pub health_status: String,
     pub last_health_check: Option<DateTime<Utc>>,
     pub communication_gap_days: i32,
@@ -33,16 +33,16 @@ impl PersonaHealthStore {
         Self { pool }
     }
 
-    pub async fn get(&self, person_id: &str) -> Result<Option<PersonaHealth>, PersonaHealthError> {
+    pub async fn get(&self, persona_id: &str) -> Result<Option<PersonaHealth>, PersonaHealthError> {
         let row = sqlx::query(
-            r#"SELECT p.person_id, p.health_status, p.last_health_check, p.communication_gap_days,
+            r#"SELECT p.persona_id, p.health_status, p.last_health_check, p.communication_gap_days,
                p.watchlist, p.interaction_count, p.last_interaction_at, p.trust_score,
-               (SELECT count(*) FROM persona_promises pp WHERE pp.person_id = p.person_id AND pp.status = 'pending') as open_promises,
-               (SELECT count(*) FROM persona_risks pr WHERE pr.person_id = p.person_id AND pr.resolved_at IS NULL) as open_risks
-               FROM personas p WHERE p.person_id = $1"#
-        ).bind(person_id).fetch_optional(&self.pool).await?;
+               (SELECT count(*) FROM persona_promises pp WHERE pp.persona_id = p.persona_id AND pp.status = 'pending') as open_promises,
+               (SELECT count(*) FROM persona_risks pr WHERE pr.persona_id = p.persona_id AND pr.resolved_at IS NULL) as open_risks
+               FROM personas p WHERE p.persona_id = $1"#
+        ).bind(persona_id).fetch_optional(&self.pool).await?;
         row.map(|r| PersonaHealth {
-            person_id: r.try_get("person_id").unwrap_or_default(),
+            persona_id: r.try_get("persona_id").unwrap_or_default(),
             health_status: r
                 .try_get("health_status")
                 .unwrap_or_else(|_| "healthy".into()),
@@ -60,7 +60,7 @@ impl PersonaHealthStore {
 
     pub async fn list_health(&self) -> Result<Vec<PersonaHealth>, PersonaHealthError> {
         let rows = sqlx::query(
-            r#"SELECT p.person_id, p.health_status, p.last_health_check, p.communication_gap_days,
+            r#"SELECT p.persona_id, p.health_status, p.last_health_check, p.communication_gap_days,
                p.watchlist, p.interaction_count, p.last_interaction_at, p.trust_score,
                0::bigint as open_promises, 0::bigint as open_risks
                FROM personas p WHERE p.health_status != 'healthy' ORDER BY p.last_interaction_at DESC NULLS LAST LIMIT 50"#
@@ -68,7 +68,7 @@ impl PersonaHealthStore {
         Ok(rows
             .into_iter()
             .map(|r| PersonaHealth {
-                person_id: r.try_get("person_id").unwrap_or_default(),
+                persona_id: r.try_get("persona_id").unwrap_or_default(),
                 health_status: r
                     .try_get("health_status")
                     .unwrap_or_else(|_| "healthy".into()),
@@ -86,7 +86,7 @@ impl PersonaHealthStore {
 
     pub async fn list_watchlist(&self) -> Result<Vec<PersonaHealth>, PersonaHealthError> {
         let rows = sqlx::query(
-            r#"SELECT p.person_id, p.health_status, p.last_health_check, p.communication_gap_days,
+            r#"SELECT p.persona_id, p.health_status, p.last_health_check, p.communication_gap_days,
                p.watchlist, p.interaction_count, p.last_interaction_at, p.trust_score,
                0::bigint as open_promises, 0::bigint as open_risks
                FROM personas p WHERE p.watchlist = true ORDER BY p.trust_score DESC NULLS LAST"#,
@@ -96,7 +96,7 @@ impl PersonaHealthStore {
         Ok(rows
             .into_iter()
             .map(|r| PersonaHealth {
-                person_id: r.try_get("person_id").unwrap_or_default(),
+                persona_id: r.try_get("persona_id").unwrap_or_default(),
                 health_status: r
                     .try_get("health_status")
                     .unwrap_or_else(|_| "healthy".into()),
@@ -112,37 +112,37 @@ impl PersonaHealthStore {
             .collect())
     }
 
-    pub async fn toggle_watchlist(&self, person_id: &str) -> Result<bool, PersonaHealthError> {
-        self.toggle_watchlist_with_source(person_id, &persona_watchlist_source(person_id))
+    pub async fn toggle_watchlist(&self, persona_id: &str) -> Result<bool, PersonaHealthError> {
+        self.toggle_watchlist_with_source(persona_id, &persona_watchlist_source(persona_id))
             .await
     }
 
     pub async fn toggle_watchlist_with_source(
         &self,
-        person_id: &str,
+        persona_id: &str,
         source: &str,
     ) -> Result<bool, PersonaHealthError> {
         let mut transaction = self.pool.begin().await?;
         let watchlist =
-            Self::toggle_watchlist_in_transaction(&mut transaction, person_id, source).await?;
+            Self::toggle_watchlist_in_transaction(&mut transaction, persona_id, source).await?;
         transaction.commit().await?;
         Ok(watchlist)
     }
 
     pub async fn toggle_watchlist_with_observation(
         &self,
-        person_id: &str,
+        persona_id: &str,
         source: &str,
         observation_id: &str,
     ) -> Result<bool, PersonaHealthError> {
         let mut transaction = self.pool.begin().await?;
         let watchlist =
-            Self::toggle_watchlist_in_transaction(&mut transaction, person_id, source).await?;
+            Self::toggle_watchlist_in_transaction(&mut transaction, persona_id, source).await?;
         link_persona_entity_in_transaction(
             &mut transaction,
             observation_id,
             "watchlist_toggle",
-            person_id,
+            persona_id,
             None,
             Some(json!({
                 "watchlist": watchlist
@@ -155,38 +155,39 @@ impl PersonaHealthStore {
 
     async fn toggle_watchlist_in_transaction(
         transaction: &mut Transaction<'_, Postgres>,
-        person_id: &str,
+        persona_id: &str,
         source: &str,
     ) -> Result<bool, PersonaHealthError> {
         let row = sqlx::query(
-            "UPDATE personas SET watchlist = NOT watchlist WHERE person_id = $1 RETURNING watchlist",
+            "UPDATE personas SET watchlist = NOT watchlist WHERE persona_id = $1 RETURNING watchlist",
         )
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_optional(&mut **transaction)
         .await?;
         let Some(row) = row else {
             return Ok(false);
         };
         let watchlist = row.try_get("watchlist").unwrap_or(false);
-        sync_watchlist_preference_in_transaction(transaction, person_id, watchlist, source).await?;
+        sync_watchlist_preference_in_transaction(transaction, persona_id, watchlist, source)
+            .await?;
         Ok(watchlist)
     }
 }
 
 async fn sync_watchlist_preference_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
-    person_id: &str,
+    persona_id: &str,
     watchlist: bool,
     source: &str,
 ) -> Result<(), PersonaHealthError> {
     if watchlist {
         sqlx::query(
-            "INSERT INTO persona_preferences (person_id, preference_type, value, source, confidence)
+            "INSERT INTO persona_preferences (persona_id, preference_type, value, source, confidence)
              VALUES ($1, 'ui:watchlist', 'true', $2, 1.0)
-             ON CONFLICT (person_id, preference_type)
+             ON CONFLICT (persona_id, preference_type)
              DO UPDATE SET value = 'true', source = $2, confidence = 1.0, updated_at = now()",
         )
-        .bind(person_id)
+        .bind(persona_id)
         .bind(source)
         .execute(&mut **transaction)
         .await?;
@@ -194,16 +195,16 @@ async fn sync_watchlist_preference_in_transaction(
     }
 
     sqlx::query(
-        "DELETE FROM persona_preferences WHERE person_id = $1 AND preference_type = 'ui:watchlist'",
+        "DELETE FROM persona_preferences WHERE persona_id = $1 AND preference_type = 'ui:watchlist'",
     )
-    .bind(person_id)
+    .bind(persona_id)
     .execute(&mut **transaction)
     .await?;
     Ok(())
 }
 
-fn persona_watchlist_source(person_id: &str) -> String {
-    format!("personas.watchlist:{person_id}")
+fn persona_watchlist_source(persona_id: &str) -> String {
+    format!("personas.watchlist:{persona_id}")
 }
 
 #[derive(Debug, Error)]

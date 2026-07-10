@@ -43,13 +43,13 @@ pub(crate) fn parse_email_participant(
 pub(crate) async fn upsert_message_participant(
     pool: &PgPool,
     message: &ProjectedMessage,
-    person_id: &str,
+    persona_id: &str,
     participant: &EmailParticipant,
 ) -> Result<bool, EmailSyncPipelineError> {
     let inserted = CommunicationMessageProjectionPort::new(pool.clone())
         .upsert_email_participant(
             message,
-            person_id,
+            persona_id,
             &participant.email_address,
             participant.display_name.as_deref(),
             participant.role,

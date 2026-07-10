@@ -15,7 +15,7 @@ use crate::domains::personas::memory::{
 
 pub(super) async fn assemble_dossier(
     pool: &PgPool,
-    person_id: &str,
+    persona_id: &str,
 ) -> Result<PersonaDossier, InvestigatorError> {
     let enrichment = PersonaEnrichmentStore::new(pool.clone());
     let facts = PersonaFactStore::new(pool.clone());
@@ -25,15 +25,15 @@ pub(super) async fn assemble_dossier(
     let expertise = PersonaExpertiseStore::new(pool.clone());
 
     let person = enrichment
-        .get_enriched(person_id)
+        .get_enriched(persona_id)
         .await?
         .ok_or(InvestigatorError::PersonaNotFound)?;
 
-    let facts_list = facts.list(person_id).await.unwrap_or_default();
-    let cards_list = cards.list(person_id).await.unwrap_or_default();
-    let preferences_list = preferences.list(person_id).await.unwrap_or_default();
-    let timeline_list = timeline.timeline(person_id, 50).await.unwrap_or_default();
-    let expertise_list = expertise.list(person_id).await.unwrap_or_default();
+    let facts_list = facts.list(persona_id).await.unwrap_or_default();
+    let cards_list = cards.list(persona_id).await.unwrap_or_default();
+    let preferences_list = preferences.list(persona_id).await.unwrap_or_default();
+    let timeline_list = timeline.timeline(persona_id, 50).await.unwrap_or_default();
+    let expertise_list = expertise.list(persona_id).await.unwrap_or_default();
 
     let mut summary_parts: Vec<String> = Vec::new();
     if let Some(tone) = &person.tone {

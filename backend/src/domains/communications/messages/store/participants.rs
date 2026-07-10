@@ -10,7 +10,7 @@ impl MessageProjectionStore {
     pub async fn upsert_email_participant(
         &self,
         message: &ProjectedMessage,
-        person_id: &str,
+        persona_id: &str,
         email_address: &str,
         display_name: Option<&str>,
         role: &str,
@@ -19,10 +19,10 @@ impl MessageProjectionStore {
         let row = sqlx::query(
             r#"
             INSERT INTO communication_message_participants (
-                message_id, person_id, email_address, display_name, role, source, confidence
+                message_id, persona_id, email_address, display_name, role, source, confidence
             )
             VALUES ($1, $2, $3, $4, $5, 'email_sync', 1.0)
-            ON CONFLICT (message_id, person_id, role, email_address)
+            ON CONFLICT (message_id, persona_id, role, email_address)
             DO UPDATE SET
                 display_name = EXCLUDED.display_name,
                 source = EXCLUDED.source,
@@ -32,7 +32,7 @@ impl MessageProjectionStore {
             "#,
         )
         .bind(&message.message_id)
-        .bind(person_id)
+        .bind(persona_id)
         .bind(email_address)
         .bind(display_name)
         .bind(role)
@@ -49,7 +49,7 @@ impl MessageProjectionStore {
             "email_sync_participant",
             json!({
                 "message_id": message.message_id,
-                "person_id": person_id,
+                "persona_id": persona_id,
                 "email_address": email_address,
                 "display_name": display_name,
                 "role": role,

@@ -4,8 +4,8 @@ use serde_json::Value;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichedPersona {
-    #[serde(rename = "persona_id", alias = "person_id")]
-    pub person_id: String,
+    #[serde(alias = "person_id")]
+    pub persona_id: String,
     pub display_name: String,
     pub email_address: Option<String>,
     pub language: Option<String>,

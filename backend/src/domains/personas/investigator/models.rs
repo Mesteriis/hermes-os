@@ -80,7 +80,7 @@ pub struct DossierSnapshot {
 #[derive(Clone, Debug, Serialize)]
 pub struct MeetingPrep {
     #[serde(rename = "persona_id")]
-    pub person_id: String,
+    pub persona_id: String,
     pub display_name: String,
     pub last_interaction_days: Option<i64>,
     pub open_promises: i64,

@@ -11,8 +11,8 @@ use super::link_persona_entity;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonaIdentity {
     pub id: String,
-    #[serde(rename = "persona_id", alias = "person_id")]
-    pub person_id: Option<String>,
+    #[serde(alias = "person_id")]
+    pub persona_id: Option<String>,
     pub identity_type: String,
     pub identity_value: String,
     pub source: String,
@@ -36,15 +36,15 @@ impl PersonaIdentityStore {
 
     pub async fn list_by_person(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<Vec<PersonaIdentity>, PersonaCoreError> {
         let rows = sqlx::query(
-            r#"SELECT id::text, person_id, identity_type, identity_value, source,
+            r#"SELECT id::text, persona_id, identity_type, identity_value, source,
                confidence::float8 AS confidence,
                last_verified_at, status, metadata, created_at, updated_at
-               FROM persona_identities WHERE person_id = $1 ORDER BY identity_type"#,
+               FROM persona_identities WHERE persona_id = $1 ORDER BY identity_type"#,
         )
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter().map(row_to_identity).collect()
@@ -57,12 +57,12 @@ impl PersonaIdentityStore {
     ) -> Result<Option<String>, PersonaCoreError> {
         let row = sqlx::query(
             r#"
-            SELECT person_id
+            SELECT persona_id
             FROM persona_identities
             WHERE identity_type = $1
               AND identity_value = $2
               AND status = 'active'
-              AND person_id IS NOT NULL
+              AND persona_id IS NOT NULL
             ORDER BY updated_at DESC, id
             LIMIT 1
             "#,
@@ -72,7 +72,7 @@ impl PersonaIdentityStore {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(row.map(|row| row.try_get("person_id")).transpose()?)
+        Ok(row.map(|row| row.try_get("persona_id")).transpose()?)
     }
 
     pub async fn list_unattached(
@@ -81,11 +81,11 @@ impl PersonaIdentityStore {
     ) -> Result<Vec<PersonaIdentity>, PersonaCoreError> {
         let limit = limit.clamp(1, 200);
         let rows = sqlx::query(
-            r#"SELECT id::text, person_id, identity_type, identity_value, source,
+            r#"SELECT id::text, persona_id, identity_type, identity_value, source,
                confidence::float8 AS confidence,
                last_verified_at, status, metadata, created_at, updated_at
                FROM persona_identities
-               WHERE person_id IS NULL
+               WHERE persona_id IS NULL
                ORDER BY updated_at DESC, id
                LIMIT $1"#,
         )
@@ -97,21 +97,21 @@ impl PersonaIdentityStore {
 
     pub async fn upsert(
         &self,
-        person_id: &str,
+        persona_id: &str,
         identity_type: &str,
         identity_value: &str,
         source: &str,
     ) -> Result<PersonaIdentity, PersonaCoreError> {
         let row = sqlx::query(
-            r#"INSERT INTO persona_identities (person_id, identity_type, identity_value, source)
+            r#"INSERT INTO persona_identities (persona_id, identity_type, identity_value, source)
                VALUES ($1, $2, $3, $4)
                ON CONFLICT (identity_type, identity_value) WHERE status = 'active'
                DO UPDATE SET updated_at = now()
-               RETURNING id::text, person_id, identity_type, identity_value, source,
+               RETURNING id::text, persona_id, identity_type, identity_value, source,
                          confidence::float8 AS confidence,
                          last_verified_at, status, metadata, created_at, updated_at"#,
         )
-        .bind(person_id)
+        .bind(persona_id)
         .bind(identity_type)
         .bind(identity_value)
         .bind(source)
@@ -122,14 +122,14 @@ impl PersonaIdentityStore {
 
     pub async fn upsert_with_observation(
         &self,
-        person_id: &str,
+        persona_id: &str,
         identity_type: &str,
         identity_value: &str,
         source: &str,
         observation_id: &str,
     ) -> Result<PersonaIdentity, PersonaCoreError> {
         let identity = self
-            .upsert(person_id, identity_type, identity_value, source)
+            .upsert(persona_id, identity_type, identity_value, source)
             .await?;
         link_persona_entity(
             &self.pool,
@@ -138,7 +138,7 @@ impl PersonaIdentityStore {
             identity.id.clone(),
             None,
             Some(json!({
-                "persona_id": identity.person_id,
+                "persona_id": identity.persona_id,
                 "identity_type": identity.identity_type,
             })),
         )
@@ -165,14 +165,14 @@ impl PersonaIdentityStore {
     ) -> Result<PersonaIdentity, PersonaCoreError> {
         let row = sqlx::query(
             r#"INSERT INTO persona_identities (
-                   person_id, identity_type, identity_value, source, metadata
+                   persona_id, identity_type, identity_value, source, metadata
                )
                VALUES (NULL, $1, $2, $3, $4)
                ON CONFLICT (identity_type, identity_value) WHERE status = 'active'
                DO UPDATE SET
                    metadata = persona_identities.metadata || EXCLUDED.metadata,
                    updated_at = now()
-               RETURNING id::text, person_id, identity_type, identity_value, source,
+               RETURNING id::text, persona_id, identity_type, identity_value, source,
                          confidence::float8 AS confidence,
                          last_verified_at, status, metadata, created_at, updated_at"#,
         )
@@ -203,7 +203,7 @@ impl PersonaIdentityStore {
             None,
             Some(json!({
                 "identity_type": identity.identity_type,
-                "persona_id": identity.person_id,
+                "persona_id": identity.persona_id,
             })),
         )
         .await?;
@@ -229,7 +229,7 @@ impl PersonaIdentityStore {
             None,
             Some(json!({
                 "identity_type": identity.identity_type,
-                "persona_id": identity.person_id,
+                "persona_id": identity.persona_id,
             })),
         )
         .await?;
@@ -239,18 +239,18 @@ impl PersonaIdentityStore {
     pub async fn attach_to_persona(
         &self,
         identity_id: &str,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<PersonaIdentity, PersonaCoreError> {
         let row = sqlx::query(
             r#"UPDATE persona_identities
-               SET person_id = $2, status = 'active', updated_at = now()
+               SET persona_id = $2, status = 'active', updated_at = now()
                WHERE id::text = $1
-               RETURNING id::text, person_id, identity_type, identity_value, source,
+               RETURNING id::text, persona_id, identity_type, identity_value, source,
                          confidence::float8 AS confidence,
                          last_verified_at, status, metadata, created_at, updated_at"#,
         )
         .bind(identity_id)
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_optional(&self.pool)
         .await?
         .ok_or(PersonaCoreError::IdentityNotFound)?;
@@ -260,10 +260,10 @@ impl PersonaIdentityStore {
     pub async fn attach_to_persona_with_observation(
         &self,
         identity_id: &str,
-        person_id: &str,
+        persona_id: &str,
         observation_id: &str,
     ) -> Result<PersonaIdentity, PersonaCoreError> {
-        let identity = self.attach_to_persona(identity_id, person_id).await?;
+        let identity = self.attach_to_persona(identity_id, persona_id).await?;
         link_persona_entity(
             &self.pool,
             observation_id,
@@ -271,7 +271,7 @@ impl PersonaIdentityStore {
             identity.id.clone(),
             Some("trace_assignment"),
             Some(json!({
-                "persona_id": identity.person_id,
+                "persona_id": identity.persona_id,
                 "identity_type": identity.identity_type,
             })),
         )
@@ -304,7 +304,7 @@ impl PersonaIdentityStore {
 
     pub async fn delete_with_observation(
         &self,
-        person_id: &str,
+        persona_id: &str,
         identity_id: &str,
         observation_id: &str,
     ) -> Result<bool, PersonaCoreError> {
@@ -316,7 +316,7 @@ impl PersonaIdentityStore {
             identity_id.to_owned(),
             Some("identity_delete"),
             Some(json!({
-                "persona_id": person_id,
+                "persona_id": persona_id,
                 "deleted": deleted,
             })),
         )
@@ -328,7 +328,7 @@ impl PersonaIdentityStore {
 fn row_to_identity(row: PgRow) -> Result<PersonaIdentity, PersonaCoreError> {
     Ok(PersonaIdentity {
         id: row.try_get("id")?,
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         identity_type: row.try_get("identity_type")?,
         identity_value: row.try_get("identity_value")?,
         source: row.try_get("source")?,

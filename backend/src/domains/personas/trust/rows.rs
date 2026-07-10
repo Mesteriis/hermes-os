@@ -7,7 +7,7 @@ use super::models::{PersonaPromise, PersonaRisk};
 pub(super) fn row_to_promise(row: PgRow) -> Result<PersonaPromise, PersonaTrustError> {
     Ok(PersonaPromise {
         id: row.try_get("id")?,
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         description: row.try_get("description")?,
         source_message_id: row.try_get("source_message_id")?,
         promised_at: row.try_get("promised_at")?,
@@ -22,7 +22,7 @@ pub(super) fn row_to_promise(row: PgRow) -> Result<PersonaPromise, PersonaTrustE
 pub(super) fn row_to_risk(row: PgRow) -> Result<PersonaRisk, PersonaTrustError> {
     Ok(PersonaRisk {
         id: row.try_get("id")?,
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         risk_type: row.try_get("risk_type")?,
         description: row.try_get("description")?,
         severity: row.try_get("severity")?,

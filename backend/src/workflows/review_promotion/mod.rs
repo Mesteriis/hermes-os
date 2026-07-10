@@ -123,10 +123,12 @@ impl ReviewPromotionService {
     ) -> Result<ReviewPromotionTarget, ReviewPromotionError> {
         match item.item_kind {
             ReviewItemKind::NewPersona => {
-                let person_id = self
+                let persona_id = self
                     .upsert_persona_from_review(item, target, evidence)
                     .await?;
-                Ok(ReviewPromotionTarget::new("personas", "persona", person_id))
+                Ok(ReviewPromotionTarget::new(
+                    "personas", "persona", persona_id,
+                ))
             }
             ReviewItemKind::NewOrganization => {
                 let organization_id = self
@@ -618,26 +620,26 @@ impl ReviewPromotionService {
         target: &ReviewPromotionTarget,
         evidence: &[ReviewItemEvidenceRecord],
     ) -> Result<String, ReviewPromotionError> {
-        let person_id = choose_target_id(target, "persona", &item.review_item_id);
+        let persona_id = choose_target_id(target, "persona", &item.review_item_id);
         let review_observation = self
             .capture_review_transition_observation(
                 item,
                 "persona_review_promotion",
                 json!({
-                    "person_id": person_id,
+                    "persona_id": persona_id,
                     "review_state": "user_confirmed",
                 }),
                 format!("review-item://{}/persona", item.review_item_id),
             )
             .await?;
         PersonaProjectionPort::new(self.pool.clone())
-            .upsert_review_person(&person_id, item.title.trim())
+            .upsert_review_person(&persona_id, item.title.trim())
             .await?;
         self.link_review_transition_observation(
             &review_observation,
             "personas",
             "persona",
-            &person_id,
+            &persona_id,
             json!({
                 "review_item_id": item.review_item_id,
                 "review_state": "user_confirmed",
@@ -650,7 +652,7 @@ impl ReviewPromotionService {
                 &record.observation_id,
                 "personas",
                 "persona",
-                &person_id,
+                &persona_id,
                 item.confidence,
                 json!({
                     "review_item_id": item.review_item_id,
@@ -660,7 +662,7 @@ impl ReviewPromotionService {
             )
             .await?;
         }
-        Ok(person_id)
+        Ok(persona_id)
     }
 
     async fn upsert_organization_from_review(

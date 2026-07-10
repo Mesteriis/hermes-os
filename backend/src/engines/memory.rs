@@ -20,18 +20,18 @@ pub use models::{
 pub struct MemoryEngine;
 
 impl MemoryEngine {
-    pub fn persona_notes_memory_card(person_id: &str, notes: &str) -> Option<MemoryCardDraft> {
-        cards::persona_notes_memory_card(person_id, notes)
+    pub fn persona_notes_memory_card(persona_id: &str, notes: &str) -> Option<MemoryCardDraft> {
+        cards::persona_notes_memory_card(persona_id, notes)
     }
 
     pub fn persona_fact_memory(
-        person_id: &str,
+        persona_id: &str,
         fact_type: &str,
         value: &str,
         source: &str,
         confidence: f64,
     ) -> Result<MemoryFactDraft, MemoryEngineError> {
-        facts::persona_fact_memory(person_id, fact_type, value, source, confidence)
+        facts::persona_fact_memory(persona_id, fact_type, value, source, confidence)
     }
 
     pub fn context_pack(

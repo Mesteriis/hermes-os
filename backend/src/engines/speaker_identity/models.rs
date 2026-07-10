@@ -16,7 +16,7 @@ pub enum SpeakerIdentitySource {
 pub struct SpeakerEvidence {
     pub source: SpeakerIdentitySource,
     pub label: String,
-    pub person_id: Option<String>,
+    pub persona_id: Option<String>,
     pub starts_at_ms: Option<i64>,
     pub ends_at_ms: Option<i64>,
     pub confidence: f32,
@@ -27,7 +27,7 @@ pub struct SpeakerEvidence {
 pub struct SpeakerIdentityCandidate {
     pub speaker_key: String,
     pub display_label: String,
-    pub person_id: Option<String>,
+    pub persona_id: Option<String>,
     pub confidence: f32,
     pub evidence_count: usize,
     pub requires_review: bool,

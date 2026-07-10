@@ -7,6 +7,8 @@ import { useToast } from '../../../shared/ui'
 import AISettingsPanel from '../components/AISettingsPanel.vue'
 import BackgroundJobsSettingsPanel from '../components/BackgroundJobsSettingsPanel.vue'
 import MaintenanceSettingsPanel from '../components/MaintenanceSettingsPanel.vue'
+import SettingsNavigationTree from '../components/SettingsNavigationTree.vue'
+import SettingsOverviewStrip from '../components/SettingsOverviewStrip.vue'
 import TraceLogsSettingsPanel from '../components/TraceLogsSettingsPanel.vue'
 import {
   healthTone,
@@ -100,57 +102,18 @@ function signalTargetIcon(kind: SignalRouteTargetKind): string {
 
 <template>
   <section class="settings-page">
-    <section class="settings-status-strip" :aria-label="t('Settings overview')">
-      <article
-        v-for="card in settingsOverviewCards"
-        :key="card.id"
-        class="settings-status-tile"
-        :class="`tone-${card.tone}`"
-      >
-        <Icon :icon="card.icon" />
-        <span>{{ t(card.label) }}</span>
-        <strong>{{ card.value }}</strong>
-        <button
-          v-if="card.id === 'realtime' && realtimeStatus.canTriggerReconnect"
-          type="button"
-          class="icon-button"
-          :aria-label="t('Reconnect')"
-          @click="realtimeStatus.requestReconnect()"
-        >
-          <Icon icon="tabler:refresh" />
-        </button>
-      </article>
-    </section>
+    <SettingsOverviewStrip
+      :can-reconnect="realtimeStatus.canTriggerReconnect"
+      :cards="settingsOverviewCards"
+      @reconnect="realtimeStatus.requestReconnect()"
+    />
 
     <div class="settings-workbench">
-      <nav class="settings-tree" :aria-label="t('Settings sections')">
-        <header class="settings-tree-header">
-          <span>{{ t('Settings') }}</span>
-          <strong>{{ t('Control Center') }}</strong>
-        </header>
-
-        <section
-          v-for="group in settingsTreeGroups"
-          :key="group.label"
-          class="settings-tree-group"
-        >
-          <h2>{{ t(group.label) }}</h2>
-          <button
-            v-for="item in group.items"
-            :key="item.id"
-            type="button"
-            :class="{ active: store.selectedSection === item.id }"
-            @click="store.selectSection(item.id)"
-          >
-            <Icon class="tree-icon" :icon="item.icon" />
-            <span class="settings-tree-copy">
-              <strong>{{ t(item.label) }}</strong>
-              <small>{{ t(item.description) }}</small>
-            </span>
-            <em v-if="item.meta">{{ item.meta }}</em>
-          </button>
-        </section>
-      </nav>
+      <SettingsNavigationTree
+        :groups="settingsTreeGroups"
+        :selected-section="store.selectedSection"
+        @select-section="store.selectSection"
+      />
 
       <main class="settings-workbench-content">
         <section

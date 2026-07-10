@@ -9,12 +9,12 @@ use crate::domains::personas::api::rows::row_to_persona;
 impl PersonaProjectionStore {
     pub async fn upsert_review_person(
         &self,
-        person_id: &str,
+        persona_id: &str,
         display_name: &str,
     ) -> Result<Persona, PersonaProjectionError> {
         let mut transaction = self.pool().begin().await?;
         let person =
-            Self::upsert_review_person_in_transaction(&mut transaction, person_id, display_name)
+            Self::upsert_review_person_in_transaction(&mut transaction, persona_id, display_name)
                 .await?;
         transaction.commit().await?;
         Ok(person)
@@ -22,14 +22,14 @@ impl PersonaProjectionStore {
 
     pub(crate) async fn upsert_review_person_in_transaction(
         transaction: &mut Transaction<'_, Postgres>,
-        person_id: &str,
+        persona_id: &str,
         display_name: &str,
     ) -> Result<Persona, PersonaProjectionError> {
-        let person_id = person_id.trim();
+        let persona_id = persona_id.trim();
         let display_name = display_name.trim();
-        if person_id.is_empty() {
+        if persona_id.is_empty() {
             return Err(PersonaProjectionError::PersonaNotFound(
-                "review promoted person_id must not be empty".to_owned(),
+                "review promoted persona_id must not be empty".to_owned(),
             ));
         }
         if display_name.is_empty() {
@@ -39,18 +39,18 @@ impl PersonaProjectionStore {
         let row = sqlx::query(
             r#"
             INSERT INTO personas (
-                person_id,
+                persona_id,
                 display_name,
                 person_type,
                 is_self
             )
             VALUES ($1, $2, 'human', false)
-            ON CONFLICT (person_id)
+            ON CONFLICT (persona_id)
             DO UPDATE SET
                 display_name = EXCLUDED.display_name,
                 updated_at = now()
             RETURNING
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 person_type,
@@ -60,7 +60,7 @@ impl PersonaProjectionStore {
                 updated_at
             "#,
         )
-        .bind(person_id)
+        .bind(persona_id)
         .bind(display_name)
         .fetch_one(&mut **transaction)
         .await?;
@@ -69,19 +69,19 @@ impl PersonaProjectionStore {
         sqlx::query(
             r#"
             INSERT INTO persona_interaction_contexts (
-                persona_id,
-                person_id,
+                interaction_context_id,
+                source_persona_id,
                 name
             )
             VALUES ($1, $2, $3)
-            ON CONFLICT (persona_id)
+            ON CONFLICT (interaction_context_id)
             DO UPDATE SET
                 name = EXCLUDED.name,
                 updated_at = now()
             "#,
         )
-        .bind(person_id)
-        .bind(person_id)
+        .bind(persona_id)
+        .bind(persona_id)
         .bind(display_name)
         .execute(&mut **transaction)
         .await?;

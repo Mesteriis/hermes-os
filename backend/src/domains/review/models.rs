@@ -231,24 +231,6 @@ pub(super) fn validate_review_item_with_evidence(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::ReviewItemKind;
-
-    #[test]
-    fn review_item_kind_writes_persona_native_value() {
-        assert_eq!(ReviewItemKind::NewPersona.as_str(), "new_persona");
-    }
-
-    #[test]
-    fn review_item_kind_reads_legacy_person_value() {
-        assert_eq!(
-            ReviewItemKind::parse("new_person").expect("legacy new_person should parse"),
-            ReviewItemKind::NewPersona
-        );
-    }
-}
-
 pub(super) fn validate_non_empty(
     field_name: &'static str,
     value: &str,
@@ -277,4 +259,22 @@ pub(super) fn validate_score(field_name: &'static str, value: f64) -> Result<(),
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ReviewItemKind;
+
+    #[test]
+    fn review_item_kind_writes_persona_native_value() {
+        assert_eq!(ReviewItemKind::NewPersona.as_str(), "new_persona");
+    }
+
+    #[test]
+    fn review_item_kind_reads_legacy_person_value() {
+        assert_eq!(
+            ReviewItemKind::parse("new_person").expect("legacy new_person should parse"),
+            ReviewItemKind::NewPersona
+        );
+    }
 }

@@ -277,7 +277,7 @@ export const Workspace: Story = {
 		await expect(canvas.getAllByRole('button', { name: /Александр Мещеряков/ })[0]).toBeVisible()
 		await expect(canvas.getAllByText(/Александр Мещеряков/)[0]).toBeVisible()
 
-		await userEvent.type(canvas.getByRole('searchbox'), 'volkov')
+		await userEvent.type(canvas.getByRole('searchbox'), 'Алексей')
 		await expect(canvas.getAllByText('Алексей Волков')[0]).toBeVisible()
 	}
 }

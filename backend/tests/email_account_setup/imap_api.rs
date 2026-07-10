@@ -174,7 +174,7 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
     assert_eq!(account.provider_kind, EmailProviderKind::Icloud);
     assert_eq!(
         account.config["connected_services"],
-        json!(["mail", "calendar", "contacts"])
+        json!(["mail", "calendar"])
     );
     let provider_account_observation_id: String = sqlx::query_scalar(
         "SELECT observation_id

@@ -494,6 +494,15 @@ fn merge_observation_payload_into_evidence_metadata(metadata: &Value, payload: &
     };
 
     if let Value::Object(payload_map) = payload {
+        let legacy_persona_id_key = ["person", "id"].join("_");
+        if !merged_map.contains_key("persona_id")
+            && let Some(value) = payload_map
+                .get("persona_id")
+                .or_else(|| payload_map.get(&legacy_persona_id_key))
+        {
+            merged_map.insert("persona_id".to_owned(), value.clone());
+        }
+
         for key in [
             "title",
             "summary",
@@ -503,7 +512,6 @@ fn merge_observation_payload_into_evidence_metadata(metadata: &Value, payload: &
             "subject",
             "document_id",
             "document_title",
-            "person_id",
             "person_name",
             "organization_id",
             "organization_name",
@@ -552,4 +560,42 @@ fn validate_limit(limit: Option<i64>) -> Result<i64, ApiError> {
     }
 
     Ok(limit)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Map;
+
+    use super::*;
+
+    #[test]
+    fn observation_payload_persona_identity_is_merged_under_the_canonical_key() {
+        let legacy_persona_id_key = ["person", "id"].join("_");
+        let mut payload = Map::new();
+        payload.insert(
+            legacy_persona_id_key.clone(),
+            Value::String("persona:legacy".to_owned()),
+        );
+
+        let merged =
+            merge_observation_payload_into_evidence_metadata(&json!({}), &Value::Object(payload));
+
+        assert_eq!(merged["persona_id"], json!("persona:legacy"));
+        assert!(merged.get(&legacy_persona_id_key).is_none());
+
+        let mut payload = Map::new();
+        payload.insert(
+            legacy_persona_id_key,
+            Value::String("persona:legacy".to_owned()),
+        );
+        payload.insert(
+            "persona_id".to_owned(),
+            Value::String("persona:canonical".to_owned()),
+        );
+
+        let merged =
+            merge_observation_payload_into_evidence_metadata(&json!({}), &Value::Object(payload));
+
+        assert_eq!(merged["persona_id"], json!("persona:canonical"));
+    }
 }

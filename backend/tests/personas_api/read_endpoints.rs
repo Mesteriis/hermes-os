@@ -4,7 +4,7 @@ use tower::ServiceExt;
 use super::support::{LOCAL_API_TOKEN, build_personas_app, get_request_with_token, unique_suffix};
 
 #[tokio::test]
-async fn person_search_returns_ok() {
+async fn persona_search_returns_ok() {
     let Some(database_url) = super::support::live_database_url("person search").await else {
         return;
     };

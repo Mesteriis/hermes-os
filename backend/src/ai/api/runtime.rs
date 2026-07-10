@@ -215,7 +215,7 @@ pub(crate) async fn post_ai_meeting_prep(
                 "route_slot": "meeting_prep",
                 "workflow": "meeting_prep",
                 "project_id": request.project_id.clone(),
-                "person_id": request.person_id.clone(),
+                "persona_id": request.persona_id.clone(),
             }),
             provenance_extra: json!({
                 "source": "ai_api",
@@ -509,7 +509,7 @@ async fn process_meeting_prep_request(
                         "route_slot": "meeting_prep",
                         "workflow": "meeting_prep",
                         "project_id": request.project_id.clone(),
-                        "person_id": request.person_id.clone(),
+                        "persona_id": request.persona_id.clone(),
                     }),
                     provenance_extra: json!({
                         "source": "ai_api",
@@ -533,7 +533,7 @@ async fn process_meeting_prep_request(
                         "route_slot": "meeting_prep",
                         "workflow": "meeting_prep",
                         "project_id": request.project_id.clone(),
-                        "person_id": request.person_id.clone(),
+                        "persona_id": request.persona_id.clone(),
                         "reason": error.to_string(),
                     }),
                     provenance_extra: json!({

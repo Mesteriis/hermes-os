@@ -1,10 +1,9 @@
 # Personas — Data Model
 
 This document defines the target logical model for the Personas domain. Active
-PostgreSQL storage now uses `personas` / `persona_*` table names; `person_id`
-columns remain compatibility fields until a separate identifier migration is
-designed. Active API routes use `/api/v1/personas/*`; legacy `/api/v1/persons/*`
-routes are retired.
+PostgreSQL storage uses `personas` / `persona_*` table names with `persona_id`
+identifier columns. Active API routes use `/api/v1/personas/*`; legacy
+`/api/v1/persons/*` routes are retired.
 
 ## Model Principles
 

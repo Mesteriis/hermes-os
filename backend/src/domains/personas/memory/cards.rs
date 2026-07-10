@@ -10,8 +10,8 @@ use crate::domains::personas::core::link_persona_entity;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonaMemoryCard {
     pub id: String,
-    #[serde(rename = "persona_id", alias = "person_id")]
-    pub person_id: String,
+    #[serde(alias = "person_id")]
+    pub persona_id: String,
     pub title: String,
     pub description: String,
     pub source: String,
@@ -33,14 +33,14 @@ impl PersonaMemoryCardStore {
 
     pub async fn list(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<Vec<PersonaMemoryCard>, PersonaMemoryError> {
         let rows = sqlx::query(
-            "SELECT id::text, person_id, title, description, source, confidence::float8 AS confidence, importance,
+            "SELECT id::text, persona_id, title, description, source, confidence::float8 AS confidence, importance,
              created_at, last_verified_at FROM persona_memory_cards
-             WHERE person_id = $1 ORDER BY importance DESC, created_at DESC",
+             WHERE persona_id = $1 ORDER BY importance DESC, created_at DESC",
         )
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter().map(row_to_memory_card).collect()
@@ -48,20 +48,20 @@ impl PersonaMemoryCardStore {
 
     pub async fn upsert(
         &self,
-        person_id: &str,
+        persona_id: &str,
         title: &str,
         description: &str,
         source: &str,
         importance: i16,
     ) -> Result<PersonaMemoryCard, PersonaMemoryError> {
         let row = sqlx::query(
-            "INSERT INTO persona_memory_cards (person_id, title, description, source, importance)
+            "INSERT INTO persona_memory_cards (persona_id, title, description, source, importance)
              VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT DO NOTHING
-             RETURNING id::text, person_id, title, description, source, confidence::float8 AS confidence, importance,
+             RETURNING id::text, persona_id, title, description, source, confidence::float8 AS confidence, importance,
                        created_at, last_verified_at",
         )
-        .bind(person_id)
+        .bind(persona_id)
         .bind(title)
         .bind(description)
         .bind(source)
@@ -73,7 +73,7 @@ impl PersonaMemoryCardStore {
 
     pub async fn upsert_with_observation(
         &self,
-        person_id: &str,
+        persona_id: &str,
         title: &str,
         description: &str,
         source: &str,
@@ -81,7 +81,7 @@ impl PersonaMemoryCardStore {
         observation_id: &str,
     ) -> Result<PersonaMemoryCard, PersonaMemoryError> {
         let card = self
-            .upsert(person_id, title, description, source, importance)
+            .upsert(persona_id, title, description, source, importance)
             .await?;
         link_persona_entity(
             &self.pool,
@@ -90,7 +90,7 @@ impl PersonaMemoryCardStore {
             card.id.clone(),
             None,
             Some(json!({
-                "persona_id": person_id,
+                "persona_id": persona_id,
                 "importance": card.importance,
             })),
         )
@@ -102,7 +102,7 @@ impl PersonaMemoryCardStore {
 fn row_to_memory_card(row: PgRow) -> Result<PersonaMemoryCard, PersonaMemoryError> {
     Ok(PersonaMemoryCard {
         id: row.try_get("id")?,
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         title: row.try_get("title")?,
         description: row.try_get("description")?,
         source: row.try_get("source")?,

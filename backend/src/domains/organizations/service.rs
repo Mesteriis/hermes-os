@@ -212,7 +212,7 @@ impl OrganizationCommandService {
     pub async fn link_persona_manual(
         &self,
         organization_id: &str,
-        person_id: &str,
+        persona_id: &str,
         role: Option<&str>,
         department: Option<&str>,
         requested_source: &str,
@@ -222,12 +222,12 @@ impl OrganizationCommandService {
                 "ORGANIZATION_RECORD_MUTATION",
                 json!({
                     "organization_id": organization_id,
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "role": role,
                     "department": department,
                     "source": requested_source,
                 }),
-                format!("organization://{organization_id}/persona-links/{person_id}"),
+                format!("organization://{organization_id}/persona-links/{persona_id}"),
                 json!({
                     "captured_by": "organizations_service.link_persona_manual",
                     "operation": "link_persona_manual",
@@ -239,7 +239,7 @@ impl OrganizationCommandService {
         Ok(OrgPersonaLinkStore::new(self.pool.clone())
             .link_with_observation(
                 organization_id,
-                person_id,
+                persona_id,
                 role,
                 department,
                 Some(&format!("observation:{}", observation.observation_id)),

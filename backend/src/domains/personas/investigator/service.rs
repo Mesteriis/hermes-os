@@ -23,23 +23,23 @@ impl PersonaInvestigator {
 
     pub async fn assemble_dossier(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<PersonaDossier, InvestigatorError> {
-        assembly::assemble_dossier(&self.pool, person_id).await
+        assembly::assemble_dossier(&self.pool, persona_id).await
     }
 
     pub async fn assemble_and_cache_dossier(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<(PersonaDossier, DossierSnapshot), InvestigatorError> {
-        let dossier = self.assemble_dossier(person_id).await?;
+        let dossier = self.assemble_dossier(persona_id).await?;
         let snapshot = self.cache_dossier_snapshot(&dossier).await?;
         Ok((dossier, snapshot))
     }
 
     pub async fn assemble_cache_and_record_refresh(
         &self,
-        person_id: &str,
+        persona_id: &str,
         operation: &str,
         captured_by: &str,
         endpoint: &str,
@@ -52,7 +52,7 @@ impl PersonaInvestigator {
                     ObservationOriginKind::Manual,
                     chrono::Utc::now(),
                     json!({
-                        "persona_id": person_id,
+                        "persona_id": persona_id,
                         "operation": operation,
                     }),
                     source_ref,
@@ -63,7 +63,7 @@ impl PersonaInvestigator {
                 })),
             )
             .await?;
-        let (dossier, snapshot) = self.assemble_and_cache_dossier(person_id).await?;
+        let (dossier, snapshot) = self.assemble_and_cache_dossier(persona_id).await?;
         link_persona_entity(
             &self.pool,
             &observation.observation_id,
@@ -71,7 +71,7 @@ impl PersonaInvestigator {
             snapshot.dossier_snapshot_id.clone(),
             Some("dossier_refresh"),
             Some(json!({
-                "persona_id": person_id,
+                "persona_id": persona_id,
                 "trigger": endpoint,
             })),
         )
@@ -88,22 +88,22 @@ impl PersonaInvestigator {
 
     pub async fn review_dossier_snapshot(
         &self,
-        person_id: &str,
+        persona_id: &str,
         review_state: DossierReviewState,
     ) -> Result<DossierSnapshot, InvestigatorError> {
-        self.review_dossier_snapshot_with_observation(person_id, review_state, None, None)
+        self.review_dossier_snapshot_with_observation(persona_id, review_state, None, None)
             .await
     }
 
     pub async fn review_dossier_snapshot_with_observation(
         &self,
-        person_id: &str,
+        persona_id: &str,
         review_state: DossierReviewState,
         observation_id: Option<&str>,
         metadata: Option<Value>,
     ) -> Result<DossierSnapshot, InvestigatorError> {
         let snapshot =
-            snapshots::review_dossier_snapshot(&self.pool, person_id, review_state).await?;
+            snapshots::review_dossier_snapshot(&self.pool, persona_id, review_state).await?;
         materialize_review_transition_link(
             &self.pool,
             observation_id,
@@ -115,13 +115,13 @@ impl PersonaInvestigator {
             metadata
                 .map(|extra| {
                     json!({
-                        "persona_id": person_id,
+                        "persona_id": persona_id,
                         "context": extra,
                     })
                 })
                 .or_else(|| {
                     Some(json!({
-                        "persona_id": person_id,
+                        "persona_id": persona_id,
                     }))
                 }),
         )
@@ -129,7 +129,7 @@ impl PersonaInvestigator {
         Ok(snapshot)
     }
 
-    pub async fn meeting_prep(&self, person_id: &str) -> Result<MeetingPrep, InvestigatorError> {
-        meeting_prep::meeting_prep(&self.pool, person_id).await
+    pub async fn meeting_prep(&self, persona_id: &str) -> Result<MeetingPrep, InvestigatorError> {
+        meeting_prep::meeting_prep(&self.pool, persona_id).await
     }
 }

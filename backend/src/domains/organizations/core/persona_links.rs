@@ -10,8 +10,8 @@ use super::{OrgCoreError, link_entity_in_transaction};
 pub struct OrgPersonaLink {
     pub id: String,
     pub organization_id: String,
-    #[serde(rename = "persona_id", alias = "person_id")]
-    pub person_id: String,
+    #[serde(alias = "person_id")]
+    pub persona_id: String,
     pub role: Option<String>,
     pub department: Option<String>,
     pub source: String,
@@ -34,7 +34,7 @@ impl OrgPersonaLinkStore {
     }
 
     pub async fn list_by_org(&self, org_id: &str) -> Result<Vec<OrgPersonaLink>, OrgCoreError> {
-        let rows = sqlx::query("SELECT id::text, organization_id, person_id, role, department, source, confidence::float8 AS confidence, valid_from, valid_to, is_primary, created_at, updated_at FROM organization_persona_links WHERE organization_id=$1 ORDER BY is_primary DESC, role")
+        let rows = sqlx::query("SELECT id::text, organization_id, persona_id, role, department, source, confidence::float8 AS confidence, valid_from, valid_to, is_primary, created_at, updated_at FROM organization_persona_links WHERE organization_id=$1 ORDER BY is_primary DESC, role")
             .bind(org_id)
             .fetch_all(&self.pool)
             .await?;
@@ -44,7 +44,7 @@ impl OrgPersonaLinkStore {
                 Ok(OrgPersonaLink {
                     id: row.try_get("id")?,
                     organization_id: row.try_get("organization_id")?,
-                    person_id: row.try_get("person_id")?,
+                    persona_id: row.try_get("persona_id")?,
                     role: row.try_get("role")?,
                     department: row.try_get("department")?,
                     source: row.try_get("source")?,
@@ -62,27 +62,27 @@ impl OrgPersonaLinkStore {
     pub async fn link(
         &self,
         org_id: &str,
-        person_id: &str,
+        persona_id: &str,
         role: Option<&str>,
         dept: Option<&str>,
     ) -> Result<OrgPersonaLink, OrgCoreError> {
-        self.link_with_observation(org_id, person_id, role, dept, None, None)
+        self.link_with_observation(org_id, persona_id, role, dept, None, None)
             .await
     }
 
     pub async fn link_with_observation(
         &self,
         org_id: &str,
-        person_id: &str,
+        persona_id: &str,
         role: Option<&str>,
         dept: Option<&str>,
         source: Option<&str>,
         observation_id: Option<&str>,
     ) -> Result<OrgPersonaLink, OrgCoreError> {
         let mut transaction = self.pool.begin().await?;
-        let row = sqlx::query("INSERT INTO organization_persona_links (organization_id, person_id, role, department, source) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (organization_id, person_id, role) DO UPDATE SET department=EXCLUDED.department, source=EXCLUDED.source, updated_at=now() RETURNING id::text, organization_id, person_id, role, department, source, confidence::float8 AS confidence, valid_from, valid_to, is_primary, created_at, updated_at")
+        let row = sqlx::query("INSERT INTO organization_persona_links (organization_id, persona_id, role, department, source) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (organization_id, persona_id, role) DO UPDATE SET department=EXCLUDED.department, source=EXCLUDED.source, updated_at=now() RETURNING id::text, organization_id, persona_id, role, department, source, confidence::float8 AS confidence, valid_from, valid_to, is_primary, created_at, updated_at")
             .bind(org_id)
-            .bind(person_id)
+            .bind(persona_id)
             .bind(role)
             .bind(dept)
             .bind(source.unwrap_or("manual"))
@@ -91,7 +91,7 @@ impl OrgPersonaLinkStore {
         let link = OrgPersonaLink {
             id: row.try_get("id")?,
             organization_id: row.try_get("organization_id")?,
-            person_id: row.try_get("person_id")?,
+            persona_id: row.try_get("persona_id")?,
             role: row.try_get("role")?,
             department: row.try_get("department")?,
             source: row.try_get("source")?,
@@ -111,7 +111,7 @@ impl OrgPersonaLinkStore {
                 &link.id,
                 json!({
                     "organization_id": org_id,
-                    "persona_id": link.person_id,
+                    "persona_id": link.persona_id,
                     "role": link.role,
                     "department": link.department,
                 }),
@@ -126,7 +126,7 @@ impl OrgPersonaLinkStore {
     pub async fn link_email_participant_with_observation(
         &self,
         org_id: &str,
-        person_id: &str,
+        persona_id: &str,
         message_id: &str,
         observation_id: &str,
     ) -> Result<(OrgPersonaLink, bool), OrgCoreError> {
@@ -135,13 +135,13 @@ impl OrgPersonaLinkStore {
             r#"
             INSERT INTO organization_persona_links (
                 organization_id,
-                person_id,
+                persona_id,
                 role,
                 source,
                 confidence
             )
             VALUES ($1, $2, 'email_participant', 'email_sync', 1.0)
-            ON CONFLICT (organization_id, person_id, role)
+            ON CONFLICT (organization_id, persona_id, role)
             DO UPDATE SET
                 source = EXCLUDED.source,
                 confidence = EXCLUDED.confidence,
@@ -149,7 +149,7 @@ impl OrgPersonaLinkStore {
             RETURNING
                 id::text,
                 organization_id,
-                person_id,
+                persona_id,
                 role,
                 department,
                 source,
@@ -163,13 +163,13 @@ impl OrgPersonaLinkStore {
             "#,
         )
         .bind(org_id)
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_one(&mut *transaction)
         .await?;
         let link = OrgPersonaLink {
             id: row.try_get("id")?,
             organization_id: row.try_get("organization_id")?,
-            person_id: row.try_get("person_id")?,
+            persona_id: row.try_get("persona_id")?,
             role: row.try_get("role")?,
             department: row.try_get("department")?,
             source: row.try_get("source")?,
@@ -186,7 +186,7 @@ impl OrgPersonaLinkStore {
         Ok((link, inserted))
     }
 
-    pub async fn set_primary(&self, org_id: &str, person_id: &str) -> Result<(), OrgCoreError> {
+    pub async fn set_primary(&self, org_id: &str, persona_id: &str) -> Result<(), OrgCoreError> {
         sqlx::query(
             "UPDATE organization_persona_links SET is_primary=false WHERE organization_id=$1",
         )
@@ -194,9 +194,9 @@ impl OrgPersonaLinkStore {
         .execute(&self.pool)
         .await?;
 
-        sqlx::query("UPDATE organization_persona_links SET is_primary=true WHERE organization_id=$1 AND person_id=$2")
+        sqlx::query("UPDATE organization_persona_links SET is_primary=true WHERE organization_id=$1 AND persona_id=$2")
             .bind(org_id)
-            .bind(person_id)
+            .bind(persona_id)
             .execute(&self.pool)
             .await?;
 

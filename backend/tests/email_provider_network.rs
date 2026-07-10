@@ -125,7 +125,7 @@ async fn imap_network_client_fetches_raw_messages_by_uid_without_mutating_mailbo
         }))
     );
     assert_eq!(batch.messages.len(), 1);
-    assert_eq!(batch.messages[0].provider_record_id, "43");
+    assert_eq!(batch.messages[0].provider_record_id, "imap:Archive:43");
     assert_eq!(batch.messages[0].payload["provider"], "imap");
     assert_eq!(batch.messages[0].payload["mailbox"], "Archive");
     assert_eq!(

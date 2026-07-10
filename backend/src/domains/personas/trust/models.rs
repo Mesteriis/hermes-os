@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonaPromise {
     pub id: String,
-    #[serde(rename = "persona_id", alias = "person_id")]
-    pub person_id: String,
+    #[serde(alias = "person_id")]
+    pub persona_id: String,
     pub description: String,
     pub source_message_id: Option<String>,
     pub promised_at: DateTime<Utc>,
@@ -19,8 +19,8 @@ pub struct PersonaPromise {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonaRisk {
     pub id: String,
-    #[serde(rename = "persona_id", alias = "person_id")]
-    pub person_id: String,
+    #[serde(alias = "person_id")]
+    pub persona_id: String,
     pub risk_type: String,
     pub description: String,
     pub severity: String,

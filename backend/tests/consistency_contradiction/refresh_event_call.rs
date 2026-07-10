@@ -31,12 +31,12 @@ async fn contradiction_refresh_detects_meeting_note_claim_against_active_persona
         .expect("person");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (persona_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("person fact");
@@ -54,13 +54,13 @@ async fn contradiction_refresh_detects_meeting_note_claim_against_active_persona
         .expect("calendar event");
     sqlx::query(
         r#"
-        INSERT INTO event_participants (event_id, email, display_name, role, person_id)
+        INSERT INTO event_participants (event_id, email, display_name, role, persona_id)
         VALUES ($1, $2, 'Polygraph Participant', 'attendee', $3)
         "#,
     )
     .bind(&event.event_id)
     .bind(&email_address)
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .execute(&pool)
     .await
     .expect("event participant");
@@ -95,7 +95,7 @@ async fn contradiction_refresh_detects_meeting_note_claim_against_active_persona
     assert_eq!(observation.severity, ContradictionSeverity::Medium);
     assert_eq!(
         observation.affected_entities,
-        json!([{"entity_kind": "subject", "entity_id": person.person_id}])
+        json!([{"entity_kind": "subject", "entity_id": person.persona_id}])
     );
     assert_eq!(
         observation.metadata,
@@ -131,23 +131,23 @@ async fn contradiction_refresh_detects_call_transcript_claim_against_active_pers
         .expect("person");
     sqlx::query(
         r#"
-        INSERT INTO persona_identities (person_id, identity_type, identity_value, source, confidence, status)
+        INSERT INTO persona_identities (persona_id, identity_type, identity_value, source, confidence, status)
         VALUES ($1, 'telegram', $2, 'test', 1.0, 'active')
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .bind(&provider_chat_id)
     .execute(&pool)
     .await
     .expect("telegram identity");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (persona_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("person fact");
@@ -220,7 +220,7 @@ async fn contradiction_refresh_detects_call_transcript_claim_against_active_pers
     assert_eq!(observation.severity, ContradictionSeverity::Medium);
     assert_eq!(
         observation.affected_entities,
-        json!([{"entity_kind": "subject", "entity_id": person.person_id}])
+        json!([{"entity_kind": "subject", "entity_id": person.persona_id}])
     );
     assert_eq!(
         observation.metadata,

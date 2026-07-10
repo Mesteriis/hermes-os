@@ -12,7 +12,7 @@ use super::support::{
 };
 
 #[tokio::test]
-async fn person_manual_memory_entrypoints_capture_observations_against_postgres() {
+async fn persona_manual_memory_entrypoints_capture_observations_against_postgres() {
     let Some(database_url) =
         super::support::live_database_url("person manual memory observations").await
     else {
@@ -29,7 +29,7 @@ async fn person_manual_memory_entrypoints_capture_observations_against_postgres(
         .await
         .expect("upsert person");
     let app = build_personas_app_with_database(&database_url, database);
-    let encoded_person_id = urlencoding_percent_encode(&person.person_id);
+    let encoded_person_id = urlencoding_percent_encode(&person.persona_id);
 
     let response = app
         .clone()
@@ -46,12 +46,12 @@ async fn person_manual_memory_entrypoints_capture_observations_against_postgres(
         r#"
         SELECT source
         FROM persona_memory_cards
-        WHERE person_id = $1
+        WHERE persona_id = $1
         ORDER BY created_at DESC
         LIMIT 1
         "#,
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("notes memory card source");
@@ -65,7 +65,7 @@ async fn person_manual_memory_entrypoints_capture_observations_against_postgres(
          ORDER BY created_at DESC
          LIMIT 1",
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("notes observation link");
@@ -167,7 +167,7 @@ async fn person_manual_memory_entrypoints_capture_observations_against_postgres(
          ORDER BY link.created_at DESC
          LIMIT 1",
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("fingerprint observation row");
@@ -193,7 +193,7 @@ async fn person_manual_memory_entrypoints_capture_observations_against_postgres(
            AND observation.payload->>'persona_id' = $1
            AND (observation.payload ? 'person_id') = false",
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("person trust signal count");
@@ -210,9 +210,9 @@ async fn person_manual_memory_entrypoints_capture_observations_against_postgres(
         .expect("favorite response");
     assert_eq!(response.status(), axum::http::StatusCode::OK);
     let favorite_source: String = sqlx::query_scalar(
-        "SELECT source FROM persona_preferences WHERE person_id = $1 AND preference_type = 'ui:favorite'",
+        "SELECT source FROM persona_preferences WHERE persona_id = $1 AND preference_type = 'ui:favorite'",
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("favorite source");
@@ -226,7 +226,7 @@ async fn person_manual_memory_entrypoints_capture_observations_against_postgres(
          ORDER BY created_at DESC
          LIMIT 1",
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("favorite observation link");
@@ -241,9 +241,9 @@ async fn person_manual_memory_entrypoints_capture_observations_against_postgres(
         .expect("watchlist response");
     assert_eq!(response.status(), axum::http::StatusCode::OK);
     let watchlist_source: String = sqlx::query_scalar(
-        "SELECT source FROM persona_preferences WHERE person_id = $1 AND preference_type = 'ui:watchlist'",
+        "SELECT source FROM persona_preferences WHERE persona_id = $1 AND preference_type = 'ui:watchlist'",
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("watchlist source");
@@ -257,7 +257,7 @@ async fn person_manual_memory_entrypoints_capture_observations_against_postgres(
          ORDER BY created_at DESC
          LIMIT 1",
     )
-    .bind(&person.person_id)
+    .bind(&person.persona_id)
     .fetch_one(&pool)
     .await
     .expect("watchlist observation link");

@@ -15,21 +15,21 @@ impl PersonaProjectionStore {
     ) -> Result<Persona, PersonaProjectionError> {
         let normalized_agent_id = normalize_ai_agent_id(agent_id)?;
         validate_display_name(display_name)?;
-        let person_id = ai_agent_persona_id(&normalized_agent_id);
+        let persona_id = ai_agent_persona_id(&normalized_agent_id);
         let email_address = ai_agent_email_address(&normalized_agent_id);
         let mut transaction = self.pool().begin().await?;
 
         let row = sqlx::query(
             r#"
             INSERT INTO personas (
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 person_type,
                 is_self
             )
             VALUES ($1, $2, $3, 'ai_agent', false)
-            ON CONFLICT (person_id)
+            ON CONFLICT (persona_id)
             DO UPDATE SET
                 display_name = EXCLUDED.display_name,
                 email_address = EXCLUDED.email_address,
@@ -37,7 +37,7 @@ impl PersonaProjectionStore {
                 is_self = false,
                 updated_at = now()
             RETURNING
-                person_id,
+                persona_id,
                 display_name,
                 email_address,
                 person_type,
@@ -47,14 +47,14 @@ impl PersonaProjectionStore {
                 updated_at
             "#,
         )
-        .bind(&person_id)
+        .bind(&persona_id)
         .bind(&email_address)
         .bind(&email_address)
         .fetch_one(&mut *transaction)
         .await?;
 
         let person = row_to_persona(row)?;
-        let graph_node_id = node_id(GraphNodeKind::Persona, &person.person_id);
+        let graph_node_id = node_id(GraphNodeKind::Persona, &person.persona_id);
         sqlx::query(
             r#"
             INSERT INTO graph_nodes (
@@ -66,7 +66,7 @@ impl PersonaProjectionStore {
             )
             VALUES (
                 $1,
-                'person',
+                'persona',
                 $2,
                 $3,
                 jsonb_build_object(
@@ -83,7 +83,7 @@ impl PersonaProjectionStore {
             "#,
         )
         .bind(&graph_node_id)
-        .bind(&person.person_id)
+        .bind(&person.persona_id)
         .bind(&email_address)
         .bind(&normalized_agent_id)
         .execute(&mut *transaction)
@@ -92,7 +92,7 @@ impl PersonaProjectionStore {
         sqlx::query(
             r#"
             INSERT INTO persona_identities (
-                person_id,
+                persona_id,
                 identity_type,
                 identity_value,
                 source,
@@ -111,7 +111,7 @@ impl PersonaProjectionStore {
             )
             ON CONFLICT (identity_type, identity_value) WHERE status = 'active'
             DO UPDATE SET
-                person_id = EXCLUDED.person_id,
+                persona_id = EXCLUDED.persona_id,
                 source = EXCLUDED.source,
                 confidence = EXCLUDED.confidence,
                 metadata = EXCLUDED.metadata,
@@ -119,7 +119,7 @@ impl PersonaProjectionStore {
                 updated_at = now()
             "#,
         )
-        .bind(&person.person_id)
+        .bind(&person.persona_id)
         .bind(&email_address)
         .bind(&normalized_agent_id)
         .execute(&mut *transaction)

@@ -25,7 +25,7 @@ impl OrganizationPersonaLinkApplicationService {
     pub async fn link_persona_manual(
         &self,
         organization_id: &str,
-        person_id: &str,
+        persona_id: &str,
         role: Option<&str>,
         department: Option<&str>,
         requested_source: &str,
@@ -33,7 +33,7 @@ impl OrganizationPersonaLinkApplicationService {
         let link = OrganizationCommandService::new(self.pool.clone())
             .link_persona_manual(
                 organization_id,
-                person_id,
+                persona_id,
                 role,
                 department,
                 requested_source,
@@ -75,7 +75,7 @@ async fn materialize_member_of_relationship(
 ) -> Result<(), RelationshipReviewPortError> {
     let relationship = NewRelationship {
         source_entity_kind: RelationshipEntityKind::Persona,
-        source_entity_id: link.person_id.clone(),
+        source_entity_id: link.persona_id.clone(),
         target_entity_kind: RelationshipEntityKind::Organization,
         target_entity_id: link.organization_id.clone(),
         relationship_type: "member_of".to_owned(),
@@ -89,7 +89,7 @@ async fn materialize_member_of_relationship(
             "compatibility_table": "organization_persona_links",
             "compatibility_record_id": link.id,
             "organization_id": link.organization_id,
-            "persona_id": link.person_id,
+            "persona_id": link.persona_id,
             "role": link.role,
             "department": link.department,
             "source": link.source,
@@ -110,7 +110,7 @@ fn relationship_evidence_metadata(link: &OrgPersonaLink) -> serde_json::Value {
         "compatibility_table": "organization_persona_links",
         "compatibility_record_id": link.id,
         "organization_id": link.organization_id,
-        "persona_id": link.person_id,
+        "persona_id": link.persona_id,
     })
 }
 

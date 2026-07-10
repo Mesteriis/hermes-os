@@ -20,7 +20,7 @@ pub(crate) struct PersonaIdentityTestContext {
     pub(crate) pool: PgPool,
     pub(crate) store: PersonaIdentityReviewStore,
     pub(crate) event_store: EventStore,
-    pub(crate) person_store: PersonaProjectionStore,
+    pub(crate) persona_store: PersonaProjectionStore,
 }
 
 pub(crate) async fn live_persona_identity_context() -> Option<PersonaIdentityTestContext> {
@@ -36,26 +36,26 @@ pub(crate) async fn live_persona_identity_context() -> Option<PersonaIdentityTes
         pool: pool.clone(),
         store: PersonaIdentityReviewStore::new(pool.clone()),
         event_store: EventStore::new(pool.clone()),
-        person_store: PersonaProjectionStore::new(pool.clone()),
+        persona_store: PersonaProjectionStore::new(pool.clone()),
     })
 }
 
 pub(crate) async fn seed_normalized_personas(
     context: &PersonaIdentityTestContext,
-    left_person_id: &str,
-    right_person_id: &str,
+    left_persona_id: &str,
+    right_persona_id: &str,
     display_name: &str,
 ) -> Result<(), PersonaIdentityError> {
     sqlx::query(
         r#"
         UPDATE personas
         SET display_name = $1
-        WHERE person_id = $2 OR person_id = $3
+        WHERE persona_id = $2 OR persona_id = $3
         "#,
     )
     .bind(display_name)
-    .bind(left_person_id)
-    .bind(right_person_id)
+    .bind(left_persona_id)
+    .bind(right_persona_id)
     .execute(&context.pool)
     .await?;
 
@@ -82,21 +82,21 @@ pub(crate) async fn confirm_identity_candidate(
 
 pub(crate) async fn exclude_personas_from_name_merge_refresh(
     context: &PersonaIdentityTestContext,
-    person_ids: &[&str],
+    persona_ids: &[&str],
     suffix: u128,
 ) -> Result<(), PersonaIdentityError> {
-    for (index, person_id) in person_ids.iter().enumerate() {
+    for (index, persona_id) in persona_ids.iter().enumerate() {
         sqlx::query(
             r#"
             UPDATE personas
             SET display_name = $1
-            WHERE person_id = $2
+            WHERE persona_id = $2
             "#,
         )
         .bind(format!(
             "identity-refresh-skip-{suffix}-{index}@example.com"
         ))
-        .bind(person_id)
+        .bind(persona_id)
         .execute(&context.pool)
         .await?;
     }
@@ -179,13 +179,13 @@ pub(crate) async fn identity_candidate_updated_at(
 }
 
 pub(crate) fn identity_candidate_id_from_personas(left_id: &str, right_id: &str) -> String {
-    let (left_person_id, right_person_id) = ordered_persona_ids(left_id, right_id);
-    format!("identity_candidate:v1:merge_personas:{left_person_id}:{right_person_id}")
+    let (left_persona_id, right_persona_id) = ordered_persona_ids(left_id, right_id);
+    format!("identity_candidate:v1:merge_personas:{left_persona_id}:{right_persona_id}")
 }
 
 pub(crate) fn split_identity_candidate_id_from_personas(left_id: &str, right_id: &str) -> String {
-    let (left_person_id, right_person_id) = ordered_persona_ids(left_id, right_id);
-    format!("identity_candidate:v1:split_persona:{left_person_id}:{right_person_id}")
+    let (left_persona_id, right_persona_id) = ordered_persona_ids(left_id, right_id);
+    format!("identity_candidate:v1:split_persona:{left_persona_id}:{right_persona_id}")
 }
 
 pub(crate) fn ordered_persona_ids(left_id: &str, right_id: &str) -> (String, String) {

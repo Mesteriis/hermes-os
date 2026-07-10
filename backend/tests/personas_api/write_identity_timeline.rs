@@ -27,7 +27,7 @@ async fn persona_identity_post_and_delete() {
         .await
         .expect("upsert person");
     let app = build_personas_app_with_database(&database_url, database);
-    let pid = person.person_id.clone();
+    let pid = person.persona_id.clone();
     let response = app
         .clone()
         .oneshot(post_request_with_token(
@@ -109,7 +109,7 @@ async fn persona_identity_post_and_delete() {
 }
 
 #[tokio::test]
-async fn person_relationship_timeline_entrypoint_captures_observation_against_postgres() {
+async fn persona_relationship_timeline_entrypoint_captures_observation_against_postgres() {
     let Some(database_url) =
         super::support::live_database_url("person relationship timeline observations").await
     else {
@@ -126,7 +126,7 @@ async fn person_relationship_timeline_entrypoint_captures_observation_against_po
         .await
         .expect("upsert person");
     let app = build_personas_app_with_database(&database_url, database);
-    let encoded_person_id = urlencoding_percent_encode(&person.person_id);
+    let encoded_person_id = urlencoding_percent_encode(&person.persona_id);
 
     let response = app
         .oneshot(post_request_with_token(

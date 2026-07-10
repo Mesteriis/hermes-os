@@ -1834,16 +1834,16 @@ async fn signal_hub_persona_derived_evidence_projection_replay_rebuilds_relation
                 Utc::now(),
                 json!({
                     "kind": "person",
-                    "person_id": "person-replay-1",
+                    "persona_id": "person-replay-1",
                 }),
                 json!({
                     "kind": "person_role",
-                    "person_id": "person-replay-1",
+                    "persona_id": "person-replay-1",
                     "role": "friend",
                 }),
             )
             .payload(json!({
-                "person_id": "person-replay-1",
+                "persona_id": "person-replay-1",
                 "role": "friend",
                 "assigned_by": "owner-replay",
             }))

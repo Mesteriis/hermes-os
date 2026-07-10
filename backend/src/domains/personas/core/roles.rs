@@ -16,8 +16,8 @@ pub const PERSONA_ROLE_REMOVED_EVENT_TYPE: &str = "persona.role.removed";
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonaRole {
     pub id: String,
-    #[serde(rename = "persona_id", alias = "person_id")]
-    pub person_id: String,
+    #[serde(alias = "person_id")]
+    pub persona_id: String,
     pub role: String,
     pub assigned_by: Option<String>,
     pub assigned_at: DateTime<Utc>,
@@ -35,13 +35,13 @@ impl PersonaRoleStore {
 
     pub async fn list_by_person(
         &self,
-        person_id: &str,
+        persona_id: &str,
     ) -> Result<Vec<PersonaRole>, PersonaCoreError> {
         let rows = sqlx::query(
-            r#"SELECT id::text, person_id, role, assigned_by, assigned_at
-               FROM persona_roles WHERE person_id = $1 ORDER BY assigned_at"#,
+            r#"SELECT id::text, persona_id, role, assigned_by, assigned_at
+               FROM persona_roles WHERE persona_id = $1 ORDER BY assigned_at"#,
         )
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter().map(row_to_role).collect()
@@ -49,29 +49,29 @@ impl PersonaRoleStore {
 
     pub async fn assign(
         &self,
-        person_id: &str,
+        persona_id: &str,
         role: &str,
         assigned_by: Option<&str>,
     ) -> Result<PersonaRole, PersonaCoreError> {
-        self.assign_with_observation(person_id, role, assigned_by, None)
+        self.assign_with_observation(persona_id, role, assigned_by, None)
             .await
     }
 
     pub async fn assign_with_observation(
         &self,
-        person_id: &str,
+        persona_id: &str,
         role: &str,
         assigned_by: Option<&str>,
         observation_id: Option<&str>,
     ) -> Result<PersonaRole, PersonaCoreError> {
         let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
-            r#"INSERT INTO persona_roles (person_id, role, assigned_by)
+            r#"INSERT INTO persona_roles (persona_id, role, assigned_by)
                VALUES ($1, $2, $3)
-               ON CONFLICT (person_id, role) DO UPDATE SET assigned_by = EXCLUDED.assigned_by
-               RETURNING id::text, person_id, role, assigned_by, assigned_at"#,
+               ON CONFLICT (persona_id, role) DO UPDATE SET assigned_by = EXCLUDED.assigned_by
+               RETURNING id::text, persona_id, role, assigned_by, assigned_at"#,
         )
-        .bind(person_id)
+        .bind(persona_id)
         .bind(role)
         .bind(assigned_by)
         .fetch_one(&mut *transaction)
@@ -86,7 +86,7 @@ impl PersonaRoleStore {
                 role.id.clone(),
                 None,
                 Some(json!({
-                    "persona_id": person_id,
+                    "persona_id": persona_id,
                     "role": &role.role,
                     "action": "assign",
                 })),
@@ -99,32 +99,32 @@ impl PersonaRoleStore {
         Ok(role)
     }
 
-    pub async fn remove(&self, person_id: &str, role: &str) -> Result<bool, PersonaCoreError> {
-        self.remove_with_observation(person_id, role, None).await
+    pub async fn remove(&self, persona_id: &str, role: &str) -> Result<bool, PersonaCoreError> {
+        self.remove_with_observation(persona_id, role, None).await
     }
 
     pub async fn remove_with_observation(
         &self,
-        person_id: &str,
+        persona_id: &str,
         role: &str,
         observation_id: Option<&str>,
     ) -> Result<bool, PersonaCoreError> {
         let mut transaction = self.pool.begin().await?;
         let existing_role = sqlx::query(
-            r#"SELECT id::text, person_id, role, assigned_by, assigned_at
+            r#"SELECT id::text, persona_id, role, assigned_by, assigned_at
                FROM persona_roles
-               WHERE person_id = $1 AND role = $2
+               WHERE persona_id = $1 AND role = $2
                FOR UPDATE"#,
         )
-        .bind(person_id)
+        .bind(persona_id)
         .bind(role)
         .fetch_optional(&mut *transaction)
         .await?
         .map(row_to_role)
         .transpose()?;
 
-        let result = sqlx::query("DELETE FROM persona_roles WHERE person_id = $1 AND role = $2")
-            .bind(person_id)
+        let result = sqlx::query("DELETE FROM persona_roles WHERE persona_id = $1 AND role = $2")
+            .bind(persona_id)
             .bind(role)
             .execute(&mut *transaction)
             .await?;
@@ -138,10 +138,10 @@ impl PersonaRoleStore {
                 &mut transaction,
                 observation_id,
                 "role",
-                format!("{person_id}:{role}"),
+                format!("{persona_id}:{role}"),
                 None,
                 Some(json!({
-                    "persona_id": &existing_role.person_id,
+                    "persona_id": &existing_role.persona_id,
                     "role": &existing_role.role,
                     "action": "delete",
                     "deleted": removed,
@@ -165,7 +165,7 @@ impl PersonaRoleStore {
 fn row_to_role(row: PgRow) -> Result<PersonaRole, PersonaCoreError> {
     Ok(PersonaRole {
         id: row.try_get("id")?,
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         role: row.try_get("role")?,
         assigned_by: row.try_get("assigned_by")?,
         assigned_at: row.try_get("assigned_at")?,
@@ -205,22 +205,22 @@ async fn append_role_assigned_event(
     let event = NewEventEnvelope::builder(
         format!(
             "persona_role_assigned:{}:{role_knowledge_id}",
-            role.person_id
+            role.persona_id
         ),
         PERSONA_ROLE_ASSIGNED_EVENT_TYPE,
         role.assigned_at,
         json!({
             "kind": "personas",
             "provider": "hermes",
-            "source_id": &role.person_id,
+            "source_id": &role.persona_id,
         }),
         json!({
             "kind": "persona",
-            "persona_id": &role.person_id,
+            "persona_id": &role.persona_id,
         }),
     )
     .payload(json!({
-        "persona_id": &role.person_id,
+        "persona_id": &role.persona_id,
         "role": &role.role,
         "assigned_by": &role.assigned_by,
         "role_knowledge_id": role_knowledge_id,
@@ -247,15 +247,15 @@ async fn append_role_removed_event(
         json!({
             "kind": "personas",
             "provider": "hermes",
-            "source_id": &role.person_id,
+            "source_id": &role.persona_id,
         }),
         json!({
             "kind": "persona",
-            "persona_id": &role.person_id,
+            "persona_id": &role.persona_id,
         }),
     )
     .payload(json!({
-        "persona_id": &role.person_id,
+        "persona_id": &role.persona_id,
         "role": &role.role,
         "assigned_by": &role.assigned_by,
         "role_knowledge_id": role_knowledge_id,

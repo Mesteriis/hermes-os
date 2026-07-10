@@ -121,11 +121,10 @@ Ambiguous identity resolution remains reviewable. This preserves the safety
 property from ADR-0019 while replacing its Contact framing.
 
 ADR-0074 remains the implementation compatibility contract for existing
-email-derived `person_id` values and internal `person_id` storage columns until
-a separate physical identifier migration ADR is accepted. Active routes and
-logical storage now use Persona terminology (`/personas`, `personas`,
-`persona_*`); remaining `person_id` columns are a physical compatibility detail,
-not a current domain name.
+email-derived `person:v1:email:*` values. ADR-0174 governs the physical column
+rename to Persona-native identifiers. Active routes and storage use Persona
+terminology (`/personas`, `personas`, `persona_*`, `persona_id`); bounded legacy
+input aliases remain readable for replay and established request contracts.
 
 ## Consequences
 
@@ -144,20 +143,19 @@ Migration constraints:
 
 - Existing email-derived `person_id` values remain compatibility identifiers
   until a dedicated opaque Persona identifier migration is designed.
-- Internal `person_id` primary/FK columns remain compatibility storage details
-  even where table and API names are Persona-native.
+- Persona-owned and resolved-reference columns covered by ADR-0174 use
+  Persona-native physical names without changing stored identifier values.
 - `person_personas` has been renamed to `persona_interaction_contexts`;
   compatibility writes now materialize interaction-context values into Persona
   Preferences.
 - Existing health, watchlist, role and trust fields must be reclassified before
   deeper implementation work.
-- UI and backend code will need a future migration plan to avoid breaking
-  current projections when physical identifiers are renamed.
+- Schema and backend code move together for physical identifier renames; future
+  changes to identifier values require a separate migration decision.
 
 ## Non-Goals
 
-- Immediate physical identifier migration away from internal `person_id`
-  columns.
+- Changing existing Persona identifier values or introducing opaque identifiers.
 - Removing current compatibility aliases for historical event payloads and
   request bodies.
 - Fine-tuning models on private Persona data.
@@ -166,9 +164,8 @@ Migration constraints:
 
 ## Required Follow-Up
 
-- Design a physical identifier migration ADR if implementation moves away from
-  compatibility `person_id` columns and email-derived `person:v1:email:*`
-  values.
+- Treat ADR-0174 as the physical column migration contract. Any future change to
+  email-derived `person:v1:email:*` values requires a separate ADR.
 - Add first-class Relationship records.
 - Finish Owner Persona usage across agents, UI context assembly and user-owned
   actions.

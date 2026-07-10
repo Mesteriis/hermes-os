@@ -14,38 +14,38 @@ async fn persona_identity_refresh_skips_existing_split_when_generating_next_spli
     let suffix = unique_suffix();
 
     let first_left = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("first.left-{suffix}@example.com"))
         .await
         .expect("upsert first left person");
     let first_right = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("first.right-{suffix}@example.com"))
         .await
         .expect("upsert first right person");
     let second_left = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("second.left-{suffix}@example.com"))
         .await
         .expect("upsert second left person");
     let second_right = context
-        .person_store
+        .persona_store
         .upsert_email_persona(&format!("second.right-{suffix}@example.com"))
         .await
         .expect("upsert second right person");
 
     seed_normalized_personas(
         &context,
-        &first_left.person_id,
-        &first_right.person_id,
+        &first_left.persona_id,
+        &first_right.persona_id,
         &format!("First Split Existing {suffix}"),
     )
     .await
     .expect("seed first pair display names");
     seed_normalized_personas(
         &context,
-        &second_left.person_id,
-        &second_right.person_id,
+        &second_left.persona_id,
+        &second_right.persona_id,
         &format!("Second Split Pending {suffix}"),
     )
     .await
@@ -58,13 +58,15 @@ async fn persona_identity_refresh_skips_existing_split_when_generating_next_spli
         .expect("refresh merge candidates");
 
     let first_merge_candidate_id =
-        identity_candidate_id_from_personas(&first_left.person_id, &first_right.person_id);
+        identity_candidate_id_from_personas(&first_left.persona_id, &first_right.persona_id);
     let second_merge_candidate_id =
-        identity_candidate_id_from_personas(&second_left.person_id, &second_right.person_id);
+        identity_candidate_id_from_personas(&second_left.persona_id, &second_right.persona_id);
     let first_split_candidate_id =
-        split_identity_candidate_id_from_personas(&first_left.person_id, &first_right.person_id);
-    let second_split_candidate_id =
-        split_identity_candidate_id_from_personas(&second_left.person_id, &second_right.person_id);
+        split_identity_candidate_id_from_personas(&first_left.persona_id, &first_right.persona_id);
+    let second_split_candidate_id = split_identity_candidate_id_from_personas(
+        &second_left.persona_id,
+        &second_right.persona_id,
+    );
 
     confirm_identity_candidate(
         &context,
@@ -84,10 +86,10 @@ async fn persona_identity_refresh_skips_existing_split_when_generating_next_spli
     exclude_personas_from_name_merge_refresh(
         &context,
         &[
-            &first_left.person_id,
-            &first_right.person_id,
-            &second_left.person_id,
-            &second_right.person_id,
+            &first_left.persona_id,
+            &first_right.persona_id,
+            &second_left.persona_id,
+            &second_right.persona_id,
         ],
         suffix,
     )

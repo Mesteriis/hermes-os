@@ -34,7 +34,7 @@ pub(super) async fn refresh_deterministic_observations(
                 pool,
                 &accepted,
                 evidence_claim(
-                    &fact.person_id,
+                    &fact.persona_id,
                     ContradictionSourceKind::Communication,
                     &message.message_id,
                     &message.text,
@@ -44,7 +44,7 @@ pub(super) async fn refresh_deterministic_observations(
         }
 
         for message in &channel_messages {
-            if message.person_id != fact.person_id {
+            if message.persona_id != fact.persona_id {
                 continue;
             }
 
@@ -52,7 +52,7 @@ pub(super) async fn refresh_deterministic_observations(
                 pool,
                 &accepted,
                 evidence_claim(
-                    &fact.person_id,
+                    &fact.persona_id,
                     ContradictionSourceKind::Communication,
                     &message.message_id,
                     &message.text,
@@ -70,7 +70,7 @@ pub(super) async fn refresh_deterministic_observations(
                 pool,
                 &accepted,
                 evidence_claim(
-                    &fact.person_id,
+                    &fact.persona_id,
                     ContradictionSourceKind::Document,
                     &document.document_id,
                     &document.text,
@@ -80,7 +80,7 @@ pub(super) async fn refresh_deterministic_observations(
         }
 
         for note in &meeting_notes {
-            if note.person_id != fact.person_id {
+            if note.persona_id != fact.persona_id {
                 continue;
             }
 
@@ -88,7 +88,7 @@ pub(super) async fn refresh_deterministic_observations(
                 pool,
                 &accepted,
                 evidence_claim(
-                    &fact.person_id,
+                    &fact.persona_id,
                     ContradictionSourceKind::Event,
                     &note.note_id,
                     &note.text,
@@ -98,7 +98,7 @@ pub(super) async fn refresh_deterministic_observations(
         }
 
         for transcript in &call_transcripts {
-            if transcript.person_id != fact.person_id {
+            if transcript.persona_id != fact.persona_id {
                 continue;
             }
 
@@ -106,7 +106,7 @@ pub(super) async fn refresh_deterministic_observations(
                 pool,
                 &accepted,
                 evidence_claim(
-                    &fact.person_id,
+                    &fact.persona_id,
                     ContradictionSourceKind::Communication,
                     &transcript.transcript_id,
                     &transcript.text,
@@ -121,7 +121,7 @@ pub(super) async fn refresh_deterministic_observations(
 
 fn accepted_claim(fact: &ActivePersonaFactClaim) -> AcceptedClaim {
     AcceptedClaim {
-        subject_id: fact.person_id.clone(),
+        subject_id: fact.persona_id.clone(),
         claim_type: fact.claim_type.clone(),
         value: fact.value.clone(),
         source_kind: ContradictionSourceKind::Memory,

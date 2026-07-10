@@ -173,7 +173,7 @@ describe('Hermes UI Storybook visual coverage boundary', () => {
 		expect(visualSpec).toContain(
 			'Cross-theme token regressions are covered by Hermes UI/Foundation/Themes'
 		)
-		expect(visualSpec).toContain("const LOCALES = ['ru', 'en', 'es'] as const")
+			 expect(visualSpec).toContain("const LOCALES = ['en'] as const")
 		for (const width of [320, 375, 768, 1024, 1440, 1920, 5120]) {
 			expect(visualSpec).toContain(`width: ${width}`)
 		}

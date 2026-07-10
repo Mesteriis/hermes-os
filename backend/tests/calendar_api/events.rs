@@ -177,6 +177,7 @@ async fn calendar_event_participants_crud() {
         eprintln!("skip: event create failed");
         return;
     };
+    let legacy_persona_id = format!("persona:calendar-participant:{suffix}");
 
     let response = app
         .clone()
@@ -188,7 +189,8 @@ async fn calendar_event_participants_crud() {
             json!({
                 "email": format!("participant-{suffix}@example.com"),
                 "display_name": format!("Participant {suffix}"),
-                "role": "required"
+                "role": "required",
+                "person_id": legacy_persona_id
             }),
             LOCAL_API_TOKEN,
         ))
@@ -201,6 +203,8 @@ async fn calendar_event_participants_crud() {
     );
     let created = json_body(response).await;
     let participant_id = created["id"].as_str().expect("participant id").to_owned();
+    assert_eq!(created["persona_id"], json!(legacy_persona_id));
+    assert!(created.get("person_id").is_none());
 
     let response = app
         .oneshot(get_request_with_token(

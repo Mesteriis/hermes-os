@@ -7,11 +7,11 @@ use crate::domains::personas::trust::{PersonaPromiseStore, PersonaRiskStore};
 
 pub(super) async fn meeting_prep(
     pool: &PgPool,
-    person_id: &str,
+    persona_id: &str,
 ) -> Result<MeetingPrep, InvestigatorError> {
     let enrichment = PersonaEnrichmentStore::new(pool.clone());
     let person = enrichment
-        .get_enriched(person_id)
+        .get_enriched(persona_id)
         .await?
         .ok_or(InvestigatorError::PersonaNotFound)?;
 
@@ -22,14 +22,14 @@ pub(super) async fn meeting_prep(
     let promises = PersonaPromiseStore::new(pool.clone());
     let risks = PersonaRiskStore::new(pool.clone());
     let open_promises = promises
-        .list(person_id)
+        .list(persona_id)
         .await
         .unwrap_or_default()
         .iter()
         .filter(|promise| promise.status == "pending")
         .count() as i64;
     let open_risks = risks
-        .list(person_id)
+        .list(persona_id)
         .await
         .unwrap_or_default()
         .iter()
@@ -49,7 +49,7 @@ pub(super) async fn meeting_prep(
     }
 
     Ok(MeetingPrep {
-        person_id: person.person_id,
+        persona_id: person.persona_id,
         display_name: person.display_name,
         last_interaction_days,
         open_promises,

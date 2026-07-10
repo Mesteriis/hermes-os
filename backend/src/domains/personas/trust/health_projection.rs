@@ -6,17 +6,17 @@ use super::errors::PersonaTrustError;
 
 pub(super) async fn sync_persona_health_status_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
-    person_id: &str,
+    persona_id: &str,
 ) -> Result<(), PersonaTrustError> {
     let rows = sqlx::query(
         r#"
         SELECT severity
         FROM persona_risks
-        WHERE person_id = $1
+        WHERE persona_id = $1
           AND resolved_at IS NULL
         "#,
     )
-    .bind(person_id)
+    .bind(persona_id)
     .fetch_all(&mut **transaction)
     .await?;
     let risks = rows
@@ -31,9 +31,9 @@ pub(super) async fn sync_persona_health_status_in_transaction(
     sqlx::query(
         "UPDATE personas
          SET health_status = $2, last_health_check = now(), updated_at = now()
-         WHERE person_id = $1",
+         WHERE persona_id = $1",
     )
-    .bind(person_id)
+    .bind(persona_id)
     .bind(health_status)
     .execute(&mut **transaction)
     .await?;

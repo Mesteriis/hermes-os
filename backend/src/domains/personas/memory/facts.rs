@@ -11,8 +11,8 @@ use crate::engines::memory::MemoryEngine;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonaFact {
     pub id: String,
-    #[serde(rename = "persona_id", alias = "person_id")]
-    pub person_id: String,
+    #[serde(alias = "person_id")]
+    pub persona_id: String,
     pub fact_type: String,
     pub value: String,
     pub source: String,
@@ -35,13 +35,13 @@ impl PersonaFactStore {
         Self { pool }
     }
 
-    pub async fn list(&self, person_id: &str) -> Result<Vec<PersonaFact>, PersonaMemoryError> {
+    pub async fn list(&self, persona_id: &str) -> Result<Vec<PersonaFact>, PersonaMemoryError> {
         let rows = sqlx::query(
-            "SELECT id::text, person_id, fact_type, value, source, confidence::float8 AS confidence, last_verified_at,
+            "SELECT id::text, persona_id, fact_type, value, source, confidence::float8 AS confidence, last_verified_at,
              valid_from, valid_to, is_active, created_at, updated_at
-             FROM persona_facts WHERE person_id = $1 ORDER BY created_at DESC",
+             FROM persona_facts WHERE persona_id = $1 ORDER BY created_at DESC",
         )
-        .bind(person_id)
+        .bind(persona_id)
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter().map(row_to_fact).collect()
@@ -49,19 +49,19 @@ impl PersonaFactStore {
 
     pub async fn upsert(
         &self,
-        person_id: &str,
+        persona_id: &str,
         fact_type: &str,
         value: &str,
         source: &str,
         confidence: f64,
     ) -> Result<PersonaFact, PersonaMemoryError> {
         let fact =
-            MemoryEngine::persona_fact_memory(person_id, fact_type, value, source, confidence)?;
+            MemoryEngine::persona_fact_memory(persona_id, fact_type, value, source, confidence)?;
         let row = sqlx::query(
-            "INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
+            "INSERT INTO persona_facts (persona_id, fact_type, value, source, confidence)
              VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT DO NOTHING
-             RETURNING id::text, person_id, fact_type, value, source, confidence::float8 AS confidence,
+             RETURNING id::text, persona_id, fact_type, value, source, confidence::float8 AS confidence,
                        last_verified_at, valid_from, valid_to, is_active, created_at, updated_at",
         )
         .bind(&fact.affected_entity_id)
@@ -76,7 +76,7 @@ impl PersonaFactStore {
 
     pub async fn upsert_with_observation(
         &self,
-        person_id: &str,
+        persona_id: &str,
         fact_type: &str,
         value: &str,
         source: &str,
@@ -84,7 +84,7 @@ impl PersonaFactStore {
         observation_id: &str,
     ) -> Result<PersonaFact, PersonaMemoryError> {
         let fact = self
-            .upsert(person_id, fact_type, value, source, confidence)
+            .upsert(persona_id, fact_type, value, source, confidence)
             .await?;
         link_persona_entity(
             &self.pool,
@@ -93,7 +93,7 @@ impl PersonaFactStore {
             fact.id.clone(),
             None,
             Some(json!({
-                "persona_id": person_id,
+                "persona_id": persona_id,
                 "fact_type": fact.fact_type,
             })),
         )
@@ -127,7 +127,7 @@ impl PersonaFactStore {
 fn row_to_fact(row: PgRow) -> Result<PersonaFact, PersonaMemoryError> {
     Ok(PersonaFact {
         id: row.try_get("id")?,
-        person_id: row.try_get("person_id")?,
+        persona_id: row.try_get("persona_id")?,
         fact_type: row.try_get("fact_type")?,
         value: row.try_get("value")?,
         source: row.try_get("source")?,

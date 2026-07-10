@@ -156,7 +156,7 @@ async fn ai_agents_api_materializes_agent_personas_against_postgres() {
         r#"
         SELECT display_name, person_type, email_address, is_self
         FROM personas
-        WHERE person_id = 'persona:v1:ai_agent:HESTIA'
+        WHERE persona_id = 'persona:v1:ai_agent:HESTIA'
         "#,
     )
     .fetch_one(&pool)
@@ -177,7 +177,7 @@ async fn ai_agents_api_materializes_agent_personas_against_postgres() {
         r#"
         SELECT identity_value
         FROM persona_identities
-        WHERE person_id = 'persona:v1:ai_agent:HESTIA'
+        WHERE persona_id = 'persona:v1:ai_agent:HESTIA'
           AND identity_type = 'email'
           AND source = 'ai_agent_registry'
           AND status = 'active'
@@ -213,7 +213,7 @@ async fn ai_agents_api_materializes_agent_personas_against_postgres() {
         r#"
         SELECT display_name, person_type, email_address, is_self
         FROM personas
-        WHERE person_id = 'persona:v1:ai_agent:HEPHAESTUS'
+        WHERE persona_id = 'persona:v1:ai_agent:HEPHAESTUS'
         "#,
     )
     .fetch_one(&pool)
@@ -234,7 +234,7 @@ async fn ai_agents_api_materializes_agent_personas_against_postgres() {
         r#"
         SELECT identity_value
         FROM persona_identities
-        WHERE person_id = 'persona:v1:ai_agent:HEPHAESTUS'
+        WHERE persona_id = 'persona:v1:ai_agent:HEPHAESTUS'
           AND identity_type = 'email'
           AND source = 'ai_agent_registry'
           AND status = 'active'

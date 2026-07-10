@@ -150,11 +150,11 @@ function handleAddressBookToggle(value: boolean): void {
         <dl class="personas-language-list">
           <div>
             <dt>{{ languageLabel(selectedPersona.language, t) }}</dt>
-            <dd><span style="--language-progress: 92%" /></dd>
+            <dd><span class="personas-language-progress--primary" /></dd>
           </div>
           <div>
             <dt>{{ t('English') }}</dt>
-            <dd><span style="--language-progress: 68%" /></dd>
+            <dd><span class="personas-language-progress--secondary" /></dd>
           </div>
         </dl>
       </section>

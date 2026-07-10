@@ -8752,7 +8752,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let persona_identity_traces: Vec<(String, String, Option<String>, String, Value)> =
         sqlx::query_as(
             r#"
-        SELECT identity_type, identity_value, person_id, source, metadata
+        SELECT identity_type, identity_value, persona_id, source, metadata
         FROM persona_identities
         WHERE source = 'communication_projection'
           AND identity_type IN ('whatsapp', 'phone')
@@ -8814,7 +8814,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let message_participant_trace: Option<(String, Option<String>, String, Value)> =
         sqlx::query_as(
             r#"
-        SELECT identity_value, person_id, source, metadata
+        SELECT identity_value, persona_id, source, metadata
         FROM persona_identities
         WHERE source = 'communication_projection'
           AND identity_type = 'message_participant'

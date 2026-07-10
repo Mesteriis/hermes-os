@@ -14,6 +14,7 @@ import {
   type RelationshipGraphDetail,
   type RelationshipNodeData
 } from './personaRelationshipGraphModel'
+import { personaInitials } from './personaWorkspaceElements'
 import type { PersonaPanelProfile, Relationship } from '../types/persona'
 
 const props = withDefaults(defineProps<{

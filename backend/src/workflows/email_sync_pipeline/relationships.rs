@@ -9,7 +9,7 @@ use super::participants::EmailParticipant;
 pub(crate) async fn insert_relationship_event(
     pool: &PgPool,
     message: &ProjectedMessage,
-    person_id: &str,
+    persona_id: &str,
     participant: &EmailParticipant,
 ) -> Result<bool, EmailSyncPipelineError> {
     let event_type = if participant.role == "sender" {
@@ -27,7 +27,7 @@ pub(crate) async fn insert_relationship_event(
             &message.observation_id,
             &message.message_id,
             message.occurred_at.unwrap_or(message.projected_at),
-            person_id,
+            persona_id,
             event_type,
             title,
             Some(&format!("Email subject: {}", message.subject)),
