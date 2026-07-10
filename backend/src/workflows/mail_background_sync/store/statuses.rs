@@ -26,7 +26,7 @@ impl MailSyncStore {
                     error_message,
                     fetched_messages,
                     projected_messages,
-                    upserted_persons,
+                    upserted_personas,
                     upserted_organizations
                 FROM communication_mail_sync_runs
                 ORDER BY account_id, started_at DESC
@@ -54,7 +54,7 @@ impl MailSyncStore {
                 latest.error_message AS last_error_message,
                 COALESCE(latest.fetched_messages, 0) AS last_fetched_messages,
                 COALESCE(latest.projected_messages, 0) AS last_projected_messages,
-                COALESCE(latest.upserted_persons, 0) AS last_upserted_persons,
+                COALESCE(latest.upserted_personas, 0) AS last_upserted_personas,
                 COALESCE(latest.upserted_organizations, 0) AS last_upserted_organizations
             FROM communication_provider_accounts a
             LEFT JOIN communication_account_sync_settings settings ON settings.account_id = a.account_id

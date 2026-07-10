@@ -92,7 +92,7 @@ impl GraphProjectionService {
               AND relationship_type IN (
                   'project_has_message',
                   'project_has_document',
-                  'project_involves_person',
+                  'project_involves_persona',
                   'project_involves_email_address'
               )
             "#,

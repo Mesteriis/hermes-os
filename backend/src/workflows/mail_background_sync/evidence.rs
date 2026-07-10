@@ -35,7 +35,7 @@ pub(super) async fn capture_mail_sync_run_observation(
                 "current_batch_size": run.current_batch_size,
                 "fetched_messages": run.fetched_messages,
                 "projected_messages": run.projected_messages,
-                "upserted_persons": run.upserted_persons,
+                "upserted_personas": run.upserted_personas,
                 "upserted_organizations": run.upserted_organizations,
                 "checkpoint_before": run.checkpoint_before,
                 "checkpoint_after": run.checkpoint_after,

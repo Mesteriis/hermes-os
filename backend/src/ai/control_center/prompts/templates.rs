@@ -6,7 +6,7 @@ use super::super::models::{AiPromptCreateRequest, AiPromptTemplate};
 use super::super::rows::row_to_prompt;
 use super::super::store::AiControlCenterStore;
 use super::super::validation::{
-    object_value, reject_secret_like_json, slug_id, validate_non_empty,
+    canonical_entity_scope, object_value, reject_secret_like_json, slug_id, validate_non_empty,
 };
 
 impl AiControlCenterStore {
@@ -41,6 +41,8 @@ impl AiControlCenterStore {
     ) -> Result<AiPromptTemplate, AiControlCenterError> {
         validate_non_empty("actor_id", actor_id)?;
         request.validate()?;
+        let entity_scope =
+            canonical_entity_scope(&request.entity_scope).expect("validated entity scope");
         let prompt_id = request
             .prompt_id
             .as_deref()
@@ -50,7 +52,7 @@ impl AiControlCenterStore {
             .unwrap_or_else(|| {
                 format!(
                     "prompt:user:{}:{}",
-                    request.entity_scope.trim(),
+                    entity_scope,
                     slug_id(request.name.trim())
                 )
             });
@@ -87,7 +89,7 @@ impl AiControlCenterStore {
         )
         .bind(prompt_id)
         .bind(request.name.trim())
-        .bind(request.entity_scope.trim())
+        .bind(entity_scope)
         .bind(request.capability_slot.trim())
         .bind(request.description.as_deref().map(str::trim))
         .bind(Value::Object(metadata))

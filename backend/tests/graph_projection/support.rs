@@ -9,10 +9,9 @@ use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
 use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::domains::projects::core::{ProjectStore, project_graph_node_id};
 use hermes_hub_backend::domains::projects::link_reviews::ProjectLinkReviewStore;
-use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::graph_projection::GraphProjectionService;
 use serde_json::json;
 use sqlx::Row;
@@ -20,7 +19,7 @@ use sqlx::postgres::PgPool;
 
 pub(crate) struct LiveProjectionContext {
     pub(crate) pool: PgPool,
-    pub(crate) person_store: PersonProjectionStore,
+    pub(crate) person_store: PersonaProjectionStore,
     pub(crate) communication_store: CommunicationIngestionStore,
     pub(crate) message_store: MessageProjectionStore,
     pub(crate) document_store: DocumentImportStore,
@@ -57,16 +56,12 @@ pub(crate) struct ExpectedProjectEdge<'a> {
 
 pub(crate) async fn live_projection_context(_test_name: &str) -> Option<LiveProjectionContext> {
     let test_context = TestContext::new().await;
-    let database_url = test_context.connection_string();
-
-    let database = Database::connect(Some(&database_url))
-        .await
-        .expect("database connection");
-    let pool = database.pool().expect("configured pool").clone();
+    let pool = test_context.pool().clone();
+    Box::leak(Box::new(test_context));
 
     Some(LiveProjectionContext {
         pool: pool.clone(),
-        person_store: PersonProjectionStore::new(pool.clone()),
+        person_store: PersonaProjectionStore::new(pool.clone()),
         communication_store: CommunicationIngestionStore::new(pool.clone()),
         message_store: MessageProjectionStore::new(pool.clone()),
         document_store: DocumentImportStore::new(pool.clone()),
@@ -82,7 +77,7 @@ pub(crate) async fn seed_person_message_and_document(
 ) {
     context
         .person_store
-        .upsert_email_person(&format!(" Known-{suffix}@Example.com "))
+        .upsert_email_persona(&format!(" Known-{suffix}@Example.com "))
         .await
         .expect("upsert known person");
 
@@ -224,7 +219,7 @@ pub(crate) async fn project_graph_counts(pool: &PgPool, project_id: &str) -> Gra
           AND relationship_type IN (
               'project_has_message',
               'project_has_document',
-              'project_involves_person',
+              'project_involves_persona',
               'project_involves_email_address'
           )
         "#,
@@ -330,7 +325,7 @@ pub(crate) async fn assert_unknown_email_endpoint_projected(
         r#"
         SELECT count(*)
         FROM graph_nodes
-        WHERE node_kind = 'person'
+        WHERE node_kind = 'persona'
           AND (stable_key LIKE $1 OR properties->>'email_address' = $2)
         "#,
     )
@@ -429,10 +424,10 @@ pub(crate) async fn assert_known_person_endpoint_projected(pool: &PgPool, suffix
     let message = message_fixture_by_provider_record_id(pool, &provider_record_id).await;
     assert_message_edge_with_evidence(
         pool,
-        "person",
+        "persona",
         &format!("known-{suffix}@example.com"),
         &provider_record_id,
-        "person_received_message",
+        "persona_received_message",
         &message,
     )
     .await;

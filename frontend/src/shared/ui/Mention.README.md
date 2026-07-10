@@ -1,7 +1,7 @@
 # Mention
 
 ## Description
-Inline mention primitive for people, entities or references.
+Inline mention primitive for Personas, entities or references.
 
 ## When to use
 Use inside text-like UI where an entity needs compact emphasis.

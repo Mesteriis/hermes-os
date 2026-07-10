@@ -6,7 +6,7 @@ use sqlx::postgres::Postgres;
 use super::errors::ConsistencyError;
 use crate::platform::observations::{ObservationStoreError, link_domain_entity_in_transaction};
 
-pub(super) struct ActivePersonFactClaim {
+pub(super) struct ActivePersonaFactClaim {
     pub(super) fact_id: String,
     pub(super) person_id: String,
     pub(super) claim_type: String,
@@ -15,10 +15,10 @@ pub(super) struct ActivePersonFactClaim {
     pub(super) email_address: String,
 }
 
-pub(super) fn row_to_active_person_fact_claim(
+pub(super) fn row_to_active_persona_fact_claim(
     row: PgRow,
-) -> Result<ActivePersonFactClaim, ConsistencyError> {
-    Ok(ActivePersonFactClaim {
+) -> Result<ActivePersonaFactClaim, ConsistencyError> {
+    Ok(ActivePersonaFactClaim {
         fact_id: row.try_get("fact_id")?,
         person_id: row.try_get("person_id")?,
         claim_type: row.try_get("fact_type")?,

@@ -155,7 +155,7 @@ async fn ai_agents_api_materializes_agent_personas_against_postgres() {
     let row = sqlx::query(
         r#"
         SELECT display_name, person_type, email_address, is_self
-        FROM persons
+        FROM personas
         WHERE person_id = 'persona:v1:ai_agent:HESTIA'
         "#,
     )
@@ -176,7 +176,7 @@ async fn ai_agents_api_materializes_agent_personas_against_postgres() {
     let identity_value: String = sqlx::query_scalar(
         r#"
         SELECT identity_value
-        FROM person_identities
+        FROM persona_identities
         WHERE person_id = 'persona:v1:ai_agent:HESTIA'
           AND identity_type = 'email'
           AND source = 'ai_agent_registry'
@@ -192,7 +192,7 @@ async fn ai_agents_api_materializes_agent_personas_against_postgres() {
         r#"
         SELECT label, properties
         FROM graph_nodes
-        WHERE node_kind = 'person'
+        WHERE node_kind = 'persona'
           AND stable_key = 'persona:v1:ai_agent:HESTIA'
         "#,
     )
@@ -212,7 +212,7 @@ async fn ai_agents_api_materializes_agent_personas_against_postgres() {
     let row = sqlx::query(
         r#"
         SELECT display_name, person_type, email_address, is_self
-        FROM persons
+        FROM personas
         WHERE person_id = 'persona:v1:ai_agent:HEPHAESTUS'
         "#,
     )
@@ -233,7 +233,7 @@ async fn ai_agents_api_materializes_agent_personas_against_postgres() {
     let identity_value: String = sqlx::query_scalar(
         r#"
         SELECT identity_value
-        FROM person_identities
+        FROM persona_identities
         WHERE person_id = 'persona:v1:ai_agent:HEPHAESTUS'
           AND identity_type = 'email'
           AND source = 'ai_agent_registry'
@@ -249,7 +249,7 @@ async fn ai_agents_api_materializes_agent_personas_against_postgres() {
         r#"
         SELECT label, properties
         FROM graph_nodes
-        WHERE node_kind = 'person'
+        WHERE node_kind = 'persona'
           AND stable_key = 'persona:v1:ai_agent:HEPHAESTUS'
         "#,
     )

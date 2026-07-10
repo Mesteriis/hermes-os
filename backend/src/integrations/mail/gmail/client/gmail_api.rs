@@ -2,11 +2,14 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use serde_json::json;
+use serde_json::{Map, Value, json};
 
 use crate::integrations::mail::send::{OutgoingEmail, SendResult, build_rfc2822_message};
 use crate::integrations::mail::sync::{EmailSyncBatch, FetchedCommunicationSourceMessage};
-use crate::platform::communications::EmailProviderKind;
+use crate::platform::communications::{
+    AddressBookProviderBatch, AddressBookProviderEntry, AddressBookProviderUpsertRequest,
+    EmailProviderKind,
+};
 use crate::platform::secrets::ResolvedSecret;
 
 use super::errors::EmailProviderNetworkError;
@@ -14,8 +17,11 @@ use super::helpers::{
     gmail_history_checkpoint, gmail_message_list_checkpoint, parse_gmail_internal_date,
     select_latest_history_id, sha256_fingerprint, trim_base_url, validate_non_empty,
 };
-use super::models::{GmailHistoryResponse, GmailListResponse, GmailRawMessage, GmailSendResponse};
-use super::options::{GmailFetchOptions, GmailHistoryFetchOptions};
+use super::models::{
+    GmailHistoryResponse, GmailListResponse, GmailRawMessage, GmailSendResponse,
+    GooglePeopleConnectionsResponse, GooglePeoplePerson,
+};
+use super::options::{GmailContactFetchOptions, GmailFetchOptions, GmailHistoryFetchOptions};
 
 #[derive(Clone)]
 pub struct GmailApiClient {
@@ -272,6 +278,155 @@ impl GmailApiClient {
         })
     }
 
+    pub async fn fetch_entries(
+        &self,
+        access_token: &ResolvedSecret,
+        options: &GmailContactFetchOptions,
+    ) -> Result<AddressBookProviderBatch, EmailProviderNetworkError> {
+        validate_non_empty("base_url", &self.base_url)?;
+        options.validate()?;
+
+        let contacts_url = format!("{}/v1/people/me/connections", self.people_api_base_url());
+        let mut query = vec![
+            ("pageSize", options.page_size.to_string()),
+            (
+                "personFields",
+                "names,emailAddresses,phoneNumbers,metadata".to_owned(),
+            ),
+        ];
+        if let Some(page_token) = &options.page_token {
+            query.push(("pageToken", page_token.clone()));
+        }
+
+        let response = self
+            .http
+            .get(contacts_url)
+            .bearer_auth(access_token.expose_for_runtime())
+            .query(&query)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<GooglePeopleConnectionsResponse>()
+            .await?;
+
+        Ok(AddressBookProviderBatch {
+            entries: response
+                .connections
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(google_person_to_address_book_entry)
+                .collect(),
+            next_page_token: response.next_page_token,
+        })
+    }
+
+    pub async fn upsert_entry(
+        &self,
+        access_token: &ResolvedSecret,
+        request: &AddressBookProviderUpsertRequest,
+    ) -> Result<AddressBookProviderEntry, EmailProviderNetworkError> {
+        if request.provider_address_book_entry_id.is_some() {
+            self.update_contact(access_token, request).await
+        } else {
+            self.create_contact(access_token, request).await
+        }
+    }
+
+    async fn create_contact(
+        &self,
+        access_token: &ResolvedSecret,
+        request: &AddressBookProviderUpsertRequest,
+    ) -> Result<AddressBookProviderEntry, EmailProviderNetworkError> {
+        validate_non_empty("base_url", &self.base_url)?;
+        validate_non_empty("display_name", &request.display_name)?;
+        validate_contact_channels(request)?;
+
+        let contacts_url = format!("{}/v1/people:createContact", self.people_api_base_url());
+        let person = self
+            .http
+            .post(contacts_url)
+            .bearer_auth(access_token.expose_for_runtime())
+            .json(&google_people_contact_payload(request, None))
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<GooglePeoplePerson>()
+            .await?;
+
+        google_person_to_address_book_entry(person).ok_or(
+            EmailProviderNetworkError::MissingProviderField {
+                field: "resourceName",
+            },
+        )
+    }
+
+    async fn update_contact(
+        &self,
+        access_token: &ResolvedSecret,
+        request: &AddressBookProviderUpsertRequest,
+    ) -> Result<AddressBookProviderEntry, EmailProviderNetworkError> {
+        validate_non_empty("base_url", &self.base_url)?;
+        validate_non_empty("display_name", &request.display_name)?;
+        validate_contact_channels(request)?;
+        let provider_address_book_entry_id = request
+            .provider_address_book_entry_id
+            .as_deref()
+            .ok_or(EmailProviderNetworkError::InvalidProviderRequest {
+                field: "provider_address_book_entry_id",
+                message: "must be present for contact update",
+            })?;
+        let provider_etag = request.provider_etag.as_deref().ok_or(
+            EmailProviderNetworkError::InvalidProviderRequest {
+                field: "provider_etag",
+                message: "must be present for contact update",
+            },
+        )?;
+        validate_non_empty(
+            "provider_address_book_entry_id",
+            provider_address_book_entry_id,
+        )?;
+        validate_non_empty("provider_etag", provider_etag)?;
+
+        let resource_name = provider_address_book_entry_id
+            .trim()
+            .trim_start_matches('/');
+        if !resource_name.starts_with("people/") {
+            return Err(EmailProviderNetworkError::InvalidProviderRequest {
+                field: "provider_address_book_entry_id",
+                message: "must be a People API resource name",
+            });
+        }
+
+        let contacts_url = format!(
+            "{}/v1/{}:updateContact",
+            self.people_api_base_url(),
+            resource_name
+        );
+        let person = self
+            .http
+            .patch(contacts_url)
+            .bearer_auth(access_token.expose_for_runtime())
+            .query(&[
+                ("updatePersonFields", google_people_update_fields(request)),
+                ("personFields", "names,emailAddresses,phoneNumbers,metadata"),
+            ])
+            .json(&google_people_contact_payload(
+                request,
+                Some((resource_name, provider_etag)),
+            ))
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<GooglePeoplePerson>()
+            .await?;
+
+        google_person_to_address_book_entry(person).ok_or(
+            EmailProviderNetworkError::MissingProviderField {
+                field: "resourceName",
+            },
+        )
+    }
+
     async fn fetch_raw_message(
         &self,
         access_token: &ResolvedSecret,
@@ -293,5 +448,203 @@ impl GmailApiClient {
             .error_for_status()?
             .json::<GmailRawMessage>()
             .await?)
+    }
+
+    fn people_api_base_url(&self) -> String {
+        if self.base_url == "https://www.googleapis.com" {
+            "https://people.googleapis.com".to_owned()
+        } else {
+            self.base_url.clone()
+        }
+    }
+}
+
+fn validate_contact_channels(
+    request: &AddressBookProviderUpsertRequest,
+) -> Result<(), EmailProviderNetworkError> {
+    let has_email = request
+        .email_address
+        .as_deref()
+        .is_some_and(|email| !email.trim().is_empty());
+    let has_phone = request
+        .phone_numbers
+        .iter()
+        .any(|phone| !phone.trim().is_empty());
+    if has_email || has_phone {
+        return Ok(());
+    }
+
+    Err(EmailProviderNetworkError::InvalidProviderRequest {
+        field: "contact_channels",
+        message: "must include at least one email address or phone number",
+    })
+}
+
+fn google_people_update_fields(request: &AddressBookProviderUpsertRequest) -> &'static str {
+    if request
+        .email_address
+        .as_deref()
+        .is_some_and(|email| !email.trim().is_empty())
+        && request
+            .phone_numbers
+            .iter()
+            .any(|phone| !phone.trim().is_empty())
+    {
+        "names,emailAddresses,phoneNumbers"
+    } else if request
+        .phone_numbers
+        .iter()
+        .any(|phone| !phone.trim().is_empty())
+    {
+        "names,phoneNumbers"
+    } else {
+        "names,emailAddresses"
+    }
+}
+
+fn google_people_contact_payload(
+    request: &AddressBookProviderUpsertRequest,
+    update_metadata: Option<(&str, &str)>,
+) -> Value {
+    let mut payload = Map::from_iter([(
+        "names".to_owned(),
+        json!([{ "unstructuredName": request.display_name }]),
+    )]);
+
+    if let Some(email_address) = request
+        .email_address
+        .as_deref()
+        .map(str::trim)
+        .filter(|email| !email.is_empty())
+    {
+        payload.insert(
+            "emailAddresses".to_owned(),
+            json!([{ "value": email_address }]),
+        );
+    }
+
+    let phone_numbers = request
+        .phone_numbers
+        .iter()
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|phone| !phone.is_empty())
+        .map(|phone| json!({ "value": phone }))
+        .collect::<Vec<_>>();
+    if !phone_numbers.is_empty() {
+        payload.insert("phoneNumbers".to_owned(), Value::Array(phone_numbers));
+    }
+
+    if let Some((resource_name, provider_etag)) = update_metadata {
+        payload.insert("resourceName".to_owned(), json!(resource_name));
+        payload.insert("etag".to_owned(), json!(provider_etag));
+        payload.insert(
+            "metadata".to_owned(),
+            json!({
+                "sources": [
+                    {
+                        "type": "CONTACT",
+                        "etag": provider_etag,
+                    }
+                ]
+            }),
+        );
+    }
+
+    Value::Object(payload)
+}
+
+fn google_person_to_address_book_entry(
+    person: GooglePeoplePerson,
+) -> Option<AddressBookProviderEntry> {
+    let provider_address_book_entry_id = person.resource_name?;
+    let display_name = person
+        .names
+        .unwrap_or_default()
+        .into_iter()
+        .find_map(|name| non_empty_string(name.display_name));
+    let email_addresses = person
+        .email_addresses
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|email| non_empty_string(email.value))
+        .collect();
+    let phone_numbers = person
+        .phone_numbers
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|phone| non_empty_string(phone.value))
+        .collect();
+
+    Some(AddressBookProviderEntry {
+        provider_address_book_entry_id,
+        display_name,
+        email_addresses,
+        phone_numbers,
+        etag: person.etag,
+    })
+}
+
+fn non_empty_string(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::communications::CommunicationProviderKind;
+
+    #[test]
+    fn google_people_payload_supports_phone_only_address_book_entries() {
+        let request = AddressBookProviderUpsertRequest {
+            account_id: "gmail-account".to_owned(),
+            provider_kind: CommunicationProviderKind::Gmail,
+            provider_address_book_entry_id: None,
+            provider_etag: None,
+            display_name: "Phone Only Persona".to_owned(),
+            email_address: None,
+            phone_numbers: vec![" +1 555 0100 ".to_owned()],
+            remote_write_allowed: true,
+        };
+
+        validate_contact_channels(&request).expect("phone-only contact channel is valid");
+        assert_eq!(google_people_update_fields(&request), "names,phoneNumbers");
+
+        let payload = google_people_contact_payload(&request, None);
+        assert_eq!(
+            payload.get("names"),
+            Some(&json!([{ "unstructuredName": "Phone Only Persona" }]))
+        );
+        assert_eq!(
+            payload.get("phoneNumbers"),
+            Some(&json!([{ "value": "+1 555 0100" }]))
+        );
+        assert!(payload.get("emailAddresses").is_none());
+    }
+
+    #[test]
+    fn google_people_payload_rejects_address_book_entries_without_contact_channels() {
+        let request = AddressBookProviderUpsertRequest {
+            account_id: "gmail-account".to_owned(),
+            provider_kind: CommunicationProviderKind::Gmail,
+            provider_address_book_entry_id: None,
+            provider_etag: None,
+            display_name: "No Channels".to_owned(),
+            email_address: None,
+            phone_numbers: Vec::new(),
+            remote_write_allowed: true,
+        };
+
+        let error = validate_contact_channels(&request)
+            .expect_err("contact needs at least one email or phone");
+        assert!(matches!(
+            error,
+            EmailProviderNetworkError::InvalidProviderRequest {
+                field: "contact_channels",
+                ..
+            }
+        ));
     }
 }

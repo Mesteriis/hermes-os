@@ -23,6 +23,7 @@ import {
 	Progress,
 	Statistic,
 	Skeleton,
+	SkeletonPanel,
 	TabContent,
 	TabTrigger,
 	Tabs,
@@ -50,6 +51,7 @@ export const TablesAndLists: Story = {
 			List,
 			Progress,
 			Skeleton,
+			SkeletonPanel,
 			TabContent,
 			TabTrigger,
 			Tabs,
@@ -105,6 +107,11 @@ export const TablesAndLists: Story = {
 							<Progress :model-value="64" />
 							<Skeleton width="40%" height="12px" />
 						</div>
+						<SkeletonPanel
+							title="Reserved projection"
+							description="Full-size skeleton container for surfaces that are not wired yet."
+							:rows="3"
+						/>
 						<Tabs default-value="display">
 							<template #list>
 								<TabTrigger value="display">{{ text.data.tableTitle }}</TabTrigger>

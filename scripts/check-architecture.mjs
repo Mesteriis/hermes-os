@@ -86,7 +86,7 @@ const reviewManualOrchestrationOwner = 'backend/src/domains/review/service.rs';
 const taskCommandServiceOwner = 'backend/src/domains/tasks/service.rs';
 const calendarCommandServiceOwner = 'backend/src/domains/calendar/service.rs';
 const organizationCommandServiceOwner = 'backend/src/domains/organizations/service.rs';
-const personCommandServiceOwner = 'backend/src/domains/persons/service.rs';
+const personCommandServiceOwner = 'backend/src/domains/personas/service.rs';
 const decisionCommandServiceOwner = 'backend/src/domains/decisions/service.rs';
 const obligationCommandServiceOwner = 'backend/src/domains/obligations/service.rs';
 const relationshipCommandServiceOwner = 'backend/src/domains/relationships/service.rs';
@@ -139,7 +139,6 @@ const businessBackendDomains = new Set([
 	'obligations',
 	'organizations',
 	'personas',
-	'persons',
 	'projects',
 	'radar',
 	'relationships',
@@ -1002,9 +1001,9 @@ function canonicalReviewPromotionEvidenceFailures(fileContents) {
 function canonicalReviewPromotionOwnerFailures(fileContents) {
 	const content = fileContents.get(reviewPromotionWorkflow);
 	if (content === undefined) return [];
-	if (/\bINSERT\s+INTO\s+(persons|person_personas|organizations|projects|project_keywords|obligation_task_links)\b/i.test(content)) {
+	if (/\bINSERT\s+INTO\s+(personas|persons|person_personas|organizations|projects|project_keywords|obligation_task_links)\b/i.test(content)) {
 		return [
-			`${reviewPromotionWorkflow}: review promotion must materialize persons/organizations/projects/task-links through their domain stores, not direct SQL owners`
+			`${reviewPromotionWorkflow}: review promotion must materialize personas/organizations/projects/task-links through their domain stores, not direct SQL owners`
 		];
 	}
 	return [];
@@ -1013,7 +1012,7 @@ function canonicalReviewPromotionOwnerFailures(fileContents) {
 function emailSyncPipelineOrganizationOwnerFailures(fileContents) {
 	const content = fileContents.get(emailSyncPipelineOrganizationOwner);
 	if (content === undefined) return [];
-	if (/\b(?:INSERT\s+INTO|UPDATE)\s+(organizations|organization_domains|organization_identities|organization_contact_links)\b/i.test(content)) {
+	if (/\b(?:INSERT\s+INTO|UPDATE)\s+(organizations|organization_domains|organization_identities|organization_persona_links)\b/i.test(content)) {
 		return [
 			`${emailSyncPipelineOrganizationOwner}: email sync organization projection must use organization domain owner stores, not direct SQL writes`
 		];
@@ -1501,10 +1500,10 @@ function calendarHandlerManualOrchestrationFailures(fileContents) {
 
 function organizationHandlerManualOrchestrationFailures(fileContents) {
 	const organizationHandlerFiles = [
-		'backend/src/domains/organizations/handlers/organizations.rs',
-		'backend/src/domains/organizations/handlers/core_records.rs',
-		'backend/src/domains/organizations/handlers/enrichment.rs',
-		'backend/src/domains/organizations/handlers/health.rs'
+		'backend/src/app/handlers/organizations/directory.rs',
+		'backend/src/app/handlers/organizations/core_records.rs',
+		'backend/src/app/handlers/organizations/enrichment.rs',
+		'backend/src/app/handlers/organizations/health.rs'
 	];
 	const forbiddenPatterns = [
 		/\bNewObservation\b/,
@@ -1535,16 +1534,16 @@ function organizationHandlerManualOrchestrationFailures(fileContents) {
 
 function personHandlerManualOrchestrationFailures(fileContents) {
 	const personHandlerFiles = [
-		'backend/src/domains/persons/handlers/compatibility.rs',
-		'backend/src/domains/persons/handlers/health.rs',
-		'backend/src/domains/persons/handlers/history.rs',
-		'backend/src/domains/persons/handlers/identity.rs',
-		'backend/src/domains/persons/handlers/intelligence.rs',
-		'backend/src/domains/persons/handlers/investigator.rs',
-		'backend/src/domains/persons/handlers/memory.rs',
-		'backend/src/domains/persons/handlers/profile/actions.rs',
-		'backend/src/domains/persons/handlers/profile/owner.rs',
-		'backend/src/domains/persons/handlers/profile/personas.rs'
+		'backend/src/app/handlers/personas/compatibility.rs',
+		'backend/src/app/handlers/personas/health.rs',
+		'backend/src/app/handlers/personas/history.rs',
+		'backend/src/app/handlers/personas/identity.rs',
+		'backend/src/app/handlers/personas/intelligence.rs',
+		'backend/src/app/handlers/personas/investigator.rs',
+		'backend/src/app/handlers/personas/memory.rs',
+		'backend/src/app/handlers/personas/profile/actions.rs',
+		'backend/src/app/handlers/personas/profile/owner.rs',
+		'backend/src/app/handlers/personas/profile/personas.rs'
 	];
 	const forbiddenPatterns = [
 		/\bNewObservation\b/,
@@ -1559,7 +1558,7 @@ function personHandlerManualOrchestrationFailures(fileContents) {
 		/\.apply_with_observation\s*\(/,
 		/\.reject_with_observation\s*\(/,
 		/\.toggle_watchlist_with_observation\s*\(/,
-		/\.enrich_person_with_observation\s*\(/,
+		/\.enrich_persona_with_observation\s*\(/,
 		/\.toggle_favorite_with_observation\s*\(/,
 		/\.set_notes_with_observation\s*\(/,
 		/\.set_owner_persona_with_observation\s*\(/,
@@ -1584,11 +1583,11 @@ function personHandlerManualOrchestrationFailures(fileContents) {
 
 function mailCommunicationQueryManualOrchestrationFailures(fileContents) {
 	const mailHandlerFiles = [
-		'backend/src/domains/communications/handlers/communication_queries/drafts.rs',
-		'backend/src/domains/communications/handlers/communication_queries/folders.rs',
-		'backend/src/domains/communications/handlers/communication_queries/saved_searches.rs',
-		'backend/src/domains/communications/handlers/communication_queries/outbox.rs',
-		'backend/src/domains/communications/handlers/communication_queries/imports.rs'
+		'backend/src/app/handlers/communications/communication_queries/drafts.rs',
+		'backend/src/app/handlers/communications/communication_queries/folders.rs',
+		'backend/src/app/handlers/communications/communication_queries/saved_searches.rs',
+		'backend/src/app/handlers/communications/communication_queries/outbox.rs',
+		'backend/src/app/handlers/communications/communication_queries/imports.rs'
 	];
 	const forbiddenPatterns = [
 		/\bNewObservation\b/,
@@ -1618,7 +1617,7 @@ function mailCommunicationQueryManualOrchestrationFailures(fileContents) {
 }
 
 function mailProviderSendManualOrchestrationFailures(fileContents) {
-	const content = fileContents.get('backend/src/domains/communications/handlers/sending/provider_send.rs');
+	const content = fileContents.get('backend/src/app/handlers/communications/sending/provider_send.rs');
 	if (content === undefined) return [];
 	const forbiddenPatterns = [
 		/\bNewObservation\b/,
@@ -1629,7 +1628,7 @@ function mailProviderSendManualOrchestrationFailures(fileContents) {
 	];
 	if (forbiddenPatterns.some((pattern) => pattern.test(content))) {
 		return [
-			`backend/src/domains/communications/handlers/sending/provider_send.rs: manual provider send evidence orchestration must stay in ${mailCommandServiceOwner}, not the sending handler`
+			`backend/src/app/handlers/communications/sending/provider_send.rs: manual provider send evidence orchestration must stay in ${mailCommandServiceOwner}, not the sending handler`
 		];
 	}
 	return [];
@@ -1637,12 +1636,12 @@ function mailProviderSendManualOrchestrationFailures(fileContents) {
 
 function mailFinalHandlerManualOrchestrationFailures(fileContents) {
 	const files = [
-		'backend/src/domains/communications/handlers/sending/forwarding.rs',
-		'backend/src/domains/communications/handlers/workflow_state.rs',
-		'backend/src/domains/communications/handlers/sending/local_state.rs',
-		'backend/src/domains/communications/handlers/message_ai_state.rs',
-		'backend/src/domains/communications/handlers/message_actions.rs',
-		'backend/src/domains/communications/handlers/workflow_actions/actions/persons.rs'
+		'backend/src/app/handlers/communications/sending/forwarding.rs',
+		'backend/src/app/handlers/communications/workflow_state.rs',
+		'backend/src/app/handlers/communications/sending/local_state.rs',
+		'backend/src/app/handlers/communications/message_ai_state.rs',
+		'backend/src/app/handlers/communications/message_actions.rs',
+		'backend/src/app/handlers/communications/workflow_actions/actions/personas.rs'
 	];
 	const forbiddenPatterns = [
 		/\bNewObservation\b/,
@@ -1677,7 +1676,7 @@ function mailFinalHandlerManualOrchestrationFailures(fileContents) {
 }
 
 function mailAccountManagementManualOrchestrationFailures(fileContents) {
-	const content = fileContents.get('backend/src/domains/communications/handlers/account_management.rs');
+	const content = fileContents.get('backend/src/app/handlers/communications/account_management.rs');
 	if (content === undefined) return [];
 	const forbiddenPatterns = [
 		/\bObservationOriginKind\b/,
@@ -1685,7 +1684,7 @@ function mailAccountManagementManualOrchestrationFailures(fileContents) {
 	];
 	if (forbiddenPatterns.some((pattern) => pattern.test(content))) {
 		return [
-			'backend/src/domains/communications/handlers/account_management.rs: email account logout/config mutation orchestration must stay in backend/src/domains/communications/core/provider_store.rs owner methods, not the handler'
+			'backend/src/app/handlers/communications/account_management.rs: email account logout/config mutation orchestration must stay in backend/src/domains/communications/core/provider_store.rs owner methods, not the handler'
 		];
 	}
 	return [];
@@ -2160,7 +2159,7 @@ function runSelfTests() {
 		'domain-to-domain backend import fails',
 		backendBoundaryViolations(
 			'backend/src/domains/radar/example.rs',
-			'use crate::domains::persons::core::Person;'
+			'use crate::domains::personas::core::Person;'
 		).length === 1
 	);
 	assertSelfTest(
@@ -2265,7 +2264,7 @@ function runSelfTests() {
 		'ai-to-domain backend import fails',
 		backendBoundaryViolations(
 			'backend/src/ai/core/service/attribution.rs',
-			'use crate::domains::persons::api::PersonProjectionStore;'
+			'use crate::domains::personas::api::PersonaProjectionStore;'
 		).length === 1
 	);
 	assertSelfTest(
@@ -2654,6 +2653,18 @@ function runSelfTests() {
 		])).length === 0
 	);
 	assertSelfTest(
+		'canonical review promotion owner guard rejects direct persona writes',
+		canonicalReviewPromotionOwnerFailures(new Map([
+			[reviewPromotionWorkflow, 'INSERT INTO personas (person_id, display_name) VALUES ($1, $2)']
+		])).length === 1
+	);
+	assertSelfTest(
+		'canonical review promotion owner guard allows non-owner text',
+		canonicalReviewPromotionOwnerFailures(new Map([
+			[reviewPromotionWorkflow, 'PersonaCommandService::new(pool).create(command).await?;']
+		])).length === 0
+	);
+	assertSelfTest(
 		'provider CRUD facade usage outside communications owner layer fails',
 		communicationProviderCrudFacadeFailures(new Map([
 			['backend/src/domains/communications/outbox/provider_sender.rs', 'store.upsert_provider_account(&account);']
@@ -2750,7 +2761,7 @@ function runSelfTests() {
 		'mail account management guard rejects handler-owned logout mutation orchestration',
 		mailAccountManagementManualOrchestrationFailures(new Map([
 			[
-				'backend/src/domains/communications/handlers/account_management.rs',
+				'backend/src/app/handlers/communications/account_management.rs',
 				'CommunicationProviderAccountStore::new(pool).update_config_with_origin(&account_id, &config, ObservationOriginKind::LocalRuntime, "actor", "logout");'
 			]
 		])).length === 1
@@ -2759,7 +2770,7 @@ function runSelfTests() {
 		'mail account management guard allows owner method call',
 		mailAccountManagementManualOrchestrationFailures(new Map([
 			[
-				'backend/src/domains/communications/handlers/account_management.rs',
+				'backend/src/app/handlers/communications/account_management.rs',
 				'CommunicationProviderAccountStore::new(pool).mark_logged_out(&account_id);'
 			]
 		])).length === 0

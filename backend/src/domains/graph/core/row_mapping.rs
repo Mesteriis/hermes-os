@@ -55,7 +55,7 @@ pub(super) fn row_to_evidence_summary(row: PgRow) -> Result<GraphEvidenceSummary
 
 fn parse_node_kind(value: String) -> Result<GraphNodeKind, GraphStoreError> {
     match value.as_str() {
-        "person" => Ok(GraphNodeKind::Person),
+        "person" | "persona" => Ok(GraphNodeKind::Persona),
         "email_address" => Ok(GraphNodeKind::EmailAddress),
         "message" => Ok(GraphNodeKind::Message),
         "document" => Ok(GraphNodeKind::Document),
@@ -72,14 +72,20 @@ fn parse_node_kind(value: String) -> Result<GraphNodeKind, GraphStoreError> {
 
 fn parse_relationship_type(value: String) -> Result<RelationshipType, GraphStoreError> {
     match value.as_str() {
-        "person_has_email_address" => Ok(RelationshipType::PersonHasEmailAddress),
-        "person_sent_message" => Ok(RelationshipType::PersonSentMessage),
-        "person_received_message" => Ok(RelationshipType::PersonReceivedMessage),
+        "person_has_email_address" | "persona_has_email_address" => {
+            Ok(RelationshipType::PersonaHasEmailAddress)
+        }
+        "person_sent_message" | "persona_sent_message" => Ok(RelationshipType::PersonaSentMessage),
+        "person_received_message" | "persona_received_message" => {
+            Ok(RelationshipType::PersonaReceivedMessage)
+        }
         "email_address_sent_message" => Ok(RelationshipType::EmailAddressSentMessage),
         "email_address_received_message" => Ok(RelationshipType::EmailAddressReceivedMessage),
         "project_has_message" => Ok(RelationshipType::ProjectHasMessage),
         "project_has_document" => Ok(RelationshipType::ProjectHasDocument),
-        "project_involves_person" => Ok(RelationshipType::ProjectInvolvesPerson),
+        "project_involves_person" | "project_involves_persona" => {
+            Ok(RelationshipType::ProjectInvolvesPersona)
+        }
         "project_involves_email_address" => Ok(RelationshipType::ProjectInvolvesEmailAddress),
         "entity_relationship" => Ok(RelationshipType::EntityRelationship),
         _ => Err(GraphStoreError::UnknownRelationshipType(value)),
@@ -98,7 +104,7 @@ fn parse_review_state(value: String) -> Result<GraphReviewState, GraphStoreError
 
 fn parse_evidence_source_kind(value: String) -> Result<GraphEvidenceSourceKind, GraphStoreError> {
     match value.as_str() {
-        "contact" | "person" => Ok(GraphEvidenceSourceKind::Person),
+        "contact" | "person" | "persona" => Ok(GraphEvidenceSourceKind::Persona),
         "message" => Ok(GraphEvidenceSourceKind::Message),
         "document" => Ok(GraphEvidenceSourceKind::Document),
         "relationship" => Ok(GraphEvidenceSourceKind::Relationship),
@@ -106,5 +112,67 @@ fn parse_evidence_source_kind(value: String) -> Result<GraphEvidenceSourceKind, 
         "obligation" => Ok(GraphEvidenceSourceKind::Obligation),
         "observation" => Ok(GraphEvidenceSourceKind::Observation),
         _ => Err(GraphStoreError::UnknownEvidenceSourceKind(value)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        GraphEvidenceSourceKind, GraphNodeKind, RelationshipType, parse_evidence_source_kind,
+        parse_node_kind, parse_relationship_type,
+    };
+
+    #[test]
+    fn persona_graph_kinds_read_person_node_storage_and_persona_evidence_source() {
+        assert_eq!(
+            parse_node_kind("persona".to_owned()).expect("persona node kind"),
+            GraphNodeKind::Persona
+        );
+        assert_eq!(
+            parse_node_kind("person".to_owned()).expect("person node kind"),
+            GraphNodeKind::Persona
+        );
+        assert_eq!(
+            parse_evidence_source_kind("persona".to_owned()).expect("persona evidence kind"),
+            GraphEvidenceSourceKind::Persona
+        );
+        assert_eq!(
+            parse_evidence_source_kind("person".to_owned()).expect("person evidence kind"),
+            GraphEvidenceSourceKind::Persona
+        );
+        assert_eq!(
+            parse_evidence_source_kind("contact".to_owned()).expect("legacy contact evidence kind"),
+            GraphEvidenceSourceKind::Persona
+        );
+        assert_eq!(
+            parse_relationship_type("persona_has_email_address".to_owned())
+                .expect("persona email relationship"),
+            RelationshipType::PersonaHasEmailAddress
+        );
+        assert_eq!(
+            parse_relationship_type("person_has_email_address".to_owned())
+                .expect("legacy persona email relationship"),
+            RelationshipType::PersonaHasEmailAddress
+        );
+        assert_eq!(
+            parse_relationship_type("persona_sent_message".to_owned())
+                .expect("persona sent relationship"),
+            RelationshipType::PersonaSentMessage
+        );
+        assert_eq!(
+            parse_relationship_type("person_sent_message".to_owned())
+                .expect("legacy persona sent relationship"),
+            RelationshipType::PersonaSentMessage
+        );
+        assert_eq!(
+            parse_relationship_type("project_involves_persona".to_owned())
+                .expect("project persona relationship"),
+            RelationshipType::ProjectInvolvesPersona
+        );
+        assert_eq!(
+            parse_relationship_type("project_involves_person".to_owned())
+                .expect("legacy project persona relationship"),
+            RelationshipType::ProjectInvolvesPersona
+        );
     }
 }

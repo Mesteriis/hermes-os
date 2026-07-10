@@ -29,7 +29,7 @@ Zoom integration must not call:
 
 ```text
 domains/calendar
-domains/persons
+domains/personas
 domains/tasks
 domains/documents
 domains/organizations

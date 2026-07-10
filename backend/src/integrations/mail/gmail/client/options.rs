@@ -71,6 +71,40 @@ pub struct GmailHistoryFetchOptions {
     pub(super) page_token: Option<String>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GmailContactFetchOptions {
+    pub(super) page_size: u16,
+    pub(super) page_token: Option<String>,
+}
+
+impl GmailContactFetchOptions {
+    pub fn new(page_size: u16) -> Self {
+        Self {
+            page_size,
+            page_token: None,
+        }
+    }
+
+    pub fn page_token(mut self, page_token: impl Into<String>) -> Self {
+        self.page_token = Some(page_token.into());
+        self
+    }
+
+    pub(super) fn validate(&self) -> Result<(), EmailProviderNetworkError> {
+        if self.page_size == 0 || self.page_size > 1000 {
+            return Err(EmailProviderNetworkError::InvalidProviderRequest {
+                field: "page_size",
+                message: "must be between 1 and 1000",
+            });
+        }
+        if let Some(page_token) = &self.page_token {
+            validate_non_empty("page_token", page_token)?;
+        }
+
+        Ok(())
+    }
+}
+
 impl GmailHistoryFetchOptions {
     pub fn new(start_history_id: impl Into<String>, max_results: u16) -> Self {
         Self {

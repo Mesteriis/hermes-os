@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GraphNodeKind {
-    Person,
+    Persona,
     EmailAddress,
     Message,
     Document,
@@ -19,7 +19,7 @@ pub enum GraphNodeKind {
 impl GraphNodeKind {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Person => "person",
+            Self::Persona => "persona",
             Self::EmailAddress => "email_address",
             Self::Message => "message",
             Self::Document => "document",

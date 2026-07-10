@@ -357,7 +357,7 @@ fn review_candidate_groups(
 )> {
     vec![
         (
-            ReviewItemKind::NewPerson,
+            ReviewItemKind::NewPersona,
             "persona",
             &analysis.persona_candidates,
             0.68,

@@ -53,7 +53,7 @@ async fn v1_status_returns_enabled_surfaces_against_postgres() {
     let value: serde_json::Value = serde_json::from_slice(&body).expect("json body");
     assert_eq!(value["version"], json!("1.0"));
     assert_eq!(value["surfaces"]["messages"], json!(true));
-    assert_eq!(value["surfaces"]["persons"], json!(true));
+    assert_eq!(value["surfaces"]["personas"], json!(true));
     assert_eq!(value["surfaces"]["search"], json!(true));
     assert_eq!(value["surfaces"]["documents"], json!(true));
     assert_eq!(value["surfaces"]["account_setup"], json!(true));

@@ -8,9 +8,9 @@ use super::errors::GraphProjectionError;
 use super::evidence::message_evidence;
 use super::helpers::normalize_email_address;
 use super::models::{
-    GraphProjectionReport, MessageEndpoint, MessageRow, PersonRow, RelationshipDirection,
+    GraphProjectionReport, MessageEndpoint, MessageRow, PersonaRow, RelationshipDirection,
 };
-use super::rows::{row_to_message, row_to_person};
+use super::rows::{row_to_message, row_to_persona};
 use super::service::GraphProjectionService;
 
 impl GraphProjectionService {
@@ -133,8 +133,8 @@ impl GraphProjectionService {
             .await?;
 
         if let Some(person) = person {
-            return Ok(MessageEndpoint::Person {
-                node_id: node_id(GraphNodeKind::Person, &person.person_id),
+            return Ok(MessageEndpoint::Persona {
+                node_id: node_id(GraphNodeKind::Persona, &person.person_id),
             });
         }
 
@@ -158,15 +158,15 @@ impl GraphProjectionService {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         normalized_email: &str,
-    ) -> Result<Option<PersonRow>, GraphProjectionError> {
+    ) -> Result<Option<PersonaRow>, GraphProjectionError> {
         let row = sqlx::query(
-            "SELECT person_id, display_name, email_address FROM persons WHERE email_address = $1",
+            "SELECT person_id, display_name, email_address FROM personas WHERE email_address = $1",
         )
         .bind(normalized_email)
         .fetch_optional(&mut **transaction)
         .await?;
 
-        row.map(row_to_person).transpose()
+        row.map(row_to_persona).transpose()
     }
 
     async fn project_message_endpoint(

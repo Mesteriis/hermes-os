@@ -14,6 +14,7 @@ const props = withDefaults(defineProps<{
 })
 
 const entityIcons: Record<EntityIconKind, string> = {
+	persona: 'tabler:user',
 	person: 'tabler:user',
 	organization: 'tabler:building',
 	project: 'tabler:briefcase',

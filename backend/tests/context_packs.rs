@@ -97,7 +97,7 @@ async fn context_pack_store_rejects_pack_without_sources_before_database_write()
         .upsert_with_sources(
             &NewContextPack::new(
                 ContextPackKind::Persona,
-                "person:v1:missing-sources",
+                "persona:missing-sources",
                 json!({"summary": "source-less context is not acceptable"}),
             ),
             &[],

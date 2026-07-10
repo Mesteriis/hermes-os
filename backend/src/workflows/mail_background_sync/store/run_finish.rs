@@ -27,7 +27,7 @@ impl MailSyncStore {
                 estimated_total_messages = $7,
                 fetched_messages = $8,
                 projected_messages = $9,
-                upserted_persons = $10,
+                upserted_personas = $10,
                 upserted_organizations = $11,
                 checkpoint_after = $12,
                 checkpoint_saved = $13,
@@ -50,7 +50,7 @@ impl MailSyncStore {
                 current_batch_size,
                 fetched_messages,
                 projected_messages,
-                upserted_persons,
+                upserted_personas,
                 upserted_organizations,
                 checkpoint_before,
                 checkpoint_after,
@@ -71,7 +71,7 @@ impl MailSyncStore {
         .bind(finish.estimated_total_messages)
         .bind(finish.fetched_messages)
         .bind(finish.projected_messages)
-        .bind(finish.upserted_persons)
+        .bind(finish.upserted_personas)
         .bind(finish.upserted_organizations)
         .bind(finish.checkpoint_after.unwrap_or_else(|| json!({})))
         .bind(finish.checkpoint_saved)

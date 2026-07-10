@@ -9,7 +9,7 @@ use crate::domains::communications::messages::MessageProjectionStore;
 use crate::platform::events::{EventStore, NewEventEnvelope};
 
 use super::actions::{
-    archive_response, create_contact_response, create_document_response, create_event_response,
+    archive_response, create_document_response, create_event_response, create_persona_response,
     create_task_response, link_document_response, reply_response,
 };
 use super::constants::WORKFLOW_EVENT_TYPE;
@@ -107,8 +107,8 @@ pub(crate) async fn execute_workflow_action(
             )
             .await?
         }
-        WorkflowActionKind::CreateContact => {
-            create_contact_response(
+        WorkflowActionKind::CreatePersona => {
+            create_persona_response(
                 &mut transaction,
                 &command_id,
                 &event_id,

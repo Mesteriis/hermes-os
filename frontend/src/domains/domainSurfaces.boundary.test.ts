@@ -8,7 +8,7 @@ import { useHomeSurface } from './home/queries/useHomeSurface'
 import { useKnowledgeSurface } from './knowledge/queries/useKnowledgeSurface'
 import { useNotesSurface } from './notes/queries/useNotesSurface'
 import { useOrganizationsSurface } from './organizations/queries/useOrganizationsSurface'
-import { usePersonsSurface } from './personas/queries/usePersonsSurface'
+import { usePersonasSurface } from './personas/queries/usePersonasSurface'
 import { useProjectsSurface } from './projects/queries/useProjectsSurface'
 import { useReviewSurface } from './review/queries/useReviewSurface'
 import { useSettingsSurface } from './settings/queries/useSettingsSurface'
@@ -24,7 +24,7 @@ const plannedDomainSurfaceIds = [
   'knowledge',
   'notes',
   'organizations',
-  'persons',
+  'personas',
   'projects',
   'review',
   'settings',
@@ -42,7 +42,7 @@ function domainSurfaces(): DomainSurface[] {
     useKnowledgeSurface(),
     useNotesSurface(),
     useOrganizationsSurface(),
-    usePersonsSurface(),
+    usePersonasSurface(),
     useProjectsSurface(),
     useReviewSurface(),
     useSettingsSurface(),

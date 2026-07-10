@@ -50,7 +50,7 @@ src/lib/services/
   graph.ts          — loadGraphSummary, runGraphSearch, selectGraphNode, loadNeighborhood
   communications.ts — loadCommunications, loadDrafts, loadMailboxHealth, workflow
   projects.ts       — loadProjects, loadProjectDetail
-  persons.ts        — loadPersons, loadIdentityCandidates, setIdentityReview
+  personas.ts       — loadPersonas, loadIdentityCandidates, setIdentityReview
   tasks.ts          — loadTaskReviewState, setTaskCandidateReview
   calendar.ts       — loadCalendar, searchCalendar, handleCreateEvent, prepareEvent
   documents.ts      — loadDocumentProcessingJobs, retryFailedJob

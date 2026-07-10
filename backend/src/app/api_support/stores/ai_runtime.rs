@@ -10,17 +10,17 @@ use std::sync::Arc;
 const AI_REQUEST_RUNTIME: &str = "ai_request_runtime";
 
 #[derive(Clone)]
-struct PersonProjectionAiPersonaAttributionPort {
+struct PersonaProjectionAiPersonaAttributionPort {
     pool: sqlx::postgres::PgPool,
 }
 
-impl PersonProjectionAiPersonaAttributionPort {
+impl PersonaProjectionAiPersonaAttributionPort {
     fn new(pool: sqlx::postgres::PgPool) -> Self {
         Self { pool }
     }
 }
 
-impl crate::ai::core::AiPersonaAttributionPort for PersonProjectionAiPersonaAttributionPort {
+impl crate::ai::core::AiPersonaAttributionPort for PersonaProjectionAiPersonaAttributionPort {
     fn upsert_ai_agent_persona<'a>(
         &'a self,
         agent_id: &'a str,
@@ -38,7 +38,7 @@ impl crate::ai::core::AiPersonaAttributionPort for PersonProjectionAiPersonaAttr
     > {
         Box::pin(async move {
             let persona =
-                crate::domains::persons::api::PersonProjectionStore::new(self.pool.clone())
+                crate::domains::personas::api::PersonaProjectionStore::new(self.pool.clone())
                     .upsert_ai_agent_persona(agent_id, display_name)
                     .await
                     .map_err(|error| {
@@ -48,7 +48,11 @@ impl crate::ai::core::AiPersonaAttributionPort for PersonProjectionAiPersonaAttr
             Ok(crate::ai::core::AiAgentPersonaAttribution {
                 persona_id: persona.person_id,
                 persona_type: persona.persona_type.as_str(),
-                persona_email: persona.email_address,
+                persona_email: persona.email_address.ok_or_else(|| {
+                    crate::ai::core::AiPersonaAttributionError::Store(
+                        "ai agent persona is missing email_address".to_owned(),
+                    )
+                })?,
             })
         })
     }
@@ -64,7 +68,7 @@ impl crate::ai::core::AiPersonaAttributionPort for PersonProjectionAiPersonaAttr
     > {
         Box::pin(async move {
             Ok(
-                crate::domains::persons::api::PersonProjectionStore::new(self.pool.clone())
+                crate::domains::personas::api::PersonaProjectionStore::new(self.pool.clone())
                     .owner_persona()
                     .await
                     .map_err(|error| {
@@ -116,7 +120,7 @@ pub(crate) async fn ai_requests_allowed(state: &AppState) -> Result<bool, ApiErr
 pub(crate) fn ai_persona_attribution_port_from_pool(
     pool: sqlx::postgres::PgPool,
 ) -> crate::ai::core::SharedAiPersonaAttributionPort {
-    Arc::new(PersonProjectionAiPersonaAttributionPort::new(pool))
+    Arc::new(PersonaProjectionAiPersonaAttributionPort::new(pool))
         as crate::ai::core::SharedAiPersonaAttributionPort
 }
 

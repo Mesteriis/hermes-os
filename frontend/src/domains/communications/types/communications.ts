@@ -146,7 +146,7 @@ export type MailSyncStatus = {
   last_error_message: string | null
   last_fetched_messages: number
   last_projected_messages: number
-  last_upserted_persons: number
+  last_upserted_personas: number
   last_upserted_organizations: number
 }
 
@@ -167,7 +167,7 @@ export type MailSyncRunResponse = {
   current_batch_size: number
   fetched_messages: number
   projected_messages: number
-  upserted_persons: number
+  upserted_personas: number
   upserted_organizations: number
   checkpoint_before_present: boolean
   checkpoint_after_present: boolean
@@ -304,7 +304,7 @@ export type WorkflowActionKind =
   | 'create_document'
   | 'create_event'
   | 'link_document'
-  | 'create_contact'
+  | 'create_persona'
   | 'archive'
 
 export type WorkflowActionSource = {
@@ -334,7 +334,7 @@ export type WorkflowActionResponse = {
   action: WorkflowActionKind
   status: 'created' | 'updated' | 'linked' | 'opened' | 'archived' | 'noop'
   target: {
-    kind: 'compose' | 'message' | 'task' | 'document' | 'calendar_event' | 'person'
+    kind: 'compose' | 'message' | 'task' | 'document' | 'calendar_event' | 'persona'
     id: string | null
   }
   provenance: {

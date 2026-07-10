@@ -3,10 +3,10 @@ use sqlx::Row;
 use sqlx::postgres::PgRow;
 
 use super::errors::GraphProjectionError;
-use super::models::{DocumentRow, MessageRow, PersonRow};
+use super::models::{DocumentRow, MessageRow, PersonaRow};
 
-pub(super) fn row_to_person(row: PgRow) -> Result<PersonRow, GraphProjectionError> {
-    Ok(PersonRow {
+pub(super) fn row_to_persona(row: PgRow) -> Result<PersonaRow, GraphProjectionError> {
+    Ok(PersonaRow {
         person_id: row.try_get("person_id")?,
         display_name: row.try_get("display_name")?,
         email_address: row.try_get("email_address")?,

@@ -9,7 +9,7 @@ pub(super) fn persona_notes_memory_card(person_id: &str, notes: &str) -> Option<
     Some(MemoryCardDraft {
         title: "Compatibility notes".to_owned(),
         description: description.to_owned(),
-        source: format!("persons.notes:{person_id}"),
+        source: format!("personas.notes:{person_id}"),
         confidence: 1.0,
         importance: 5,
     })

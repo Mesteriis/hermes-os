@@ -19,6 +19,6 @@ pub struct MailSyncStatus {
     pub last_error_message: Option<String>,
     pub last_fetched_messages: i64,
     pub last_projected_messages: i64,
-    pub last_upserted_persons: i64,
+    pub last_upserted_personas: i64,
     pub last_upserted_organizations: i64,
 }

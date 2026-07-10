@@ -36,7 +36,7 @@ export async function fetchAiRun(runId: string): Promise<AiRun> {
 
 export async function fetchOwnerPersona(): Promise<OwnerPersonaResponse> {
 	return ApiClient.instance.get<OwnerPersonaResponse>(
-		'/api/v1/persons/owner',
+		'/api/v1/personas/owner',
 		'Owner persona request failed'
 	)
 }

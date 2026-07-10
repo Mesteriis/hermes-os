@@ -4,14 +4,14 @@ use chrono::Utc;
 use hermes_hub_backend::domains::communications::core::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
-use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::integrations::zoom::client::{
     ZoomAccountSetupRequest, ZoomMeetingObservationRequest, ZoomParticipantSnapshot, ZoomStore,
 };
 use hermes_hub_backend::platform::calls::CallIntelligenceStore;
 use hermes_hub_backend::platform::events::{EventBus, EventLogQuery, EventStore};
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::review_inbox::project_person_identity_review_event;
+use hermes_hub_backend::workflows::review_inbox::project_persona_identity_review_event;
 use hermes_hub_backend::workflows::zoom_participant_identity::project_zoom_participant_identity;
 use serde_json::json;
 use sqlx::Row;
@@ -26,13 +26,13 @@ async fn zoom_participant_identity_candidates_flow_into_review_inbox() {
     let pool = database.pool().expect("pool").clone();
     let suffix = format!("{}", Utc::now().timestamp_nanos_opt().unwrap_or_default());
 
-    let person_store = PersonProjectionStore::new(pool.clone());
+    let person_store = PersonaProjectionStore::new(pool.clone());
     let matched_person = person_store
-        .upsert_email_person(&format!("existing-zoom-person-{suffix}@example.com"))
+        .upsert_email_persona(&format!("existing-zoom-person-{suffix}@example.com"))
         .await
         .expect("upsert existing person");
     let display_name = format!("Zoom Person {suffix}");
-    sqlx::query("UPDATE persons SET display_name = $1 WHERE person_id = $2")
+    sqlx::query("UPDATE personas SET display_name = $1 WHERE person_id = $2")
         .bind(&display_name)
         .bind(&matched_person.person_id)
         .execute(&pool)
@@ -129,7 +129,7 @@ async fn zoom_participant_identity_candidates_flow_into_review_inbox() {
             email_address,
             review_state,
             evidence_summary
-        FROM person_identity_candidates
+        FROM persona_identity_candidates
         WHERE identity_candidate_id = $1
         "#,
     )
@@ -176,17 +176,17 @@ async fn zoom_participant_identity_candidates_flow_into_review_inbox() {
 
     let candidate_event = EventStore::new(pool.clone())
         .list_matching(EventLogQuery {
-            event_type: Some("person_identity.candidate.detected".to_owned()),
+            event_type: Some("persona_identity.candidate.detected".to_owned()),
             limit: Some(20),
             ..Default::default()
         })
         .await
-        .expect("person identity candidate events")
+        .expect("persona identity candidate events")
         .into_iter()
         .find(|event| event.event.payload["identity_candidate_id"] == json!(expected_candidate_id))
         .expect("candidate detected event");
 
-    project_person_identity_review_event(pool.clone(), candidate_event)
+    project_persona_identity_review_event(pool.clone(), candidate_event)
         .await
         .expect("person identity review inbox projection");
 

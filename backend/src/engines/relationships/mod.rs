@@ -114,7 +114,7 @@ mod tests {
     #[test]
     fn relationship_candidate_requires_evidence() {
         let error = RelationshipCandidate::linked_entities_candidate(
-            RelationshipSubject::new("persona", "person:v1:ivan"),
+            RelationshipSubject::new("persona", "persona:ivan"),
             RelationshipSubject::new("organization", "org:v1:acme"),
             "works_at",
             0.77,

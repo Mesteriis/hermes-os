@@ -23,7 +23,7 @@ use crate::domains::communications::storage::{
     CommunicationStorageError, CommunicationStorageStore, NewCommunicationAttachment,
     NewCommunicationBlob,
 };
-use crate::domains::persons::core::{PersonCoreError, PersonsIdentityStore};
+use crate::domains::personas::core::{PersonaCoreError, PersonaIdentityStore};
 use crate::domains::signal_hub::{
     SignalHubError, dispatch_telegram_raw_signal, dispatch_whatsapp_raw_signal,
 };
@@ -229,7 +229,7 @@ impl WhatsappFixtureIngestApplicationService {
             &projected.raw_record_id,
         )
         .await?;
-        self.upsert_whatsapp_person_identity_traces_for_message(
+        self.upsert_whatsapp_persona_identity_traces_for_message(
             request,
             &stored_raw.observation_id,
         )
@@ -786,7 +786,7 @@ impl WhatsappFixtureIngestApplicationService {
         let status_author_identity_id = self
             .upsert_whatsapp_status_identity(&request.account_id, request, &stored_raw)
             .await?;
-        self.upsert_whatsapp_person_identity_traces_for_status(request, &stored_raw)
+        self.upsert_whatsapp_persona_identity_traces_for_status(request, &stored_raw)
             .await?;
         let status_feed_conversation_id = self
             .upsert_whatsapp_status_feed_conversation(
@@ -1553,7 +1553,7 @@ impl WhatsappFixtureIngestApplicationService {
         let identity_id = self
             .upsert_whatsapp_identity(&request.account_id, &channel_id, request, &stored_raw)
             .await?;
-        self.upsert_whatsapp_person_identity_traces_for_participant(request, &stored_raw)
+        self.upsert_whatsapp_persona_identity_traces_for_participant(request, &stored_raw)
             .await?;
         let participant_upsert = self
             .upsert_whatsapp_conversation_participant(
@@ -2414,7 +2414,7 @@ impl WhatsappFixtureIngestApplicationService {
         Ok(Some(identity_id))
     }
 
-    async fn upsert_whatsapp_person_identity_traces_for_participant(
+    async fn upsert_whatsapp_persona_identity_traces_for_participant(
         &self,
         request: &NewWhatsappWebParticipant,
         stored_raw: &AcceptedWhatsappRawRecord,
@@ -2444,14 +2444,14 @@ impl WhatsappFixtureIngestApplicationService {
                 "accepted_signal_event_id": stored_raw.accepted_event_id,
             }
         });
-        self.upsert_person_identity_trace_with_metadata(
+        self.upsert_persona_identity_trace_with_metadata(
             "whatsapp",
             Some(request.provider_identity_id.as_str()),
             participant_trace_metadata.clone(),
             stored_raw,
         )
         .await?;
-        self.upsert_person_identity_trace_with_metadata(
+        self.upsert_persona_identity_trace_with_metadata(
             "phone",
             request.address.as_deref(),
             participant_trace_metadata.clone(),
@@ -2464,7 +2464,7 @@ impl WhatsappFixtureIngestApplicationService {
             request.provider_chat_id,
             request.effective_provider_member_id()
         );
-        self.upsert_person_identity_trace_with_metadata(
+        self.upsert_persona_identity_trace_with_metadata(
             "message_participant",
             Some(trace_value.as_str()),
             participant_trace_metadata,
@@ -2474,7 +2474,7 @@ impl WhatsappFixtureIngestApplicationService {
         Ok(())
     }
 
-    async fn upsert_whatsapp_person_identity_traces_for_status(
+    async fn upsert_whatsapp_persona_identity_traces_for_status(
         &self,
         request: &NewWhatsappWebStatus,
         stored_raw: &AcceptedWhatsappRawRecord,
@@ -2498,14 +2498,14 @@ impl WhatsappFixtureIngestApplicationService {
                 "accepted_signal_event_id": stored_raw.accepted_event_id,
             }
         });
-        self.upsert_person_identity_trace_with_metadata(
+        self.upsert_persona_identity_trace_with_metadata(
             "whatsapp",
             Some(request.sender_id.as_str()),
             status_trace_metadata.clone(),
             stored_raw,
         )
         .await?;
-        self.upsert_person_identity_trace_with_metadata(
+        self.upsert_persona_identity_trace_with_metadata(
             "phone",
             request.sender_address.as_deref(),
             status_trace_metadata,
@@ -2515,13 +2515,13 @@ impl WhatsappFixtureIngestApplicationService {
         Ok(())
     }
 
-    async fn upsert_person_identity_trace(
+    async fn upsert_persona_identity_trace(
         &self,
         identity_type: &str,
         identity_value: Option<&str>,
         stored_raw: &AcceptedWhatsappRawRecord,
     ) -> Result<(), CommunicationFixtureIngestError> {
-        self.upsert_person_identity_trace_with_metadata(
+        self.upsert_persona_identity_trace_with_metadata(
             identity_type,
             identity_value,
             json!({}),
@@ -2530,7 +2530,7 @@ impl WhatsappFixtureIngestApplicationService {
         .await
     }
 
-    async fn upsert_person_identity_trace_with_metadata(
+    async fn upsert_persona_identity_trace_with_metadata(
         &self,
         identity_type: &str,
         identity_value: Option<&str>,
@@ -2543,7 +2543,7 @@ impl WhatsappFixtureIngestApplicationService {
         else {
             return Ok(());
         };
-        PersonsIdentityStore::new(self.pool.clone())
+        PersonaIdentityStore::new(self.pool.clone())
             .create_unattached_with_metadata_and_observation(
                 identity_type,
                 identity_value,
@@ -2555,7 +2555,7 @@ impl WhatsappFixtureIngestApplicationService {
         Ok(())
     }
 
-    async fn upsert_whatsapp_person_identity_traces_for_message(
+    async fn upsert_whatsapp_persona_identity_traces_for_message(
         &self,
         request: &NewWhatsappWebMessage,
         observation_id: &str,
@@ -2569,7 +2569,7 @@ impl WhatsappFixtureIngestApplicationService {
         let Some(phones) = contact_card.get("phones").and_then(Value::as_array) else {
             return Ok(());
         };
-        let store = PersonsIdentityStore::new(self.pool.clone());
+        let store = PersonaIdentityStore::new(self.pool.clone());
         let contact_card_display_name = contact_card
             .get("display_name")
             .and_then(Value::as_str)
@@ -2801,7 +2801,7 @@ pub(crate) enum CommunicationFixtureIngestError {
     Call(#[from] CallError),
 
     #[error(transparent)]
-    PersonCore(#[from] PersonCoreError),
+    PersonaCore(#[from] PersonaCoreError),
 }
 
 fn whatsapp_reaction_id(

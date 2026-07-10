@@ -58,32 +58,32 @@ async fn test_context_databases_are_isolated() {
     );
 }
 
-/// Verify the ContactFactory works against a real container.
+/// Verify the PersonaFactory works against a real container.
 #[tokio::test]
-async fn testkit_contact_factory_creates_person() {
+async fn testkit_persona_factory_creates_persona() {
     let ctx = TestContext::new().await;
-    let factory = testkit::factories::contact::ContactFactory::new(ctx.pool());
+    let factory = testkit::factories::persona::PersonaFactory::new(ctx.pool());
 
     let person_id = factory
-        .with_name("Characterization Test Person")
+        .with_name("Characterization Test Persona")
         .with_email("char-test@example.com")
         .create()
         .await
-        .expect("ContactFactory must create a person against the test container");
+        .expect("PersonaFactory must create a persona against the test container");
 
     assert!(
         !person_id.is_empty(),
-        "ContactFactory must return a non-empty person ID"
+        "PersonaFactory must return a non-empty persona record ID"
     );
 
-    // Verify the person actually exists in the database
+    // Verify the persona record actually exists in the database.
     let exists: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM persons WHERE person_id = $1)")
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM personas WHERE person_id = $1)")
             .bind(&person_id)
             .fetch_one(ctx.pool())
             .await
             .expect("query must succeed");
-    assert!(exists, "person created by ContactFactory must exist in DB");
+    assert!(exists, "persona created by PersonaFactory must exist in DB");
 }
 
 /// Verify the EmailFactory works against a real container.

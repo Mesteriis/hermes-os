@@ -60,12 +60,31 @@ function defaultLayoutSettings(): LayoutSettings {
   }
 }
 
+function normalizeLegacyViewId(viewId: string): string {
+  if (viewId === 'persons') return 'personas'
+
+  return viewId
+}
+
+function normalizeLayoutSettings(settings: LayoutSettings): LayoutSettings {
+  const views: Record<string, ViewLayoutOverride> = {}
+  for (const [viewId, override] of Object.entries(settings.views)) {
+    views[normalizeLegacyViewId(viewId)] = override
+  }
+
+  return {
+    ...settings,
+    schemaVersion: 2,
+    views,
+  }
+}
+
 const defaultWidgets: WidgetDefinition[] = [
   { id: 'home-welcome', title: 'Welcome', icon: 'tabler:home', viewScope: ['home'], defaultColumns: 6, defaultRows: 2, minColumns: 3, minRows: 1, canAdd: true, removable: true },
   { id: 'home-stats', title: 'Statistics', icon: 'tabler:chart-bar', viewScope: ['home'], defaultColumns: 6, defaultRows: 2, minColumns: 3, minRows: 1, canAdd: true, removable: true },
   { id: 'home-timeline', title: 'Recent Activity', icon: 'tabler:timeline-event', viewScope: ['home'], defaultColumns: 4, defaultRows: 3, minColumns: 2, minRows: 2, canAdd: true, removable: true },
-  { id: 'persons-list', title: 'Personas', icon: 'tabler:user', viewScope: ['persons'], defaultColumns: 6, defaultRows: 4, minColumns: 3, minRows: 2, canAdd: true, removable: true },
-  { id: 'persons-recent', title: 'Recent Persons', icon: 'tabler:user-plus', viewScope: ['persons'], defaultColumns: 6, defaultRows: 2, minColumns: 3, minRows: 1, canAdd: true, removable: true },
+  { id: 'personas-list', title: 'Personas', icon: 'tabler:user', viewScope: ['personas'], defaultColumns: 6, defaultRows: 4, minColumns: 3, minRows: 2, canAdd: true, removable: true },
+  { id: 'personas-recent', title: 'Recent Personas', icon: 'tabler:user-plus', viewScope: ['personas'], defaultColumns: 6, defaultRows: 2, minColumns: 3, minRows: 1, canAdd: true, removable: true },
   { id: 'projects-list', title: 'Projects', icon: 'tabler:briefcase', viewScope: ['projects'], defaultColumns: 8, defaultRows: 4, minColumns: 4, minRows: 2, canAdd: true, removable: true },
   { id: 'tasks-list', title: 'Tasks', icon: 'tabler:checkbox', viewScope: ['tasks'], defaultColumns: 8, defaultRows: 4, minColumns: 4, minRows: 2, canAdd: true, removable: true },
   { id: 'calendar-month', title: 'Month View', icon: 'tabler:calendar', viewScope: ['calendar'], defaultColumns: 8, defaultRows: 4, minColumns: 4, minRows: 2, canAdd: true, removable: true },
@@ -89,13 +108,14 @@ const defaultWidgets: WidgetDefinition[] = [
 ]
 
 function getWidgetsForView(viewId: string, setting: LayoutSettings): ResolvedWidget[] {
-  const override = setting.views[viewId]
+  const normalizedViewId = normalizeLegacyViewId(viewId)
+  const override = setting.views[normalizedViewId]
   const hiddenIds = new Set(override?.hiddenWidgetIds ?? [])
   const gridOverrides = override?.gridOverrides ?? {}
   const panelOverrides = override?.panelSurfaceOverrides ?? {}
 
   const widgets: ResolvedWidget[] = []
-  const viewWidgets = defaultWidgets.filter((w) => w.viewScope.includes(viewId))
+  const viewWidgets = defaultWidgets.filter((w) => w.viewScope.includes(normalizedViewId))
 
   for (let i = 0; i < viewWidgets.length; i++) {
     const def = viewWidgets[i]
@@ -154,13 +174,14 @@ export const useLayoutEditorStore = defineStore('layoutEditor', () => {
 
   const addableWidgetsForCurrentView = computed<WidgetDefinition[]>(() => {
     const visibleIds = visibleWidgetIds.value
+    const normalizedViewId = normalizeLegacyViewId(currentView.value)
     return defaultWidgets
-      .filter((w) => w.viewScope.includes(currentView.value))
+      .filter((w) => w.viewScope.includes(normalizedViewId))
       .filter((w) => w.canAdd && !visibleIds.has(w.id))
   })
 
   function setLayoutSettings(settings: LayoutSettings): void {
-    layoutSettings.value = settings
+    layoutSettings.value = normalizeLayoutSettings(settings)
   }
 
   function startLayoutEditing(): void {
@@ -176,7 +197,7 @@ export const useLayoutEditorStore = defineStore('layoutEditor', () => {
 
   function saveLayoutSettings(): void {
     if (layoutDraft.value) {
-      layoutSettings.value = JSON.parse(JSON.stringify(layoutDraft.value))
+      layoutSettings.value = normalizeLayoutSettings(JSON.parse(JSON.stringify(layoutDraft.value)))
       layoutDraft.value = null
     }
     isLayoutEditing.value = false
@@ -337,7 +358,7 @@ export const useLayoutEditorStore = defineStore('layoutEditor', () => {
     const draft = layoutDraft.value
     if (!draft) return
 
-    const viewId = currentView.value
+    const viewId = normalizeLegacyViewId(currentView.value)
     const currentOverride = draft.views[viewId] ?? {
       hiddenWidgetIds: [],
       zoneOverrides: {},
@@ -350,7 +371,7 @@ export const useLayoutEditorStore = defineStore('layoutEditor', () => {
   }
 
   function setCurrentView(viewId: string): void {
-    currentView.value = viewId
+    currentView.value = normalizeLegacyViewId(viewId)
   }
 
   return {

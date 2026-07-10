@@ -366,6 +366,20 @@ pub(crate) async fn post_v1_email_account_sync_now(
     ))
 }
 
+pub(crate) async fn post_v1_email_account_address_book_sync_now(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<AddressBookSyncRunResponse>, ApiError> {
+    let _account = email_account_or_not_found(&state, &account_id).await?;
+    let report = address_book_sync_service(&state)
+        .map_err(address_book_sync_api_error)?
+        .run_account(&account_id, AddressBookSyncTrigger::Manual)
+        .await
+        .map_err(address_book_sync_api_error)?;
+
+    Ok(Json(report.response()))
+}
+
 pub(crate) async fn post_v1_email_account_sync_full_resync(
     State(state): State<AppState>,
     Path(account_id): Path<String>,

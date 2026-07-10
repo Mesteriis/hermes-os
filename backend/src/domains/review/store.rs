@@ -737,7 +737,7 @@ async fn append_event_idempotently(
 
 fn candidate_event_type(kind: ReviewItemKind) -> Option<&'static str> {
     match kind {
-        ReviewItemKind::NewPerson => Some("persona.detected.v1"),
+        ReviewItemKind::NewPersona => Some("persona.detected.v1"),
         ReviewItemKind::NewOrganization => Some("organization.detected.v1"),
         ReviewItemKind::IdentityCandidate => Some("identity.candidate.detected.v1"),
         ReviewItemKind::ProjectLinkCandidate => Some("project_link.candidate.detected.v1"),

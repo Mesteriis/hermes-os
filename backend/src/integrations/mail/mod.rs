@@ -1,4 +1,5 @@
 pub mod accounts;
+pub mod address_book_sync_provider;
 pub mod gmail;
 pub mod imap_write;
 pub mod outbox;

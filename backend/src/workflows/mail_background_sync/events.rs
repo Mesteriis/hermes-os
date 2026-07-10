@@ -65,7 +65,7 @@ fn sync_run_event(event_type: &str, run: &MailSyncRun) -> Result<NewEventEnvelop
         "current_batch_size": run.current_batch_size,
         "fetched_messages": run.fetched_messages,
         "projected_messages": run.projected_messages,
-        "upserted_persons": run.upserted_persons,
+        "upserted_personas": run.upserted_personas,
         "upserted_organizations": run.upserted_organizations,
         "checkpoint_saved": run.checkpoint_saved,
         "error_code": run.error_code,

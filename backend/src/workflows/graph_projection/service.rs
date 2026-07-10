@@ -25,8 +25,8 @@ impl GraphProjectionService {
     pub async fn project_from_v1(&self) -> Result<GraphProjectionReport, GraphProjectionError> {
         let mut report = GraphProjectionReport::default();
 
-        for person in self.list_persons().await? {
-            self.project_person(&person, &mut report).await?;
+        for persona in self.list_personas().await? {
+            self.project_persona(&persona, &mut report).await?;
         }
         for message in self.list_messages().await? {
             self.project_message(&message, &mut report).await?;

@@ -4,7 +4,7 @@ Status: Proposed
 
 ## Context
 
-Version 2 needs graph-backed memory that connects messages, people, projects and documents. The current V2 graph core projects contacts, email addresses, messages and documents, but projects still exist only as frontend presentation data. This blocks project timelines and prevents the graph from using projects as durable memory anchors.
+Version 2 needs graph-backed memory that connects messages, Personas, projects and documents. The current V2 graph core projects Personas, email addresses, messages and documents, but projects still exist only as frontend presentation data. This blocks project timelines and prevents the graph from using projects as durable memory anchors.
 
 ADR-0045 intentionally limited the first graph core to four node kinds and five relationship types. Project nodes and project relationships therefore require an explicit ADR and schema evolution before implementation.
 
@@ -19,7 +19,8 @@ Extend the PostgreSQL graph projection with:
 - node kind `project`;
 - relationship type `project_has_message`;
 - relationship type `project_has_document`;
-- relationship type `project_involves_person`;
+- semantic relationship `project_involves_persona` (`project_involves_person`
+  remains the persisted graph string until a graph replay migration is planned);
 - relationship type `project_involves_email_address`.
 
 Project graph edges are rebuildable projection state. They must carry evidence from the matched message or document and preserve confidence/review state. The first project matching rule is deterministic keyword containment over message subject/body and document title/extracted text. These links are `suggested` unless a later review workflow confirms them.
@@ -29,7 +30,7 @@ Expose read-only protected local APIs:
 - `GET /api/v2/projects`;
 - `GET /api/v2/projects/{project_id}`.
 
-The project detail API returns project metadata, derived stats, recent communications, related documents, key people and timeline items. It must not expose message body text.
+The project detail API returns project metadata, derived stats, recent communications, related documents, key Personas and timeline items. It must not expose message body text.
 
 ## Non-Goals
 

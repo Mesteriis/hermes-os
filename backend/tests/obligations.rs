@@ -139,7 +139,7 @@ async fn obligation_store_upserts_evidence_backed_obligation_without_creating_ta
     .await
     .expect("obligation graph node");
     let obligated_node_id: String = sqlx::query_scalar(
-        "SELECT node_id FROM graph_nodes WHERE node_kind = 'person' AND stable_key = $1",
+        "SELECT node_id FROM graph_nodes WHERE node_kind = 'persona' AND stable_key = $1",
     )
     .bind(&first.obligated_entity_id)
     .fetch_one(&pool)

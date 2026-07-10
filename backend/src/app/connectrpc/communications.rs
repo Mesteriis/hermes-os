@@ -3278,7 +3278,7 @@ fn parse_workflow_action_kind(value: &str) -> Result<HandlerWorkflowActionKind, 
         "create_document" => Ok(HandlerWorkflowActionKind::CreateDocument),
         "create_event" => Ok(HandlerWorkflowActionKind::CreateEvent),
         "link_document" => Ok(HandlerWorkflowActionKind::LinkDocument),
-        "create_contact" => Ok(HandlerWorkflowActionKind::CreateContact),
+        "create_persona" | "create_contact" => Ok(HandlerWorkflowActionKind::CreatePersona),
         "archive" => Ok(HandlerWorkflowActionKind::Archive),
         _ => Err(invalid_argument_error(format!(
             "invalid workflow action: {value}"
@@ -3294,7 +3294,7 @@ fn workflow_action_kind_str(value: &HandlerWorkflowActionKind) -> &'static str {
         HandlerWorkflowActionKind::CreateDocument => "create_document",
         HandlerWorkflowActionKind::CreateEvent => "create_event",
         HandlerWorkflowActionKind::LinkDocument => "link_document",
-        HandlerWorkflowActionKind::CreateContact => "create_contact",
+        HandlerWorkflowActionKind::CreatePersona => "create_persona",
         HandlerWorkflowActionKind::Archive => "archive",
     }
 }
@@ -3317,7 +3317,7 @@ fn workflow_action_target_kind_str(value: &HandlerWorkflowActionTargetKind) -> &
         HandlerWorkflowActionTargetKind::Task => "task",
         HandlerWorkflowActionTargetKind::Document => "document",
         HandlerWorkflowActionTargetKind::CalendarEvent => "calendar_event",
-        HandlerWorkflowActionTargetKind::Person => "person",
+        HandlerWorkflowActionTargetKind::Persona => "persona",
     }
 }
 

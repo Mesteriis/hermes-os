@@ -4,7 +4,7 @@ use testkit::context::TestContext;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use hermes_hub_backend::app::{build_router, build_router_with_database};
-use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::domains::tasks::api::{NewTask, TaskStore};
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
@@ -100,7 +100,7 @@ async fn tasks_endpoint_returns_first_class_task_payload_against_postgres() {
 }
 
 #[tokio::test]
-async fn person_health_endpoint_returns_single_person_health_against_postgres() {
+async fn persona_health_endpoint_returns_single_persona_health_against_postgres() {
     let test_context = TestContext::new().await;
     let database_url = test_context.connection_string();
 
@@ -109,10 +109,10 @@ async fn person_health_endpoint_returns_single_person_health_against_postgres() 
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
     let suffix = unique_suffix();
-    let person = PersonProjectionStore::new(pool.clone())
-        .upsert_email_person(&format!("health-{suffix}@example.com"))
+    let person = PersonaProjectionStore::new(pool.clone())
+        .upsert_email_persona(&format!("health-{suffix}@example.com"))
         .await
-        .expect("seed person");
+        .expect("seed persona");
     seed_person_health(&pool, &person.person_id).await;
 
     let app = build_router_with_database(
@@ -122,7 +122,7 @@ async fn person_health_endpoint_returns_single_person_health_against_postgres() 
 
     let response = app
         .oneshot(get_request_with_token_and_actor(
-            &format!("/api/v1/persons/{}/health", person.person_id),
+            &format!("/api/v1/personas/{}/health", person.person_id),
             LOCAL_API_TOKEN,
             "hermes-frontend",
         ))
@@ -131,7 +131,8 @@ async fn person_health_endpoint_returns_single_person_health_against_postgres() 
 
     assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
-    assert_eq!(body["person_id"], json!(person.person_id));
+    assert_eq!(body["persona_id"], json!(person.person_id));
+    assert!(body.get("person_id").is_none());
     assert_eq!(body["health_status"], json!("at_risk"));
     assert_eq!(body["communication_gap_days"], json!(42));
     assert!(body.get("items").is_none());
@@ -173,7 +174,7 @@ async fn json_body(response: axum::response::Response) -> Value {
 
 async fn seed_person_health(pool: &PgPool, person_id: &str) {
     sqlx::query(
-        "UPDATE persons SET health_status = 'at_risk', communication_gap_days = 42, watchlist = true WHERE person_id = $1",
+        "UPDATE personas SET health_status = 'at_risk', communication_gap_days = 42, watchlist = true WHERE person_id = $1",
     )
     .bind(person_id)
     .execute(pool)

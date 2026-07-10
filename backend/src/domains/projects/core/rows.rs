@@ -6,7 +6,7 @@ use crate::domains::projects::link_reviews::ProjectLinkReviewState;
 use super::errors::ProjectStoreError;
 use super::models::{
     Project, ProjectDocumentSummary, ProjectMatchedDocument, ProjectMatchedMessage,
-    ProjectMessageSummary, ProjectPersonSummary, ProjectTimelineItem,
+    ProjectMessageSummary, ProjectPersonaSummary, ProjectTimelineItem,
 };
 
 pub(super) fn row_to_project(row: PgRow) -> Result<Project, ProjectStoreError> {
@@ -48,8 +48,10 @@ pub(super) fn row_to_project_document(
     })
 }
 
-pub(super) fn row_to_project_person(row: PgRow) -> Result<ProjectPersonSummary, ProjectStoreError> {
-    Ok(ProjectPersonSummary {
+pub(super) fn row_to_project_persona(
+    row: PgRow,
+) -> Result<ProjectPersonaSummary, ProjectStoreError> {
+    Ok(ProjectPersonaSummary {
         display_name: row.try_get("display_name")?,
         email_address: row.try_get("email_address")?,
         interaction_count: row.try_get("interaction_count")?,

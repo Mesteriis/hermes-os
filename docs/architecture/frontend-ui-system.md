@@ -94,7 +94,7 @@ Kbd
 ConversationItem
 RadarItemCard
 TaskCandidateRow
-PersonIdentityBlock
+PersonaIdentityBlock
 ```
 
 Он может использовать `shared/ui`, но не может импортировать Reka primitives напрямую.

@@ -17,7 +17,7 @@ pub(super) use crate::app::handlers::graph::*;
 pub(super) use crate::app::handlers::maintenance::*;
 pub(super) use crate::app::handlers::obligations::*;
 pub(super) use crate::app::handlers::organizations::*;
-pub(super) use crate::app::handlers::persons::*;
+pub(super) use crate::app::handlers::personas::*;
 pub(super) use crate::app::handlers::projects::*;
 pub(super) use crate::app::handlers::relationships::*;
 pub(super) use crate::app::handlers::review::*;

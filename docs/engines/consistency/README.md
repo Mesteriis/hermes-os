@@ -107,7 +107,7 @@ into the contradiction detector.
 `ContradictionObservationStore::refresh_deterministic_observations` now adds the
 first backend refresh paths from projected Communication messages, imported
 Documents, meeting notes and call transcripts to Polygraph: active
-`person_facts` are treated as accepted Memory claims, matched through the
+`persona_facts` are treated as accepted Memory claims, matched through the
 compatibility `persons.email_address` field, active Telegram/WhatsApp
 `person_identities`, `event_participants.person_id` or active Telegram call
 identity, and compared with structured claims extracted from projected email

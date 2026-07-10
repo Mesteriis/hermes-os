@@ -122,6 +122,8 @@ pub struct Project {
 pub struct ProjectStats {
     pub message_count: i64,
     pub document_count: i64,
+    pub persona_count: i64,
+    #[deprecated(note = "Use persona_count; kept for compatibility with existing clients.")]
     pub people_count: i64,
     pub graph_connection_count: i64,
     pub latest_activity_at: Option<DateTime<Utc>>,
@@ -140,7 +142,9 @@ pub struct ProjectDetail {
     pub stats: ProjectStats,
     pub graph_node_id: String,
     pub timeline: Vec<ProjectTimelineItem>,
-    pub key_people: Vec<ProjectPersonSummary>,
+    pub key_personas: Vec<ProjectPersonaSummary>,
+    #[deprecated(note = "Use key_personas; kept for compatibility with existing clients.")]
+    pub key_people: Vec<ProjectPersonaSummary>,
     pub recent_messages: Vec<ProjectMessageSummary>,
     pub documents: Vec<ProjectDocumentSummary>,
 }
@@ -155,12 +159,15 @@ pub struct ProjectTimelineItem {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct ProjectPersonSummary {
+pub struct ProjectPersonaSummary {
     pub display_name: String,
     pub email_address: String,
     pub interaction_count: i64,
     pub last_interaction_at: Option<DateTime<Utc>>,
 }
+
+#[deprecated(note = "Use ProjectPersonaSummary.")]
+pub type ProjectPersonSummary = ProjectPersonaSummary;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ProjectMessageSummary {

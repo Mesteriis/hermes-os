@@ -1,5 +1,5 @@
 use super::super::types::ApiError;
-use crate::application::OrganizationContactLinkApplicationError;
+use crate::application::OrganizationPersonaLinkApplicationError;
 use crate::domains::organizations::api::OrganizationError;
 use crate::domains::organizations::service::OrganizationCommandServiceError;
 
@@ -88,11 +88,11 @@ impl From<OrganizationCommandServiceError> for ApiError {
     }
 }
 
-impl From<OrganizationContactLinkApplicationError> for ApiError {
-    fn from(error: OrganizationContactLinkApplicationError) -> Self {
+impl From<OrganizationPersonaLinkApplicationError> for ApiError {
+    fn from(error: OrganizationPersonaLinkApplicationError) -> Self {
         match error {
-            OrganizationContactLinkApplicationError::Organization(source) => Self::from(source),
-            OrganizationContactLinkApplicationError::Relationship(source) => Self::from(source),
+            OrganizationPersonaLinkApplicationError::Organization(source) => Self::from(source),
+            OrganizationPersonaLinkApplicationError::Relationship(source) => Self::from(source),
         }
     }
 }

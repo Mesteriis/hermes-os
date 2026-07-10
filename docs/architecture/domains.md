@@ -105,7 +105,7 @@ Direct ownership transfer is not allowed. For example:
 Current backend modules observed during this audit:
 
 - domains: `calendar`, `communications`, `decisions`, `documents`, `graph`,
-  `obligations`, `organizations`, `persons`, `projects`, `relationships`,
+  `obligations`, `organizations`, `personas`, `projects`, `relationships`,
   `review`, `settings`, `signal_hub`, `tasks`;
 - engines: `automation`, `consistency`, `context_packs`, `enrichment`,
   `identity_resolution`, `memory`, `obligation`, `relationships`, `risk`,

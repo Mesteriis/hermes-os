@@ -116,7 +116,7 @@ relationships compactly when a Persona is selected. It does not yet provide
 cross-domain workflow placement or timeline projection. Manual/API
 `person_roles` now materialize source-backed `has_role` Relationships from
 Persona to role Knowledge anchors, and deletion demotes the same Relationship
-to `user_rejected`. Manual/API and email-sync `organization_contact_links` now
+to `user_rejected`. Manual/API and email-sync `organization_persona_links` now
 have a compatibility adapter that materializes source-backed `member_of`
 Relationships from Persona to Organization. Manual `task_relations` now have a
 compatibility adapter that materializes source-backed Relationships from Task to

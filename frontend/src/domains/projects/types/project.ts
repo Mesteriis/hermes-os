@@ -17,6 +17,8 @@ export interface ProjectRecord {
 export interface ProjectStats {
   message_count: number
   document_count: number
+  persona_count: number
+  /** @deprecated Use persona_count. */
   people_count: number
   graph_connection_count: number
   latest_activity_at: string | null
@@ -36,12 +38,15 @@ export interface ProjectTimelineItem {
   occurred_at: string
 }
 
-export interface ProjectPersonSummary {
+export interface ProjectPersonaSummary {
   display_name: string
   email_address: string
   interaction_count: number
   last_interaction_at: string | null
 }
+
+/** @deprecated Use ProjectPersonaSummary. */
+export type ProjectPersonSummary = ProjectPersonaSummary
 
 export interface ProjectMessageSummary {
   message_id: string
@@ -62,7 +67,9 @@ export interface ProjectDetail {
   stats: ProjectStats
   graph_node_id: string
   timeline: ProjectTimelineItem[]
-  key_people: ProjectPersonSummary[]
+  key_personas: ProjectPersonaSummary[]
+  /** @deprecated Use key_personas. */
+  key_people: ProjectPersonaSummary[]
   recent_messages: ProjectMessageSummary[]
   documents: ProjectDocumentSummary[]
 }

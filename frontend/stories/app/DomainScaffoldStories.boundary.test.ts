@@ -54,11 +54,6 @@ const domainScaffoldStories: readonly DomainScaffoldStoryExpectation[] = [
     modelKey: 'organizations'
   },
   {
-    fileName: 'Persons.stories.ts',
-    storyTitle: 'Hermes App/Persons/Scaffold',
-    modelKey: 'persons'
-  },
-  {
     fileName: 'Projects.stories.ts',
     storyTitle: 'Hermes App/Projects/Scaffold',
     modelKey: 'projects'
@@ -110,5 +105,24 @@ describe('domain scaffold Storybook coverage', () => {
     expect(storySources).not.toContain('/Surface')
     expect(helperSource).not.toContain('surfacePath')
     expect(helperSource).not.toContain('contract')
+  })
+
+  it('keeps Personas on the rebuilt workspace story instead of the scaffold placeholder', () => {
+    const source = readFileSync(new URL('./Personas.stories.ts', import.meta.url), 'utf8')
+    const componentSource = readFileSync(new URL('./PersonasComponents.stories.ts', import.meta.url), 'utf8')
+
+    expect(source).toContain("title: 'Hermes App/Personas/Workspace'")
+    expect(source).toContain('PersonasWorkspaceComponent')
+    expect(source).not.toContain('createDomainScaffoldStory')
+    expect(source).not.toContain('domainScaffoldModels.persons')
+    expect(componentSource).toContain("title: 'Hermes App/Personas/Components'")
+    expect(componentSource).toContain('PersonaDirectoryPanel')
+    expect(componentSource).toContain('PersonaOverviewPanel')
+    expect(componentSource).not.toContain('PersonDirectoryPanel')
+    expect(componentSource).not.toContain('PersonOverviewPanel')
+    expect(componentSource).toContain('UnavailableSkeletonPanel')
+    expect(componentSource).toContain('directoryFilter')
+    expect(componentSource).toContain('toggleAddressBook')
+    expect(componentSource).toContain('is_address_book')
   })
 })

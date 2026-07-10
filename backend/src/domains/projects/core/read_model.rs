@@ -1,7 +1,7 @@
 mod documents;
 mod keywords;
 mod messages;
-mod people;
+mod personas;
 mod projects;
 mod reviewed_targets;
 mod stats;

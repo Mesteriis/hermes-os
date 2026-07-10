@@ -26,7 +26,7 @@ Project graph edges remain rebuildable projection state. During graph projection
 - rejected links are omitted;
 - confirmed links remain active even when current keyword rules do not match.
 
-People and email-address project links remain derived from active project-message links. Direct people review is out of scope for this slice.
+Persona and email-address project links remain derived from active project-message links. Direct Persona review is out of scope for this slice.
 
 Protected local review APIs must require the temporary local bearer token and `X-Hermes-Actor-Id`.
 
@@ -34,7 +34,7 @@ Protected local review APIs must require the temporary local bearer token and `X
 
 - Project create/edit UI.
 - Keyword management UI.
-- Manual people/contact merge.
+- Manual Persona merge.
 - Direct review of project-person edges.
 - AI project inference.
 - OCR or entity extraction.

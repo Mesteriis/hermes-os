@@ -12,7 +12,7 @@ use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
 use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};
 use hermes_hub_backend::domains::projects::link_reviews::{
     ProjectLinkReviewCommand, ProjectLinkReviewState, ProjectLinkReviewStore, ProjectLinkTargetKind,
@@ -20,7 +20,7 @@ use hermes_hub_backend::domains::projects::link_reviews::{
 use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
-async fn project_detail_links_keyword_messages_documents_and_people_against_postgres() {
+async fn project_detail_links_keyword_messages_documents_and_personas_against_postgres() {
     let Some(context) = live_project_context("project detail").await else {
         return;
     };
@@ -44,7 +44,7 @@ async fn project_detail_links_keyword_messages_documents_and_people_against_post
         .expect("upsert project");
     context
         .person_store
-        .upsert_email_person(&format!("owner-{suffix}@example.com"))
+        .upsert_email_persona(&format!("owner-{suffix}@example.com"))
         .await
         .expect("upsert owner person");
 
@@ -89,7 +89,11 @@ async fn project_detail_links_keyword_messages_documents_and_people_against_post
     assert_eq!(detail.project.progress_percent, 42);
     assert_eq!(detail.stats.message_count, 1);
     assert_eq!(detail.stats.document_count, 1);
-    assert_eq!(detail.stats.people_count, 2);
+    assert_eq!(detail.stats.persona_count, 2);
+    #[allow(deprecated)]
+    {
+        assert_eq!(detail.stats.people_count, 2);
+    }
     assert_eq!(detail.recent_messages.len(), 1);
     assert_eq!(
         detail.recent_messages[0].subject,
@@ -103,10 +107,14 @@ async fn project_detail_links_keyword_messages_documents_and_people_against_post
     assert_eq!(detail.timeline.len(), 2);
     assert!(
         detail
-            .key_people
+            .key_personas
             .iter()
             .any(|person| person.email_address == format!("owner-{suffix}@example.com"))
     );
+    #[allow(deprecated)]
+    {
+        assert_eq!(detail.key_people, detail.key_personas);
+    }
 
     cleanup_project(&context.pool, &project_id).await;
 }
@@ -244,7 +252,7 @@ async fn project_detail_includes_confirmed_non_keyword_message_against_postgres(
 
 struct LiveProjectContext {
     pool: PgPool,
-    person_store: PersonProjectionStore,
+    person_store: PersonaProjectionStore,
     communication_store: CommunicationIngestionStore,
     document_store: DocumentImportStore,
     message_store: MessageProjectionStore,
@@ -263,7 +271,7 @@ async fn live_project_context(_test_name: &str) -> Option<LiveProjectContext> {
 
     Some(LiveProjectContext {
         pool: pool.clone(),
-        person_store: PersonProjectionStore::new(pool.clone()),
+        person_store: PersonaProjectionStore::new(pool.clone()),
         communication_store: CommunicationIngestionStore::new(pool.clone()),
         document_store: DocumentImportStore::new(pool.clone()),
         message_store: MessageProjectionStore::new(pool.clone()),

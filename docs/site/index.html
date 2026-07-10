@@ -91,7 +91,7 @@
 					<p class="eyebrow">Durable entities</p>
 					<h2 id="domains-title">Domains</h2>
 					<div class="tile-grid">
-						<a href="https://github.com/Mesteriis/hermes-os/blob/main/docs/domains/persons/README.md">Personas</a>
+						<a href="https://github.com/Mesteriis/hermes-os/blob/main/docs/domains/personas/README.md">Personas</a>
 						<a href="https://github.com/Mesteriis/hermes-os/blob/main/docs/domains/communications/README.md">Communications</a>
 						<a href="https://github.com/Mesteriis/hermes-os/blob/main/docs/domains/organizations/spec.md">Organizations</a>
 						<a href="https://github.com/Mesteriis/hermes-os/blob/main/docs/domains/projects/README.md">Projects</a>
@@ -139,8 +139,9 @@
 						<p class="eyebrow">Current implementation reality</p>
 						<h2 id="implementation-title">Compatibility Surface</h2>
 						<ul class="plain-list">
-							<li>Active identity route: <code>/api/v1/persons/{person_id}/identity</code></li>
-							<li>Historical <code>contacts</code> projection was renamed to <code>persons</code>.</li>
+							<li>Active identity route: <code>/api/v1/personas/{persona_id}/identity</code>.</li>
+							<li>Legacy <code>/api/v1/persons/*</code> routes remain compatibility-only.</li>
+							<li>Historical <code>contacts</code>/<code>persons</code> storage is now the <code>personas</code> domain.</li>
 							<li>Protected local APIs use <code>X-Hermes-Secret</code>.</li>
 							<li>New credentials use host vault storage.</li>
 							<li>Email channel code remains under current mail modules.</li>

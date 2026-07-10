@@ -98,7 +98,7 @@ const { t } = useI18n()
 				</template>
 				<DropdownMenuItem icon="tabler:checkbox">{{ t('Create task') }}</DropdownMenuItem>
 				<DropdownMenuItem icon="tabler:calendar-plus">{{ t('Create event') }}</DropdownMenuItem>
-				<DropdownMenuItem icon="tabler:user-plus">{{ t('Create contact') }}</DropdownMenuItem>
+				<DropdownMenuItem icon="tabler:user-plus">{{ t('Create persona') }}</DropdownMenuItem>
 				<DropdownMenuItem icon="tabler:file-plus">{{ t('Create document') }}</DropdownMenuItem>
 			</DropdownMenu>
 		</ButtonGroup>

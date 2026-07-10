@@ -212,7 +212,7 @@ The backend currently has domain modules for:
 - graph;
 - obligations;
 - organizations;
-- persons;
+- personas;
 - projects;
 - relationships;
 - review;
@@ -259,7 +259,7 @@ Current migrations include storage for:
 - first-class obligations, obligation evidence and task links;
 - projects and project link reviews;
 - task candidates and tasks;
-- persons compatibility tables and person memory tables;
+- personas storage, persona memory tables, and physical `person_id` compatibility columns;
 - organizations and organization memory/workflow tables;
 - calendar accounts, events, meetings, deadlines, focus blocks and rules;
 - Telegram accounts, chats, messages, policies, calls and transcripts;
@@ -277,7 +277,7 @@ Implemented route groups include:
 - `/api/v1/graph/*`;
 - `/api/v1/projects/*`;
 - `/api/v1/documents/*` and `/api/v1/document-processing/*`;
-- `/api/v1/persons/*`;
+- `/api/v1/personas/*`;
 - `/api/v1/calendar/*`;
 - `/api/v1/organizations/*`;
 - `/api/v1/tasks/*` and `/api/v1/task-candidates/*`;
@@ -305,7 +305,7 @@ The frontend currently has page surfaces for:
 - Knowledge;
 - Notes;
 - Organizations;
-- Persons;
+- Personas;
 - Projects;
 - Settings;
 - Tasks;
@@ -313,9 +313,9 @@ The frontend currently has page surfaces for:
 - Timeline;
 - WhatsApp.
 
-Several surfaces still use compatibility names such as Persons, Notes, health or
-watchtower. Those names must be interpreted through the foundation glossary and
-future product roadmap.
+Some legacy documents still use compatibility names such as `person_id`, Notes,
+health or watchtower. Those names must be interpreted through the foundation
+glossary and future product roadmap.
 
 ## Target Gaps And Refactoring Direction
 
@@ -324,10 +324,10 @@ target product model.
 
 | Gap | Current evidence | Direction |
 |---|---|---|
-| Persona-native model incomplete | `persons`, `person_id`, `person_roles`, `person_personas`, `person_promises` and `/api/v1/persons/*` still exist. Owner Persona, PersonaType, Persona-native read/write compatibility bridge per ADR-0090, role-to-Relationship, interaction-context-to-Preference, enrichment trust-to-Relationship, notes-to-memory-card, favorite-to-preference, watchlist-to-preference, risk-to-health-cache, Dossier section adapters and reviewable Dossier snapshots have compatibility baselines. | Keep compatibility short-term. Plan physical Persona-native schema migration under a dedicated migration ADR. |
-| Owner Persona partially implemented | Migration `0059` adds `is_self` uniqueness and `person_type` constraints on the compatibility `persons` table, and GET/PUT `/api/v1/persons/owner` exposes the compatibility Owner Persona route. Agents and UI still need to consistently route owner-scoped context through that Owner Persona. | Wire agent attribution and context assembly to the Owner Persona before expanding autonomous actions. |
-| First-class Relationships partially implemented | Migrations `0060`, `0061` and `0068` plus `backend/src/domains/relationships/` add first-class Relationship persistence with evidence, trust score, strength score, confidence, review state, graph projection for all current Relationship entity kinds, and guarded entity/global review routes. Manual/API person roles now materialize source-backed `has_role` Relationships from Persona to role Knowledge anchors and demote those Relationships to `user_rejected` when the role is removed. Manual/API and email-sync organization contact links now materialize source-backed `member_of` Relationships from Persona to Organization. Manual task relations now materialize source-backed Relationships from Task to known target entity kinds. Explicit project link reviews now materialize source-backed Relationships from Project to reviewed Communication or Document and demote the candidate back to `suggested` when explicit review is reset. The Personas workspace and cross-domain Review workspace include suggested Relationship review, and the Review service owns confirm/reject routing for Relationship review items. Downstream engine projections remain incomplete. | Migrate remaining relationship-shaped read-model semantics behind compatibility boundaries and keep review routing in the Review workspace. |
-| Polygraph engine partially implemented | ADR-0087, migration `0062`, `backend/src/engines/consistency.rs`, `backend/src/engines/consistency/`, `backend/src/app/handlers/consistency.rs` and `backend/src/application/consistency_review.rs` add structured direct-contradiction detection, deterministic structured and limited natural-language `location` / `status` claim extraction from Communication/Document/Event evidence text, reviewable `ContradictionObservation` persistence and guarded backend review routes. `ContradictionObservationStore::refresh_deterministic_observations` now compares active `person_facts` Memory claims with claims from projected email message subject/body evidence matched by Persona email sender, projected Telegram/WhatsApp message evidence matched through active channel identities and provider `sender_id`, imported Document title/extracted-text evidence that references the Persona email, meeting-note content linked through event participants and successful call transcript text linked through active Telegram identity. The Knowledge workspace and cross-domain Review workspace include Polygraph review, and the Review service owns confirm/reject routing for contradiction observations. Broad natural-language extraction and broader provider evidence remain incomplete. | Expand ingestion wiring to broader provider evidence, then add reviewed-outcome semantics without automatic memory overwrite. |
+| Persona-native model incomplete | Persona storage/module naming is now native, and `/api/v1/personas/*` is the active API, while `person_id`, `person_roles`, `person_promises` and legacy event aliases remain compatibility surfaces. Owner Persona, PersonaType, Persona-native read/write compatibility bridge per ADR-0090, role-to-Relationship, interaction-context-to-Preference, enrichment trust-to-Relationship, notes-to-memory-card, favorite-to-preference, watchlist-to-preference, risk-to-health-cache, Dossier section adapters and reviewable Dossier snapshots have baselines. | Keep compatibility explicit and retire it only with API/event/schema migration evidence and replay safety. |
+| Owner Persona partially implemented | Migration `0059` adds `is_self` uniqueness and `person_type` constraints on Persona storage, and GET/PUT `/api/v1/personas/owner` exposes the Owner Persona route. Agents and UI still need to consistently route owner-scoped context through that Owner Persona. | Wire agent attribution and context assembly to the Owner Persona before expanding autonomous actions. |
+| First-class Relationships partially implemented | Migrations `0060`, `0061` and `0068` plus `backend/src/domains/relationships/` add first-class Relationship persistence with evidence, trust score, strength score, confidence, review state, graph projection for all current Relationship entity kinds, and guarded entity/global review routes. Manual/API Persona roles now materialize source-backed `has_role` Relationships from Persona to role Knowledge anchors and demote those Relationships to `user_rejected` when the role is removed. Manual/API and email-sync Organization-Persona links now materialize source-backed `member_of` Relationships from Persona to Organization. Manual task relations now materialize source-backed Relationships from Task to known target entity kinds. Explicit project link reviews now materialize source-backed Relationships from Project to reviewed Communication or Document and demote the candidate back to `suggested` when explicit review is reset. The Personas workspace and cross-domain Review workspace include suggested Relationship review, and the Review service owns confirm/reject routing for Relationship review items. Downstream engine projections remain incomplete. | Migrate remaining relationship-shaped read-model semantics behind compatibility boundaries and keep review routing in the Review workspace. |
+| Polygraph engine partially implemented | ADR-0087, migration `0062`, `backend/src/engines/consistency.rs`, `backend/src/engines/consistency/`, `backend/src/app/handlers/consistency.rs` and `backend/src/application/consistency_review.rs` add structured direct-contradiction detection, deterministic structured and limited natural-language `location` / `status` claim extraction from Communication/Document/Event evidence text, reviewable `ContradictionObservation` persistence and guarded backend review routes. `ContradictionObservationStore::refresh_deterministic_observations` now compares active `persona_facts` Memory claims with claims from projected email message subject/body evidence matched by Persona email sender, projected Telegram/WhatsApp message evidence matched through active channel identities and provider `sender_id`, imported Document title/extracted-text evidence that references the Persona email, meeting-note content linked through event participants and successful call transcript text linked through active Telegram identity. The Knowledge workspace and cross-domain Review workspace include Polygraph review, and the Review service owns confirm/reject routing for contradiction observations. Broad natural-language extraction and broader provider evidence remain incomplete. | Expand ingestion wiring to broader provider evidence, then add reviewed-outcome semantics without automatic memory overwrite. |
 | Communications still mail-heavy | Many modules are email-specific under `domains/communications`. | Keep provider-specific modules but document Communications as the product domain and email as one channel. |
 | Telegram production capability matrix is not implemented end-to-end | Current Telegram foundation covers account setup, runtime status/start, chat/history sync, manual send, media download facade, policy dry-runs, call metadata and fixture transcripts. ADR-0091 and `docs/integrations/telegram/` define the broader production target for accounts, sessions, proxies, chats, messages, tombstones, history, attachments, calls, offline, export and desktop UX. | Deliver Telegram in gated slices. Do not expose provider-write, destructive, call, export, proxy or session import/export features as available until capability state, storage, audit, UI and validation exist. |
 | Engine boundaries are partial | Search, automation, Polygraph and Obligation have baseline engine modules. Memory, Timeline, Trust, Risk and Enrichment remain partly embedded in domain modules. | Continue extracting shared engine behavior only behind dedicated plans and review workflows. |

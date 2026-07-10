@@ -10,7 +10,7 @@ pub(crate) mod graph;
 pub(crate) mod maintenance;
 pub(crate) mod obligations;
 pub(crate) mod organizations;
-pub(crate) mod persons;
+pub(crate) mod personas;
 pub(crate) mod projects;
 pub(crate) mod relationships;
 pub(crate) mod review;

@@ -32,8 +32,12 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_org_departments).post(post_org_department),
         )
         .route(
-            "/api/v1/organizations/{org_id}/contacts",
-            get(get_org_contacts).post(post_org_contact_link),
+            "/api/v1/organizations/{org_id}/persona-links",
+            get(get_org_persona_links).post(post_org_persona_link),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/person-links",
+            get(get_org_persona_links).post(post_org_persona_link),
         )
         .route(
             "/api/v1/organizations/{org_id}/related",

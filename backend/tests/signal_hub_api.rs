@@ -1169,36 +1169,36 @@ async fn signal_hub_connect_api_lists_sources_and_updates_runtime_state() {
         "communication_messages"
     );
 
-    let request_person_projection_replay_response = router
+    let request_persona_projection_replay_response = router
         .clone()
         .oneshot(post_json(
             "/hermes.signal_hub.v1.SignalHubService/RequestReplay",
             serde_json::json!({
-                "eventPattern": "person.role.assigned",
+                "eventPattern": "persona.role.assigned",
                 "fromPosition": 50,
                 "toPosition": 50,
-                "targetProjection": "person_derived_evidence",
+                "targetProjection": "persona_derived_evidence",
                 "metadataJson": "{\"requested_from\":\"connect\"}"
             }),
         ))
         .await
-        .expect("connect request person projection replay request");
+        .expect("connect request persona projection replay request");
     assert_eq!(
-        request_person_projection_replay_response.status(),
+        request_persona_projection_replay_response.status(),
         StatusCode::OK
     );
-    let request_person_projection_replay_body = to_bytes(
-        request_person_projection_replay_response.into_body(),
+    let request_persona_projection_replay_body = to_bytes(
+        request_persona_projection_replay_response.into_body(),
         usize::MAX,
     )
     .await
-    .expect("connect request person projection replay body");
-    let request_person_projection_replay_json: Value =
-        serde_json::from_slice(&request_person_projection_replay_body)
-            .expect("connect request person projection replay json");
+    .expect("connect request persona projection replay body");
+    let request_persona_projection_replay_json: Value =
+        serde_json::from_slice(&request_persona_projection_replay_body)
+            .expect("connect request persona projection replay json");
     assert_eq!(
-        request_person_projection_replay_json["item"]["targetProjection"],
-        "person_derived_evidence"
+        request_persona_projection_replay_json["item"]["targetProjection"],
+        "persona_derived_evidence"
     );
 
     let run_health_response = router

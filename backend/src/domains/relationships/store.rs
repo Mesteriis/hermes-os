@@ -450,7 +450,7 @@ async fn materialize_relationship_graph_with_evidence_in_transaction(
 
 fn graph_node_kind(entity_kind: RelationshipEntityKind) -> GraphNodeKind {
     match entity_kind {
-        RelationshipEntityKind::Persona => GraphNodeKind::Person,
+        RelationshipEntityKind::Persona => GraphNodeKind::Persona,
         RelationshipEntityKind::Organization => GraphNodeKind::Organization,
         RelationshipEntityKind::Project => GraphNodeKind::Project,
         RelationshipEntityKind::Communication => GraphNodeKind::Message,

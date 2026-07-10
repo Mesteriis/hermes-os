@@ -22,9 +22,16 @@ export async function fetchProviderAccounts(): Promise<ProviderAccountListRespon
   )
 }
 
+export interface ProviderAccountUpdate {
+  display_name?: string
+  address_book_sync_enabled?: boolean
+  address_book_sync_direction?: 'read_only' | 'bidirectional'
+  address_book_remote_write_enabled?: boolean
+}
+
 export async function updateProviderAccount(
   accountId: string,
-  update: { display_name?: string }
+  update: ProviderAccountUpdate
 ): Promise<ProviderAccount> {
   return ApiClient.instance.patch<ProviderAccount>(
     `/api/v1/settings/accounts/${encodeURIComponent(accountId)}`,
@@ -111,5 +118,25 @@ export async function importMailAccountSettings(
     '/api/v1/integrations/mail/accounts/import',
     request,
     'Mail account import failed'
+  )
+}
+
+export interface AddressBookSyncRunResponse {
+  status: string
+  provider_entries_seen: number
+  provider_entries_upserted: number
+  provider_entries_skipped: number
+  local_entries_seen: number
+  local_entries_pushed: number
+  local_entries_blocked: number
+}
+
+export async function runAddressBookSyncNow(
+  accountId: string
+): Promise<AddressBookSyncRunResponse> {
+  return ApiClient.instance.post<AddressBookSyncRunResponse>(
+    `/api/v1/integrations/mail/accounts/${encodeURIComponent(accountId)}/address-book-sync-now`,
+    {},
+    'Address book sync request failed'
   )
 }

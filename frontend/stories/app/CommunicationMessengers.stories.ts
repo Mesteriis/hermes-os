@@ -297,8 +297,8 @@ const messengerInspectorModel: MessengerInspectorModel = {
 		summary: 'Friday is the stronger meeting candidate, but Tuesday remains contradictory evidence.',
 		checks: [
 			{
-				id: 'known-contact',
-				label: 'Known contact',
+				id: 'known-persona',
+				label: 'Known persona',
 				description: 'Anna is linked to an existing person record.',
 				icon: 'tabler:user-check',
 				tone: 'success'
@@ -321,12 +321,12 @@ const messengerInspectorModel: MessengerInspectorModel = {
 	},
 	entityGroups: [
 		{
-			id: 'people',
-			title: 'People',
+			id: 'personas',
+			title: 'Personas',
 			items: [
 				{
 					id: 'anna',
-					entity: 'person',
+					entity: 'persona',
 					title: 'Anna Petrova',
 					description: 'Direct chat participant',
 					evidenceLabel: '3 fresh Telegram messages',

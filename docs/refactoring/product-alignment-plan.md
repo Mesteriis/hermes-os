@@ -27,7 +27,7 @@ Communication
 
 Current implementation already includes communication ingestion, mail workflows,
 Telegram and WhatsApp foundations, graph projection, documents, projects,
-persons compatibility, organizations, calendar, tasks, AI runtime, settings and
+Personas, organizations, calendar, tasks, AI runtime, settings and
 vault support.
 
 The gaps below are about target-model alignment, not lack of useful
@@ -38,13 +38,13 @@ implementation.
 | Gap | Current evidence | Target direction | Plan type |
 |---|---|---|---|
 | Communications still read as email-heavy in code and docs. | `backend/src/domains/communications`, `docs/integrations/mail/`, many `/api/v1/communications/*` routes backed by email modules. | Communications is the domain; email is one channel. | Documentation first, implementation naming later. |
-| Persona model is compatibility-based. | `persons`, `person_id`, `person_roles`, `person_personas`, `person_promises`, `/api/v1/persons/*`. Owner Persona, PersonaType, role-to-Relationship and interaction-context-to-Preference adapters have baselines. | Persona, Owner Persona, PersonaType and first-class Relationships. | ADR and migration plan before schema/API rename. |
-| Relationships are fragmented. | Graph edges, organization contact links, task relations, project link reviews, relationship events and person roles coexist. First-class Relationship persistence, graph projection for all current Relationship entity kinds, guarded entity/global review routes, manual/API person role adapters, manual/API and email-sync organization contact link adapters, manual task relation adapters, project link review adapters and Personas workspace review have a baseline. | Relationship is first-class with type, confidence, provenance, trust and validity. | Continue remaining relationship-shaped compatibility adapter work and cross-domain review workflow placement. |
-| Polygraph engine is partially implemented. | Migration `0062`, `backend/src/engines/consistency.rs`, `backend/src/engines/consistency/`, `backend/src/app/handlers/consistency.rs` and `backend/src/application/consistency_review.rs` provide structured direct-contradiction detection, deterministic structured and limited natural-language `location` / `status` claim extraction from Communication/Document/Event evidence text, reviewable observations, guarded backend review routes, Knowledge workspace review UI and projected email/Telegram/WhatsApp message/imported Document/meeting-note/call-transcript refresh against active `person_facts`. Broad natural-language extraction and broader provider evidence are incomplete. | Cross-domain engine for contradiction observations and review items. | Expand ingestion refresh to broader provider evidence, then add reviewed-outcome semantics. |
+| Persona model still has compatibility aliases. | Persona storage/module/API naming is native, while physical `person_id` columns, compatibility tables such as `person_roles` / `person_promises`, and historical event/request aliases remain. Legacy `/api/v1/persons/*` routes are retired; `/api/v1/personas/*` is the active Persona API. Owner Persona, PersonaType, Persona-native profile routes, role-to-Relationship and interaction-context-to-Preference adapters have baselines. | Persona, Owner Persona, PersonaType and first-class Relationships. | Retire remaining storage/event compatibility aliases only with explicit schema/event migration evidence and replay safety. |
+| Relationships are fragmented. | Graph edges, Organization-Persona links, task relations, project link reviews, relationship events and Persona roles coexist. First-class Relationship persistence, graph projection for all current Relationship entity kinds, guarded entity/global review routes, manual/API Persona role adapters, manual/API and email-sync Organization-Persona link adapters, manual task relation adapters, project link review adapters and Personas workspace review have a baseline. | Relationship is first-class with type, confidence, provenance, trust and validity. | Continue remaining relationship-shaped compatibility adapter work and cross-domain review workflow placement. |
+| Polygraph engine is partially implemented. | Migration `0062`, `backend/src/engines/consistency.rs`, `backend/src/engines/consistency/`, `backend/src/app/handlers/consistency.rs` and `backend/src/application/consistency_review.rs` provide structured direct-contradiction detection, deterministic structured and limited natural-language `location` / `status` claim extraction from Communication/Document/Event evidence text, reviewable observations, guarded backend review routes, Knowledge workspace review UI and projected email/Telegram/WhatsApp message/imported Document/meeting-note/call-transcript refresh against active `persona_facts`. Broad natural-language extraction and broader provider evidence are incomplete. | Cross-domain engine for contradiction observations and review items. | Expand ingestion refresh to broader provider evidence, then add reviewed-outcome semantics. |
 | Decisions and Obligations are partial. | Migrations `0063`, `0064`, `0065`, `0066` and `0067` plus `backend/src/domains/obligations/` and `backend/src/domains/decisions/` provide source-backed persistence, accepted graph projection and task-candidate classification for obligation-derived candidates. `backend/src/engines/obligation/` provides a first obligation candidate detector, `backend/src/domains/decisions/extraction/` provides a first explicit-decision candidate detector, message and document task candidate refresh use Obligation detection for explicit commitments/requests, confirmed `obligation_task` candidates materialize source-backed Obligations linked to Tasks, reset/reject review on those candidates synchronizes durable Obligation state, email sync and Telegram/WhatsApp fixture ingestion refresh reviewable Decision and obligation-derived task candidates for projected Communications, compatibility `person_promises` materialize source-backed `user_confirmed` Obligations, explicit message/imported-document Decision candidates persist as source-backed `suggested` Decisions, project link reviews materialize source-backed `user_confirmed` Decisions, meeting outcomes create reviewable Decisions or Obligations for `decision`, `promise`, `task` and `follow_up` outcomes, accepted Obligations/Decisions have guarded backend entity/global list/review routes, and the Tasks workspace has a global suggested review panel. Candidate-to-domain routing still needs broader workflow coverage. | Durable Decisions and Obligations with evidence and review. | Expand ingestion wiring, review workflows and compatibility adapters. |
 | Engine ownership is partly embedded in domains. | Health/watchtower, intelligence, enrichment and timeline-like modules appear in domain folders. | Engines are reusable mechanisms; domains own durable truth. | Engine spec wave before refactoring. |
 | Notes are ambiguous. | Frontend has Notes page; foundation treats Notes as document-like artifacts. | Notes remain lightweight document artifacts unless a future ADR promotes them. | Documentation clarification; no implementation change yet. |
-| UI vocabulary exposes compatibility names. | Frontend pages include Persons, Notes, Timeline and domain-specific health/watchtower concepts. | UI should surface Personal Memory System concepts without hiding compatibility state. | UI vocabulary plan after product docs. |
+| UI vocabulary still has compatibility pockets. | Frontend navigation now exposes Personas, while Notes, Timeline and domain-specific health/watchtower concepts still need vocabulary review. | UI should surface Personal Memory System concepts without hiding compatibility state. | UI vocabulary plan after product docs. |
 
 ## Refactoring And Delivery Plans To Create
 
@@ -63,14 +63,15 @@ Required scope:
 
 ### 2. Persona Migration Plan
 
-Goal: move from `persons` compatibility toward the Persona target model.
+Goal: finish the Persona-native model while retiring remaining `person_id`
+compatibility in explicit, replay-safe slices.
 
 Required scope:
 
 - Owner Persona semantics;
 - `PersonaType` values: `human`, `ai_agent`, `organization_proxy`, `system`;
 - target identity trace model;
-- `/persons` compatibility strategy;
+- retired `/api/v1/persons/*` guardrails;
 - route/schema compatibility for remaining Persona root cache columns;
 - migration safety and graph impact.
 
@@ -140,7 +141,7 @@ Goal: align desktop surfaces with the Personal Memory System model.
 
 Required scope:
 
-- Personas vs Persons labeling;
+- retired legacy `/api/v1/persons/*` API guardrails vs Persona UI labeling;
 - Notes as capture/document artifacts;
 - Timeline as engine view;
 - Health/watchtower as attention/risk views;

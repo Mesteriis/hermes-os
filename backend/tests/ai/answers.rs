@@ -16,9 +16,9 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
     let pool = database.pool().expect("configured pool").clone();
     configure_fake_ollama_setting(&pool, &ollama_base_url).await;
     let suffix = unique_suffix();
-    let person_store = PersonProjectionStore::new(pool.clone());
+    let person_store = PersonaProjectionStore::new(pool.clone());
     let owner = person_store
-        .upsert_email_person(&format!("ai-owner-{suffix}@example.com"))
+        .upsert_email_persona(&format!("ai-owner-{suffix}@example.com"))
         .await
         .expect("owner persona candidate");
     let owner = person_store

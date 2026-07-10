@@ -11,6 +11,7 @@ export type ProviderIconKind = 'mail' | 'telegram' | 'whatsapp' | 'calendar' | '
 export type StatusIconKind = 'idle' | 'active' | 'success' | 'warning' | 'danger' | 'offline' | 'syncing'
 
 export type EntityIconKind =
+	| 'persona'
 	| 'person'
 	| 'organization'
 	| 'project'

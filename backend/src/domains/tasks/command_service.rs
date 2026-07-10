@@ -179,11 +179,11 @@ impl TaskCommandService {
             .unwrap_or(false);
         let is_legal = task.area.as_deref() == Some("legal") || task.area.as_deref() == Some("tax");
         let is_tax = task.area.as_deref() == Some("tax");
-        let has_contact = task.linked_person_id.is_some();
+        let has_persona_link = task.linked_person_id.is_some();
         let has_org = task.linked_organization_id.is_some();
         let priority = TaskIntelligenceService::calculate_priority(
             task.due_at,
-            has_contact,
+            has_persona_link,
             has_org,
             task.project_id.is_some(),
             is_legal,
@@ -206,13 +206,13 @@ impl TaskCommandService {
             false,
             task.due_at.is_some(),
             true,
-            has_contact,
+            has_persona_link,
         );
         let missing_context = TaskIntelligenceService::detect_missing_context(
             task.description.is_some(),
             has_ctx,
             task.due_at.is_some(),
-            has_contact,
+            has_persona_link,
             task.project_id.is_some(),
         );
         let next_action = TaskIntelligenceService::suggest_next_action(

@@ -10,7 +10,7 @@ export type DomainScaffoldKey =
   | 'knowledge'
   | 'notes'
   | 'organizations'
-  | 'persons'
+  | 'personas'
   | 'projects'
   | 'review'
   | 'settings'
@@ -128,8 +128,8 @@ export const domainScaffoldModels = {
       }
     ]
   },
-  persons: {
-    title: 'Persons',
+  personas: {
+    title: 'Personas',
     subtitle: 'Люди, отношения, роли и memory context.',
     icon: 'tabler:user',
     actionLabel: 'Создать персону',
@@ -142,7 +142,7 @@ export const domainScaffoldModels = {
     records: [
       {
         title: 'Maya Chen',
-        summary: 'Security vendor contact, часто участвует в review.',
+        summary: 'Security vendor persona, часто участвует в review.',
         meta: 'today',
         icon: 'tabler:user-circle',
         selected: true
@@ -167,7 +167,7 @@ export const domainScaffoldModels = {
       chips: ['vendor', 'security', 'recent communication'],
       body: [
         'Карточка персоны должна объяснять отношение к владельцу: кто это, откуда известно, какие текущие контексты активны.',
-        'Raw contacts и AI extraction остаются кандидатами, пока Hermes не подтверждает durable person record через evidence.'
+        'Raw address book entries и AI extraction остаются кандидатами, пока Hermes не подтверждает durable Persona через evidence.'
       ]
     },
     inspectorTitle: 'Память о персоне',
@@ -176,7 +176,7 @@ export const domainScaffoldModels = {
       {
         title: 'Активные связи',
         items: [
-          { label: 'Northwind Security', value: 'Vendor contact in current security review.', icon: 'tabler:building' },
+          { label: 'Northwind Security', value: 'Vendor persona in current security review.', icon: 'tabler:building' },
           { label: 'Retention decision', value: 'Участвует как источник evidence.', icon: 'tabler:shield-check' }
         ]
       }
@@ -216,7 +216,7 @@ export const domainScaffoldModels = {
     ],
     preview: {
       title: 'Northwind Security',
-      meta: 'Organization memory with contacts, documents and decisions',
+      meta: 'Organization memory with personas, documents and decisions',
       icon: 'tabler:building-bank',
       chips: ['vendor', 'security review', 'open decision'],
       body: [
@@ -230,7 +230,7 @@ export const domainScaffoldModels = {
       {
         title: 'Связанные объекты',
         items: [
-          { label: 'Maya Chen', value: 'Primary communication contact.', icon: 'tabler:user' },
+          { label: 'Maya Chen', value: 'Primary communication persona.', icon: 'tabler:user' },
           { label: 'Security answers', value: 'Document evidence linked to current review.', icon: 'tabler:file-text' }
         ]
       }

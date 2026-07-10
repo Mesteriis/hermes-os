@@ -612,7 +612,7 @@ mod tests {
                         "message_id": "message:v1:first",
                         "title": "Potential task in review",
                         "body": "First evidence message body.",
-                        "person_id": "person:v1:first",
+                        "persona_id": "persona:first",
                         "person_name": "Alice",
                         "organization_id": "org:v1:first",
                         "organization_name": "Acme Labs",

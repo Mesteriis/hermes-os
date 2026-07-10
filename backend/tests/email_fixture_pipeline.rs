@@ -50,7 +50,7 @@ async fn fixture_email_pipeline_imports_projects_persons_and_graph_against_postg
 
     assert_eq!(report.imported_records, 1);
     assert_eq!(report.projected_messages, 1);
-    assert_eq!(report.upserted_persons, 2);
+    assert_eq!(report.upserted_personas, 2);
     assert!(!report.graph_summary.is_empty);
     assert!(report.total_graph_nodes >= 4);
     assert!(report.total_graph_edges >= 3);

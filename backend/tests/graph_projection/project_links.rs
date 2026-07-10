@@ -36,13 +36,16 @@ async fn graph_projection_links_projects_to_keyword_messages_documents_and_peopl
         .expect("upsert graph project");
     let owner = context
         .person_store
-        .upsert_email_person(&format!("graph-project-owner-{suffix}@example.com"))
+        .upsert_email_persona(&format!("graph-project-owner-{suffix}@example.com"))
         .await
         .expect("upsert graph project owner");
     let projected = seed_message(
         &context,
         suffix,
-        &owner.email_address,
+        owner
+            .email_address
+            .as_deref()
+            .expect("graph project owner fixture must have email"),
         &[format!("graph-project-reviewer-{suffix}@example.com")],
         &format!("provider-graph-project-{suffix}"),
         &format!("{keyword} kickoff"),
@@ -74,7 +77,7 @@ async fn graph_projection_links_projects_to_keyword_messages_documents_and_peopl
     assert_eq!(counts_after_first, counts_after_second);
 
     let project_node_id = project_graph_node_id(&project_id);
-    let owner_node_id = node_id(GraphNodeKind::Person, &owner.person_id);
+    let owner_node_id = node_id(GraphNodeKind::Persona, &owner.person_id);
     let reviewer_node_id = node_id(
         GraphNodeKind::EmailAddress,
         &format!("graph-project-reviewer-{suffix}@example.com"),
@@ -112,7 +115,7 @@ async fn graph_projection_links_projects_to_keyword_messages_documents_and_peopl
         ExpectedProjectEdge {
             source_node_id: &project_node_id,
             target_node_id: &owner_node_id,
-            relationship_type: "project_involves_person",
+            relationship_type: "project_involves_persona",
             source_kind: "message",
             source_id: &projected.message_id,
             observation_id: Some(projected.observation_id.as_str()),

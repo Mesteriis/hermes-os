@@ -60,7 +60,7 @@ the system.
 - Making Zulip a user-facing Hermes product domain.
 - Persisting Zulip-specific business truth outside integration runtime state.
 - Direct `integrations/zulip -> domains/communications` imports.
-- Direct creation of Tasks, Persons, Documents or Organizations from Zulip events.
+- Direct creation of Tasks, Personas, Documents or Organizations from Zulip events.
 - Replacing existing provider-specific live smoke checks for Telegram, WhatsApp or
   Mail.
 

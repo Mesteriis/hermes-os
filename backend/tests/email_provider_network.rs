@@ -1,4 +1,4 @@
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -16,10 +16,14 @@ use hermes_hub_backend::domains::communications::storage::{
     CommunicationStorageStore, LocalCommunicationBlobStore,
 };
 use hermes_hub_backend::integrations::mail::gmail::client::{
-    GmailApiClient, GmailFetchOptions, ImapFetchOptions, ImapNetworkClient,
+    GmailApiClient, GmailContactFetchOptions, GmailFetchOptions, ImapFetchOptions,
+    ImapNetworkClient,
 };
 use hermes_hub_backend::integrations::mail::sync::{
     EmailSyncBatch, FetchedCommunicationSourceMessage,
+};
+use hermes_hub_backend::platform::communications::{
+    AddressBookProviderUpsertRequest, EmailProviderKind as PlatformEmailProviderKind,
 };
 use hermes_hub_backend::platform::secrets::ResolvedSecret;
 use hermes_hub_backend::platform::storage::Database;
@@ -156,6 +160,183 @@ async fn imap_network_client_fetches_raw_messages_by_uid_without_mutating_mailbo
             "IMAP client must not send mutating command `{prohibited_command}`: {commands:?}"
         );
     }
+}
+
+#[tokio::test]
+async fn gmail_api_client_fetches_people_contacts_with_metadata() {
+    let server = MockPeopleServer::start(vec![
+        json!({
+            "connections": [
+                {
+                    "resourceName": "people/c123",
+                    "etag": "contact-etag-1",
+                    "names": [{"displayName": "Maya Chen"}],
+                    "emailAddresses": [{"value": "maya@example.com"}],
+                    "phoneNumbers": [{"value": "+1 555 0100"}]
+                }
+            ],
+            "nextPageToken": "contacts-next-page"
+        })
+        .to_string(),
+    ]);
+    let token = ResolvedSecret::new("people-access-token").expect("token");
+    let client = GmailApiClient::new(server.base_url());
+
+    let batch = client
+        .fetch_entries(
+            &token,
+            &GmailContactFetchOptions::new(250).page_token("contacts-page-1"),
+        )
+        .await
+        .expect("fetch address book entries");
+
+    assert_eq!(batch.next_page_token.as_deref(), Some("contacts-next-page"));
+    assert_eq!(batch.entries.len(), 1);
+    let contact = &batch.entries[0];
+    assert_eq!(contact.provider_address_book_entry_id, "people/c123");
+    assert_eq!(contact.display_name.as_deref(), Some("Maya Chen"));
+    assert_eq!(contact.email_addresses, vec!["maya@example.com"]);
+    assert_eq!(contact.phone_numbers, vec!["+1 555 0100"]);
+    assert_eq!(contact.etag.as_deref(), Some("contact-etag-1"));
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    assert!(
+        requests[0]
+            .request_line
+            .starts_with("GET /v1/people/me/connections?")
+    );
+    assert!(requests[0].request_line.contains("pageSize=250"));
+    assert!(
+        requests[0]
+            .request_line
+            .contains("personFields=names%2CemailAddresses%2CphoneNumbers%2Cmetadata")
+    );
+    assert!(
+        requests[0]
+            .request_line
+            .contains("pageToken=contacts-page-1")
+    );
+    assert_eq!(
+        requests[0].authorization.as_deref(),
+        Some("Bearer people-access-token")
+    );
+}
+
+#[tokio::test]
+async fn gmail_api_client_updates_linked_people_contact_with_etag() {
+    let server = MockPeopleServer::start(vec![
+        json!({
+            "resourceName": "people/c123",
+            "etag": "contact-etag-2",
+            "names": [{"displayName": "Maya Chen"}],
+            "emailAddresses": [{"value": "maya@example.com"}]
+        })
+        .to_string(),
+    ]);
+    let token = ResolvedSecret::new("people-access-token").expect("token");
+    let client = GmailApiClient::new(server.base_url());
+
+    let updated = client
+        .upsert_entry(
+            &token,
+            &AddressBookProviderUpsertRequest {
+                account_id: "acct-gmail".to_owned(),
+                provider_kind: PlatformEmailProviderKind::Gmail,
+                provider_address_book_entry_id: Some("people/c123".to_owned()),
+                provider_etag: Some("contact-etag-1".to_owned()),
+                display_name: "Maya Chen".to_owned(),
+                email_address: Some("maya@example.com".to_owned()),
+                phone_numbers: Vec::new(),
+                remote_write_allowed: true,
+            },
+        )
+        .await
+        .expect("update address book entry");
+
+    assert_eq!(updated.provider_address_book_entry_id, "people/c123");
+    assert_eq!(updated.etag.as_deref(), Some("contact-etag-2"));
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    assert!(
+        requests[0]
+            .request_line
+            .starts_with("PATCH /v1/people/c123:updateContact?")
+    );
+    assert!(
+        requests[0]
+            .request_line
+            .contains("updatePersonFields=names%2CemailAddresses")
+    );
+    assert_eq!(
+        requests[0].authorization.as_deref(),
+        Some("Bearer people-access-token")
+    );
+    let body: serde_json::Value =
+        serde_json::from_str(&requests[0].body).expect("json request body");
+    assert_eq!(body["resourceName"], json!("people/c123"));
+    assert_eq!(body["etag"], json!("contact-etag-1"));
+    assert_eq!(body["names"][0]["unstructuredName"], json!("Maya Chen"));
+    assert_eq!(
+        body["emailAddresses"][0]["value"],
+        json!("maya@example.com")
+    );
+    assert_eq!(
+        body["metadata"]["sources"][0]["etag"],
+        json!("contact-etag-1")
+    );
+}
+
+#[tokio::test]
+async fn gmail_api_client_creates_phone_only_people_contact() {
+    let server = MockPeopleServer::start(vec![
+        json!({
+            "resourceName": "people/c-phone",
+            "etag": "contact-etag-phone",
+            "names": [{"displayName": "Phone Only Persona"}],
+            "phoneNumbers": [{"value": "+1 555 0100"}]
+        })
+        .to_string(),
+    ]);
+    let token = ResolvedSecret::new("people-access-token").expect("token");
+    let client = GmailApiClient::new(server.base_url());
+
+    let created = client
+        .upsert_entry(
+            &token,
+            &AddressBookProviderUpsertRequest {
+                account_id: "acct-gmail".to_owned(),
+                provider_kind: PlatformEmailProviderKind::Gmail,
+                provider_address_book_entry_id: None,
+                provider_etag: None,
+                display_name: "Phone Only Persona".to_owned(),
+                email_address: None,
+                phone_numbers: vec!["+1 555 0100".to_owned()],
+                remote_write_allowed: true,
+            },
+        )
+        .await
+        .expect("create phone-only address book entry");
+
+    assert_eq!(created.provider_address_book_entry_id, "people/c-phone");
+    assert_eq!(created.email_addresses, Vec::<String>::new());
+    assert_eq!(created.phone_numbers, vec!["+1 555 0100".to_owned()]);
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].request_line,
+        "POST /v1/people:createContact HTTP/1.1"
+    );
+    let body: serde_json::Value =
+        serde_json::from_str(&requests[0].body).expect("json request body");
+    assert_eq!(
+        body["names"][0]["unstructuredName"],
+        json!("Phone Only Persona")
+    );
+    assert!(body.get("emailAddresses").is_none());
+    assert_eq!(body["phoneNumbers"][0]["value"], json!("+1 555 0100"));
 }
 
 #[tokio::test]
@@ -438,10 +619,59 @@ impl Drop for MockGmailServer {
     }
 }
 
+struct MockPeopleServer {
+    addr: SocketAddr,
+    requests: Arc<Mutex<Vec<RecordedHttpRequest>>>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl MockPeopleServer {
+    fn start(responses: Vec<String>) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock People server");
+        let addr = listener.local_addr().expect("mock People addr");
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let requests_for_thread = Arc::clone(&requests);
+        let handle = thread::spawn(move || {
+            for body in responses {
+                let (mut stream, _) = listener.accept().expect("accept People request");
+                let request = read_http_request(&mut stream);
+                requests_for_thread
+                    .lock()
+                    .expect("requests lock")
+                    .push(request);
+                write_http_response(&mut stream, &body);
+            }
+        });
+
+        Self {
+            addr,
+            requests,
+            handle: Some(handle),
+        }
+    }
+
+    fn base_url(&self) -> String {
+        format!("http://{}", self.addr)
+    }
+
+    fn requests(&self) -> Vec<RecordedHttpRequest> {
+        self.requests.lock().expect("requests lock").clone()
+    }
+}
+
+impl Drop for MockPeopleServer {
+    fn drop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            handle.join().expect("mock People server join");
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct RecordedHttpRequest {
     request_line: String,
     authorization: Option<String>,
+    body: String,
 }
 
 fn read_http_request(stream: &mut TcpStream) -> RecordedHttpRequest {
@@ -455,6 +685,7 @@ fn read_http_request(stream: &mut TcpStream) -> RecordedHttpRequest {
         .expect("read request line");
     let request_line = request_line.trim_end().to_owned();
     let mut authorization = None;
+    let mut content_length = 0usize;
 
     loop {
         let mut line = String::new();
@@ -468,11 +699,22 @@ fn read_http_request(stream: &mut TcpStream) -> RecordedHttpRequest {
         {
             authorization = Some(value.trim().to_owned());
         }
+        if let Some((name, value)) = line.split_once(':')
+            && name.eq_ignore_ascii_case("content-length")
+        {
+            content_length = value.trim().parse().unwrap_or(0);
+        }
+    }
+
+    let mut body = vec![0; content_length];
+    if content_length > 0 {
+        reader.read_exact(&mut body).expect("read request body");
     }
 
     RecordedHttpRequest {
         request_line,
         authorization,
+        body: String::from_utf8(body).expect("utf8 request body"),
     }
 }
 

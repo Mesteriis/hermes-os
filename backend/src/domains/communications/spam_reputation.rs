@@ -31,7 +31,7 @@ impl SenderReputationStore {
         let key = SenderReputationKey::from_sender(&message.sender)?;
         let record = self.reputation(&key).await?;
         let known_contact = self
-            .sender_has_confirmed_person_link(&key.sender_key)
+            .sender_has_confirmed_persona_identity(&key.sender_key)
             .await?;
         let suppressed = record.as_ref().is_some_and(|record| {
             record.score == 0
@@ -208,7 +208,7 @@ impl SenderReputationStore {
         row.map(row_to_reputation_record).transpose()
     }
 
-    async fn sender_has_confirmed_person_link(
+    async fn sender_has_confirmed_persona_identity(
         &self,
         sender_key: &str,
     ) -> Result<bool, SenderReputationError> {
@@ -216,7 +216,7 @@ impl SenderReputationStore {
             r#"
             SELECT EXISTS (
                 SELECT 1
-                FROM person_identities identity_trace
+                FROM persona_identities identity_trace
                 WHERE identity_trace.identity_type = 'email'
                   AND lower(identity_trace.identity_value) = $1
                   AND identity_trace.status = 'active'

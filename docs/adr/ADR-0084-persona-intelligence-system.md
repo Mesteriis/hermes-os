@@ -4,7 +4,7 @@ Status: Proposed
 
 Supersedes:
 
-- ADR-0019 Contact Identity Resolution
+- ADR-0019 Persona Identity Resolution
 - ADR-0059 Person Communication DNA and Personas
 
 Clarifies:
@@ -12,11 +12,11 @@ Clarifies:
 - ADR-0057 Person Memory and Provenance
 - ADR-0058 Person Enrichment Engine
 - ADR-0060 Person Timeline and Graph Integration
-- ADR-0074 Person Multi-Channel Identity Model
+- ADR-0074 Persona Multi-Channel Identity Compatibility
 
 ## Context
 
-Hermes Hub is a local-first Personal Memory System. The persons domain was
+Hermes Hub is a local-first Personal Memory System. The Personas domain was
 previously documented as a partially renamed contact system: contacts became
 persons, but the model still used CRM-shaped concepts such as contact merge,
 roles, nested personas, favorites, watchlists, health status, fingerprints,
@@ -31,7 +31,7 @@ a generated dossier.
 
 ## Decision
 
-Use Persona Intelligence as the target architecture for the persons domain.
+Use Persona Intelligence as the target architecture for the Personas domain.
 
 The root domain entity is:
 
@@ -121,9 +121,11 @@ Ambiguous identity resolution remains reviewable. This preserves the safety
 property from ADR-0019 while replacing its Contact framing.
 
 ADR-0074 remains the implementation compatibility contract for existing
-`person_id` values and `/persons` routes until a separate schema/API migration
-ADR is accepted. This ADR changes the domain model and terminology; it does not
-silently require a database migration.
+email-derived `person_id` values and internal `person_id` storage columns until
+a separate physical identifier migration ADR is accepted. Active routes and
+logical storage now use Persona terminology (`/personas`, `personas`,
+`persona_*`); remaining `person_id` columns are a physical compatibility detail,
+not a current domain name.
 
 ## Consequences
 
@@ -134,38 +136,42 @@ Positive:
 - Relationships become queryable, provenance-backed records.
 - The Owner Persona gives agents a clear subject boundary.
 - Dossiers become derived read models with citations instead of manually edited
-  contact summaries.
+  persona summaries.
 - Identity resolution can unify communication and document traces without
   pretending they are address-book fields.
 
-Negative:
+Migration constraints:
 
-- Current `persons` schema and `/persons` API names become compatibility
-  details.
-- `person_personas` conflicts with the new Persona meaning. Compatibility
-  writes now materialize interaction-context values into Persona Preferences,
-  but the nested Persona table and route names remain deprecated compatibility
-  surfaces until a schema/API migration ADR retires them.
+- Existing email-derived `person_id` values remain compatibility identifiers
+  until a dedicated opaque Persona identifier migration is designed.
+- Internal `person_id` primary/FK columns remain compatibility storage details
+  even where table and API names are Persona-native.
+- `person_personas` has been renamed to `persona_interaction_contexts`;
+  compatibility writes now materialize interaction-context values into Persona
+  Preferences.
 - Existing health, watchlist, role and trust fields must be reclassified before
   deeper implementation work.
 - UI and backend code will need a future migration plan to avoid breaking
-  current projections.
+  current projections when physical identifiers are renamed.
 
 ## Non-Goals
 
-- Immediate schema migration from `persons` to `personas`.
-- Immediate route migration from `/persons` to `/personas`.
-- Removing current compatibility tables or endpoints.
+- Immediate physical identifier migration away from internal `person_id`
+  columns.
+- Removing current compatibility aliases for historical event payloads and
+  request bodies.
 - Fine-tuning models on private Persona data.
 - Turning public enrichment into active OSINT or scraping beyond approved
   provider boundaries.
 
 ## Required Follow-Up
 
-- Design a schema/API migration ADR if implementation moves from compatibility
-  `persons` storage to Persona-native storage.
+- Design a physical identifier migration ADR if implementation moves away from
+  compatibility `person_id` columns and email-derived `person:v1:email:*`
+  values.
 - Add first-class Relationship records.
-- Add Owner Persona uniqueness semantics.
-- Add target PersonaType validation.
+- Finish Owner Persona usage across agents, UI context assembly and user-owned
+  actions.
+- Finish PersonaType-aware graph and workflow semantics.
 - Reframe existing intelligence, analytics and investigator code as Persona
   Intelligence services and read models.

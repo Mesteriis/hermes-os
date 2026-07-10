@@ -16,7 +16,7 @@ fn memory_engine_builds_persona_notes_memory_card_draft() {
     assert_eq!(draft.description, "Met Alice at the local-first workshop.");
     assert_eq!(
         draft.source,
-        "persons.notes:person:v1:email:alice@example.com"
+        "personas.notes:person:v1:email:alice@example.com"
     );
     assert_eq!(draft.confidence, 1.0);
     assert_eq!(draft.importance, 5);
@@ -105,7 +105,7 @@ fn memory_engine_builds_source_backed_context_pack_for_entity() {
     let cards = vec![MemoryCardDraft {
         title: "Compatibility notes".to_owned(),
         description: "Met Alice at the local-first workshop.".to_owned(),
-        source: format!("persons.notes:{persona_id}"),
+        source: format!("personas.notes:{persona_id}"),
         confidence: 1.0,
         importance: 5,
     }];
@@ -118,7 +118,7 @@ fn memory_engine_builds_source_backed_context_pack_for_entity() {
     assert_eq!(pack.items.len(), 3);
     assert_eq!(pack.items[0].item_kind, "memory_card");
     assert_eq!(pack.items[0].title, "Compatibility notes");
-    assert_eq!(pack.items[0].source, format!("persons.notes:{persona_id}"));
+    assert_eq!(pack.items[0].source, format!("personas.notes:{persona_id}"));
     assert_eq!(pack.items[1].item_kind, "fact");
     assert_eq!(pack.items[1].title, "interest");
     assert_eq!(pack.items[1].body, "local-first systems");
@@ -126,7 +126,7 @@ fn memory_engine_builds_source_backed_context_pack_for_entity() {
     assert_eq!(
         pack.source_citations,
         vec![
-            format!("persons.notes:{persona_id}"),
+            format!("personas.notes:{persona_id}"),
             "communication_messages:message-1".to_owned(),
             "documents:doc-1".to_owned(),
         ]

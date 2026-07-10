@@ -10,7 +10,7 @@ use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::graph::core::{GraphNodeKind, node_id};
-use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::domains::relationships::{
     NewRelationship, NewRelationshipEvidence, Relationship, RelationshipEvidenceSourceKind,
     RelationshipReviewState, RelationshipStore,
@@ -162,8 +162,8 @@ async fn put_relationship_review_updates_relationship_and_graph_projection() {
           AND valid_to IS NULL
         "#,
     )
-    .bind(node_id(GraphNodeKind::Person, &stored.source_entity_id))
-    .bind(node_id(GraphNodeKind::Person, &stored.target_entity_id))
+    .bind(node_id(GraphNodeKind::Persona, &stored.source_entity_id))
+    .bind(node_id(GraphNodeKind::Persona, &stored.target_entity_id))
     .fetch_one(&pool)
     .await
     .expect("relationship graph edge");
@@ -237,13 +237,13 @@ async fn seed_persona_relationship_with_state(
     relationship_type: &str,
     review_state: RelationshipReviewState,
 ) -> Relationship {
-    let person_store = PersonProjectionStore::new(pool.clone());
+    let person_store = PersonaProjectionStore::new(pool.clone());
     let source = person_store
-        .upsert_email_person(&format!("relationship-api-source-{suffix}@example.com"))
+        .upsert_email_persona(&format!("relationship-api-source-{suffix}@example.com"))
         .await
         .expect("source persona");
     let target = person_store
-        .upsert_email_person(&format!("relationship-api-target-{suffix}@example.com"))
+        .upsert_email_persona(&format!("relationship-api-target-{suffix}@example.com"))
         .await
         .expect("target persona");
     let relationship = NewRelationship::between_personas(

@@ -20,12 +20,12 @@ use crate::ai::core::{
 use crate::domains::communications::core::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
 };
-use crate::domains::persons::analytics::{AnalyticsError, PersonAnalyticsService};
-use crate::domains::persons::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
-use crate::domains::persons::expertise::{PersonExpertiseError, PersonExpertiseStore};
-use crate::domains::persons::export::{ExportError, ExportFormat, PersonExportService};
-use crate::domains::persons::health::{PersonHealthError, PersonHealthStore};
-use crate::domains::persons::investigator::{InvestigatorError, PersonInvestigator};
+use crate::domains::personas::analytics::{AnalyticsError, PersonaAnalyticsService};
+use crate::domains::personas::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
+use crate::domains::personas::expertise::{PersonaExpertiseError, PersonaExpertiseStore};
+use crate::domains::personas::export::{ExportError, ExportFormat, PersonaExportService};
+use crate::domains::personas::health::{PersonaHealthError, PersonaHealthStore};
+use crate::domains::personas::investigator::{InvestigatorError, PersonaInvestigator};
 use crate::engines::automation::{
     AutomationError, AutomationPolicy, AutomationStore, AutomationTemplate, NewAutomationPolicy,
     NewAutomationTemplate, TelegramSendDryRunRequest, TelegramSendDryRunResponse,
@@ -39,20 +39,20 @@ use crate::platform::calls::{
 use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
 use crate::platform::config::AppConfig;
 
-use crate::domains::persons::trust::{PersonPromiseStore, PersonRiskStore, PersonTrustError};
+use crate::domains::personas::trust::{PersonaPromiseStore, PersonaRiskStore, PersonaTrustError};
 
-use crate::domains::persons::memory::{
-    NewRelationshipEvent, PersonFactStore, PersonMemoryCardStore, PersonMemoryError,
-    PersonPreferenceStore, RelationshipEventStore,
+use crate::domains::personas::memory::{
+    NewRelationshipEvent, PersonaFactStore, PersonaMemoryCardStore, PersonaMemoryError,
+    PersonaPreferenceStore, RelationshipEventStore,
 };
 
-use crate::domains::persons::core::{
-    NewPersonPersona, PersonCoreError, PersonIdentity, PersonPersona, PersonPersonaStore,
-    PersonRole, PersonRoleStore, PersonsIdentityStore,
+use crate::domains::personas::core::{
+    NewPersonaInteractionContext, PersonaCoreError, PersonaIdentity, PersonaIdentityStore,
+    PersonaInteractionContext, PersonaInteractionContextStore, PersonaRole, PersonaRoleStore,
 };
-use crate::domains::persons::identity::{
-    PersonIdentityCandidate, PersonIdentityDetail, PersonIdentityError,
-    PersonIdentityReviewCommand, PersonIdentityReviewState, PersonIdentityStore,
+use crate::domains::personas::identity::{
+    PersonaIdentityCandidate, PersonaIdentityDetail, PersonaIdentityError,
+    PersonaIdentityReviewCommand, PersonaIdentityReviewState, PersonaIdentityReviewStore,
 };
 
 use crate::application::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};

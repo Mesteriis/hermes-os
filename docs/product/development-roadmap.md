@@ -37,8 +37,8 @@ The repository already contains meaningful implementation slices:
 | Graph | Graph tables, graph projection module and `/api/v1/graph/*` routes. |
 | Documents | Document tables, processing jobs/artifacts, document processing APIs and Documents frontend page. |
 | Projects | Project tables, project link review workflow, project APIs and Projects frontend page. |
-| Personas compatibility | `persons` tables, identity candidates, memory cards, preferences, timeline events, expertise, risks, promises and `/api/v1/persons/*` routes. |
-| Organizations | Organization tables, identities, departments, contacts, memory, risks, finance/enrichment routes and Organizations frontend page. |
+| Personas | `personas` / `persona_*` storage, identity candidates, memory cards, preferences, timeline events, expertise, risks, promises and `/api/v1/personas/*` routes. Legacy `/api/v1/persons/*` routes are retired. |
+| Organizations | Organization tables, identities, departments, linked Personas, memory, risks, finance/enrichment routes and Organizations frontend page. |
 | Calendar and events | Calendar account/source/event tables, meetings, outcomes, deadlines, focus blocks, rules and Calendar frontend page. |
 | Tasks | Task candidates, tasks, task evidence/context/relations/rules/templates and Tasks frontend page. |
 | AI and agents | AI runtime, semantic embeddings, AI control center, AI APIs and Agents frontend page. |
@@ -51,9 +51,9 @@ The repository already contains meaningful implementation slices:
 |---|---|---|
 | Communication is not yet documented as the single ingestion spine across all channels. | Mail, Telegram, WhatsApp, calls and meetings can drift into separate apps. | Create Communications domain spec and normalize channel docs around source evidence and canonical Communication. |
 | Telegram production capability model is broader than current implementation. | The requested production surface includes account/session lifecycle, proxies, chat management, message commands, soft delete, message history, attachments, voice/video messages, calls, channels, groups, forums, search, drafts, notifications, address book data, media gallery, offline, export and desktop UX. | Use ADR-0091 and `docs/integrations/telegram/` as the delivery contract; expose every new feature through backend capability states before enabling UI controls. |
-| Persona target model is not implemented end-to-end. | Current `persons` compatibility still carries contact/person history. Owner Persona storage, GET/PUT owner compatibility route, ADR-0090 Persona-native read/write compatibility bridge, PersonaType, person role Relationship adapters, `person_personas` interaction-context Preference adapters, enrichment trust Relationship adapters and notes-to-memory-card adapters have baselines. | Plan physical Persona-native schema migration beyond the compatibility bridge. |
-| Relationships are not a complete first-class model. | Roles, organization links, graph edges and relationship events are spread across domains. Durable Relationship records, graph projection for all current Relationship entity kinds, guarded entity/global review routes, manual/API person role adapters, manual/API and email-sync organization contact link adapters, manual task relation adapters, project link review adapters, Personas workspace review and cross-domain Review workspace review/action routing have a baseline. | Migrate remaining relationship-shaped compatibility surfaces behind Relationship records and keep review routing in the Review workspace. |
-| Polygraph engine is partially implemented. | Structured direct contradictions can be stored as reviewable observations, deterministic structured and limited natural-language `location` / `status` claims can be extracted from Communication/Document/Event evidence text, projected email/Telegram/WhatsApp message refresh, imported Document refresh, meeting-note refresh and call-transcript refresh can compare active `person_facts` Memory claims against evidence by Persona email identity, active Telegram/WhatsApp identity, event participant link or active Telegram call identity, guarded backend routes can list/review observations without overwriting Memory, and the Knowledge workspace plus cross-domain Review workspace have Polygraph review panels and shared review action routing. Broad natural-language extraction and broader provider evidence remain incomplete. | Expand ingestion refresh to broader provider evidence, then add reviewed-outcome semantics. |
+| Persona target model is not implemented end-to-end. | Persona storage/module naming is now native, including `persona_metadata`; `/api/v1/personas/*` is the active API and read payloads use Persona-native identifiers. Internal `person_id` storage columns, legacy event aliases and some request compatibility DTOs still carry contact/person history. Owner Persona storage, Persona-native owner routes, ADR-0090 Persona-native read/write compatibility bridge, PersonaType, persona role Relationship adapters, interaction-context Preference adapters, enrichment trust Relationship adapters and notes-to-memory-card adapters have baselines. | Retire remaining compatibility aliases only with explicit API/event/schema migration evidence and replay safety. |
+| Relationships are not a complete first-class model. | Roles, organization links, graph edges and relationship events are spread across domains. Durable Relationship records, graph projection for all current Relationship entity kinds, guarded entity/global review routes, manual/API Persona role adapters, manual/API and email-sync Organization-Persona link adapters, manual task relation adapters, project link review adapters, Personas workspace review and cross-domain Review workspace review/action routing have a baseline. | Migrate remaining relationship-shaped compatibility surfaces behind Relationship records and keep review routing in the Review workspace. |
+| Polygraph engine is partially implemented. | Structured direct contradictions can be stored as reviewable observations, deterministic structured and limited natural-language `location` / `status` claims can be extracted from Communication/Document/Event evidence text, projected email/Telegram/WhatsApp message refresh, imported Document refresh, meeting-note refresh and call-transcript refresh can compare active `persona_facts` Memory claims against evidence by Persona email identity, active Telegram/WhatsApp identity, event participant link or active Telegram call identity, guarded backend routes can list/review observations without overwriting Memory, and the Knowledge workspace plus cross-domain Review workspace have Polygraph review panels and shared review action routing. Broad natural-language extraction and broader provider evidence remain incomplete. | Expand ingestion refresh to broader provider evidence, then add reviewed-outcome semantics. |
 | Decisions and Obligations are partial top-level domains. | Both have source-backed persistence, deterministic candidate detectors where explicit evidence exists, accepted graph projection, guarded backend entity/global list/review routes, a global Tasks workspace review panel and a cross-domain Review workspace panel with shared action routing. Message and document task candidate refresh use Obligation detection for explicit commitments/requests, confirmed `obligation_task` candidates now materialize accepted Obligations linked to Tasks, reset/reject review on those candidates synchronizes the durable Obligation state, email sync and Telegram/WhatsApp fixture ingestion refresh reviewable Decision and obligation-derived task candidates for projected Communications, compatibility `person_promises` now materialize accepted Obligations, explicit message/imported-document Decision candidates now persist as source-backed `suggested` Decisions, project link reviews now materialize accepted Decisions, and meeting outcomes now create reviewable Decisions or Obligations for `decision`, `promise`, `task` and `follow_up` outcomes. Broader live-provider ingestion, candidate routing and follow-ups can still blur together. | Wire remaining candidate extraction and review workflows to accepted Decisions and Obligations, then add adapters from compatibility surfaces. |
 | Engine boundaries are not fully separated. | Memory, Timeline, Trust, Risk, Enrichment and Obligation behavior appears inside domain modules. | Write engine specs before extraction or renaming. |
 | Notes remain ambiguous. | Frontend has Notes page, but foundation treats Notes as document-like artifacts. | Keep Notes as capture/document artifacts until a future ADR promotes them. |
@@ -80,12 +80,13 @@ Implementation plan topics:
 
 ## Slice 2: Persona And Relationship Memory
 
-Goal: move from compatibility `persons` toward Persona and first-class
+Goal: finish the Persona-native baseline and move the remaining physical
+`person_id` compatibility debt toward first-class
 Relationship memory.
 
 Documentation outcomes:
 
-- `docs/domains/persons/spec.md`;
+- `docs/domains/personas/spec.md`;
 - `docs/domains/relationships/README.md`;
 - Owner Persona behavior;
 - PersonaType behavior;
@@ -95,8 +96,8 @@ Documentation outcomes:
 Refactoring plan topics:
 
 - introduce Owner Persona semantics;
-- decide `/persons` compatibility strategy before any `/personas` route work;
-- retire remaining Persona root compatibility caches only through a
+- keep legacy `/api/v1/persons/*` routes retired and guarded;
+- retire remaining Persona physical/runtime compatibility aliases only through a
   schema/API migration plan;
 - preserve existing identity candidate review behavior while changing language.
 
@@ -182,7 +183,8 @@ Documentation outcomes:
 
 - UI information architecture tied to master-spec domains;
 - navigation model for Communications, Context, Memory, Projects and Actions;
-- compatibility strategy for current Persons, Notes, Timeline and Knowledge pages.
+- compatibility strategy for retired legacy `/api/v1/persons/*` APIs plus current Notes,
+  Timeline and Knowledge pages.
 
 Refactoring plan topics:
 
@@ -210,7 +212,7 @@ Create dedicated refactoring plans for:
 
 | Plan | Scope |
 |---|---|
-| Persona migration plan | Owner Persona, PersonaType, `/persons` compatibility, target Persona naming and relationship extraction. |
+| Persona migration plan | Owner Persona, PersonaType, retired `/api/v1/persons/*` compatibility guardrails, target Persona naming and relationship extraction. |
 | Relationship model plan | First-class relationship records, graph integration, trust/strength and provenance. |
 | Communications normalization plan | Channel-agnostic Communication model over mail, Telegram, WhatsApp, calls and meetings. |
 | Telegram production plan | Capability-gated Telegram delivery slices for accounts, sessions, proxies, chats, messages, tombstones, media, calls, offline, export and desktop UX. |

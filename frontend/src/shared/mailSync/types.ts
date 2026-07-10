@@ -29,7 +29,7 @@ export type MailSyncStatus = {
   last_error_message: string | null
   last_fetched_messages: number
   last_projected_messages: number
-  last_upserted_persons: number
+  last_upserted_personas: number
   last_upserted_organizations: number
 }
 
@@ -50,7 +50,7 @@ export type MailSyncRunResponse = {
   current_batch_size: number
   fetched_messages: number
   projected_messages: number
-  upserted_persons: number
+  upserted_personas: number
   upserted_organizations: number
   checkpoint_before_present: boolean
   checkpoint_after_present: boolean

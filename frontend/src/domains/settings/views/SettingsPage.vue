@@ -74,6 +74,16 @@ function updateSelectedService(service: AccountServiceRow, event: Event) {
   void integrationsSettings.handleToggleSelectedService(service.id, eventChecked(event))
 }
 
+function runSelectedServiceNow(service: AccountServiceRow) {
+  void integrationsSettings.handleRunSelectedServiceNow(service.id)
+}
+
+function runSelectedServiceModeAction(service: AccountServiceRow) {
+  if (service.id === 'contacts') {
+    void integrationsSettings.handleEnableSelectedContactsBidirectional()
+  }
+}
+
 function updateSelectedAccountLabel(event: Event) {
   integrationsSettings.handleSelectedAccountLabelInput(eventValue(event))
 }
@@ -260,6 +270,26 @@ function signalTargetIcon(kind: SignalRouteTargetKind): string {
                       <span />
                       <strong>{{ service.statusText }}</strong>
                     </label>
+                    <button
+                      v-if="service.canRunNow"
+                      type="button"
+                      class="secondary-button settings-service-row__action"
+                      :disabled="service.isBusy"
+                      @click="runSelectedServiceNow(service)"
+                    >
+                      <Icon icon="tabler:refresh" />
+                      {{ service.isBusy ? t('Syncing') : service.runNowLabel }}
+                    </button>
+                    <button
+                      v-if="service.canRunModeAction"
+                      type="button"
+                      class="secondary-button settings-service-row__action"
+                      :disabled="service.isBusy"
+                      @click="runSelectedServiceModeAction(service)"
+                    >
+                      <Icon icon="tabler:arrows-exchange" />
+                      {{ service.modeActionLabel }}
+                    </button>
                   </article>
                 </section>
 

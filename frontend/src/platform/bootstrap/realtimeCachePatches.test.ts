@@ -178,7 +178,7 @@ describe('realtime cache patch handling', () => {
         last_error_message: null,
         last_fetched_messages: 5,
         last_projected_messages: 4,
-        last_upserted_persons: 1,
+        last_upserted_personas: 1,
         last_upserted_organizations: 0
       }
     ]
@@ -209,7 +209,7 @@ describe('realtime cache patch handling', () => {
               current_batch_size: 10,
               fetched_messages: 30,
               projected_messages: 24,
-              upserted_persons: 5,
+              upserted_personas: 5,
               upserted_organizations: 2,
               next_run_at: null
             }
@@ -228,7 +228,7 @@ describe('realtime cache patch handling', () => {
       last_updated_at: expect.any(String),
       last_fetched_messages: 30,
       last_projected_messages: 24,
-      last_upserted_persons: 5,
+      last_upserted_personas: 5,
       last_upserted_organizations: 2
     })
   })

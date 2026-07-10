@@ -17,7 +17,7 @@ should hide the item from active workbench views while preserving local raw/blob
 content and metadata for replay, AI analysis and analytics.
 
 Mail sync also feeds the knowledge system. Sender and recipient identities should
-be projected to persons, organizations and relationship events as mail arrives.
+be projected to Personas, organizations and relationship events as mail arrives.
 
 ## Decision
 
@@ -62,13 +62,13 @@ Local deletion behavior:
 
 Knowledge projection behavior:
 
-- Mail projection creates or updates `persons` and active email identities from
+- Mail projection creates or updates Personas and active email identities from
   normalized addr-spec values.
 - Mail projection creates durable `communication_message_participants` links.
 - Mail projection creates idempotent relationship events for sender/recipient
   interactions.
 - Mail projection creates non-public-domain organizations, organization domains
-  and organization contact links with mail sync/message provenance.
+  and organization-Persona links with mail sync/message provenance.
 - Graph projection is refreshed after successful mail batches. Task/note
   extraction remains candidate or user-controlled and does not auto-activate
   tasks.
@@ -109,7 +109,7 @@ Frontend behavior:
 - ADR-0066 — Organization Graph Integration
 - ADR-0070 — Tasks First-Class Domain
 - ADR-0071 — Task Context Evidence Provenance
-- ADR-0074 — Person Multi-Channel Identity Model
+- ADR-0074 — Persona Multi-Channel Identity Compatibility
 - ADR-0076 — Host Vault on macOS
 - ADR-0077 — i18n Russian and English Interface
 - ADR-0078 — Frontend Component Decomposition

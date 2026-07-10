@@ -1,30 +1,84 @@
 use super::*;
 
 #[derive(Serialize)]
-pub(crate) struct PersonIdentityCandidateListResponse {
-    pub(crate) items: Vec<PersonIdentityCandidate>,
+pub(crate) struct PersonaIdentityCandidateListResponse {
+    pub(crate) items: Vec<PersonaIdentityCandidateApiResponse>,
+}
+
+impl From<Vec<PersonaIdentityCandidate>> for PersonaIdentityCandidateListResponse {
+    fn from(items: Vec<PersonaIdentityCandidate>) -> Self {
+        Self {
+            items: items.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub(crate) struct PersonaIdentityDetailResponse {
+    pub(crate) items: Vec<PersonaIdentityCandidateApiResponse>,
+}
+
+impl From<PersonaIdentityDetail> for PersonaIdentityDetailResponse {
+    fn from(detail: PersonaIdentityDetail) -> Self {
+        Self {
+            items: detail.items.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub(crate) struct PersonaIdentityCandidateApiResponse {
+    pub(crate) identity_candidate_id: String,
+    pub(crate) candidate_kind: String,
+    pub(crate) left_persona_id: String,
+    pub(crate) right_persona_id: Option<String>,
+    pub(crate) email_address: Option<String>,
+    pub(crate) evidence_summary: String,
+    pub(crate) confidence: f64,
+    pub(crate) review_state: String,
+    pub(crate) generated_at: DateTime<Utc>,
+    pub(crate) reviewed_at: Option<DateTime<Utc>>,
+    pub(crate) updated_at: DateTime<Utc>,
+}
+
+impl From<PersonaIdentityCandidate> for PersonaIdentityCandidateApiResponse {
+    fn from(candidate: PersonaIdentityCandidate) -> Self {
+        Self {
+            identity_candidate_id: candidate.identity_candidate_id,
+            candidate_kind: candidate.candidate_kind,
+            left_persona_id: candidate.left_persona_id,
+            right_persona_id: candidate.right_persona_id,
+            email_address: candidate.email_address,
+            evidence_summary: candidate.evidence_summary,
+            confidence: candidate.confidence,
+            review_state: candidate.review_state,
+            generated_at: candidate.generated_at,
+            reviewed_at: candidate.reviewed_at,
+            updated_at: candidate.updated_at,
+        }
+    }
 }
 
 #[derive(Deserialize)]
-pub(crate) struct PersonIdentityReviewApiRequest {
+pub(crate) struct PersonaIdentityReviewApiRequest {
     pub(crate) command_id: String,
     pub(crate) review_state: String,
 }
 
-impl PersonIdentityReviewApiRequest {
+impl PersonaIdentityReviewApiRequest {
     pub(crate) fn into_command(
         self,
         identity_candidate_id: String,
         actor_id: String,
-    ) -> Result<PersonIdentityReviewCommand, ApiError> {
-        let command_id = validate_non_empty_person_identity_field("command_id", &self.command_id)?;
-        let identity_candidate_id = validate_non_empty_person_identity_field(
+    ) -> Result<PersonaIdentityReviewCommand, ApiError> {
+        let command_id = validate_non_empty_persona_identity_field("command_id", &self.command_id)?;
+        let identity_candidate_id = validate_non_empty_persona_identity_field(
             "identity_candidate_id",
             &identity_candidate_id,
         )?;
-        let review_state = parse_person_identity_review_state(&self.review_state)?;
+        let review_state = parse_persona_identity_review_state(&self.review_state)?;
 
-        Ok(PersonIdentityReviewCommand {
+        Ok(PersonaIdentityReviewCommand {
             command_id,
             identity_candidate_id,
             review_state,
@@ -34,16 +88,18 @@ impl PersonIdentityReviewApiRequest {
 }
 
 #[derive(Serialize)]
-pub(crate) struct PersonIdentityReviewApiResponse {
+pub(crate) struct PersonaIdentityReviewApiResponse {
     pub(crate) identity_candidate_id: String,
     pub(crate) review_state: String,
     pub(crate) event_id: String,
 }
 
-impl From<crate::domains::persons::identity::PersonIdentityReviewCommandResult>
-    for PersonIdentityReviewApiResponse
+impl From<crate::domains::personas::identity::PersonaIdentityReviewCommandResult>
+    for PersonaIdentityReviewApiResponse
 {
-    fn from(result: crate::domains::persons::identity::PersonIdentityReviewCommandResult) -> Self {
+    fn from(
+        result: crate::domains::personas::identity::PersonaIdentityReviewCommandResult,
+    ) -> Self {
         Self {
             identity_candidate_id: result.identity_candidate_id,
             review_state: result.review_state.as_str().to_owned(),

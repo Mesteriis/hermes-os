@@ -11,7 +11,7 @@ pub struct OrgDossier {
     pub organization: Value,
     pub identities: Vec<Value>,
     pub domains: Vec<Value>,
-    pub contacts: Vec<Value>,
+    pub linked_personas: Vec<Value>,
     pub facts: Vec<Value>,
     pub memory_cards: Vec<Value>,
     pub timeline: Vec<Value>,
@@ -31,7 +31,7 @@ pub struct OrgBrief {
     pub last_interaction_days: Option<i64>,
     pub open_risks: i64,
     pub active_contracts: i64,
-    pub primary_contact: Option<String>,
+    pub primary_persona: Option<String>,
     pub language: Option<String>,
     pub next_deadline: Option<String>,
 }
@@ -40,7 +40,7 @@ pub struct OrgBrief {
 pub struct OrgContextPack {
     pub brief: OrgBrief,
     pub recent_events: Vec<Value>,
-    pub key_contacts: Vec<Value>,
+    pub key_personas: Vec<Value>,
     pub active_contracts: Vec<Value>,
     pub open_risks: Vec<Value>,
     pub portals: Vec<Value>,
@@ -75,7 +75,7 @@ impl OrganizationInvestigator {
             organization: org_json,
             identities: vec![],
             domains: vec![],
-            contacts: vec![],
+            linked_personas: vec![],
             facts: vec![],
             memory_cards: vec![],
             timeline: vec![],
@@ -102,7 +102,7 @@ impl OrganizationInvestigator {
             last_interaction_days: last_days,
             open_risks: 0,
             active_contracts: 0,
-            primary_contact: None,
+            primary_persona: None,
             language: org_data.primary_language,
             next_deadline: None,
         })
@@ -113,7 +113,7 @@ impl OrganizationInvestigator {
         Ok(OrgContextPack {
             brief,
             recent_events: vec![],
-            key_contacts: vec![],
+            key_personas: vec![],
             active_contracts: vec![],
             open_risks: vec![],
             portals: vec![],

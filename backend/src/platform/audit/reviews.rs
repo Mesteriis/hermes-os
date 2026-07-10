@@ -118,16 +118,16 @@ impl NewApiAuditRecord {
         )
     }
 
-    pub fn person_identity_review_set(
+    pub fn persona_identity_review_set(
         actor_id: impl Into<String>,
         identity_candidate_id: impl Into<String>,
     ) -> Self {
         Self::new(
             actor_id,
-            "person_identity.review.set",
+            "persona_identity.review.set",
             "PUT",
             "/api/v1/identity-candidates/{identity_candidate_id}/review",
-            "person_identity_candidate",
+            "persona_identity_candidate",
             Some(identity_candidate_id.into()),
             json!({}),
         )

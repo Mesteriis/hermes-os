@@ -311,7 +311,7 @@ const callsSurface: CommunicationCallsSurfaceModel = {
 				{
 					id: 'speaker-map',
 					label: 'Speaker map stable',
-					description: 'Four speakers matched to known people and owner context.',
+					description: 'Four speakers matched to known Personas and owner context.',
 					tone: 'success',
 					icon: 'tabler:user-check'
 				},
@@ -326,12 +326,12 @@ const callsSurface: CommunicationCallsSurfaceModel = {
 		},
 		entityGroups: [
 			{
-				id: 'people',
-				title: 'People',
+				id: 'personas',
+				title: 'Personas',
 				items: [
 					{
 						id: 'maya',
-						entity: 'person',
+						entity: 'persona',
 						title: 'Maya Chen',
 						description: 'Security vendor participant',
 						evidenceLabel: 'Speaker segments 03:12, 12:44',

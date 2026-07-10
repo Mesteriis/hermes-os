@@ -203,7 +203,7 @@ export function useThreadMessagesQuery(accountId: NullableQueryParam<string>, su
   })
 }
 
-export function usePersonasQuery() {
+export function useCommunicationPersonasQuery() {
   return useQuery<CommunicationPersona[]>({
     queryKey: ['communications-personas'],
     queryFn: async () => {

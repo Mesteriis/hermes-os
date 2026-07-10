@@ -9,7 +9,8 @@ use tower::ServiceExt;
 
 use hermes_hub_backend::ai::control_center::{
     AiControlCenterError, AiControlCenterStore, AiModelAvailabilityUpdateRequest,
-    AiModelRouteUpdateRequest, AiProviderConsentRequest, AiProviderCreateRequest,
+    AiModelRouteUpdateRequest, AiPromptCreateRequest, AiProviderConsentRequest,
+    AiProviderCreateRequest,
 };
 use hermes_hub_backend::app::{build_router, build_router_with_database};
 use hermes_hub_backend::platform::config::AppConfig;
@@ -1367,6 +1368,34 @@ async fn ai_control_center_mutations_record_observation_trail_against_postgres()
         provider.provider_id
     );
     assert_eq!(route_row.get::<Value, _>("payload")["model_key"], "gpt-5.5");
+}
+
+#[tokio::test]
+async fn ai_prompt_create_canonicalizes_legacy_person_scope_to_persona_against_postgres() {
+    let ctx = TestContext::new().await;
+    let store = AiControlCenterStore::new(ctx.pool().clone());
+
+    let prompt = store
+        .create_prompt(
+            &AiPromptCreateRequest {
+                prompt_id: None,
+                name: "Persona prompt".to_owned(),
+                entity_scope: "person".to_owned(),
+                capability_slot: "default_chat".to_owned(),
+                description: None,
+                metadata: Some(json!({})),
+            },
+            "hermes-frontend",
+        )
+        .await
+        .expect("create prompt with legacy person entity scope");
+
+    assert_eq!(prompt.entity_scope, "persona");
+    assert!(
+        prompt.prompt_id.starts_with("prompt:user:persona:"),
+        "generated prompt id must use persona scope, got {}",
+        prompt.prompt_id
+    );
 }
 
 fn assert_invalid_request_contains(error: AiControlCenterError, expected: &str) {

@@ -2,16 +2,16 @@ use sqlx::postgres::PgPool;
 
 use super::super::errors::ConsistencyError;
 use super::super::evidence::{
-    ActivePersonFactClaim, CallTranscriptEvidence, ChannelMessageEvidence, DocumentEvidence,
-    MeetingNoteEvidence, MessageEvidence, row_to_active_person_fact_claim,
+    ActivePersonaFactClaim, CallTranscriptEvidence, ChannelMessageEvidence, DocumentEvidence,
+    MeetingNoteEvidence, MessageEvidence, row_to_active_persona_fact_claim,
     row_to_call_transcript_evidence, row_to_channel_message_evidence, row_to_document_evidence,
     row_to_meeting_note_evidence, row_to_message_evidence,
 };
 
-pub(super) async fn active_person_fact_claims(
+pub(super) async fn active_persona_fact_claims(
     pool: &PgPool,
     limit: i64,
-) -> Result<Vec<ActivePersonFactClaim>, ConsistencyError> {
+) -> Result<Vec<ActivePersonaFactClaim>, ConsistencyError> {
     let rows = sqlx::query(
         r#"
         SELECT
@@ -21,8 +21,8 @@ pub(super) async fn active_person_fact_claims(
             fact.value,
             fact.confidence::float8 AS confidence,
             person.email_address
-        FROM person_facts fact
-        JOIN persons person ON person.person_id = fact.person_id
+        FROM persona_facts fact
+        JOIN personas person ON person.person_id = fact.person_id
         WHERE fact.is_active = true
           AND length(trim(person.email_address)) > 0
         ORDER BY fact.updated_at DESC, fact.id
@@ -34,7 +34,7 @@ pub(super) async fn active_person_fact_claims(
     .await?;
 
     rows.into_iter()
-        .map(row_to_active_person_fact_claim)
+        .map(row_to_active_persona_fact_claim)
         .collect()
 }
 
@@ -73,7 +73,7 @@ pub(super) async fn recent_channel_message_evidence(
             message.subject,
             message.body_text
         FROM communication_messages message
-        JOIN person_identities identity
+        JOIN persona_identities identity
           ON identity.status = 'active'
          AND (
                 (
@@ -185,7 +185,7 @@ pub(super) async fn recent_call_transcript_evidence(
             identity.person_id,
             transcript.transcript_text
         FROM call_transcripts transcript
-        JOIN person_identities identity
+        JOIN persona_identities identity
           ON identity.identity_type = 'telegram'
          AND identity.status = 'active'
          AND identity.identity_value = transcript.provider_chat_id

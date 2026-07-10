@@ -32,7 +32,7 @@ async fn graph_projection_is_idempotent_for_v1_sources_against_postgres() {
     assert_eq!(counts_after_first, counts_after_second);
 
     let person_count = sqlx::query_scalar::<_, i64>(
-        "SELECT count(*) FROM graph_nodes WHERE node_kind = 'person' AND stable_key LIKE $1",
+        "SELECT count(*) FROM graph_nodes WHERE node_kind = 'persona' AND stable_key LIKE $1",
     )
     .bind(format!("person:v1:email:%unknown-{suffix}%"))
     .fetch_one(&context.pool)
@@ -96,7 +96,7 @@ async fn graph_projection_replaces_stale_unknown_message_edges_against_postgres(
 
     context
         .person_store
-        .upsert_email_person(&sender_email)
+        .upsert_email_persona(&sender_email)
         .await
         .expect("upsert exact sender person");
     context
@@ -107,10 +107,10 @@ async fn graph_projection_replaces_stale_unknown_message_edges_against_postgres(
 
     assert_message_edge_with_evidence(
         &context.pool,
-        "person",
+        "persona",
         &sender_email,
         &provider_record_id,
-        "person_sent_message",
+        "persona_sent_message",
         &projected,
     )
     .await;

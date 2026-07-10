@@ -11,7 +11,6 @@ const plannedSurfaces = [
 	'useKnowledgeViewSurface',
 	'useNotesViewSurface',
 	'useOrganizationsViewSurface',
-	'usePersonsViewSurface',
 	'useProjectsViewSurface',
 	'useReviewViewSurface',
 	'useSettingsViewSurface',
@@ -37,5 +36,15 @@ describe('planned app screen surfaces', () => {
 			expect(surfaceSource).toContain('screenId:')
 			expect(surfaceSource).toContain('status:')
 		}
+	})
+
+	it('keeps Personas routed to the rebuilt personas domain surface', () => {
+		const surfaceSource = readFileSync(
+			new URL('./usePersonasViewSurface.ts', import.meta.url),
+			'utf8'
+		)
+
+		expect(surfaceSource).toContain('usePersonasSurface')
+		expect(surfaceSource).not.toContain('createPlannedScreenSurface')
 	})
 })

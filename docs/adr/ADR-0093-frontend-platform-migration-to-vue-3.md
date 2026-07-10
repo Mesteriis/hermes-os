@@ -281,7 +281,7 @@ domains/communications/views/
 domains/telegram/views/
   TelegramChat.vue
 
-domains/persons/views/
+domains/personas/views/
   PersonProfile.vue
 ```
 

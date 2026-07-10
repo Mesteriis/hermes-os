@@ -293,7 +293,7 @@ impl From<ReviewInboxError> for ApiError {
                 Self::InvalidReviewQuery("review evidence observation was not found")
             }
             ReviewInboxError::UnknownItemKind(_) => Self::InvalidReviewItem(
-                "item_kind must be new_person, new_organization, identity_candidate, project_link_candidate, contradiction_candidate, potential_task, potential_obligation, potential_decision, potential_relationship, potential_project, or knowledge_candidate",
+                "item_kind must be new_persona, new_organization, identity_candidate, project_link_candidate, contradiction_candidate, potential_task, potential_obligation, potential_decision, potential_relationship, potential_project, or knowledge_candidate",
             ),
             ReviewInboxError::UnknownStatus(_) => Self::InvalidReviewQuery(
                 "status must be new, in_review, approved, promoted, dismissed, or archived",
@@ -319,8 +319,8 @@ impl From<ReviewPromotionError> for ApiError {
             ReviewPromotionError::Decision(inner) => Self::from(inner),
             ReviewPromotionError::Obligation(inner) => Self::from(inner),
             ReviewPromotionError::Relationship(inner) => Self::from(inner),
-            ReviewPromotionError::PersonIdentity(inner) => Self::from(inner),
-            ReviewPromotionError::PersonProjection(_) => {
+            ReviewPromotionError::PersonaIdentity(inner) => Self::from(inner),
+            ReviewPromotionError::PersonaProjection(_) => {
                 Self::InvalidReviewQuery("review promotion person target is invalid")
             }
             ReviewPromotionError::ProjectLinkReview(inner) => Self::from(inner),

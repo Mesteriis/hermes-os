@@ -6,6 +6,8 @@ import {
   fetchProviderAccounts,
   fetchCalendarAccounts,
   logoutMailAccount,
+  runAddressBookSyncNow,
+  type ProviderAccountUpdate,
   updateCalendarAccount,
   updateProviderAccount,
 } from '../api/settings'
@@ -137,7 +139,7 @@ export function useUpdateProviderAccountMutation() {
       update
     }: {
       accountId: string
-      update: { display_name?: string }
+      update: ProviderAccountUpdate
     }) => updateProviderAccount(accountId, update),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: settingsKeys.providerAccounts() })
@@ -183,6 +185,18 @@ export function useUpdateCalendarAccountMutation() {
     }) => updateCalendarAccount(accountId, update),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: settingsKeys.calendarAccounts() })
+      queryClient.invalidateQueries({ queryKey: settingsKeys.workspace() })
+    },
+  })
+}
+
+export function useRunAddressBookSyncNowMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (accountId: string) => runAddressBookSyncNow(accountId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: settingsKeys.providerAccounts() })
       queryClient.invalidateQueries({ queryKey: settingsKeys.workspace() })
     },
   })

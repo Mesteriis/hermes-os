@@ -1,5 +1,5 @@
 use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::engines::consistency::{
     ContradictionObservationStore, ContradictionSeverity, ContradictionSourceKind,
 };
@@ -8,7 +8,7 @@ use serde_json::json;
 use super::support::{live_consistency_pool, seed_message, unique_suffix};
 
 #[tokio::test]
-async fn contradiction_refresh_detects_message_claim_against_active_person_fact_without_overwriting_memory()
+async fn contradiction_refresh_detects_message_claim_against_active_persona_fact_without_overwriting_memory()
  {
     let Some(pool) = live_consistency_pool("contradiction refresh").await else {
         return;
@@ -16,13 +16,13 @@ async fn contradiction_refresh_detects_message_claim_against_active_person_fact_
     let store = ContradictionObservationStore::new(pool.clone());
     let suffix = unique_suffix();
     let sender = format!("polygraph-{suffix}@example.com");
-    let person = PersonProjectionStore::new(pool.clone())
-        .upsert_email_person(&sender)
+    let person = PersonaProjectionStore::new(pool.clone())
+        .upsert_email_persona(&sender)
         .await
         .expect("person");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO person_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
@@ -78,7 +78,7 @@ async fn contradiction_refresh_detects_message_claim_against_active_person_fact_
     );
 
     let remembered_value: String =
-        sqlx::query_scalar("SELECT value FROM person_facts WHERE id::text = $1")
+        sqlx::query_scalar("SELECT value FROM persona_facts WHERE id::text = $1")
             .bind(&fact_id)
             .fetch_one(&pool)
             .await
@@ -87,7 +87,7 @@ async fn contradiction_refresh_detects_message_claim_against_active_person_fact_
 }
 
 #[tokio::test]
-async fn contradiction_refresh_detects_natural_language_message_claim_against_active_person_fact_without_overwriting_memory()
+async fn contradiction_refresh_detects_natural_language_message_claim_against_active_persona_fact_without_overwriting_memory()
  {
     let Some(pool) = live_consistency_pool("contradiction natural-language refresh").await else {
         return;
@@ -95,13 +95,13 @@ async fn contradiction_refresh_detects_natural_language_message_claim_against_ac
     let store = ContradictionObservationStore::new(pool.clone());
     let suffix = unique_suffix();
     let sender = format!("polygraph-natural-language-{suffix}@example.com");
-    let person = PersonProjectionStore::new(pool.clone())
-        .upsert_email_person(&sender)
+    let person = PersonaProjectionStore::new(pool.clone())
+        .upsert_email_persona(&sender)
         .await
         .expect("person");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO person_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
@@ -145,7 +145,7 @@ async fn contradiction_refresh_detects_natural_language_message_claim_against_ac
     assert_eq!(observation.severity, ContradictionSeverity::Medium);
 
     let remembered_value: String =
-        sqlx::query_scalar("SELECT value FROM person_facts WHERE id::text = $1")
+        sqlx::query_scalar("SELECT value FROM persona_facts WHERE id::text = $1")
             .bind(&fact_id)
             .fetch_one(&pool)
             .await
@@ -154,7 +154,7 @@ async fn contradiction_refresh_detects_natural_language_message_claim_against_ac
 }
 
 #[tokio::test]
-async fn contradiction_refresh_detects_document_claim_against_active_person_fact_without_overwriting_memory()
+async fn contradiction_refresh_detects_document_claim_against_active_persona_fact_without_overwriting_memory()
  {
     let Some(pool) = live_consistency_pool("contradiction document refresh").await else {
         return;
@@ -162,13 +162,13 @@ async fn contradiction_refresh_detects_document_claim_against_active_person_fact
     let store = ContradictionObservationStore::new(pool.clone());
     let suffix = unique_suffix();
     let email_address = format!("polygraph-document-{suffix}@example.com");
-    let person = PersonProjectionStore::new(pool.clone())
-        .upsert_email_person(&email_address)
+    let person = PersonaProjectionStore::new(pool.clone())
+        .upsert_email_persona(&email_address)
         .await
         .expect("person");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO person_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
@@ -223,7 +223,7 @@ async fn contradiction_refresh_detects_document_claim_against_active_person_fact
     );
 
     let remembered_value: String =
-        sqlx::query_scalar("SELECT value FROM person_facts WHERE id::text = $1")
+        sqlx::query_scalar("SELECT value FROM persona_facts WHERE id::text = $1")
             .bind(&fact_id)
             .fetch_one(&pool)
             .await

@@ -1,4 +1,4 @@
-use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::engines::consistency::{
     ContradictionObservationStore, ContradictionSeverity, ContradictionSourceKind,
 };
@@ -10,7 +10,7 @@ use super::support::{
 };
 
 #[tokio::test]
-async fn contradiction_refresh_detects_telegram_message_claim_against_active_person_fact_without_overwriting_memory()
+async fn contradiction_refresh_detects_telegram_message_claim_against_active_persona_fact_without_overwriting_memory()
  {
     let Some(pool) = live_consistency_pool("contradiction telegram message refresh").await else {
         return;
@@ -19,13 +19,13 @@ async fn contradiction_refresh_detects_telegram_message_claim_against_active_per
     let suffix = unique_suffix();
     let email_address = format!("polygraph-telegram-{suffix}@example.com");
     let sender_id = format!("telegram-sender-{suffix}");
-    let person = PersonProjectionStore::new(pool.clone())
-        .upsert_email_person(&email_address)
+    let person = PersonaProjectionStore::new(pool.clone())
+        .upsert_email_persona(&email_address)
         .await
         .expect("person");
     sqlx::query(
         r#"
-        INSERT INTO person_identities (person_id, identity_type, identity_value, source, confidence, status)
+        INSERT INTO persona_identities (person_id, identity_type, identity_value, source, confidence, status)
         VALUES ($1, 'telegram', $2, 'test', 1.0, 'active')
         "#,
     )
@@ -36,7 +36,7 @@ async fn contradiction_refresh_detects_telegram_message_claim_against_active_per
     .expect("telegram identity");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO person_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
@@ -83,7 +83,7 @@ async fn contradiction_refresh_detects_telegram_message_claim_against_active_per
     );
 
     let remembered_value: String =
-        sqlx::query_scalar("SELECT value FROM person_facts WHERE id::text = $1")
+        sqlx::query_scalar("SELECT value FROM persona_facts WHERE id::text = $1")
             .bind(&fact_id)
             .fetch_one(&pool)
             .await
@@ -92,7 +92,7 @@ async fn contradiction_refresh_detects_telegram_message_claim_against_active_per
 }
 
 #[tokio::test]
-async fn contradiction_refresh_detects_whatsapp_message_claim_against_active_person_fact_without_overwriting_memory()
+async fn contradiction_refresh_detects_whatsapp_message_claim_against_active_persona_fact_without_overwriting_memory()
  {
     let Some(pool) = live_consistency_pool("contradiction WhatsApp message refresh").await else {
         return;
@@ -101,13 +101,13 @@ async fn contradiction_refresh_detects_whatsapp_message_claim_against_active_per
     let suffix = unique_suffix();
     let email_address = format!("polygraph-whatsapp-{suffix}@example.com");
     let sender_id = format!("whatsapp-sender-{suffix}");
-    let person = PersonProjectionStore::new(pool.clone())
-        .upsert_email_person(&email_address)
+    let person = PersonaProjectionStore::new(pool.clone())
+        .upsert_email_persona(&email_address)
         .await
         .expect("person");
     sqlx::query(
         r#"
-        INSERT INTO person_identities (person_id, identity_type, identity_value, source, confidence, status)
+        INSERT INTO persona_identities (person_id, identity_type, identity_value, source, confidence, status)
         VALUES ($1, 'whatsapp', $2, 'test', 1.0, 'active')
         "#,
     )
@@ -118,7 +118,7 @@ async fn contradiction_refresh_detects_whatsapp_message_claim_against_active_per
     .expect("whatsapp identity");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO person_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
@@ -165,7 +165,7 @@ async fn contradiction_refresh_detects_whatsapp_message_claim_against_active_per
     );
 
     let remembered_value: String =
-        sqlx::query_scalar("SELECT value FROM person_facts WHERE id::text = $1")
+        sqlx::query_scalar("SELECT value FROM persona_facts WHERE id::text = $1")
             .bind(&fact_id)
             .fetch_one(&pool)
             .await
@@ -174,7 +174,7 @@ async fn contradiction_refresh_detects_whatsapp_message_claim_against_active_per
 }
 
 #[tokio::test]
-async fn contradiction_refresh_detects_zulip_message_claim_against_active_person_fact_without_overwriting_memory()
+async fn contradiction_refresh_detects_zulip_message_claim_against_active_persona_fact_without_overwriting_memory()
  {
     let Some(pool) = live_consistency_pool("contradiction Zulip message refresh").await else {
         return;
@@ -183,13 +183,13 @@ async fn contradiction_refresh_detects_zulip_message_claim_against_active_person
     let suffix = unique_suffix();
     let email_address = format!("polygraph-zulip-{suffix}@example.com");
     let sender_email = format!("zulip-sender-{suffix}@example.com");
-    let person = PersonProjectionStore::new(pool.clone())
-        .upsert_email_person(&email_address)
+    let person = PersonaProjectionStore::new(pool.clone())
+        .upsert_email_persona(&email_address)
         .await
         .expect("person");
     sqlx::query(
         r#"
-        INSERT INTO person_identities (person_id, identity_type, identity_value, source, confidence, status)
+        INSERT INTO persona_identities (person_id, identity_type, identity_value, source, confidence, status)
         VALUES ($1, 'zulip', $2, 'test', 1.0, 'active')
         "#,
     )
@@ -200,7 +200,7 @@ async fn contradiction_refresh_detects_zulip_message_claim_against_active_person
     .expect("zulip identity");
     let fact_id: String = sqlx::query_scalar(
         r#"
-        INSERT INTO person_facts (person_id, fact_type, value, source, confidence)
+        INSERT INTO persona_facts (person_id, fact_type, value, source, confidence)
         VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
         RETURNING id::text
         "#,
@@ -247,7 +247,7 @@ async fn contradiction_refresh_detects_zulip_message_claim_against_active_person
     );
 
     let remembered_value: String =
-        sqlx::query_scalar("SELECT value FROM person_facts WHERE id::text = $1")
+        sqlx::query_scalar("SELECT value FROM persona_facts WHERE id::text = $1")
             .bind(&fact_id)
             .fetch_one(&pool)
             .await

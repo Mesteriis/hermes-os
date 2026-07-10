@@ -151,7 +151,7 @@ async fn put_contradiction_review_updates_review_state_with_observation_trail() 
             resolution,
             (
                 SELECT count(*)
-                FROM person_facts
+                FROM persona_facts
                 WHERE value = $2
             ) AS memory_overwrite_count
         FROM contradiction_observations

@@ -22,7 +22,7 @@ export function useOrganizationsSurface() {
       {
         id: 'organizations-relationships',
         labelKey: 'Organization relationships',
-        descriptionKey: 'People, projects and evidence linked to an organization.',
+        descriptionKey: 'Personas, projects and evidence linked to an organization.',
         icon: 'tabler:building-community',
         status: 'active',
         kind: 'graph',
@@ -63,4 +63,3 @@ export function useOrganizationsSurface() {
     ]
   })
 }
-

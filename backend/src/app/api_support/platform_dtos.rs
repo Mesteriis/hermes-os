@@ -63,6 +63,9 @@ impl ApplicationAccountCredentialState {
 #[derive(Deserialize)]
 pub(crate) struct ApplicationAccountUpdateRequest {
     pub(crate) display_name: Option<String>,
+    pub(crate) address_book_sync_enabled: Option<bool>,
+    pub(crate) address_book_sync_direction: Option<String>,
+    pub(crate) address_book_remote_write_enabled: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -146,7 +149,7 @@ pub(crate) struct V1StatusResponse {
 #[derive(Serialize)]
 pub(crate) struct V1Surfaces {
     pub(crate) messages: bool,
-    pub(crate) persons: bool,
+    pub(crate) personas: bool,
     pub(crate) search: bool,
     pub(crate) documents: bool,
     pub(crate) account_setup: bool,

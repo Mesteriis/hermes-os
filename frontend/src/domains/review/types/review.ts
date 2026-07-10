@@ -149,7 +149,7 @@ export type ReviewItemStatus =
 	| 'archived'
 
 export type ReviewItemKind =
-	| 'new_person'
+	| 'new_persona'
 	| 'new_organization'
 	| 'identity_candidate'
 	| 'project_link_candidate'

@@ -39,9 +39,8 @@ pub(super) fn email_provider_connected_services(
     provider_kind: EmailProviderKind,
 ) -> Option<&'static [&'static str]> {
     match provider_kind {
-        EmailProviderKind::Gmail | EmailProviderKind::Icloud => {
-            Some(&["mail", "calendar", "contacts"])
-        }
+        EmailProviderKind::Gmail => Some(&["mail", "calendar", "contacts"]),
+        EmailProviderKind::Icloud => Some(&["mail", "calendar"]),
         EmailProviderKind::Imap
         | EmailProviderKind::TelegramUser
         | EmailProviderKind::TelegramBot
@@ -81,4 +80,21 @@ pub(super) fn random_url_token() -> String {
 pub(super) fn pkce_challenge(code_verifier: &str) -> String {
     let digest = Sha256::digest(code_verifier.as_bytes());
     URL_SAFE_NO_PAD.encode(digest)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gmail_advertises_contacts_but_icloud_does_not_without_carddav_adapter() {
+        assert_eq!(
+            email_provider_connected_services(EmailProviderKind::Gmail),
+            Some(["mail", "calendar", "contacts"].as_slice())
+        );
+        assert_eq!(
+            email_provider_connected_services(EmailProviderKind::Icloud),
+            Some(["mail", "calendar"].as_slice())
+        );
+    }
 }

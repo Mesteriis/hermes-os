@@ -88,7 +88,7 @@ async fn graph_neighborhood_rejects_missing_local_api_secret_before_malformed_qu
 
     let response = app
         .oneshot(get_request(
-            "/api/v1/graph/neighborhood?node_id=graph:node:v1:person:alex&depth=not-a-number",
+            "/api/v1/graph/neighborhood?node_id=graph:node:v1:persona:alex&depth=not-a-number",
         ))
         .await
         .expect("response");

@@ -21,11 +21,11 @@ use crate::ai::core::{
 use crate::domains::communications::core::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
 };
-use crate::domains::persons::analytics::{AnalyticsError, PersonAnalyticsService};
-use crate::domains::persons::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
-use crate::domains::persons::expertise::{PersonExpertiseError, PersonExpertiseStore};
-use crate::domains::persons::export::{ExportError, ExportFormat, PersonExportService};
-use crate::domains::persons::investigator::{InvestigatorError, PersonInvestigator};
+use crate::domains::personas::analytics::{AnalyticsError, PersonaAnalyticsService};
+use crate::domains::personas::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
+use crate::domains::personas::expertise::{PersonaExpertiseError, PersonaExpertiseStore};
+use crate::domains::personas::export::{ExportError, ExportFormat, PersonaExportService};
+use crate::domains::personas::investigator::{InvestigatorError, PersonaInvestigator};
 use crate::engines::automation::{
     AutomationError, AutomationPolicy, AutomationStore, AutomationTemplate, NewAutomationPolicy,
     NewAutomationTemplate, TelegramSendDryRunRequest, TelegramSendDryRunResponse,
@@ -38,24 +38,27 @@ use crate::platform::calls::{
 };
 use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
 use crate::platform::config::AppConfig;
+use crate::platform::observations::ObservationOriginKind;
 
-use crate::domains::persons::health::{PersonHealthError, PersonHealthStore};
+use crate::domains::personas::health::{PersonaHealthError, PersonaHealthStore};
 
-use crate::domains::persons::trust::{PersonPromiseStore, PersonRiskStore, PersonTrustError};
+use crate::domains::personas::trust::{PersonaPromiseStore, PersonaRiskStore, PersonaTrustError};
 
-use crate::domains::persons::memory::{
-    NewRelationshipEvent, PersonFactStore, PersonMemoryCardStore, PersonMemoryError,
-    PersonPreferenceStore, RelationshipEventStore,
+use crate::domains::personas::memory::{
+    NewRelationshipEvent, PersonaFactStore, PersonaMemoryCardStore, PersonaMemoryError,
+    PersonaPreferenceStore, RelationshipEventStore,
 };
 
-use crate::domains::persons::core::{
-    NewPersonPersona, PersonCoreError, PersonIdentity, PersonPersona, PersonPersonaStore,
-    PersonRole, PersonRoleStore, PersonsIdentityStore,
+use crate::domains::personas::core::{
+    NewPersonaInteractionContext, PersonaCoreError, PersonaIdentity, PersonaIdentityStore,
+    PersonaInteractionContext, PersonaInteractionContextStore, PersonaRole, PersonaRoleStore,
 };
-use crate::domains::persons::identity::{
-    PersonIdentityCandidate, PersonIdentityDetail, PersonIdentityError,
-    PersonIdentityReviewCommand, PersonIdentityReviewState, PersonIdentityStore,
+use crate::domains::personas::identity::{
+    PersonaIdentityCandidate, PersonaIdentityDetail, PersonaIdentityError,
+    PersonaIdentityReviewCommand, PersonaIdentityReviewState, PersonaIdentityReviewStore,
 };
+
+const GOOGLE_CONTACTS_WRITE_SCOPE: &str = "https://www.googleapis.com/auth/contacts";
 
 use crate::application::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
 use crate::application::mail_background_sync::MailSyncStore;
@@ -212,27 +215,155 @@ pub(crate) async fn patch_application_settings_account(
     Path(account_id): Path<String>,
     Json(request): Json<ApplicationAccountUpdateRequest>,
 ) -> Result<Json<ProviderAccount>, ApiError> {
-    let Some(display_name) = request
-        .display_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return Err(ApiError::InvalidCommunicationQuery(
-            "account display_name is required",
-        ));
-    };
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let account = crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
-        .update_display_name(&account_id, display_name)
-        .await?
-        .ok_or(ApiError::NotFound)?;
+    let store = crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool);
+    let mut account = if let Some(display_name) = request
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        store
+            .update_display_name(&account_id, display_name)
+            .await?
+            .ok_or(ApiError::NotFound)?
+    } else {
+        store.get(&account_id).await?.ok_or(ApiError::NotFound)?
+    };
+
+    if request.address_book_sync_enabled.is_some()
+        || request.address_book_sync_direction.is_some()
+        || request.address_book_remote_write_enabled.is_some()
+    {
+        let config = address_book_sync_config(
+            &account,
+            request.address_book_sync_enabled,
+            request.address_book_sync_direction.as_deref(),
+            request.address_book_remote_write_enabled,
+        )?;
+        account = store
+            .update_config_with_origin(
+                &account_id,
+                &config,
+                ObservationOriginKind::LocalRuntime,
+                "settings.provider_accounts.update_address_book_sync",
+                "update_address_book_sync",
+            )
+            .await?
+            .ok_or(ApiError::NotFound)?;
+    } else if request
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_none()
+    {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "account update field is required",
+        ));
+    }
 
     Ok(Json(account))
+}
+
+fn address_book_sync_config(
+    account: &ProviderAccount,
+    enabled: Option<bool>,
+    direction: Option<&str>,
+    remote_write_enabled: Option<bool>,
+) -> Result<Value, ApiError> {
+    if !provider_account_supports_contacts(account) {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "account contacts service is not available",
+        ));
+    }
+    if account_config_string(account, "address_book_sync_unsupported_reason").is_some() {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "account contacts service is disabled by provider adapter",
+        ));
+    }
+
+    let mut config = account.config.clone();
+    let Some(config_object) = config.as_object_mut() else {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "account config must be an object",
+        ));
+    };
+    if let Some(enabled) = enabled {
+        config_object.insert("address_book_sync_enabled".to_owned(), json!(enabled));
+    }
+    if let Some(direction) = direction {
+        let direction = direction.trim();
+        if direction != "read_only" && direction != "bidirectional" {
+            return Err(ApiError::InvalidCommunicationQuery(
+                "address book sync direction must be read_only or bidirectional",
+            ));
+        }
+        config_object.insert("address_book_sync_direction".to_owned(), json!(direction));
+        if direction != "bidirectional" {
+            config_object.insert("address_book_remote_write_enabled".to_owned(), json!(false));
+        }
+    }
+    if let Some(remote_write_enabled) = remote_write_enabled {
+        if remote_write_enabled {
+            let direction_allows_write = direction == Some("bidirectional")
+                || account_config_string(account, "address_book_sync_direction")
+                    .is_some_and(|value| value == "bidirectional");
+            if !direction_allows_write {
+                return Err(ApiError::InvalidCommunicationQuery(
+                    "address book remote write requires bidirectional sync",
+                ));
+            }
+            if account.provider_kind != EmailProviderKind::Gmail {
+                return Err(ApiError::InvalidCommunicationQuery(
+                    "address book remote write is only supported for Gmail accounts",
+                ));
+            }
+            if !provider_account_requested_scope(account, GOOGLE_CONTACTS_WRITE_SCOPE) {
+                return Err(ApiError::InvalidCommunicationQuery(
+                    "address book remote write requires Google Contacts write scope",
+                ));
+            }
+        }
+        config_object.insert(
+            "address_book_remote_write_enabled".to_owned(),
+            json!(remote_write_enabled),
+        );
+    }
+    Ok(config)
+}
+
+fn provider_account_supports_contacts(account: &ProviderAccount) -> bool {
+    account
+        .config
+        .get("connected_services")
+        .and_then(Value::as_array)
+        .is_some_and(|services| {
+            services
+                .iter()
+                .any(|service| service.as_str() == Some("contacts"))
+        })
+}
+
+fn account_config_string<'a>(account: &'a ProviderAccount, key: &str) -> Option<&'a str> {
+    account.config.get(key).and_then(Value::as_str)
+}
+
+fn provider_account_requested_scope(account: &ProviderAccount, scope: &str) -> bool {
+    account
+        .config
+        .get("requested_scopes")
+        .and_then(Value::as_array)
+        .is_some_and(|scopes| {
+            scopes
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|value| value.trim() == scope)
+        })
 }
 
 pub(crate) async fn put_application_setting(

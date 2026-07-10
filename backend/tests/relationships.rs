@@ -2,10 +2,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::Utc;
-use hermes_hub_backend::application::OrganizationContactLinkApplicationService;
+use hermes_hub_backend::application::OrganizationPersonaLinkApplicationService;
 use hermes_hub_backend::domains::graph::core::{GraphNodeKind, node_id};
 use hermes_hub_backend::domains::organizations::api::OrganizationStore;
-use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::domains::relationships::{
     NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
     RelationshipEvidenceSourceKind, RelationshipReviewState, RelationshipStore,
@@ -28,11 +28,11 @@ async fn relationship_store_upserts_persona_relationship_with_evidence_against_p
     };
     let suffix = unique_suffix();
     let source = person_store
-        .upsert_email_person(&format!("relationship-source-{suffix}@example.com"))
+        .upsert_email_persona(&format!("relationship-source-{suffix}@example.com"))
         .await
         .expect("source persona");
     let target = person_store
-        .upsert_email_person(&format!("relationship-target-{suffix}@example.com"))
+        .upsert_email_persona(&format!("relationship-target-{suffix}@example.com"))
         .await
         .expect("target persona");
 
@@ -130,11 +130,11 @@ async fn relationship_store_projects_persona_relationship_into_graph_against_pos
     };
     let suffix = unique_suffix();
     let source = person_store
-        .upsert_email_person(&format!("graph-source-{suffix}@example.com"))
+        .upsert_email_persona(&format!("graph-source-{suffix}@example.com"))
         .await
         .expect("source persona");
     let target = person_store
-        .upsert_email_person(&format!("graph-target-{suffix}@example.com"))
+        .upsert_email_persona(&format!("graph-target-{suffix}@example.com"))
         .await
         .expect("target persona");
 
@@ -169,8 +169,8 @@ async fn relationship_store_projects_persona_relationship_into_graph_against_pos
           AND edge.valid_to IS NULL
         "#,
     )
-    .bind(node_id(GraphNodeKind::Person, &source.person_id))
-    .bind(node_id(GraphNodeKind::Person, &target.person_id))
+    .bind(node_id(GraphNodeKind::Persona, &source.person_id))
+    .bind(node_id(GraphNodeKind::Persona, &target.person_id))
     .fetch_one(&pool)
     .await
     .expect("relationship graph edge");
@@ -414,27 +414,33 @@ async fn relationship_store_projects_organization_task_relationship_into_graph_a
 }
 
 #[tokio::test]
-async fn organization_contact_link_materializes_member_of_relationship_against_postgres() {
-    let Some((pool, person_store, relationship_store, organization_store, contact_link_service)) =
-        live_organization_contact_relationship_context("organization contact relationship").await
+async fn organization_persona_link_materializes_member_of_relationship_against_postgres() {
+    let Some((
+        _test_context,
+        pool,
+        person_store,
+        relationship_store,
+        organization_store,
+        persona_link_service,
+    )) = live_organization_person_relationship_context("organization-persona relationship").await
     else {
         return;
     };
     let suffix = unique_suffix();
     let person = person_store
-        .upsert_email_person(&format!("org-contact-relationship-{suffix}@example.com"))
+        .upsert_email_persona(&format!("org-person-relationship-{suffix}@example.com"))
         .await
         .expect("persona");
     let organization = organization_store
         .create(
-            &format!("Organization Contact Relationship {suffix}"),
+            &format!("Organization Person Relationship {suffix}"),
             Some("company"),
         )
         .await
         .expect("organization");
 
-    let link = contact_link_service
-        .link_contact_manual(
+    let link = persona_link_service
+        .link_persona_manual(
             &organization.organization_id,
             &person.person_id,
             Some("advisor"),
@@ -442,7 +448,7 @@ async fn organization_contact_link_materializes_member_of_relationship_against_p
             "manual",
         )
         .await
-        .expect("organization contact link");
+        .expect("organization-person link");
 
     let relationships = relationship_store
         .list_for_entity(RelationshipEntityKind::Persona, &person.person_id, 20)
@@ -457,7 +463,7 @@ async fn organization_contact_link_materializes_member_of_relationship_against_p
                 && item.target_entity_id == organization.organization_id
                 && item.relationship_type == "member_of"
         })
-        .expect("organization contact link should create member_of relationship");
+        .expect("organization-person link should create member_of relationship");
 
     assert_eq!(
         relationship.review_state,
@@ -466,7 +472,7 @@ async fn organization_contact_link_materializes_member_of_relationship_against_p
     assert_eq!(relationship.confidence, link.confidence);
     assert_eq!(
         relationship.metadata["compatibility_table"],
-        json!("organization_contact_links")
+        json!("organization_persona_links")
     );
     assert_eq!(relationship.metadata["role"], json!("advisor"));
     assert_eq!(relationship.metadata["department"], json!("strategy"));
@@ -494,13 +500,14 @@ async fn organization_contact_link_materializes_member_of_relationship_against_p
     assert!(source_id.starts_with("observation:v1:"));
     assert_eq!(
         excerpt.as_deref(),
-        Some("Persona is linked to organization through compatibility organization contact data.")
+        Some("Persona is linked to organization through organization-persona compatibility data.")
     );
     assert_eq!(
         metadata["organization_id"],
         json!(organization.organization_id)
     );
-    assert_eq!(metadata["person_id"], json!(person.person_id));
+    assert_eq!(metadata["persona_id"], json!(person.person_id));
+    assert!(metadata.get("person_id").is_none());
 }
 
 #[tokio::test]
@@ -618,11 +625,11 @@ async fn relationship_store_materializes_support_link_for_observation_evidence_a
     };
     let suffix = unique_suffix();
     let source = person_store
-        .upsert_email_person(&format!("relationship-support-source-{suffix}@example.com"))
+        .upsert_email_persona(&format!("relationship-support-source-{suffix}@example.com"))
         .await
         .expect("source persona");
     let target = person_store
-        .upsert_email_person(&format!("relationship-support-target-{suffix}@example.com"))
+        .upsert_email_persona(&format!("relationship-support-target-{suffix}@example.com"))
         .await
         .expect("target persona");
     let observation = ObservationStore::new(pool.clone())
@@ -682,7 +689,7 @@ async fn relationship_store_materializes_support_link_for_observation_evidence_a
 
 async fn live_relationship_context(
     _test_name: &str,
-) -> Option<(PgPool, PersonProjectionStore, RelationshipStore)> {
+) -> Option<(PgPool, PersonaProjectionStore, RelationshipStore)> {
     let test_context = TestContext::new().await;
     let database_url = test_context.connection_string();
 
@@ -692,19 +699,20 @@ async fn live_relationship_context(
     let pool = database.pool().expect("configured pool").clone();
     Some((
         pool.clone(),
-        PersonProjectionStore::new(pool.clone()),
+        PersonaProjectionStore::new(pool.clone()),
         RelationshipStore::new(pool),
     ))
 }
 
-async fn live_organization_contact_relationship_context(
+async fn live_organization_person_relationship_context(
     _test_name: &str,
 ) -> Option<(
+    TestContext,
     PgPool,
-    PersonProjectionStore,
+    PersonaProjectionStore,
     RelationshipStore,
     OrganizationStore,
-    OrganizationContactLinkApplicationService,
+    OrganizationPersonaLinkApplicationService,
 )> {
     let test_context = TestContext::new().await;
     let database_url = test_context.connection_string();
@@ -714,11 +722,12 @@ async fn live_organization_contact_relationship_context(
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
     Some((
+        test_context,
         pool.clone(),
-        PersonProjectionStore::new(pool.clone()),
+        PersonaProjectionStore::new(pool.clone()),
         RelationshipStore::new(pool.clone()),
         OrganizationStore::new(pool.clone()),
-        OrganizationContactLinkApplicationService::new(pool),
+        OrganizationPersonaLinkApplicationService::new(pool),
     ))
 }
 

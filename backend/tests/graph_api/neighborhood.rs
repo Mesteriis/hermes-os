@@ -9,7 +9,7 @@ async fn graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence()
     let person = context
         .store
         .upsert_node(&NewGraphNode::new(
-            GraphNodeKind::Person,
+            GraphNodeKind::Persona,
             format!("person:alex-neighborhood:{suffix}"),
             format!("Alex Neighborhood {suffix}"),
         ))
@@ -30,12 +30,12 @@ async fn graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence()
             &NewGraphEdge::new(
                 person.node_id.clone(),
                 email.node_id.clone(),
-                RelationshipType::PersonHasEmailAddress,
+                RelationshipType::PersonaHasEmailAddress,
                 1.0,
                 GraphReviewState::SystemAccepted,
             ),
             &[NewGraphEvidence::new(
-                GraphEvidenceSourceKind::Person,
+                GraphEvidenceSourceKind::Persona,
                 format!("person-source:{suffix}"),
             )
             .excerpt("confirmed by person record")
@@ -87,7 +87,7 @@ async fn graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence()
     let evidence = body["evidence"].as_array().expect("evidence array");
     assert_eq!(evidence.len(), 1);
     assert_eq!(evidence[0]["edge_id"], json!(edge.edge_id));
-    assert_eq!(evidence[0]["source_kind"], json!("person"));
+    assert_eq!(evidence[0]["source_kind"], json!("persona"));
     assert_eq!(
         evidence[0]["source_id"],
         json!(format!("person-source:{suffix}"))
@@ -107,7 +107,7 @@ async fn graph_neighborhood_caps_depth_one_edges_nodes_and_evidence() {
     let person = context
         .store
         .upsert_node(&NewGraphNode::new(
-            GraphNodeKind::Person,
+            GraphNodeKind::Persona,
             format!("person:alex-neighborhood-cap:{suffix}"),
             format!("Alex Neighborhood Cap {suffix}"),
         ))
@@ -130,12 +130,12 @@ async fn graph_neighborhood_caps_depth_one_edges_nodes_and_evidence() {
                 &NewGraphEdge::new(
                     person.node_id.clone(),
                     email.node_id,
-                    RelationshipType::PersonHasEmailAddress,
+                    RelationshipType::PersonaHasEmailAddress,
                     1.0,
                     GraphReviewState::SystemAccepted,
                 ),
                 &[NewGraphEvidence::new(
-                    GraphEvidenceSourceKind::Person,
+                    GraphEvidenceSourceKind::Persona,
                     format!("person-source:{suffix}:{index:03}"),
                 )],
             )
@@ -186,7 +186,7 @@ async fn graph_neighborhood_caps_evidence_for_returned_edges() {
     let person = context
         .store
         .upsert_node(&NewGraphNode::new(
-            GraphNodeKind::Person,
+            GraphNodeKind::Persona,
             format!("person:alex-neighborhood-evidence-cap:{suffix}"),
             format!("Alex Neighborhood Evidence Cap {suffix}"),
         ))
@@ -204,7 +204,7 @@ async fn graph_neighborhood_caps_evidence_for_returned_edges() {
     let evidence = (0..=EXPECTED_GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT)
         .map(|index| {
             NewGraphEvidence::new(
-                GraphEvidenceSourceKind::Person,
+                GraphEvidenceSourceKind::Persona,
                 format!("person-source:{suffix}:{index:03}"),
             )
         })
@@ -215,7 +215,7 @@ async fn graph_neighborhood_caps_evidence_for_returned_edges() {
             &NewGraphEdge::new(
                 person.node_id.clone(),
                 email.node_id,
-                RelationshipType::PersonHasEmailAddress,
+                RelationshipType::PersonaHasEmailAddress,
                 1.0,
                 GraphReviewState::SystemAccepted,
             ),
@@ -281,7 +281,7 @@ async fn graph_neighborhood_rejects_unsupported_depth() {
 
     let response = app
         .oneshot(get_request_with_token(
-            "/api/v1/graph/neighborhood?node_id=graph:node:v1:person:alex&depth=2",
+            "/api/v1/graph/neighborhood?node_id=graph:node:v1:persona:alex&depth=2",
             LOCAL_API_TOKEN,
         ))
         .await

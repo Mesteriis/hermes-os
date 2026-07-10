@@ -7,7 +7,7 @@ use super::errors::ReviewInboxError;
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewItemKind {
-    NewPerson,
+    NewPersona,
     NewOrganization,
     IdentityCandidate,
     ProjectLinkCandidate,
@@ -23,7 +23,7 @@ pub enum ReviewItemKind {
 impl ReviewItemKind {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::NewPerson => "new_person",
+            Self::NewPersona => "new_persona",
             Self::NewOrganization => "new_organization",
             Self::IdentityCandidate => "identity_candidate",
             Self::ProjectLinkCandidate => "project_link_candidate",
@@ -39,7 +39,7 @@ impl ReviewItemKind {
 
     pub fn parse(value: impl AsRef<str>) -> Result<Self, ReviewInboxError> {
         match value.as_ref() {
-            "new_person" => Ok(Self::NewPerson),
+            "new_persona" | "new_person" => Ok(Self::NewPersona),
             "new_organization" => Ok(Self::NewOrganization),
             "identity_candidate" => Ok(Self::IdentityCandidate),
             "project_link_candidate" => Ok(Self::ProjectLinkCandidate),
@@ -229,6 +229,24 @@ pub(super) fn validate_review_item_with_evidence(
         item.validate()?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ReviewItemKind;
+
+    #[test]
+    fn review_item_kind_writes_persona_native_value() {
+        assert_eq!(ReviewItemKind::NewPersona.as_str(), "new_persona");
+    }
+
+    #[test]
+    fn review_item_kind_reads_legacy_person_value() {
+        assert_eq!(
+            ReviewItemKind::parse("new_person").expect("legacy new_person should parse"),
+            ReviewItemKind::NewPersona
+        );
+    }
 }
 
 pub(super) fn validate_non_empty(

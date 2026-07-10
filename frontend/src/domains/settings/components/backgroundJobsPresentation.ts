@@ -117,6 +117,18 @@ export const BACKGROUND_JOB_CATALOG: BackgroundJobCatalogItem[] = [
     controlSection: 'accounts'
   },
   {
+    id: 'address-book-sync',
+    group: 'mail',
+    label: 'Address book sync',
+    description: 'Pulls provider contacts into Personas and pushes confirmed local contacts when bidirectional sync is enabled.',
+    icon: 'tabler:address-book',
+    sourceCode: 'mail',
+    runtimeKinds: ['address_book_sync'],
+    cadence: '300s scheduler tick, then per-account address-book poll interval',
+    evidence: 'backend/src/application/bootstrap.rs + /api/v1/integrations/mail/accounts/{account_id}/address-book-sync-now',
+    controlSection: 'accounts'
+  },
+  {
     id: 'mail-outbox-delivery',
     group: 'mail',
     label: 'Mail outbox delivery',
@@ -249,10 +261,10 @@ export const BACKGROUND_JOB_CATALOG: BackgroundJobCatalogItem[] = [
     id: 'review-evidence-projections',
     group: 'projections',
     label: 'Review and evidence projections',
-    description: 'Keeps person evidence, identity review inbox and project link review effects current.',
+    description: 'Keeps persona evidence, identity review inbox and project link review effects current.',
     icon: 'tabler:git-merge',
     sourceCode: 'system',
-    runtimeKinds: ['person_derived_evidence', 'person_identity_review_inbox', 'project_link_review_effects'],
+    runtimeKinds: ['persona_derived_evidence', 'persona_identity_review_inbox', 'project_link_review_effects'],
     cadence: 'Event consumer ticks',
     evidence: 'backend/src/application/bootstrap.rs',
     controlSection: 'signal-hub'

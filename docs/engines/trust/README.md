@@ -48,7 +48,7 @@ Trust output must include:
 
 ## Current Implementation Evidence
 
-Current implementation includes `backend/src/domains/persons/trust.rs` and
+Current implementation includes `backend/src/domains/personas/trust.rs` and
 trust-related Persona Intelligence language. This should be treated as an
 implementation-local stage on the way to shared Trust Engine semantics.
 

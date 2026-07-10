@@ -205,12 +205,12 @@ const workspace: CommunicationChannelWorkspaceModel = {
 		},
 		entityGroups: [
 			{
-				id: 'people',
-				title: 'People',
+				id: 'personas',
+				title: 'Personas',
 				items: [
 					{
 						id: 'entity-nadia',
-						entity: 'person',
+						entity: 'persona',
 						title: 'Nadia Ivanova',
 						description: 'Reporter in the active channel topic.',
 						evidenceLabel: 'Mentioned in risk-review · Export SLA',
@@ -218,7 +218,7 @@ const workspace: CommunicationChannelWorkspaceModel = {
 					},
 					{
 						id: 'entity-owner',
-						entity: 'person',
+						entity: 'persona',
 						title: 'Export owner',
 						description: 'Likely approver before durable promotion.',
 						evidenceLabel: 'Appears in two channel topics and one mail thread',

@@ -139,7 +139,7 @@ and reuses the same direct-contradiction detector.
 `ContradictionObservationStore::refresh_deterministic_observations` now
 provides the first backend ingestion bridge for projected Communication
 messages, imported Documents, meeting notes and call transcripts. It treats
-active `person_facts` as accepted Memory claims, matches a Persona through the
+active `persona_facts` as accepted Memory claims, matches a Persona through the
 compatibility `persons.email_address` field, active Telegram/WhatsApp
 `person_identities`, `event_participants.person_id` or active Telegram call
 identity, compares projected email message subject/body evidence by sender,
@@ -148,7 +148,7 @@ compares projected Telegram and WhatsApp message evidence by provider
 text references the Persona email, compares meeting-note content for linked
 event participants and compares successful call transcript text for linked
 Telegram identities. It stores reviewable contradiction observations and does
-not overwrite `person_facts`, Trust, Risk or Relationships.
+not overwrite `persona_facts`, Trust, Risk or Relationships.
 
 The desktop frontend now includes a Knowledge workspace Polygraph review panel
 that lists open contradiction observations through `GET /api/v1/contradictions`

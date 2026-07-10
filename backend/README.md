@@ -26,7 +26,6 @@ make backend-email-fixture-project-dev
 make backend-account-setup-smoke-dev
 make backend-email-import-smoke-dev
 make backend-messages-smoke-dev
-make backend-contacts-smoke-dev
 make backend-documents-smoke-dev
 make backend-graph-smoke-dev
 make backend-workflow-smoke-dev
@@ -39,10 +38,6 @@ make backend-events-api-smoke-dev
 make backend-v1-api-smoke-dev
 make backend-validate
 ```
-
-`backend-contacts-smoke-dev` is a legacy Makefile target name. It currently
-runs the `persons` integration test suite and is kept only for compatibility
-until the development command surface is renamed deliberately.
 
 Graph core smoke:
 

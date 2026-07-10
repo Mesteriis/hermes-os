@@ -6,6 +6,7 @@ import type { ProjectDetail, ProjectStats, ProjectSummary } from '../types/proje
 const emptyProjectStats: ProjectStats = {
   message_count: 0,
   document_count: 0,
+  persona_count: 0,
   people_count: 0,
   graph_connection_count: 0,
   latest_activity_at: null

@@ -73,7 +73,7 @@ Canonical domain specs live under [Domain Catalog](domains/README.md).
 
 - [Signal Hub](domains/signal-hub/spec.md), [package](domains/signal-hub/README.md)
 - [Communications](domains/communications/README.md)
-- [Personas / Persona Intelligence](domains/persons/spec.md), [package](domains/persons/README.md)
+- [Personas / Persona Intelligence](domains/personas/spec.md), [package](domains/personas/README.md)
 - [Organizations](domains/organizations/spec.md), [package](domains/organizations/README.md)
 - [Projects](domains/projects/README.md)
 - [Documents](domains/documents/README.md)
@@ -186,7 +186,7 @@ Examples:
 - `docs/integrations/mail/status.md`
 - `docs/domains/calendar/status.md`
 - `docs/domains/tasks/status.md`
-- `docs/domains/persons/status.md`
+- `docs/domains/personas/status.md`
 - `docs/domains/*/api.md`
 - `docs/integrations/*/api.md`
 

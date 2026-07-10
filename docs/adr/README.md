@@ -27,7 +27,7 @@ ADR status vocabulary:
 - [ADR-0016 Secrets and Encryption Boundary](ADR-0016-secrets-and-encryption-boundary.md)
 - [ADR-0017 Document Processing Pipeline](ADR-0017-document-processing-pipeline.md)
 - [ADR-0018 Provider Adapter Boundary](ADR-0018-provider-adapter-boundary.md)
-- [ADR-0019 Contact Identity Resolution](ADR-0019-contact-identity-resolution.md)
+- [ADR-0019 Persona Identity Resolution](ADR-0019-persona-identity-resolution.md)
 - [ADR-0020 Task Candidate Lifecycle](ADR-0020-task-candidate-lifecycle.md)
 - [ADR-0021 Calendar as Event Source](ADR-0021-calendar-as-event-source.md)
 - [ADR-0022 No Fine Tuning on Private Data](ADR-0022-no-fine-tuning-on-private-data.md)

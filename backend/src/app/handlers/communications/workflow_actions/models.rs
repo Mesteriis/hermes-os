@@ -10,7 +10,8 @@ pub(crate) enum WorkflowActionKind {
     CreateDocument,
     CreateEvent,
     LinkDocument,
-    CreateContact,
+    #[serde(alias = "create_contact")]
+    CreatePersona,
     Archive,
 }
 
@@ -59,7 +60,7 @@ pub(crate) enum WorkflowActionTargetKind {
     Task,
     Document,
     CalendarEvent,
-    Person,
+    Persona,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -17,9 +17,13 @@ const classes = computed(() => [
   { 'hermes-skeleton--rounded': props.rounded },
   props.class
 ])
+
+const styles = computed(() => ({
+  '--hermes-skeleton-width': props.width,
+  '--hermes-skeleton-height': props.height
+}))
 </script>
 
 <template>
-  <div :class="classes" />
+  <div :class="classes" :style="styles" />
 </template>
-

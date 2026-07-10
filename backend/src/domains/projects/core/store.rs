@@ -148,15 +148,19 @@ impl ProjectStore {
             return Ok(None);
         };
 
+        let key_personas = self
+            .project_personas(&project.project_id, PROJECT_DETAIL_ITEM_LIMIT)
+            .await?;
+
         Ok(Some(ProjectDetail {
             graph_node_id: project_graph_node_id(&project.project_id),
             stats: self.project_stats(&project.project_id).await?,
             timeline: self
                 .project_timeline(&project.project_id, PROJECT_DETAIL_ITEM_LIMIT)
                 .await?,
-            key_people: self
-                .project_people(&project.project_id, PROJECT_DETAIL_ITEM_LIMIT)
-                .await?,
+            key_personas: key_personas.clone(),
+            #[allow(deprecated)]
+            key_people: key_personas,
             recent_messages: self
                 .project_messages(&project.project_id, PROJECT_DETAIL_ITEM_LIMIT)
                 .await?,

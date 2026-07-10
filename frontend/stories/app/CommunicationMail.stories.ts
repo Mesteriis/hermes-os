@@ -724,7 +724,7 @@ const mailOpenMessage: CommunicationConversationMessageModel = {
 				{ id: 'create-task', label: 'Create task', description: 'Promote a reviewed candidate to a task.', icon: 'tabler:circle-check', tone: 'success', contract: 'runWorkflowAction:create_task' },
 				{ id: 'create-document', label: 'Create document', description: 'Promote attachment context to document.', icon: 'tabler:file-plus', contract: 'runWorkflowAction:create_document' },
 				{ id: 'create-event', label: 'Create event', description: 'Promote deadline signal to calendar event.', icon: 'tabler:calendar-plus', contract: 'runWorkflowAction:create_event' },
-				{ id: 'create-contact', label: 'Create contact', description: 'Promote sender into a reviewed contact.', icon: 'tabler:user-plus', contract: 'runWorkflowAction:create_contact' },
+				{ id: 'create-persona', label: 'Create persona', description: 'Promote sender into a reviewed persona.', icon: 'tabler:user-plus', contract: 'runWorkflowAction:create_persona' },
 				{ id: 'archive-response', label: 'Archive response', description: 'Archive after owner decision is captured.', icon: 'tabler:archive-filled', contract: 'runWorkflowAction:archive' }
 			]
 		},
@@ -807,12 +807,12 @@ const mailInspectorModel: MailInspectorModel = {
 	},
 	entityGroups: [
 		{
-			id: 'people',
-			title: 'People',
+			id: 'personas',
+			title: 'Personas',
 			items: [
 				{
 					id: 'maya-chen',
-					entity: 'person',
+					entity: 'persona',
 					title: 'Maya Chen',
 					description: 'maya@northwind.example',
 					evidenceLabel: 'Sender, 3 thread messages',

@@ -24,7 +24,7 @@ describe('HomePage boundary', () => {
     expect(surfaceSource).toContain('useMailboxHealthQuery()')
     expect(surfaceSource).toContain('homeStats')
     expect(surfaceSource).toContain('whatsNew')
-    expect(surfaceSource).toContain('peopleTalked')
+    expect(surfaceSource).toContain('personasTalked')
     expect(surfaceSource).toContain("seen = new Set<string>()")
     expect(querySource).toContain('useCommunicationMessagesQuery')
     expect(querySource).toContain('useMailboxHealthQuery')

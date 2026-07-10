@@ -6,7 +6,6 @@ use hermes_hub_backend::domains::graph::core::{
     GraphEvidenceSourceKind, GraphNodeKind, GraphReviewState, GraphStore, GraphStoreError,
     NewGraphEdge, NewGraphEvidence, NewGraphNode, RelationshipType, edge_id, evidence_id,
 };
-use hermes_hub_backend::platform::storage::Database;
 use serde_json::{Value, json};
 use sqlx::Row;
 
@@ -17,7 +16,7 @@ async fn graph_store_upserts_node_idempotently_against_postgres() {
     };
     let suffix = unique_suffix();
     let node = NewGraphNode::new(
-        GraphNodeKind::Person,
+        GraphNodeKind::Persona,
         format!("person-{suffix}"),
         format!("Alex {suffix}"),
     )
@@ -27,7 +26,7 @@ async fn graph_store_upserts_node_idempotently_against_postgres() {
     let second = store.upsert_node(&node).await.expect("second node upsert");
 
     assert_eq!(first.node_id, second.node_id);
-    assert_eq!(first.node_kind, GraphNodeKind::Person);
+    assert_eq!(first.node_kind, GraphNodeKind::Persona);
     assert_eq!(first.stable_key, format!("person-{suffix}"));
 }
 
@@ -39,7 +38,7 @@ async fn graph_store_upserts_edge_with_evidence_idempotently_against_postgres() 
     let suffix = unique_suffix();
     let person = store
         .upsert_node(&NewGraphNode::new(
-            GraphNodeKind::Person,
+            GraphNodeKind::Persona,
             format!("person-{suffix}"),
             format!("Person {suffix}"),
         ))
@@ -56,17 +55,17 @@ async fn graph_store_upserts_edge_with_evidence_idempotently_against_postgres() 
     let edge = NewGraphEdge::new(
         person.node_id.clone(),
         email.node_id.clone(),
-        RelationshipType::PersonHasEmailAddress,
+        RelationshipType::PersonaHasEmailAddress,
         1.0,
         GraphReviewState::SystemAccepted,
     );
     let evidence_source_id = format!("person-{suffix}");
     let first_evidence =
-        NewGraphEvidence::new(GraphEvidenceSourceKind::Person, evidence_source_id.clone())
+        NewGraphEvidence::new(GraphEvidenceSourceKind::Persona, evidence_source_id.clone())
             .excerpt("initial person evidence")
             .metadata(json!({"projection": "first"}));
     let second_evidence =
-        NewGraphEvidence::new(GraphEvidenceSourceKind::Person, evidence_source_id.clone())
+        NewGraphEvidence::new(GraphEvidenceSourceKind::Persona, evidence_source_id.clone())
             .excerpt("updated person evidence")
             .metadata(json!({"projection": "second", "source": "duplicate-upsert"}));
 
@@ -82,7 +81,7 @@ async fn graph_store_upserts_edge_with_evidence_idempotently_against_postgres() 
     assert_eq!(first.edge_id, second.edge_id);
     assert_eq!(
         first.relationship_type,
-        RelationshipType::PersonHasEmailAddress
+        RelationshipType::PersonaHasEmailAddress
     );
     assert_eq!(first.review_state, GraphReviewState::SystemAccepted);
 
@@ -104,7 +103,7 @@ async fn graph_store_upserts_edge_with_evidence_idempotently_against_postgres() 
         "#,
     )
     .bind(&first.edge_id)
-    .bind(GraphEvidenceSourceKind::Person.as_str())
+    .bind(GraphEvidenceSourceKind::Persona.as_str())
     .bind(&evidence_source_id)
     .fetch_one(&pool)
     .await
@@ -127,7 +126,7 @@ async fn graph_store_rejects_system_edge_without_evidence_against_postgres() {
     let suffix = unique_suffix();
     let left = store
         .upsert_node(&NewGraphNode::new(
-            GraphNodeKind::Person,
+            GraphNodeKind::Persona,
             format!("left-{suffix}"),
             "Left",
         ))
@@ -144,7 +143,7 @@ async fn graph_store_rejects_system_edge_without_evidence_against_postgres() {
     let edge = NewGraphEdge::new(
         left.node_id,
         right.node_id,
-        RelationshipType::PersonHasEmailAddress,
+        RelationshipType::PersonaHasEmailAddress,
         1.0,
         GraphReviewState::SystemAccepted,
     );
@@ -161,9 +160,9 @@ async fn graph_store_rejects_system_edge_without_evidence_against_postgres() {
 async fn graph_store_rejects_suggested_edge_without_evidence_before_database_write() {
     let store = disconnected_graph_store();
     let edge = NewGraphEdge::new(
-        "graph:node:v1:person:left".to_owned(),
+        "graph:node:v1:persona:left".to_owned(),
         "graph:node:v1:email:right@example.com".to_owned(),
-        RelationshipType::PersonHasEmailAddress,
+        RelationshipType::PersonaHasEmailAddress,
         0.5,
         GraphReviewState::Suggested,
     );
@@ -180,13 +179,13 @@ async fn graph_store_rejects_suggested_edge_without_evidence_before_database_wri
 async fn graph_store_rejects_invalid_confidence_before_database_write() {
     let store = disconnected_graph_store();
     let edge = NewGraphEdge::new(
-        "graph:node:v1:person:left".to_owned(),
+        "graph:node:v1:persona:left".to_owned(),
         "graph:node:v1:email:right@example.com".to_owned(),
-        RelationshipType::PersonHasEmailAddress,
+        RelationshipType::PersonaHasEmailAddress,
         1.1,
         GraphReviewState::SystemAccepted,
     );
-    let evidence = NewGraphEvidence::new(GraphEvidenceSourceKind::Person, "person-id");
+    let evidence = NewGraphEvidence::new(GraphEvidenceSourceKind::Persona, "person-id");
 
     let error = store
         .upsert_edge_with_evidence(&edge, &[evidence])
@@ -200,14 +199,14 @@ async fn graph_store_rejects_invalid_confidence_before_database_write() {
 async fn graph_store_rejects_closed_temporal_edge_before_database_write() {
     let store = disconnected_graph_store();
     let mut edge = NewGraphEdge::new(
-        "graph:node:v1:person:left".to_owned(),
+        "graph:node:v1:persona:left".to_owned(),
         "graph:node:v1:email:right@example.com".to_owned(),
-        RelationshipType::PersonHasEmailAddress,
+        RelationshipType::PersonaHasEmailAddress,
         1.0,
         GraphReviewState::SystemAccepted,
     );
     edge.valid_to = Some(Utc::now());
-    let evidence = NewGraphEvidence::new(GraphEvidenceSourceKind::Person, "person-id");
+    let evidence = NewGraphEvidence::new(GraphEvidenceSourceKind::Persona, "person-id");
 
     let error = store
         .upsert_edge_with_evidence(&edge, &[evidence])
@@ -219,15 +218,15 @@ async fn graph_store_rejects_closed_temporal_edge_before_database_write() {
 
 #[test]
 fn graph_deterministic_ids_distinguish_delimiter_bearing_components() {
-    let relationship_type = RelationshipType::PersonHasEmailAddress;
+    let relationship_type = RelationshipType::PersonaHasEmailAddress;
 
     assert_ne!(
         edge_id("a:b", relationship_type, "c"),
         edge_id("a", relationship_type, "b:c")
     );
     assert_ne!(
-        evidence_id("edge:a:b", GraphEvidenceSourceKind::Person, "c"),
-        evidence_id("edge:a", GraphEvidenceSourceKind::Person, "b:c")
+        evidence_id("edge:a:b", GraphEvidenceSourceKind::Persona, "c"),
+        evidence_id("edge:a", GraphEvidenceSourceKind::Persona, "b:c")
     );
 }
 
@@ -239,11 +238,8 @@ async fn live_graph_store(test_name: &str) -> Option<GraphStore> {
 
 async fn live_graph_context(_test_name: &str) -> Option<(sqlx::postgres::PgPool, GraphStore)> {
     let test_context = TestContext::new().await;
-    let database_url = test_context.connection_string();
-    let database = Database::connect(Some(&database_url))
-        .await
-        .expect("database connection");
-    let pool = database.pool().expect("configured pool").clone();
+    let pool = test_context.pool().clone();
+    Box::leak(Box::new(test_context));
     Some((pool.clone(), GraphStore::new(pool)))
 }
 

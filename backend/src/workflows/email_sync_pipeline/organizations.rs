@@ -2,7 +2,7 @@ use sqlx::postgres::PgPool;
 
 use crate::domains::communications::messages::ProjectedMessage;
 use crate::domains::organizations::api::OrganizationCommandPort;
-use crate::domains::organizations::core::{OrgContactLink, OrganizationContactLinkPort};
+use crate::domains::organizations::core::{OrgPersonaLink, OrganizationPersonaLinkPort};
 use crate::domains::relationships::{
     NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
     RelationshipEvidenceSourceKind, RelationshipReviewPort, RelationshipReviewState,
@@ -14,7 +14,7 @@ use super::participants::EmailParticipant;
 #[derive(Default)]
 pub(crate) struct OrganizationProjectionReport {
     pub(crate) upserted_organizations: usize,
-    pub(crate) upserted_organization_contact_links: usize,
+    pub(crate) upserted_organization_persona_links: usize,
 }
 
 pub(crate) async fn project_email_participant_organization(
@@ -31,13 +31,13 @@ pub(crate) async fn project_email_participant_organization(
         upsert_email_domain_organization(pool, &domain, &message.observation_id).await?;
     let organization_inserted = organization_id.is_some();
     let organization_id = organization_id.unwrap_or_else(|| organization_id_for_domain(&domain));
-    let contact_link_inserted =
-        upsert_organization_contact_link(pool, &organization_id, person_id, message, participant)
+    let persona_link_inserted =
+        upsert_organization_persona_link(pool, &organization_id, person_id, message, participant)
             .await?;
 
     Ok(OrganizationProjectionReport {
         upserted_organizations: usize::from(organization_inserted),
-        upserted_organization_contact_links: usize::from(contact_link_inserted),
+        upserted_organization_persona_links: usize::from(persona_link_inserted),
     })
 }
 
@@ -84,14 +84,14 @@ async fn upsert_email_domain_organization(
     Ok(inserted.then(|| organization_id_for_domain(domain)))
 }
 
-async fn upsert_organization_contact_link(
+async fn upsert_organization_persona_link(
     pool: &PgPool,
     organization_id: &str,
     person_id: &str,
     message: &ProjectedMessage,
     _participant: &EmailParticipant,
 ) -> Result<bool, EmailSyncPipelineError> {
-    let (link, inserted) = OrganizationContactLinkPort::new(pool.clone())
+    let (link, inserted) = OrganizationPersonaLinkPort::new(pool.clone())
         .link_email_participant_with_observation(
             organization_id,
             person_id,
@@ -111,7 +111,7 @@ async fn upsert_organization_contact_link(
 
 async fn materialize_email_participant_member_relationship(
     pool: &PgPool,
-    link: &OrgContactLink,
+    link: &OrgPersonaLink,
     message_id: &str,
     observation_id: &str,
 ) -> Result<(), EmailSyncPipelineError> {
@@ -128,7 +128,7 @@ async fn materialize_email_participant_member_relationship(
         valid_from: link.valid_from,
         valid_to: link.valid_to,
         metadata: serde_json::json!({
-            "compatibility_table": "organization_contact_links",
+            "compatibility_table": "organization_persona_links",
             "compatibility_record_id": link.id,
             "organization_id": link.organization_id,
             "person_id": link.person_id,
@@ -142,11 +142,11 @@ async fn materialize_email_participant_member_relationship(
         source_id: message_id.to_owned(),
         observation_id: Some(observation_id.to_owned()),
         excerpt: Some(
-            "Persona is linked to organization through compatibility organization contact data."
+            "Persona is linked to organization through organization-persona compatibility data."
                 .to_owned(),
         ),
         metadata: serde_json::json!({
-            "compatibility_table": "organization_contact_links",
+            "compatibility_table": "organization_persona_links",
             "compatibility_record_id": link.id,
             "organization_id": link.organization_id,
             "person_id": link.person_id,

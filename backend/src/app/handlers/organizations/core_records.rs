@@ -4,11 +4,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::app::{ApiError, AppState};
-use crate::application::OrganizationContactLinkApplicationService;
+use crate::application::OrganizationPersonaLinkApplicationService;
 use crate::domains::organizations::core::{
-    OrgAliasStore, OrgContactLink, OrgContactLinkStore, OrgDepartment, OrgDepartmentStore,
-    OrgDomainStore, OrgIdentityStore, OrganizationAlias, OrganizationDomain, OrganizationIdentity,
-    RelatedOrgStore, RelatedOrganization,
+    OrgAliasStore, OrgDepartment, OrgDepartmentStore, OrgDomainStore, OrgIdentityStore,
+    OrgPersonaLink, OrgPersonaLinkStore, OrganizationAlias, OrganizationDomain,
+    OrganizationIdentity, RelatedOrgStore, RelatedOrganization,
 };
 use crate::domains::organizations::service::OrganizationCommandService;
 
@@ -155,39 +155,40 @@ pub(crate) async fn post_org_department(
 }
 
 #[derive(Serialize)]
-pub(crate) struct OrgContactsResponse {
-    items: Vec<OrgContactLink>,
+pub(crate) struct OrgPersonaLinksResponse {
+    items: Vec<OrgPersonaLink>,
 }
 
-pub(crate) async fn get_org_contacts(
+pub(crate) async fn get_org_persona_links(
     State(state): State<AppState>,
     Path(org_id): Path<String>,
-) -> Result<Json<OrgContactsResponse>, ApiError> {
+) -> Result<Json<OrgPersonaLinksResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<OrgContactLinkStore>(pool)
+    let items = crate::app::api_support::app_store::<OrgPersonaLinkStore>(pool)
         .list_by_org(&org_id)
         .await
         .map_err(ApiError::from)?;
-    Ok(Json(OrgContactsResponse { items }))
+    Ok(Json(OrgPersonaLinksResponse { items }))
 }
 
 #[derive(Deserialize)]
-pub(crate) struct LinkOrgContactRequest {
+pub(crate) struct LinkOrgPersonaRequest {
+    #[serde(rename = "persona_id", alias = "person_id")]
     person_id: String,
     role: Option<String>,
     department: Option<String>,
     source: Option<String>,
 }
 
-pub(crate) async fn post_org_contact_link(
+pub(crate) async fn post_org_persona_link(
     State(state): State<AppState>,
     Path(org_id): Path<String>,
-    Json(req): Json<LinkOrgContactRequest>,
-) -> Result<Json<OrgContactLink>, ApiError> {
+    Json(req): Json<LinkOrgPersonaRequest>,
+) -> Result<Json<OrgPersonaLink>, ApiError> {
     let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = database_pool(&state)?;
-    let link = OrganizationContactLinkApplicationService::new(pool)
-        .link_contact_manual(
+    let link = OrganizationPersonaLinkApplicationService::new(pool)
+        .link_persona_manual(
             &org_id,
             &req.person_id,
             req.role.as_deref(),

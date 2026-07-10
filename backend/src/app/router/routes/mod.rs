@@ -7,7 +7,7 @@ mod knowledge;
 mod maintenance;
 mod messaging;
 mod organizations;
-mod persons;
+mod personas;
 mod public;
 mod review;
 mod settings;
@@ -23,7 +23,7 @@ pub(super) fn protected_routes(api_secret: String) -> Router<AppState> {
     let routes = status_vault::add_routes(routes);
     let routes = communications::add_routes(routes);
     let routes = knowledge::add_routes(routes);
-    let routes = persons::add_routes(routes);
+    let routes = personas::add_routes(routes);
     let routes = calendar::add_routes(routes);
     let routes = organizations::add_routes(routes);
     let routes = tasks::add_routes(routes);

@@ -14,8 +14,8 @@ use crate::domains::decisions::DecisionStoreError;
 use crate::domains::documents::processing::DocumentProcessingError;
 use crate::domains::obligations::ObligationStoreError;
 use crate::domains::organizations::api::OrganizationError;
-use crate::domains::persons::api::PersonProjectionError;
-use crate::domains::persons::identity::PersonIdentityError;
+use crate::domains::personas::api::PersonaProjectionError;
+use crate::domains::personas::identity::PersonaIdentityError;
 use crate::domains::projects::core::ProjectStoreError;
 use crate::domains::projects::link_reviews::ProjectLinkReviewError;
 use crate::domains::relationships::RelationshipStoreError;
@@ -58,7 +58,7 @@ pub enum ApiError {
     InvalidReviewQuery(&'static str),
     InvalidReviewItem(&'static str),
     FailedPrecondition(String),
-    InvalidPersonIdentityReview(&'static str),
+    InvalidPersonaIdentityReview(&'static str),
     InvalidDocumentProcessingQuery(&'static str),
     Settings(SettingsError),
     SignalHub(SignalHubError),
@@ -88,9 +88,9 @@ pub enum ApiError {
     Call(CallError),
     ProjectLinkTargetNotFound,
     ProjectLinkReview(ProjectLinkReviewError),
-    PersonIdentityNotFound,
-    PersonProjection(PersonProjectionError),
-    PersonIdentity(PersonIdentityError),
+    PersonaIdentityNotFound,
+    PersonaProjection(PersonaProjectionError),
+    PersonaIdentity(PersonaIdentityError),
     Messages(MessageProjectionError),
     CommunicationIngestion(CommunicationIngestionError),
     CommunicationStorage(CommunicationStorageError),

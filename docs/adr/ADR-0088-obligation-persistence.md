@@ -166,7 +166,7 @@ candidate is user-confirmed, it creates or updates a source-backed
 Task through `obligation_task_links.link_kind = fulfillment_task`. Generic task
 candidates remain task-only.
 
-`PersonPromiseStore::create` now materializes compatibility `person_promises`
+`PersonaPromiseStore::create` now materializes compatibility `person_promises`
 records into source-backed `user_confirmed` Obligations with `raw_record`
 evidence. It does not create Tasks.
 

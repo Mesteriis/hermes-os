@@ -67,7 +67,7 @@ impl_app_store_factory!(
     crate::domains::obligations::ObligationStore,
     crate::domains::organizations::api::OrganizationStore,
     crate::domains::organizations::core::OrgAliasStore,
-    crate::domains::organizations::core::OrgContactLinkStore,
+    crate::domains::organizations::core::OrgPersonaLinkStore,
     crate::domains::organizations::core::OrgDepartmentStore,
     crate::domains::organizations::core::OrgDomainStore,
     crate::domains::organizations::core::OrgIdentityStore,
@@ -85,21 +85,21 @@ impl_app_store_factory!(
     crate::domains::organizations::workflows::OrgProcedureStore,
     crate::domains::organizations::workflows::OrgTemplateStore,
     crate::domains::organizations::workflows::OrgTimelineStore,
-    crate::domains::persons::api::PersonProjectionStore,
-    crate::domains::persons::core::PersonPersonaStore,
-    crate::domains::persons::core::PersonRoleStore,
-    crate::domains::persons::core::PersonsIdentityStore,
-    crate::domains::persons::enrichment::PersonEnrichmentStore,
-    crate::domains::persons::enrichment_engine::EnrichmentResultStore,
-    crate::domains::persons::expertise::PersonExpertiseStore,
-    crate::domains::persons::health::PersonHealthStore,
-    crate::domains::persons::memory::PersonFactStore,
-    crate::domains::persons::memory::PersonMemoryCardStore,
-    crate::domains::persons::memory::PersonPreferenceStore,
-    crate::domains::persons::memory::PersonSnapshotStore,
-    crate::domains::persons::memory::RelationshipEventStore,
-    crate::domains::persons::trust::PersonPromiseStore,
-    crate::domains::persons::trust::PersonRiskStore,
+    crate::domains::personas::api::PersonaProjectionStore,
+    crate::domains::personas::core::PersonaInteractionContextStore,
+    crate::domains::personas::core::PersonaRoleStore,
+    crate::domains::personas::core::PersonaIdentityStore,
+    crate::domains::personas::enrichment::PersonaEnrichmentStore,
+    crate::domains::personas::enrichment_engine::EnrichmentResultStore,
+    crate::domains::personas::expertise::PersonaExpertiseStore,
+    crate::domains::personas::health::PersonaHealthStore,
+    crate::domains::personas::memory::PersonaFactStore,
+    crate::domains::personas::memory::PersonaMemoryCardStore,
+    crate::domains::personas::memory::PersonaPreferenceStore,
+    crate::domains::personas::memory::PersonaSnapshotStore,
+    crate::domains::personas::memory::RelationshipEventStore,
+    crate::domains::personas::trust::PersonaPromiseStore,
+    crate::domains::personas::trust::PersonaRiskStore,
     crate::domains::relationships::RelationshipStore,
     crate::domains::review::ReviewInboxStore,
     crate::domains::tasks::api::TaskStore,
@@ -199,8 +199,10 @@ pub(crate) fn document_processing_store(
     Ok(DocumentProcessingStore::new(database_pool(state)?))
 }
 
-pub(crate) fn person_identity_store(state: &AppState) -> Result<PersonIdentityStore, ApiError> {
-    Ok(PersonIdentityStore::new(database_pool(state)?))
+pub(crate) fn persona_identity_review_store(
+    state: &AppState,
+) -> Result<PersonaIdentityReviewStore, ApiError> {
+    Ok(PersonaIdentityReviewStore::new(database_pool(state)?))
 }
 
 pub(crate) fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {

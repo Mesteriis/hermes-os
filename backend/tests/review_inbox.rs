@@ -8,8 +8,8 @@ use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::decisions::DecisionStore;
 use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::domains::obligations::ObligationStore;
-use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
-use hermes_hub_backend::domains::persons::identity::PersonIdentityStore;
+use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
+use hermes_hub_backend::domains::personas::identity::PersonaIdentityReviewStore;
 use hermes_hub_backend::domains::projects::core::ProjectStore;
 use hermes_hub_backend::domains::relationships::RelationshipStore;
 use hermes_hub_backend::domains::review::{
@@ -22,7 +22,7 @@ use hermes_hub_backend::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore,
 };
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::review_inbox::project_person_identity_review_event;
+use hermes_hub_backend::workflows::review_inbox::project_persona_identity_review_event;
 use hermes_hub_backend::workflows::review_inbox::sync_decisions_to_review_for_observations;
 use hermes_hub_backend::workflows::review_inbox::sync_obligations_to_review_for_observations;
 use hermes_hub_backend::workflows::review_inbox::sync_relationships_to_review_for_observations;
@@ -581,10 +581,10 @@ async fn review_can_materialize_promotions_for_core_target_domains_against_postg
 
     let targets = [
         (
-            ReviewItemKind::NewPerson,
-            "persons",
+            ReviewItemKind::NewPersona,
+            "personas",
             "persona",
-            "person:v1:review",
+            "persona:v1:review",
         ),
         (
             ReviewItemKind::NewOrganization,
@@ -1404,7 +1404,7 @@ async fn relationship_review_mirror_promotes_existing_relationship_against_postg
             &hermes_hub_backend::domains::relationships::NewRelationship {
                 source_entity_kind:
                     hermes_hub_backend::domains::relationships::RelationshipEntityKind::Persona,
-                source_entity_id: format!("person:v1:source:{suffix}"),
+                source_entity_id: format!("persona:source:{suffix}"),
                 target_entity_kind:
                     hermes_hub_backend::domains::relationships::RelationshipEntityKind::Project,
                 target_entity_id: format!("project:v1:target:{suffix}"),
@@ -1513,19 +1513,19 @@ async fn identity_candidate_review_mirror_promotes_existing_candidate_against_po
         return;
     };
     let suffix = unique_suffix();
-    let person_store = PersonProjectionStore::new(pool.clone());
-    let identity_store = PersonIdentityStore::new(pool.clone());
+    let person_store = PersonaProjectionStore::new(pool.clone());
+    let identity_store = PersonaIdentityReviewStore::new(pool.clone());
     let display_name = format!("Identity Mirror {suffix}");
 
     let left = person_store
-        .upsert_email_person(&format!("identity-mirror-left-{suffix}@example.com"))
+        .upsert_email_persona(&format!("identity-mirror-left-{suffix}@example.com"))
         .await
         .expect("left persona");
     let right = person_store
-        .upsert_email_person(&format!("identity-mirror-right-{suffix}@example.com"))
+        .upsert_email_persona(&format!("identity-mirror-right-{suffix}@example.com"))
         .await
         .expect("right persona");
-    sqlx::query("UPDATE persons SET display_name = $1 WHERE person_id = $2 OR person_id = $3")
+    sqlx::query("UPDATE personas SET display_name = $1 WHERE person_id = $2 OR person_id = $3")
         .bind(&display_name)
         .bind(&left.person_id)
         .bind(&right.person_id)
@@ -1542,14 +1542,19 @@ async fn identity_candidate_review_mirror_promotes_existing_candidate_against_po
 
     let identity_candidate_id = if left.person_id <= right.person_id {
         format!(
-            "identity_candidate:v1:merge_persons:{}:{}",
+            "identity_candidate:v1:merge_personas:{}:{}",
             left.person_id, right.person_id
         )
     } else {
         format!(
-            "identity_candidate:v1:merge_persons:{}:{}",
+            "identity_candidate:v1:merge_personas:{}:{}",
             right.person_id, left.person_id
         )
+    };
+    let (left_persona_id, right_persona_id) = if left.person_id <= right.person_id {
+        (left.person_id.clone(), right.person_id.clone())
+    } else {
+        (right.person_id.clone(), left.person_id.clone())
     };
 
     let review_item = review_store
@@ -1560,13 +1565,23 @@ async fn identity_candidate_review_mirror_promotes_existing_candidate_against_po
         .find(|item| item.metadata["identity_candidate_id"] == json!(identity_candidate_id))
         .expect("mirrored identity review item");
     assert_eq!(review_item.item_kind, ReviewItemKind::IdentityCandidate);
+    assert_eq!(
+        review_item.metadata["left_persona_id"],
+        json!(left_persona_id)
+    );
+    assert_eq!(
+        review_item.metadata["right_persona_id"],
+        json!(right_persona_id)
+    );
+    assert!(review_item.metadata.get("left_person_id").is_none());
+    assert!(review_item.metadata.get("right_person_id").is_none());
 
     let promoted =
         hermes_hub_backend::workflows::review_promotion::ReviewPromotionService::new(pool.clone())
             .promote(
                 &review_item.review_item_id,
                 ReviewPromotionTarget::new(
-                    "persons",
+                    "personas",
                     "identity_candidate",
                     identity_candidate_id.clone(),
                 ),
@@ -1576,7 +1591,7 @@ async fn identity_candidate_review_mirror_promotes_existing_candidate_against_po
     assert_eq!(promoted.status, ReviewItemStatus::Promoted);
 
     let review_state: String = sqlx::query_scalar(
-        "SELECT review_state FROM person_identity_candidates WHERE identity_candidate_id = $1",
+        "SELECT review_state FROM persona_identity_candidates WHERE identity_candidate_id = $1",
     )
     .bind(&identity_candidate_id)
     .fetch_one(&pool)
@@ -1587,7 +1602,7 @@ async fn identity_candidate_review_mirror_promotes_existing_candidate_against_po
     let link_row = sqlx::query(
         "SELECT observation_id, metadata
          FROM observation_links
-         WHERE domain = 'persons'
+         WHERE domain = 'personas'
            AND entity_kind = 'identity_candidate'
            AND entity_id = $1
            AND relationship_kind = 'review_transition'
@@ -1623,19 +1638,19 @@ async fn identity_candidate_review_mirror_reuses_review_item_and_attaches_new_ev
         return;
     };
     let suffix = unique_suffix();
-    let person_store = PersonProjectionStore::new(pool.clone());
-    let identity_store = PersonIdentityStore::new(pool.clone());
+    let person_store = PersonaProjectionStore::new(pool.clone());
+    let identity_store = PersonaIdentityReviewStore::new(pool.clone());
     let display_name = format!("Identity Mirror Reuse {suffix}");
 
     let left = person_store
-        .upsert_email_person(&format!("identity-reuse-left-{suffix}@example.com"))
+        .upsert_email_persona(&format!("identity-reuse-left-{suffix}@example.com"))
         .await
         .expect("left persona");
     let right = person_store
-        .upsert_email_person(&format!("identity-reuse-right-{suffix}@example.com"))
+        .upsert_email_persona(&format!("identity-reuse-right-{suffix}@example.com"))
         .await
         .expect("right persona");
-    sqlx::query("UPDATE persons SET display_name = $1 WHERE person_id = $2 OR person_id = $3")
+    sqlx::query("UPDATE personas SET display_name = $1 WHERE person_id = $2 OR person_id = $3")
         .bind(&display_name)
         .bind(&left.person_id)
         .bind(&right.person_id)
@@ -1653,12 +1668,12 @@ async fn identity_candidate_review_mirror_reuses_review_item_and_attaches_new_ev
 
     let identity_candidate_id = if left.person_id <= right.person_id {
         format!(
-            "identity_candidate:v1:merge_persons:{}:{}",
+            "identity_candidate:v1:merge_personas:{}:{}",
             left.person_id, right.person_id
         )
     } else {
         format!(
-            "identity_candidate:v1:merge_persons:{}:{}",
+            "identity_candidate:v1:merge_personas:{}:{}",
             right.person_id, left.person_id
         )
     };
@@ -1836,9 +1851,9 @@ async fn assert_materialized_target(
     observation_id: &str,
 ) {
     match domain {
-        "persons" => {
+        "personas" => {
             let count =
-                sqlx::query_scalar::<_, i64>("SELECT count(*) FROM persons WHERE person_id = $1")
+                sqlx::query_scalar::<_, i64>("SELECT count(*) FROM personas WHERE person_id = $1")
                     .bind(target_id)
                     .fetch_one(pool)
                     .await
@@ -1849,7 +1864,7 @@ async fn assert_materialized_target(
                 SELECT count(*)
                 FROM observation_links
                 WHERE observation_id = $1
-                  AND domain = 'persons'
+                  AND domain = 'personas'
                   AND entity_kind = 'persona'
                   AND entity_id = $2
                   AND relationship_kind = 'supports'
@@ -1866,7 +1881,7 @@ async fn assert_materialized_target(
                 r#"
                 SELECT count(*)
                 FROM observation_links
-                WHERE domain = 'persons'
+                WHERE domain = 'personas'
                   AND entity_kind = 'persona'
                   AND entity_id = $1
                   AND relationship_kind = 'review_transition'
@@ -2221,12 +2236,8 @@ async fn live_review_context(
     _test_name: &str,
 ) -> Option<(PgPool, ObservationStore, ReviewInboxStore)> {
     let test_context = TestContext::new().await;
-    let database_url = test_context.connection_string();
-
-    let database = Database::connect(Some(&database_url))
-        .await
-        .expect("database connection");
-    let pool = database.pool().expect("configured pool").clone();
+    let pool = test_context.pool().clone();
+    Box::leak(Box::new(test_context));
     Some((
         pool.clone(),
         ObservationStore::new(pool.clone()),
@@ -2238,14 +2249,14 @@ async fn project_identity_review_events(pool: &PgPool, after_position: i64) -> i
     let events = EventStore::new(pool.clone())
         .list_after_position(after_position, 100)
         .await
-        .expect("list person identity events");
+        .expect("list persona identity events");
     let mut last_position = after_position;
     for event in events {
         last_position = event.position;
-        if event.event.event_type == "person_identity.candidate.detected" {
-            project_person_identity_review_event(pool.clone(), event)
+        if event.event.event_type == "persona_identity.candidate.detected" {
+            project_persona_identity_review_event(pool.clone(), event)
                 .await
-                .expect("project person identity review event");
+                .expect("project persona identity review event");
         }
     }
     last_position

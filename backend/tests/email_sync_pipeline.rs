@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
-use testkit::factories::contact::ContactFactory;
+use testkit::factories::persona::PersonaFactory;
 
 use base64::Engine as _;
 use chrono::{TimeZone, Utc};
@@ -47,12 +47,12 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
         ))
         .await
         .expect("store provider account");
-    ContactFactory::new(&pool)
+    PersonaFactory::new(&pool)
         .with_name("Confirmed Sender")
         .with_email(sender_email.clone())
         .create()
         .await
-        .expect("confirmed sender contact");
+        .expect("confirmed sender person");
 
     let raw_rfc822 = format!(
         "Subject: Sync Pipeline\r\n\
@@ -95,12 +95,12 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
     assert_eq!(report.attachment_blobs_upserted, 0);
     assert_eq!(report.attachments_extracted, 0);
     assert_eq!(report.attachments_not_scanned, 0);
-    assert_eq!(report.upserted_persons, 0);
-    assert_eq!(report.upserted_person_identities, 0);
+    assert_eq!(report.upserted_personas, 0);
+    assert_eq!(report.upserted_persona_identities, 0);
     assert_eq!(report.upserted_message_participants, 1);
     assert_eq!(report.upserted_relationship_events, 1);
     assert_eq!(report.upserted_organizations, 1);
-    assert_eq!(report.upserted_organization_contact_links, 1);
+    assert_eq!(report.upserted_organization_persona_links, 1);
 
     let projected = sqlx::query(
         r#"
@@ -148,7 +148,7 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
     let identity_count: i64 = sqlx::query_scalar(
         r#"
         SELECT count(*)::BIGINT
-        FROM person_identities
+        FROM persona_identities
         WHERE identity_type = 'email'
           AND identity_value = ANY($1)
           AND source = 'email_sync'
@@ -166,7 +166,7 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
         SELECT count(*)::BIGINT
         FROM observation_links
         WHERE observation_id = $1
-          AND domain = 'persons'
+          AND domain = 'personas'
           AND entity_kind = 'persona'
           AND relationship_kind = 'email_sync_projection'
         "#,
@@ -182,7 +182,7 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
         SELECT count(*)::BIGINT
         FROM observation_links
         WHERE observation_id = $1
-          AND domain = 'persons'
+          AND domain = 'personas'
           AND entity_kind = 'identity'
           AND relationship_kind = 'email_sync_projection'
         "#,
@@ -255,7 +255,7 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
         SELECT count(*)::BIGINT
         FROM observation_links
         WHERE observation_id = $1
-          AND domain = 'persons'
+          AND domain = 'personas'
           AND entity_kind = 'relationship_event'
           AND relationship_kind = 'email_sync_relationship_event'
         "#,
@@ -269,9 +269,9 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
     let organization_link_count: i64 = sqlx::query_scalar(
         r#"
         SELECT count(*)::BIGINT
-        FROM organization_contact_links link
+        FROM organization_persona_links link
         JOIN organization_domains domain ON domain.organization_id = link.organization_id
-        JOIN person_identities identity ON identity.person_id = link.person_id
+        JOIN persona_identities identity ON identity.person_id = link.person_id
         WHERE domain.domain = ANY($1)
           AND identity.identity_value = $2
         "#,
@@ -280,7 +280,7 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
     .bind(&sender_email)
     .fetch_one(&pool)
     .await
-    .expect("organization contact links");
+    .expect("organization-person links");
     assert_eq!(organization_link_count, 1);
 
     let organization_relationship_count: i64 = sqlx::query_scalar(
@@ -291,13 +291,13 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
           ON evidence.relationship_id = relationship.relationship_id
         JOIN organization_domains domain
           ON domain.organization_id = relationship.target_entity_id
-        JOIN person_identities identity
+        JOIN persona_identities identity
           ON identity.person_id = relationship.source_entity_id
         WHERE relationship.source_entity_kind = 'persona'
           AND relationship.target_entity_kind = 'organization'
           AND relationship.relationship_type = 'member_of'
           AND relationship.review_state = 'system_accepted'
-          AND relationship.metadata->>'compatibility_table' = 'organization_contact_links'
+          AND relationship.metadata->>'compatibility_table' = 'organization_persona_links'
           AND relationship.metadata->>'source' = 'email_sync'
           AND evidence.source_kind = 'communication'
           AND evidence.source_id = $1

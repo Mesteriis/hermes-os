@@ -4,7 +4,7 @@ Status: Proposed
 
 ## Context
 
-Organizations accumulate facts, memory cards, preferences, and timeline events. Like persons (ADR-0057), every piece of information must carry provenance: source, confidence, and verification timestamp.
+Organizations accumulate facts, memory cards, preferences, and timeline events. Like Personas (ADR-0057), every piece of information must carry provenance: source, confidence, and verification timestamp.
 
 ## Decision
 

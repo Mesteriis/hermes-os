@@ -11,7 +11,7 @@ fn trust_engine_maps_persona_compatibility_score_to_relationship_signal() {
     assert_eq!(signal.confidence, 1.0);
     assert_eq!(
         signal.explanation,
-        "compatibility persons.trust_score signal"
+        "compatibility personas.trust_score signal"
     );
 }
 
@@ -27,7 +27,7 @@ fn trust_engine_clamps_legacy_persona_scores_to_relationship_range() {
 #[test]
 fn trust_engine_builds_source_reliability_signal_for_review() {
     let signal = TrustEngine::source_reliability_signal(
-        "person_enrichment:persona:v1:human:alice:trust_score",
+        "persona_enrichment:persona:v1:human:alice:trust_score",
         "trust_score=82",
         0.82,
     )
@@ -36,7 +36,7 @@ fn trust_engine_builds_source_reliability_signal_for_review() {
     assert_eq!(signal.kind, TrustSignalKind::SourceReliability);
     assert_eq!(
         signal.affected_source,
-        "person_enrichment:persona:v1:human:alice:trust_score"
+        "persona_enrichment:persona:v1:human:alice:trust_score"
     );
     assert_eq!(signal.evidence, "trust_score=82");
     assert_eq!(signal.confidence, 0.82);

@@ -8354,11 +8354,11 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     .fetch_one(&pool)
     .await
     .expect("whatsapp message observation id");
-    let people_review_items = sqlx::query(
+    let persona_review_items = sqlx::query(
         r#"
         SELECT item_kind, title, metadata
         FROM review_items
-        WHERE item_kind IN ('new_person', 'new_organization')
+        WHERE item_kind IN ('new_persona', 'new_organization')
           AND review_item_id IN (
               SELECT review_item_id
               FROM review_item_evidence
@@ -8370,16 +8370,16 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     .bind(&message_observation_id)
     .fetch_all(&pool)
     .await
-    .expect("message people review items");
-    assert!(people_review_items.iter().any(|row| {
-        row.try_get::<String, _>("item_kind").ok().as_deref() == Some("new_person")
+    .expect("message persona review items");
+    assert!(persona_review_items.iter().any(|row| {
+        row.try_get::<String, _>("item_kind").ok().as_deref() == Some("new_persona")
             && row.try_get::<String, _>("title").ok().as_deref() == Some("WhatsApp Fixture")
     }));
-    assert!(people_review_items.iter().any(|row| {
-        row.try_get::<String, _>("item_kind").ok().as_deref() == Some("new_person")
+    assert!(persona_review_items.iter().any(|row| {
+        row.try_get::<String, _>("item_kind").ok().as_deref() == Some("new_persona")
             && row.try_get::<String, _>("title").ok().as_deref() == Some("Ada Lovelace")
     }));
-    assert!(people_review_items.iter().any(|row| {
+    assert!(persona_review_items.iter().any(|row| {
         row.try_get::<String, _>("item_kind").ok().as_deref() == Some("new_organization")
             && row.try_get::<String, _>("title").ok().as_deref() == Some("acme.example")
             && row
@@ -8753,7 +8753,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
         sqlx::query_as(
             r#"
         SELECT identity_type, identity_value, person_id, source, metadata
-        FROM person_identities
+        FROM persona_identities
         WHERE source = 'communication_projection'
           AND identity_type IN ('whatsapp', 'phone')
           AND identity_value IN ($1, $2, $3, $4, $5)
@@ -8815,7 +8815,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
         sqlx::query_as(
             r#"
         SELECT identity_value, person_id, source, metadata
-        FROM person_identities
+        FROM persona_identities
         WHERE source = 'communication_projection'
           AND identity_type = 'message_participant'
           AND identity_value = $1
@@ -8848,9 +8848,9 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
         r#"
         SELECT COUNT(*)
         FROM observation_links link
-        JOIN person_identities identity_trace
+        JOIN persona_identities identity_trace
           ON identity_trace.id::text = link.entity_id
-        WHERE link.domain = 'persons'
+        WHERE link.domain = 'personas'
           AND link.entity_kind = 'identity_trace'
           AND identity_trace.source = 'communication_projection'
           AND identity_trace.identity_type = 'whatsapp'
@@ -8867,9 +8867,9 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
         r#"
         SELECT COUNT(*)
         FROM observation_links link
-        JOIN person_identities identity_trace
+        JOIN persona_identities identity_trace
           ON identity_trace.id::text = link.entity_id
-        WHERE link.domain = 'persons'
+        WHERE link.domain = 'personas'
           AND link.entity_kind = 'identity_trace'
           AND identity_trace.source = 'communication_projection'
           AND identity_trace.identity_type = 'message_participant'
@@ -8888,9 +8888,9 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
         r#"
         SELECT COUNT(*)
         FROM observation_links link
-        JOIN person_identities identity_trace
+        JOIN persona_identities identity_trace
           ON identity_trace.id::text = link.entity_id
-        WHERE link.domain = 'persons'
+        WHERE link.domain = 'personas'
           AND link.entity_kind = 'identity_trace'
           AND identity_trace.source = 'communication_projection'
           AND identity_trace.identity_type = 'phone'

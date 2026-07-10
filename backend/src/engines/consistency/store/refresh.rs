@@ -3,7 +3,7 @@ use sqlx::postgres::PgPool;
 use super::super::constants::STRUCTURED_EVIDENCE_CLAIM_CONFIDENCE;
 use super::super::engine::ConsistencyEngine;
 use super::super::errors::ConsistencyError;
-use super::super::evidence::ActivePersonFactClaim;
+use super::super::evidence::ActivePersonaFactClaim;
 use super::super::models::{AcceptedClaim, ContradictionSourceKind, EvidenceClaimExtractionInput};
 use super::super::validation::validate_refresh_limit;
 use super::observations;
@@ -14,7 +14,7 @@ pub(super) async fn refresh_deterministic_observations(
     limit: i64,
 ) -> Result<usize, ConsistencyError> {
     let limit = validate_refresh_limit(limit);
-    let facts = sources::active_person_fact_claims(pool, limit).await?;
+    let facts = sources::active_persona_fact_claims(pool, limit).await?;
     let messages = sources::recent_message_evidence(pool, limit).await?;
     let channel_messages = sources::recent_channel_message_evidence(pool, limit).await?;
     let documents = sources::recent_document_evidence(pool, limit).await?;
@@ -119,7 +119,7 @@ pub(super) async fn refresh_deterministic_observations(
     Ok(count)
 }
 
-fn accepted_claim(fact: &ActivePersonFactClaim) -> AcceptedClaim {
+fn accepted_claim(fact: &ActivePersonaFactClaim) -> AcceptedClaim {
     AcceptedClaim {
         subject_id: fact.person_id.clone(),
         claim_type: fact.claim_type.clone(),

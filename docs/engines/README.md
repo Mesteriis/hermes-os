@@ -73,9 +73,9 @@ The current repository contains dedicated baseline modules for:
 
 Many other engine-like behaviors are still domain-local:
 
-- `backend/src/domains/persons/memory.rs`;
-- `backend/src/domains/persons/trust.rs`;
-- `backend/src/domains/persons/enrichment_engine.rs`;
+- `backend/src/domains/personas/memory.rs`;
+- `backend/src/domains/personas/trust.rs`;
+- `backend/src/domains/personas/enrichment_engine.rs`;
 - `backend/src/domains/organizations/memory.rs`;
 - `backend/src/domains/*/health.rs`;
 - `backend/src/domains/*/intelligence.rs`;

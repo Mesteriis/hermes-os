@@ -22,7 +22,7 @@ export interface TaskItem {
   priority: string
 }
 
-export interface PersonItem {
+export interface PersonaItem {
   name: string
   meta: string
   icon: string

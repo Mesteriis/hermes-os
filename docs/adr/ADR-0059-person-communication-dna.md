@@ -10,9 +10,15 @@ interaction contexts is no longer the target domain model.
 
 The functional spec distinguishes between Roles (who the person is to the user) and Personas (how the user interacts in a specific context). Communication DNA captures the person's natural style independently of any persona: formality, verbosity, technical depth, call preference, and response patterns.
 
-## Decision
+## Historical Decision
 
-Store Communication DNA as typed columns on the `persons` table (`communication_style`, `verbosity`, `technical_depth`, `question_frequency`, `call_preference`, `response_pattern`, `active_hours`, `active_days`). Personas live in `person_personas` as named interaction contexts with their own tone, language, and channel preferences. The `PersonIntelligenceService` computes DNA from message corpus with heuristic fallback and optional LLM refinement via Ollama.
+The original decision stored Communication DNA as typed columns on the
+historical `persons` table and modeled nested interaction personas through
+`person_personas`. That naming is no longer the target model.
+
+Current implementation direction is owned by ADR-0084: Persona is the root
+domain entity, storage is persona-native, and the former nested persona concept
+is treated as deprecated interaction-context compatibility.
 
 ## Consequences
 

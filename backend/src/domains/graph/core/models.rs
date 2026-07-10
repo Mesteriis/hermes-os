@@ -10,14 +10,14 @@ use super::validation::{validate_json_object, validate_non_empty};
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RelationshipType {
-    PersonHasEmailAddress,
-    PersonSentMessage,
-    PersonReceivedMessage,
+    PersonaHasEmailAddress,
+    PersonaSentMessage,
+    PersonaReceivedMessage,
     EmailAddressSentMessage,
     EmailAddressReceivedMessage,
     ProjectHasMessage,
     ProjectHasDocument,
-    ProjectInvolvesPerson,
+    ProjectInvolvesPersona,
     ProjectInvolvesEmailAddress,
     EntityRelationship,
 }
@@ -25,14 +25,14 @@ pub enum RelationshipType {
 impl RelationshipType {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::PersonHasEmailAddress => "person_has_email_address",
-            Self::PersonSentMessage => "person_sent_message",
-            Self::PersonReceivedMessage => "person_received_message",
+            Self::PersonaHasEmailAddress => "persona_has_email_address",
+            Self::PersonaSentMessage => "persona_sent_message",
+            Self::PersonaReceivedMessage => "persona_received_message",
             Self::EmailAddressSentMessage => "email_address_sent_message",
             Self::EmailAddressReceivedMessage => "email_address_received_message",
             Self::ProjectHasMessage => "project_has_message",
             Self::ProjectHasDocument => "project_has_document",
-            Self::ProjectInvolvesPerson => "project_involves_person",
+            Self::ProjectInvolvesPersona => "project_involves_persona",
             Self::ProjectInvolvesEmailAddress => "project_involves_email_address",
             Self::EntityRelationship => "entity_relationship",
         }
@@ -62,7 +62,7 @@ impl GraphReviewState {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GraphEvidenceSourceKind {
-    Person,
+    Persona,
     Message,
     Document,
     Relationship,
@@ -74,7 +74,7 @@ pub enum GraphEvidenceSourceKind {
 impl GraphEvidenceSourceKind {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Person => "contact",
+            Self::Persona => "persona",
             Self::Message => "message",
             Self::Document => "document",
             Self::Relationship => "relationship",

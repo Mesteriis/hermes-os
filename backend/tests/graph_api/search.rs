@@ -37,7 +37,7 @@ async fn graph_nodes_returns_connected_picker_nodes_first() {
     let connected_person = context
         .store
         .upsert_node(&NewGraphNode::new(
-            GraphNodeKind::Person,
+            GraphNodeKind::Persona,
             format!("person:connected-picker:{suffix}"),
             format!("Connected Picker {suffix}"),
         ))
@@ -55,7 +55,7 @@ async fn graph_nodes_returns_connected_picker_nodes_first() {
     let disconnected = context
         .store
         .upsert_node(&NewGraphNode::new(
-            GraphNodeKind::Person,
+            GraphNodeKind::Persona,
             format!("person:disconnected-picker:{suffix}"),
             format!("Disconnected Picker {suffix}"),
         ))
@@ -67,12 +67,12 @@ async fn graph_nodes_returns_connected_picker_nodes_first() {
             &NewGraphEdge::new(
                 connected_person.node_id.clone(),
                 connected_email.node_id.clone(),
-                RelationshipType::PersonHasEmailAddress,
+                RelationshipType::PersonaHasEmailAddress,
                 1.0,
                 GraphReviewState::SystemAccepted,
             ),
             &[NewGraphEvidence::new(
-                GraphEvidenceSourceKind::Person,
+                GraphEvidenceSourceKind::Persona,
                 format!("person-source:{suffix}"),
             )],
         )
@@ -114,7 +114,7 @@ async fn graph_search_returns_matching_nodes() {
     let alex = context
         .store
         .upsert_node(&NewGraphNode::new(
-            GraphNodeKind::Person,
+            GraphNodeKind::Persona,
             format!("person:alex:{suffix}"),
             format!("Alex Morgan {suffix}"),
         ))
@@ -123,7 +123,7 @@ async fn graph_search_returns_matching_nodes() {
     context
         .store
         .upsert_node(&NewGraphNode::new(
-            GraphNodeKind::Person,
+            GraphNodeKind::Persona,
             format!("person:blair:{suffix}"),
             format!("Blair Morgan {suffix}"),
         ))

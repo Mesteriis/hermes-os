@@ -32,7 +32,7 @@ pub(super) fn row_to_status(row: PgRow) -> Result<MailSyncStatus, MailSyncError>
         last_error_message: row.try_get("last_error_message")?,
         last_fetched_messages: row.try_get("last_fetched_messages")?,
         last_projected_messages: row.try_get("last_projected_messages")?,
-        last_upserted_persons: row.try_get("last_upserted_persons")?,
+        last_upserted_personas: row.try_get("last_upserted_personas")?,
         last_upserted_organizations: row.try_get("last_upserted_organizations")?,
     })
 }
@@ -59,7 +59,7 @@ pub(super) fn row_to_run(row: PgRow) -> Result<MailSyncRun, MailSyncError> {
         current_batch_size: row.try_get("current_batch_size")?,
         fetched_messages: row.try_get("fetched_messages")?,
         projected_messages: row.try_get("projected_messages")?,
-        upserted_persons: row.try_get("upserted_persons")?,
+        upserted_personas: row.try_get("upserted_personas")?,
         upserted_organizations: row.try_get("upserted_organizations")?,
         checkpoint_before: row.try_get("checkpoint_before")?,
         checkpoint_after: row.try_get("checkpoint_after")?,

@@ -4,7 +4,7 @@ mod communications;
 mod document_processing;
 mod integrations;
 mod knowledge;
-mod persons;
+mod personas;
 mod platform;
 mod review;
 mod tasks;
@@ -86,10 +86,10 @@ fn parts(error: ApiError) -> ErrorParts {
         | ApiError::ReviewPromotion(_) => review::parts(error),
         ApiError::InvalidTaskQuery(_) => tasks::parts(error),
         ApiError::InvalidPersonaQuery(_)
-        | ApiError::InvalidPersonIdentityReview(_)
-        | ApiError::PersonIdentityNotFound
-        | ApiError::PersonProjection(_)
-        | ApiError::PersonIdentity(_) => persons::parts(error),
+        | ApiError::InvalidPersonaIdentityReview(_)
+        | ApiError::PersonaIdentityNotFound
+        | ApiError::PersonaProjection(_)
+        | ApiError::PersonaIdentity(_) => personas::parts(error),
         ApiError::Messages(_)
         | ApiError::CommunicationIngestion(_)
         | ApiError::CommunicationStorage(_)

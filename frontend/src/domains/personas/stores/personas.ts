@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { PersonDossier, PersonIdentityCandidate, PersonIdentity, Relationship } from '../types/persona'
+import type { PersonaDossier, PersonaIdentityCandidate, PersonaIdentity, Relationship } from '../types/persona'
 import { reviewIdentityCandidate, assignIdentityTrace, reviewRelationship } from '../api/personas'
 
 export function formatIdentityTraceKind(kind: string): string {
@@ -16,11 +16,11 @@ export function formatIdentityTraceKind(kind: string): string {
   return labels[kind] || kind
 }
 
-export function formatIdentityTraceValue(trace: PersonIdentity): string {
-  return trace.value || trace.identity_type
+export function formatIdentityTraceValue(trace: PersonaIdentity): string {
+  return trace.identity_value || trace.identity_type
 }
 
-export function identityTraceConfidence(trace: PersonIdentity): string {
+export function identityTraceConfidence(trace: PersonaIdentity): string {
   return `${Math.round(trace.confidence * 100)}%`
 }
 
@@ -50,42 +50,42 @@ export function formatRelationshipEndpoint(kind: string, id: string): string {
   return `${kind}:${id.slice(0, 8)}...`
 }
 
-export function personIdentityPairKey(leftPersonId: string, rightPersonId: string): string {
-  return leftPersonId <= rightPersonId
-    ? `${leftPersonId}:${rightPersonId}`
-    : `${rightPersonId}:${leftPersonId}`
+export function personaIdentityPairKey(leftPersonaId: string, rightPersonaId: string): string {
+  return leftPersonaId <= rightPersonaId
+    ? `${leftPersonaId}:${rightPersonaId}`
+    : `${rightPersonaId}:${leftPersonaId}`
 }
 
-export function dossierSectionPreview(dossier: PersonDossier): string[] {
+export function dossierSectionPreview(dossier: PersonaDossier): string[] {
   const words = (dossier.summary || '').split(/\s+/).filter(Boolean)
   return [...new Set(words.slice(0, 10))]
 }
 
 export const usePersonasStore = defineStore('personas', () => {
-  const selectedPersonIndex = ref(0)
-  const loadedDossierPersonId = ref<string | null>(null)
-  const personDossier = ref<PersonDossier | null>(null)
-  const personDossierError = ref('')
-  const isPersonDossierLoading = ref(false)
+  const selectedPersonaIndex = ref(0)
+  const loadedDossierPersonaId = ref<string | null>(null)
+  const personaDossier = ref<PersonaDossier | null>(null)
+  const personaDossierError = ref('')
+  const isPersonaDossierLoading = ref(false)
   const identityCandidatesError = ref('')
   const identityTracesError = ref('')
   const relationshipsError = ref('')
   const assigningIdentityTraceId = ref<string | null>(null)
   const reviewingRelationshipId = ref<string | null>(null)
 
-  const identityCandidates = ref<PersonIdentityCandidate[]>([])
-  const identityTraces = ref<PersonIdentity[]>([])
+  const identityCandidates = ref<PersonaIdentityCandidate[]>([])
+  const identityTraces = ref<PersonaIdentity[]>([])
   const relationships = ref<Relationship[]>([])
 
   const suggestedIdentityCandidates = computed(() =>
     identityCandidates.value.filter((item) => item.review_state === 'suggested')
   )
 
-  function setIdentityCandidates(items: PersonIdentityCandidate[]) {
+  function setIdentityCandidates(items: PersonaIdentityCandidate[]) {
     identityCandidates.value = items
   }
 
-  function setIdentityTraces(items: PersonIdentity[]) {
+  function setIdentityTraces(items: PersonaIdentity[]) {
     identityTraces.value = items
   }
 
@@ -93,35 +93,35 @@ export const usePersonasStore = defineStore('personas', () => {
     relationships.value = items
   }
 
-  function selectPerson(index: number) {
-    selectedPersonIndex.value = index
+  function selectPersona(index: number) {
+    selectedPersonaIndex.value = index
   }
 
-  function setPersonDossier(dossier: PersonDossier | null, error: string) {
-    personDossier.value = dossier
-    personDossierError.value = error
+  function setPersonaDossier(dossier: PersonaDossier | null, error: string) {
+    personaDossier.value = dossier
+    personaDossierError.value = error
   }
 
-  function setPersonDossierLoading(loading: boolean) {
-    isPersonDossierLoading.value = loading
+  function setPersonaDossierLoading(loading: boolean) {
+    isPersonaDossierLoading.value = loading
   }
 
-  function setLoadedDossierPersonId(id: string | null) {
-    loadedDossierPersonId.value = id
+  function setLoadedDossierPersonaId(id: string | null) {
+    loadedDossierPersonaId.value = id
   }
 
-  async function reviewCandidate(candidate: PersonIdentityCandidate, state: PersonIdentityCandidate['review_state']) {
+  async function reviewCandidate(candidate: PersonaIdentityCandidate, state: PersonaIdentityCandidate['review_state']) {
     try {
-      await reviewIdentityCandidate(candidate.candidate_id, state as any)
+      await reviewIdentityCandidate(candidate.identity_candidate_id, state as any)
     } catch (e: any) {
       identityCandidatesError.value = e.message || 'Review failed'
     }
   }
 
-  async function assignTraceToPersona(trace: PersonIdentity, personId: string) {
+  async function assignTraceToPersona(trace: PersonaIdentity, personaId: string) {
     assigningIdentityTraceId.value = trace.id
     try {
-      await assignIdentityTrace(trace.id, personId)
+      await assignIdentityTrace(trace.id, personaId)
     } catch (e: any) {
       identityTracesError.value = e.message || 'Assignment failed'
     }
@@ -139,10 +139,10 @@ export const usePersonasStore = defineStore('personas', () => {
   }
 
   return {
-    selectedPersonIndex,
-    personDossier,
-    personDossierError,
-    isPersonDossierLoading,
+    selectedPersonaIndex,
+    personaDossier,
+    personaDossierError,
+    isPersonaDossierLoading,
     identityCandidatesError,
     identityTracesError,
     relationshipsError,
@@ -152,14 +152,14 @@ export const usePersonasStore = defineStore('personas', () => {
     identityCandidates,
     identityTraces,
     relationships,
-    loadedDossierPersonId,
+    loadedDossierPersonaId,
     setIdentityCandidates,
     setIdentityTraces,
     setRelationships,
-    selectPerson,
-    setPersonDossier,
-    setPersonDossierLoading,
-    setLoadedDossierPersonId,
+    selectPersona,
+    setPersonaDossier,
+    setPersonaDossierLoading,
+    setLoadedDossierPersonaId,
     reviewCandidate,
     assignTraceToPersona,
     reviewRelation

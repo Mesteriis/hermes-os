@@ -1315,6 +1315,7 @@ impl SignalHubStore {
             .target_projection
             .as_deref()
             .map(|value| validate_non_empty("target_projection", value))
+            .map(|result| result.map(|value| canonical_target_projection(value.as_str())))
             .transpose()?;
         let connection_id = match request.connection_id.as_deref() {
             Some(value) => Some(
@@ -1364,7 +1365,7 @@ impl SignalHubStore {
             match target_projection {
                 "communication_messages"
                 | "timeline_event_log"
-                | "person_derived_evidence"
+                | "persona_derived_evidence"
                 | "project_link_review_effects" => {}
                 other => {
                     return Err(SignalHubError::InvalidReplayRequest(format!(
@@ -2398,7 +2399,7 @@ fn replay_selector_from_metadata(metadata: &Value) -> Result<ReplaySelector, Sig
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned);
+        .map(canonical_target_projection);
 
     Ok(ReplaySelector {
         from_position,
@@ -2452,6 +2453,13 @@ fn build_replay_metadata(
     }
 
     Ok(metadata)
+}
+
+fn canonical_target_projection(value: &str) -> String {
+    match value {
+        "person_derived_evidence" => "persona_derived_evidence".to_owned(),
+        other => other.to_owned(),
+    }
 }
 
 fn parse_replay_timestamp(value: &str) -> Result<DateTime<Utc>, SignalHubError> {

@@ -45,7 +45,7 @@ pub(in crate::workflows::mail_background_sync) enum MailSyncPhase {
     Listing,
     Fetching,
     Projecting,
-    PersonsGraph,
+    PersonasGraph,
     Completed,
     Failed,
 }
@@ -56,7 +56,7 @@ impl MailSyncPhase {
             Self::Listing => "listing",
             Self::Fetching => "fetching",
             Self::Projecting => "projecting",
-            Self::PersonsGraph => "persons_graph",
+            Self::PersonasGraph => "personas_graph",
             Self::Completed => "completed",
             Self::Failed => "failed",
         }

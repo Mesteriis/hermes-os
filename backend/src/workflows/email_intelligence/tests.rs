@@ -138,7 +138,8 @@ fn heuristic_structured_summary_extracts_mail_knowledge_candidates() {
         summary
             .persona_candidates
             .iter()
-            .any(|candidate| candidate.title.contains("Ada Lovelace"))
+            .any(|candidate| candidate.title.contains("Ada Lovelace")
+                && candidate.kind.as_deref() == Some("persona"))
     );
     assert!(
         summary
@@ -175,6 +176,10 @@ fn heuristic_structured_summary_is_bounded_and_deduplicated() {
     assert!(summary.event_candidates.is_empty());
     assert_eq!(summary.persona_candidates.len(), 1);
     assert_eq!(summary.persona_candidates[0].title, "sender@example.com");
+    assert_eq!(
+        summary.persona_candidates[0].kind.as_deref(),
+        Some("persona")
+    );
 }
 
 #[test]

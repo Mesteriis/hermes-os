@@ -5,7 +5,7 @@ pub mod documents;
 pub mod graph;
 pub mod obligations;
 pub mod organizations;
-pub mod persons;
+pub mod personas;
 pub mod projects;
 pub mod relationships;
 pub mod review;

@@ -2,11 +2,11 @@
 
 Status: implementation decomposition note.
 
-This document predates the foundation terminology cleanup and names existing
-handler groups/routes. Treat `persons`, `health`, `watchlist`, `promises`,
-`fingerprint` and similar names below as compatibility labels until the code is
-renamed through an explicit implementation task. The canonical domain model is
-defined in `../foundation/`.
+This document predates the foundation terminology cleanup and names historical
+handler groups/routes. Treat `health`, `watchlist`, `promises`, `fingerprint`
+and similar names below as compatibility labels until the code is renamed
+through an explicit implementation task. The canonical domain model is defined
+in `../foundation/`; the active people domain is Personas.
 
 For the product-model migration from current modules and routes to
 Communications, Persona, shared Engines, Decisions, Obligations and Polygraph,
@@ -89,13 +89,13 @@ domains/communications/api/account_setup/
 
 ## Phase 2: Large Domains (~120 files)
 
-### 2.1 Persons compatibility routes (45 handlers)
+### 2.1 Personas routes (45 handlers)
 ```
-domains/persons/api/
+domains/personas/api/
 ├── dto.rs              # shared DTOs
-├── list.rs             # GET /persons
-├── get.rs              # GET /persons/:id
-├── search.rs           # GET /persons/search
+├── list.rs             # GET /personas
+├── get.rs              # GET /personas/:id
+├── search.rs           # GET /personas/search
 ├── identity/           # 9 handlers + dto.rs
 ├── enrichment/         # 3 handlers + dto.rs
 ├── expertise/          # 2 handlers + dto.rs
@@ -164,7 +164,7 @@ domains/communications/api/v1/
 | Current | New |
 |---------|-----|
 | `calendar/core.rs` | `calendar/domain/calendar.rs` |
-| `persons/core.rs` | `persons/domain/person.rs` |
+| `personas/core.rs` | `personas/domain/persona.rs` |
 | `tasks/core.rs` | `tasks/domain/task.rs` |
 | `organizations/core.rs` | `organizations/domain/organization.rs` |
 | `projects/core.rs` | `projects/domain/project.rs` |
@@ -195,57 +195,59 @@ cargo check && cargo fmt && cargo clippy --all-targets --all-features -- -D warn
 Every handler follows this exact shape — 10-30 lines:
 
 ```rust
-// domains/persons/api/search.rs
-// GET /api/v1/persons/search
+// domains/personas/api/search.rs
+// GET /api/v1/personas/search
 
 use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
 use serde::Deserialize;
 
-use super::dto::PersonSearchResponse;
+use super::dto::PersonaSearchResponse;
 use crate::app::auth::verify_local_api_capability;
 use crate::app::error::ApiError;
 use crate::app::state::AppState;
-use crate::domains::persons::infrastructure::PersonRepo;
+use crate::domains::personas::enrichment::PersonaEnrichmentStore;
 
 #[derive(Deserialize)]
-struct PersonSearchQuery {
+struct PersonaSearchQuery {
     q: String,
     limit: Option<i64>,
 }
 
-pub async fn search_persons(
+pub async fn search_personas(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Query(query): Query<PersonSearchQuery>,
-) -> Result<Json<PersonSearchResponse>, ApiError> {
+    Query(query): Query<PersonaSearchQuery>,
+) -> Result<Json<PersonaSearchResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
 
     let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let repo = PersonRepo::new(pool);
-    let items = repo.search(&query.q, query.limit.unwrap_or(20)).await?;
+    let store = crate::app::api_support::app_store::<PersonaEnrichmentStore>(pool);
+    let items = store
+        .search_personas(&query.q, query.limit.unwrap_or(20))
+        .await?;
 
-    Ok(Json(PersonSearchResponse { items }))
+    Ok(Json(PersonaSearchResponse { items }))
 }
 ```
 
 ## DTO Template
 
 ```rust
-// domains/persons/api/dto.rs
-// Shared DTOs for persons list/search/get
+// domains/personas/api/dto.rs
+// Shared DTOs for personas list/search/get
 
 use serde::Serialize;
-use crate::domains::persons::domain::person::Person;
+use crate::domains::personas::enrichment::EnrichedPersona;
 
 #[derive(Serialize)]
-pub struct PersonListResponse {
-    pub items: Vec<Person>,
+pub struct PersonaListResponse {
+    pub items: Vec<EnrichedPersona>,
 }
 
 #[derive(Serialize)]
-pub struct PersonSearchResponse {
-    pub items: Vec<Person>,
+pub struct PersonaSearchResponse {
+    pub items: Vec<EnrichedPersona>,
 }
 ```

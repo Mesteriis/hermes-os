@@ -257,6 +257,28 @@ pub(super) fn mail_sync_service(
     ))
 }
 
+pub(super) fn address_book_sync_service(
+    state: &AppState,
+) -> Result<AddressBookSyncService, AddressBookSyncError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(AddressBookSyncError::DatabaseNotConfigured);
+    };
+
+    Ok(AddressBookSyncService::new(
+        pool.clone(),
+        std::sync::Arc::new(
+            crate::integrations::mail::address_book_sync_provider::LiveAddressBookProviderSyncPort::new(
+                pool.clone(),
+                state.vault.clone(),
+                std::sync::Arc::new(crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                    pool.clone(),
+                )),
+                crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+            ),
+        ),
+    ))
+}
+
 pub(super) fn mail_sync_api_error(error: MailSyncError) -> ApiError {
     match error {
         MailSyncError::AccountNotFound => ApiError::NotFound,
@@ -282,6 +304,29 @@ pub(super) fn mail_sync_api_error(error: MailSyncError) -> ApiError {
         MailSyncError::ObservationPort(error) => {
             tracing::error!(error = %error, "mail sync observation store failed");
             ApiError::InvalidCommunicationQuery("mail sync operation failed")
+        }
+    }
+}
+
+pub(super) fn address_book_sync_api_error(error: AddressBookSyncError) -> ApiError {
+    match error {
+        AddressBookSyncError::AccountNotFound(_) => ApiError::NotFound,
+        AddressBookSyncError::DatabaseNotConfigured => ApiError::DatabaseNotConfigured,
+        AddressBookSyncError::Sqlx(error) => {
+            tracing::error!(error = %error, "address book sync database operation failed");
+            ApiError::InvalidCommunicationQuery("address book sync operation failed")
+        }
+        AddressBookSyncError::Communication(error) => {
+            tracing::error!(error = %error, "address book sync communication store failed");
+            ApiError::InvalidCommunicationQuery("address book sync operation failed")
+        }
+        AddressBookSyncError::PersonaCommand(error) => {
+            tracing::error!(error = %error, "address book sync persona projection failed");
+            ApiError::InvalidCommunicationQuery("address book sync operation failed")
+        }
+        AddressBookSyncError::Provider(error) => {
+            tracing::warn!(error = %error, "address book sync provider operation failed");
+            ApiError::InvalidCommunicationQuery("address book sync provider operation failed")
         }
     }
 }

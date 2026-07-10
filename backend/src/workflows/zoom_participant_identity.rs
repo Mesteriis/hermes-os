@@ -3,7 +3,7 @@ use serde_json::Value;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::persons::identity::{PersonIdentityError, PersonIdentityPort};
+use crate::domains::personas::identity::{PersonaIdentityError, PersonaIdentityReviewPort};
 use crate::platform::events::bus::zoom_event_types;
 use crate::platform::events::{EventEnvelope, EventStoreError, StoredEventEnvelope};
 
@@ -24,7 +24,7 @@ pub enum ZoomParticipantIdentityWorkflowError {
     Json(#[from] serde_json::Error),
 
     #[error(transparent)]
-    PersonsIdentity(#[from] PersonIdentityError),
+    PersonaIdentity(#[from] PersonaIdentityError),
 
     #[error("event payload is missing required field {0}")]
     MissingPayloadField(&'static str),
@@ -56,7 +56,7 @@ pub async fn project_zoom_participant_identity(
         .unwrap_or_else(|| Value::Array(Vec::new()));
     let participants: Vec<ZoomParticipantObservation> = serde_json::from_value(participants)?;
 
-    let store = PersonIdentityPort::new(pool.clone());
+    let store = PersonaIdentityReviewPort::new(pool.clone());
     for participant in participants {
         let Some(display_name) = participant
             .display_name

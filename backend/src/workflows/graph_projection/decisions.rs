@@ -264,7 +264,7 @@ pub(super) fn entity_graph_node_kind(
     value: &str,
 ) -> Result<GraphNodeKind, GraphProjectionError> {
     match value {
-        "persona" => Ok(GraphNodeKind::Person),
+        "persona" => Ok(GraphNodeKind::Persona),
         "organization" => Ok(GraphNodeKind::Organization),
         "project" => Ok(GraphNodeKind::Project),
         "communication" => Ok(GraphNodeKind::Message),

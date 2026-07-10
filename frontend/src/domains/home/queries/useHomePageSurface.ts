@@ -1,7 +1,7 @@
 import { computed } from 'vue'
 import { useI18n } from '../../../platform/i18n'
 import { useCommunicationMessagesQuery, useMailboxHealthQuery } from './useHomeQuery'
-import type { FeedItem, PersonItem, StatCard } from '../types/home'
+import type { FeedItem, PersonaItem, StatCard } from '../types/home'
 
 const channelIcons: Record<string, string> = {
   email: 'tabler:mail',
@@ -27,7 +27,7 @@ export function useHomePageSurface() {
       stats.push({ label: t('Waiting'), value: String(mailboxHealth.waiting), delta: `${mailboxHealth.done} ${t('done')}`, icon: 'tabler:message-reply' })
     }
     stats.push({ label: t('Projects'), value: '—', delta: t('active'), icon: 'tabler:briefcase' })
-    stats.push({ label: t('Persons'), value: '—', delta: t('enriched'), icon: 'tabler:user-plus' })
+    stats.push({ label: t('Personas'), value: '—', delta: t('enriched'), icon: 'tabler:user-plus' })
     return stats
   })
 
@@ -47,9 +47,9 @@ export function useHomePageSurface() {
     return items
   })
 
-  const peopleTalked = computed<PersonItem[]>(() => {
+  const personasTalked = computed<PersonaItem[]>(() => {
     const seen = new Set<string>()
-    const result: PersonItem[] = []
+    const result: PersonaItem[] = []
     const messages = messagesQuery.data.value ?? []
     for (const message of messages) {
       const sender = message.sender_display_name || message.sender || t('Unknown')
@@ -69,7 +69,7 @@ export function useHomePageSurface() {
     homeStats,
     mailboxHealth: mailboxHealthQuery.data,
     messages: messagesQuery.data,
-    peopleTalked,
+    personasTalked,
     whatsNew
   }
 }

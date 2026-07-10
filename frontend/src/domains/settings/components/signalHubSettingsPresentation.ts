@@ -51,7 +51,7 @@ export const COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER =
 export const SIGNAL_HUB_REPLAY_PROJECTION_TARGETS = [
   'communication_messages',
   'timeline_event_log',
-  'person_derived_evidence',
+  'persona_derived_evidence',
   'project_link_review_effects'
 ] as const
 

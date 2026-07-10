@@ -33,18 +33,22 @@ describe('backgroundJobsPresentation', () => {
       replayPendingCount: 2,
       runtimeStates: [
         runtimeState('mail', 'mail_background_sync', 'running'),
+        runtimeState('mail', 'address_book_sync', 'running'),
         runtimeState('system', 'signal_replay_dispatcher', 'running')
       ],
       signalSourceCount: 8
     })
 
     const mailSync = rows.find((row) => row.id === 'mail-background-sync')
+    const addressBookSync = rows.find((row) => row.id === 'address-book-sync')
     const replay = rows.find((row) => row.id === 'signal-replay-dispatcher')
     const ai = rows.find((row) => row.id === 'ai-model-catalog-sync')
 
     expect(mailSync?.statusLabel).toBe('Running')
     expect(mailSync?.metric).toBe('1 mail accounts')
     expect(mailSync?.nextRunLabel).toBe('2026-07-08T12:00:00Z')
+    expect(addressBookSync?.statusLabel).toBe('Running')
+    expect(addressBookSync?.controlSection).toBe('accounts')
     expect(replay?.statusLabel).toBe('Replay pending')
     expect(replay?.tone).toBe('warn')
     expect(ai?.metric).toBe('7 models')
@@ -131,7 +135,7 @@ function mailStatus(overrides: Partial<MailSyncStatus>): MailSyncStatus {
     last_error_message: null,
     last_fetched_messages: 0,
     last_projected_messages: 0,
-    last_upserted_persons: 0,
+    last_upserted_personas: 0,
     last_upserted_organizations: 0,
     ...overrides
   }

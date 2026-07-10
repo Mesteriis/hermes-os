@@ -180,7 +180,7 @@ pub(crate) async fn post_v1_rich_template_mail_merge_preview(
 }
 
 #[derive(Deserialize)]
-pub(crate) struct PersonListQuery {
+pub(crate) struct PersonaListQuery {
     pub(super) favorites_only: Option<bool>,
     pub(super) limit: Option<i64>,
 }
@@ -196,7 +196,7 @@ pub(crate) async fn get_v1_status(
         version: "1.0",
         surfaces: V1Surfaces {
             messages: true,
-            persons: true,
+            personas: true,
             search: true,
             documents: true,
             account_setup: true,

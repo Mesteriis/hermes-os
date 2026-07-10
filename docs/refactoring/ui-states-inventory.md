@@ -145,8 +145,6 @@
 
 | Source | Target | Файл |
 |--------|--------|------|
-| `personas/api/personas.ts` | Organizations API | [`frontend/src/domains/personas/api/personas.ts`](../../frontend/src/domains/personas/api/personas.ts) |
-| `review/stores/review.ts` | `personas/api/personas` | [`frontend/src/domains/review/stores/review.ts`](../../frontend/src/domains/review/stores/review.ts) |
+| `review/stores/review.ts` | `review/api/workspace` | [`frontend/src/domains/review/stores/review.ts`](../../frontend/src/domains/review/stores/review.ts) |
 | `review/stores/review.ts` | `tasks/api/tasks` | same file |
 | `review/stores/review.ts` | `knowledge/api/knowledge` | same file |
-| `organizations/queries/` | `personas/api/personas` | [`frontend/src/domains/organizations/queries/useOrganizationsQuery.ts`](../../frontend/src/domains/organizations/queries/useOrganizationsQuery.ts) |

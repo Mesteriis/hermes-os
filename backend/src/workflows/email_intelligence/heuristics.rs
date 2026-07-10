@@ -282,7 +282,7 @@ fn persona_candidates(message: &ProjectedMessage) -> Vec<EmailKnowledgeCandidate
             push_candidate_bounded(
                 &mut candidates,
                 EmailKnowledgeCandidate::new(label, email.clone())
-                    .kind("person")
+                    .kind("persona")
                     .confidence(0.64)
                     .source_message_id(message.message_id.clone())
                     .identifiers(email_candidate_identifiers_email(&email)),
@@ -380,7 +380,7 @@ fn push_persona_candidate(
         return;
     }
     let mut candidate = EmailKnowledgeCandidate::new(label, evidence.to_owned())
-        .kind("person")
+        .kind("persona")
         .confidence(0.62)
         .source_message_id(message.message_id.clone());
     if evidence.contains('@') {

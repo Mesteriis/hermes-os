@@ -11,7 +11,7 @@ fn enrichment_engine_builds_persona_favorite_preference_draft() {
     assert_eq!(draft.value, "true");
     assert_eq!(
         draft.source,
-        "persons.is_favorite:person:v1:email:alice@example.com"
+        "personas.is_favorite:person:v1:email:alice@example.com"
     );
     assert_eq!(draft.confidence, 1.0);
 }

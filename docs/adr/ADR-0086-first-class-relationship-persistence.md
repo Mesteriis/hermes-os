@@ -109,7 +109,7 @@ Negative:
 
 ## Non-Goals
 
-- Renaming `/persons` routes.
+- Reintroducing `/persons` routes.
 - Removing `graph_edges`.
 - Removing `relationship_events`, `person_roles` or organization/project link
   tables.
@@ -136,7 +136,7 @@ Manual/API `person_roles` now materialize source-backed `has_role`
 Relationships from Persona to role Knowledge anchors. Removing a role demotes
 the same Relationship to `user_rejected`.
 
-Manual/API and email-sync `organization_contact_links`, manual `task_relations`
+Manual/API and email-sync `organization_persona_links`, manual `task_relations`
 and explicit project link reviews now also materialize source-backed
 Relationship records behind their compatibility surfaces.
 

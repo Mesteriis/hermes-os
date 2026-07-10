@@ -11,10 +11,10 @@ pub struct GraphProjectionReport {
     pub evidence_upserted: usize,
 }
 
-pub(super) struct PersonRow {
+pub(super) struct PersonaRow {
     pub(super) person_id: String,
     pub(super) display_name: String,
-    pub(super) email_address: String,
+    pub(super) email_address: Option<String>,
 }
 
 pub(super) struct MessageRow {
@@ -40,24 +40,24 @@ pub(super) struct DocumentRow {
 }
 
 pub(super) enum MessageEndpoint {
-    Person { node_id: String },
+    Persona { node_id: String },
     EmailAddress { node_id: String },
 }
 
 impl MessageEndpoint {
     pub(super) fn node_id(&self) -> &str {
         match self {
-            Self::Person { node_id } | Self::EmailAddress { node_id } => node_id,
+            Self::Persona { node_id } | Self::EmailAddress { node_id } => node_id,
         }
     }
 
     pub(super) fn relationship_type(&self, direction: RelationshipDirection) -> RelationshipType {
         match (self, direction) {
-            (Self::Person { .. }, RelationshipDirection::Sent) => {
-                RelationshipType::PersonSentMessage
+            (Self::Persona { .. }, RelationshipDirection::Sent) => {
+                RelationshipType::PersonaSentMessage
             }
-            (Self::Person { .. }, RelationshipDirection::Received) => {
-                RelationshipType::PersonReceivedMessage
+            (Self::Persona { .. }, RelationshipDirection::Received) => {
+                RelationshipType::PersonaReceivedMessage
             }
             (Self::EmailAddress { .. }, RelationshipDirection::Sent) => {
                 RelationshipType::EmailAddressSentMessage
@@ -70,7 +70,7 @@ impl MessageEndpoint {
 
     pub(super) fn project_relationship_type(&self) -> RelationshipType {
         match self {
-            Self::Person { .. } => RelationshipType::ProjectInvolvesPerson,
+            Self::Persona { .. } => RelationshipType::ProjectInvolvesPersona,
             Self::EmailAddress { .. } => RelationshipType::ProjectInvolvesEmailAddress,
         }
     }

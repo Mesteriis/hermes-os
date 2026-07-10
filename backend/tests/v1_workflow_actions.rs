@@ -269,7 +269,7 @@ async fn workflow_action_create_task_is_idempotent_and_records_safe_event() {
 }
 
 #[tokio::test]
-async fn workflow_action_create_contact_reuses_message_observation_for_person_projection() {
+async fn workflow_action_create_persona_reuses_message_observation_for_persona_projection() {
     let test_context = TestContext::new().await;
     let db = test_context.connection_string();
     let database = Database::connect(Some(&db)).await.expect("database");
@@ -277,9 +277,9 @@ async fn workflow_action_create_contact_reuses_message_observation_for_person_pr
     let suffix = uid();
     let message_id = seed_projected_message(
         pool.clone(),
-        &format!("acct-workflow-contact-{suffix}"),
-        &format!("provider-workflow-contact-{suffix}"),
-        &format!("Workflow action contact {suffix}"),
+        &format!("acct-workflow-persona-{suffix}"),
+        &format!("provider-workflow-persona-{suffix}"),
+        &format!("Workflow action persona {suffix}"),
     )
     .await;
     let message_observation_id: String = sqlx::query_scalar(
@@ -290,38 +290,41 @@ async fn workflow_action_create_contact_reuses_message_observation_for_person_pr
     .await
     .expect("message observation id");
     let r = router(&db).await;
-    let command_id = format!("workflow-action-contact-{suffix}");
+    let command_id = format!("workflow-action-persona-{suffix}");
 
     let response = r
         .oneshot(post_with_actor(
             "/api/v1/workflow-actions",
             json!({
                 "command_id": command_id,
-                "action": "create_contact",
+                "action": "create_persona",
                 "source": { "kind": "communication_message", "id": message_id }
             }),
         ))
         .await
-        .expect("workflow contact response");
+        .expect("workflow persona response");
 
     assert_eq!(response.status(), StatusCode::OK);
     let body = response_json(response).await;
-    assert_eq!(body["target"]["kind"], "person");
-    let person_id = body["target"]["id"].as_str().expect("person id").to_owned();
+    assert_eq!(body["target"]["kind"], "persona");
+    let persona_id = body["target"]["id"]
+        .as_str()
+        .expect("persona id")
+        .to_owned();
 
     let persona_link_count: i64 = sqlx::query_scalar(
         r#"
         SELECT count(*)::BIGINT
         FROM observation_links
         WHERE observation_id = $1
-          AND domain = 'persons'
+          AND domain = 'personas'
           AND entity_kind = 'persona'
           AND entity_id = $2
           AND relationship_kind = 'workflow_action_projection'
         "#,
     )
     .bind(&message_observation_id)
-    .bind(&person_id)
+    .bind(&persona_id)
     .fetch_one(&pool)
     .await
     .expect("persona workflow action observation links");
@@ -332,7 +335,7 @@ async fn workflow_action_create_contact_reuses_message_observation_for_person_pr
         SELECT count(*)::BIGINT
         FROM observation_links
         WHERE observation_id = $1
-          AND domain = 'persons'
+          AND domain = 'personas'
           AND entity_kind = 'identity'
           AND relationship_kind = 'workflow_action_projection'
         "#,
@@ -342,6 +345,75 @@ async fn workflow_action_create_contact_reuses_message_observation_for_person_pr
     .await
     .expect("identity workflow action observation links");
     assert_eq!(identity_link_count, 1);
+}
+
+#[tokio::test]
+async fn workflow_action_create_persona_can_create_persona_without_email() {
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
+    let database = Database::connect(Some(&db)).await.expect("database");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = uid();
+    let r = router(&db).await;
+    let command_id = format!("workflow-action-persona-no-email-{suffix}");
+    let display_name = format!("Phone Only Persona {suffix}");
+
+    let response = r
+        .oneshot(post_with_actor(
+            "/api/v1/workflow-actions",
+            json!({
+                "command_id": command_id,
+                "action": "create_persona",
+                "input": {
+                    "display_name": display_name
+                }
+            }),
+        ))
+        .await
+        .expect("workflow persona without email response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["target"]["kind"], "persona");
+    let persona_id = body["target"]["id"]
+        .as_str()
+        .expect("persona id")
+        .to_owned();
+
+    let row: (String, Option<String>, bool) = sqlx::query_as(
+        "SELECT display_name, email_address, is_address_book FROM personas WHERE person_id = $1",
+    )
+    .bind(&persona_id)
+    .fetch_one(&pool)
+    .await
+    .expect("persona without email");
+    assert_eq!(row.0, display_name);
+    assert_eq!(row.1, None);
+    assert!(!row.2);
+
+    let identity_count: i64 =
+        sqlx::query_scalar("SELECT count(*)::BIGINT FROM persona_identities WHERE person_id = $1")
+            .bind(&persona_id)
+            .fetch_one(&pool)
+            .await
+            .expect("persona identities");
+    assert_eq!(identity_count, 0);
+
+    let persona_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE domain = 'personas'
+          AND entity_kind = 'persona'
+          AND entity_id = $1
+          AND relationship_kind = 'workflow_action_projection'
+        "#,
+    )
+    .bind(&persona_id)
+    .fetch_one(&pool)
+    .await
+    .expect("persona workflow action observation links");
+    assert_eq!(persona_link_count, 1);
 }
 
 #[tokio::test]

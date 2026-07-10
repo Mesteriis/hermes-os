@@ -86,7 +86,7 @@ the provider API, event queue and Hermes projection path.
   `identity_type = 'zulip'`. Provider-neutral Polygraph/Consistency refresh can
   match Zulip channel messages to active Personas by sender id/email and create
   contradiction observations from structured facts such as `Location: Madrid`
-  without overwriting remembered `person_facts`.
+  without overwriting remembered `persona_facts`.
 - Zulip message attachment metadata mapping as raw/accepted evidence with
   explicit `bytes_state = not_transferred`, `scan_status = not_scanned` and
   `materialization_state = not_materialized`; no canonical

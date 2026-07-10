@@ -16,7 +16,7 @@ pub(super) const CAPABILITY_SLOTS: &[&str] = &[
 
 const ENTITY_SCOPES: &[&str] = &[
     "global",
-    "person",
+    "persona",
     "organization",
     "project",
     "document",
@@ -25,6 +25,17 @@ const ENTITY_SCOPES: &[&str] = &[
     "communication",
     "conversation",
 ];
+
+pub(super) fn canonical_entity_scope(value: &str) -> Option<&'static str> {
+    let trimmed = value.trim();
+    if trimmed == "person" {
+        return Some("persona");
+    }
+    ENTITY_SCOPES
+        .iter()
+        .copied()
+        .find(|scope| *scope == trimmed)
+}
 
 pub(super) fn validate_provider_kind(value: &str) -> Result<(), AiControlCenterError> {
     match value.trim() {
@@ -56,7 +67,7 @@ pub(super) fn validate_capability_slot(value: &str) -> Result<(), AiControlCente
 }
 
 pub(super) fn validate_entity_scope(value: &str) -> Result<(), AiControlCenterError> {
-    if ENTITY_SCOPES.contains(&value.trim()) {
+    if canonical_entity_scope(value).is_some() {
         Ok(())
     } else {
         Err(AiControlCenterError::InvalidRequest(format!(

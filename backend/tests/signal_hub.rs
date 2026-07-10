@@ -14,7 +14,7 @@ use hermes_hub_backend::domains::communications::messages::{
     COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, consume_accepted_signal_event,
     project_accepted_signal_if_runtime_allows,
 };
-use hermes_hub_backend::domains::persons::core::PERSON_ROLE_ASSIGNED_EVENT_TYPE;
+use hermes_hub_backend::domains::personas::core::PERSONA_ROLE_ASSIGNED_EVENT_TYPE;
 use hermes_hub_backend::domains::signal_hub::dispatch_telegram_raw_signal;
 use hermes_hub_backend::domains::signal_hub::{
     SIGNAL_HUB_RAW_SIGNAL_CONSUMER, SignalConnectionCreate, SignalFixtureEmitRequest,
@@ -31,8 +31,8 @@ use hermes_hub_backend::platform::events::{
     runtime_allows_processing,
 };
 use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
-use hermes_hub_backend::workflows::person_derived_evidence::{
-    PERSON_DERIVED_EVIDENCE_CONSUMER, project_person_derived_evidence_event,
+use hermes_hub_backend::workflows::persona_derived_evidence::{
+    PERSONA_DERIVED_EVIDENCE_CONSUMER, project_persona_derived_evidence_event,
 };
 use hermes_hub_backend::workflows::project_link_review_effects::{
     PROJECT_LINK_REVIEW_EFFECTS_CONSUMER, PROJECT_LINK_REVIEW_EVENT_TYPE,
@@ -616,6 +616,38 @@ async fn signal_hub_connection_scoped_pause_policy_matches_raw_event_account_bin
         .expect("list paused events for connection replay");
     assert_eq!(paused_events.len(), 1);
     assert_eq!(paused_events[0].event_id, paused_raw.event_id);
+}
+
+#[tokio::test]
+async fn signal_hub_replay_request_canonicalizes_legacy_person_projection_alias() {
+    let ctx = TestContext::new().await;
+    let signal_store = SignalHubStore::new(ctx.pool().clone());
+
+    let request = signal_store
+        .create_replay_request(&SignalReplayRequestCreate {
+            source_code: None,
+            connection_id: None,
+            event_pattern: Some(PERSONA_ROLE_ASSIGNED_EVENT_TYPE.to_owned()),
+            from_position: Some(1),
+            to_position: Some(1),
+            from_time: None,
+            to_time: None,
+            target_consumer: None,
+            target_projection: Some("person_derived_evidence".to_owned()),
+            requested_by: "test".to_owned(),
+            metadata: json!({}),
+        })
+        .await
+        .expect("create replay request with legacy projection alias");
+
+    assert_eq!(
+        request.target_projection.as_deref(),
+        Some("persona_derived_evidence")
+    );
+    assert_eq!(
+        request.metadata["target_projection"],
+        json!("persona_derived_evidence")
+    );
 }
 
 #[tokio::test]
@@ -1788,7 +1820,7 @@ async fn signal_hub_communication_messages_projection_replay_clears_processed_ma
 }
 
 #[tokio::test]
-async fn signal_hub_person_derived_evidence_projection_replay_rebuilds_relationships() {
+async fn signal_hub_persona_derived_evidence_projection_replay_rebuilds_relationships() {
     let ctx = TestContext::new().await;
     let pool = ctx.pool().clone();
     let signal_store = SignalHubStore::new(pool.clone());
@@ -1798,7 +1830,7 @@ async fn signal_hub_person_derived_evidence_projection_replay_rebuilds_relations
         .append_for_dispatch(
             &NewEventEnvelope::builder(
                 "evt_person_role_assigned_replay",
-                PERSON_ROLE_ASSIGNED_EVENT_TYPE,
+                PERSONA_ROLE_ASSIGNED_EVENT_TYPE,
                 Utc::now(),
                 json!({
                     "kind": "person",
@@ -1824,7 +1856,7 @@ async fn signal_hub_person_derived_evidence_projection_replay_rebuilds_relations
     let stored_event = event_store
         .list_matching(
             EventLogQuery::default()
-                .event_type(PERSON_ROLE_ASSIGNED_EVENT_TYPE)
+                .event_type(PERSONA_ROLE_ASSIGNED_EVENT_TYPE)
                 .position_between(position, position)
                 .limit(1),
         )
@@ -1834,9 +1866,9 @@ async fn signal_hub_person_derived_evidence_projection_replay_rebuilds_relations
         .next()
         .expect("stored person role event exists");
 
-    project_person_derived_evidence_event(pool.clone(), stored_event.clone())
+    project_persona_derived_evidence_event(pool.clone(), stored_event.clone())
         .await
-        .expect("project person derived evidence once");
+        .expect("project persona derived evidence once");
 
     let relationship_count: i64 = sqlx::query_scalar(
         r#"
@@ -1854,13 +1886,13 @@ async fn signal_hub_person_derived_evidence_projection_replay_rebuilds_relations
 
     let consumer_store = EventConsumerStore::new(pool.clone());
     consumer_store
-        .record_processed(PERSON_DERIVED_EVIDENCE_CONSUMER, &stored_event)
+        .record_processed(PERSONA_DERIVED_EVIDENCE_CONSUMER, &stored_event)
         .await
-        .expect("record processed person derived evidence event");
+        .expect("record processed persona derived evidence event");
     consumer_store
-        .save_position(PERSON_DERIVED_EVIDENCE_CONSUMER, stored_event.position)
+        .save_position(PERSONA_DERIVED_EVIDENCE_CONSUMER, stored_event.position)
         .await
-        .expect("save person derived evidence consumer position");
+        .expect("save persona derived evidence consumer position");
 
     sqlx::query(
         r#"
@@ -1879,28 +1911,28 @@ async fn signal_hub_person_derived_evidence_projection_replay_rebuilds_relations
         .request_replay(&SignalReplayRequestCreate {
             source_code: None,
             connection_id: None,
-            event_pattern: Some(PERSON_ROLE_ASSIGNED_EVENT_TYPE.to_owned()),
+            event_pattern: Some(PERSONA_ROLE_ASSIGNED_EVENT_TYPE.to_owned()),
             from_position: Some(stored_event.position),
             to_position: Some(stored_event.position),
             from_time: None,
             to_time: None,
             target_consumer: None,
-            target_projection: Some("person_derived_evidence".to_owned()),
+            target_projection: Some("persona_derived_evidence".to_owned()),
             requested_by: "test".to_owned(),
-            metadata: json!({"requested_from": "person_derived_projection_rebuild"}),
+            metadata: json!({"requested_from": "persona_derived_projection_rebuild"}),
         })
         .await
-        .expect("request person derived evidence replay");
+        .expect("request persona derived evidence replay");
     assert_eq!(
         request.target_projection.as_deref(),
-        Some("person_derived_evidence")
+        Some("persona_derived_evidence")
     );
 
     let report = replay_service
         .process_next_request()
         .await
-        .expect("process person derived evidence replay")
-        .expect("person derived evidence report");
+        .expect("process persona derived evidence replay")
+        .expect("persona derived evidence report");
     assert_eq!(report.replayed_count, 1);
 
     let rebuilt_count: i64 = sqlx::query_scalar(
@@ -1918,7 +1950,7 @@ async fn signal_hub_person_derived_evidence_projection_replay_rebuilds_relations
     assert_eq!(rebuilt_count, 1);
     assert!(
         consumer_store
-            .has_processed_event(PERSON_DERIVED_EVIDENCE_CONSUMER, stored_event.position)
+            .has_processed_event(PERSONA_DERIVED_EVIDENCE_CONSUMER, stored_event.position)
             .await
             .expect("processed marker after person derived replay")
     );
@@ -1926,7 +1958,7 @@ async fn signal_hub_person_derived_evidence_projection_replay_rebuilds_relations
     let projection_events = event_store
         .list_matching(
             EventLogQuery::default()
-                .event_type("persons.derived_evidence.updated")
+                .event_type("personas.derived_evidence.updated")
                 .correlation_id(request.id.clone())
                 .limit(10),
         )
@@ -1935,7 +1967,7 @@ async fn signal_hub_person_derived_evidence_projection_replay_rebuilds_relations
     assert_eq!(projection_events.len(), 1);
     assert_eq!(
         projection_events[0].event.payload["target_projection"],
-        "person_derived_evidence"
+        "persona_derived_evidence"
     );
     assert_eq!(projection_events[0].event.payload["replayed_count"], 1);
 }

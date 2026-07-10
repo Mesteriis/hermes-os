@@ -42,7 +42,7 @@ Current exported domain directories:
 - `graph`;
 - `obligations`;
 - `organizations`;
-- `persons`;
+- `personas`;
 - `projects`;
 - `relationships`;
 - `review`;

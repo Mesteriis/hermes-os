@@ -69,14 +69,14 @@ MEETING_TRANSCRIPT
 DOCUMENT
 VOICE_RECORDING
 BROWSER_CAPTURE
-CONTACT_RECORD
+PERSONA_RECORD
 CALENDAR_EVENT
 ```
 
 Review item kinds include:
 
 ```text
-new_person
+new_persona
 new_organization
 potential_task
 potential_obligation
@@ -85,6 +85,9 @@ potential_relationship
 potential_project
 knowledge_candidate
 ```
+
+`new_person` remains a legacy read alias for older review rows; new writes use
+`new_persona`.
 
 Review lifecycle states are:
 

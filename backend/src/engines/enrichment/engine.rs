@@ -19,7 +19,7 @@ impl EnrichmentEngine {
         Some(PreferenceDraft {
             preference_type: "ui:favorite".to_owned(),
             value: "true".to_owned(),
-            source: format!("persons.is_favorite:{person_id}"),
+            source: format!("personas.is_favorite:{person_id}"),
             confidence: 1.0,
         })
     }

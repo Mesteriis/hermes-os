@@ -645,6 +645,189 @@ async fn settings_accounts_api_updates_provider_account_label_against_postgres()
     );
 }
 
+#[tokio::test]
+async fn settings_accounts_api_updates_address_book_sync_against_postgres() {
+    let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("acct_settings_contacts_{suffix}");
+    CommunicationIngestionStore::new(pool.clone())
+        .upsert_provider_account(
+            &NewProviderAccount::new(
+                &account_id,
+                EmailProviderKind::Gmail,
+                "Gmail contacts account",
+                format!("contacts-{suffix}@gmail.com"),
+            )
+            .config(json!({
+                "connected_services": ["mail", "calendar", "contacts"],
+                "address_book_sync_enabled": false,
+                "requested_scopes": ["https://www.googleapis.com/auth/contacts"]
+            })),
+        )
+        .await
+        .expect("seed provider account");
+
+    let app = build_router_with_database(
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        database,
+    );
+
+    let response = app
+        .oneshot(json_patch_request_with_actor(
+            format!("/api/v1/settings/accounts/{account_id}").as_str(),
+            json!({
+                "address_book_sync_enabled": true,
+                "address_book_sync_direction": "bidirectional",
+                "address_book_remote_write_enabled": true
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    assert_eq!(body["account_id"], json!(account_id));
+    assert_eq!(body["config"]["address_book_sync_enabled"], json!(true));
+    assert_eq!(
+        body["config"]["address_book_sync_direction"],
+        json!("bidirectional")
+    );
+    assert_eq!(
+        body["config"]["address_book_remote_write_enabled"],
+        json!(true)
+    );
+
+    let stored_config = sqlx::query_scalar::<_, Value>(
+        r#"
+        SELECT config
+        FROM communication_provider_accounts
+        WHERE account_id = $1
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("stored config");
+
+    assert_eq!(stored_config["address_book_sync_enabled"], json!(true));
+    assert_eq!(
+        stored_config["address_book_sync_direction"],
+        json!("bidirectional")
+    );
+    assert_eq!(
+        stored_config["address_book_remote_write_enabled"],
+        json!(true)
+    );
+}
+
+#[tokio::test]
+async fn settings_accounts_api_rejects_address_book_sync_without_contacts_capability() {
+    let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("acct_settings_no_contacts_{suffix}");
+    CommunicationIngestionStore::new(pool.clone())
+        .upsert_provider_account(
+            &NewProviderAccount::new(
+                &account_id,
+                EmailProviderKind::Imap,
+                "IMAP mail account",
+                format!("imap-{suffix}@example.com"),
+            )
+            .config(json!({
+                "connected_services": ["mail"],
+                "address_book_sync_enabled": false
+            })),
+        )
+        .await
+        .expect("seed provider account");
+
+    let app = build_router_with_database(
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        database,
+    );
+
+    let response = app
+        .oneshot(json_patch_request_with_actor(
+            format!("/api/v1/settings/accounts/{account_id}").as_str(),
+            json!({
+                "address_book_sync_enabled": true
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = json_body(response).await;
+    assert_eq!(body["error"], json!("invalid_communication_query"));
+}
+
+#[tokio::test]
+async fn settings_accounts_api_rejects_address_book_remote_write_without_scope() {
+    let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("acct_settings_contacts_readonly_{suffix}");
+    CommunicationIngestionStore::new(pool.clone())
+        .upsert_provider_account(
+            &NewProviderAccount::new(
+                &account_id,
+                EmailProviderKind::Gmail,
+                "Gmail contacts readonly account",
+                format!("contacts-readonly-{suffix}@gmail.com"),
+            )
+            .config(json!({
+                "connected_services": ["mail", "contacts"],
+                "address_book_sync_enabled": true,
+                "requested_scopes": ["https://www.googleapis.com/auth/contacts.readonly"]
+            })),
+        )
+        .await
+        .expect("seed provider account");
+
+    let app = build_router_with_database(
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        database,
+    );
+
+    let response = app
+        .oneshot(json_patch_request_with_actor(
+            format!("/api/v1/settings/accounts/{account_id}").as_str(),
+            json!({
+                "address_book_sync_direction": "bidirectional",
+                "address_book_remote_write_enabled": true
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = json_body(response).await;
+    assert_eq!(body["error"], json!("invalid_communication_query"));
+}
+
 fn get_request_with_token(uri: &str, token: &str) -> Request<Body> {
     Request::builder()
         .method("GET")

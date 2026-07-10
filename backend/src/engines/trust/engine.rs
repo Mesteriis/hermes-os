@@ -14,7 +14,7 @@ impl TrustEngine {
             trust_score: normalize_compatibility_score(score),
             strength_score: 0.5,
             confidence: 1.0,
-            explanation: "compatibility persons.trust_score signal",
+            explanation: "compatibility personas.trust_score signal",
         }
     }
 

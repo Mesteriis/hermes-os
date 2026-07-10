@@ -4,8 +4,8 @@ use thiserror::Error;
 
 use crate::domains::decisions::{Decision, DecisionReviewState};
 use crate::domains::obligations::{Obligation, ObligationReviewState};
-use crate::domains::persons::identity::{
-    PersonIdentityCandidateKind, PersonIdentityCandidatePayload, PersonIdentityReviewState,
+use crate::domains::personas::identity::{
+    PersonaIdentityCandidateKind, PersonaIdentityCandidatePayload, PersonaIdentityReviewState,
 };
 use crate::domains::projects::link_reviews::{ProjectLinkReviewState, ProjectLinkTargetKind};
 use crate::domains::relationships::{Relationship, RelationshipReviewState};
@@ -362,7 +362,7 @@ pub(crate) async fn sync_relationship_review_state_with_observation(
 
 pub(crate) async fn sync_identity_candidate_to_review(
     pool: &sqlx::postgres::PgPool,
-    payload: &PersonIdentityCandidatePayload,
+    payload: &PersonaIdentityCandidatePayload,
 ) -> Result<(), ReviewMirrorError> {
     let observation = ObservationPort::new(pool.clone())
         .capture(&identity_candidate_observation(payload))
@@ -374,7 +374,7 @@ pub(crate) async fn sync_identity_candidate_to_review(
 
 pub(crate) async fn sync_identity_candidate_to_review_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
-    payload: &PersonIdentityCandidatePayload,
+    payload: &PersonaIdentityCandidatePayload,
 ) -> Result<(), ReviewMirrorError> {
     let observation = ObservationPort::capture_in_transaction(
         transaction,
@@ -393,8 +393,8 @@ pub(crate) async fn sync_identity_candidate_to_review_in_transaction(
 pub(crate) async fn sync_identity_candidate_review_state_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     identity_candidate_id: &str,
-    review_state: PersonIdentityReviewState,
-    payload: &PersonIdentityCandidatePayload,
+    review_state: PersonaIdentityReviewState,
+    payload: &PersonaIdentityCandidatePayload,
 ) -> Result<(), ReviewMirrorError> {
     let observation = ObservationPort::capture_in_transaction(
         transaction,
@@ -409,7 +409,7 @@ pub(crate) async fn sync_identity_candidate_review_state_in_transaction(
     .await?;
 
     match review_state {
-        PersonIdentityReviewState::Suggested => {
+        PersonaIdentityReviewState::Suggested => {
             let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
@@ -417,7 +417,7 @@ pub(crate) async fn sync_identity_candidate_review_state_in_transaction(
             )
             .await?;
         }
-        PersonIdentityReviewState::UserRejected => {
+        PersonaIdentityReviewState::UserRejected => {
             let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
@@ -425,11 +425,11 @@ pub(crate) async fn sync_identity_candidate_review_state_in_transaction(
             )
             .await?;
         }
-        PersonIdentityReviewState::UserConfirmed => {
+        PersonaIdentityReviewState::UserConfirmed => {
             let _ = ReviewInboxPort::promote_in_transaction(
                 transaction,
                 &review_item.review_item_id,
-                ReviewPromotionTarget::new("persons", "identity_candidate", identity_candidate_id),
+                ReviewPromotionTarget::new("personas", "identity_candidate", identity_candidate_id),
             )
             .await?;
         }
@@ -440,7 +440,7 @@ pub(crate) async fn sync_identity_candidate_review_state_in_transaction(
 
 pub(crate) async fn ensure_identity_candidate_review_item(
     pool: &sqlx::postgres::PgPool,
-    payload: &PersonIdentityCandidatePayload,
+    payload: &PersonaIdentityCandidatePayload,
     observation_id: &str,
 ) -> Result<ReviewItem, ReviewMirrorError> {
     let mut transaction = pool.begin().await?;
@@ -530,7 +530,7 @@ pub(crate) async fn ensure_task_candidate_review_item(
 
 pub(crate) async fn ensure_identity_candidate_review_item_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
-    payload: &PersonIdentityCandidatePayload,
+    payload: &PersonaIdentityCandidatePayload,
     observation_id: &str,
 ) -> Result<ReviewItem, ReviewMirrorError> {
     let identity_candidate_id = payload.identity_candidate_id();
@@ -1040,17 +1040,17 @@ pub(crate) async fn ensure_relationship_review_item_in_transaction(
     }
 }
 
-fn identity_candidate_observation(payload: &PersonIdentityCandidatePayload) -> NewObservation {
+fn identity_candidate_observation(payload: &PersonaIdentityCandidatePayload) -> NewObservation {
     let identity_candidate_id = payload.identity_candidate_id();
     NewObservation::new(
-        "PERSON_IDENTITY_CANDIDATE",
+        "PERSONA_IDENTITY_CANDIDATE",
         ObservationOriginKind::LocalRuntime,
         chrono::Utc::now(),
         json!({
             "identity_candidate_id": identity_candidate_id,
             "candidate_kind": payload.candidate_kind.as_str(),
-            "left_person_id": payload.left_person_id,
-            "right_person_id": payload.right_person_id,
+            "left_persona_id": payload.left_persona_id,
+            "right_persona_id": payload.right_persona_id,
             "email_address": payload.email_address,
             "evidence_summary": payload.evidence_summary,
             "confidence": payload.confidence,
@@ -1059,12 +1059,12 @@ fn identity_candidate_observation(payload: &PersonIdentityCandidatePayload) -> N
     )
     .confidence(payload.confidence)
     .provenance(json!({
-        "pipeline": "person_identity_candidates",
+        "pipeline": "persona_identity_candidates",
         "candidate_kind": payload.candidate_kind.as_str(),
     }))
 }
 
-fn identity_candidate_review_item(payload: &PersonIdentityCandidatePayload) -> NewReviewItem {
+fn identity_candidate_review_item(payload: &PersonaIdentityCandidatePayload) -> NewReviewItem {
     NewReviewItem::new(
         ReviewItemKind::IdentityCandidate,
         payload.candidate_kind.as_str(),
@@ -1075,8 +1075,8 @@ fn identity_candidate_review_item(payload: &PersonIdentityCandidatePayload) -> N
         "mirrored_from": "identity_candidates",
         "identity_candidate_id": payload.identity_candidate_id(),
         "candidate_kind": payload.candidate_kind.as_str(),
-        "left_person_id": payload.left_person_id,
-        "right_person_id": payload.right_person_id,
+        "left_persona_id": payload.left_persona_id,
+        "right_persona_id": payload.right_persona_id,
         "email_address": payload.email_address,
     }))
 }

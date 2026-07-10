@@ -42,8 +42,8 @@ Do not create empty placeholder files just to fill the shape.
 |---|---|---|
 | Signal Hub | [Signal Hub](signal-hub/spec.md), [package](signal-hub/README.md) | target system domain for source registry, signal control, fixtures, NATS-backed event delivery and ConnectRPC APIs |
 | Communications | [Communications](communications/README.md) | implemented as the single communication domain; Mail, Telegram and WhatsApp are channel integrations |
-| Personas | [Personas](persons/spec.md), [package](persons/README.md) | partially implemented through `persons` and compatibility migrations |
-| Relationships | [Relationships](relationships/README.md) | partially implemented through first-class persistence, graph projection for all current Relationship entity kinds, guarded global suggested review, organization contact link adapters, person role adapters, task relation adapters, project link review adapters and Personas workspace review; remaining cross-domain inbox work incomplete |
+| Personas | [Personas](personas/spec.md), [package](personas/README.md) | partially implemented through `personas` and compatibility migrations |
+| Relationships | [Relationships](relationships/README.md) | partially implemented through first-class persistence, graph projection for all current Relationship entity kinds, guarded global suggested review, Organization-Persona link adapters, Persona role adapters, task relation adapters, project link review adapters and Personas workspace review; remaining cross-domain inbox work incomplete |
 | Organizations | [Organizations](organizations/spec.md), [package](organizations/README.md) | implemented as a memory anchor domain |
 | Projects | [Projects](projects/README.md) | implemented, needs stronger domain documentation |
 | Documents | [Documents](documents/README.md) | implemented, needs clearer Knowledge boundary |
@@ -80,8 +80,9 @@ The repository still contains historical naming and compatibility boundaries:
 
 - `communications` backend modules still contain some mail-heavy compatibility
   names because email was the first implemented channel.
-- `person_id` and `/api/v1/persons/*` are current implementation names, while
-  new domain language is Persona.
+- Internal `person_id` columns remain compatibility storage boundaries, while
+  Persona-native code and API surfaces use `persona_id` and `/api/v1/personas/*`;
+  legacy `/api/v1/persons/*` routes are retired.
 - `contacts` appears in migration history because the persistence model evolved
   from contact records into Personas.
 - `backend/src/domains/settings` is currently an exported but empty backend
@@ -97,7 +98,7 @@ The repository still contains historical naming and compatibility boundaries:
   Decisions have explicit message/imported-document candidate refresh, a
   meeting `decision` outcome adapter, Telegram/WhatsApp fixture ingestion
   refresh and a project link review adapter.
-  Relationships have organization contact link, task relation and project link
+  Relationships have organization-person link, task relation and project link
   review adapters.
   Obligations have review-state synchronization for obligation-derived task
   candidates, document commitment candidate refresh, email-sync plus

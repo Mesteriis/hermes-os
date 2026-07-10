@@ -8,7 +8,7 @@ pub enum SemanticSourceKind {
     Document,
     Project,
     Task,
-    Person,
+    Persona,
 }
 
 impl SemanticSourceKind {
@@ -18,7 +18,7 @@ impl SemanticSourceKind {
             Self::Document => "document",
             Self::Project => "project",
             Self::Task => "task",
-            Self::Person => "person",
+            Self::Persona => "persona",
         }
     }
 
@@ -28,7 +28,7 @@ impl SemanticSourceKind {
             "document" => Ok(Self::Document),
             "project" => Ok(Self::Project),
             "task" => Ok(Self::Task),
-            "contact" | "person" => Ok(Self::Person),
+            "contact" | "person" | "persona" => Ok(Self::Persona),
             _ => Err(AiError::InvalidSourceKind(value.to_owned())),
         }
     }
@@ -87,4 +87,26 @@ pub(super) struct SemanticSource {
     pub(super) title: String,
     pub(super) source_text: String,
     pub(super) graph_node_id: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SemanticSourceKind;
+
+    #[test]
+    fn persona_source_kind_writes_persona_and_reads_legacy_person_or_contact() {
+        assert_eq!(SemanticSourceKind::Persona.as_str(), "persona");
+        assert_eq!(
+            SemanticSourceKind::parse("persona").expect("persona source kind"),
+            SemanticSourceKind::Persona
+        );
+        assert_eq!(
+            SemanticSourceKind::parse("person").expect("person source kind"),
+            SemanticSourceKind::Persona
+        );
+        assert_eq!(
+            SemanticSourceKind::parse("contact").expect("legacy contact source kind"),
+            SemanticSourceKind::Persona
+        );
+    }
 }

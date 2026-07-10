@@ -13,7 +13,8 @@ pub use errors::ProjectStoreError as ProjectCommandPortError;
 pub use ids::project_graph_node_id;
 pub use models::{
     NewProject, Project, ProjectDetail, ProjectDocumentSummary, ProjectListResponse,
-    ProjectMessageSummary, ProjectPersonSummary, ProjectStats, ProjectSummary, ProjectTimelineItem,
+    ProjectMessageSummary, ProjectPersonaSummary, ProjectStats, ProjectSummary,
+    ProjectTimelineItem,
 };
 pub(crate) use models::{ProjectMatchedDocument, ProjectMatchedMessage, ProjectProjectionSource};
 pub use store::ProjectStore;

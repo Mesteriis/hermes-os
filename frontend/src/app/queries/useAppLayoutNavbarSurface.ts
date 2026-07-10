@@ -175,6 +175,12 @@ export function useAppLayoutNavbarSurface() {
       iconTone: 'review',
     },
     {
+      id: 'personas',
+      label: 'Personas',
+      icon: 'tabler:user-circle',
+      iconTone: 'knowledge',
+    },
+    {
       id: 'knowledge',
       label: 'Knowledge',
       icon: 'tabler:share',
@@ -297,7 +303,7 @@ export function useAppLayoutNavbarSurface() {
   }
 
   function selectNavigationItem(itemId: string): void {
-    const path = findRoutePath(routeTree.value, itemId)
+    const path = findRoutePath(routeTree.value, normalizeLegacyRouteId(itemId))
     const selectedNode = path?.at(-1)
     if (!selectedNode) return
 
@@ -320,9 +326,9 @@ export function useAppLayoutNavbarSurface() {
 
     if (
       notification.targetView &&
-      findRoutePath(routeTree.value, notification.targetView)
+      findRoutePath(routeTree.value, normalizeLegacyRouteId(notification.targetView))
     ) {
-      selectedRouteId.value = notification.targetView
+      selectedRouteId.value = normalizeLegacyRouteId(notification.targetView)
     }
 
     notificationsStore?.openNotificationTarget(notification)
@@ -523,6 +529,12 @@ function notificationTimeLabel(time: Date): string {
 function oauthReturnRouteId(search: string): string | null {
   const params = new URLSearchParams(search)
   return params.get('hermes_route')?.trim() || null
+}
+
+function normalizeLegacyRouteId(routeId: string): string {
+  if (routeId === 'persons') return 'personas'
+
+  return routeId
 }
 
 function toNavigationItem(

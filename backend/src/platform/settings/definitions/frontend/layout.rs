@@ -37,7 +37,7 @@ fn sidebar_setting() -> DeclaredApplicationSetting {
             "rootItemIds": [
                 "home",
                 "group:communications",
-                "persons",
+                "personas",
                 "projects",
                 "tasks",
                 "calendar",

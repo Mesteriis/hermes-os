@@ -71,7 +71,7 @@ Current backend baseline:
 - `backend/migrations/0067_task_candidate_kind_metadata.sql`;
 - `backend/src/domains/obligations/mod.rs`;
 - `backend/src/domains/obligations/api.rs`;
-- `backend/src/domains/persons/trust.rs`;
+- `backend/src/domains/personas/trust.rs`;
 - `backend/src/domains/tasks/candidates.rs`;
 - `backend/tests/obligations.rs`;
 - `backend/tests/obligations_api.rs`;
@@ -105,9 +105,9 @@ meeting outcome has an `owner_person_id`, the Obligation is owed by that
 Persona; otherwise the meeting Event remains the obligated compatibility anchor.
 The meeting outcome keeps the created Obligation id in `linked_entity_id`.
 
-Compatibility `person_promises` created through `PersonPromiseStore::create`
+Compatibility `person_promises` created through `PersonaPromiseStore::create`
 now adapt into source-backed `user_confirmed` Obligations with `raw_record`
-evidence. This preserves the old `persons` compatibility surface while making
+evidence. This preserves the old promise compatibility table while making
 Obligation the durable commitment record. It does not create Tasks.
 
 Backend routes currently expose:
@@ -131,7 +131,7 @@ Related behavior still exists through:
 - `backend/src/domains/tasks/candidates.rs`;
 - `backend/src/domains/tasks/rules.rs`;
 - `backend/src/domains/tasks/intelligence.rs`;
-- `backend/src/domains/persons/trust.rs`;
+- `backend/src/domains/personas/trust.rs`;
 - meeting outcomes;
 - communication extraction and workflow state;
 - task candidate migrations.

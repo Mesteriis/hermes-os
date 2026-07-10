@@ -1,6 +1,6 @@
 # ADR-0090 Persona-Native Compatibility API Bridge
 
-Status: Proposed
+Status: Accepted
 
 Clarifies:
 
@@ -8,34 +8,37 @@ Clarifies:
 
 ## Context
 
-ADR-0084 defines Persona as the target domain entity, while current durable
-storage and much of the compatibility API still use `persons`, `person_id` and
-`/api/v1/persons/*`.
+ADR-0084 defines Persona as the target domain entity. Durable storage now uses
+`personas` / `persona_*` table names and the active API surface is
+`/api/v1/personas/*`; internal `person_id` storage columns remain as explicit
+physical compatibility.
 
 Hermes needs Persona-native read and write surfaces so new UI and agent flows
-can speak the target language. A physical schema rename from `persons` to
-`personas` is still a separate migration decision because existing routes,
-tables, projections and tests depend on compatibility names.
+can speak the target language. A physical identifier rename away from
+`person_id` columns is still a separate migration decision because existing
+projections, graph rows, tasks, communications and historical event payloads
+depend on compatibility names.
 
 ## Decision
 
-Expose a Persona-native compatibility API bridge under `/api/v1/personas/*`.
+Expose the active Persona API under `/api/v1/personas/*`.
 
 The bridge may read and write the current compatibility projection, but its
 public contract uses Persona terminology and target-model shapes.
 
 Allowed in this bridge:
 
-- read Persona list/detail models from compatibility storage;
+- read Persona list/detail models from Persona storage with physical
+  `person_id` compatibility columns;
 - update owner-editable Persona identity fields such as display name;
 - set the single Owner Persona through Persona-native request fields;
 - return the same Persona read model after writes;
-- keep legacy identifiers in an explicit `compatibility` section.
+- keep storage compatibility details explicit in docs and migration plans.
 
 Not allowed in this bridge:
 
-- rename PostgreSQL tables, columns or migrations from `persons` to `personas`;
-- remove `/api/v1/persons/*` compatibility routes;
+- infer an opaque Persona identifier migration from the API rename;
+- reintroduce `/api/v1/persons/*` compatibility routes;
 - change Persona identity or `persona_type` without explicit validation rules;
 - create separate Self/UserProfile storage;
 - auto-merge identity traces without review.
@@ -65,15 +68,16 @@ Positive:
 
 Negative:
 
-- The backend still contains compatibility names internally.
-- The bridge must be maintained until the physical schema/API migration ADR is
-  accepted and implemented.
+- The backend still contains physical `person_id` compatibility columns and
+  historical aliases internally.
+- Legacy `/api/v1/persons/*` routes are retired and guarded by regression tests.
 - Some target-model fields remain read-only until their source-of-truth
   boundaries are defined.
 
 ## Follow-Up
 
-- Design a physical schema migration ADR before renaming tables or columns.
+- Design a physical identifier migration ADR before renaming remaining
+  `person_id` columns or changing email-derived `person:v1:email:*` values.
 - Expand write support only for fields with clear source-of-truth ownership and
   review semantics.
 - Keep compatibility gaps visible in `docs/refactoring/implementation-alignment-plan.md`.

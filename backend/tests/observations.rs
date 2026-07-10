@@ -14,7 +14,9 @@ use sqlx::postgres::PgPool;
 
 #[tokio::test]
 async fn manual_capture_creates_observation_without_vault_source_against_postgres() {
-    let Some((pool, store)) = live_observation_context("manual capture without vault").await else {
+    let Some((_test_context, pool, store)) =
+        live_observation_context("manual capture without vault").await
+    else {
         return;
     };
     let suffix = unique_suffix();
@@ -102,7 +104,9 @@ async fn manual_capture_creates_observation_without_vault_source_against_postgre
 
 #[tokio::test]
 async fn manual_note_creates_observation_without_vault_source_against_postgres() {
-    let Some((_pool, store)) = live_observation_context("manual note without vault").await else {
+    let Some((_test_context, _pool, store)) =
+        live_observation_context("manual note without vault").await
+    else {
         return;
     };
     let suffix = unique_suffix();
@@ -134,7 +138,8 @@ async fn manual_note_creates_observation_without_vault_source_against_postgres()
 
 #[tokio::test]
 async fn observations_are_append_only_and_survive_provider_deletion_against_postgres() {
-    let Some((pool, store)) = live_observation_context("append-only deletion").await else {
+    let Some((_test_context, pool, store)) = live_observation_context("append-only deletion").await
+    else {
         return;
     };
     let suffix = unique_suffix();
@@ -230,7 +235,9 @@ async fn observations_are_append_only_and_survive_provider_deletion_against_post
 
 #[tokio::test]
 async fn observation_platform_persists_links_and_ingestion_runs_against_postgres() {
-    let Some((_pool, store)) = live_observation_context("observation links and runs").await else {
+    let Some((_test_context, _pool, store)) =
+        live_observation_context("observation links and runs").await
+    else {
         return;
     };
     let suffix = unique_suffix();
@@ -312,7 +319,9 @@ async fn observation_platform_persists_links_and_ingestion_runs_against_postgres
 
 #[tokio::test]
 async fn canonical_observation_kind_definitions_are_seeded_against_postgres() {
-    let Some((_pool, store)) = live_observation_context("canonical kind definitions").await else {
+    let Some((_test_context, _pool, store)) =
+        live_observation_context("canonical kind definitions").await
+    else {
         return;
     };
 
@@ -342,7 +351,7 @@ async fn canonical_observation_kind_definitions_are_seeded_against_postgres() {
         "DOCUMENT",
         "VOICE_RECORDING",
         "BROWSER_CAPTURE",
-        "CONTACT_RECORD",
+        "PERSONA_RECORD",
         "CALENDAR_EVENT",
         "CALENDAR_EVENT_DELETED",
     ] {
@@ -355,7 +364,8 @@ async fn canonical_observation_kind_definitions_are_seeded_against_postgres() {
 
 #[tokio::test]
 async fn browser_capture_creates_observation_without_vault_source_against_postgres() {
-    let Some((_pool, store)) = live_observation_context("browser capture without vault").await
+    let Some((_test_context, _pool, store)) =
+        live_observation_context("browser capture without vault").await
     else {
         return;
     };
@@ -390,7 +400,8 @@ async fn browser_capture_creates_observation_without_vault_source_against_postgr
 
 #[tokio::test]
 async fn meeting_transcript_creates_observation_without_vault_source_against_postgres() {
-    let Some((_pool, store)) = live_observation_context("meeting transcript without vault").await
+    let Some((_test_context, _pool, store)) =
+        live_observation_context("meeting transcript without vault").await
     else {
         return;
     };
@@ -423,7 +434,8 @@ async fn meeting_transcript_creates_observation_without_vault_source_against_pos
 
 #[tokio::test]
 async fn meeting_recording_creates_observation_without_vault_source_against_postgres() {
-    let Some((_pool, store)) = live_observation_context("meeting recording without vault").await
+    let Some((_test_context, _pool, store)) =
+        live_observation_context("meeting recording without vault").await
     else {
         return;
     };
@@ -457,7 +469,8 @@ async fn meeting_recording_creates_observation_without_vault_source_against_post
 
 #[tokio::test]
 async fn calendar_event_creates_observation_without_vault_source_against_postgres() {
-    let Some((_pool, store)) = live_observation_context("calendar event without vault").await
+    let Some((_test_context, _pool, store)) =
+        live_observation_context("calendar event without vault").await
     else {
         return;
     };
@@ -491,8 +504,9 @@ async fn calendar_event_creates_observation_without_vault_source_against_postgre
 }
 
 #[tokio::test]
-async fn contact_record_creates_observation_without_vault_source_against_postgres() {
-    let Some((_pool, store)) = live_observation_context("contact record without vault").await
+async fn persona_record_creates_observation_without_vault_source_against_postgres() {
+    let Some((_test_context, _pool, store)) =
+        live_observation_context("persona record without vault").await
     else {
         return;
     };
@@ -501,30 +515,32 @@ async fn contact_record_creates_observation_without_vault_source_against_postgre
     let stored = store
         .capture(
             &NewObservation::new(
-                "CONTACT_RECORD",
+                "PERSONA_RECORD",
                 ObservationOriginKind::Manual,
                 Utc.with_ymd_and_hms(2026, 6, 18, 10, 33, 0).unwrap(),
                 json!({
                     "display_name": format!("Ada Example {suffix}"),
-                    "channel": "manual_contact_rollup",
-                    "identity_tag": format!("contact:{suffix}")
+                    "channel": "manual_address_book_rollup",
+                    "identity_tag": format!("persona:{suffix}")
                 }),
-                format!("contact://manual/{suffix}"),
+                format!("persona://manual/{suffix}"),
             )
             .confidence(0.74)
             .provenance(json!({
-                "captured_by": "contact_import"
+                "captured_by": "address_book_import"
             })),
         )
         .await
-        .expect("capture contact record observation");
+        .expect("capture persona record observation");
 
-    assert_eq!(stored.kind_code, "CONTACT_RECORD");
+    assert_eq!(stored.kind_code, "PERSONA_RECORD");
     assert_eq!(stored.origin_kind, ObservationOriginKind::Manual);
     assert!(stored.vault_source_id.is_none());
 }
 
-async fn live_observation_context(_test_name: &str) -> Option<(PgPool, ObservationStore)> {
+async fn live_observation_context(
+    _test_name: &str,
+) -> Option<(TestContext, PgPool, ObservationStore)> {
     let test_context = TestContext::new().await;
     let database_url = test_context.connection_string();
 
@@ -532,7 +548,7 @@ async fn live_observation_context(_test_name: &str) -> Option<(PgPool, Observati
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
-    Some((pool.clone(), ObservationStore::new(pool)))
+    Some((test_context, pool.clone(), ObservationStore::new(pool)))
 }
 
 fn unique_suffix() -> u128 {

@@ -49,7 +49,7 @@ Enrichment output must include:
 
 ## Current Implementation Evidence
 
-Current implementation includes enrichment modules under Persons and
+Current implementation includes enrichment modules under Personas and
 Organizations. That is a current shape, not a reason to create separate
 per-domain engines.
 
@@ -63,7 +63,7 @@ compatibility `persons.is_favorite` state into a source-backed preference draft:
 - confidence: `1.0`.
 
 `PersonEnrichmentStore` uses this draft when materializing compatibility
-`person_preferences`. Turning the favorite state off removes the compatibility
+`persona_preferences`. Turning the favorite state off removes the compatibility
 preference and does not create a replacement draft.
 
 The shared engine also builds source-backed Persona observation candidates for

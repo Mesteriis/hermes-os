@@ -194,6 +194,9 @@ describe('AppNavbar boundary', () => {
     expect(root).toContain(
       "import CommunicationsWorkspaceView from '../../domains/communications/views/CommunicationsWorkspaceView.vue'"
     )
+    expect(root).toContain(
+      "import PersonasWorkspaceView from '../../domains/personas/views/PersonasWorkspaceView.vue'"
+    )
     expect(root).toContain("import AppNavbar from './AppNavbar.vue'")
     expect(root).toContain('const navbar = useAppLayoutNavbarSurface()')
     expect(root).toContain('const breadcrumbs = navbar.breadcrumbs')
@@ -253,6 +256,10 @@ describe('AppNavbar boundary', () => {
       'v-if="selectedTopLevelRouteId === \'communications\'"'
     )
     expect(root).toContain(':selected-route-id="selectedRouteId"')
+    expect(root).toContain('<PersonasWorkspaceView')
+    expect(root).toContain(
+      'v-else-if="selectedTopLevelRouteId === \'personas\'"'
+    )
     expect(root).not.toContain('@route-select="navbar.selectNavigationItem"')
     expect(surface).toContain('Main menu')
     expect(surface).toContain('Sub menu')
@@ -329,6 +336,8 @@ describe('AppNavbar boundary', () => {
     expect(surface).toContain('targetId: notification.targetId')
     expect(surface).not.toContain('Vault требует разблокировки')
     expect(surface).toContain('Review')
+    expect(surface).toContain('Personas')
+    expect(surface).toContain("id: 'personas'")
     expect(surface).toContain("id: 'settings'")
     expect(surface).toContain('notificationsCount')
   })

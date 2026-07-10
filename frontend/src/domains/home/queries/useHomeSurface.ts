@@ -31,11 +31,11 @@ export function useHomeSurface() {
       {
         id: 'home-relationship-snapshot',
         labelKey: 'Relationship snapshot',
-        descriptionKey: 'Recent people and organizations surfaced from communications context.',
+        descriptionKey: 'Recent Personas and organizations surfaced from communications context.',
         icon: 'tabler:users',
         status: 'active',
         kind: 'projection',
-        contract: 'useHomePageSurface.peopleTalked'
+        contract: 'useHomePageSurface.personasTalked'
       }
     ],
     childSurfaces: [
@@ -63,4 +63,3 @@ export function useHomeSurface() {
     ]
   })
 }
-

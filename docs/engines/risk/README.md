@@ -52,7 +52,7 @@ Risk output must include:
 ## Current Implementation Evidence
 
 Risk-like behavior is currently named through domain-local `health` and
-`intelligence` modules in Calendar, Organizations, Persons and Tasks. Those
+`intelligence` modules in Calendar, Organizations, Personas and Tasks. Those
 modules should be treated as current implementation surfaces, not separate
 engine ownership.
 

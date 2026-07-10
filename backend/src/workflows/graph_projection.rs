@@ -7,7 +7,7 @@ mod helpers;
 mod messages;
 mod models;
 mod obligations;
-mod persons;
+mod personas;
 mod projects;
 mod rows;
 mod service;

@@ -22,7 +22,7 @@ pub(crate) use hermes_hub_backend::domains::communications::messages::{
 pub(crate) use hermes_hub_backend::domains::documents::core::{
     DocumentImportStore, NewDocumentImport,
 };
-pub(crate) use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+pub(crate) use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 pub(crate) use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};
 pub(crate) use hermes_hub_backend::platform::config::AppConfig;
 pub(crate) use hermes_hub_backend::platform::settings::ApplicationSettingsStore;

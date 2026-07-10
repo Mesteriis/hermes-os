@@ -29,7 +29,7 @@ Base: `/api/v1/`
 | Метод | Путь | Описание |
 |---|---|---|
 | GET, POST | `/organizations/{id}/departments` | |
-| GET, POST | `/organizations/{id}/contacts` | Compatibility route for Organization-Persona links |
+| GET, POST | `/organizations/{id}/persona-links` | Organization-Persona links |
 | GET | `/organizations/{id}/related` | |
 
 ## Timeline & Templates

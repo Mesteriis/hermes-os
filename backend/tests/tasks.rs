@@ -488,7 +488,7 @@ async fn task_creation_rejects_obligation_without_observation_evidence_against_p
         .upsert_with_evidence(
             &NewObligation::new(
                 ObligationEntityKind::Persona,
-                format!("person:v1:task-gap:{suffix}"),
+                format!("persona:task-gap:{suffix}"),
                 format!("Deliver obligation gap proof {suffix}"),
                 0.73,
                 ObligationReviewState::Suggested,

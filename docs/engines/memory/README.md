@@ -68,11 +68,11 @@ source-backed Persona memory-card draft:
 - importance: `5`.
 
 `PersonEnrichmentStore` uses this draft when materializing compatibility
-`person_memory_cards`. Empty notes remove the compatibility memory-card source
+`persona_memory_cards`. Empty notes remove the compatibility memory-card source
 and do not create a new card.
 
 The shared engine also builds source-backed accepted Persona fact drafts for
-compatibility `person_facts`. These drafts preserve affected entity, fact type,
+compatibility `persona_facts`. These drafts preserve affected entity, fact type,
 value, source citation, confidence, accepted review state and the producing
 process before the compatibility store writes the record.
 

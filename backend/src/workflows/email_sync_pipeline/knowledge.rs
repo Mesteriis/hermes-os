@@ -9,12 +9,12 @@ use super::relationships::insert_relationship_event;
 
 #[derive(Default)]
 pub(crate) struct MessageKnowledgeReport {
-    pub(crate) upserted_persons: usize,
-    pub(crate) upserted_person_identities: usize,
+    pub(crate) upserted_personas: usize,
+    pub(crate) upserted_persona_identities: usize,
     pub(crate) upserted_message_participants: usize,
     pub(crate) upserted_relationship_events: usize,
     pub(crate) upserted_organizations: usize,
-    pub(crate) upserted_organization_contact_links: usize,
+    pub(crate) upserted_organization_persona_links: usize,
 }
 
 pub(crate) async fn project_message_knowledge(
@@ -46,8 +46,8 @@ pub(crate) async fn project_message_knowledge(
                 project_email_participant_organization(pool, &person_id, message, &participant)
                     .await?;
             report.upserted_organizations += organization_report.upserted_organizations;
-            report.upserted_organization_contact_links +=
-                organization_report.upserted_organization_contact_links;
+            report.upserted_organization_persona_links +=
+                organization_report.upserted_organization_persona_links;
         }
     }
 
@@ -61,7 +61,7 @@ async fn confirmed_person_id_for_participant(
     let person_id = sqlx::query_scalar::<_, String>(
         r#"
         SELECT person_id
-        FROM person_identities
+        FROM persona_identities
         WHERE identity_type = 'email'
           AND lower(identity_value) = $1
           AND status = 'active'

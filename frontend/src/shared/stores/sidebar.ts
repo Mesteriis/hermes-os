@@ -5,7 +5,7 @@ export type PrimaryNavId =
   | 'home'
   | 'communications'
   | 'timeline'
-  | 'persons'
+  | 'personas'
   | 'projects'
   | 'tasks'
   | 'calendar'
@@ -91,7 +91,7 @@ export const primaryWorkspaceNav: PrimaryWorkspaceNavItem[] = [
   { id: 'home', label: 'Home', icon: 'tabler:home' },
   { id: 'communications', label: 'Communications', icon: 'tabler:messages' },
   { id: 'timeline', label: 'Timeline', icon: 'tabler:timeline-event' },
-  { id: 'persons', label: 'Persons', icon: 'tabler:user' },
+  { id: 'personas', label: 'Personas', icon: 'tabler:user' },
   { id: 'projects', label: 'Projects', icon: 'tabler:briefcase' },
   { id: 'tasks', label: 'Tasks', icon: 'tabler:checkbox' },
   { id: 'calendar', label: 'Calendar', icon: 'tabler:calendar' },
@@ -163,6 +163,32 @@ function defaultSidebarSettings(): SidebarSettings {
     rootItemIds: defaultRootItemIds,
     groups: [defaultCommunicationsGroup],
     hiddenItemIds: []
+  }
+}
+
+function normalizeLegacySidebarItemId(itemId: string): SidebarItemId {
+  if (itemId === 'persons') return 'personas'
+
+  return itemId as SidebarItemId
+}
+
+function normalizeLegacySidebarRootId(rootId: string): SidebarRootItemId {
+  if (rootId === 'persons') return 'personas'
+
+  return rootId as SidebarRootItemId
+}
+
+function normalizeSidebarSettings(settings: SidebarSettings): SidebarSettings {
+  return {
+    ...settings,
+    schemaVersion: SIDEBAR_SETTINGS_SCHEMA_VERSION,
+    rootItemIds: settings.rootItemIds.map(normalizeLegacySidebarRootId),
+    groups: settings.groups.map((group) => ({
+      ...group,
+      itemIds: group.itemIds.map(normalizeLegacySidebarItemId),
+      separatorBeforeItemIds: group.separatorBeforeItemIds.map(normalizeLegacySidebarItemId),
+    })),
+    hiddenItemIds: settings.hiddenItemIds.map(normalizeLegacySidebarItemId),
   }
 }
 
@@ -288,7 +314,7 @@ export const useSidebarStore = defineStore('sidebar', () => {
   }))
 
   function setSidebarSettings(settings: SidebarSettings): void {
-    sidebarSettings.value = settings
+    sidebarSettings.value = normalizeSidebarSettings(settings)
   }
 
   function updateSidebarDraft(update: (draft: SidebarSettings) => SidebarSettings): void {

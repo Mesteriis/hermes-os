@@ -2,6 +2,7 @@
 import { watch } from 'vue'
 import Toast from '../../shared/ui/Toast.vue'
 import CommunicationsWorkspaceView from '../../domains/communications/views/CommunicationsWorkspaceView.vue'
+import PersonasWorkspaceView from '../../domains/personas/views/PersonasWorkspaceView.vue'
 import SettingsPage from '../../domains/settings/views/SettingsPage.vue'
 import { useAppLayoutNavbarSurface } from '../queries/useAppLayoutNavbarSurface'
 import AppLayout from './AppLayout.vue'
@@ -87,6 +88,7 @@ function consumeReturnNavigationFromLocation(): void {
 					v-if="selectedTopLevelRouteId === 'communications'"
 					:selected-route-id="selectedRouteId"
 				/>
+				<PersonasWorkspaceView v-else-if="selectedTopLevelRouteId === 'personas'" />
 				<SettingsPage v-else-if="selectedTopLevelRouteId === 'settings'" />
 			</AppLayout>
 		</Toast>

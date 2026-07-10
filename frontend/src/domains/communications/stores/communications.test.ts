@@ -188,7 +188,7 @@ function mailSyncStatus(accountId: string): MailSyncStatus {
     last_error_message: null,
     last_fetched_messages: 0,
     last_projected_messages: 0,
-    last_upserted_persons: 0,
+    last_upserted_personas: 0,
     last_upserted_organizations: 0,
   }
 }

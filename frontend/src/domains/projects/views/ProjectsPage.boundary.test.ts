@@ -28,4 +28,16 @@ describe('ProjectsPage boundary', () => {
     expect(storeSource).toContain('formatProjectDate')
     expect(storeSource).toContain('formatProjectDateTime')
   })
+
+  it('keeps project detail Persona-native while retaining deprecated people aliases', () => {
+    const typeSource = readFileSync(new URL('../types/project.ts', import.meta.url), 'utf8')
+    const surfaceSource = readFileSync(new URL('../queries/useProjectsPageSurface.ts', import.meta.url), 'utf8')
+
+    expect(typeSource).toContain('persona_count: number')
+    expect(typeSource).toContain('key_personas: ProjectPersonaSummary[]')
+    expect(typeSource).toContain('export interface ProjectPersonaSummary')
+    expect(typeSource).toContain('@deprecated Use persona_count.')
+    expect(typeSource).toContain('@deprecated Use key_personas.')
+    expect(surfaceSource).toContain('persona_count: 0')
+  })
 })

@@ -159,7 +159,7 @@ function phaseLabel(phase: string): string {
     case 'projecting':
     case 'project':
       return t('projecting messages')
-    case 'persons_graph':
+    case 'personas_graph':
       return t('updating graph')
     case 'completed':
       return t('completed')

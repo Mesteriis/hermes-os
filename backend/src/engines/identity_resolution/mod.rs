@@ -111,8 +111,8 @@ mod tests {
     #[test]
     fn identity_resolution_candidate_requires_evidence() {
         let error = IdentityResolutionCandidate::same_entity_candidate(
-            IdentityResolutionSubject::new("persona", "person:v1:ivan-a"),
-            IdentityResolutionSubject::new("persona", "person:v1:ivan-b"),
+            IdentityResolutionSubject::new("persona", "persona:ivan-a"),
+            IdentityResolutionSubject::new("persona", "persona:ivan-b"),
             0.82,
             vec![],
         )

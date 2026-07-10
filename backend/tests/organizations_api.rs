@@ -5,7 +5,7 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
 use sqlx::Row;
-use testkit::factories::contact::ContactFactory;
+use testkit::factories::persona::PersonaFactory;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::{build_router, build_router_with_database};
@@ -216,7 +216,7 @@ org_test!(orgs_identities, "/api/v1/organizations/{}/identities");
 org_test!(orgs_aliases, "/api/v1/organizations/{}/aliases");
 org_test!(orgs_domains, "/api/v1/organizations/{}/domains");
 org_test!(orgs_departments, "/api/v1/organizations/{}/departments");
-org_test!(orgs_contacts, "/api/v1/organizations/{}/contacts");
+org_test!(orgs_persona_links, "/api/v1/organizations/{}/persona-links");
 org_test!(orgs_related, "/api/v1/organizations/{}/related");
 org_test!(orgs_timeline, "/api/v1/organizations/{}/timeline");
 org_test!(orgs_portals, "/api/v1/organizations/{}/portals");
@@ -480,52 +480,52 @@ async fn organization_manual_entrypoints_capture_observations_against_postgres()
     .await
     .expect("department observation link");
 
-    let contact_person_id = ContactFactory::new(&pool)
-        .with_person_id(format!("person:v1:organization-contact:{suffix}"))
-        .with_name(format!("Organization Contact {suffix}"))
+    let linked_person_id = PersonaFactory::new(&pool)
+        .with_persona_id(format!("persona:organization-person:{suffix}"))
+        .with_name(format!("Organization Person {suffix}"))
         .with_email(format!("organization-contact-{suffix}@example.com"))
         .create()
         .await
-        .expect("create contact person");
+        .expect("create organization persona link target");
 
-    let contact_response = app
+    let persona_link_response = app
         .clone()
         .oneshot(post(
-            &format!("/api/v1/organizations/{}/contacts", enc(&oid)),
+            &format!("/api/v1/organizations/{}/persona-links", enc(&oid)),
             json!({
-                "person_id": contact_person_id,
+                "persona_id": linked_person_id,
                 "role": "cto",
                 "department": "engineering",
                 "source": "manual"
             }),
         ))
         .await
-        .expect("contact response");
-    assert_eq!(contact_response.status(), StatusCode::OK);
-    let contact_id = jb(contact_response).await["id"]
+        .expect("person link response");
+    assert_eq!(persona_link_response.status(), StatusCode::OK);
+    let persona_link_id = jb(persona_link_response).await["id"]
         .as_str()
-        .expect("contact id")
+        .expect("person link id")
         .to_owned();
-    let contact_source: String =
-        sqlx::query_scalar("SELECT source FROM organization_contact_links WHERE id::text = $1")
-            .bind(&contact_id)
+    let persona_link_source: String =
+        sqlx::query_scalar("SELECT source FROM organization_persona_links WHERE id::text = $1")
+            .bind(&persona_link_id)
             .fetch_one(&pool)
             .await
-            .expect("contact source");
-    assert!(contact_source.starts_with("observation:"));
-    let contact_observation_id: String = sqlx::query_scalar(
+            .expect("person link source");
+    assert!(persona_link_source.starts_with("observation:"));
+    let persona_link_observation_id: String = sqlx::query_scalar(
         "SELECT observation_id
          FROM observation_links
          WHERE domain = 'organizations'
-           AND entity_kind = 'contact_link'
+           AND entity_kind = 'persona_link'
            AND entity_id = $1
          ORDER BY created_at DESC
          LIMIT 1",
     )
-    .bind(&contact_id)
+    .bind(&persona_link_id)
     .fetch_one(&pool)
     .await
-    .expect("contact observation link");
+    .expect("person link observation link");
 
     let update_response = app
         .clone()
@@ -613,7 +613,7 @@ async fn organization_manual_entrypoints_capture_observations_against_postgres()
         identity_observation_id.clone(),
         alias_observation_id.clone(),
         department_observation_id.clone(),
-        contact_observation_id.clone(),
+        persona_link_observation_id.clone(),
         update_observation_id.clone(),
         watchlist_observation_id.clone(),
         archive_observation_id.clone(),
@@ -660,7 +660,7 @@ async fn organization_manual_entrypoints_capture_observations_against_postgres()
         identity_observation_id,
         alias_observation_id,
         department_observation_id,
-        contact_observation_id,
+        persona_link_observation_id,
     ] {
         let kind_code: String = sqlx::query_scalar(
             "SELECT kind.code AS kind_code

@@ -6,7 +6,7 @@ pub struct TaskIntelligenceService;
 impl TaskIntelligenceService {
     pub fn calculate_priority(
         due_at: Option<DateTime<Utc>>,
-        has_contact: bool,
+        has_persona_link: bool,
         has_org: bool,
         has_project: bool,
         is_legal: bool,
@@ -32,7 +32,7 @@ impl TaskIntelligenceService {
         if has_blockers {
             score += 0.15;
         }
-        if has_contact {
+        if has_persona_link {
             score += 0.1;
         }
         if has_org {
@@ -81,7 +81,7 @@ impl TaskIntelligenceService {
         has_docs: bool,
         has_deadline: bool,
         no_blockers: bool,
-        contacts_resolved: bool,
+        personas_resolved: bool,
     ) -> f64 {
         let mut score: f64 = 0.0;
         if has_desc {
@@ -99,7 +99,7 @@ impl TaskIntelligenceService {
         if no_blockers {
             score += 0.15;
         }
-        if contacts_resolved {
+        if personas_resolved {
             score += 0.15;
         }
         score.clamp(0.0, 1.0)
@@ -109,7 +109,7 @@ impl TaskIntelligenceService {
         has_desc: bool,
         has_context: bool,
         has_deadline: bool,
-        has_contact: bool,
+        has_persona_link: bool,
         has_project: bool,
     ) -> Vec<String> {
         let mut missing = Vec::new();
@@ -122,8 +122,8 @@ impl TaskIntelligenceService {
         if !has_deadline {
             missing.push("No deadline".into());
         }
-        if !has_contact {
-            missing.push("No linked contact".into());
+        if !has_persona_link {
+            missing.push("No linked persona".into());
         }
         if !has_project {
             missing.push("No linked project".into());

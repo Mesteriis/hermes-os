@@ -199,8 +199,8 @@ function patchSyncStatuses(
 			last_fetched_messages: numberValue(payload.fetched_messages) ?? item.last_fetched_messages,
 			last_projected_messages:
 				numberValue(payload.projected_messages) ?? item.last_projected_messages,
-			last_upserted_persons:
-				numberValue(payload.upserted_persons) ?? item.last_upserted_persons,
+			last_upserted_personas:
+				numberValue(payload.upserted_personas) ?? item.last_upserted_personas,
 			last_upserted_organizations:
 				numberValue(payload.upserted_organizations) ?? item.last_upserted_organizations
 		}

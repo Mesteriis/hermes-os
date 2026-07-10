@@ -73,7 +73,7 @@ export function useReviewPageSurface() {
 
   function deriveDefaultPromotion(item: ReviewItem): ReviewItemPromotionRequest {
     const defaults: Record<string, ReviewItemPromotionRequest> = {
-      new_person: { target_domain: 'persons', target_entity_kind: 'person', target_entity_id: '' },
+      new_persona: { target_domain: 'personas', target_entity_kind: 'persona', target_entity_id: '' },
       new_organization: {
         target_domain: 'organizations',
         target_entity_kind: 'organization',

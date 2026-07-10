@@ -1,7 +1,7 @@
 use sqlx::postgres::PgPool;
 
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::domains::persons::memory::RelationshipEventPort;
+use crate::domains::personas::memory::RelationshipEventPort;
 
 use super::errors::EmailSyncPipelineError;
 use super::participants::EmailParticipant;

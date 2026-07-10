@@ -9,8 +9,8 @@ use crate::platform::observations::{
 
 use super::api::{Organization, OrganizationError, OrganizationStore, OrganizationUpdate};
 use super::core::{
-    OrgAliasStore, OrgContactLink, OrgContactLinkStore, OrgCoreError, OrgDepartment,
-    OrgDepartmentStore, OrgIdentityStore, OrganizationAlias, OrganizationIdentity,
+    OrgAliasStore, OrgCoreError, OrgDepartment, OrgDepartmentStore, OrgIdentityStore,
+    OrgPersonaLink, OrgPersonaLinkStore, OrganizationAlias, OrganizationIdentity,
 };
 use super::enrichment::{OrgEnrichmentError, OrgEnrichmentStore};
 use super::health::{OrgHealthError, OrgHealthStore};
@@ -209,34 +209,34 @@ impl OrganizationCommandService {
             .await?)
     }
 
-    pub async fn link_contact_manual(
+    pub async fn link_persona_manual(
         &self,
         organization_id: &str,
         person_id: &str,
         role: Option<&str>,
         department: Option<&str>,
         requested_source: &str,
-    ) -> Result<OrgContactLink, OrganizationCommandServiceError> {
+    ) -> Result<OrgPersonaLink, OrganizationCommandServiceError> {
         let observation = self
             .capture_manual(
                 "ORGANIZATION_RECORD_MUTATION",
                 json!({
                     "organization_id": organization_id,
-                    "person_id": person_id,
+                    "persona_id": person_id,
                     "role": role,
                     "department": department,
                     "source": requested_source,
                 }),
-                format!("organization://{organization_id}/contacts/{person_id}"),
+                format!("organization://{organization_id}/persona-links/{person_id}"),
                 json!({
-                    "captured_by": "organizations_service.link_contact_manual",
-                    "operation": "link_contact_manual",
+                    "captured_by": "organizations_service.link_persona_manual",
+                    "operation": "link_persona_manual",
                     "requested_source": requested_source,
                 }),
             )
             .await?;
 
-        Ok(OrgContactLinkStore::new(self.pool.clone())
+        Ok(OrgPersonaLinkStore::new(self.pool.clone())
             .link_with_observation(
                 organization_id,
                 person_id,

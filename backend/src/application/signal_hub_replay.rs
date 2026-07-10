@@ -5,11 +5,11 @@ use crate::domains::communications::messages::{
     COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, replay_accepted_signal_event,
     supports_communication_projection_signal_event,
 };
-use crate::domains::persons::core::{
-    PERSON_ROLE_ASSIGNED_EVENT_TYPE, PERSON_ROLE_REMOVED_EVENT_TYPE,
+use crate::domains::personas::core::{
+    PERSONA_ROLE_ASSIGNED_EVENT_TYPE, PERSONA_ROLE_REMOVED_EVENT_TYPE,
 };
-use crate::domains::persons::enrichment::PERSON_TRUST_SCORE_CHANGED_EVENT_TYPE;
-use crate::domains::persons::trust::PERSON_PROMISE_CREATED_EVENT_TYPE;
+use crate::domains::personas::enrichment::PERSONA_TRUST_SCORE_CHANGED_EVENT_TYPE;
+use crate::domains::personas::trust::PERSONA_PROMISE_CREATED_EVENT_TYPE;
 use crate::domains::signal_hub::{
     SignalHubError, SignalHubSignalService, SignalHubStore, SignalReplayRequest,
     SignalReplayRequestCreate,
@@ -23,15 +23,15 @@ use crate::workflows::project_link_review_effects::PROJECT_LINK_REVIEW_EVENT_TYP
 use crate::workflows::realtime_conversation_transcript_projection::REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER;
 
 use super::{
-    PERSON_DERIVED_EVIDENCE_CONSUMER, PROJECT_LINK_REVIEW_EFFECTS_CONSUMER,
+    PERSONA_DERIVED_EVIDENCE_CONSUMER, PROJECT_LINK_REVIEW_EFFECTS_CONSUMER,
     ZOOM_CALENDAR_MATCHING_CONSUMER, project_link_review_effect_event,
-    project_person_derived_evidence_event, project_realtime_conversation_transcript_event,
+    project_persona_derived_evidence_event, project_realtime_conversation_transcript_event,
     project_yandex_telemost_calendar_matching_event, project_zoom_calendar_matching_event,
 };
 
 const DEFAULT_REPLAY_BATCH_SIZE: u32 = 500;
 const COMMUNICATION_MESSAGES_PROJECTION: &str = "communication_messages";
-const PERSON_DERIVED_EVIDENCE_PROJECTION: &str = "person_derived_evidence";
+const PERSONA_DERIVED_EVIDENCE_PROJECTION: &str = "persona_derived_evidence";
 const PROJECT_LINK_REVIEW_EFFECTS_PROJECTION: &str = "project_link_review_effects";
 const REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION: &str =
     "realtime_conversation_transcript_projection";
@@ -186,8 +186,8 @@ impl SignalHubReplayService {
                 self.rebuild_communication_messages_projection(request)
                     .await
             }
-            PERSON_DERIVED_EVIDENCE_PROJECTION => {
-                self.rebuild_person_derived_evidence_projection(request)
+            PERSONA_DERIVED_EVIDENCE_PROJECTION | "person_derived_evidence" => {
+                self.rebuild_persona_derived_evidence_projection(request)
                     .await
             }
             PROJECT_LINK_REVIEW_EFFECTS_PROJECTION => {
@@ -500,7 +500,7 @@ impl SignalHubReplayService {
         Ok(u32::try_from(replay_events.len()).unwrap_or(u32::MAX))
     }
 
-    async fn rebuild_person_derived_evidence_projection(
+    async fn rebuild_persona_derived_evidence_projection(
         &self,
         request: &SignalReplayRequest,
     ) -> Result<u32, SignalHubError> {
@@ -509,7 +509,7 @@ impl SignalHubReplayService {
             .await?
             .into_iter()
             .filter(|event| {
-                supports_person_derived_evidence_projection_event(&event.event.event_type)
+                supports_persona_derived_evidence_projection_event(&event.event.event_type)
             })
             .collect::<Vec<_>>();
         let Some(first_position) = replay_events.first().map(|event| event.position) else {
@@ -522,52 +522,52 @@ impl SignalHubReplayService {
         let positions: Vec<i64> = replay_events.iter().map(|event| event.position).collect();
         let consumer_store = EventConsumerStore::new(self.event_store.pool().clone());
         let cleared_processed = consumer_store
-            .clear_processed_for_positions(PERSON_DERIVED_EVIDENCE_CONSUMER, &positions)
+            .clear_processed_for_positions(PERSONA_DERIVED_EVIDENCE_CONSUMER, &positions)
             .await?;
         consumer_store
-            .clear_failures_for_positions(PERSON_DERIVED_EVIDENCE_CONSUMER, &positions)
+            .clear_failures_for_positions(PERSONA_DERIVED_EVIDENCE_CONSUMER, &positions)
             .await?;
         consumer_store
             .rewind_position(
-                PERSON_DERIVED_EVIDENCE_CONSUMER,
+                PERSONA_DERIVED_EVIDENCE_CONSUMER,
                 first_position.saturating_sub(1),
             )
             .await?;
 
         for replay_event in &replay_events {
-            project_person_derived_evidence_event(
+            project_persona_derived_evidence_event(
                 self.event_store.pool().clone(),
                 replay_event.clone(),
             )
             .await
             .map_err(|error| {
                 SignalHubError::InvalidReplayRequest(format!(
-                    "person_derived_evidence projection replay failed: {error}"
+                    "persona_derived_evidence projection replay failed: {error}"
                 ))
             })?;
             consumer_store
-                .record_processed(PERSON_DERIVED_EVIDENCE_CONSUMER, replay_event)
+                .record_processed(PERSONA_DERIVED_EVIDENCE_CONSUMER, replay_event)
                 .await?;
             consumer_store
                 .mark_dead_letter_replayed_for_event(
-                    PERSON_DERIVED_EVIDENCE_CONSUMER,
+                    PERSONA_DERIVED_EVIDENCE_CONSUMER,
                     replay_event.position,
                 )
                 .await?;
             consumer_store
-                .clear_failure(PERSON_DERIVED_EVIDENCE_CONSUMER, replay_event.position)
+                .clear_failure(PERSONA_DERIVED_EVIDENCE_CONSUMER, replay_event.position)
                 .await?;
             consumer_store
-                .save_position(PERSON_DERIVED_EVIDENCE_CONSUMER, replay_event.position)
+                .save_position(PERSONA_DERIVED_EVIDENCE_CONSUMER, replay_event.position)
                 .await?;
         }
 
         self.append_projection_lifecycle_event(
-            "persons.derived_evidence.updated",
+            "personas.derived_evidence.updated",
             request,
             json!({
-                "target_projection": PERSON_DERIVED_EVIDENCE_PROJECTION,
-                "consumer_name": PERSON_DERIVED_EVIDENCE_CONSUMER,
+                "target_projection": PERSONA_DERIVED_EVIDENCE_PROJECTION,
+                "consumer_name": PERSONA_DERIVED_EVIDENCE_CONSUMER,
                 "from_position": first_position,
                 "to_position": last_position,
                 "replayed_count": replay_events.len(),
@@ -980,13 +980,17 @@ fn uses_event_log_replay(request: &SignalReplayRequest) -> bool {
         || request.to_time.is_some()
 }
 
-fn supports_person_derived_evidence_projection_event(event_type: &str) -> bool {
+fn supports_persona_derived_evidence_projection_event(event_type: &str) -> bool {
     matches!(
         event_type,
-        PERSON_ROLE_ASSIGNED_EVENT_TYPE
-            | PERSON_ROLE_REMOVED_EVENT_TYPE
-            | PERSON_TRUST_SCORE_CHANGED_EVENT_TYPE
-            | PERSON_PROMISE_CREATED_EVENT_TYPE
+        PERSONA_ROLE_ASSIGNED_EVENT_TYPE
+            | PERSONA_ROLE_REMOVED_EVENT_TYPE
+            | PERSONA_TRUST_SCORE_CHANGED_EVENT_TYPE
+            | PERSONA_PROMISE_CREATED_EVENT_TYPE
+            | "person.role.assigned"
+            | "person.role.removed"
+            | "person.enrichment.trust_score_changed"
+            | "person.promise.created"
     )
 }
 

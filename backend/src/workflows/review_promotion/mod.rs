@@ -13,9 +13,9 @@ use crate::domains::obligations::{
     ObligationReviewState,
 };
 use crate::domains::organizations::api::{OrganizationCommandPort, OrganizationError};
-use crate::domains::persons::api::{PersonProjectionError, PersonProjectionPort};
-use crate::domains::persons::identity::{
-    PersonIdentityPort, PersonIdentityReviewCommand, PersonIdentityReviewState,
+use crate::domains::personas::api::{PersonaProjectionError, PersonaProjectionPort};
+use crate::domains::personas::identity::{
+    PersonaIdentityReviewCommand, PersonaIdentityReviewPort, PersonaIdentityReviewState,
 };
 use crate::domains::projects::core::ProjectCommandPort;
 use crate::domains::projects::core::{NewProject, ProjectCommandPortError};
@@ -54,9 +54,9 @@ pub enum ReviewPromotionError {
     #[error(transparent)]
     Relationship(#[from] crate::domains::relationships::RelationshipReviewPortError),
     #[error(transparent)]
-    PersonIdentity(#[from] crate::domains::persons::identity::PersonIdentityError),
+    PersonaIdentity(#[from] crate::domains::personas::identity::PersonaIdentityError),
     #[error(transparent)]
-    PersonProjection(#[from] PersonProjectionError),
+    PersonaProjection(#[from] PersonaProjectionError),
     #[error(transparent)]
     ProjectLinkReview(#[from] crate::domains::projects::link_reviews::ProjectLinkReviewError),
     #[error(transparent)]
@@ -122,11 +122,11 @@ impl ReviewPromotionService {
         evidence: &[ReviewItemEvidenceRecord],
     ) -> Result<ReviewPromotionTarget, ReviewPromotionError> {
         match item.item_kind {
-            ReviewItemKind::NewPerson => {
+            ReviewItemKind::NewPersona => {
                 let person_id = self
-                    .upsert_person_from_review(item, target, evidence)
+                    .upsert_persona_from_review(item, target, evidence)
                     .await?;
-                Ok(ReviewPromotionTarget::new("persons", "persona", person_id))
+                Ok(ReviewPromotionTarget::new("personas", "persona", person_id))
             }
             ReviewItemKind::NewOrganization => {
                 let organization_id = self
@@ -153,17 +153,17 @@ impl ReviewPromotionService {
                         format!("review-item://{}/identity-candidate", item.review_item_id),
                     )
                     .await?;
-                let result = PersonIdentityPort::new(self.pool.clone())
-                    .set_review_state(&PersonIdentityReviewCommand {
+                let result = PersonaIdentityReviewPort::new(self.pool.clone())
+                    .set_review_state(&PersonaIdentityReviewCommand {
                         command_id: format!("review-promotion:{}", item.review_item_id),
                         identity_candidate_id: identity_candidate_id.clone(),
-                        review_state: PersonIdentityReviewState::UserConfirmed,
+                        review_state: PersonaIdentityReviewState::UserConfirmed,
                         actor_id: "review_promotion".to_owned(),
                     })
                     .await?;
                 self.link_review_transition_observation(
                     &review_observation,
-                    "persons",
+                    "personas",
                     "identity_candidate",
                     &result.identity_candidate_id,
                     json!({
@@ -174,7 +174,7 @@ impl ReviewPromotionService {
                 )
                 .await?;
                 Ok(ReviewPromotionTarget::new(
-                    "persons",
+                    "personas",
                     "identity_candidate",
                     result.identity_candidate_id,
                 ))
@@ -612,30 +612,30 @@ impl ReviewPromotionService {
         }
     }
 
-    async fn upsert_person_from_review(
+    async fn upsert_persona_from_review(
         &self,
         item: &ReviewItem,
         target: &ReviewPromotionTarget,
         evidence: &[ReviewItemEvidenceRecord],
     ) -> Result<String, ReviewPromotionError> {
-        let person_id = choose_target_id(target, "person", &item.review_item_id);
+        let person_id = choose_target_id(target, "persona", &item.review_item_id);
         let review_observation = self
             .capture_review_transition_observation(
                 item,
-                "person_review_promotion",
+                "persona_review_promotion",
                 json!({
                     "person_id": person_id,
                     "review_state": "user_confirmed",
                 }),
-                format!("review-item://{}/person", item.review_item_id),
+                format!("review-item://{}/persona", item.review_item_id),
             )
             .await?;
-        PersonProjectionPort::new(self.pool.clone())
+        PersonaProjectionPort::new(self.pool.clone())
             .upsert_review_person(&person_id, item.title.trim())
             .await?;
         self.link_review_transition_observation(
             &review_observation,
-            "persons",
+            "personas",
             "persona",
             &person_id,
             json!({
@@ -648,7 +648,7 @@ impl ReviewPromotionService {
         for record in evidence {
             self.link_supporting_review_evidence(
                 &record.observation_id,
-                "persons",
+                "personas",
                 "persona",
                 &person_id,
                 item.confidence,

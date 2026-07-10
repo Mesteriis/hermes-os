@@ -19,7 +19,7 @@ Status: Accepted
 ```text
 backend/src/
 ├── app/            — HTTP-слой приложения (router, handlers, state, error)
-├── domains/        — Bounded contexts (mail, persons, calendar, tasks, ...)
+├── domains/        — Bounded contexts (mail, personas, calendar, tasks, ...)
 ├── engines/        — Общие движки (search, automation)
 ├── integrations/   — Внешние адаптеры (gmail, telegram, whatsapp, ollama)
 ├── ai/             — AI-слой (семантические эмбеддинги, retrieval, AI-сервис)

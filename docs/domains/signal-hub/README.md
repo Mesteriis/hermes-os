@@ -201,10 +201,10 @@ and emits `timeline.projection.updated`, while `communication_messages`
 clears processed markers for the accepted-signal Communications consumer,
 rewinds that consumer cursor over the selected signal slice and emits
 `communications.projection.updated`. Signal Hub now also supports first-class
-projection-targeted rebuilds for `person_derived_evidence` and
+projection-targeted rebuilds for `persona_derived_evidence` and
 `project_link_review_effects`, each rewinding the matching consumer cursor,
 clearing processed markers for the selected event-log slice and emitting
-`persons.derived_evidence.updated` or `projects.link_review_effects.updated`.
+`personas.derived_evidence.updated` or `projects.link_review_effects.updated`.
 Broader projection rebuild coverage is still separate work for future targets.
 
 Current fixture note: Signal Hub now has an initial deterministic fixture

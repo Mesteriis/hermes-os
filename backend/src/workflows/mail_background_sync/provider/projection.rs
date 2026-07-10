@@ -51,7 +51,7 @@ impl MailBackgroundSyncService {
         store
             .update_progress(ProgressUpdate {
                 run_id,
-                phase: MailSyncPhase::PersonsGraph,
+                phase: MailSyncPhase::PersonasGraph,
                 progress_mode: ProgressMode::Indeterminate,
                 progress_percent: None,
                 processed_messages: summary.processed_messages,

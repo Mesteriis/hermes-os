@@ -38,7 +38,7 @@ impl ProjectStore {
         .fetch_one(&self.pool)
         .await?;
 
-        let people_count = sqlx::query_scalar::<_, i64>(
+        let persona_count = sqlx::query_scalar::<_, i64>(
             r#"
             WITH project_messages AS (
                 SELECT sender, recipients
@@ -103,7 +103,9 @@ impl ProjectStore {
         Ok(ProjectStats {
             message_count,
             document_count,
-            people_count,
+            persona_count,
+            #[allow(deprecated)]
+            people_count: persona_count,
             graph_connection_count,
             latest_activity_at,
         })

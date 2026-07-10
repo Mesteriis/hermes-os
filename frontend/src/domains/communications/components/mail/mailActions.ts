@@ -157,7 +157,7 @@ const mailActionGroupDefinitions: readonly MailActionGroupDefinition[] = [
     menuLabel: 'Open creation actions',
     icon: 'tabler:circle-plus',
     tone: 'success',
-    actionIds: ['create-task', 'create-document', 'create-event', 'create-contact']
+    actionIds: ['create-task', 'create-document', 'create-event', 'create-persona']
   },
   {
     id: 'evidence',

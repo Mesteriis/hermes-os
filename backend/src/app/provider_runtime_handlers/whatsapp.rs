@@ -6059,12 +6059,12 @@ async fn list_whatsapp_sync_contacts(
         FROM communication_identities identity
         JOIN communication_channels channel
           ON channel.channel_id = identity.channel_id
-        LEFT JOIN person_identities whatsapp_trace
+        LEFT JOIN persona_identities whatsapp_trace
           ON whatsapp_trace.source = 'communication_projection'
          AND whatsapp_trace.status = 'active'
          AND whatsapp_trace.identity_type = 'whatsapp'
          AND whatsapp_trace.identity_value = identity.provider_identity_id
-        LEFT JOIN person_identities phone_trace
+        LEFT JOIN persona_identities phone_trace
           ON phone_trace.source = 'communication_projection'
          AND phone_trace.status = 'active'
          AND phone_trace.identity_type = 'phone'

@@ -251,7 +251,7 @@ export async function runWorkflowActionConnect(
     eventId: string
     action: string
     status: 'created' | 'updated' | 'linked' | 'opened' | 'archived' | 'noop'
-    target?: { kind: 'compose' | 'message' | 'task' | 'document' | 'calendar_event' | 'person'; id?: string }
+    target?: { kind: 'compose' | 'message' | 'task' | 'document' | 'calendar_event' | 'persona'; id?: string }
     provenance?: { sourceKind?: string; sourceId?: string; confidence?: number; evidence: string[] }
   }>('RunWorkflowAction', {
     commandId: request.command_id,

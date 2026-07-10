@@ -51,6 +51,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_v1_email_account_sync_now),
         )
         .route(
+            "/api/v1/integrations/mail/accounts/{account_id}/address-book-sync-now",
+            post(post_v1_email_account_address_book_sync_now),
+        )
+        .route(
             "/api/v1/integrations/mail/accounts/{account_id}/sync-full-resync",
             post(post_v1_email_account_sync_full_resync),
         )

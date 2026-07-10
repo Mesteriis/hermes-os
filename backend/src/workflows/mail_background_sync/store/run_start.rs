@@ -46,7 +46,7 @@ impl MailSyncStore {
                 current_batch_size,
                 fetched_messages,
                 projected_messages,
-                upserted_persons,
+                upserted_personas,
                 upserted_organizations,
                 checkpoint_before,
                 checkpoint_after,

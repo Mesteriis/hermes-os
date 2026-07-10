@@ -55,3 +55,38 @@ pub(super) struct GmailHistoryMessageAdded {
 pub(super) struct GmailHistoryMessage {
     pub(super) id: String,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct GooglePeopleConnectionsResponse {
+    pub(super) connections: Option<Vec<GooglePeoplePerson>>,
+    pub(super) next_page_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct GooglePeoplePerson {
+    pub(super) resource_name: Option<String>,
+    pub(super) etag: Option<String>,
+    pub(super) names: Option<Vec<GooglePeopleName>>,
+    pub(super) email_addresses: Option<Vec<GooglePeopleEmailAddress>>,
+    pub(super) phone_numbers: Option<Vec<GooglePeoplePhoneNumber>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct GooglePeopleName {
+    pub(super) display_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct GooglePeopleEmailAddress {
+    pub(super) value: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct GooglePeoplePhoneNumber {
+    pub(super) value: Option<String>,
+}

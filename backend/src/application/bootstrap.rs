@@ -15,6 +15,8 @@ use crate::vault::{HostVault, VaultMode};
 
 static MAIL_BACKGROUND_SYNC_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
+static ADDRESS_BOOK_SYNC_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 static MAIL_OUTBOX_DELIVERY_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static MAIL_AI_PIPELINE_DATABASES: LazyLock<Mutex<HashSet<String>>> =
@@ -45,7 +47,7 @@ static WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_DATABASES: LazyLock<Mutex<Ha
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
-static PERSON_DERIVED_EVIDENCE_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+static PERSONA_DERIVED_EVIDENCE_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static ZOOM_SIGNAL_DETECTION_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -60,7 +62,7 @@ static YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER_DATABASES: LazyLock<Mutex<Hash
 static REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_CONSUMER_DATABASES: LazyLock<
     Mutex<HashSet<String>>,
 > = LazyLock::new(|| Mutex::new(HashSet::new()));
-static PERSON_IDENTITY_REVIEW_INBOX_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+static PERSONA_IDENTITY_REVIEW_INBOX_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static PROJECT_LINK_REVIEW_EFFECTS_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -75,6 +77,7 @@ static SIGNAL_REPLAY_DISPATCHER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
 const MAIL_BACKGROUND_SYNC_RUNTIME: &str = "mail_background_sync";
+const ADDRESS_BOOK_SYNC_RUNTIME: &str = "address_book_sync";
 const MAIL_OUTBOX_DELIVERY_RUNTIME: &str = "mail_outbox_delivery";
 const MAIL_AI_PIPELINE_RUNTIME: &str = "mail_ai_pipeline";
 const TELEGRAM_COMMAND_EXECUTOR_RUNTIME: &str = "telegram_command_executor";
@@ -109,14 +112,14 @@ const WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME: &str =
     "whatsapp_provider_observation_reconciliation";
 const COMMUNICATION_PROVIDER_OBSERVATION_RUNTIME: &str =
     "communication_provider_observation_projection";
-const PERSON_DERIVED_EVIDENCE_RUNTIME: &str = "person_derived_evidence";
+const PERSONA_DERIVED_EVIDENCE_RUNTIME: &str = "persona_derived_evidence";
 const ZOOM_SIGNAL_DETECTION_RUNTIME: &str = "zoom_signal_detection";
 const ZOOM_CALENDAR_MATCHING_RUNTIME: &str = "zoom_calendar_matching";
 const ZOOM_PARTICIPANT_IDENTITY_RUNTIME: &str = "zoom_participant_identity";
 const YANDEX_TELEMOST_CALENDAR_MATCHING_RUNTIME: &str = "yandex_telemost_calendar_matching";
 const REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_RUNTIME: &str =
     "realtime_conversation_transcript_execution";
-const PERSON_IDENTITY_REVIEW_INBOX_RUNTIME: &str = "person_identity_review_inbox";
+const PERSONA_IDENTITY_REVIEW_INBOX_RUNTIME: &str = "persona_identity_review_inbox";
 const PROJECT_LINK_REVIEW_EFFECTS_RUNTIME: &str = "project_link_review_effects";
 const REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_RUNTIME: &str =
     "realtime_conversation_transcript_projection";
@@ -140,6 +143,7 @@ pub(crate) struct ApplicationBootstrapContext {
 
 pub(crate) fn start_background_services(context: ApplicationBootstrapContext) {
     start_mail_background_sync(context.clone());
+    start_address_book_sync(context.clone());
     start_mail_outbox_delivery(context.clone());
     start_mail_ai_pipeline(context.clone());
     start_telegram_command_executor(context.clone());
@@ -156,13 +160,13 @@ pub(crate) fn start_background_services(context: ApplicationBootstrapContext) {
     start_whatsapp_runtime_event_projection(context.clone());
     start_whatsapp_provider_observation_reconciliation(context.clone());
     start_communication_provider_observation_projection(context.clone());
-    start_person_derived_evidence_projection(context.clone());
+    start_persona_derived_evidence_projection(context.clone());
     start_zoom_signal_detection_projection(context.clone());
     start_zoom_calendar_matching_projection(context.clone());
     start_zoom_participant_identity_projection(context.clone());
     start_yandex_telemost_calendar_matching_projection(context.clone());
     start_realtime_conversation_transcript_execution(context.clone());
-    start_person_identity_review_inbox_projection(context.clone());
+    start_persona_identity_review_inbox_projection(context.clone());
     start_project_link_review_effects_projection(context.clone());
     start_realtime_conversation_transcript_projection(context.clone());
     start_signal_hub_raw_signal_dispatcher(context.clone());
@@ -224,6 +228,59 @@ fn start_mail_background_sync(context: ApplicationBootstrapContext) {
             }
             if let Err(error) = service.run_due_accounts().await {
                 tracing::warn!(error = %error, "mail background sync scheduler tick failed");
+            }
+        }
+    });
+}
+
+fn start_address_book_sync(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_address_book_sync_scheduler(&database_url) {
+        return;
+    }
+    let vault = context.vault;
+
+    tokio::spawn(async move {
+        let service = crate::application::address_book_sync::AddressBookSyncService::new(
+            pool.clone(),
+            Arc::new(
+                crate::integrations::mail::address_book_sync_provider::LiveAddressBookProviderSyncPort::new(
+                    pool.clone(),
+                    vault,
+                    Arc::new(
+                        crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                            pool.clone(),
+                        ),
+                    ),
+                    crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+                ),
+            ),
+        );
+        let mut tick = tokio::time::interval(Duration::from_secs(300));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "mail",
+                ADDRESS_BOOK_SYNC_RUNTIME,
+                json!({
+                    "label": "Address book sync",
+                    "scope": "scheduler",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            if let Err(error) = service.run_due_accounts().await {
+                tracing::warn!(error = %error, "address book sync scheduler tick failed");
             }
         }
     });
@@ -1242,14 +1299,14 @@ fn start_communication_provider_observation_projection(context: ApplicationBoots
     });
 }
 
-fn start_person_derived_evidence_projection(context: ApplicationBootstrapContext) {
+fn start_persona_derived_evidence_projection(context: ApplicationBootstrapContext) {
     let Some(pool) = context.pool else {
         return;
     };
     let Some(database_url) = context.database_url else {
         return;
     };
-    if !register_person_derived_evidence_consumer(&database_url) {
+    if !register_persona_derived_evidence_consumer(&database_url) {
         return;
     }
 
@@ -1257,7 +1314,7 @@ fn start_person_derived_evidence_projection(context: ApplicationBootstrapContext
         let runner = crate::platform::events::EventConsumerRunner::new(
             pool.clone(),
             crate::platform::events::EventConsumerConfig::new(
-                crate::application::PERSON_DERIVED_EVIDENCE_CONSUMER,
+                crate::application::PERSONA_DERIVED_EVIDENCE_CONSUMER,
             ),
         );
         let mut tick = tokio::time::interval(Duration::from_secs(5));
@@ -1268,9 +1325,9 @@ fn start_person_derived_evidence_projection(context: ApplicationBootstrapContext
             if !runtime_allows_processing(
                 &pool,
                 "system",
-                PERSON_DERIVED_EVIDENCE_RUNTIME,
+                PERSONA_DERIVED_EVIDENCE_RUNTIME,
                 json!({
-                    "label": "Person derived evidence consumer",
+                    "label": "Persona derived evidence consumer",
                     "scope": "consumer",
                 }),
             )
@@ -1281,7 +1338,7 @@ fn start_person_derived_evidence_projection(context: ApplicationBootstrapContext
             let handler_pool = pool.clone();
             if let Err(error) = runner
                 .process_next_batch(|event| {
-                    crate::application::project_person_derived_evidence_event(
+                    crate::application::project_persona_derived_evidence_event(
                         handler_pool.clone(),
                         event,
                     )
@@ -1290,7 +1347,7 @@ fn start_person_derived_evidence_projection(context: ApplicationBootstrapContext
             {
                 tracing::warn!(
                     error = %error,
-                    "person derived evidence projection consumer tick failed"
+                    "persona derived evidence projection consumer tick failed"
                 );
             }
         }
@@ -1407,14 +1464,14 @@ fn start_zoom_signal_detection_projection(context: ApplicationBootstrapContext) 
     });
 }
 
-fn start_person_identity_review_inbox_projection(context: ApplicationBootstrapContext) {
+fn start_persona_identity_review_inbox_projection(context: ApplicationBootstrapContext) {
     let Some(pool) = context.pool else {
         return;
     };
     let Some(database_url) = context.database_url else {
         return;
     };
-    if !register_person_identity_review_inbox_consumer(&database_url) {
+    if !register_persona_identity_review_inbox_consumer(&database_url) {
         return;
     }
 
@@ -1422,7 +1479,7 @@ fn start_person_identity_review_inbox_projection(context: ApplicationBootstrapCo
         let runner = crate::platform::events::EventConsumerRunner::new(
             pool.clone(),
             crate::platform::events::EventConsumerConfig::new(
-                crate::application::PERSON_IDENTITY_REVIEW_INBOX_CONSUMER,
+                crate::application::PERSONA_IDENTITY_REVIEW_INBOX_CONSUMER,
             ),
         );
         let mut tick = tokio::time::interval(Duration::from_secs(5));
@@ -1433,9 +1490,9 @@ fn start_person_identity_review_inbox_projection(context: ApplicationBootstrapCo
             if !runtime_allows_processing(
                 &pool,
                 "system",
-                PERSON_IDENTITY_REVIEW_INBOX_RUNTIME,
+                PERSONA_IDENTITY_REVIEW_INBOX_RUNTIME,
                 json!({
-                    "label": "Person identity review inbox consumer",
+                    "label": "Persona identity review inbox consumer",
                     "scope": "consumer",
                 }),
             )
@@ -1446,7 +1503,7 @@ fn start_person_identity_review_inbox_projection(context: ApplicationBootstrapCo
             let handler_pool = pool.clone();
             if let Err(error) = runner
                 .process_next_batch(|event| {
-                    crate::application::project_person_identity_review_event(
+                    crate::application::project_persona_identity_review_event(
                         handler_pool.clone(),
                         event,
                     )
@@ -1455,7 +1512,7 @@ fn start_person_identity_review_inbox_projection(context: ApplicationBootstrapCo
             {
                 tracing::warn!(
                     error = %error,
-                    "person identity review inbox projection consumer tick failed"
+                    "persona identity review inbox projection consumer tick failed"
                 );
             }
         }
@@ -2054,13 +2111,13 @@ fn register_communication_provider_observation_consumer(database_url: &str) -> b
     }
 }
 
-fn register_person_derived_evidence_consumer(database_url: &str) -> bool {
-    match PERSON_DERIVED_EVIDENCE_CONSUMER_DATABASES.lock() {
+fn register_persona_derived_evidence_consumer(database_url: &str) -> bool {
+    match PERSONA_DERIVED_EVIDENCE_CONSUMER_DATABASES.lock() {
         Ok(mut databases) => databases.insert(database_url.to_owned()),
         Err(error) => {
             tracing::warn!(
                 error = %error,
-                "person derived evidence consumer registry is unavailable"
+                "persona derived evidence consumer registry is unavailable"
             );
             false
         }
@@ -2132,13 +2189,13 @@ fn register_yandex_telemost_calendar_matching_consumer(database_url: &str) -> bo
     }
 }
 
-fn register_person_identity_review_inbox_consumer(database_url: &str) -> bool {
-    match PERSON_IDENTITY_REVIEW_INBOX_CONSUMER_DATABASES.lock() {
+fn register_persona_identity_review_inbox_consumer(database_url: &str) -> bool {
+    match PERSONA_IDENTITY_REVIEW_INBOX_CONSUMER_DATABASES.lock() {
         Ok(mut databases) => databases.insert(database_url.to_owned()),
         Err(error) => {
             tracing::warn!(
                 error = %error,
-                "person identity review inbox consumer registry is unavailable"
+                "persona identity review inbox consumer registry is unavailable"
             );
             false
         }
@@ -2229,6 +2286,19 @@ fn register_mail_background_sync_scheduler(database_url: &str) -> bool {
             tracing::warn!(
                 error = %error,
                 "mail background sync scheduler registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn register_address_book_sync_scheduler(database_url: &str) -> bool {
+    match ADDRESS_BOOK_SYNC_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "address book sync scheduler registry is unavailable"
             );
             false
         }
@@ -2494,7 +2564,7 @@ async fn mail_ai_target_language(pool: &PgPool) -> String {
     let language = sqlx::query_scalar::<_, String>(
         r#"
         SELECT language
-        FROM persons
+        FROM personas
         WHERE is_self = true
           AND language IS NOT NULL
           AND length(trim(language)) > 0

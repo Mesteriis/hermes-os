@@ -956,7 +956,7 @@ fn whatsapp_runtime_has_no_direct_domain_or_engine_write_boundary() {
         + &read_all_sources(root.join("backend/src/workflows"));
 
     for forbidden in [
-        "crate::domains::persons",
+        "crate::domains::personas",
         "crate::domains::tasks",
         "crate::domains::documents",
         "crate::domains::memory",

@@ -5,6 +5,6 @@ mod documents;
 mod integrations;
 mod knowledge;
 mod organizations;
-mod persons;
+mod personas;
 mod platform;
 mod tasks;

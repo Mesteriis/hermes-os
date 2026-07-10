@@ -140,7 +140,7 @@ export type SyncPatchPayload = {
 	current_batch_size?: unknown
 	fetched_messages?: unknown
 	projected_messages?: unknown
-	upserted_persons?: unknown
+	upserted_personas?: unknown
 	upserted_organizations?: unknown
 	error_code?: unknown
 	next_run_at?: unknown

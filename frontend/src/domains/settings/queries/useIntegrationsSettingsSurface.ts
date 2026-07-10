@@ -11,6 +11,7 @@ import {
   useCalendarAccountsQuery,
   useLogoutMailAccountMutation,
   useProviderAccountsQuery,
+  useRunAddressBookSyncNowMutation,
   useUpdateCalendarAccountMutation,
   useUpdateProviderAccountMutation,
 } from './useSettingsQuery'
@@ -65,6 +66,10 @@ export interface AccountServiceRow {
   statusText: string
   detail: string
   canToggle: boolean
+  canRunNow?: boolean
+  runNowLabel?: string
+  modeActionLabel?: string
+  canRunModeAction?: boolean
   disabledReason?: string
   isBusy: boolean
 }
@@ -118,6 +123,50 @@ function isManagedRuntimeProvider(providerKind: string): boolean {
     isYandexTelemostProvider(providerKind) ||
     isZulipProvider(providerKind)
   )
+}
+
+function accountConnectedServices(account: ProviderAccount): string[] {
+  const raw = account.config?.connected_services
+  if (!Array.isArray(raw)) return []
+  return raw.filter((service): service is string => typeof service === 'string')
+}
+
+function accountConfigBoolean(account: ProviderAccount, key: string): boolean | null {
+  const value = account.config?.[key]
+  return typeof value === 'boolean' ? value : null
+}
+
+function accountConfigString(account: ProviderAccount, key: string): string | null {
+  const value = account.config?.[key]
+  return typeof value === 'string' ? value : null
+}
+
+function accountSupportsContacts(account: ProviderAccount): boolean {
+  return accountConnectedServices(account).includes('contacts')
+}
+
+function accountContactsSyncEnabled(account: ProviderAccount): boolean {
+  return accountConfigBoolean(account, 'address_book_sync_enabled') ?? false
+}
+
+function accountContactsSyncDirection(account: ProviderAccount): 'read_only' | 'bidirectional' {
+  return accountConfigString(account, 'address_book_sync_direction') === 'bidirectional'
+    ? 'bidirectional'
+    : 'read_only'
+}
+
+function accountContactsRemoteWriteEnabled(account: ProviderAccount): boolean {
+  return accountConfigBoolean(account, 'address_book_remote_write_enabled') ?? false
+}
+
+function accountRequestedScopes(account: ProviderAccount): string[] {
+  const raw = account.config?.requested_scopes
+  if (!Array.isArray(raw)) return []
+  return raw.filter((scope): scope is string => typeof scope === 'string')
+}
+
+function accountHasGoogleContactsWriteScope(account: ProviderAccount): boolean {
+  return accountRequestedScopes(account).includes('https://www.googleapis.com/auth/contacts')
 }
 
 function providerLabel(providerKind: string): string {
@@ -197,6 +246,7 @@ export function useIntegrationsSettingsSurface() {
   const updateMailSyncSettingsMutation = useUpdateMailSyncSettingsMutation()
   const updateCalendarAccountMutation = useUpdateCalendarAccountMutation()
   const updateProviderAccountMutation = useUpdateProviderAccountMutation()
+  const runAddressBookSyncNowMutation = useRunAddressBookSyncNowMutation()
 
   const isConnectWizardOpen = ref(false)
   const activeMailAction = ref<string | null>(null)
@@ -519,6 +569,11 @@ export function useIntegrationsSettingsSurface() {
       return
     }
 
+    if (serviceId === 'contacts') {
+      await handleToggleContactsService(account, enabled)
+      return
+    }
+
     store.setError(t('This service does not expose a settings toggle contract yet.'))
   }
 
@@ -573,6 +628,102 @@ export function useIntegrationsSettingsSurface() {
     }
   }
 
+  async function handleToggleContactsService(account: ProviderAccount, enabled: boolean) {
+    if (!accountSupportsContacts(account)) {
+      store.setError(t('Contacts are not provided by this integration.'))
+      return
+    }
+    if (accountConfigString(account, 'address_book_sync_unsupported_reason')) {
+      store.setError(t('Contacts sync is disabled for this account because the provider adapter is not available.'))
+      return
+    }
+
+    activeMailAction.value = account.account_id
+    store.clearMessages()
+    try {
+      await updateProviderAccountMutation.mutateAsync({
+        accountId: account.account_id,
+        update: {
+          address_book_sync_enabled: enabled,
+        },
+      })
+      store.setActionMessage(enabled ? t('Contacts sync enabled') : t('Contacts sync paused'))
+    } catch (error) {
+      store.setError(error instanceof Error ? error.message : t('Contacts sync update failed'))
+    } finally {
+      activeMailAction.value = null
+    }
+  }
+
+  async function handleEnableSelectedContactsBidirectional() {
+    const account = selectedAccount.value
+    if (!account) return
+    if (!accountSupportsContacts(account)) {
+      store.setError(t('Contacts are not provided by this integration.'))
+      return
+    }
+    if (accountConfigString(account, 'address_book_sync_unsupported_reason')) {
+      store.setError(t('Contacts sync is disabled for this account because the provider adapter is not available.'))
+      return
+    }
+
+    activeMailAction.value = account.account_id
+    store.clearMessages()
+    try {
+      await updateProviderAccountMutation.mutateAsync({
+        accountId: account.account_id,
+        update: {
+          address_book_sync_enabled: true,
+          address_book_sync_direction: 'bidirectional',
+          address_book_remote_write_enabled: accountHasGoogleContactsWriteScope(account),
+        },
+      })
+      store.setActionMessage(
+        accountHasGoogleContactsWriteScope(account)
+          ? t('Contacts two-way sync enabled')
+          : t('Contacts two-way sync is prepared; reconnect with Contacts write scope to push changes.')
+      )
+    } catch (error) {
+      store.setError(error instanceof Error ? error.message : t('Contacts sync update failed'))
+    } finally {
+      activeMailAction.value = null
+    }
+  }
+
+  async function handleRunSelectedServiceNow(serviceId: AccountServiceRow['id']) {
+    const account = selectedAccount.value
+    if (!account) return
+
+    if (serviceId !== 'contacts') {
+      store.setError(t('This service does not expose a manual sync action yet.'))
+      return
+    }
+    if (!accountSupportsContacts(account)) {
+      store.setError(t('Contacts are not provided by this integration.'))
+      return
+    }
+    if (accountConfigString(account, 'address_book_sync_unsupported_reason')) {
+      store.setError(t('Contacts sync is disabled for this account because the provider adapter is not available.'))
+      return
+    }
+
+    activeMailAction.value = account.account_id
+    store.clearMessages()
+    try {
+      const result = await runAddressBookSyncNowMutation.mutateAsync(account.account_id)
+      store.setActionMessage(
+        t('Address book sync finished: {provider} provider entries, {local} local entries.', {
+          provider: String(result.provider_entries_upserted),
+          local: String(result.local_entries_pushed),
+        })
+      )
+    } catch (error) {
+      store.setError(error instanceof Error ? error.message : t('Address book sync failed'))
+    } finally {
+      activeMailAction.value = null
+    }
+  }
+
   function serviceRowsForAccount(account: ProviderAccount): AccountServiceRow[] {
     const rows: AccountServiceRow[] = []
     const mailSyncSettings = selectedMailSyncSettings.value
@@ -588,8 +739,9 @@ export function useIntegrationsSettingsSurface() {
         detail: mailSyncSettings
           ? t('Uses backend mail sync settings for this account.')
           : t('Waiting for mail sync settings from the backend.'),
-        canToggle: Boolean(mailSyncSettings),
-        disabledReason: mailSyncSettings ? undefined : t('Sync settings are still loading.'),
+      canToggle: Boolean(mailSyncSettings),
+      canRunNow: false,
+      disabledReason: mailSyncSettings ? undefined : t('Sync settings are still loading.'),
         isBusy: updateMailSyncSettingsMutation.isPending.value && activeMailAction.value === account.account_id,
       })
     }
@@ -605,22 +757,56 @@ export function useIntegrationsSettingsSurface() {
         detail: calendarAccount
           ? t('Uses the Calendar account sync_status contract.')
           : t('No matching Calendar account exists for this provider account.'),
-        canToggle: Boolean(calendarAccount),
-        disabledReason: calendarAccount ? undefined : t('Calendar account endpoint has no linked account yet.'),
+      canToggle: Boolean(calendarAccount),
+      canRunNow: false,
+      disabledReason: calendarAccount ? undefined : t('Calendar account endpoint has no linked account yet.'),
         isBusy: updateCalendarAccountMutation.isPending.value,
       })
     }
 
+    const contactsSupported = accountSupportsContacts(account)
+    const contactsEnabled = contactsSupported && accountContactsSyncEnabled(account)
+    const contactsUnsupportedReason = accountConfigString(account, 'address_book_sync_unsupported_reason')
+    const contactsDirection = accountContactsSyncDirection(account)
+    const contactsRemoteWriteEnabled = accountContactsRemoteWriteEnabled(account)
+    const contactsCanWrite = account.provider_kind === 'gmail' && accountHasGoogleContactsWriteScope(account)
+    const contactsDetail = contactsSupported
+      ? contactsUnsupportedReason
+        ? t('Contacts sync is disabled for this account because the provider adapter is not available.')
+        : contactsDirection === 'bidirectional'
+          ? contactsRemoteWriteEnabled
+            ? t('Two-way sync with provider contacts is enabled.')
+            : contactsCanWrite
+              ? t('Two-way sync is selected, but provider write is paused.')
+              : t('Two-way sync is selected, but this account needs Contacts write permission before Hermes can push changes.')
+          : t('Contacts sync reads provider contacts into Personas. Local changes are not pushed.')
+      : t('Contacts are not provided by this integration.')
     rows.push({
       id: 'contacts',
       label: t('Contacts'),
       icon: 'tabler:address-book',
-      enabled: false,
-      statusText: t('No contract'),
-      detail: t('Contacts service toggle is hidden until the Contacts API contract exists.'),
-      canToggle: false,
-      disabledReason: t('Contacts account API is not present in the current backend contracts.'),
-      isBusy: false,
+      enabled: contactsEnabled,
+      statusText: contactsSupported
+        ? contactsEnabled
+          ? contactsDirection === 'bidirectional'
+            ? t('Two-way sync')
+            : t('Read-only sync')
+          : contactsUnsupportedReason
+            ? t('Not supported')
+            : t('Sync paused')
+        : t('Not provided'),
+      detail: contactsDetail,
+      canToggle: contactsSupported && !contactsUnsupportedReason,
+      canRunNow: contactsSupported && !contactsUnsupportedReason,
+      runNowLabel: t('Sync now'),
+      modeActionLabel: contactsDirection === 'bidirectional' ? undefined : t('Enable two-way'),
+      canRunModeAction: contactsSupported && !contactsUnsupportedReason && contactsDirection !== 'bidirectional',
+      disabledReason: contactsSupported
+        ? contactsUnsupportedReason
+          ? t('Contacts sync is disabled for this account because the provider adapter is not available.')
+          : undefined
+        : t('Contacts are not provided by this integration.'),
+      isBusy: (updateProviderAccountMutation.isPending.value || runAddressBookSyncNowMutation.isPending.value) && activeMailAction.value === account.account_id,
     })
 
     if (isTelegramProvider(account.provider_kind) || isWhatsappProvider(account.provider_kind)) {
@@ -632,6 +818,7 @@ export function useIntegrationsSettingsSurface() {
         statusText: statusText(account),
         detail: t('Runtime-owned messaging service; setup continues through the managed route.'),
         canToggle: false,
+        canRunNow: false,
         disabledReason: t('Messenger runtime toggles are not exposed through Settings yet.'),
         isBusy: false,
       })
@@ -646,6 +833,7 @@ export function useIntegrationsSettingsSurface() {
         statusText: statusText(account),
         detail: t('Meeting integration is runtime-owned and managed through its provider flow.'),
         canToggle: false,
+        canRunNow: false,
         disabledReason: t('Meeting runtime toggle is not exposed through Settings yet.'),
         isBusy: false,
       })
@@ -677,6 +865,8 @@ export function useIntegrationsSettingsSurface() {
     handleLogout,
     handleToggleSelectedAccount,
     handleToggleSelectedService,
+    handleRunSelectedServiceNow,
+    handleEnableSelectedContactsBidirectional,
     selectedMailSyncSettings,
     selectedMailSyncSettingsQuery,
   }

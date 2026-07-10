@@ -8,7 +8,7 @@ The functional spec requires every AI-extracted or discovered fact about a perso
 
 ## Decision
 
-Store all facts, memory cards, preferences, and expertise in dedicated domain tables (`person_facts`, `person_memory_cards`, `person_preferences`, `person_expertise`) with mandatory `source`, `confidence`, and `last_verified_at` columns. The enrichment engine writes through these tables and never mutates the person profile directly. Memory decay is a scheduled projection that lowers confidence for unverified facts older than a threshold.
+Store all facts, memory cards, preferences, and expertise in dedicated domain tables (`persona_facts`, `persona_memory_cards`, `persona_preferences`, `person_expertise`) with mandatory `source`, `confidence`, and `last_verified_at` columns. The enrichment engine writes through these tables and never mutates the person profile directly. Memory decay is a scheduled projection that lowers confidence for unverified facts older than a threshold.
 
 ## Consequences
 
