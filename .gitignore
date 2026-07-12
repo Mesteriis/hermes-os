@@ -60,3 +60,4 @@ temp/
 .autoclaw/
 # wiki
 docs/wiki/_meta
+.playwright-cli
