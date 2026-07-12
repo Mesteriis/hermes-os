@@ -224,6 +224,7 @@ pub type ProviderChannelMessagePortFuture<'a, T> =
 pub struct ProviderAttachmentDownloadStateUpdate<'a> {
     pub message_id: &'a str,
     pub provider_attachment_id: &'a str,
+    pub communication_attachment_id: Option<&'a str>,
     pub provider_file_id: i64,
     pub download_state: &'a str,
     pub local_path: Option<&'a str>,
@@ -1561,6 +1562,9 @@ fn provider_observation_event_type(provider: &str, event_kind: &str) -> String {
             "metadata_observed" => "signal.raw.telegram.message.metadata.observed".to_owned(),
             "delivery_state_observed" => {
                 "signal.raw.telegram.message.delivery_state.observed".to_owned()
+            }
+            "provider_identity_observed" => {
+                "signal.raw.telegram.message.provider_identity.observed".to_owned()
             }
             "pinned_state_observed" => {
                 "signal.raw.telegram.message.pinned_state.observed".to_owned()

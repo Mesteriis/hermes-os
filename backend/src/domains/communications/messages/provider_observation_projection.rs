@@ -100,6 +100,7 @@ fn is_supported_provider_observation_event(event_type: &str) -> bool {
         "signal.accepted.telegram.message.content"
             | "signal.accepted.telegram.message.metadata"
             | "signal.accepted.telegram.message.delivery_state"
+            | "signal.accepted.telegram.message.provider_identity"
             | "signal.accepted.telegram.message.pinned_state"
             | "signal.accepted.telegram.attachment.download_state"
     )
@@ -713,6 +714,12 @@ async fn project_telegram_observation(
                 .set_delivery_state(message_id, delivery_state, observed_at, context)
                 .await
         }
+        "provider_identity_observed" => {
+            let provider_record_id = required_str(fact_payload, "provider_record_id")?;
+            store
+                .rebind_provider_record_id(message_id, provider_record_id, observed_at, context)
+                .await
+        }
         "content_observed" => {
             let body_text = required_str(fact_payload, "body_text")?;
             let metadata = fact_payload.get("message_metadata").ok_or_else(|| {
@@ -741,6 +748,10 @@ async fn project_telegram_observation(
             let update = ProviderAttachmentDownloadStateUpdate {
                 message_id,
                 provider_attachment_id: required_str(fact_payload, "provider_attachment_id")?,
+                communication_attachment_id: optional_str(
+                    fact_payload,
+                    "communication_attachment_id",
+                ),
                 provider_file_id: required_i64(fact_payload, "provider_file_id")?,
                 download_state: required_str(fact_payload, "download_state")?,
                 local_path: optional_str(fact_payload, "local_path"),
@@ -800,6 +811,7 @@ fn telegram_projection_context(
         relationship_kind: match event_kind {
             "metadata_observed" => "telegram_metadata_observed",
             "delivery_state_observed" => "telegram_delivery_state_observed",
+            "provider_identity_observed" => "telegram_provider_identity_observed",
             "content_observed" => "telegram_content_observed",
             "pinned_state_observed" => "telegram_pinned_state_observed",
             "attachment_download_state_observed" => "telegram_attachment_download_state_observed",

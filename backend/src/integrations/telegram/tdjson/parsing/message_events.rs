@@ -4,7 +4,8 @@ use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::tdjson::snapshots::{
     TelegramTdlibMessageContentSnapshot, TelegramTdlibMessageDeleteSnapshot,
     TelegramTdlibMessageEditedSnapshot, TelegramTdlibMessageInteractionInfoSnapshot,
-    TelegramTdlibMessagePinnedSnapshot, TelegramTdlibMessageSnapshot,
+    TelegramTdlibMessagePinnedSnapshot, TelegramTdlibMessageSendFailedSnapshot,
+    TelegramTdlibMessageSendSucceededSnapshot, TelegramTdlibMessageSnapshot,
 };
 
 use super::message_parts::tdlib_message_text;
@@ -72,6 +73,50 @@ pub(crate) fn parse_tdlib_message_delete_snapshot(
         from_cache,
         source_event: "updateDeleteMessages".to_owned(),
         raw: event.clone(),
+    }))
+}
+
+pub(crate) fn parse_tdlib_message_send_failed_snapshot(
+    event: &Value,
+) -> Result<Option<TelegramTdlibMessageSendFailedSnapshot>, TelegramError> {
+    if event.get("@type").and_then(Value::as_str) != Some("updateMessageSendFailed") {
+        return Ok(None);
+    }
+
+    let provider_chat_id = tdlib_string_id(event, "chat_id")?;
+    let old_provider_message_id = tdlib_string_id(event, "old_message_id")?;
+    let error_code = event
+        .get("error")
+        .and_then(|error| error.get("code"))
+        .and_then(Value::as_i64);
+
+    Ok(Some(TelegramTdlibMessageSendFailedSnapshot {
+        provider_chat_id,
+        old_provider_message_id,
+        error_code,
+        source_event: "updateMessageSendFailed".to_owned(),
+    }))
+}
+
+pub(crate) fn parse_tdlib_message_send_succeeded_snapshot(
+    event: &Value,
+) -> Result<Option<TelegramTdlibMessageSendSucceededSnapshot>, TelegramError> {
+    if event.get("@type").and_then(Value::as_str) != Some("updateMessageSendSucceeded") {
+        return Ok(None);
+    }
+
+    let provider_chat_id = tdlib_string_id(event, "chat_id")?;
+    let old_provider_message_id = tdlib_string_id(event, "old_message_id")?;
+    let message = event.get("message").ok_or_else(|| {
+        TelegramError::TdlibRuntime("updateMessageSendSucceeded missing `message`".to_owned())
+    })?;
+    let provider_message_id = tdlib_string_id(message, "id")?;
+
+    Ok(Some(TelegramTdlibMessageSendSucceededSnapshot {
+        provider_chat_id,
+        old_provider_message_id,
+        provider_message_id,
+        source_event: "updateMessageSendSucceeded".to_owned(),
     }))
 }
 
@@ -230,6 +275,38 @@ mod tests {
         assert_eq!(snapshot.provider_message_ids, vec!["42", "43"]);
         assert!(snapshot.is_permanent);
         assert!(!snapshot.from_cache);
+    }
+
+    #[test]
+    fn parses_update_message_send_failed_snapshot() {
+        let snapshot = parse_tdlib_message_send_failed_snapshot(&json!({
+            "@type": "updateMessageSendFailed",
+            "chat_id": -100123,
+            "old_message_id": -42,
+            "error": { "@type": "error", "code": 429, "message": "FLOOD_WAIT" }
+        }))
+        .expect("parse updateMessageSendFailed")
+        .expect("snapshot");
+
+        assert_eq!(snapshot.provider_chat_id, "-100123");
+        assert_eq!(snapshot.old_provider_message_id, "-42");
+        assert_eq!(snapshot.error_code, Some(429));
+    }
+
+    #[test]
+    fn parses_update_message_send_succeeded_snapshot() {
+        let snapshot = parse_tdlib_message_send_succeeded_snapshot(&json!({
+            "@type": "updateMessageSendSucceeded",
+            "chat_id": -100123,
+            "old_message_id": -42,
+            "message": { "@type": "message", "id": 42 }
+        }))
+        .expect("parse updateMessageSendSucceeded")
+        .expect("snapshot");
+
+        assert_eq!(snapshot.provider_chat_id, "-100123");
+        assert_eq!(snapshot.old_provider_message_id, "-42");
+        assert_eq!(snapshot.provider_message_id, "42");
     }
 
     #[test]

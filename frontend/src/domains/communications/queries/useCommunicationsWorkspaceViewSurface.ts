@@ -1,29 +1,25 @@
-import { computed, ref, toValue, watch, type MaybeRefOrGetter } from 'vue'
+import { computed, onScopeDispose, ref, toValue, watch, type MaybeRefOrGetter } from 'vue'
 import { getActivePinia } from 'pinia'
 import {
-  attachmentIcon,
-  messageTime,
   senderEmail,
   senderLabel,
 } from '../stores/communications'
 import type {
-  CommunicationAttachment,
-  CommunicationMessageDetailItem,
-  CommunicationMessageSummary,
-  TranslationResponse,
-} from '../types/communications'
-import type {
-  CommunicationConversationAttachmentModel,
-  CommunicationConversationMessageModel,
   CommunicationConversationModel,
 } from '../components/communicationDomainElements'
 import type { MailListItemModel } from '../components/mail/mailElements'
 import type { MailInspectorModel } from '../components/mail/mailInspector'
-import type { MessengerListItemModel } from '../components/messengers/messengerElements'
+import type { MessengerAttachmentModel, MessengerListItemModel } from '../components/messengers/messengerElements'
 import {
-  mailActionGroups,
   selectMailWorkspaceAction,
 } from './communicationMailWorkspaceActions'
+import {
+  attachmentCount,
+  conversationMessage,
+  emptyConversation,
+  mailSyncStatusIsActive,
+  messageTranslation,
+} from './communicationWorkspaceMailPresentation'
 import { mailItem } from './communicationMailWorkspaceModels'
 import {
   routeToAccountId,
@@ -42,9 +38,12 @@ import {
 } from './communicationMessengerWorkspaceModels'
 import {
   useTelegramChatsQuery,
-  useTelegramMessagesQuery,
+  useTelegramMessagesInfiniteQuery,
+  useSendTelegramMessageMutation,
 } from './telegramBusinessQueries'
+import type { TelegramConversationRuntimeAction, TelegramConversationRuntimeActionRunner } from '../../../shared/communications/types/telegramRuntimeActions'
 import { useNotificationsStore, type NotificationItem } from '../../../shared/stores/notifications'
+import { useToast } from '@/shared/ui'
 import { useCommunicationsPageSurface } from './useCommunicationsPageSurface'
 import {
   useWhatsappBusinessConversationsQuery,
@@ -56,14 +55,35 @@ import { useDelayedMessageRead } from './useDelayedMessageRead'
 import { useMessageAiStateQuery } from './mailCoreQueries'
 import { buildMailInspector } from './mailInspectorPresentation'
 import { prepareMailImport } from '../forms/mailImport'
+import { messengerComposerPlainText } from '../components/messengers/messengerComposer'
+import { createTelegramInitialHistorySynchronizer } from './telegramInitialHistorySync'
+import { createTelegramChatAvatarSynchronizer } from './telegramChatAvatarSync'
+import { useTelegramWorkspaceAutoRead } from './useTelegramWorkspaceAutoRead'
+import {
+  latestTelegramInboundMessageId,
+  telegramTdlibMessageId,
+} from './telegramWorkspacePresentation'
+import {
+  telegramAttachmentDownloadExtras,
+  type TelegramAttachmentDownloadExtras,
+} from './telegramAttachmentDownload'
 
 export function useCommunicationsWorkspaceViewSurface(
-  selectedRouteId?: MaybeRefOrGetter<string | undefined>
+  selectedRouteId?: MaybeRefOrGetter<string | undefined>,
+  telegramRuntimeActionRunner?: MaybeRefOrGetter<TelegramConversationRuntimeActionRunner | undefined>
 ) {
   const pageSurface = useCommunicationsPageSurface()
   const notificationsStore = getActivePinia() ? useNotificationsStore() : null
+  const toast = useToast()
   const selectedTelegramChatId = ref('')
+  const telegramMessagesVisibleForChatId = ref('')
+  const selectedTelegramMessageId = ref('')
   const selectedWhatsappProviderChatId = ref('')
+  const isTelegramConversationActionRunning = ref(false)
+  const isTelegramInitialHistorySyncing = ref(false)
+  const isTelegramProviderHistoryLoading = ref(false)
+  const exhaustedTelegramHistoryChatKeys = new Set<string>()
+  const telegramChatAvatarSynchronizer = createTelegramChatAvatarSynchronizer()
   const activeChannelId = computed<PrimaryChannelId>(
     () => routeToChannelId(toValue(selectedRouteId)) ?? 'mail'
   )
@@ -229,27 +249,65 @@ export function useCommunicationsWorkspaceViewSurface(
         (chat) => chat.telegram_chat_id === selectedTelegramChatId.value
       ) ?? null
   )
-  const telegramMessagesQuery = useTelegramMessagesQuery(
+  const telegramMessagesQuery = useTelegramMessagesInfiniteQuery(
     () => selectedTelegramChat.value?.account_id ?? null,
     () => selectedTelegramChat.value?.provider_chat_id ?? null,
-    200
+    100
   )
   const telegramMessages = computed(
-    () => telegramMessagesQuery.data.value ?? []
+    () => (telegramMessagesQuery.data.value?.pages.flatMap((page) => page.items) ?? [])
+      .sort((left, right) => {
+        const leftAt = left.occurred_at ?? left.projected_at
+        const rightAt = right.occurred_at ?? right.projected_at
+        return leftAt.localeCompare(rightAt) || left.message_id.localeCompare(right.message_id)
+      })
   )
+  const syncSelectedTelegramHistoryIfNeeded = createTelegramInitialHistorySynchronizer({
+    resolveRunner: () => telegramRuntimeActionRunner ? toValue(telegramRuntimeActionRunner) : undefined,
+    refetchMessages: () => telegramMessagesQuery.refetch(),
+    messageCount: () => telegramMessages.value.length,
+    setError: showTelegramActionError,
+    setSyncing: (value) => { isTelegramInitialHistorySyncing.value = value },
+  })
+  const selectedTelegramMessage = computed(
+    () => telegramMessages.value.find(
+      (message) => message.message_id === selectedTelegramMessageId.value
+    ) ?? null
+  )
+  const sendTelegramMessageMutation = useSendTelegramMessageMutation()
   const telegramMessengerItems = computed(() =>
     telegramChats.value.map((chat) =>
-      telegramMessengerListItem(chat, selectedTelegramChatId.value)
+      telegramMessengerListItem(
+        chat,
+        selectedTelegramChatId.value,
+        telegramChatAvatarSynchronizer.sourceFor(chat.telegram_chat_id)
+      )
     )
   )
   const telegramMessengerConversation = computed(() =>
     buildTelegramMessengerConversation(
       selectedTelegramChat.value,
-      telegramMessages.value
+      telegramMessages.value,
+      selectedTelegramMessageId.value
     )
   )
   const telegramMessengerInspector = computed(() =>
     messengerInspectorModel('telegram', telegramMessengerConversation.value)
+  )
+
+  useTelegramWorkspaceAutoRead(
+    () => activeChannelId.value === 'telegram' ? selectedTelegramChat.value : null,
+    () => telegramMessagesVisibleForChatId.value === selectedTelegramChat.value?.telegram_chat_id,
+    () => telegramRuntimeActionRunner ? toValue(telegramRuntimeActionRunner) : undefined,
+    async (chat, runner) => {
+      if (selectedTelegramChat.value?.telegram_chat_id !== chat.telegram_chat_id) return
+      await runTelegramConversationAction('mark_read', runner)
+    },
+    (error) => {
+      showTelegramActionError(
+        error instanceof Error ? error.message : 'Telegram read-state sync failed.'
+      )
+    }
   )
 
   const whatsappConversationsQuery = useWhatsappBusinessConversationsQuery(
@@ -323,6 +381,33 @@ export function useCommunicationsWorkspaceViewSurface(
     },
     { immediate: true }
   )
+  watch(
+    telegramMessages,
+    (items) => {
+      if (items.some((message) => message.message_id === selectedTelegramMessageId.value)) return
+      selectedTelegramMessageId.value = items[0]?.message_id ?? ''
+    },
+    { immediate: true }
+  )
+  watch(
+    telegramChats,
+    (chats) => { void telegramChatAvatarSynchronizer.sync(chats) },
+    { immediate: true }
+  )
+  onScopeDispose(() => telegramChatAvatarSynchronizer.dispose())
+  watch(
+    () => ({
+      activeChannel: activeChannelId.value,
+      chat: selectedTelegramChat.value,
+      hasFetchedMessages: telegramMessagesQuery.isFetched.value,
+      messageCount: telegramMessages.value.length,
+    }),
+    ({ activeChannel, chat, hasFetchedMessages }) => {
+      if (activeChannel !== 'telegram' || !chat || !hasFetchedMessages) return
+      void syncSelectedTelegramHistoryIfNeeded(chat)
+    },
+    { immediate: true }
+  )
   return {
     activeChannelId,
     conversation,
@@ -340,10 +425,30 @@ export function useCommunicationsWorkspaceViewSurface(
     importMailFile,
     selectMailMessage,
     selectTelegramConversation,
+    markTelegramMessagesVisible,
+    selectTelegramMessage,
+    submitTelegramMessage,
+    runTelegramConversationAction,
+    downloadTelegramAttachment,
+    isTelegramActionRunning: computed(() =>
+      sendTelegramMessageMutation.isPending.value
+      || isTelegramConversationActionRunning.value
+      || isTelegramInitialHistorySyncing.value
+    ),
+    isTelegramListLoading: computed(() => telegramChatsQuery.isLoading.value),
+    isTelegramListRefreshing: computed(() => telegramChatsQuery.isFetching.value),
+    telegramListError: computed(() => telegramChatsQuery.error.value?.message ?? ''),
+    refreshTelegramConversations,
+    loadOlderTelegramMessages,
+    isTelegramLoadingOlder: computed(() =>
+      telegramMessagesQuery.isFetchingNextPage.value || isTelegramProviderHistoryLoading.value
+    ),
     selectWhatsappConversation,
     telegramMessengerConversation,
     telegramMessengerInspector,
     telegramMessengerItems,
+    selectedTelegramChat,
+    selectedTelegramMessage,
     whatsappMessengerConversation,
     whatsappMessengerInspector,
     whatsappMessengerItems,
@@ -354,6 +459,130 @@ export function useCommunicationsWorkspaceViewSurface(
 
   function selectTelegramConversation(item: MessengerListItemModel): void {
     selectedTelegramChatId.value = item.id
+    telegramMessagesVisibleForChatId.value = ''
+  }
+
+  function markTelegramMessagesVisible(): void {
+    const chat = selectedTelegramChat.value
+    if (chat && telegramMessages.value.length > 0) {
+      telegramMessagesVisibleForChatId.value = chat.telegram_chat_id
+    }
+  }
+
+  async function refreshTelegramConversations(): Promise<void> {
+    await telegramChatsQuery.refetch()
+    if (selectedTelegramChat.value) {
+      await telegramMessagesQuery.refetch()
+      exhaustedTelegramHistoryChatKeys.delete(
+        `${selectedTelegramChat.value.account_id}:${selectedTelegramChat.value.provider_chat_id}`
+      )
+    }
+  }
+
+  async function loadOlderTelegramMessages(): Promise<void> {
+    const chat = selectedTelegramChat.value
+    if (!chat || telegramMessagesQuery.isFetchingNextPage.value) return
+    const chatKey = `${chat.account_id}:${chat.provider_chat_id}`
+    if (exhaustedTelegramHistoryChatKeys.has(chatKey)) return
+
+    if (telegramMessagesQuery.hasNextPage.value) {
+      await telegramMessagesQuery.fetchNextPage()
+      return
+    }
+
+    const runner = telegramRuntimeActionRunner ? toValue(telegramRuntimeActionRunner) : undefined
+    const oldestMessage = telegramMessages.value[0]
+    const previousMessageIds = new Set(telegramMessages.value.map((message) => message.message_id))
+    const oldestProviderMessageId = telegramTdlibMessageId(oldestMessage?.provider_message_id)
+    if (!runner || !oldestProviderMessageId) return
+
+    isTelegramProviderHistoryLoading.value = true
+    try {
+      await runTelegramConversationAction(
+        'sync_older',
+        runner,
+        undefined,
+        undefined,
+        { historyFromMessageId: oldestProviderMessageId }
+      )
+      await telegramMessagesQuery.refetch()
+      if (telegramMessagesQuery.hasNextPage.value) {
+        await telegramMessagesQuery.fetchNextPage()
+      }
+      const loadedNewMessage = telegramMessages.value.some(
+        (message) => !previousMessageIds.has(message.message_id)
+      )
+      if (!loadedNewMessage && !telegramMessagesQuery.hasNextPage.value) {
+        exhaustedTelegramHistoryChatKeys.add(chatKey)
+      }
+    } finally {
+      isTelegramProviderHistoryLoading.value = false
+    }
+  }
+
+  function selectTelegramMessage(messageId: string): void {
+    selectedTelegramMessageId.value = messageId
+  }
+
+  async function submitTelegramMessage(value: string): Promise<void> {
+    const chat = selectedTelegramChat.value
+    const text = messengerComposerPlainText(value)
+    if (!chat || !text) return
+
+    try {
+      await sendTelegramMessageMutation.mutateAsync({
+        account_id: chat.account_id,
+        provider_chat_id: chat.provider_chat_id,
+        text,
+      })
+    } catch (error) {
+      showTelegramActionError(
+        error instanceof Error ? error.message : 'Telegram message send failed.'
+      )
+    }
+  }
+
+  async function runTelegramConversationAction(
+    action: TelegramConversationRuntimeAction,
+    runner: TelegramConversationRuntimeActionRunner | undefined,
+    file?: File, caption?: string,
+    extras: TelegramAttachmentDownloadExtras & { historyFromMessageId?: number } = {},
+  ): Promise<void> {
+    const chat = selectedTelegramChat.value
+    if (!chat || !runner) return
+
+    isTelegramConversationActionRunning.value = true
+    try {
+      await runner({
+        action,
+        accountId: chat.account_id,
+        providerChatId: chat.provider_chat_id,
+        telegramChatId: chat.telegram_chat_id,
+        lastReadInboxProviderMessageId: latestTelegramInboundMessageId(telegramMessages.value),
+        file,
+        caption,
+        ...extras,
+      })
+    } catch (error) {
+      showTelegramActionError(
+        error instanceof Error ? error.message : 'Telegram provider command failed.'
+      )
+    } finally {
+      isTelegramConversationActionRunning.value = false
+    }
+  }
+
+  async function downloadTelegramAttachment(attachment: MessengerAttachmentModel, runner: TelegramConversationRuntimeActionRunner | undefined): Promise<void> {
+    const extras = telegramAttachmentDownloadExtras(attachment)
+    if (!extras) return void showTelegramActionError(
+      'This Telegram attachment cannot be downloaded from the provider.'
+    )
+    await runTelegramConversationAction('download_media', runner, undefined, undefined, extras)
+  }
+
+  function showTelegramActionError(message: string): void {
+    if (!message) return
+    toast.error('Telegram action failed', message)
   }
 
   function selectWhatsappConversation(item: MessengerListItemModel): void {
@@ -419,125 +648,3 @@ export function useCommunicationsWorkspaceViewSurface(
 }
 
 export { mailInspectorSummary } from './mailInspectorPresentation'
-
-function mailSyncStatusIsActive(status: string): boolean {
-  return (
-    status === 'queued' ||
-    status === 'running' ||
-    status === 'recoverable_full_resync_needed'
-  )
-}
-
-function attachmentCount(
-  source: CommunicationMessageDetailItem | CommunicationMessageSummary,
-  fallbackCount: number
-): number {
-  if ('attachment_count' in source) return source.attachment_count
-  return fallbackCount
-}
-
-function conversationMessage(
-  source: CommunicationMessageDetailItem | CommunicationMessageSummary,
-  attachments: readonly CommunicationAttachment[],
-  translation: TranslationResponse | null,
-  providerFlagMutationAvailable: boolean
-): CommunicationConversationMessageModel {
-  return {
-    id: source.message_id,
-    author: senderLabel(source.sender_display_name ?? source.sender),
-    body: messageBody(source),
-    bodyFormat: 'body_html' in source && source.body_html ? 'html' : 'plain',
-    bodyHtml: 'body_html' in source ? source.body_html ?? undefined : undefined,
-    bodyHtmlSanitized:
-      'body_html' in source ? Boolean(source.body_html) : undefined,
-    timestamp: messageTime(source.occurred_at ?? source.projected_at),
-    direction: messageDirection(source.delivery_state),
-    subject: source.subject,
-    fromLabel: source.sender,
-    toLabel: source.recipients.join(', '),
-    meta: source.provider_record_id,
-    attachments: attachments.map(conversationAttachment),
-    translation:
-      translation?.translated && translation.text?.trim()
-        ? {
-            text: translation.text.trim(),
-            target: translation.target ?? 'ru',
-            model: translation.model,
-          }
-        : undefined,
-    evidenceItems: [
-      {
-        id: 'raw-record',
-        label: 'raw record',
-        value: source.raw_record_id,
-        mono: true,
-      },
-      {
-        id: 'provider-record',
-        label: 'provider record',
-        value: source.provider_record_id,
-        mono: true,
-      },
-    ],
-    markers: [
-      { id: 'workflow', label: 'workflow', value: source.workflow_state },
-      { id: 'delivery', label: 'delivery', value: source.delivery_state },
-    ],
-    actionGroups: mailActionGroups(source, { providerFlagMutationAvailable }),
-  }
-}
-
-function messageTranslation(
-  insight: { messageId: string; translation: TranslationResponse | null } | null,
-  messageId: string
-): TranslationResponse | null {
-  if (insight?.messageId !== messageId) return null
-
-  return insight.translation
-}
-
-function messageBody(
-  source: CommunicationMessageDetailItem | CommunicationMessageSummary
-): string {
-  if ('body_text' in source) return source.body_text
-  return source.body_text_preview || source.ai_summary || source.subject
-}
-
-function messageDirection(
-  deliveryState: string
-): CommunicationConversationMessageModel['direction'] {
-  if (
-    deliveryState === 'sent' ||
-    deliveryState === 'queued' ||
-    deliveryState === 'scheduled'
-  ) {
-    return 'outbound'
-  }
-  return 'inbound'
-}
-
-function conversationAttachment(
-  attachment: CommunicationAttachment
-): CommunicationConversationAttachmentModel {
-  return {
-    id: attachment.attachment_id,
-    name: attachment.filename ?? attachment.attachment_id,
-    meta: `${attachment.content_type} · ${attachment.scan_status}`,
-    icon: attachmentIcon(attachment.content_type),
-    tone: attachment.scan_status === 'clean' ? 'success' : 'warning',
-    scanStatus: attachment.scan_status,
-  }
-}
-
-function emptyConversation(): CommunicationConversationModel {
-  return {
-    id: 'empty',
-    channelKind: 'mail',
-    title: 'No message selected',
-    subtitle: 'Import or select a communication to inspect source evidence.',
-    workflowState: 'new',
-    facts: [],
-    messages: [],
-    draftPreview: '',
-  }
-}

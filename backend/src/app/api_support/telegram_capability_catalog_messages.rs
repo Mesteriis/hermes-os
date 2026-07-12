@@ -131,15 +131,15 @@ fn push_message_write_capabilities(
         "messages.mark_read",
         cat_msg_write,
         if qr_ready {
-            TelegramCapabilityState::Degraded
+            TelegramCapabilityState::Available
         } else {
             TelegramCapabilityState::Blocked
         },
         TelegramActionClass::ProviderWrite,
         if qr_ready {
-            "Provider mark-read uses TDLib viewMessages and now has dedicated message-level API/UI, but mark-unread symmetry and richer read-history remain incomplete."
+            "Provider mark-read uses TDLib viewMessages. Telegram exposes unread as a chat-level state through dialogs.mark_unread."
         } else {
-            "Provider mark-read requires TDLib QR runtime; mark-unread symmetry and richer read-history remain incomplete."
+            "Provider mark-read requires the TDLib QR runtime. Telegram exposes unread as a chat-level state through dialogs.mark_unread."
         },
         true,
         true,

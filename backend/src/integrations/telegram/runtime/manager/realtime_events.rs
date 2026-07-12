@@ -17,6 +17,7 @@ use super::chat_events::{
 use super::message_events::{
     publish_message_content_updated_event, publish_message_created_event,
     publish_message_deleted_event, publish_message_edited_event, publish_message_pinned_event,
+    publish_message_send_failed_event, publish_message_send_succeeded_event,
     publish_reaction_changed_event,
 };
 use super::topic_events::publish_topic_event;
@@ -79,6 +80,24 @@ pub(super) fn spawn_telegram_runtime_event_bridge(
                 }
                 TelegramRuntimeEvent::MessagePinnedUpdated(snapshot) => {
                     publish_message_pinned_event(
+                        &telegram_store,
+                        &event_bus,
+                        &account_id,
+                        &snapshot,
+                    )
+                    .await;
+                }
+                TelegramRuntimeEvent::MessageSendFailed(snapshot) => {
+                    publish_message_send_failed_event(
+                        &telegram_store,
+                        &event_bus,
+                        &account_id,
+                        &snapshot,
+                    )
+                    .await;
+                }
+                TelegramRuntimeEvent::MessageSendSucceeded(snapshot) => {
+                    publish_message_send_succeeded_event(
                         &telegram_store,
                         &event_bus,
                         &account_id,

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  invalidateTelegramMediaUploadState,
   primeTelegramUploadCommandQueues,
   telegramMediaTypeForFile,
 } from './useTelegramMediaUploadWorkflow'
@@ -53,6 +54,19 @@ describe('telegramMediaTypeForFile', () => {
       blob_id: 'blob-1',
       filename: 'upload-note.txt',
       caption: 'hello',
+    })
+  })
+
+  it('refreshes the canonical Telegram conversation after an upload command is queued', () => {
+    const invalidateQueries = vi.fn()
+
+    invalidateTelegramMediaUploadState({ invalidateQueries } as never, 'account-1')
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['communications', 'telegram'],
+    })
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['integrations', 'telegram', 'commands', 'account-1'],
     })
   })
 })

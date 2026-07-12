@@ -9,9 +9,11 @@ use hermes_hub_backend::domains::communications::core::{
     CommunicationProviderSecretBindingStore, NewProviderAccount,
 };
 use hermes_hub_backend::domains::communications::messages::{
-    ProviderChannelMessageStore, consume_accepted_signal_event,
+    ProviderChannelMessageStore, consume_accepted_signal_event, project_provider_observation_event,
 };
-use hermes_hub_backend::domains::signal_hub::dispatch_telegram_raw_signal;
+use hermes_hub_backend::domains::signal_hub::{
+    dispatch_telegram_raw_signal, process_signal_hub_raw_event,
+};
 use hermes_hub_backend::integrations::telegram::client::lifecycle::{
     self, reconcile_delete_commands_from_provider_state,
     reconcile_edit_commands_from_provider_state,
@@ -21,6 +23,11 @@ use hermes_hub_backend::integrations::telegram::client::lifecycle::{
 use hermes_hub_backend::integrations::telegram::client::{
     NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramMessage, TelegramStore,
 };
+use hermes_hub_backend::platform::communications::{
+    EventStoreProviderMessageObservationEventPort, ProviderMessageObservationEvent,
+    ProviderMessageObservationEventPort,
+};
+use hermes_hub_backend::platform::events::{EventLogQuery, EventStore};
 use testkit::context::TestContext;
 
 #[tokio::test]
@@ -567,4 +574,118 @@ async fn ingest_projected_fixture_message(
         .await
         .expect("load message")
         .expect("message")
+}
+
+#[tokio::test]
+async fn telegram_provider_identity_rebind_is_durable_and_replay_safe() {
+    let ctx = TestContext::new().await;
+    let pool = ctx.pool().clone();
+    let account_id = create_telegram_account(&pool, "send-rebind", "telegram:send-rebind").await;
+    let store = telegram_store(&pool);
+    let provider_chat_id = "-100send-rebind";
+    let old_provider_message_id = format!("{provider_chat_id}:-42");
+    let new_provider_message_id = format!("{provider_chat_id}:42");
+    let message = ingest_projected_fixture_message(
+        &pool,
+        &store,
+        NewTelegramMessage {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.to_owned(),
+            provider_message_id: old_provider_message_id.clone(),
+            chat_kind: TelegramChatKind::Private,
+            chat_title: "Send Rebind Test".to_owned(),
+            sender_id: "user:777".to_owned(),
+            sender_display_name: "Alice".to_owned(),
+            text: "queued outgoing message".to_owned(),
+            import_batch_id: "telegram-send-rebind".to_owned(),
+            occurred_at: Utc::now(),
+            delivery_state: TelegramDeliveryState::Queued,
+        },
+    )
+    .await;
+
+    EventStoreProviderMessageObservationEventPort::new(pool.clone())
+        .append_provider_message_observation(ProviderMessageObservationEvent {
+            provider: "telegram",
+            account_id: &message.account_id,
+            channel_kind: "telegram_user",
+            message_id: &message.message_id,
+            external_message_id: &message.provider_message_id,
+            event_kind: "provider_identity_observed",
+            observed_at: Utc::now(),
+            external_event_id: None,
+            payload: &json!({ "provider_record_id": new_provider_message_id }),
+            causation_id: None,
+            correlation_id: None,
+        })
+        .await
+        .expect("append provider identity observation");
+
+    let event_store = EventStore::new(pool.clone());
+    let raw_event = event_store
+        .list_matching(
+            EventLogQuery::default()
+                .event_type("signal.raw.telegram.message.provider_identity.observed")
+                .limit(1),
+        )
+        .await
+        .expect("load raw provider identity event")
+        .into_iter()
+        .next()
+        .expect("stored raw provider identity event");
+    process_signal_hub_raw_event(pool.clone(), raw_event)
+        .await
+        .expect("accept provider identity event");
+
+    let accepted_event = event_store
+        .list_matching(
+            EventLogQuery::default()
+                .event_type("signal.accepted.telegram.message.provider_identity")
+                .limit(1),
+        )
+        .await
+        .expect("load accepted provider identity event")
+        .into_iter()
+        .next()
+        .expect("stored accepted provider identity event");
+    project_provider_observation_event(pool.clone(), accepted_event)
+        .await
+        .expect("project provider identity event");
+    let replay_event = event_store
+        .list_matching(
+            EventLogQuery::default()
+                .event_type("signal.accepted.telegram.message.provider_identity")
+                .limit(1),
+        )
+        .await
+        .expect("reload accepted provider identity event")
+        .into_iter()
+        .next()
+        .expect("replayable accepted provider identity event");
+    project_provider_observation_event(pool.clone(), replay_event)
+        .await
+        .expect("replay provider identity event");
+
+    let rebound = ProviderChannelMessageStore::new(pool.clone())
+        .message_by_provider_record_id(&account_id, &new_provider_message_id, &["telegram_user"])
+        .await
+        .expect("load rebound message")
+        .expect("rebound message");
+    assert_eq!(rebound.message_id, message.message_id);
+    assert_eq!(rebound.delivery_state, "sent");
+    assert_eq!(
+        rebound.message_metadata["previous_provider_record_id"],
+        json!(old_provider_message_id)
+    );
+    assert!(
+        ProviderChannelMessageStore::new(pool)
+            .message_by_provider_record_id(
+                &account_id,
+                &old_provider_message_id,
+                &["telegram_user"]
+            )
+            .await
+            .expect("load previous provider identity")
+            .is_none()
+    );
 }

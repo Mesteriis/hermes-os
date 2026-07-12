@@ -51,18 +51,6 @@ const signalRichTextActions: readonly RichTextEditorToolbarAction[] = [
 ]
 
 export function telegramMessengerComposerPreset(conversation: MessengerConversationModel): MessengerComposerPreset {
-  const insertActions: MessengerComposerCapability[] = [
-    { id: 'telegram-file', label: 'Attach file', icon: 'tabler:paperclip', tone: 'accent' },
-    { id: 'telegram-voice', label: 'Voice note', icon: 'tabler:microphone', tone: 'info' }
-  ]
-
-  if (conversation.kind !== 'direct') {
-    insertActions.push(
-      { id: 'telegram-mention', label: 'Mention participant', icon: 'tabler:at', tone: 'accent' },
-      { id: 'telegram-poll', label: 'Create poll', icon: 'tabler:chart-bar', tone: 'warning' }
-    )
-  }
-
   return {
     id: 'telegram',
     providerLabel: 'Telegram',
@@ -73,11 +61,10 @@ export function telegramMessengerComposerPreset(conversation: MessengerConversat
     toolbarLabel: 'Telegram rich text tools',
     maxLength: 4096,
     primaryActions: [
-      { id: 'telegram-reply', label: 'Quote reply', icon: 'tabler:corner-up-left', tone: 'accent' },
-      { id: 'telegram-silent', label: 'Silent send', icon: 'tabler:bell-off', tone: 'neutral' },
-      { id: 'telegram-schedule', label: 'Schedule send', icon: 'tabler:calendar-time', tone: 'warning' }
+      { id: 'telegram-file', label: 'Attach file', icon: 'tabler:paperclip', tone: 'accent' }
     ],
-    insertActions,
+    // Voice, polls, scheduling and hidden-send options are not provider capabilities yet.
+    insertActions: [],
     richTextActions: telegramRichTextActions
   }
 }
@@ -140,6 +127,24 @@ export function messengerComposerDraftHtml(draft: string): string {
   const escapedDraft = escapeHtml(draft.trim())
   if (!escapedDraft) return '<p></p>'
   return `<p>${escapedDraft.replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
+}
+
+export function messengerComposerPlainText(html: string): string {
+  return html
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim()
 }
 
 export function localizedMessengerRichTextActions(

@@ -2,12 +2,17 @@
 import MailWorkspace from '../components/mail/MailWorkspace.vue'
 import MessengerWorkspace from '../components/messengers/MessengerWorkspace.vue'
 import { useCommunicationsWorkspaceViewSurface } from '../queries/useCommunicationsWorkspaceViewSurface'
+import type { TelegramConversationRuntimeActionRunner } from '../../../shared/communications/types/telegramRuntimeActions'
 
 const props = defineProps<{
 	selectedRouteId?: string
+	telegramRuntimeActionRunner?: TelegramConversationRuntimeActionRunner
 }>()
 
-const surface = useCommunicationsWorkspaceViewSurface(() => props.selectedRouteId)
+const surface = useCommunicationsWorkspaceViewSurface(
+	() => props.selectedRouteId,
+	() => props.telegramRuntimeActionRunner
+)
 </script>
 
 <template>
@@ -50,7 +55,24 @@ const surface = useCommunicationsWorkspaceViewSurface(() => props.selectedRouteI
 			:items="surface.telegramMessengerItems.value"
 			:conversation="surface.telegramMessengerConversation.value"
 			:inspector="surface.telegramMessengerInspector.value"
+			:is-action-running="surface.isTelegramActionRunning.value"
+			:is-list-loading="surface.isTelegramListLoading.value"
+			:is-list-refreshing="surface.isTelegramListRefreshing.value"
+			:is-loading-older="surface.isTelegramLoadingOlder.value"
+			:list-error="surface.telegramListError.value"
+			:selected-message-id="surface.selectedTelegramMessage.value?.message_id"
+			:telegram-chat="surface.selectedTelegramChat.value"
+			:telegram-message="surface.selectedTelegramMessage.value"
+			:runtime-action-runner="props.telegramRuntimeActionRunner"
+			@conversation-action="surface.runTelegramConversationAction($event, props.telegramRuntimeActionRunner)"
+			@refresh="surface.refreshTelegramConversations"
 			@select-conversation="surface.selectTelegramConversation"
+			@select-message="surface.selectTelegramMessage"
+			@submit="surface.submitTelegramMessage"
+			@upload-file="(file, caption) => surface.runTelegramConversationAction('upload_media', props.telegramRuntimeActionRunner, file, caption)"
+			@download-attachment="surface.downloadTelegramAttachment($event, props.telegramRuntimeActionRunner)"
+			@load-older="surface.loadOlderTelegramMessages"
+			@messages-visible="surface.markTelegramMessagesVisible"
 		/>
 
 		<MessengerWorkspace

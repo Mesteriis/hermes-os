@@ -28,11 +28,34 @@ impl CommunicationIngestionStore {
             return Ok(stored);
         }
 
-        let observation = ObservationStore::capture_in_transaction(
-            &mut transaction,
-            &raw_record_observation(record),
+        let existing_observation_id = sqlx::query_scalar::<_, String>(
+            r#"
+            SELECT observation_id
+            FROM communication_raw_records
+            WHERE account_id = $1
+              AND record_kind = $2
+              AND provider_record_id = $3
+            ORDER BY captured_at ASC, raw_record_id ASC
+            LIMIT 1
+            FOR UPDATE
+            "#,
         )
+        .bind(record.account_id.trim())
+        .bind(record.record_kind.trim())
+        .bind(record.provider_record_id.trim())
+        .fetch_optional(&mut *transaction)
         .await?;
+        let observation_id = match existing_observation_id {
+            Some(observation_id) => observation_id,
+            None => {
+                ObservationStore::capture_in_transaction(
+                    &mut transaction,
+                    &raw_record_observation(record),
+                )
+                .await?
+                .observation_id
+            }
+        };
         let inserted = sqlx::query(
             r#"
             INSERT INTO communication_raw_records (
@@ -65,7 +88,7 @@ impl CommunicationIngestionStore {
             "#,
         )
         .bind(record.raw_record_id.trim())
-        .bind(&observation.observation_id)
+        .bind(&observation_id)
         .bind(record.account_id.trim())
         .bind(record.record_kind.trim())
         .bind(record.provider_record_id.trim())

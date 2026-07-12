@@ -21,6 +21,7 @@ Communications business state remains provider-neutral and lives under:
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/v1/communications/conversations?account_id=&limit=` | Projected Telegram chat list |
+| GET | `/api/v1/communications/conversation-folders?account_id=` | Projected Telegram folders for user-facing chat actions |
 | GET | `/api/v1/communications/conversations/{conversation_id}` | Projected conversation detail |
 | GET | `/api/v1/communications/conversations/{conversation_id}/members` | Projected member list |
 | POST | `/api/v1/integrations/telegram/provider-sync/conversations/{telegram_chat_id}/members` | Provider-backed member sync |
@@ -42,6 +43,8 @@ Communications business state remains provider-neutral and lives under:
 | POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/reassign` | Replace folder assignments |
 | POST | `/api/v1/integrations/telegram/provider-sync/chats` | Provider chat sync |
 | POST | `/api/v1/integrations/telegram/provider-sync/history` | Provider history sync |
+| POST | `/api/v1/communications/conversations/{telegram_chat_id}/avatar` | Download the current TDLib chat photo to local blob storage |
+| GET | `/api/v1/communications/conversations/{telegram_chat_id}/avatar` | Read a locally stored raster chat photo; requires the normal Hermes API secret header |
 
 ## Topics
 
@@ -58,7 +61,7 @@ Communications business state remains provider-neutral and lives under:
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/v1/communications/messages?account_id=&provider_chat_id=&limit=` | Projected Telegram message list |
+| GET | `/api/v1/communications/messages?channel_kind=telegram&account_id=&conversation_id=&limit=` | Projected Telegram message list; `conversation_id` is the provider chat identifier for Telegram projections |
 | POST | `/api/v1/integrations/telegram/fixtures/messages` | Fixture ingest |
 | POST | `/api/v1/communications/conversations/{conversation_id}/messages` | User-facing send |
 | POST | `/api/v1/communications/messages/{message_id}/reply` | User-facing reply |
@@ -78,6 +81,22 @@ Communications business state remains provider-neutral and lives under:
 ## Notes
 
 - Provider search and provider sync remain integration-scoped runtime surfaces.
+- Chat avatar bytes remain local and content-addressed. Hermes only serves JPEG, PNG, or WebP
+  after matching the stored blob to the current TDLib file reference; an avatar is never projected
+  as a message attachment or exposed as a TDLib filesystem path.
 - Provider-command message routes under `/api/v1/integrations/telegram/provider-commands/messages/*` are debug/control/recovery surfaces, not normal Communication UI APIs.
 - Communication business UI should consume `/api/v1/communications/*` routes and not call these provider runtime routes directly.
 - Provider observations are projected on the application side; integrations do not own communication business mutations.
+- When a user opens a Telegram dialog without projected messages, the UI requests one
+  successful `mode=latest` history read for that dialog during the current session.
+  A transient failed read can be retried by reopening the dialog. TDLib data
+  first enters the provider-observation flow; the reader updates when its
+  Communications projection is available through realtime events or the bounded
+  polling fallback. No provider send or state-changing command is issued.
+- Selecting a composer attachment only stages it locally. The `send_media`
+  provider command is queued after the user explicitly selects **Send**; the
+  editor text becomes the plain-text media caption.
+- Reaction commands derive `sender_id` from the authenticated Telegram account
+  when the client omits it. Product UI must not ask a user to enter their own
+  Telegram identifier; an explicit sender remains accepted only for compatible
+  diagnostic clients.

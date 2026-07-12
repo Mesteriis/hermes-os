@@ -122,6 +122,13 @@ export type TelegramChatDetailResponse = {
   item: TelegramChat
 }
 
+export type TelegramChatAvatarSyncResponse = {
+  telegram_chat_id: string
+  status: string
+  content_type: string | null
+  size_bytes: number | null
+}
+
 export type TelegramChatGroupFilterListResponse = {
   items: TelegramChatGroupFilter[]
 }
@@ -135,6 +142,9 @@ export type {
 export type {
   TelegramChatActionRequest,
   TelegramChatActionResponse,
+  TelegramChatHistoryPolicyRequest,
+  TelegramChatReadReceiptPolicyRequest,
+  TelegramChatUnreadCounterPolicyRequest,
   TelegramChatFolderReassignRequest,
   TelegramChatFolderReassignResponse,
   TelegramChatLifecycleCommandResponse
@@ -160,6 +170,11 @@ export type TelegramMessage = {
 
 export type TelegramMessageListResponse = {
   items: TelegramMessage[]
+}
+
+export type TelegramMessagePageResponse = TelegramMessageListResponse & {
+  next_cursor: string | null
+  has_more: boolean
 }
 
 export type TelegramMessageSearchResponse = {
@@ -589,7 +604,8 @@ export type TelegramReactionRequest = {
   provider_chat_id: string
   provider_message_id: string
   reaction_emoji: string
-  sender_id: string
+  /** The server derives the authenticated provider identity when omitted. */
+  sender_id?: string
   sender_display_name?: string | null
   command_id?: string
 }

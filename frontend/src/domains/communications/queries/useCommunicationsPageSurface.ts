@@ -45,6 +45,10 @@ export function useCommunicationsPageSurface() {
   const activeSavedSearchId = ref('')
   const activeFolderId = ref('')
   const savedSearchChannelKind = ref<string>()
+  const mailChannelKind = computed(() => {
+    const value = savedSearchChannelKind.value?.trim()
+    return value === 'email' || value === 'mail' ? value : 'mail'
+  })
 
   const {
     data: mailListData,
@@ -57,7 +61,7 @@ export function useCommunicationsPageSurface() {
   } = useMailListQuery(
     () => store.selectedMailAccountId || undefined,
     () => store.mailStateFilter || undefined,
-    () => savedSearchChannelKind.value,
+    () => mailChannelKind.value,
     () => store.messageSearchQuery || undefined,
     () => store.mailLocalStateFilter
   )

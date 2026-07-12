@@ -10,6 +10,7 @@ const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 pub(crate) struct TelegramAttachmentDownloadStateUpdate<'a> {
     pub(crate) message_id: &'a str,
     pub(crate) provider_attachment_id: &'a str,
+    pub(crate) communication_attachment_id: Option<&'a str>,
     pub(crate) tdlib_file_id: i64,
     pub(crate) download_state: &'a str,
     pub(crate) local_path: Option<&'a str>,
@@ -66,6 +67,7 @@ impl TelegramStore {
             &message,
             TelegramAttachmentDownloadObservation {
                 provider_attachment_id: update.provider_attachment_id,
+                communication_attachment_id: update.communication_attachment_id,
                 tdlib_file_id: update.tdlib_file_id,
                 download_state: update.download_state,
                 local_path: update.local_path,

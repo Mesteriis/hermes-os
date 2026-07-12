@@ -234,6 +234,75 @@ describe('telegram realtime cache patch handling', () => {
     })
   })
 
+  it('patches an infinite Telegram message cache without duplicating the new message across pages', () => {
+    const messageKey = ['communications', 'telegram', 'messages', 'infinite', 'account-1', 'chat-1', 100]
+    const existingMessage = {
+      message_id: 'tg-msg-existing',
+      raw_record_id: 'raw-existing',
+      account_id: 'account-1',
+      provider_message_id: 'provider-existing',
+      provider_chat_id: 'chat-1',
+      chat_title: 'Chat',
+      sender: 'sender-1',
+      sender_display_name: 'Sender',
+      text: 'Existing',
+      occurred_at: '2026-06-16T09:00:00Z',
+      projected_at: '2026-06-16T09:00:01Z',
+      channel_kind: 'telegram_user',
+      delivery_state: 'received',
+      metadata: {},
+    }
+    let cache = {
+      pages: [
+        { items: [existingMessage], next_cursor: 'older', has_more: true },
+        { items: [], next_cursor: null, has_more: false },
+      ],
+      pageParams: [null, 'older'],
+    }
+    const setQueryData = vi.fn((queryKey, updater) => {
+      if (JSON.stringify(queryKey) !== JSON.stringify(messageKey)) return updater
+      cache = typeof updater === 'function' ? updater(cache) : updater
+      return cache
+    })
+    const queryClient = {
+      invalidateQueries: vi.fn(),
+      getQueriesData: vi.fn().mockImplementation(({ queryKey }) =>
+        JSON.stringify(queryKey) === JSON.stringify(['communications', 'telegram', 'messages'])
+          ? [[messageKey, cache]]
+          : []
+      ),
+      setQueryData,
+    }
+    const newMessage = {
+      ...existingMessage,
+      message_id: 'tg-msg-new',
+      provider_message_id: 'provider-new',
+      text: 'New message',
+      occurred_at: '2026-06-16T10:00:00Z',
+    }
+
+    handleRealtimeEvent(
+      {
+        id: 'tg-infinite-created',
+        event: 'event',
+        data: JSON.stringify({
+          event: {
+            event_type: 'telegram.message.created',
+            subject: { id: 'tg-msg-new', kind: 'telegram_message' },
+            payload: { message: newMessage },
+          },
+        }),
+      },
+      queryClient
+    )
+
+    expect(cache.pages[0].items.map((message) => message.message_id)).toEqual([
+      'tg-msg-new',
+      'tg-msg-existing',
+    ])
+    expect(cache.pages[1].items).toEqual([])
+  })
+
   it('patches cached telegram lifecycle metadata for telegram message updated events', () => {
     const messageKey = ['communications', 'telegram', 'messages', 'account-1', 'chat-1', 50]
     const pinnedKey = ['communications', 'telegram', 'chats', 'tgchat-1', 'pinned-messages', 100]

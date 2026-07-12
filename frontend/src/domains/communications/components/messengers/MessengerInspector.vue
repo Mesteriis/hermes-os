@@ -4,9 +4,17 @@ import { useI18n } from '@/platform/i18n'
 import { Badge, Button, EntityIcon, Icon, ScoreGauge } from '@/shared/ui'
 import '../communicationDomainElements.css'
 import type { MessengerInspectorModel } from './messengerElements'
+import type { TelegramMessage } from '@/shared/communications/types/telegram'
+import type { TelegramChat } from '@/shared/communications/types/telegram'
+import type { TelegramConversationRuntimeActionRunner } from '@/shared/communications/types/telegramRuntimeActions'
+import TelegramConversationInspector from './TelegramConversationInspector.vue'
+import TelegramMessageInspector from './TelegramMessageInspector.vue'
 
 const props = defineProps<{
   model: MessengerInspectorModel
+  runtimeActionRunner?: TelegramConversationRuntimeActionRunner
+  telegramChat?: TelegramChat | null
+  telegramMessage?: TelegramMessage | null
 }>()
 
 const { t } = useI18n()
@@ -17,6 +25,15 @@ const scoreUnit = computed(() => `/${props.model.intelligence.maxScore}`)
 	<aside class="communication-workspace-panel communication-workspace-panel--inspector messenger-inspector" :aria-label="t('Messenger inspector')">
 		<div class="communication-workspace-panel__body">
 			<div class="messenger-inspector__content">
+				<TelegramConversationInspector
+					v-if="telegramChat"
+					:runtime-action-runner="runtimeActionRunner"
+					:telegram-chat="telegramChat"
+				/>
+				<TelegramMessageInspector
+					v-if="telegramMessage"
+					:telegram-message="telegramMessage"
+				/>
 				<section class="messenger-inspector-section messenger-inspector-section--intelligence">
 					<header class="messenger-inspector-section__header">
 						<div class="messenger-inspector-section__title-row">

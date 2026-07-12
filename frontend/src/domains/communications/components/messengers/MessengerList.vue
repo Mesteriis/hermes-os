@@ -15,11 +15,15 @@ import {
 } from './messengerElements'
 
 const props = defineProps<{
+  errorMessage?: string
+  isLoading?: boolean
+  isRefreshing?: boolean
   items: readonly MessengerListItemModel[]
   selectedId?: string
 }>()
 
 const emit = defineEmits<{
+  refresh: []
   select: [item: MessengerListItemModel]
 }>()
 
@@ -82,7 +86,9 @@ function densityMenuItemClass(value: MessengerListItemDensity): string {
 					size="sm"
 					icon="tabler:refresh"
 					:aria-label="t('Refresh')"
+					:disabled="isRefreshing"
 					:title="t('Refresh')"
+					@click="emit('refresh')"
 				/>
 				<DropdownMenu align="end" :side-offset="8" class="mail-list-settings-menu">
 					<template #trigger>
@@ -138,6 +144,13 @@ function densityMenuItemClass(value: MessengerListItemDensity): string {
 						:selected="selectedId ? item.id === selectedId : item.selected"
 						@select="emit('select', $event)"
 					/>
+				</div>
+				<p v-else-if="isLoading" class="messenger-list-empty" role="status">
+					{{ t('Loading dialogs') }}
+				</p>
+				<div v-else-if="errorMessage" class="messenger-list-empty" role="alert">
+					<p>{{ t('Could not load dialogs') }}</p>
+					<Button size="sm" variant="outline" @click="emit('refresh')">{{ t('Retry') }}</Button>
 				</div>
 				<NoSearchResultsState
 					v-else

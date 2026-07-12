@@ -12,6 +12,10 @@ use crate::application::provider_runtime_contracts::{TelegramChat, lifecycle};
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
+use crate::platform::settings::ApplicationSettingsStore;
+
+const TELEGRAM_READ_RECEIPT_REPORTS_ENABLED_SETTING_KEY: &str =
+    "communications.telegram.read_receipt_reports_enabled";
 
 fn build_event(
     event_type: &str,
@@ -107,6 +111,27 @@ pub(crate) struct TelegramChatActionRequest {
     pub(crate) last_read_inbox_provider_message_id: Option<String>,
 }
 
+#[derive(serde::Deserialize)]
+pub(crate) struct TelegramChatHistoryPolicyRequest {
+    pub(crate) account_id: String,
+    pub(crate) provider_chat_id: String,
+    pub(crate) full_history_sync_enabled: bool,
+}
+
+#[derive(serde::Deserialize)]
+pub(crate) struct TelegramChatReadReceiptPolicyRequest {
+    pub(crate) account_id: String,
+    pub(crate) provider_chat_id: String,
+    pub(crate) read_receipt_reports_enabled: bool,
+}
+
+#[derive(serde::Deserialize)]
+pub(crate) struct TelegramChatUnreadCounterPolicyRequest {
+    pub(crate) account_id: String,
+    pub(crate) provider_chat_id: String,
+    pub(crate) hide_unread_counter: bool,
+}
+
 #[derive(serde::Serialize)]
 pub(crate) struct TelegramChatActionResponse {
     pub(crate) telegram_chat_id: String,
@@ -122,6 +147,141 @@ pub(crate) struct TelegramChatLifecycleCommandResponse {
     pub(crate) action: String,
     pub(crate) status: String,
     pub(crate) command_id: String,
+}
+
+pub(crate) async fn put_telegram_chat_history_policy(
+    State(state): State<AppState>,
+    Path(telegram_chat_id): Path<String>,
+    Json(request): Json<TelegramChatHistoryPolicyRequest>,
+) -> Result<Json<TelegramChatActionResponse>, ApiError> {
+    let store = telegram_provider_runtime_service(&state)?;
+    let chat = store.telegram_chat_by_id(&telegram_chat_id).await?.ok_or(
+        ApiError::InvalidCommunicationQuery("Telegram chat was not found"),
+    )?;
+    if chat.account_id != request.account_id.trim()
+        || chat.provider_chat_id != request.provider_chat_id.trim()
+    {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "Telegram chat does not belong to the supplied account and provider chat",
+        ));
+    }
+
+    let metadata = store
+        .set_chat_metadata_bool(
+            &telegram_chat_id,
+            "full_history_sync_enabled",
+            request.full_history_sync_enabled,
+        )
+        .await?;
+    let action_request = TelegramChatActionRequest {
+        account_id: request.account_id,
+        provider_chat_id: request.provider_chat_id,
+        last_read_inbox_provider_message_id: None,
+    };
+    publish_chat_updated_event(
+        &state,
+        &action_request,
+        &telegram_chat_id,
+        "history_policy_updated",
+    )
+    .await?;
+
+    Ok(Json(TelegramChatActionResponse {
+        telegram_chat_id,
+        action: "history_policy_updated".to_owned(),
+        status: "applied".to_owned(),
+        metadata,
+    }))
+}
+
+pub(crate) async fn put_telegram_chat_read_receipt_policy(
+    State(state): State<AppState>,
+    Path(telegram_chat_id): Path<String>,
+    Json(request): Json<TelegramChatReadReceiptPolicyRequest>,
+) -> Result<Json<TelegramChatActionResponse>, ApiError> {
+    let store = telegram_provider_runtime_service(&state)?;
+    let chat = store.telegram_chat_by_id(&telegram_chat_id).await?.ok_or(
+        ApiError::InvalidCommunicationQuery("Telegram chat was not found"),
+    )?;
+    if chat.account_id != request.account_id.trim()
+        || chat.provider_chat_id != request.provider_chat_id.trim()
+    {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "Telegram chat does not belong to the supplied account and provider chat",
+        ));
+    }
+
+    let metadata = store
+        .set_chat_metadata_bool(
+            &telegram_chat_id,
+            "read_receipt_reports_enabled",
+            request.read_receipt_reports_enabled,
+        )
+        .await?;
+    let action_request = TelegramChatActionRequest {
+        account_id: request.account_id,
+        provider_chat_id: request.provider_chat_id,
+        last_read_inbox_provider_message_id: None,
+    };
+    publish_chat_updated_event(
+        &state,
+        &action_request,
+        &telegram_chat_id,
+        "read_receipt_policy_updated",
+    )
+    .await?;
+
+    Ok(Json(TelegramChatActionResponse {
+        telegram_chat_id,
+        action: "read_receipt_policy_updated".to_owned(),
+        status: "applied".to_owned(),
+        metadata,
+    }))
+}
+
+pub(crate) async fn put_telegram_chat_unread_counter_policy(
+    State(state): State<AppState>,
+    Path(telegram_chat_id): Path<String>,
+    Json(request): Json<TelegramChatUnreadCounterPolicyRequest>,
+) -> Result<Json<TelegramChatActionResponse>, ApiError> {
+    let store = telegram_provider_runtime_service(&state)?;
+    let chat = store.telegram_chat_by_id(&telegram_chat_id).await?.ok_or(
+        ApiError::InvalidCommunicationQuery("Telegram chat was not found"),
+    )?;
+    if chat.account_id != request.account_id.trim()
+        || chat.provider_chat_id != request.provider_chat_id.trim()
+    {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "Telegram chat does not belong to the supplied account and provider chat",
+        ));
+    }
+
+    let metadata = store
+        .set_chat_metadata_bool(
+            &telegram_chat_id,
+            "hide_unread_counter",
+            request.hide_unread_counter,
+        )
+        .await?;
+    let action_request = TelegramChatActionRequest {
+        account_id: request.account_id,
+        provider_chat_id: request.provider_chat_id,
+        last_read_inbox_provider_message_id: None,
+    };
+    publish_chat_updated_event(
+        &state,
+        &action_request,
+        &telegram_chat_id,
+        "unread_counter_policy_updated",
+    )
+    .await?;
+
+    Ok(Json(TelegramChatActionResponse {
+        telegram_chat_id,
+        action: "unread_counter_policy_updated".to_owned(),
+        status: "applied".to_owned(),
+        metadata,
+    }))
 }
 
 async fn record_dialog_command(
@@ -549,28 +709,77 @@ pub(crate) async fn post_telegram_chat_mark_read(
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "dialogs.mark_read")
         .await?;
     let service = telegram_provider_runtime_service(&state)?;
+    let chat = service
+        .telegram_chat_by_id(&telegram_chat_id)
+        .await?
+        .ok_or(ApiError::InvalidCommunicationQuery(
+            "Telegram chat was not found",
+        ))?;
+    if chat.account_id != request.account_id.trim()
+        || chat.provider_chat_id != request.provider_chat_id.trim()
+    {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "Telegram chat does not belong to the supplied account and provider chat",
+        ));
+    }
+    let report_to_provider = telegram_read_receipt_reports_enabled(&state, &chat).await?;
     service
         .set_chat_last_read_at(&telegram_chat_id, Some(Utc::now()))
         .await?;
     let metadata = service
         .recompute_chat_unread_count(&telegram_chat_id)
         .await?;
-    let _command_id = record_dialog_command(
-        &state,
-        &telegram_chat_id,
-        &request,
-        "mark_read",
-        "provider_write",
-    )
-    .await?;
-    publish_chat_updated_event(&state, &request, &telegram_chat_id, "mark_read").await?;
+    if report_to_provider {
+        let _command_id = record_dialog_command(
+            &state,
+            &telegram_chat_id,
+            &request,
+            "mark_read",
+            "provider_write",
+        )
+        .await?;
+    }
+    let action = if report_to_provider {
+        "mark_read"
+    } else {
+        "mark_read_local_only"
+    };
+    publish_chat_updated_event(&state, &request, &telegram_chat_id, action).await?;
 
     Ok(Json(TelegramChatActionResponse {
         telegram_chat_id,
-        action: "mark_read".to_owned(),
-        status: "read".to_owned(),
+        action: action.to_owned(),
+        status: if report_to_provider {
+            "read".to_owned()
+        } else {
+            "read_local_only".to_owned()
+        },
         metadata,
     }))
+}
+
+async fn telegram_read_receipt_reports_enabled(
+    state: &AppState,
+    chat: &TelegramChat,
+) -> Result<bool, ApiError> {
+    if let Some(enabled) = chat
+        .metadata
+        .get("read_receipt_reports_enabled")
+        .and_then(serde_json::Value::as_bool)
+    {
+        return Ok(enabled);
+    }
+
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    Ok(ApplicationSettingsStore::new(pool)
+        .setting(TELEGRAM_READ_RECEIPT_REPORTS_ENABLED_SETTING_KEY)
+        .await?
+        .and_then(|setting| setting.value.as_bool())
+        .unwrap_or(true))
 }
 
 pub(crate) async fn post_telegram_chat_mark_unread(

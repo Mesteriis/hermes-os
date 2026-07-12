@@ -153,13 +153,14 @@ export function telegramMessageSnapshot(value: unknown): TelegramMessage | null 
 
 export function messageQueryScope(queryKey: readonly unknown[]): [string | null, string | null, number | null] {
   if (queryKey[0] !== 'communications' || queryKey[1] !== 'telegram' || queryKey[2] !== 'messages') return [null, null, null]
-  const accountId = typeof queryKey[3] === 'string' && queryKey[3] !== 'all' && queryKey[3] !== 'none'
-    ? queryKey[3]
+  const offset = queryKey[3] === 'infinite' ? 1 : 0
+  const accountId = typeof queryKey[3 + offset] === 'string' && queryKey[3 + offset] !== 'all' && queryKey[3 + offset] !== 'none'
+    ? queryKey[3 + offset] as string
     : null
-  const providerChatId = typeof queryKey[4] === 'string' && queryKey[4] !== 'all' && queryKey[4] !== 'none'
-    ? queryKey[4]
+  const providerChatId = typeof queryKey[4 + offset] === 'string' && queryKey[4 + offset] !== 'all' && queryKey[4 + offset] !== 'none'
+    ? queryKey[4 + offset] as string
     : null
-  const limit = typeof queryKey[5] === 'number' ? queryKey[5] : null
+  const limit = typeof queryKey[5 + offset] === 'number' ? queryKey[5 + offset] as number : null
   return [accountId, providerChatId, limit]
 }
 

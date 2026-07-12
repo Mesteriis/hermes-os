@@ -11,6 +11,24 @@ export type TelegramChatActionResponse = {
   metadata: Record<string, unknown>
 }
 
+export type TelegramChatHistoryPolicyRequest = {
+  account_id: string
+  provider_chat_id: string
+  full_history_sync_enabled: boolean
+}
+
+export type TelegramChatReadReceiptPolicyRequest = {
+  account_id: string
+  provider_chat_id: string
+  read_receipt_reports_enabled: boolean
+}
+
+export type TelegramChatUnreadCounterPolicyRequest = {
+  account_id: string
+  provider_chat_id: string
+  hide_unread_counter: boolean
+}
+
 export type TelegramChatLifecycleCommandResponse = {
   telegram_chat_id: string | null
   provider_chat_id: string

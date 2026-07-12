@@ -55,6 +55,10 @@
 	"Messenger actions": "Действия мессенджера",
 	"Messenger conversation actions": "Действия диалога",
 	"Messenger list": "Список диалогов",
+	"Attachment ready to send": "Вложение готово к отправке",
+	"Remove attachment": "Удалить вложение",
+	"Loading dialogs": "Загружаем диалоги",
+	"Could not load dialogs": "Не удалось загрузить диалоги",
 	"Messenger list settings": "Настройки списка диалогов",
 	"Messenger signals": "Сигналы диалога",
 	"Messenger view": "Представление диалогов",
@@ -2119,5 +2123,12 @@
 	"Failed to start Telegram QR login.": "Не удалось запустить Telegram QR login.",
 	"Failed to refresh Telegram QR login status.": "Не удалось обновить статус Telegram QR login.",
 	"Start or resume Telegram QR login": "Запустить или продолжить Telegram QR login",
-	"Resume Telegram QR login": "Продолжить Telegram QR login"
+	"Resume Telegram QR login": "Продолжить Telegram QR login",
+	"Unpin": "Открепить",
+	"Unmute": "Включить уведомления",
+	"Unarchive": "Вернуть из архива",
+	"Telegram synchronization actions": "Действия синхронизации Telegram",
+	"Sync latest history": "Синхронизировать новые сообщения",
+	"Sync older history": "Загрузить более раннюю историю",
+	"Open synchronization actions": "Открыть действия синхронизации"
 }

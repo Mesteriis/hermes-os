@@ -51,7 +51,7 @@ impl TelegramRuntimeManager {
                     account_id: account.account_id,
                     provider_chat_id: request.provider_chat_id.trim().to_owned(),
                     delivery_state: snapshot.delivery_state.as_str().to_owned(),
-                    status: "sent".to_owned(),
+                    status: snapshot.delivery_state.as_str().to_owned(),
                     runtime_kind,
                     rendered_preview_hash: telegram_text_preview_hash(&request.text),
                 })
@@ -116,7 +116,7 @@ impl TelegramRuntimeManager {
                     account_id: account.account_id,
                     provider_chat_id: request.provider_chat_id.trim().to_owned(),
                     delivery_state: snapshot.delivery_state.as_str().to_owned(),
-                    status: "sent".to_owned(),
+                    status: snapshot.delivery_state.as_str().to_owned(),
                     runtime_kind,
                     rendered_preview_hash: telegram_text_preview_hash(&request.text),
                 })
@@ -181,7 +181,7 @@ impl TelegramRuntimeManager {
                     account_id: account.account_id,
                     provider_chat_id: request.provider_chat_id.trim().to_owned(),
                     delivery_state: snapshot.delivery_state.as_str().to_owned(),
-                    status: "sent".to_owned(),
+                    status: snapshot.delivery_state.as_str().to_owned(),
                     runtime_kind,
                     rendered_preview_hash: telegram_text_preview_hash(&snapshot.text),
                 })

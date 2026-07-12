@@ -13,7 +13,7 @@ use telegram_support::{
 };
 use testkit::context::TestContext;
 #[tokio::test]
-async fn telegram_fixture_runtime_status_can_start_account_actor() {
+async fn telegram_fixture_runtime_reconnects_enabled_account_and_accepts_idempotent_start() {
     let ctx = TestContext::new().await;
     let database_url = ctx.connection_string();
     let database = Database::connect(Some(&database_url))
@@ -58,7 +58,7 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     assert_eq!(initial_body["account_id"], json!(account_id));
     assert_eq!(initial_body["provider_kind"], json!("telegram_user"));
     assert_eq!(initial_body["runtime_kind"], json!("fixture"));
-    assert_eq!(initial_body["status"], json!("stopped"));
+    assert_eq!(initial_body["status"], json!("running"));
     assert_eq!(initial_body["live_send_available"], json!(false));
     assert_eq!(initial_body["fixture_runtime"], json!(true));
     assert_eq!(initial_body["telegram_api_id_configured"], json!(false));

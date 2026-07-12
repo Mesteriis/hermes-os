@@ -8,7 +8,6 @@ import {
   messengerListItemAriaLabel,
   messengerListItemHasSignal,
   messengerListItemProfile,
-  messengerWorkflowStatusPresentation
 } from './messengerElements'
 
 const props = withDefaults(defineProps<{
@@ -25,9 +24,14 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const avatarStoryOpen = ref(false)
-const status = computed(() => messengerWorkflowStatusPresentation(props.item.workflowState))
 const profile = computed(() => messengerListItemProfile(props.item))
 const profileStoryItems = computed(() => profile.value.storyItems ?? [])
+const hasSecondarySignals = computed(() => Boolean(
+  props.item.mentionCount
+  || props.item.attachmentCount
+  || props.item.hermesSignalCount
+  || props.item.pinned
+))
 const isSelected = computed(() => props.selected ?? Boolean(props.item.selected))
 const itemClasses = computed(() => [
   'messenger-list-item',
@@ -98,16 +102,13 @@ const avatarAriaLabel = computed(() => `${t('Open avatar story')}: ${profile.val
 		>
 			<div class="messenger-list-item__top">
 				<strong class="messenger-list-item__title">{{ item.title }}</strong>
-				<span v-if="item.unreadCount" class="messenger-list-item__unread">{{ item.unreadCount }}</span>
-				<span class="messenger-list-item__time">{{ item.timestampLabel }}</span>
+				<div class="messenger-list-item__meta">
+					<span class="messenger-list-item__time">{{ item.timestampLabel }}</span>
+					<span v-if="item.unreadCount" class="messenger-list-item__unread">{{ item.unreadCount }}</span>
+				</div>
 			</div>
-			<p class="messenger-list-item__subject">{{ item.subtitle }}</p>
-			<p class="messenger-list-item__preview">{{ item.preview }}</p>
-			<div v-if="density !== 'compact'" class="messenger-list-item__signals" :aria-label="t('Messenger signals')">
-				<span class="messenger-list-item__status">
-					<Icon :icon="status.icon" size="0.9rem" />
-					<span v-if="density === 'cozy'">{{ t(status.label) }}</span>
-				</span>
+			<p v-if="item.preview && density !== 'compact'" class="messenger-list-item__preview">{{ item.preview }}</p>
+			<div v-if="density !== 'compact' && hasSecondarySignals" class="messenger-list-item__signals" :aria-label="t('Messenger signals')">
 				<span v-if="item.mentionCount" class="messenger-list-item__signal">
 					<Icon icon="tabler:at" size="0.9rem" />
 					<span>{{ item.mentionCount }}</span>
@@ -121,7 +122,6 @@ const avatarAriaLabel = computed(() => `${t('Open avatar story')}: ${profile.val
 					<span>{{ item.hermesSignalCount }}</span>
 				</span>
 				<Badge v-if="item.pinned" variant="info">{{ t('Pinned') }}</Badge>
-				<Badge v-if="item.muted" variant="neutral">{{ t('Muted') }}</Badge>
 			</div>
 		</button>
 	</article>

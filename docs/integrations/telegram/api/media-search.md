@@ -41,5 +41,8 @@ Shared Communication attachment and business read-model APIs live under:
 ## Notes
 
 - Provider media upload does not accept raw file bytes or a bare blob reference. It requires an already imported local `attachment_id` with a `clean` scan verdict; an optional `blob_id` is checked only for consistency with that attachment.
+- A completed provider-media download stores the bytes through the shared local blob boundary, records its scan verdict, and returns the canonical `attachment_id` and `blob_id`. The projected attachment keeps the provider attachment id separately, so preview and future downloads do not confuse provider identifiers with Hermes storage identifiers.
+- TDLib ingestion normalizes `photo`, `video`, `document`, `audio`, `voice`, `video_note`, `sticker`, and `animation` into the same projected `attachments` metadata. For a photo, Hermes selects the largest provider `photoSize` file; it does not download bytes until the user requests it.
+- Repeating a Telegram history sync enriches an already projected message through a provider observation when attachment metadata or a reaction summary was previously absent. Raw provider evidence remains immutable, and a pre-existing downloaded/canonical attachment or realtime reaction summary is never replaced by a stale descriptor.
 - Shared Communication attachment APIs remain the canonical safe access path for local preview and import.
 - Normal user-facing Communication search uses `/api/v1/communications/search/*`; provider search is runtime/debug/sync-assist only and must not return projected message or media items.

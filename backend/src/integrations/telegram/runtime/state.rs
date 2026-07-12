@@ -10,8 +10,9 @@ use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatSnapshot, TelegramTdlibChatUnreadSnapshot, TelegramTdlibFileSnapshot,
     TelegramTdlibMessageContentSnapshot, TelegramTdlibMessageDeleteSnapshot,
     TelegramTdlibMessageEditedSnapshot, TelegramTdlibMessageInteractionInfoSnapshot,
-    TelegramTdlibMessagePinnedSnapshot, TelegramTdlibMessageSnapshot, TelegramTdlibTopicSnapshot,
-    TelegramTdlibTopicUpdateSnapshot, TelegramTdlibTypingSnapshot,
+    TelegramTdlibMessagePinnedSnapshot, TelegramTdlibMessageSendFailedSnapshot,
+    TelegramTdlibMessageSendSucceededSnapshot, TelegramTdlibMessageSnapshot,
+    TelegramTdlibTopicSnapshot, TelegramTdlibTopicUpdateSnapshot, TelegramTdlibTypingSnapshot,
 };
 
 use super::models::{TelegramHistorySyncMode, TelegramMediaSendRequest};
@@ -235,6 +236,8 @@ pub(super) enum TelegramRuntimeEvent {
     MessageContentUpdated(TelegramTdlibMessageContentSnapshot),
     MessageEdited(TelegramTdlibMessageEditedSnapshot),
     MessagePinnedUpdated(TelegramTdlibMessagePinnedSnapshot),
+    MessageSendFailed(TelegramTdlibMessageSendFailedSnapshot),
+    MessageSendSucceeded(TelegramTdlibMessageSendSucceededSnapshot),
     MessageDeleted(TelegramTdlibMessageDeleteSnapshot),
     MessageInteractionInfoUpdated(TelegramTdlibMessageInteractionInfoSnapshot),
     TypingChanged(TelegramTdlibTypingSnapshot),

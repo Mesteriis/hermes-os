@@ -1,4 +1,12 @@
-import type { CommunicationTone, EntityIconKind, MessageDirection, ProviderIconKind, TreeSelectOption, UtilityTone } from '@/shared/ui'
+import type {
+  CommunicationTone,
+  EntityIconKind,
+  MessageDeliveryState,
+  MessageDirection,
+  ProviderIconKind,
+  TreeSelectOption,
+  UtilityTone
+} from '@/shared/ui'
 
 export type MessengerChannelKind = 'telegram' | 'whatsapp' | 'signal'
 export type MessengerConversationKind = 'direct' | 'group' | 'channel'
@@ -55,6 +63,17 @@ export type MessengerAttachmentModel = {
   meta: string
   icon: string
   tone?: UtilityTone
+  downloadable?: boolean
+  providerAttachmentId?: string
+  providerMessageId?: string
+  tdlibFileId?: number
+  contentType?: string
+}
+
+export type MessengerReactionModel = {
+  emoji: string
+  count: number
+  active?: boolean
 }
 
 export type MessengerMessageModel = {
@@ -66,8 +85,11 @@ export type MessengerMessageModel = {
   tone?: CommunicationTone
   meta?: string
   pending?: boolean
+  deliveryStatus?: MessageDeliveryState
+  deliveryStatusLabel?: string
   selected?: boolean
   attachments?: readonly MessengerAttachmentModel[]
+  reactions?: readonly MessengerReactionModel[]
 }
 
 export type MessengerConversationModel = {
@@ -250,7 +272,11 @@ export function messengerListViewOptions(
     label: translate('Saved filters'),
     icon: 'tabler:filter-star',
     children: [
+      { value: 'messenger-filter:unread', label: translate('Unread'), icon: 'tabler:mail' },
       { value: 'messenger-filter:mentions', label: translate('Mentions'), icon: 'tabler:at' },
+      { value: 'messenger-filter:pinned', label: translate('Pinned'), icon: 'tabler:pin' },
+      { value: 'messenger-filter:muted', label: translate('Muted'), icon: 'tabler:bell-off' },
+      { value: 'messenger-filter:archived', label: translate('Archived'), icon: 'tabler:archive' },
       { value: 'messenger-filter:open-actions', label: translate('Open actions'), icon: 'tabler:alert-triangle' }
     ]
   })
@@ -301,6 +327,22 @@ export function messengerItemsForView(
 
   if (viewId === 'messenger-filter:mentions') {
     return items.filter((item) => (item.mentionCount ?? 0) > 0)
+  }
+
+  if (viewId === 'messenger-filter:unread') {
+    return items.filter((item) => (item.unreadCount ?? 0) > 0)
+  }
+
+  if (viewId === 'messenger-filter:pinned') {
+    return items.filter((item) => item.pinned)
+  }
+
+  if (viewId === 'messenger-filter:muted') {
+    return items.filter((item) => item.muted)
+  }
+
+  if (viewId === 'messenger-filter:archived') {
+    return items.filter((item) => item.workflowState === 'archived')
   }
 
   if (viewId === 'messenger-filter:open-actions') {

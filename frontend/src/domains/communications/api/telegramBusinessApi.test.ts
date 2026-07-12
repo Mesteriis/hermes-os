@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClient } from '../../../platform/api'
 import {
+  addTelegramBusinessReaction,
+  fetchTelegramBusinessChatFolders,
   fetchTelegramBusinessMessages,
   forwardTelegramBusinessMessage,
   pinTelegramBusinessMessage,
   replyToTelegramBusinessMessage,
+  removeTelegramBusinessReaction,
   searchTelegramBusinessTopics,
   sendTelegramBusinessMessage,
 } from './telegramBusinessApi'
@@ -37,6 +40,22 @@ describe('telegram business API', () => {
     expect(url).toContain('q=architecture+docs')
     expect(url).toContain('telegram_chat_id=chat-42')
     expect(url).toContain('limit=25')
+  })
+
+  it('loads Telegram conversation folders through the canonical Communications route', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ items: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchTelegramBusinessChatFolders(' telegram-account-1 ')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toContain('/api/v1/communications/conversation-folders?account_id=telegram-account-1')
+    expect(init.method).toBe('GET')
   })
 
   it('adapts canonical Communication messages to Telegram message DTOs', async () => {
@@ -98,6 +117,7 @@ describe('telegram business API', () => {
         metadata: { is_pinned: true },
       },
     ])
+    expect(response).toMatchObject({ next_cursor: null, has_more: false })
     const [url] = fetchMock.mock.calls[0]
     expect(url).toContain('/api/v1/communications/messages?')
     expect(url).toContain('channel_kind=telegram')
@@ -181,5 +201,44 @@ describe('telegram business API', () => {
     const [forwardUrl, forwardInit] = fetchMock.mock.calls[2]
     expect(forwardUrl).toContain('/api/v1/communications/messages/msg-1/forward')
     expect(JSON.parse(forwardInit.body as string)).toEqual({ conversation_id: 'chat-2' })
+  })
+
+  it('lets the Telegram server derive the authenticated reaction sender', async () => {
+    const reactionResponse = {
+      reaction_id: 'reaction-1',
+      message_id: 'msg-1',
+      account_id: 'telegram-account-1',
+      provider_chat_id: 'chat-1',
+      provider_message_id: 'provider-message-1',
+      reaction_emoji: '👍',
+      is_active: true,
+      status: 'queued',
+      timestamp: '2026-07-12T10:00:00Z',
+    }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(reactionResponse), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...reactionResponse, is_active: false }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const request = {
+      account_id: 'telegram-account-1',
+      provider_chat_id: 'chat-1',
+      provider_message_id: 'provider-message-1',
+      reaction_emoji: '👍',
+    }
+    await addTelegramBusinessReaction('msg-1', request)
+    await removeTelegramBusinessReaction('msg-1', request)
+
+    const [, addInit] = fetchMock.mock.calls[0]
+    expect(JSON.parse(addInit.body as string)).toEqual(request)
+    const [removeUrl] = fetchMock.mock.calls[1]
+    expect(removeUrl).not.toContain('sender_id=')
   })
 })

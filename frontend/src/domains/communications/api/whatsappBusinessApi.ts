@@ -347,8 +347,8 @@ export async function removeWhatsappBusinessReaction(
     provider_chat_id: request.provider_chat_id,
     provider_message_id: request.provider_message_id,
     reaction_emoji: request.reaction_emoji,
-    sender_id: request.sender_id,
   })
+  if (request.sender_id) params.set('sender_id', request.sender_id)
   if (request.sender_display_name) params.set('sender_display_name', request.sender_display_name)
   if (request.command_id) params.set('command_id', request.command_id)
   return ApiClient.instance.delete<TelegramReactionResponse>(

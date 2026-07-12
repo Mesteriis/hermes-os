@@ -14,7 +14,8 @@ use crate::integrations::telegram::client::{
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibMessageContentSnapshot, TelegramTdlibMessageDeleteSnapshot,
     TelegramTdlibMessageEditedSnapshot, TelegramTdlibMessageInteractionInfoSnapshot,
-    TelegramTdlibMessagePinnedSnapshot, TelegramTdlibMessageSnapshot,
+    TelegramTdlibMessagePinnedSnapshot, TelegramTdlibMessageSendFailedSnapshot,
+    TelegramTdlibMessageSendSucceededSnapshot, TelegramTdlibMessageSnapshot,
 };
 use crate::platform::events::EventBus;
 
@@ -134,6 +135,115 @@ pub(super) async fn publish_message_deleted_event(
         };
         append_and_broadcast(Some(pool.clone()), event_bus, event).await;
     }
+}
+
+pub(super) async fn publish_message_send_failed_event(
+    telegram_store: &Option<TelegramStore>,
+    event_bus: &EventBus,
+    account_id: &str,
+    snapshot: &TelegramTdlibMessageSendFailedSnapshot,
+) {
+    let Some(store) = telegram_store else {
+        return;
+    };
+    let provider_message_ref = format!(
+        "{}:{}",
+        snapshot.provider_chat_id, snapshot.old_provider_message_id
+    );
+    let Some(message) = (match store
+        .message_by_provider_message_id(account_id, &provider_message_ref)
+        .await
+    {
+        Ok(message) => message,
+        Err(error) => {
+            tracing::warn!(error = %error, provider_message_id = %provider_message_ref, "Telegram runtime event bridge: failed to load failed-send message");
+            return;
+        }
+    }) else {
+        return;
+    };
+
+    let observed_at = Utc::now();
+    if let Err(error) = store
+        .append_message_delivery_state_observation(&message, "send_failed", observed_at)
+        .await
+    {
+        tracing::warn!(error = %error, message_id = %message.message_id, "Telegram runtime event bridge: failed to append send failure observation");
+        return;
+    }
+
+    let mut updated_message = message;
+    updated_message.delivery_state = "send_failed".to_owned();
+    let Ok(event) = message_updated_event(
+        account_id,
+        &updated_message,
+        json!({
+            "delivery_state": "send_failed",
+            "provider_error_code": snapshot.error_code,
+            "source": format!("tdlib.{}", snapshot.source_event),
+        }),
+        observed_at,
+    ) else {
+        return;
+    };
+    append_and_broadcast(Some(store.pool().clone()), event_bus, event).await;
+}
+
+pub(super) async fn publish_message_send_succeeded_event(
+    telegram_store: &Option<TelegramStore>,
+    event_bus: &EventBus,
+    account_id: &str,
+    snapshot: &TelegramTdlibMessageSendSucceededSnapshot,
+) {
+    let Some(store) = telegram_store else {
+        return;
+    };
+    let previous_provider_message_ref = format!(
+        "{}:{}",
+        snapshot.provider_chat_id, snapshot.old_provider_message_id
+    );
+    let provider_message_ref = format!(
+        "{}:{}",
+        snapshot.provider_chat_id, snapshot.provider_message_id
+    );
+    let Some(message) = (match store
+        .message_by_provider_message_id(account_id, &previous_provider_message_ref)
+        .await
+    {
+        Ok(message) => message,
+        Err(error) => {
+            tracing::warn!(error = %error, provider_message_id = %previous_provider_message_ref, "Telegram runtime event bridge: failed to load succeeded-send message");
+            return;
+        }
+    }) else {
+        return;
+    };
+
+    let observed_at = Utc::now();
+    if let Err(error) = store
+        .append_message_provider_identity_observation(&message, &provider_message_ref, observed_at)
+        .await
+    {
+        tracing::warn!(error = %error, message_id = %message.message_id, "Telegram runtime event bridge: failed to append send success observation");
+        return;
+    }
+
+    let mut updated_message = message;
+    updated_message.provider_message_id = provider_message_ref;
+    updated_message.delivery_state = "sent".to_owned();
+    let Ok(event) = message_updated_event(
+        account_id,
+        &updated_message,
+        json!({
+            "delivery_state": "sent",
+            "previous_provider_message_id": previous_provider_message_ref,
+            "source": format!("tdlib.{}", snapshot.source_event),
+        }),
+        observed_at,
+    ) else {
+        return;
+    };
+    append_and_broadcast(Some(store.pool().clone()), event_bus, event).await;
 }
 
 pub(super) async fn publish_message_content_updated_event(

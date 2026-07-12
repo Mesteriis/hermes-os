@@ -222,6 +222,10 @@ describe('Communications workspace surface', () => {
       new URL('./useSelectedMessageActions.ts', import.meta.url),
       'utf8'
     )
+    const mailComposeActionsSource = readFileSync(
+      new URL('./useMailComposeActions.ts', import.meta.url),
+      'utf8'
+    )
     const communicationDomainElementsCss = readFileSync(
       new URL('../components/communicationDomainElements.css', import.meta.url),
       'utf8'
@@ -256,13 +260,15 @@ describe('Communications workspace surface', () => {
       '@update-search-query="surface.pageSurface.handleSearchQueryUpdate"'
     )
     expect(viewSource).toContain('MessengerWorkspace')
+    expect(viewSource).toContain(':is-loading-older="surface.isTelegramLoadingOlder.value"')
+    expect(viewSource).toContain('@load-older="surface.loadOlderTelegramMessages"')
     expect(viewSource).toContain("surface.activeChannelId.value === 'mail'")
     expect(viewSource).toContain("surface.activeChannelId.value === 'telegram'")
     expect(viewSource).not.toContain('communication-workspace-menu')
     expect(viewSource).not.toContain('CommunicationWorkspaceShell')
     expect(viewSource).not.toContain('CommunicationWorkspaceOverview')
     expect(viewSurfaceSource).toContain('useTelegramChatsQuery')
-    expect(viewSurfaceSource).toContain('useTelegramMessagesQuery')
+    expect(viewSurfaceSource).toContain('useTelegramMessagesInfiniteQuery')
     expect(viewSurfaceSource).toContain('useWhatsappBusinessConversationsQuery')
     expect(viewSurfaceSource).toContain('useWhatsappBusinessMessagesQuery')
     expect(viewSurfaceSource).toContain('routeToChannelId')
@@ -425,7 +431,7 @@ describe('Communications workspace surface', () => {
       '.filter((item) => item.capabilities.send)'
     )
     expect(pageSurfaceSource).toContain('getDefaultMailAccountId')
-    expect(pageSurfaceSource).toContain('composeFormWithAvailableMailAccount')
+    expect(mailComposeActionsSource).toContain('composeFormWithAvailableMailAccount')
     expect(accountApiSource).toContain('/api/v1/communications/email/accounts')
     expect(accountApiSource).not.toContain(['/api/v1/integrations', 'mail/accounts'].join('/'))
     expect(mailAccountQueriesSource).toContain('useEmailAccountsQuery')
@@ -494,6 +500,15 @@ describe('Communications workspace surface', () => {
     )
     expect(communicationDomainElementsCss).toMatch(
       /\.communications-workspace-view\s*\{[^}]*box-sizing: border-box;[^}]*height: 100%;[^}]*max-height: 100%;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.communications-workspace-view\s*\{[^}]*grid-template-rows: minmax\(0, 1fr\);[^}]*overflow: hidden;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.messenger-viewer__messages\s*\{[^}]*display: flex;[^}]*min-height: 0;[^}]*overflow: auto;/s
+    )
+    expect(communicationDomainElementsCss).toMatch(
+      /\.messenger-viewer__messages::before\s*\{[^}]*content: '';[^}]*flex: 1 0 auto;/s
     )
     expect(communicationDomainElementsCss).not.toContain('calc(100dvh - 72px)')
     expect(communicationDomainElementsCss).toMatch(

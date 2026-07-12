@@ -8,6 +8,7 @@ use crate::platform::communications::ProviderMessageObservationEvent;
 
 pub(in crate::integrations::telegram) struct TelegramAttachmentDownloadObservation<'a> {
     pub(in crate::integrations::telegram) provider_attachment_id: &'a str,
+    pub(in crate::integrations::telegram) communication_attachment_id: Option<&'a str>,
     pub(in crate::integrations::telegram) tdlib_file_id: i64,
     pub(in crate::integrations::telegram) download_state: &'a str,
     pub(in crate::integrations::telegram) local_path: Option<&'a str>,
@@ -70,6 +71,42 @@ impl TelegramStore {
         .await
     }
 
+    pub(in crate::integrations::telegram) async fn append_message_delivery_state_observation(
+        &self,
+        message: &TelegramMessage,
+        delivery_state: &str,
+        observed_at: DateTime<Utc>,
+    ) -> Result<Option<i64>, TelegramError> {
+        self.append_message_observation_event(
+            message,
+            "delivery_state_observed",
+            observed_at,
+            &json!({
+                "delivery_state": delivery_state,
+                "observed_at": observed_at,
+            }),
+        )
+        .await
+    }
+
+    pub(in crate::integrations::telegram) async fn append_message_provider_identity_observation(
+        &self,
+        message: &TelegramMessage,
+        provider_record_id: &str,
+        observed_at: DateTime<Utc>,
+    ) -> Result<Option<i64>, TelegramError> {
+        self.append_message_observation_event(
+            message,
+            "provider_identity_observed",
+            observed_at,
+            &json!({
+                "provider_record_id": provider_record_id,
+                "observed_at": observed_at,
+            }),
+        )
+        .await
+    }
+
     pub(in crate::integrations::telegram) async fn append_attachment_download_observation(
         &self,
         message: &TelegramMessage,
@@ -81,6 +118,7 @@ impl TelegramStore {
             observation.observed_at,
             &json!({
                 "provider_attachment_id": observation.provider_attachment_id,
+                "communication_attachment_id": observation.communication_attachment_id,
                 "provider_file_id": observation.tdlib_file_id,
                 "download_state": observation.download_state,
                 "local_path": observation.local_path,

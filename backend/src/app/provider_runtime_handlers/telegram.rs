@@ -1,6 +1,7 @@
 mod accounts;
 mod capabilities;
 mod chat_actions;
+mod chat_avatars;
 mod chat_folder_actions;
 mod chats;
 mod commands;
@@ -23,8 +24,10 @@ pub(crate) use chat_actions::{
     post_telegram_chat_archive, post_telegram_chat_join, post_telegram_chat_leave,
     post_telegram_chat_mark_read, post_telegram_chat_mark_unread, post_telegram_chat_mute,
     post_telegram_chat_pin, post_telegram_chat_unarchive, post_telegram_chat_unmute,
-    post_telegram_chat_unpin,
+    post_telegram_chat_unpin, put_telegram_chat_history_policy,
+    put_telegram_chat_read_receipt_policy, put_telegram_chat_unread_counter_policy,
 };
+pub(crate) use chat_avatars::{get_telegram_chat_avatar, post_telegram_chat_avatar_sync};
 pub(crate) use chat_folder_actions::{
     post_telegram_chat_add_folder, post_telegram_chat_reassign_folders,
     post_telegram_chat_remove_folder,

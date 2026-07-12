@@ -31,6 +31,7 @@ import type { useApplicationSettingsSurface } from './useApplicationSettingsSurf
 import type { useIntegrationsSettingsSurface } from './useIntegrationsSettingsSurface'
 
 const MAIL_DEGRADATION_THRESHOLD_KEY = 'communications.mail.consecutive_failures_before_degraded'
+const TELEGRAM_READ_RECEIPT_REPORTS_ENABLED_KEY = 'communications.telegram.read_receipt_reports_enabled'
 
 function newSensitiveForwardingPolicyDraft(deliveryAccountId: string): MailSensitiveForwardingPolicyInput {
   return {
@@ -125,6 +126,9 @@ export function useCommunicationsSettingsSurface({
   const degradationThresholdSetting = computed(() =>
     findSetting(applicationSettings.allApplicationSettings.value, MAIL_DEGRADATION_THRESHOLD_KEY)
   )
+  const telegramReadReceiptReportsSetting = computed(() =>
+    findSetting(applicationSettings.allApplicationSettings.value, TELEGRAM_READ_RECEIPT_REPORTS_ENABLED_KEY)
+  )
   const degradationThresholdDraft = computed(() =>
     degradationThresholdSetting.value
       ? applicationSettings.settingDraftValue(degradationThresholdSetting.value)
@@ -166,6 +170,13 @@ export function useCommunicationsSettingsSurface({
   async function saveDegradationThreshold() {
     const setting = degradationThresholdSetting.value
     if (!setting) return
+    await applicationSettings.handleSave(setting)
+  }
+
+  async function updateTelegramReadReceiptReports(enabled: boolean) {
+    const setting = telegramReadReceiptReportsSetting.value
+    if (!setting) return
+    applicationSettings.handleInput(setting, String(enabled))
     await applicationSettings.handleSave(setting)
   }
 
@@ -390,6 +401,7 @@ export function useCommunicationsSettingsSurface({
     commandDiagnosticsStatus,
     degradationThresholdDraft,
     degradationThresholdSetting,
+    telegramReadReceiptReportsSetting,
     isLoading,
     localFolders,
     localFoldersLoading: localFoldersQuery.isLoading,
@@ -401,6 +413,7 @@ export function useCommunicationsSettingsSurface({
     refreshCommandDiagnostics,
     retryMailProviderCommand,
     saveDegradationThreshold,
+    updateTelegramReadReceiptReports,
     saveSelectedMailSyncSettings,
     saveSensitiveForwardingPolicy,
     removeSelectedSensitiveForwardingPolicy,

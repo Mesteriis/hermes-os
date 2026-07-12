@@ -23,6 +23,7 @@ describe('CommunicationsPage boundary', () => {
     expect(surfaceSource).toContain('useMailResourceOverview')
     expect(surfaceSource).toContain('useOutboxStatusStrip')
     expect(surfaceSource).toContain('savedSearchChannelKind = ref<string>()')
+    expect(surfaceSource).toContain("return value === 'email' || value === 'mail' ? value : 'mail'")
     expect(surfaceSource).toContain('handleGenerateAiReply')
     expect(surfaceSource).toContain('handleApplyAiReply')
     expect(surfaceSource).toContain('handleReviewSecurity')

@@ -1,12 +1,17 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
 import type {
   TelegramChatDetailResponse,
+  TelegramChatGroupFilterListResponse,
+  TelegramChatHistoryPolicyRequest,
   TelegramChatListResponse,
   TelegramChatMemberListResponse,
   TelegramChatActionResponse,
+  TelegramChatReadReceiptPolicyRequest,
+  TelegramChatUnreadCounterPolicyRequest,
   TelegramChatSearchResponse,
   TelegramMediaSearchResponse,
   TelegramMessageListResponse,
+  TelegramMessagePageResponse,
   TelegramMessageSearchResponse,
   TelegramTopicListResponse,
 } from '../../../shared/communications/types/telegram'
@@ -25,6 +30,7 @@ import type {
 import type { TelegramRawMessageResponse } from '../../../shared/communications/types/telegramRawEvidence'
 import type {
   TelegramTopicCreateRequest,
+  TelegramTopicCloseRequest,
   TelegramTopicLifecycleResponse,
 } from '../../../shared/communications/types/telegramTopics'
 import type { AttachmentPreviewResponse } from '../types/attachments'
@@ -44,10 +50,70 @@ export async function fetchTelegramBusinessChats(accountId?: string, limit = 50)
   )
 }
 
+export async function fetchTelegramBusinessChatFolders(
+  accountId?: string
+): Promise<TelegramChatGroupFilterListResponse> {
+  const params = new URLSearchParams()
+  if (accountId?.trim()) params.set('account_id', accountId.trim())
+  const suffix = params.size ? `?${params.toString()}` : ''
+  return ApiClient.instance.get<TelegramChatGroupFilterListResponse>(
+    `/api/v1/communications/conversation-folders${suffix}`,
+    'Communication conversation folders request failed'
+  )
+}
+
 export async function fetchTelegramBusinessChatDetail(conversationId: string): Promise<TelegramChatDetailResponse> {
   return ApiClient.instance.get<TelegramChatDetailResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(conversationId)}`,
     'Communication conversation detail request failed'
+  )
+}
+
+export function fetchTelegramBusinessChatAvatar(telegramChatId: string): Promise<Blob> {
+  return ApiClient.instance.getBlob(
+    `/api/v1/communications/conversations/${encodeURIComponent(telegramChatId)}/avatar`,
+    'Telegram chat avatar request failed'
+  )
+}
+
+export function syncTelegramBusinessChatAvatar(telegramChatId: string): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.post<TelegramChatActionResponse>(
+    `/api/v1/communications/conversations/${encodeURIComponent(telegramChatId)}/avatar`,
+    {},
+    'Telegram chat avatar sync failed'
+  )
+}
+
+export function updateTelegramBusinessChatHistoryPolicy(
+  telegramChatId: string,
+  request: TelegramChatHistoryPolicyRequest
+): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.put<TelegramChatActionResponse>(
+    `/api/v1/communications/conversations/${encodeURIComponent(telegramChatId)}/history-policy`,
+    request,
+    'Telegram history policy update failed'
+  )
+}
+
+export function updateTelegramBusinessChatReadReceiptPolicy(
+  telegramChatId: string,
+  request: TelegramChatReadReceiptPolicyRequest
+): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.put<TelegramChatActionResponse>(
+    `/api/v1/communications/conversations/${encodeURIComponent(telegramChatId)}/read-receipt-policy`,
+    request,
+    'Telegram read receipt policy update failed'
+  )
+}
+
+export function updateTelegramBusinessChatUnreadCounterPolicy(
+  telegramChatId: string,
+  request: TelegramChatUnreadCounterPolicyRequest
+): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.put<TelegramChatActionResponse>(
+    `/api/v1/communications/conversations/${encodeURIComponent(telegramChatId)}/unread-counter-policy`,
+    request,
+    'Telegram unread counter policy update failed'
   )
 }
 
@@ -71,16 +137,22 @@ export async function fetchTelegramBusinessChatMembers(
 export async function fetchTelegramBusinessMessages(
   accountId?: string,
   providerChatId?: string,
-  limit = 50
-): Promise<TelegramMessageListResponse> {
+  limit = 100,
+  cursor?: string
+): Promise<TelegramMessagePageResponse> {
   const params = new URLSearchParams({ limit: String(Math.trunc(limit)), channel_kind: 'telegram' })
   if (accountId?.trim()) params.set('account_id', accountId.trim())
   if (providerChatId?.trim()) params.set('conversation_id', providerChatId.trim())
+  if (cursor?.trim()) params.set('cursor', cursor.trim())
   const response = await ApiClient.instance.get<CommunicationMessagesResponse>(
     `/api/v1/communications/messages?${params.toString()}`,
     'Communication messages request failed'
   )
-  return { items: response.items.map(communicationMessageToTelegramMessage) }
+  return {
+    items: response.items.map(communicationMessageToTelegramMessage),
+    next_cursor: response.next_cursor,
+    has_more: response.has_more,
+  }
 }
 
 export async function searchTelegramBusinessChats(params: {
@@ -296,8 +368,8 @@ export async function removeTelegramBusinessReaction(messageId: string, request:
     provider_chat_id: request.provider_chat_id,
     provider_message_id: request.provider_message_id,
     reaction_emoji: request.reaction_emoji,
-    sender_id: request.sender_id,
   })
+  if (request.sender_id) params.set('sender_id', request.sender_id)
   if (request.sender_display_name) params.set('sender_display_name', request.sender_display_name)
   if (request.command_id) params.set('command_id', request.command_id)
   return ApiClient.instance.delete<TelegramReactionResponse>(
@@ -358,6 +430,17 @@ export async function createTelegramBusinessTopic(
     `/api/v1/communications/conversations/${encodeURIComponent(conversationId)}/topics`,
     request,
     'Communication topic create failed'
+  )
+}
+
+export async function closeTelegramBusinessTopic(
+  topicId: string,
+  request: TelegramTopicCloseRequest
+): Promise<TelegramTopicLifecycleResponse> {
+  return ApiClient.instance.post<TelegramTopicLifecycleResponse>(
+    `/api/v1/communications/topics/${encodeURIComponent(topicId)}/close`,
+    request,
+    'Communication topic lifecycle update failed'
   )
 }
 

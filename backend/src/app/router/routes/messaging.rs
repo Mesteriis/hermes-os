@@ -478,6 +478,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route("/api/v1/communications/conversations", get(get_telegram_chats))
         .route(
+            "/api/v1/communications/conversation-folders",
+            get(get_telegram_folders),
+        )
+        .route(
             "/api/v1/integrations/telegram/provider-commands/conversations/join",
             post(post_telegram_chat_join),
         )
@@ -556,6 +560,18 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_chat_pin),
         )
         .route(
+            "/api/v1/communications/conversations/{telegram_chat_id}/history-policy",
+            put(put_telegram_chat_history_policy),
+        )
+        .route(
+            "/api/v1/communications/conversations/{telegram_chat_id}/read-receipt-policy",
+            put(put_telegram_chat_read_receipt_policy),
+        )
+        .route(
+            "/api/v1/communications/conversations/{telegram_chat_id}/unread-counter-policy",
+            put(put_telegram_chat_unread_counter_policy),
+        )
+        .route(
             "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unpin",
             post(post_telegram_chat_unpin),
         )
@@ -602,6 +618,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         .route(
             "/api/v1/integrations/telegram/provider-sync/history",
             post(post_telegram_sync_history),
+        )
+        .route(
+            "/api/v1/communications/conversations/{telegram_chat_id}/avatar",
+            get(get_telegram_chat_avatar).post(post_telegram_chat_avatar_sync),
         )
         .route(
             "/api/v1/integrations/telegram/fixtures/messages",

@@ -64,6 +64,10 @@ fn qr_ready_dialog_capabilities_reflect_provider_write_reconciliation() {
     assert_eq!(mark_unread.status, "available");
     assert_eq!(mark_unread.action_class, "provider_write");
 
+    let message_mark_read = capability(&capabilities, "messages.mark_read");
+    assert_eq!(message_mark_read.status, "available");
+    assert_eq!(message_mark_read.action_class, "provider_write");
+
     let reaction_sync = capability(&capabilities, "reactions.sync");
     assert_eq!(reaction_sync.status, "available");
     assert_eq!(reaction_sync.action_class, "read");

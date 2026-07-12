@@ -49,7 +49,7 @@ impl TelegramRuntimeManager {
     ) -> Result<TelegramHistorySyncResponse, TelegramError> {
         let mode = request.mode();
         if mode == TelegramHistorySyncMode::Full {
-            ensure_private_chat_for_full_sync(context.telegram_store, context.account, request)
+            ensure_full_history_sync_allowed(context.telegram_store, context.account, request)
                 .await?;
         }
         let command_tx = self
@@ -66,14 +66,14 @@ impl TelegramRuntimeManager {
             command_tx,
             request.provider_chat_id.trim().to_owned(),
             request.from_message_id,
-            request.limit.unwrap_or(50) as i32,
+            request.limit.unwrap_or(100) as i32,
             mode,
         )
         .await?;
         let next_from_message_id = oldest_tdlib_message_id(&snapshots);
         let has_more = mode != TelegramHistorySyncMode::Full
             && next_from_message_id.is_some()
-            && snapshots.len() >= request.limit.unwrap_or(50) as usize;
+            && snapshots.len() >= request.limit.unwrap_or(100) as usize;
         let import_batch_id = format!(
             "telegram-tdlib-history-sync:{}:{}",
             context.account.account_id,
@@ -144,7 +144,7 @@ impl TelegramRuntimeManager {
             .recent_messages(
                 Some(&context.account.account_id),
                 Some(&request.provider_chat_id),
-                request.limit.unwrap_or(50),
+                request.limit.unwrap_or(100),
             )
             .await?;
         Ok(TelegramHistorySyncResponse {
@@ -160,7 +160,7 @@ impl TelegramRuntimeManager {
     }
 }
 
-async fn ensure_private_chat_for_full_sync(
+async fn ensure_full_history_sync_allowed(
     telegram_store: &TelegramStore,
     account: &ProviderAccount,
     request: &TelegramHistorySyncRequest,
@@ -175,9 +175,15 @@ async fn ensure_private_chat_for_full_sync(
                 account.account_id
             ))
         })?;
-    if chat.chat_kind != "private" {
+    if chat.chat_kind != "private"
+        && chat
+            .metadata
+            .get("full_history_sync_enabled")
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+    {
         return Err(TelegramError::InvalidRequest(
-            "full Telegram history sync is only allowed for private chats; group and channel history must be paged with mode=older"
+            "full Telegram history sync is only allowed for private chats unless the chat full-history setting is enabled"
                 .to_owned(),
         ));
     }

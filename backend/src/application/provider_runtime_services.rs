@@ -413,6 +413,30 @@ impl TelegramProviderRuntimeApplicationService {
         self.store.telegram_chat_by_id(telegram_chat_id).await
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn apply_local_telegram_chat_avatar(
+        &self,
+        telegram_chat_id: &str,
+        tdlib_file_id: i64,
+        remote_unique_id: Option<&str>,
+        blob_id: &str,
+        content_type: &str,
+        size_bytes: i64,
+        sha256: &str,
+    ) -> Result<serde_json::Value, TelegramError> {
+        self.store
+            .apply_local_chat_avatar(
+                telegram_chat_id,
+                tdlib_file_id,
+                remote_unique_id,
+                blob_id,
+                content_type,
+                size_bytes,
+                sha256,
+            )
+            .await
+    }
+
     pub(crate) async fn list_chat_members(
         &self,
         telegram_chat_id: &str,

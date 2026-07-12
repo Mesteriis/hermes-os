@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use chrono::Utc;
+use serde::Deserialize;
 
 use crate::app::api_support::{TelegramReactionDeleteQuery, communication_provider_account_store};
 use crate::app::provider_runtime_handlers::whatsapp::{
@@ -9,17 +10,28 @@ use crate::app::provider_runtime_handlers::whatsapp::{
 use crate::app::{ApiError, AppState};
 use crate::application::provider_runtime_contracts::{
     TelegramReactionListResponse, TelegramReactionRequest, TelegramReactionResponse,
-    WhatsAppProviderCommandResponse, WhatsAppReactionRequest,
+    WhatsAppProviderCommandResponse, WhatsAppReactionRequest, telegram_self_provider_member_id,
 };
 
 use super::super::helpers::ensure_telegram_account_operation_allowed;
 use super::telegram_message_write_service;
 
+#[derive(Deserialize)]
+pub(crate) struct TelegramReactionCommandRequest {
+    account_id: String,
+    provider_chat_id: String,
+    provider_message_id: String,
+    reaction_emoji: String,
+    sender_id: Option<String>,
+    sender_display_name: Option<String>,
+    command_id: Option<String>,
+}
+
 /// POST /api/v1/communications/messages/{message_id}/reactions
 pub(crate) async fn post_telegram_reaction(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
-    Json(request): Json<TelegramReactionRequest>,
+    Json(request): Json<TelegramReactionCommandRequest>,
 ) -> Result<Json<TelegramReactionResponse>, ApiError> {
     let Some(account) = communication_provider_account_store(&state)?
         .get(&request.account_id)
@@ -29,6 +41,11 @@ pub(crate) async fn post_telegram_reaction(
             "provider account was not found",
         ));
     };
+    let request = normalize_reaction_request(
+        request,
+        account.provider_kind.is_telegram(),
+        &account.external_account_id,
+    )?;
 
     if account.provider_kind.is_whatsapp() {
         let command_id = request
@@ -70,12 +87,12 @@ pub(crate) async fn delete_telegram_reaction(
     Path(message_id): Path<String>,
     Query(query): Query<TelegramReactionDeleteQuery>,
 ) -> Result<Json<TelegramReactionResponse>, ApiError> {
-    let request = TelegramReactionRequest {
+    let request = TelegramReactionCommandRequest {
         account_id: query.account_id.clone(),
         provider_chat_id: query.provider_chat_id.clone(),
         provider_message_id: query.provider_message_id.clone(),
         reaction_emoji: query.reaction_emoji.clone(),
-        sender_id: query.sender_id.clone().unwrap_or_default(),
+        sender_id: query.sender_id.clone(),
         sender_display_name: query.sender_display_name.clone(),
         command_id: query.command_id.clone(),
     };
@@ -87,6 +104,11 @@ pub(crate) async fn delete_telegram_reaction(
             "provider account was not found",
         ));
     };
+    let request = normalize_reaction_request(
+        request,
+        account.provider_kind.is_telegram(),
+        &account.external_account_id,
+    )?;
 
     if account.provider_kind.is_whatsapp() {
         let command_id = request
@@ -121,6 +143,40 @@ pub(crate) async fn delete_telegram_reaction(
         .remove_reaction(&message_id, request)
         .await?;
     Ok(Json(response))
+}
+
+fn normalize_reaction_request(
+    request: TelegramReactionCommandRequest,
+    is_telegram: bool,
+    external_account_id: &str,
+) -> Result<TelegramReactionRequest, ApiError> {
+    let sender_id = request
+        .sender_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            if is_telegram {
+                telegram_self_provider_member_id(external_account_id)
+            } else {
+                let value = external_account_id.trim();
+                (!value.is_empty()).then(|| value.to_owned())
+            }
+        })
+        .ok_or(ApiError::InvalidCommunicationQuery(
+            "reaction sender identity is unavailable for this provider account",
+        ))?;
+
+    Ok(TelegramReactionRequest {
+        account_id: request.account_id,
+        provider_chat_id: request.provider_chat_id,
+        provider_message_id: request.provider_message_id,
+        reaction_emoji: request.reaction_emoji,
+        sender_id,
+        sender_display_name: request.sender_display_name,
+        command_id: request.command_id,
+    })
 }
 
 /// GET /api/v1/communications/messages/{message_id}/reactions
@@ -164,5 +220,38 @@ fn whatsapp_command_response_to_reaction_response(
         is_active,
         status: response.status.clone(),
         timestamp: response.updated_at,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TelegramReactionCommandRequest, normalize_reaction_request};
+
+    fn request(sender_id: Option<&str>) -> TelegramReactionCommandRequest {
+        TelegramReactionCommandRequest {
+            account_id: "telegram-account".to_owned(),
+            provider_chat_id: "chat-1".to_owned(),
+            provider_message_id: "message-1".to_owned(),
+            reaction_emoji: "👍".to_owned(),
+            sender_id: sender_id.map(ToOwned::to_owned),
+            sender_display_name: None,
+            command_id: None,
+        }
+    }
+
+    #[test]
+    fn derives_telegram_reaction_sender_from_account_identity() {
+        let normalized = normalize_reaction_request(request(None), true, "telegram:42")
+            .expect("normalized Telegram reaction request");
+
+        assert_eq!(normalized.sender_id, "user:42");
+    }
+
+    #[test]
+    fn preserves_explicit_reaction_sender_identity() {
+        let normalized = normalize_reaction_request(request(Some("user:9")), true, "telegram:42")
+            .expect("normalized Telegram reaction request");
+
+        assert_eq!(normalized.sender_id, "user:9");
     }
 }

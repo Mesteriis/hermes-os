@@ -60,7 +60,7 @@ async fn sync_fixture_history(
         .recent_messages(
             Some(account_id),
             Some(&request.provider_chat_id),
-            request.limit.unwrap_or(50),
+            request.limit.unwrap_or(100),
         )
         .await?;
     Ok(TelegramHistorySyncResponse {

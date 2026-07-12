@@ -113,6 +113,16 @@ pub fn json_post_request_with_explicit_actor_header(
         .expect("request")
 }
 
+pub fn json_put_request_with_actor(path: &str, body: Value, token: &str) -> Request<Body> {
+    Request::builder()
+        .method(Method::PUT)
+        .uri(path)
+        .header("x-hermes-secret", token)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .expect("request")
+}
+
 pub fn get_request_with_token(path: &str, token: &str) -> Request<Body> {
     Request::builder()
         .method("GET")

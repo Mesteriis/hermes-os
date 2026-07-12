@@ -2,9 +2,12 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import {
   addTelegramBusinessReaction,
+  closeTelegramBusinessTopic,
+  createTelegramBusinessTopic,
   deleteTelegramBusinessMessage,
   editTelegramBusinessMessage,
   fetchTelegramBusinessChatDetail,
+  fetchTelegramBusinessChatFolders,
   fetchTelegramBusinessChatMembers,
   fetchTelegramBusinessChats,
   fetchTelegramBusinessForwardChain,
@@ -29,10 +32,14 @@ import {
   searchTelegramBusinessMessages,
   searchTelegramBusinessTopics,
   sendTelegramBusinessMessage,
+  updateTelegramBusinessChatHistoryPolicy,
+  updateTelegramBusinessChatReadReceiptPolicy,
+  updateTelegramBusinessChatUnreadCounterPolicy,
 } from '../api/telegramBusinessApi'
 import type {
   TelegramChat,
   TelegramChatDetailResponse,
+  TelegramChatGroupFilter,
   TelegramChatListResponse,
   TelegramChatMember,
   TelegramChatMemberListResponse,
@@ -42,6 +49,7 @@ import type {
   TelegramMediaSearchResponse,
   TelegramMessage,
   TelegramMessageListResponse,
+  TelegramMessagePageResponse,
   TelegramMessageSearchResponse,
   TelegramMessageTombstoneListResponse,
   TelegramMessageVersionListResponse,
@@ -57,6 +65,7 @@ import type {
   CommunicationProviderMessageCommandResponse,
   MessagePinToggleResponse,
 } from '../types/communications'
+import type { TelegramTopicCloseRequest, TelegramTopicCreateRequest, TelegramTopicLifecycleResponse } from '../../../shared/communications/types/telegramTopics'
 
 export const telegramBusinessQueryKeys = {
   chats: ['communications', 'telegram', 'chats'] as const,
@@ -67,6 +76,11 @@ export const telegramBusinessQueryKeys = {
   topicMessages: ['communications', 'telegram', 'topic-messages'] as const,
   search: ['communications', 'telegram', 'search'] as const,
 }
+
+// SSE is the primary realtime path. Polling keeps the list current while a
+// local runtime reconnects or the browser briefly loses its event stream.
+const TELEGRAM_CONVERSATION_REFETCH_INTERVAL_MS = 15_000
+const TELEGRAM_MESSAGE_REFETCH_INTERVAL_MS = 8_000
 
 export function useTelegramChatsQuery(
   accountId?: MaybeRefOrGetter<string | undefined>,
@@ -83,6 +97,23 @@ export function useTelegramChatsQuery(
         toValue(accountId),
         toValue(limit)
       )
+      return response.items
+    },
+    refetchInterval: TELEGRAM_CONVERSATION_REFETCH_INTERVAL_MS,
+  })
+}
+
+export function useTelegramChatFoldersQuery(
+  accountId?: MaybeRefOrGetter<string | undefined>
+) {
+  return useQuery<TelegramChatGroupFilter[]>({
+    queryKey: computed(() => [
+      ...telegramBusinessQueryKeys.chats,
+      'folders',
+      toValue(accountId) ?? 'all',
+    ]),
+    queryFn: async () => {
+      const response = await fetchTelegramBusinessChatFolders(toValue(accountId))
       return response.items
     },
   })
@@ -169,6 +200,93 @@ export function useTelegramMessagesQuery(
       if (providerChatIdValue === null) return false
       return providerChatIdValue === undefined || Boolean(toValue(accountId) && providerChatIdValue)
     }),
+    refetchInterval: TELEGRAM_MESSAGE_REFETCH_INTERVAL_MS,
+  })
+}
+
+export function useTelegramMessagesInfiniteQuery(
+  accountId?: MaybeRefOrGetter<string | null | undefined>,
+  providerChatId?: MaybeRefOrGetter<string | null | undefined>,
+  limit: MaybeRefOrGetter<number> = 100
+) {
+  return useInfiniteQuery<TelegramMessagePageResponse>({
+    queryKey: computed(() => [
+      ...telegramBusinessQueryKeys.messages,
+      'infinite',
+      toValue(accountId) ?? 'all',
+      toValue(providerChatId) ?? 'all',
+      toValue(limit),
+    ]),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) => fetchTelegramBusinessMessages(
+      toValue(accountId) ?? undefined,
+      toValue(providerChatId) ?? undefined,
+      toValue(limit),
+      typeof pageParam === 'string' ? pageParam : undefined
+    ),
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    enabled: computed(() => Boolean(toValue(accountId) && toValue(providerChatId))),
+    refetchInterval: TELEGRAM_MESSAGE_REFETCH_INTERVAL_MS,
+  })
+}
+
+export function useUpdateTelegramChatHistoryPolicyMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ telegramChatId, accountId, providerChatId, enabled }: {
+      telegramChatId: string
+      accountId: string
+      providerChatId: string
+      enabled: boolean
+    }) => updateTelegramBusinessChatHistoryPolicy(telegramChatId, {
+      account_id: accountId,
+      provider_chat_id: providerChatId,
+      full_history_sync_enabled: enabled,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: telegramBusinessQueryKeys.chats })
+      queryClient.invalidateQueries({ queryKey: telegramBusinessQueryKeys.chatDetail })
+    },
+  })
+}
+
+export function useUpdateTelegramChatReadReceiptPolicyMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ telegramChatId, accountId, providerChatId, enabled }: {
+      telegramChatId: string
+      accountId: string
+      providerChatId: string
+      enabled: boolean
+    }) => updateTelegramBusinessChatReadReceiptPolicy(telegramChatId, {
+      account_id: accountId,
+      provider_chat_id: providerChatId,
+      read_receipt_reports_enabled: enabled,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: telegramBusinessQueryKeys.chats })
+      queryClient.invalidateQueries({ queryKey: telegramBusinessQueryKeys.chatDetail })
+    },
+  })
+}
+
+export function useUpdateTelegramChatUnreadCounterPolicyMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ telegramChatId, accountId, providerChatId, hideUnreadCounter }: {
+      telegramChatId: string
+      accountId: string
+      providerChatId: string
+      hideUnreadCounter: boolean
+    }) => updateTelegramBusinessChatUnreadCounterPolicy(telegramChatId, {
+      account_id: accountId,
+      provider_chat_id: providerChatId,
+      hide_unread_counter: hideUnreadCounter,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: telegramBusinessQueryKeys.chats })
+      queryClient.invalidateQueries({ queryKey: telegramBusinessQueryKeys.chatDetail })
+    },
   })
 }
 
@@ -327,6 +445,31 @@ export function useTelegramTopicSearchQuery(
       return searchTelegramBusinessTopics(chatId, toValue(q), toValue(limit))
     },
     enabled: computed(() => Boolean(toValue(telegramChatId)) && toValue(q).trim().length >= 2),
+  })
+}
+
+function useInvalidateTelegramTopics() {
+  const queryClient = useQueryClient()
+  return () => {
+    queryClient.invalidateQueries({ queryKey: telegramBusinessQueryKeys.topics })
+    queryClient.invalidateQueries({ queryKey: telegramBusinessQueryKeys.topicMessages })
+    queryClient.invalidateQueries({ queryKey: telegramBusinessQueryKeys.chats })
+  }
+}
+
+export function useCreateTelegramTopicMutation() {
+  const invalidate = useInvalidateTelegramTopics()
+  return useMutation<TelegramTopicLifecycleResponse, Error, { conversationId: string; request: TelegramTopicCreateRequest }>({
+    mutationFn: ({ conversationId, request }) => createTelegramBusinessTopic(conversationId, request),
+    onSuccess: invalidate,
+  })
+}
+
+export function useCloseTelegramTopicMutation() {
+  const invalidate = useInvalidateTelegramTopics()
+  return useMutation<TelegramTopicLifecycleResponse, Error, { topicId: string; request: TelegramTopicCloseRequest }>({
+    mutationFn: ({ topicId, request }) => closeTelegramBusinessTopic(topicId, request),
+    onSuccess: invalidate,
   })
 }
 

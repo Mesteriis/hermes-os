@@ -14,7 +14,7 @@ use hermes_hub_backend::domains::signal_hub::dispatch_telegram_raw_signal;
 use hermes_hub_backend::platform::storage::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, get_request_with_token, json_body, json_post_request_with_actor,
-    json_post_request_with_explicit_actor_header, unique_suffix,
+    json_post_request_with_explicit_actor_header, json_put_request_with_actor, unique_suffix,
 };
 use testkit::context::TestContext;
 #[tokio::test]
@@ -476,5 +476,175 @@ async fn telegram_fixture_sync_selected_history_returns_projected_messages() {
     assert_eq!(
         sync_body["items"][0]["text"],
         json!("Selected chat history message.")
+    );
+}
+
+#[tokio::test]
+async fn telegram_group_history_policy_is_local_and_persisted() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-history-policy-{suffix}");
+    let provider_chat_id = format!("group-history-policy-{suffix}");
+    let app = build_router_with_database(
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/integrations/telegram/fixtures/accounts",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram History Policy",
+            "external_account_id": format!("tg-history-policy-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    assert_ok(
+        app.clone(),
+        "/api/v1/integrations/telegram/fixtures/messages",
+        json!({
+            "account_id": account_id,
+            "provider_chat_id": provider_chat_id,
+            "provider_message_id": format!("group-history-message-{suffix}"),
+            "chat_kind": "group",
+            "chat_title": "Group History Policy",
+            "sender_id": format!("sender-{suffix}"),
+            "sender_display_name": "Maria Petrova",
+            "text": "Configure full history locally.",
+            "import_batch_id": format!("telegram-history-policy-{suffix}"),
+            "occurred_at": "2026-07-12T20:00:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
+
+    let chats_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!(
+                "/api/v1/communications/conversations?account_id={account_id}&channel_kind=telegram"
+            ),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("chat list response");
+    assert_eq!(chats_response.status(), StatusCode::OK);
+    let chats_body = json_body(chats_response).await;
+    let telegram_chat_id = chats_body["items"][0]["telegram_chat_id"]
+        .as_str()
+        .expect("telegram chat id");
+
+    let policy_response = app
+        .clone()
+        .oneshot(json_put_request_with_actor(
+            &format!("/api/v1/communications/conversations/{telegram_chat_id}/history-policy"),
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": provider_chat_id,
+                "full_history_sync_enabled": true
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("history policy response");
+    assert_eq!(policy_response.status(), StatusCode::OK);
+    let policy_body = json_body(policy_response).await;
+    assert_eq!(policy_body["action"], json!("history_policy_updated"));
+    assert_eq!(
+        policy_body["metadata"]["full_history_sync_enabled"],
+        json!(true)
+    );
+
+    let persisted_response = app
+        .oneshot(get_request_with_token(
+            &format!(
+                "/api/v1/communications/conversations?account_id={account_id}&channel_kind=telegram"
+            ),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("persisted chat list response");
+    assert_eq!(persisted_response.status(), StatusCode::OK);
+    let persisted_body = json_body(persisted_response).await;
+    assert_eq!(
+        persisted_body["items"][0]["metadata"]["full_history_sync_enabled"],
+        json!(true)
+    );
+
+    let receipt_policy_response = app
+        .clone()
+        .oneshot(json_put_request_with_actor(
+            &format!("/api/v1/communications/conversations/{telegram_chat_id}/read-receipt-policy"),
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": provider_chat_id,
+                "read_receipt_reports_enabled": false
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("read receipt policy response");
+    assert_eq!(receipt_policy_response.status(), StatusCode::OK);
+    let receipt_policy_body = json_body(receipt_policy_response).await;
+    assert_eq!(
+        receipt_policy_body["action"],
+        json!("read_receipt_policy_updated")
+    );
+    assert_eq!(
+        receipt_policy_body["metadata"]["read_receipt_reports_enabled"],
+        json!(false)
+    );
+
+    let read_response = app
+        .oneshot(json_post_request_with_actor(
+            &format!(
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/read"
+            ),
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": provider_chat_id,
+                "last_read_inbox_provider_message_id": format!("group-history-message-{suffix}")
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("local-only read response");
+    assert_eq!(read_response.status(), StatusCode::OK);
+    let read_body = json_body(read_response).await;
+    assert_eq!(read_body["action"], json!("mark_read_local_only"));
+    assert_eq!(read_body["status"], json!("read_local_only"));
+
+    let counter_policy_response = app
+        .oneshot(json_put_request_with_actor(
+            &format!(
+                "/api/v1/communications/conversations/{telegram_chat_id}/unread-counter-policy"
+            ),
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": provider_chat_id,
+                "hide_unread_counter": true
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("unread counter policy response");
+    assert_eq!(counter_policy_response.status(), StatusCode::OK);
+    let counter_policy_body = json_body(counter_policy_response).await;
+    assert_eq!(
+        counter_policy_body["action"],
+        json!("unread_counter_policy_updated")
+    );
+    assert_eq!(
+        counter_policy_body["metadata"]["hide_unread_counter"],
+        json!(true)
     );
 }

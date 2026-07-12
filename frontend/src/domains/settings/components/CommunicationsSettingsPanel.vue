@@ -108,6 +108,29 @@ function mappingSourceLabel(source: string): string {
       </div>
     </section>
 
+    <section v-if="surface.telegramReadReceiptReportsSetting.value" class="settings-communications-panel">
+      <header>
+        <div>
+          <span>{{ t('Telegram privacy') }}</span>
+          <strong>{{ t('Read reports') }}</strong>
+        </div>
+        <small>{{ t('A chat can override this default from its inspector.') }}</small>
+      </header>
+      <div class="settings-communications-policy">
+        <label class="settings-switch">
+          <input
+            type="checkbox"
+            :checked="surface.telegramReadReceiptReportsSetting.value.value === true"
+            :disabled="!surface.telegramReadReceiptReportsSetting.value.is_editable"
+            @change="surface.updateTelegramReadReceiptReports(eventChecked($event))"
+          />
+          <span>{{ t('Send read reports to Telegram') }}</span>
+        </label>
+        <p>{{ t(surface.telegramReadReceiptReportsSetting.value.description) }}</p>
+        <p>{{ t('Telegram delivery receipts are provider-managed and cannot be suppressed through TDLib.') }}</p>
+      </div>
+    </section>
+
     <section class="settings-communications-mail-grid">
       <aside class="settings-communications-panel settings-communications-accounts">
         <header>

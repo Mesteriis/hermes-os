@@ -55,6 +55,10 @@
 	"Messenger actions": "Messenger actions",
 	"Messenger conversation actions": "Messenger conversation actions",
 	"Messenger list": "Messenger list",
+	"Attachment ready to send": "Attachment ready to send",
+	"Remove attachment": "Remove attachment",
+	"Loading dialogs": "Loading dialogs",
+	"Could not load dialogs": "Could not load dialogs",
 	"Messenger list settings": "Messenger list settings",
 	"Messenger signals": "Messenger signals",
 	"Messenger view": "Messenger view",
@@ -1832,5 +1836,12 @@
 	"Failed to start Telegram QR login.": "Failed to start Telegram QR login.",
 	"Failed to refresh Telegram QR login status.": "Failed to refresh Telegram QR login status.",
 	"Start or resume Telegram QR login": "Start or resume Telegram QR login",
-	"Resume Telegram QR login": "Resume Telegram QR login"
+	"Resume Telegram QR login": "Resume Telegram QR login",
+	"Unpin": "Unpin",
+	"Unmute": "Unmute",
+	"Unarchive": "Unarchive",
+	"Telegram synchronization actions": "Telegram synchronization actions",
+	"Sync latest history": "Sync latest history",
+	"Sync older history": "Sync older history",
+	"Open synchronization actions": "Open synchronization actions"
 }

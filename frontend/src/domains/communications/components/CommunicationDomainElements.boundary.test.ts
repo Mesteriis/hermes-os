@@ -1145,7 +1145,7 @@ describe('Communication domain elements', () => {
     expect(messengerComposerSource).toContain('telegramMessengerComposerPreset')
     expect(messengerComposerSource).toContain('whatsAppMessengerComposerPreset')
     expect(messengerComposerSource).toContain('signalMessengerComposerPreset')
-    expect(messengerComposerSource).toContain("conversation.kind !== 'direct'")
+    expect(messengerComposerSource).toContain('messengerComposerVariantLabel')
     expect(messengerComposerSource).toContain("conversation.kind === 'group'")
     expect(messengerMessageSource).toContain('MessengerAction')
     expect(messengerMessageSource).toContain('MessengerViewer')

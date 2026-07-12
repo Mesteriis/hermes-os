@@ -24,7 +24,8 @@ pub(crate) use files::parse_tdlib_file_snapshot;
 pub(crate) use message_events::{
     parse_tdlib_message_content_snapshot, parse_tdlib_message_delete_snapshot,
     parse_tdlib_message_edited_snapshot, parse_tdlib_message_interaction_info_snapshot,
-    parse_tdlib_message_pinned_snapshot, parse_tdlib_new_message_snapshot,
+    parse_tdlib_message_pinned_snapshot, parse_tdlib_message_send_failed_snapshot,
+    parse_tdlib_message_send_succeeded_snapshot, parse_tdlib_new_message_snapshot,
 };
 pub(crate) use messages::{parse_tdlib_message_list, parse_tdlib_message_snapshot};
 pub(crate) use participants::{parse_tdlib_basic_group_member_list, parse_tdlib_chat_member_list};

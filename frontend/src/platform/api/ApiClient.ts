@@ -54,6 +54,25 @@ export class ApiClient {
 		return this.request<T>('GET', path, undefined, fallbackMessage)
 	}
 
+	async getBlob(path: string, fallbackMessage = 'GET blob request failed'): Promise<Blob> {
+		const res = await fetch(`${this.baseUrl}${path}`, {
+			method: 'GET',
+			headers: {
+				'X-Hermes-Secret': this.secret
+			}
+		})
+		if (!res.ok) {
+			let errorBody: string | undefined
+			try {
+				errorBody = await res.text()
+			} catch {
+				// ignore parse error
+			}
+			throw apiErrorFromResponseBody(errorBody, res.status, fallbackMessage)
+		}
+		return res.blob()
+	}
+
 	async post<T>(path: string, body: unknown, fallbackMessage = 'POST request failed'): Promise<T> {
 		return this.request<T>('POST', path, body, fallbackMessage)
 	}

@@ -19,6 +19,22 @@ fn mail_degradation_threshold_is_declared_as_a_bounded_integer() {
 }
 
 #[test]
+fn telegram_read_receipt_policy_is_declared_as_an_editable_boolean() {
+    let setting = declared_setting("communications.telegram.read_receipt_reports_enabled")
+        .expect("Telegram read receipt setting");
+
+    assert_eq!(setting.category, "communications");
+    assert_eq!(setting.value_kind, SettingValueKind::Boolean);
+    assert!(setting.is_editable);
+    assert_eq!(setting.default_value, json!(true));
+    assert_eq!(setting.metadata["scope"], json!("telegram"));
+    assert_eq!(
+        setting.metadata["policy_kind"],
+        json!("provider_read_receipt")
+    );
+}
+
+#[test]
 fn frontend_locale_setting_is_declared_as_editable_string() {
     let setting = declared_setting("frontend.locale").expect("frontend locale setting");
 

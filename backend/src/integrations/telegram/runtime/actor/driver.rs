@@ -368,6 +368,12 @@ fn drain_unsolicited_tdlib_events(
         if let Some(snapshot) = tdjson::parse_tdlib_message_pinned_snapshot(&event)? {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessagePinnedUpdated(snapshot));
         }
+        if let Some(snapshot) = tdjson::parse_tdlib_message_send_failed_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageSendFailed(snapshot));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_message_send_succeeded_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageSendSucceeded(snapshot));
+        }
         if let Some(snapshot) = tdjson::parse_tdlib_message_delete_snapshot(&event)? {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageDeleted(snapshot));
         }

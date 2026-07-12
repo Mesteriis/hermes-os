@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
@@ -26,6 +26,8 @@ static MAIL_PROVIDER_COMMAND_DATABASES: LazyLock<Mutex<HashSet<String>>> =
 static MAIL_AI_PIPELINE_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static TELEGRAM_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static TELEGRAM_RUNTIME_RECONCILIATION_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static WHATSAPP_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -87,6 +89,11 @@ const MAIL_OUTBOX_DELIVERY_RUNTIME: &str = "mail_outbox_delivery";
 const MAIL_PROVIDER_COMMAND_RUNTIME: &str = "mail_provider_commands";
 const MAIL_AI_PIPELINE_RUNTIME: &str = "mail_ai_pipeline";
 const TELEGRAM_COMMAND_EXECUTOR_RUNTIME: &str = "telegram_command_executor";
+const TELEGRAM_RUNTIME_RECONCILIATION_RUNTIME: &str = "telegram_runtime_reconciliation";
+const TELEGRAM_RUNTIME_RECONCILIATION_TICK_SECONDS: u64 = 15;
+const TELEGRAM_RUNTIME_CHAT_SYNC_LIMIT: i64 = 100;
+const TELEGRAM_RUNTIME_RECONNECT_INITIAL_DELAY_SECONDS: u64 = 5;
+const TELEGRAM_RUNTIME_RECONNECT_MAX_DELAY_SECONDS: u64 = 300;
 const WHATSAPP_COMMAND_EXECUTOR_RUNTIME: &str = "whatsapp_command_executor";
 const ZULIP_COMMAND_EXECUTOR_RUNTIME: &str = "zulip_command_executor";
 const ZULIP_EVENT_INGEST_RUNTIME: &str = "zulip_event_ingest";
@@ -130,6 +137,10 @@ const PROJECT_LINK_REVIEW_EFFECTS_RUNTIME: &str = "project_link_review_effects";
 const REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_RUNTIME: &str =
     "realtime_conversation_transcript_projection";
 const SIGNAL_HUB_RAW_SIGNAL_RUNTIME: &str = "signal_hub_raw_signal_dispatcher";
+// Telegram and other inbound signals cross Signal Hub before they become
+// canonical Communications messages. Keep that durable path responsive enough
+// for an open conversation without tightening unrelated background workers.
+const REALTIME_SIGNAL_PROJECTION_TICK_MILLIS: u64 = 250;
 const EVENT_OUTBOX_DISPATCHER_RUNTIME: &str = "event_outbox_dispatcher";
 const SIGNAL_REPLAY_DISPATCHER_RUNTIME: &str = "signal_replay_dispatcher";
 
@@ -156,6 +167,7 @@ pub(crate) fn start_background_services(context: ApplicationBootstrapContext) {
     start_mail_provider_command_executor(context.clone());
     start_mail_ai_pipeline(context.clone());
     start_telegram_command_executor(context.clone());
+    start_telegram_runtime_reconciliation(context.clone());
     start_whatsapp_command_executor(context.clone());
     start_zulip_event_ingest(context.clone());
     start_zulip_attachment_download(context.clone());
@@ -608,6 +620,64 @@ fn start_telegram_command_executor(context: ApplicationBootstrapContext) {
                 10,
             )
             .await;
+        }
+    });
+}
+
+fn start_telegram_runtime_reconciliation(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_telegram_runtime_reconciliation(&database_url) {
+        return;
+    }
+
+    let vault = context.vault;
+    let config = context.config;
+    let event_bus = context.event_bus;
+    let runtime = context.telegram_runtime;
+
+    tokio::spawn(async move {
+        let mut reconnects = HashMap::new();
+        let mut tick = tokio::time::interval(Duration::from_secs(
+            TELEGRAM_RUNTIME_RECONCILIATION_TICK_SECONDS,
+        ));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "telegram",
+                TELEGRAM_RUNTIME_RECONCILIATION_RUNTIME,
+                json!({
+                    "label": "Telegram runtime reconciliation",
+                    "scope": "runtime",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+
+            if let Err(error) = reconcile_telegram_runtime_once(
+                &pool,
+                &vault,
+                &config,
+                &event_bus,
+                &runtime,
+                &mut reconnects,
+            )
+            .await
+            {
+                tracing::warn!(
+                    error = %error,
+                    "telegram runtime reconciliation tick failed"
+                );
+            }
         }
     });
 }
@@ -1385,7 +1455,9 @@ fn start_communication_provider_observation_projection(context: ApplicationBoots
                 crate::domains::communications::messages::COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER,
             ),
         );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        let mut tick = tokio::time::interval(Duration::from_millis(
+            REALTIME_SIGNAL_PROJECTION_TICK_MILLIS,
+        ));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         loop {
@@ -1944,7 +2016,9 @@ fn start_signal_hub_raw_signal_dispatcher(context: ApplicationBootstrapContext) 
                 crate::domains::signal_hub::SIGNAL_HUB_RAW_SIGNAL_CONSUMER,
             ),
         );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        let mut tick = tokio::time::interval(Duration::from_millis(
+            REALTIME_SIGNAL_PROJECTION_TICK_MILLIS,
+        ));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         loop {
@@ -2114,6 +2188,19 @@ fn register_telegram_command_executor(database_url: &str) -> bool {
             tracing::warn!(
                 error = %error,
                 "telegram command executor registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn register_telegram_runtime_reconciliation(database_url: &str) -> bool {
+    match TELEGRAM_RUNTIME_RECONCILIATION_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "telegram runtime reconciliation registry is unavailable"
             );
             false
         }
@@ -3146,6 +3233,224 @@ async fn reconcile_whatsapp_runtime_restore_once(
     Ok(())
 }
 
+#[derive(Default)]
+struct TelegramRuntimeReconnectState {
+    consecutive_failures: u32,
+    retry_after: Option<tokio::time::Instant>,
+}
+
+async fn reconcile_telegram_runtime_once(
+    pool: &PgPool,
+    vault: &HostVault,
+    config: &AppConfig,
+    event_bus: &EventBus,
+    runtime: &TelegramRuntimeManager,
+    reconnects: &mut HashMap<String, TelegramRuntimeReconnectState>,
+) -> Result<(), String> {
+    let account_store =
+        crate::domains::communications::core::CommunicationProviderAccountStore::new(pool.clone());
+    let accounts = account_store
+        .list()
+        .await
+        .map_err(|error| error.to_string())?;
+    let enabled_account_ids = accounts
+        .iter()
+        .filter(|account| telegram_runtime_reconciliation_enabled(account))
+        .map(|account| account.account_id.as_str())
+        .collect::<HashSet<_>>();
+
+    for account in accounts
+        .iter()
+        .filter(|account| account.provider_kind.is_telegram())
+        .filter(|account| !enabled_account_ids.contains(account.account_id.as_str()))
+    {
+        if let Err(error) = runtime.stop_account(&account.account_id) {
+            tracing::warn!(
+                error = %error,
+                account_id = %account.account_id,
+                "telegram runtime reconciliation could not stop a disabled account"
+            );
+        }
+        reconnects.remove(&account.account_id);
+    }
+
+    let runtime_context = crate::application::telegram_runtime::TelegramRuntimeUseCaseContext::new(
+        crate::application::telegram_runtime::TelegramRuntimeUseCaseStores {
+            provider_account_store:
+                crate::domains::communications::core::CommunicationProviderAccountStore::new(
+                    pool.clone(),
+                ),
+            provider_secret_binding_store:
+                crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                    pool.clone(),
+                ),
+            telegram_store: crate::application::telegram_provider_runtime_store(pool.clone()),
+            secret_store: crate::platform::secrets::SecretReferenceStore::new(pool.clone()),
+        },
+        crate::application::telegram_runtime::TelegramRuntimeUseCaseRuntime {
+            secret_resolver: vault,
+            config,
+            event_bus,
+            runtime,
+        },
+    );
+
+    for account in accounts
+        .iter()
+        .filter(|account| telegram_runtime_reconciliation_enabled(account))
+    {
+        let account_id = &account.account_id;
+        let now = tokio::time::Instant::now();
+        if reconnects
+            .get(account_id)
+            .and_then(|state| state.retry_after)
+            .is_some_and(|retry_after| retry_after > now)
+        {
+            continue;
+        }
+
+        let status = match crate::application::telegram_runtime::runtime_status(
+            &runtime_context,
+            account_id,
+        )
+        .await
+        {
+            Ok(status) => status,
+            Err(error) => {
+                record_telegram_runtime_reconciliation_failure(reconnects, account_id, &error);
+                continue;
+            }
+        };
+
+        if status.status != "running" {
+            let _ = runtime.stop_account(account_id);
+            match crate::application::telegram_runtime::start_runtime(
+                &runtime_context,
+                &crate::integrations::telegram::runtime::TelegramRuntimeStartRequest {
+                    account_id: account_id.clone(),
+                },
+            )
+            .await
+            {
+                Ok(status) if status.status == "running" => {
+                    tracing::info!(
+                        account_id = %account_id,
+                        runtime_kind = %status.runtime_kind,
+                        "telegram runtime restored"
+                    );
+                }
+                Ok(status) => {
+                    record_telegram_runtime_reconciliation_failure(
+                        reconnects,
+                        account_id,
+                        &format!("runtime entered `{}`", status.status),
+                    );
+                    continue;
+                }
+                Err(error) => {
+                    record_telegram_runtime_reconciliation_failure(reconnects, account_id, &error);
+                    continue;
+                }
+            }
+        }
+
+        match crate::application::telegram_runtime::sync_chats(
+            &runtime_context,
+            &crate::integrations::telegram::runtime::TelegramChatSyncRequest {
+                account_id: account_id.clone(),
+                limit: Some(TELEGRAM_RUNTIME_CHAT_SYNC_LIMIT),
+            },
+        )
+        .await
+        {
+            Ok(report) => {
+                reconnects.remove(account_id);
+                if report.synced_count > 0 {
+                    tracing::debug!(
+                        account_id = %account_id,
+                        synced_count = report.synced_count,
+                        "telegram runtime chat fallback sync completed"
+                    );
+                }
+            }
+            Err(error) => {
+                let _ = runtime.stop_account(account_id);
+                record_telegram_runtime_reconciliation_failure(reconnects, account_id, &error);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn telegram_runtime_reconciliation_enabled(
+    account: &crate::platform::communications::ProviderAccount,
+) -> bool {
+    if !account.provider_kind.is_telegram() || account.is_deleted() {
+        return false;
+    }
+
+    let lifecycle_state = account
+        .config
+        .get("lifecycle_state")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|state| !state.is_empty())
+        .unwrap_or("active");
+    if lifecycle_state != "active" {
+        return false;
+    }
+
+    if matches!(
+        account.config.get("auth_state").and_then(Value::as_str),
+        Some("logged_out" | "deleted")
+    ) {
+        return false;
+    }
+
+    if matches!(
+        account
+            .config
+            .get("runtime_enabled")
+            .and_then(Value::as_bool),
+        Some(false)
+    ) || matches!(
+        account.config.get("sync_enabled").and_then(Value::as_bool),
+        Some(false)
+    ) {
+        return false;
+    }
+
+    matches!(
+        account.config.get("runtime").and_then(Value::as_str),
+        Some("fixture" | "tdlib_qr_authorized")
+    )
+}
+
+fn record_telegram_runtime_reconciliation_failure(
+    reconnects: &mut HashMap<String, TelegramRuntimeReconnectState>,
+    account_id: &str,
+    error: &impl std::fmt::Display,
+) {
+    let state = reconnects.entry(account_id.to_owned()).or_default();
+    state.consecutive_failures = state.consecutive_failures.saturating_add(1);
+    let exponent = state.consecutive_failures.saturating_sub(1).min(6);
+    let delay_seconds = TELEGRAM_RUNTIME_RECONNECT_INITIAL_DELAY_SECONDS
+        .saturating_mul(2_u64.pow(exponent))
+        .min(TELEGRAM_RUNTIME_RECONNECT_MAX_DELAY_SECONDS);
+    state.retry_after = Some(tokio::time::Instant::now() + Duration::from_secs(delay_seconds));
+
+    if matches!(state.consecutive_failures, 1 | 3 | 6) {
+        tracing::warn!(
+            account_id = %account_id,
+            consecutive_failures = state.consecutive_failures,
+            retry_after_seconds = delay_seconds,
+            error = %error,
+            "telegram runtime reconciliation failed; retrying without degrading the system"
+        );
+    }
+}
+
 async fn restore_whatsapp_runtime_from_vault_session_if_enabled(
     runtime: crate::application::provider_runtime_contracts::WhatsAppProviderRuntimeRef,
     secret_store: &crate::platform::secrets::SecretReferenceStore,
@@ -3458,6 +3763,49 @@ fn whatsapp_event_id(scope: &str, entity: &str, now: chrono::DateTime<chrono::Ut
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn telegram_runtime_reconciliation_registration_is_once_per_database_url() {
+        let database_url = format!(
+            "postgres://telegram-runtime-reconciliation-test/{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+
+        assert!(register_telegram_runtime_reconciliation(&database_url));
+        assert!(!register_telegram_runtime_reconciliation(&database_url));
+    }
+
+    #[test]
+    fn telegram_runtime_reconciliation_only_runs_enabled_runnable_accounts() {
+        let now = Utc::now();
+        let account = |config| crate::platform::communications::ProviderAccount {
+            account_id: "telegram-account".to_owned(),
+            provider_kind: crate::platform::communications::CommunicationProviderKind::TelegramUser,
+            display_name: "Telegram".to_owned(),
+            external_account_id: "telegram:1".to_owned(),
+            config,
+            created_at: now,
+            updated_at: now,
+        };
+
+        assert!(telegram_runtime_reconciliation_enabled(&account(json!({
+            "runtime": "fixture"
+        }))));
+        assert!(telegram_runtime_reconciliation_enabled(&account(json!({
+            "runtime": "tdlib_qr_authorized"
+        }))));
+        assert!(!telegram_runtime_reconciliation_enabled(&account(json!({
+            "runtime": "tdlib_qr_authorized",
+            "runtime_enabled": false
+        }))));
+        assert!(!telegram_runtime_reconciliation_enabled(&account(json!({
+            "runtime": "fixture",
+            "lifecycle_state": "logged_out"
+        }))));
+        assert!(!telegram_runtime_reconciliation_enabled(&account(json!({
+            "runtime": "live_blocked"
+        }))));
+    }
 
     #[test]
     fn outbox_delivery_scheduler_registration_is_once_per_database_url() {

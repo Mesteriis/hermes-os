@@ -8,6 +8,11 @@ use super::super::validation::validate_non_empty;
 use super::chats::TelegramChatKind;
 use crate::platform::communications::NewRawCommunicationRecord;
 
+pub use super::message_references::{
+    TelegramForwardChainResponse, TelegramForwardRef, TelegramMessageReferenceSummary,
+    TelegramReplyChainResponse, TelegramReplyRef,
+};
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct NewTelegramMessage {
     pub account_id: String,
@@ -67,7 +72,9 @@ impl NewTelegramMessage {
 #[serde(rename_all = "snake_case")]
 pub enum TelegramDeliveryState {
     Received,
+    Queued,
     Sent,
+    SendFailed,
     SendDryRun,
     SendBlocked,
 }
@@ -76,7 +83,9 @@ impl TelegramDeliveryState {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Received => "received",
+            Self::Queued => "queued",
             Self::Sent => "sent",
+            Self::SendFailed => "send_failed",
             Self::SendDryRun => "send_dry_run",
             Self::SendBlocked => "send_blocked",
         }
@@ -93,7 +102,9 @@ impl TryFrom<String> for TelegramDeliveryState {
     fn try_from(value: String) -> Result<Self, Self::Error> {
         match value.as_str() {
             "received" => Ok(Self::Received),
+            "queued" => Ok(Self::Queued),
             "sent" => Ok(Self::Sent),
+            "send_failed" => Ok(Self::SendFailed),
             "send_dry_run" => Ok(Self::SendDryRun),
             "send_blocked" => Ok(Self::SendBlocked),
             _ => Err(TelegramError::InvalidRequest(format!(
@@ -625,71 +636,4 @@ pub struct TelegramReactionListResponse {
     pub message_id: String,
     pub reactions: Vec<TelegramReaction>,
     pub summary: TelegramReactionSummary,
-}
-
-// ---------------------------------------------------------------------------
-// Reply and Forward references (ADR-0091)
-// ---------------------------------------------------------------------------
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct TelegramMessageReferenceSummary {
-    pub message_id: String,
-    pub provider_message_id: String,
-    pub provider_chat_id: Option<String>,
-    pub chat_title: String,
-    pub sender: String,
-    pub sender_display_name: Option<String>,
-    pub text: String,
-    pub occurred_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct TelegramReplyRef {
-    pub reply_ref_id: String,
-    pub source_message_id: String,
-    pub target_message_id: String,
-    pub account_id: String,
-    pub provider_chat_id: String,
-    pub source_provider_id: String,
-    pub target_provider_id: String,
-    pub reply_depth: i32,
-    pub is_topic_reply: bool,
-    pub topic_id: Option<String>,
-    pub source_message_summary: Option<TelegramMessageReferenceSummary>,
-    pub target_message_summary: Option<TelegramMessageReferenceSummary>,
-    pub metadata: serde_json::Value,
-    pub provenance: serde_json::Value,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct TelegramForwardRef {
-    pub forward_ref_id: String,
-    pub source_message_id: String,
-    pub account_id: String,
-    pub provider_chat_id: String,
-    pub source_provider_id: String,
-    pub forward_origin_chat_id: Option<String>,
-    pub forward_origin_message_id: Option<String>,
-    pub forward_origin_sender_id: Option<String>,
-    pub forward_origin_sender_name: Option<String>,
-    pub forward_date: Option<DateTime<Utc>>,
-    pub forward_depth: i32,
-    pub source_message_summary: Option<TelegramMessageReferenceSummary>,
-    pub metadata: serde_json::Value,
-    pub provenance: serde_json::Value,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct TelegramReplyChainResponse {
-    pub message_id: String,
-    pub replies: Vec<TelegramReplyRef>,
-    pub reply_to: Vec<TelegramReplyRef>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct TelegramForwardChainResponse {
-    pub message_id: String,
-    pub forwards: Vec<TelegramForwardRef>,
 }

@@ -6,8 +6,8 @@ use thiserror::Error;
 
 use crate::domains::communications::storage::{
     AttachmentSafetyScanRequest, AttachmentSafetyScanner, CommunicationAttachmentDisposition,
-    CommunicationBlobMetadataPort, LocalCommunicationBlobPort, NewCommunicationAttachment,
-    NewCommunicationBlob, NoopAttachmentSafetyScanner,
+    CommunicationBlobMetadataPort, HeuristicAttachmentSafetyScanner, LocalCommunicationBlobPort,
+    NewCommunicationAttachment, NewCommunicationBlob,
 };
 use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 
@@ -178,7 +178,7 @@ pub(crate) async fn persist_downloaded_media(
                 "failed to record Telegram media blob: {error}"
             ))
         })?;
-    let scanner = NoopAttachmentSafetyScanner;
+    let scanner = HeuristicAttachmentSafetyScanner;
     let provider_attachment_id = request.provider_attachment_id();
     let filename = request.filename();
     let scan_report = scanner

@@ -37,11 +37,19 @@ export function useTelegramMediaUploadMutation() {
     mutationFn: uploadTelegramMediaFile,
     onSuccess: (result, variables) => {
       primeTelegramUploadCommandQueues(queryClient, result, variables.file.name || undefined, variables.caption)
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.runtime })
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'telegram', 'commands', result.account_id] })
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'telegram', 'commands'] })
+      invalidateTelegramMediaUploadState(queryClient, result.account_id)
     },
   })
+}
+
+export function invalidateTelegramMediaUploadState(
+  queryClient: Pick<ReturnType<typeof useQueryClient>, 'invalidateQueries'>,
+  accountId: string
+): void {
+  queryClient.invalidateQueries({ queryKey: ['communications', 'telegram'] })
+  queryClient.invalidateQueries({ queryKey: telegramQueryKeys.runtime })
+  queryClient.invalidateQueries({ queryKey: ['integrations', 'telegram', 'commands', accountId] })
+  queryClient.invalidateQueries({ queryKey: ['integrations', 'telegram', 'commands'] })
 }
 
 export function primeTelegramUploadCommandQueues(

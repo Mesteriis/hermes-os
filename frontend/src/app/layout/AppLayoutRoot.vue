@@ -5,6 +5,7 @@ import CommunicationsWorkspaceView from '../../domains/communications/views/Comm
 import PersonasWorkspaceView from '../../domains/personas/views/PersonasWorkspaceView.vue'
 import SettingsPage from '../../domains/settings/views/SettingsPage.vue'
 import { useAppLayoutNavbarSurface } from '../queries/useAppLayoutNavbarSurface'
+import { useTelegramConversationRuntimeActions } from '../queries/useTelegramConversationRuntimeActions'
 import AppLayout from './AppLayout.vue'
 import AppNavbar from './AppNavbar.vue'
 
@@ -20,6 +21,7 @@ const notificationsCount = navbar.notificationsCount
 const notificationToasts = navbar.notificationToasts
 const selectedRouteId = navbar.selectedRouteId
 const selectedTopLevelRouteId = navbar.selectedTopLevelRouteId
+const telegramRuntimeActions = useTelegramConversationRuntimeActions()
 
 consumeReturnNavigationFromLocation()
 
@@ -87,6 +89,7 @@ function consumeReturnNavigationFromLocation(): void {
 				<CommunicationsWorkspaceView
 					v-if="selectedTopLevelRouteId === 'communications'"
 					:selected-route-id="selectedRouteId"
+					:telegram-runtime-action-runner="telegramRuntimeActions.run"
 				/>
 				<PersonasWorkspaceView v-else-if="selectedTopLevelRouteId === 'personas'" />
 				<SettingsPage v-else-if="selectedTopLevelRouteId === 'settings'" />

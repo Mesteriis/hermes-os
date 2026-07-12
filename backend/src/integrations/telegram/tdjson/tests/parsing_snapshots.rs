@@ -323,6 +323,38 @@ fn parses_tdlib_chat_position_update() {
 }
 
 #[test]
+fn ignores_tdlib_chat_position_with_unknown_list_type() {
+    let update = super::super::parse_tdlib_chat_position_snapshot(&json!({
+        "@type": "updateChatPosition",
+        "chat_id": -1001234567890_i64,
+        "position": {
+            "@type": "chatPosition",
+            "list": { "@type": "chatListFilter" },
+            "order": 42,
+            "is_pinned": false
+        }
+    }))
+    .expect("parse result");
+
+    assert!(update.is_none());
+}
+
+#[test]
+fn ignores_incomplete_tdlib_chat_position_update() {
+    let update = super::super::parse_tdlib_chat_position_snapshot(&json!({
+        "@type": "updateChatPosition",
+        "chat_id": -1001234567890_i64,
+        "position": {
+            "@type": "chatPosition",
+            "list": { "@type": "chatListMain" }
+        }
+    }))
+    .expect("parse result");
+
+    assert!(update.is_none());
+}
+
+#[test]
 fn parses_tdlib_chat_removed_from_list_snapshot() {
     let update = super::super::parse_tdlib_chat_removed_from_list_snapshot(&json!({
         "@type": "updateChatRemovedFromList",

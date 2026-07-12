@@ -56,7 +56,9 @@ pub use self::models::{
     TelegramReplyRequest, TelegramSyncState, TelegramTopic, TelegramTopicCloseRequest,
     TelegramTopicCreateRequest, TelegramTopicLifecycleResponse, TelegramTopicListResponse,
 };
-pub use self::participants::mark_absent_members_from_exhaustive_roster;
+pub use self::participants::{
+    mark_absent_members_from_exhaustive_roster, telegram_self_provider_member_id,
+};
 pub(in crate::integrations::telegram) use self::reactions::{
     TelegramReactionMessageRef, sync_provider_reactions,
 };

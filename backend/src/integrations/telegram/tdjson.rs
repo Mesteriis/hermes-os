@@ -23,9 +23,10 @@ pub(crate) use self::parsing::{
     parse_tdlib_chat_unread_snapshot, parse_tdlib_created_forum_topic, parse_tdlib_file_snapshot,
     parse_tdlib_message_content_snapshot, parse_tdlib_message_delete_snapshot,
     parse_tdlib_message_edited_snapshot, parse_tdlib_message_interaction_info_snapshot,
-    parse_tdlib_message_list, parse_tdlib_message_pinned_snapshot, parse_tdlib_message_snapshot,
-    parse_tdlib_new_message_snapshot, parse_tdlib_topic_list, parse_tdlib_topic_update_snapshot,
-    parse_tdlib_typing_snapshot, tdlib_error_message,
+    parse_tdlib_message_list, parse_tdlib_message_pinned_snapshot,
+    parse_tdlib_message_send_failed_snapshot, parse_tdlib_message_send_succeeded_snapshot,
+    parse_tdlib_message_snapshot, parse_tdlib_new_message_snapshot, parse_tdlib_topic_list,
+    parse_tdlib_topic_update_snapshot, parse_tdlib_typing_snapshot, tdlib_error_message,
 };
 pub(crate) use self::qr_login::{cancel_qr_login, start_qr_login, submit_qr_login_password};
 pub(crate) use self::qr_login_support::{PendingQrLoginMap, TelegramQrLoginSession};
@@ -51,6 +52,7 @@ pub(crate) use self::snapshots::{
     TelegramTdlibFileSnapshot, TelegramTdlibMessageContentSnapshot,
     TelegramTdlibMessageDeleteSnapshot, TelegramTdlibMessageEditedSnapshot,
     TelegramTdlibMessageInteractionInfoSnapshot, TelegramTdlibMessagePinnedSnapshot,
+    TelegramTdlibMessageSendFailedSnapshot, TelegramTdlibMessageSendSucceededSnapshot,
     TelegramTdlibMessageSnapshot, TelegramTdlibTopicSnapshot,
 };
 

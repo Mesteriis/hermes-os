@@ -300,26 +300,16 @@ pub(crate) fn parse_tdlib_chat_position_snapshot(
             "folder".to_owned(),
             list.get("chat_folder_id").and_then(Value::as_i64),
         ),
-        other => {
-            return Err(TelegramError::TdlibRuntime(format!(
-                "unsupported updateChatPosition list type `{other}`"
-            )));
-        }
+        // TDLib may add client-only list types. They do not map to Hermes folder
+        // semantics, so ignore the update instead of terminating the actor.
+        _ => return Ok(None),
     };
-    let order = position
-        .get("order")
-        .and_then(Value::as_i64)
-        .ok_or_else(|| {
-            TelegramError::TdlibRuntime("updateChatPosition missing `position.order`".to_owned())
-        })?;
-    let is_pinned = position
-        .get("is_pinned")
-        .and_then(Value::as_bool)
-        .ok_or_else(|| {
-            TelegramError::TdlibRuntime(
-                "updateChatPosition missing `position.is_pinned`".to_owned(),
-            )
-        })?;
+    let Some(order) = position.get("order").and_then(Value::as_i64) else {
+        return Ok(None);
+    };
+    let Some(is_pinned) = position.get("is_pinned").and_then(Value::as_bool) else {
+        return Ok(None);
+    };
 
     Ok(Some(TelegramTdlibChatPositionSnapshot {
         provider_chat_id,
@@ -384,11 +374,7 @@ pub(crate) fn parse_tdlib_chat_removed_from_list_snapshot(
             "folder".to_owned(),
             list.get("chat_folder_id").and_then(Value::as_i64),
         ),
-        other => {
-            return Err(TelegramError::TdlibRuntime(format!(
-                "unsupported updateChatRemovedFromList list type `{other}`"
-            )));
-        }
+        _ => return Ok(None),
     };
 
     Ok(Some(TelegramTdlibChatRemovedFromListSnapshot {

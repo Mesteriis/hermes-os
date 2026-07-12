@@ -69,6 +69,22 @@ pub(crate) struct TelegramTdlibMessageDeleteSnapshot {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibMessageSendFailedSnapshot {
+    pub(crate) provider_chat_id: String,
+    pub(crate) old_provider_message_id: String,
+    pub(crate) error_code: Option<i64>,
+    pub(crate) source_event: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibMessageSendSucceededSnapshot {
+    pub(crate) provider_chat_id: String,
+    pub(crate) old_provider_message_id: String,
+    pub(crate) provider_message_id: String,
+    pub(crate) source_event: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TelegramTdlibMessageInteractionInfoSnapshot {
     pub(crate) provider_chat_id: String,
     pub(crate) provider_message_id: String,

@@ -27,7 +27,7 @@ pub(crate) use crate::integrations::telegram::client::{
     TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest, TelegramQrLoginStatus,
     TelegramQrLoginStatusResponse, TelegramSecretVault, TelegramTopic, TelegramTopicCloseRequest,
     TelegramTopicCreateRequest, TelegramTopicLifecycleResponse, TelegramTopicListResponse,
-    ensure_telegram_account_active, telegram_chat_id,
+    ensure_telegram_account_active, telegram_chat_id, telegram_self_provider_member_id,
 };
 pub(crate) use crate::integrations::telegram::runtime::{
     TelegramChatSyncRequest, TelegramChatSyncResponse, TelegramHistorySyncRequest,

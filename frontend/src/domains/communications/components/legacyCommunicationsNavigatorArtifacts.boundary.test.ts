@@ -51,6 +51,7 @@ describe('legacy communications navigator artifacts', () => {
     const outboxStripSource = readQueryArtifact('outboxStatusStrip.ts')
     const queryBarrelSource = readQueryArtifact('useCommunicationsQuery.ts')
     const resourceOverviewSource = readViewArtifact('useMailResourceOverview.ts')
+    const mailComposeActionsSource = readViewArtifact('useMailComposeActions.ts')
 
     expect(pageSurfaceSource).toContain('useMailListQuery')
     expect(pageSurfaceSource).toContain('useOutboxStatusStrip')
@@ -58,7 +59,7 @@ describe('legacy communications navigator artifacts', () => {
     expect(pageSurfaceSource).toContain('useMailSyncActions')
     expect(pageSurfaceSource).toContain('useThreadReplyActions')
     expect(pageSurfaceSource).toContain('useSelectedMessageActions')
-    expect(pageSurfaceSource).toContain('draftToComposeForm')
+    expect(mailComposeActionsSource).toContain('draftToComposeForm')
     expect(outboxStripSource).toContain('useOutboxQuery')
     expect(outboxStripSource).toContain('useUndoOutboxMutation')
     expect(outboxStripSource).toContain('undoOutbox')

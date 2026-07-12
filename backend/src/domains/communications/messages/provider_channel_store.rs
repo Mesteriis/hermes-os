@@ -707,6 +707,134 @@ impl ProviderChannelMessageStore {
         Ok(Some(updated))
     }
 
+    pub async fn rebind_provider_record_id(
+        &self,
+        message_id: &str,
+        provider_record_id: &str,
+        observed_at: DateTime<Utc>,
+        context: ProviderMessageProjectionObservationContext<'_>,
+    ) -> Result<Option<ProviderChannelMessage>, ProviderCommunicationMessagePortError> {
+        let provider_record_id = provider_record_id.trim();
+        if provider_record_id.is_empty() {
+            return Err(ProviderCommunicationMessagePortError::InvalidRequest(
+                "provider record id must not be empty".to_owned(),
+            ));
+        }
+
+        let mut transaction = self.pool.begin().await?;
+        let current = sqlx::query(
+            r#"
+            SELECT
+                message_id, raw_record_id, account_id, provider_record_id, subject, sender,
+                body_text, occurred_at, projected_at, channel_kind, conversation_id,
+                sender_display_name, delivery_state, message_metadata
+            FROM communication_messages
+            WHERE message_id = $1
+              AND channel_kind = ANY($2)
+            FOR UPDATE
+            "#,
+        )
+        .bind(message_id.trim())
+        .bind(context.channel_kinds)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let Some(current) = current.map(row_to_provider_channel_message).transpose()? else {
+            return Ok(None);
+        };
+
+        // A replay of the same accepted provider event must retain the original
+        // temporary locator evidence rather than treating the final id as prior state.
+        if current.provider_record_id == provider_record_id && current.delivery_state == "sent" {
+            transaction.commit().await?;
+            return Ok(Some(current));
+        }
+
+        let conflicting_message_id = sqlx::query_scalar::<_, String>(
+            r#"
+            SELECT message_id
+            FROM communication_messages
+            WHERE account_id = $1
+              AND provider_record_id = $2
+              AND message_id <> $3
+              AND channel_kind = ANY($4)
+            FOR UPDATE
+            "#,
+        )
+        .bind(&current.account_id)
+        .bind(provider_record_id)
+        .bind(&current.message_id)
+        .bind(context.channel_kinds)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        if let Some(conflicting_message_id) = conflicting_message_id {
+            return Err(ProviderCommunicationMessagePortError::InvalidRequest(
+                format!(
+                    "provider record `{provider_record_id}` is already mapped to message `{conflicting_message_id}`"
+                ),
+            ));
+        }
+
+        let mut metadata = current
+            .message_metadata
+            .as_object()
+            .cloned()
+            .ok_or_else(|| {
+                ProviderCommunicationMessagePortError::InvalidRequest(
+                    "provider message metadata must be a JSON object".to_owned(),
+                )
+            })?;
+        metadata.insert(
+            "previous_provider_record_id".to_owned(),
+            json!(current.provider_record_id),
+        );
+        metadata.insert(
+            "provider_identity_source".to_owned(),
+            json!(context.relationship_kind),
+        );
+        let metadata = Value::Object(metadata);
+
+        let row = sqlx::query(
+            r#"
+            UPDATE communication_messages
+            SET provider_record_id = $2,
+                delivery_state = 'sent',
+                message_metadata = $3,
+                projected_at = $4
+            WHERE message_id = $1
+            RETURNING
+                message_id, raw_record_id, account_id, provider_record_id, subject, sender,
+                body_text, occurred_at, projected_at, channel_kind, conversation_id,
+                sender_display_name, delivery_state, message_metadata
+            "#,
+        )
+        .bind(&current.message_id)
+        .bind(provider_record_id)
+        .bind(&metadata)
+        .bind(observed_at)
+        .fetch_one(&mut *transaction)
+        .await?;
+        let updated = row_to_provider_channel_message(row)?;
+        capture_projection_observation_in_transaction(
+            &mut transaction,
+            &updated,
+            observed_at,
+            context.relationship_kind,
+            json!({
+                "message_id": updated.message_id,
+                "account_id": updated.account_id,
+                "previous_provider_message_id": current.provider_record_id,
+                "provider_message_id": updated.provider_record_id,
+                "provider_chat_id": updated.conversation_id,
+                "previous_delivery_state": current.delivery_state,
+                "delivery_state": updated.delivery_state,
+            }),
+            context.actor,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(Some(updated))
+    }
+
     pub async fn apply_content_update(
         &self,
         message_id: &str,
@@ -890,7 +1018,8 @@ impl ProviderChannelMessageStore {
                 continue;
             };
             let attachment_id_matches = object
-                .get("attachment_id")
+                .get("provider_attachment_id")
+                .or_else(|| object.get("attachment_id"))
                 .and_then(Value::as_str)
                 .map(|value| value == update.provider_attachment_id)
                 .unwrap_or(false);
@@ -904,9 +1033,17 @@ impl ProviderChannelMessageStore {
             }
 
             object.insert(
-                "attachment_id".to_owned(),
+                "provider_attachment_id".to_owned(),
                 json!(update.provider_attachment_id.to_owned()),
             );
+            if let Some(attachment_id) = update.communication_attachment_id {
+                object.insert("attachment_id".to_owned(), json!(attachment_id));
+            } else if !object.contains_key("attachment_id") {
+                object.insert(
+                    "attachment_id".to_owned(),
+                    json!(update.provider_attachment_id.to_owned()),
+                );
+            }
             object.insert("tdlib_file_id".to_owned(), json!(update.provider_file_id));
             object.insert("download_state".to_owned(), json!(update.download_state));
             object.insert("content_type".to_owned(), json!(update.content_type));
@@ -923,8 +1060,8 @@ impl ProviderChannelMessageStore {
         }
 
         if !updated_attachment {
-            attachment_array.push(json!({
-                "attachment_id": update.provider_attachment_id,
+            let mut attachment = json!({
+                "provider_attachment_id": update.provider_attachment_id,
                 "attachment_type": "file",
                 "content_type": update.content_type,
                 "tdlib_file_id": update.provider_file_id,
@@ -932,7 +1069,14 @@ impl ProviderChannelMessageStore {
                 "local_path": update.local_path,
                 "size": update.size_bytes,
                 "filename": update.filename,
-            }));
+            });
+            if let (Some(object), Some(attachment_id)) = (
+                attachment.as_object_mut(),
+                update.communication_attachment_id,
+            ) {
+                object.insert("attachment_id".to_owned(), json!(attachment_id));
+            }
+            attachment_array.push(attachment);
         }
 
         let updated_metadata = Value::Object(metadata_object);
@@ -980,7 +1124,8 @@ impl ProviderChannelMessageStore {
                 "account_id": updated.account_id,
                 "provider_message_id": updated.provider_record_id,
                 "provider_chat_id": updated.conversation_id,
-                "attachment_id": update.provider_attachment_id,
+                "provider_attachment_id": update.provider_attachment_id,
+                "communication_attachment_id": update.communication_attachment_id,
                 "tdlib_file_id": update.provider_file_id,
                 "download_state": update.download_state,
                 "local_path": update.local_path,

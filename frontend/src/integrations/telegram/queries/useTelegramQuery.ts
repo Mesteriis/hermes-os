@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/vue-query'
+import { useMutation, useQuery } from '@tanstack/vue-query'
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import {
   fetchTelegramAccountCapabilities,
@@ -8,6 +8,7 @@ import {
   fetchTelegramCalls,
   fetchTelegramCallTranscript,
 } from '../api/telegram'
+import { searchTelegramProviderMessages } from '../api/telegramSearch'
 import type {
   TelegramCapabilitiesResponse,
   TelegramCall,
@@ -97,6 +98,12 @@ export function useTelegramCallTranscriptQuery(
       return res.transcript
     },
     enabled: computed(() => Boolean(toValue(callId))),
+  })
+}
+
+export function useTelegramProviderSearchMutation() {
+  return useMutation({
+    mutationFn: searchTelegramProviderMessages,
   })
 }
 

@@ -4,6 +4,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use std::path::Path;
 
 use super::helpers::{AUDIT_ACTOR_ID, publish_telegram_event};
 use crate::app::api_support::{
@@ -22,6 +23,10 @@ use crate::domains::communications::storage::AttachmentSafetyScanStatus;
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
+use crate::workflows::telegram_media_storage::{
+    TelegramAttachmentAnchor, TelegramDownloadedFileData, TelegramMediaDownloadData,
+    persist_downloaded_media,
+};
 
 fn build_event(
     event_type: &str,
@@ -339,7 +344,7 @@ pub(crate) async fn post_telegram_media_download(
 
     let provider_runtime = telegram_provider_runtime_service(&state)?;
     let runtime_context = telegram_runtime_use_case_context(&state)?;
-    let response = match telegram_runtime::download_media(&runtime_context, &request).await {
+    let mut response = match telegram_runtime::download_media(&runtime_context, &request).await {
         Ok(response) => response,
         Err(error) => {
             let failed = build_event(
@@ -361,6 +366,9 @@ pub(crate) async fn post_telegram_media_download(
     };
 
     if response.is_downloading_completed {
+        let Some(pool) = state.database.pool() else {
+            return Err(ApiError::DatabaseNotConfigured);
+        };
         let attachment_anchor = provider_runtime
             .attachment_anchor_for_message(
                 &request.account_id,
@@ -371,10 +379,40 @@ pub(crate) async fn post_telegram_media_download(
         let provider_attachment_id = request.provider_attachment_id();
         let content_type = request.content_type();
         let filename = request.filename();
+        let persisted = persist_downloaded_media(
+            pool.clone(),
+            &TelegramMediaDownloadData {
+                account_id: request.account_id.clone(),
+                provider_chat_id: request.provider_chat_id.clone(),
+                provider_message_id: request.provider_message_id.clone(),
+                tdlib_file_id: response.tdlib_file_id,
+                provider_attachment_id: request.provider_attachment_id.clone(),
+                filename: filename.clone(),
+                content_type: request.content_type.clone(),
+            },
+            &TelegramDownloadedFileData {
+                file_id: response.tdlib_file_id,
+                size_bytes: response.size_bytes,
+                expected_size_bytes: response.expected_size_bytes,
+                local_path: response.local_path.clone(),
+                is_downloading_active: response.is_downloading_active,
+                is_downloading_completed: response.is_downloading_completed,
+                downloaded_size_bytes: response.downloaded_size_bytes,
+            },
+            Some(TelegramAttachmentAnchor {
+                message_id: attachment_anchor.message_id.clone(),
+                raw_record_id: attachment_anchor.raw_record_id.clone(),
+            }),
+            Path::new(crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT),
+        )
+        .await
+        .map_err(|error| TelegramError::MediaStorage(error.to_string()))?;
+        apply_persisted_media_download(&mut response, persisted);
         provider_runtime
             .update_message_attachment_download_state(TelegramAttachmentDownloadStateUpdate {
                 message_id: &attachment_anchor.message_id,
                 provider_attachment_id: &provider_attachment_id,
+                communication_attachment_id: response.attachment_id.as_deref(),
                 tdlib_file_id: response.tdlib_file_id,
                 download_state: &response.status,
                 local_path: response.local_path.as_deref(),
@@ -556,4 +594,73 @@ fn optional_string(
     value
         .map(|value| required_string(field, &value))
         .transpose()
+}
+
+fn apply_persisted_media_download(
+    response: &mut TelegramMediaDownloadResponse,
+    persisted: crate::workflows::telegram_media_storage::TelegramMediaDownloadProjection,
+) {
+    response.status = persisted.status;
+    response.local_path = persisted.local_path;
+    response.size_bytes = persisted.size_bytes;
+    response.expected_size_bytes = persisted.expected_size_bytes;
+    response.downloaded_size_bytes = persisted.downloaded_size_bytes;
+    response.is_downloading_active = persisted.is_downloading_active;
+    response.is_downloading_completed = persisted.is_downloading_completed;
+    response.attachment_id = persisted.attachment_id;
+    response.blob_id = persisted.blob_id;
+    response.scan_status = persisted.scan_status;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::workflows::telegram_media_storage::TelegramMediaDownloadProjection;
+
+    #[test]
+    fn persists_canonical_attachment_identifiers_in_download_response() {
+        let mut response = TelegramMediaDownloadResponse {
+            account_id: "telegram-account".to_owned(),
+            provider_chat_id: "chat-1".to_owned(),
+            provider_message_id: "message-1".to_owned(),
+            runtime_kind: "tdlib_qr_authorized".to_owned(),
+            status: "downloaded".to_owned(),
+            tdlib_file_id: 17,
+            local_path: Some("/private/tmp/tdlib-file".to_owned()),
+            size_bytes: Some(128),
+            expected_size_bytes: Some(128),
+            downloaded_size_bytes: Some(128),
+            is_downloading_active: false,
+            is_downloading_completed: true,
+            attachment_id: None,
+            blob_id: None,
+            scan_status: None,
+        };
+
+        apply_persisted_media_download(
+            &mut response,
+            TelegramMediaDownloadProjection {
+                account_id: "telegram-account".to_owned(),
+                provider_chat_id: "chat-1".to_owned(),
+                provider_message_id: "message-1".to_owned(),
+                runtime_kind: "tdlib_qr_authorized".to_owned(),
+                status: "downloaded".to_owned(),
+                tdlib_file_id: 17,
+                local_path: Some("hermes/blobs/sha256".to_owned()),
+                size_bytes: Some(128),
+                expected_size_bytes: Some(128),
+                downloaded_size_bytes: Some(128),
+                is_downloading_active: false,
+                is_downloading_completed: true,
+                attachment_id: Some("attachment-1".to_owned()),
+                blob_id: Some("blob-1".to_owned()),
+                scan_status: Some("clean".to_owned()),
+            },
+        );
+
+        assert_eq!(response.local_path.as_deref(), Some("hermes/blobs/sha256"));
+        assert_eq!(response.attachment_id.as_deref(), Some("attachment-1"));
+        assert_eq!(response.blob_id.as_deref(), Some("blob-1"));
+        assert_eq!(response.scan_status.as_deref(), Some("clean"));
+    }
 }

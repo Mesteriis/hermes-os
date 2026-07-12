@@ -4,6 +4,7 @@ import type {
   TelegramMediaSearchResponse,
   TelegramMessage,
   TelegramMessageListResponse,
+  TelegramMessagePageResponse,
   TelegramMessageSearchResponse,
   TelegramReactionListResponse,
   TelegramRuntimeStatus
@@ -66,10 +67,10 @@ export function applyTelegramRealtimePatch(
   const chatSnapshot = telegramChatSnapshot(payload?.chat)
 
   let patched = false
-  for (const [queryKey, data] of getQueriesData<TelegramMessage[]>({
+  for (const [queryKey, data] of getQueriesData<unknown>({
     queryKey: ['communications', 'telegram', 'messages']
   })) {
-    const updated = patchMessageList(queryKey, data, eventType, subjectId, payload, snapshot)
+    const updated = patchMessageQueryData(queryKey, data, eventType, subjectId, payload, snapshot)
     if (updated !== data) {
       setQueryData(queryKey, updated)
       patched = true
@@ -171,13 +172,61 @@ export function applyTelegramRealtimePatch(
   return patched
 }
 
+type TelegramInfiniteMessageData = {
+  pages: readonly TelegramMessagePageResponse[]
+  pageParams: readonly unknown[]
+}
+
+function patchMessageQueryData(
+  queryKey: readonly unknown[],
+  data: unknown,
+  eventType: string,
+  subjectId: string | null,
+  payload: TelegramEventPayload | undefined,
+  snapshot: TelegramMessage | null
+): unknown {
+  if (Array.isArray(data)) {
+    return patchMessageList(queryKey, data as TelegramMessage[], eventType, subjectId, payload, snapshot)
+  }
+  if (!isTelegramInfiniteMessageData(data)) return data
+
+  const targetMessageId = subjectId ?? snapshot?.message_id ?? null
+  const targetExists = targetMessageId != null && data.pages.some((page) =>
+    page.items.some((message) => message.message_id === targetMessageId)
+  )
+  let changed = false
+  const pages = data.pages.map((page, pageIndex) => {
+    const items = patchMessageList(
+      queryKey,
+      page.items,
+      eventType,
+      subjectId,
+      payload,
+      snapshot,
+      !targetExists && pageIndex === 0
+    )
+    if (items === page.items) return page
+    changed = true
+    return { ...page, items }
+  })
+  return changed ? { ...data, pages } : data
+}
+
+function isTelegramInfiniteMessageData(value: unknown): value is TelegramInfiniteMessageData {
+  return isRecord(value)
+    && Array.isArray(value.pages)
+    && Array.isArray(value.pageParams)
+    && value.pages.every((page) => isRecord(page) && Array.isArray(page.items))
+}
+
 function patchMessageList(
   queryKey: readonly unknown[],
   messages: TelegramMessage[] | undefined,
   eventType: string,
   subjectId: string | null,
   payload: TelegramEventPayload | undefined,
-  snapshot: TelegramMessage | null
+  snapshot: TelegramMessage | null,
+  allowInsert = true
 ): TelegramMessage[] | undefined {
   if (!messages) return messages
 
@@ -281,10 +330,10 @@ function patchMessageList(
 
   const existingIndex = patched.findIndex((message) => message.message_id === targetMessageId)
   if (existingIndex >= 0) return patched
-  if ((eventType === 'telegram.message.created' || eventType === 'telegram.media.downloaded') && snapshot) {
+  if (allowInsert && (eventType === 'telegram.message.created' || eventType === 'telegram.media.downloaded') && snapshot) {
     return insertMessageByRecency(messages, snapshot, limit)
   }
-  if (eventType === 'telegram.message.updated' && snapshot) {
+  if (allowInsert && eventType === 'telegram.message.updated' && snapshot) {
     return insertMessageByRecency(
       messages,
       { ...snapshot, metadata: patchPinMetadata(snapshot.metadata, payload) },

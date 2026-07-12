@@ -17,6 +17,16 @@ pub(super) fn tdlib_chat_projection_metadata(
     {
         metadata_map.insert("tdlib_permissions".to_owned(), permissions);
     }
+    if let Some(avatar) = tdlib_chat_avatar_metadata(&snapshot.raw)
+        && let Some(metadata_map) = metadata.as_object_mut()
+    {
+        metadata_map.insert("avatar".to_owned(), avatar);
+    }
+    if let Some(preview) = tdlib_chat_last_message_preview(&snapshot.raw)
+        && let Some(metadata_map) = metadata.as_object_mut()
+    {
+        metadata_map.insert("last_message_preview".to_owned(), Value::String(preview));
+    }
     if let Some(marked) = snapshot
         .raw
         .get("is_marked_as_unread")
@@ -230,6 +240,66 @@ fn tdlib_chat_permissions_metadata(raw: &Value) -> Option<Value> {
     }
 }
 
+fn tdlib_chat_avatar_metadata(raw: &Value) -> Option<Value> {
+    let photo = raw.get("photo")?.as_object()?;
+    let file = ["big", "small"]
+        .into_iter()
+        .filter_map(|size| photo.get(size))
+        .find(|file| {
+            file.get("id")
+                .and_then(Value::as_i64)
+                .is_some_and(|id| id > 0)
+        })?;
+    let file_id = file.get("id")?.as_i64()?;
+    let remote_unique_id = file
+        .get("remote")
+        .and_then(|remote| remote.get("unique_id"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+
+    Some(json!({
+        "source": "tdlib_chat_photo",
+        "tdlib_file_id": file_id,
+        "remote_unique_id": remote_unique_id,
+        "downloaded": file
+            .get("local")
+            .and_then(|local| local.get("is_downloading_completed"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    }))
+}
+
+fn tdlib_chat_last_message_preview(raw: &Value) -> Option<String> {
+    let content = raw.get("last_message")?.get("content")?;
+    let content_type = content.get("@type")?.as_str()?;
+    let text = match content_type {
+        "messageText" => content.get("text")?.get("text")?.as_str(),
+        "messagePhoto" | "messageVideo" | "messageDocument" | "messageAnimation" => {
+            content.get("caption")?.get("text")?.as_str()
+        }
+        _ => None,
+    }
+    .or_else(|| match content_type {
+        "messagePhoto" => Some("Photo"),
+        "messageVideo" => Some("Video"),
+        "messageDocument" => Some("Document"),
+        "messageVoiceNote" => Some("Voice message"),
+        "messageSticker" => Some("Sticker"),
+        _ => None,
+    })?;
+    let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.is_empty() {
+        return None;
+    }
+    let mut characters = normalized.chars();
+    let preview = characters.by_ref().take(160).collect::<String>();
+    Some(if characters.next().is_some() {
+        format!("{preview}…")
+    } else {
+        preview
+    })
+}
+
 fn tdlib_notification_settings_metadata(raw: &Value) -> Option<Value> {
     let settings = raw
         .get("notification_settings")
@@ -430,6 +500,63 @@ mod tests {
         assert_eq!(metadata["is_pinned"], false);
         assert_eq!(metadata["tdlib_chat_positions"]["archive"]["order"], 42);
         assert_eq!(metadata["tdlib_chat_positions"]["folder_ids"][0], 7);
+    }
+
+    #[test]
+    fn tdlib_chat_projection_metadata_keeps_a_provider_avatar_reference() {
+        let snapshot = TelegramTdlibChatSnapshot {
+            provider_chat_id: "123456789".to_owned(),
+            chat_kind: TelegramChatKind::Group,
+            title: "Release Group".to_owned(),
+            username: None,
+            last_message_at: None,
+            raw: json!({
+                "@type": "chat",
+                "id": 123456789,
+                "type": {"@type": "chatTypeBasicGroup"},
+                "photo": {
+                    "small": {"id": 7},
+                    "big": {
+                        "id": 42,
+                        "local": {"is_downloading_completed": true},
+                        "remote": {"unique_id": "avatar-remote-42"}
+                    }
+                }
+            }),
+        };
+
+        let metadata = tdlib_chat_projection_metadata(&snapshot, "raw-telegram-chat-123", "42");
+
+        assert_eq!(metadata["avatar"]["source"], "tdlib_chat_photo");
+        assert_eq!(metadata["avatar"]["tdlib_file_id"], 42);
+        assert_eq!(metadata["avatar"]["remote_unique_id"], "avatar-remote-42");
+        assert_eq!(metadata["avatar"]["downloaded"], true);
+    }
+
+    #[test]
+    fn tdlib_chat_projection_metadata_keeps_a_compact_last_message_preview() {
+        let snapshot = TelegramTdlibChatSnapshot {
+            provider_chat_id: "123456789".to_owned(),
+            chat_kind: TelegramChatKind::Group,
+            title: "Release Group".to_owned(),
+            username: None,
+            last_message_at: None,
+            raw: json!({
+                "@type": "chat",
+                "id": 123456789,
+                "type": {"@type": "chatTypeBasicGroup"},
+                "last_message": {
+                    "content": {
+                        "@type": "messageText",
+                        "text": {"text": "  New\n  release   is ready  "}
+                    }
+                }
+            }),
+        };
+
+        let metadata = tdlib_chat_projection_metadata(&snapshot, "raw-telegram-chat-123", "42");
+
+        assert_eq!(metadata["last_message_preview"], "New release is ready");
     }
 
     #[test]

@@ -80,6 +80,42 @@ pub(super) fn derive_tdlib_attachment_metadata(raw: &Value) -> Vec<Value> {
     };
 
     match content_type {
+        "messagePhoto" => tdlib_photo_attachment(content),
+        "messageVideo" => tdlib_file_attachment(
+            content,
+            "video",
+            &["video", "video"],
+            tdlib_nested_string(content, &["video", "mime_type"])
+                .unwrap_or_else(|| "video/mp4".to_owned()),
+            tdlib_nested_string(content, &["video", "file_name"])
+                .unwrap_or_else(|| "video.mp4".to_owned()),
+        ),
+        "messageDocument" => tdlib_file_attachment(
+            content,
+            "document",
+            &["document", "document"],
+            tdlib_nested_string(content, &["document", "mime_type"])
+                .unwrap_or_else(|| "application/octet-stream".to_owned()),
+            tdlib_nested_string(content, &["document", "file_name"])
+                .unwrap_or_else(|| "document".to_owned()),
+        ),
+        "messageAudio" => tdlib_file_attachment(
+            content,
+            "audio",
+            &["audio", "audio"],
+            tdlib_nested_string(content, &["audio", "mime_type"])
+                .unwrap_or_else(|| "audio/mpeg".to_owned()),
+            tdlib_nested_string(content, &["audio", "file_name"])
+                .unwrap_or_else(|| "audio.mp3".to_owned()),
+        ),
+        "messageVoiceNote" => tdlib_file_attachment(
+            content,
+            "voice",
+            &["voice_note", "voice"],
+            tdlib_nested_string(content, &["voice_note", "mime_type"])
+                .unwrap_or_else(|| "audio/ogg".to_owned()),
+            "voice-note.ogg".to_owned(),
+        ),
         "messageSticker" => tdlib_file_attachment(
             content,
             "sticker",
@@ -300,6 +336,54 @@ fn tdlib_file_attachment(
     filename: String,
 ) -> Option<Value> {
     let file = tdlib_nested_value(content, file_path)?;
+    tdlib_attachment_from_file(content, attachment_type, file, content_type, filename)
+}
+
+fn tdlib_photo_attachment(content: &Value) -> Option<Value> {
+    let file = tdlib_largest_photo_file(content)?;
+    let file_id = file.get("id").and_then(Value::as_i64)?;
+
+    tdlib_attachment_from_file(
+        content,
+        "photo",
+        file,
+        "image/jpeg".to_owned(),
+        format!("photo-{file_id}.jpg"),
+    )
+}
+
+fn tdlib_largest_photo_file(content: &Value) -> Option<&Value> {
+    content
+        .get("photo")?
+        .get("sizes")?
+        .as_array()?
+        .iter()
+        .filter_map(|size| {
+            let file = size.get("photo")?;
+            let file_id = file.get("id").and_then(Value::as_i64)?;
+            (file_id > 0).then_some((
+                file,
+                size.get("width")
+                    .and_then(Value::as_u64)
+                    .unwrap_or_default()
+                    .saturating_mul(
+                        size.get("height")
+                            .and_then(Value::as_u64)
+                            .unwrap_or_default(),
+                    ),
+            ))
+        })
+        .max_by_key(|(_, area)| *area)
+        .map(|(file, _)| file)
+}
+
+fn tdlib_attachment_from_file(
+    content: &Value,
+    attachment_type: &str,
+    file: &Value,
+    content_type: String,
+    filename: String,
+) -> Option<Value> {
     let tdlib_file_id = file.get("id").and_then(Value::as_i64)?;
     if tdlib_file_id <= 0 {
         return None;
@@ -428,6 +512,57 @@ mod tests {
         assert_eq!(video_note[0]["attachment_type"], json!("video_note"));
         assert_eq!(video_note[0]["content_type"], json!("video/mp4"));
         assert_eq!(video_note[0]["tdlib_file_id"], json!(703));
+    }
+
+    #[test]
+    fn derives_standard_photo_video_document_audio_and_voice_attachment_metadata() {
+        let photo = derive_tdlib_attachment_metadata(&json!({
+            "content": {
+                "@type": "messagePhoto",
+                "photo": {
+                    "sizes": [
+                        {"width": 90, "height": 90, "photo": {"id": 801, "size": 1024}},
+                        {"width": 1280, "height": 720, "photo": {"id": 802, "size": 16384}}
+                    ]
+                }
+            }
+        }));
+        let video = derive_tdlib_attachment_metadata(&json!({
+            "content": {
+                "@type": "messageVideo",
+                "video": {"file_name": "clip.webm", "mime_type": "video/webm", "video": {"id": 803, "size": 32768}}
+            }
+        }));
+        let document = derive_tdlib_attachment_metadata(&json!({
+            "content": {
+                "@type": "messageDocument",
+                "document": {"file_name": "brief.pdf", "mime_type": "application/pdf", "document": {"id": 804, "size": 4096}}
+            }
+        }));
+        let audio = derive_tdlib_attachment_metadata(&json!({
+            "content": {
+                "@type": "messageAudio",
+                "audio": {"file_name": "song.ogg", "mime_type": "audio/ogg", "audio": {"id": 805, "size": 8192}}
+            }
+        }));
+        let voice = derive_tdlib_attachment_metadata(&json!({
+            "content": {
+                "@type": "messageVoiceNote",
+                "voice_note": {"mime_type": "audio/ogg", "voice": {"id": 806, "size": 2048}}
+            }
+        }));
+
+        assert_eq!(photo[0]["attachment_type"], json!("photo"));
+        assert_eq!(photo[0]["tdlib_file_id"], json!(802));
+        assert_eq!(photo[0]["filename"], json!("photo-802.jpg"));
+        assert_eq!(video[0]["attachment_type"], json!("video"));
+        assert_eq!(video[0]["content_type"], json!("video/webm"));
+        assert_eq!(document[0]["attachment_type"], json!("document"));
+        assert_eq!(document[0]["filename"], json!("brief.pdf"));
+        assert_eq!(audio[0]["attachment_type"], json!("audio"));
+        assert_eq!(audio[0]["tdlib_file_id"], json!(805));
+        assert_eq!(voice[0]["attachment_type"], json!("voice"));
+        assert_eq!(voice[0]["content_type"], json!("audio/ogg"));
     }
 
     #[test]

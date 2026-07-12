@@ -1,5 +1,6 @@
 mod accounts;
 mod chats;
+mod message_references;
 pub mod messages;
 mod qr_login;
 pub mod topics;
