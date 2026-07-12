@@ -55,6 +55,9 @@ impl MessageProjectionStore {
                 m.local_state,
                 m.local_state_changed_at,
                 m.local_state_reason,
+                m.is_read,
+                m.read_changed_at,
+                m.read_origin,
                 count(a.attachment_id)::BIGINT AS attachment_count
             FROM communication_messages m
             LEFT JOIN communication_ai_states s ON s.message_id = m.message_id
@@ -85,7 +88,10 @@ impl MessageProjectionStore {
                 s.ai_state,
                 m.local_state,
                 m.local_state_changed_at,
-                m.local_state_reason
+                m.local_state_reason,
+                m.is_read,
+                m.read_changed_at,
+                m.read_origin
             ORDER BY
                 COALESCE(m.occurred_at, m.projected_at) DESC,
                 m.projected_at DESC,
@@ -135,7 +141,10 @@ impl MessageProjectionStore {
                 (SELECT s.ai_state FROM communication_ai_states s WHERE s.message_id = communication_messages.message_id) AS ai_state,
                 local_state,
                 local_state_changed_at,
-                local_state_reason
+                local_state_reason,
+                is_read,
+                read_changed_at,
+                read_origin
             FROM communication_messages
             WHERE message_id = $1
             "#,
@@ -160,6 +169,7 @@ impl MessageProjectionStore {
             .list_messages_page(ProjectedMessagePageQuery {
                 account_id,
                 workflow_state,
+                is_read: None,
                 channel_kind,
                 conversation_id: None,
                 query,
@@ -210,6 +220,7 @@ impl MessageProjectionStore {
                 m.workflow_state, m.importance_score, m.ai_category,
                 m.ai_summary, m.ai_summary_generated_at, s.ai_state,
                 m.local_state, m.local_state_changed_at, m.local_state_reason,
+                m.is_read, m.read_changed_at, m.read_origin,
                 count(a.attachment_id)::BIGINT AS attachment_count
             FROM communication_messages m
             LEFT JOIN communication_ai_states s ON s.message_id = m.message_id
@@ -224,6 +235,10 @@ impl MessageProjectionStore {
         if let Some(workflow_state) = workflow_state_str.as_deref() {
             builder.push(" AND m.workflow_state = ");
             builder.push_bind(workflow_state);
+        }
+        if let Some(is_read) = request.is_read {
+            builder.push(" AND m.is_read = ");
+            builder.push_bind(is_read);
         }
         if let Some(channel_kind) = request.channel_kind {
             append_channel_kind_filter(&mut builder, channel_kind);
@@ -261,7 +276,8 @@ impl MessageProjectionStore {
                 m.sender_display_name, m.delivery_state, m.message_metadata,
                 m.workflow_state, m.importance_score, m.ai_category,
                 m.ai_summary, m.ai_summary_generated_at, s.ai_state,
-                m.local_state, m.local_state_changed_at, m.local_state_reason
+                m.local_state, m.local_state_changed_at, m.local_state_reason,
+                m.is_read, m.read_changed_at, m.read_origin
             ORDER BY COALESCE(m.occurred_at, m.projected_at) DESC, m.projected_at DESC, m.message_id ASC
             LIMIT 
             "#,

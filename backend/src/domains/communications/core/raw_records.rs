@@ -18,10 +18,8 @@ impl CommunicationIngestionStore {
         record.validate()?;
 
         let mut transaction = self.pool.begin().await?;
-        let existing = sqlx::query(raw_record_by_provider_identity_sql())
-            .bind(record.account_id.trim())
-            .bind(record.record_kind.trim())
-            .bind(record.provider_record_id.trim())
+        let existing = sqlx::query(raw_record_by_id_sql())
+            .bind(record.raw_record_id.trim())
             .fetch_optional(&mut *transaction)
             .await?;
         if let Some(row) = existing {
@@ -50,7 +48,7 @@ impl CommunicationIngestionStore {
                 provenance
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            ON CONFLICT (account_id, record_kind, provider_record_id)
+            ON CONFLICT (raw_record_id)
             DO NOTHING
             RETURNING
                 raw_record_id,
@@ -85,10 +83,8 @@ impl CommunicationIngestionStore {
             return Ok(stored);
         }
 
-        let row = sqlx::query(raw_record_by_provider_identity_sql())
-            .bind(record.account_id.trim())
-            .bind(record.record_kind.trim())
-            .bind(record.provider_record_id.trim())
+        let row = sqlx::query(raw_record_by_id_sql())
+            .bind(record.raw_record_id.trim())
             .fetch_one(&mut *transaction)
             .await?;
 
@@ -146,7 +142,7 @@ impl CommunicationRawRecordCommandPort for CommunicationIngestionStore {
     }
 }
 
-fn raw_record_by_provider_identity_sql() -> &'static str {
+fn raw_record_by_id_sql() -> &'static str {
     r#"
     SELECT
         raw_record_id,
@@ -161,9 +157,7 @@ fn raw_record_by_provider_identity_sql() -> &'static str {
         payload,
         provenance
     FROM communication_raw_records
-    WHERE account_id = $1
-      AND record_kind = $2
-      AND provider_record_id = $3
+    WHERE raw_record_id = $1
     "#
 }
 

@@ -44,6 +44,8 @@ fn parse_bulk_message_action(
         "not_important" => {
             crate::domains::communications::bulk_actions::BulkMessageAction::NotImportant
         }
+        "star" => crate::domains::communications::bulk_actions::BulkMessageAction::Star,
+        "unstar" => crate::domains::communications::bulk_actions::BulkMessageAction::Unstar,
         "add_label" => {
             let label = request
                 .label

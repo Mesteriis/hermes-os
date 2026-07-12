@@ -8,7 +8,8 @@ use crate::integrations::mail::send::{OutgoingEmail, SendResult, build_rfc2822_m
 use crate::integrations::mail::sync::{EmailSyncBatch, FetchedCommunicationSourceMessage};
 use crate::platform::communications::{
     AddressBookProviderBatch, AddressBookProviderEntry, AddressBookProviderUpsertRequest,
-    EmailProviderKind,
+    DiscoveredMailProviderResource, EmailProviderKind, MailProviderResourceKind,
+    MailProviderSemanticRole,
 };
 use crate::platform::secrets::ResolvedSecret;
 
@@ -18,8 +19,8 @@ use super::helpers::{
     select_latest_history_id, sha256_fingerprint, trim_base_url, validate_non_empty,
 };
 use super::models::{
-    GmailHistoryResponse, GmailListResponse, GmailRawMessage, GmailSendResponse,
-    GooglePeopleConnectionsResponse, GooglePeoplePerson,
+    GmailHistoryItem, GmailHistoryResponse, GmailLabel, GmailLabelsResponse, GmailListResponse,
+    GmailRawMessage, GmailSendResponse, GooglePeopleConnectionsResponse, GooglePeoplePerson,
 };
 use super::options::{GmailContactFetchOptions, GmailFetchOptions, GmailHistoryFetchOptions};
 
@@ -47,6 +48,30 @@ impl GmailApiClient {
     pub fn user_id(mut self, user_id: impl Into<String>) -> Self {
         self.user_id = user_id.into();
         self
+    }
+
+    pub async fn list_labels(
+        &self,
+        access_token: &ResolvedSecret,
+    ) -> Result<Vec<DiscoveredMailProviderResource>, EmailProviderNetworkError> {
+        validate_non_empty("base_url", &self.base_url)?;
+        validate_non_empty("user_id", &self.user_id)?;
+        let labels_url = format!("{}/gmail/v1/users/{}/labels", self.base_url, self.user_id);
+        let response = self
+            .http
+            .get(labels_url)
+            .bearer_auth(access_token.expose_for_runtime())
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<GmailLabelsResponse>()
+            .await?;
+        Ok(response
+            .labels
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(gmail_label_to_resource)
+            .collect())
     }
 
     pub async fn fetch_raw_messages(
@@ -156,6 +181,8 @@ impl GmailApiClient {
             ("startHistoryId", options.start_history_id.clone()),
             ("maxResults", options.max_results.to_string()),
             ("historyTypes", "messageAdded".to_owned()),
+            ("historyTypes", "labelAdded".to_owned()),
+            ("historyTypes", "labelRemoved".to_owned()),
         ];
         if let Some(page_token) = &options.page_token {
             query.push(("pageToken", page_token.clone()));
@@ -172,14 +199,7 @@ impl GmailApiClient {
             .json::<GmailHistoryResponse>()
             .await?;
 
-        let mut message_ids = Vec::new();
-        for history in history_response.history.unwrap_or_default() {
-            for added in history.messages_added.unwrap_or_default() {
-                if !message_ids.contains(&added.message.id) {
-                    message_ids.push(added.message.id);
-                }
-            }
-        }
+        let message_ids = history_message_ids(history_response.history.unwrap_or_default());
 
         let mut messages = Vec::new();
         let mut latest_history_id = history_response.history_id.clone();
@@ -283,10 +303,30 @@ impl GmailApiClient {
         access_token: &ResolvedSecret,
         message_id: &str,
     ) -> Result<(), EmailProviderNetworkError> {
+        self.modify_message(access_token, message_id, &[], &["UNREAD"])
+            .await
+    }
+
+    pub async fn mark_message_unread(
+        &self,
+        access_token: &ResolvedSecret,
+        message_id: &str,
+    ) -> Result<(), EmailProviderNetworkError> {
+        self.modify_message(access_token, message_id, &["UNREAD"], &[])
+            .await
+    }
+
+    pub async fn modify_message(
+        &self,
+        access_token: &ResolvedSecret,
+        message_id: &str,
+        add_label_ids: &[&str],
+        remove_label_ids: &[&str],
+    ) -> Result<(), EmailProviderNetworkError> {
         validate_non_empty("base_url", &self.base_url)?;
         validate_non_empty("user_id", &self.user_id)?;
         validate_non_empty("gmail_message_id", message_id)?;
-
+        validate_label_mutation(add_label_ids, remove_label_ids)?;
         let modify_url = format!(
             "{}/gmail/v1/users/{}/messages/{}/modify",
             self.base_url, self.user_id, message_id
@@ -294,7 +334,48 @@ impl GmailApiClient {
         self.http
             .post(modify_url)
             .bearer_auth(access_token.expose_for_runtime())
-            .json(&json!({ "removeLabelIds": ["UNREAD"] }))
+            .json(&json!({
+                "addLabelIds": add_label_ids,
+                "removeLabelIds": remove_label_ids,
+            }))
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
+    pub async fn batch_modify_messages(
+        &self,
+        access_token: &ResolvedSecret,
+        message_ids: &[String],
+        add_label_ids: &[&str],
+        remove_label_ids: &[&str],
+    ) -> Result<(), EmailProviderNetworkError> {
+        validate_non_empty("base_url", &self.base_url)?;
+        validate_non_empty("user_id", &self.user_id)?;
+        if message_ids.is_empty() || message_ids.len() > 1_000 {
+            return Err(EmailProviderNetworkError::InvalidProviderRequest {
+                field: "gmail_message_ids",
+                message: "must contain between 1 and 1000 message ids",
+            });
+        }
+        for message_id in message_ids {
+            validate_non_empty("gmail_message_id", message_id)?;
+        }
+        validate_label_mutation(add_label_ids, remove_label_ids)?;
+
+        let modify_url = format!(
+            "{}/gmail/v1/users/{}/messages/batchModify",
+            self.base_url, self.user_id
+        );
+        self.http
+            .post(modify_url)
+            .bearer_auth(access_token.expose_for_runtime())
+            .json(&json!({
+                "ids": message_ids,
+                "addLabelIds": add_label_ids,
+                "removeLabelIds": remove_label_ids,
+            }))
             .send()
             .await?
             .error_for_status()?;
@@ -482,6 +563,60 @@ impl GmailApiClient {
     }
 }
 
+fn validate_label_mutation(
+    add_label_ids: &[&str],
+    remove_label_ids: &[&str],
+) -> Result<(), EmailProviderNetworkError> {
+    if add_label_ids.is_empty() && remove_label_ids.is_empty() {
+        return Err(EmailProviderNetworkError::InvalidProviderRequest {
+            field: "gmail_label_ids",
+            message: "at least one label must be added or removed",
+        });
+    }
+    for label_id in add_label_ids.iter().chain(remove_label_ids) {
+        validate_non_empty("gmail_label_id", label_id)?;
+    }
+    Ok(())
+}
+
+fn gmail_label_to_resource(label: GmailLabel) -> Option<DiscoveredMailProviderResource> {
+    let provider_resource_id = non_empty_string(label.id)?;
+    let display_name = non_empty_string(label.name)?;
+    let label_type = label.label_type.unwrap_or_default().to_ascii_lowercase();
+    let semantic_role = if label_type == "user" {
+        Some(MailProviderSemanticRole::User)
+    } else {
+        match provider_resource_id.as_str() {
+            "INBOX" => Some(MailProviderSemanticRole::Inbox),
+            "SENT" => Some(MailProviderSemanticRole::Sent),
+            "DRAFT" => Some(MailProviderSemanticRole::Drafts),
+            "TRASH" => Some(MailProviderSemanticRole::Trash),
+            "SPAM" => Some(MailProviderSemanticRole::Junk),
+            "STARRED" => Some(MailProviderSemanticRole::Flagged),
+            "IMPORTANT" => Some(MailProviderSemanticRole::Important),
+            _ => None,
+        }
+    };
+    let writable = matches!(
+        provider_resource_id.as_str(),
+        "INBOX" | "TRASH" | "SPAM" | "STARRED" | "IMPORTANT" | "UNREAD"
+    ) || label_type == "user";
+    let selectable = label.label_list_visibility.as_deref() != Some("labelHide");
+    Some(DiscoveredMailProviderResource {
+        resource_kind: MailProviderResourceKind::Label,
+        provider_resource_id,
+        display_name,
+        semantic_role,
+        selectable,
+        writable,
+        capabilities: json!({
+            "gmail_label_type": label_type,
+            "message_list_visibility": label.message_list_visibility,
+            "label_list_visibility": label.label_list_visibility,
+        }),
+    })
+}
+
 fn validate_contact_channels(
     request: &AddressBookProviderUpsertRequest,
 ) -> Result<(), EmailProviderNetworkError> {
@@ -614,10 +749,76 @@ fn non_empty_string(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn history_message_ids(history_items: Vec<GmailHistoryItem>) -> Vec<String> {
+    let mut message_ids = Vec::new();
+    for history in history_items {
+        for changes in [
+            history.messages_added,
+            history.labels_added,
+            history.labels_removed,
+        ] {
+            for change in changes.unwrap_or_default() {
+                if !message_ids.contains(&change.message.id) {
+                    message_ids.push(change.message.id);
+                }
+            }
+        }
+    }
+    message_ids
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::platform::communications::CommunicationProviderKind;
+    use serde_json::json;
+
+    #[test]
+    fn gmail_history_collects_new_and_label_changed_message_ids_once() {
+        let response: GmailHistoryResponse = serde_json::from_value(json!({
+            "history": [{
+                "messagesAdded": [{ "message": { "id": "message-1" } }],
+                "labelsAdded": [{ "message": { "id": "message-2" } }],
+                "labelsRemoved": [
+                    { "message": { "id": "message-1" } },
+                    { "message": { "id": "message-3" } }
+                ]
+            }]
+        }))
+        .expect("Gmail history payload");
+
+        assert_eq!(
+            history_message_ids(response.history.expect("history items")),
+            vec!["message-1", "message-2", "message-3"]
+        );
+    }
+
+    #[test]
+    fn gmail_label_discovery_maps_system_roles_without_promoting_user_labels() {
+        let sent = gmail_label_to_resource(GmailLabel {
+            id: Some("SENT".to_owned()),
+            name: Some("Sent".to_owned()),
+            label_type: Some("system".to_owned()),
+            message_list_visibility: Some("show".to_owned()),
+            label_list_visibility: Some("labelShow".to_owned()),
+        })
+        .expect("Sent label is a provider resource");
+        assert_eq!(sent.provider_resource_id, "SENT");
+        assert_eq!(sent.semantic_role, Some(MailProviderSemanticRole::Sent));
+        assert!(sent.selectable);
+        assert!(!sent.writable);
+
+        let user = gmail_label_to_resource(GmailLabel {
+            id: Some("Label_42".to_owned()),
+            name: Some("Follow up".to_owned()),
+            label_type: Some("user".to_owned()),
+            message_list_visibility: None,
+            label_list_visibility: Some("labelShowIfUnread".to_owned()),
+        })
+        .expect("user label is a provider resource");
+        assert_eq!(user.semantic_role, Some(MailProviderSemanticRole::User));
+        assert!(user.writable);
+    }
 
     #[test]
     fn google_people_payload_supports_phone_only_address_book_entries() {

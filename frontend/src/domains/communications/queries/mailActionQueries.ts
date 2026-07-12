@@ -106,6 +106,14 @@ export function useMarkMessageSpamMutation() {
   })
 }
 
+export function useMarkMessageNotSpamMutation() {
+  const queryClient = useQueryClient()
+  return useMutation<WorkflowStateTransitionResponse, Error, string>({
+    mutationFn: async (messageId) => transitionMessageWorkflowState(messageId, 'new'),
+    onSuccess: (_result, messageId) => invalidateMessageViews(queryClient, messageId)
+  })
+}
+
 export function useDeleteMessageFromProviderMutation() {
   const queryClient = useQueryClient()
   return useMutation<LocalMessageStateResponse, Error, string>({

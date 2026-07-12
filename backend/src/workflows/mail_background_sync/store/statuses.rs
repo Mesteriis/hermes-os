@@ -33,13 +33,21 @@ impl MailSyncStore {
             )
             SELECT
                 a.account_id,
-                COALESCE(latest.status, 'idle') AS status,
+                CASE
+                    WHEN latest.status = 'failed'
+                         AND COALESCE(failures.consecutive_failures, 0)
+                             >= COALESCE(settings.failure_threshold, 3)
+                        THEN 'degraded'
+                    WHEN latest.status = 'failed' THEN 'warning'
+                    ELSE COALESCE(latest.status, 'idle')
+                END AS status,
                 COALESCE(latest.phase, 'idle') AS phase,
                 COALESCE(latest.progress_mode, 'none') AS progress_mode,
                 latest.progress_percent,
                 COALESCE(latest.processed_messages, 0) AS processed_messages,
                 latest.estimated_total_messages,
                 COALESCE(latest.current_batch_size, COALESCE(settings.batch_size, $1)) AS current_batch_size,
+                COALESCE(settings.failure_threshold, 3) AS failure_threshold,
                 latest.started_at AS last_started_at,
                 latest.updated_at AS last_updated_at,
                 latest.completed_at AS last_completed_at,
@@ -65,7 +73,11 @@ impl MailSyncStore {
                 FROM (
                     SELECT
                         status,
-                        count(*) FILTER (WHERE status <> 'failed') OVER (
+                        error_code,
+                        count(*) FILTER (
+                            WHERE status <> 'failed'
+                               OR error_code <> 'provider_network_error'
+                        ) OVER (
                             ORDER BY started_at DESC
                             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
                         ) AS terminal_run_seen
@@ -74,6 +86,7 @@ impl MailSyncStore {
                     ORDER BY started_at DESC
                 ) runs
                 WHERE runs.status = 'failed'
+                  AND runs.error_code = 'provider_network_error'
                   AND runs.terminal_run_seen = 0
             ) failures ON true
             WHERE a.provider_kind IN ('gmail', 'icloud', 'imap')

@@ -125,6 +125,44 @@ impl AiHub {
         }
     }
 
+    pub async fn chat_json(
+        &self,
+        route: AiModelRoute,
+        prompt: &str,
+    ) -> Result<AiChatResult, AiHubError> {
+        let model = self.model_for_route(route);
+        let started = Instant::now();
+        let result = self.runtime.chat_json_with_model(prompt, model).await;
+        let latency_ms = elapsed_ms(started);
+        match result {
+            Ok(result) => {
+                self.record_usage(AiHubUsageEvent::completed_chat(
+                    route,
+                    self.target_for_route(route),
+                    model,
+                    prompt,
+                    &result,
+                    latency_ms,
+                ))
+                .await;
+                Ok(result)
+            }
+            Err(error) => {
+                self.record_usage(AiHubUsageEvent::failed(
+                    route,
+                    self.target_for_route(route),
+                    model,
+                    "chat",
+                    prompt.chars().count(),
+                    latency_ms,
+                    &error.to_string(),
+                ))
+                .await;
+                Err(AiHubError::from(error))
+            }
+        }
+    }
+
     pub async fn translate_text(
         &self,
         text: &str,
@@ -524,7 +562,7 @@ fn detect_pem_blocks(text: &str, findings: &mut Vec<SensitiveFinding>) {
         push_finding(
             findings,
             "certificate_pem",
-            SensitivityLevel::High,
+            SensitivityLevel::Public,
             0.95,
             "PEM certificate marker",
         );
@@ -533,7 +571,7 @@ fn detect_pem_blocks(text: &str, findings: &mut Vec<SensitiveFinding>) {
         push_finding(
             findings,
             "ssh_public_key",
-            SensitivityLevel::Medium,
+            SensitivityLevel::Public,
             0.90,
             "SSH public key marker",
         );
@@ -541,34 +579,19 @@ fn detect_pem_blocks(text: &str, findings: &mut Vec<SensitiveFinding>) {
 }
 
 fn detect_secret_assignments(text: &str, findings: &mut Vec<SensitiveFinding>) {
-    let labels = [
-        "password",
-        "passwd",
-        "secret",
-        "token",
-        "api_key",
-        "apikey",
-        "private_key",
-        "client_secret",
-    ];
-
     for line in text.lines() {
-        let lower = line.to_ascii_lowercase();
-        if !contains_any(&lower, &labels) || !(line.contains('=') || line.contains(':')) {
+        let Some((label, value)) = explicit_secret_assignment(line) else {
+            continue;
+        };
+        if is_placeholder_secret_value(value) {
             continue;
         }
-        let evidence = line
-            .split(['=', ':'])
-            .next()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or("secret-like assignment");
         push_finding(
             findings,
             "secret_assignment",
             SensitivityLevel::Critical,
             0.85,
-            &bounded_evidence(evidence),
+            &bounded_evidence(&label),
         );
     }
 }
@@ -638,38 +661,93 @@ fn detect_token_shapes(text: &str, findings: &mut Vec<SensitiveFinding>) {
 }
 
 fn has_secret_context(line: &str) -> bool {
-    let line = line.to_ascii_lowercase();
-    contains_any(
-        &line,
-        &[
-            "api_key",
-            "apikey",
-            "access_token",
-            "client_secret",
-            "private_key",
-            "authorization",
-            "bearer ",
-            "password",
-            "passwd",
-            "secret",
-        ],
+    if explicit_secret_assignment(line)
+        .is_some_and(|(_, value)| !is_placeholder_secret_value(value))
+    {
+        return true;
+    }
+    line.to_ascii_lowercase().contains("authorization: bearer ")
+}
+
+fn explicit_secret_assignment(line: &str) -> Option<(String, &str)> {
+    let (label, value) = line.split_once('=').or_else(|| line.split_once(':'))?;
+    if value.trim().is_empty() {
+        return None;
+    }
+    let label = label.trim().strip_prefix("export ").unwrap_or(label.trim());
+    if label.bytes().any(|byte| byte.is_ascii_whitespace()) {
+        return None;
+    }
+    let normalized = label
+        .chars()
+        .filter_map(|character| match character {
+            'A'..='Z' => Some(character.to_ascii_lowercase()),
+            'a'..='z' | '0'..='9' | '_' => Some(character),
+            '-' => Some('_'),
+            _ => None,
+        })
+        .collect::<String>();
+    matches!(
+        normalized.as_str(),
+        "password"
+            | "passwd"
+            | "secret"
+            | "token"
+            | "api_key"
+            | "apikey"
+            | "private_key"
+            | "client_secret"
+            | "access_token"
+    )
+    .then_some((normalized, value.trim()))
+}
+
+fn is_placeholder_secret_value(value: &str) -> bool {
+    let value = value
+        .trim()
+        .trim_matches(|character| matches!(character, '\'' | '"' | '`' | '<' | '>'))
+        .to_ascii_lowercase();
+    matches!(
+        value.as_str(),
+        "example"
+            | "example-value"
+            | "example_value"
+            | "changeme"
+            | "change-me"
+            | "redacted"
+            | "placeholder"
+            | "replace-me"
+            | "replace_me"
+            | "your-api-key"
+            | "your_api_key"
+            | "your-token"
+            | "your_token"
     )
 }
 
 fn detect_financial_identifiers(text: &str, findings: &mut Vec<SensitiveFinding>) {
     let mut card_candidate = String::new();
+    let mut separator_before_next_digit = false;
+    let mut has_internal_separator = false;
     for ch in text.chars() {
         if ch.is_ascii_digit() {
+            if separator_before_next_digit && !card_candidate.is_empty() {
+                has_internal_separator = true;
+            }
             card_candidate.push(ch);
+            separator_before_next_digit = false;
             continue;
         }
         if matches!(ch, ' ' | '-') && !card_candidate.is_empty() {
+            separator_before_next_digit = true;
             continue;
         }
-        flush_payment_card_candidate(&card_candidate, findings);
+        flush_payment_card_candidate(&card_candidate, has_internal_separator, findings);
         card_candidate.clear();
+        separator_before_next_digit = false;
+        has_internal_separator = false;
     }
-    flush_payment_card_candidate(&card_candidate, findings);
+    flush_payment_card_candidate(&card_candidate, has_internal_separator, findings);
 
     for raw_token in text.split_whitespace() {
         let compact: String = raw_token
@@ -677,7 +755,11 @@ fn detect_financial_identifiers(text: &str, findings: &mut Vec<SensitiveFinding>
             .filter(|c| c.is_ascii_alphanumeric())
             .collect::<String>()
             .to_ascii_uppercase();
-        if compact.len() >= 15 && compact.len() <= 34 && looks_like_iban(&compact) {
+        if compact.len() >= 15
+            && compact.len() <= 34
+            && looks_like_iban(&compact)
+            && iban_checksum_valid(&compact)
+        {
             push_finding(
                 findings,
                 "iban",
@@ -689,8 +771,12 @@ fn detect_financial_identifiers(text: &str, findings: &mut Vec<SensitiveFinding>
     }
 }
 
-fn flush_payment_card_candidate(digits: &str, findings: &mut Vec<SensitiveFinding>) {
-    if (13..=19).contains(&digits.len()) && luhn_valid(digits) {
+fn flush_payment_card_candidate(
+    digits: &str,
+    has_internal_separator: bool,
+    findings: &mut Vec<SensitiveFinding>,
+) {
+    if has_internal_separator && (13..=19).contains(&digits.len()) && luhn_valid(digits) {
         push_finding(
             findings,
             "payment_card_number",
@@ -754,6 +840,24 @@ fn looks_like_iban(value: &str) -> bool {
         && value.chars().take(2).all(|c| c.is_ascii_uppercase())
         && value.chars().skip(2).take(2).all(|c| c.is_ascii_digit())
         && value.chars().skip(4).all(|c| c.is_ascii_alphanumeric())
+}
+
+fn iban_checksum_valid(value: &str) -> bool {
+    let mut remainder = 0u32;
+    for byte in value[4..].bytes().chain(value[..4].bytes()) {
+        let numeric = match byte {
+            b'0'..=b'9' => u32::from(byte - b'0'),
+            b'A'..=b'Z' => u32::from(byte - b'A') + 10,
+            _ => return false,
+        };
+        if numeric >= 10 {
+            remainder = (remainder * 10 + numeric / 10) % 97;
+            remainder = (remainder * 10 + numeric % 10) % 97;
+        } else {
+            remainder = (remainder * 10 + numeric) % 97;
+        }
+    }
+    remainder == 1
 }
 
 fn luhn_valid(digits: &str) -> bool {
@@ -879,6 +983,31 @@ mod tests {
     }
 
     #[test]
+    fn does_not_classify_an_unlabelled_luhn_tracking_number_as_a_payment_card() {
+        let findings = AiHub::detect_sensitive_content("Shipment reference 4111111111111111");
+
+        assert!(
+            !findings
+                .iter()
+                .any(|finding| finding.kind == "payment_card_number")
+        );
+    }
+
+    #[test]
+    fn does_not_classify_an_iban_shaped_tracking_value_without_a_valid_checksum() {
+        let findings = AiHub::detect_sensitive_content("Tracking reference DE89370400440532013001");
+
+        assert!(!findings.iter().any(|finding| finding.kind == "iban"));
+    }
+
+    #[test]
+    fn detects_a_checksum_valid_iban() {
+        let findings = AiHub::detect_sensitive_content("IBAN: DE89370400440532013000");
+
+        assert!(findings.iter().any(|finding| finding.kind == "iban"));
+    }
+
+    #[test]
     fn does_not_classify_unlabelled_tracking_identifier_as_secret() {
         let findings = AiHub::detect_sensitive_content(
             "https://example.test/click?tracking=Abc9-Def8_Ghi7.Jkl6/Mno5Pqr4",
@@ -888,6 +1017,55 @@ mod tests {
             !findings
                 .iter()
                 .any(|finding| finding.kind == "high_entropy_token")
+        );
+    }
+
+    #[test]
+    fn does_not_classify_password_reset_copy_as_a_secret_assignment() {
+        let findings = AiHub::detect_sensitive_content(
+            "Reset your password: use the link in this email to choose a new one.",
+        );
+
+        assert!(
+            !findings
+                .iter()
+                .any(|finding| finding.kind == "secret_assignment")
+        );
+    }
+
+    #[test]
+    fn detects_explicit_secret_assignment_keys() {
+        let findings = AiHub::detect_sensitive_content("API_KEY=actual-secret-value-123");
+
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.kind == "secret_assignment")
+        );
+    }
+
+    #[test]
+    fn ignores_documented_placeholder_secret_assignments() {
+        let inspection = AiHub::inspect_text(
+            "Configuration example:\nAPI_KEY=example-value\nTOKEN=<your-token>",
+        );
+
+        assert_eq!(inspection.sensitivity, SensitivityLevel::Public);
+        assert!(inspection.sensitive_findings.is_empty());
+    }
+
+    #[test]
+    fn does_not_escalate_public_certificate_or_ssh_key_markers() {
+        let inspection = AiHub::inspect_text(
+            "-----BEGIN CERTIFICATE-----\npublic certificate\n-----END CERTIFICATE-----\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIexample",
+        );
+
+        assert_eq!(inspection.sensitivity, SensitivityLevel::Public);
+        assert!(
+            inspection
+                .sensitive_findings
+                .iter()
+                .all(|finding| finding.severity == SensitivityLevel::Public)
         );
     }
 

@@ -330,6 +330,9 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 	if (eventType.startsWith('signal.')) {
 		return SIGNAL_HUB_QUERY_KEYS
 	}
+	if (eventType.startsWith('communication.provider_command.')) {
+		return [['communications', 'mail', 'provider-command-diagnostics']]
+	}
 
 	if (eventType === 'mail.ai_state.changed') {
 		return [['communications-ai-state'], ['communications-message'], ['communications-list']]

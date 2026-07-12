@@ -11,6 +11,10 @@ describe('IntegrationsSettings boundary', () => {
       new URL('../queries/useIntegrationsSettingsSurface.ts', import.meta.url),
       'utf8'
     )
+    const presentation = readFileSync(
+      new URL('../queries/integrationAccountPresentation.ts', import.meta.url),
+      'utf8'
+    )
     const store = readFileSync(new URL('../stores/settings.ts', import.meta.url), 'utf8')
     const api = readFileSync(new URL('../api/settings.ts', import.meta.url), 'utf8')
 
@@ -37,11 +41,11 @@ describe('IntegrationsSettings boundary', () => {
     expect(surface).toContain('groups = computed')
     expect(surface).toContain('selectedAccountSummary = computed')
     expect(surface).toContain('accountCredentialRequiresReauthorization')
-    expect(surface).toContain("account.credential_state?.status === 'expired'")
+    expect(presentation).toContain("account.credential_state?.status === 'expired'")
     expect(surface).toContain('openCredentialRecovery')
     expect(surface).toContain('serviceRowsForAccount')
     expect(surface).toContain('accountContactsSyncEnabled')
-    expect(surface).toContain("accountConfigBoolean(account, 'address_book_sync_enabled') ?? true")
+    expect(presentation).toContain("accountConfigBoolean(account, 'address_book_sync_enabled') ?? true")
     expect(surface).toContain('handleToggleContactsService')
     expect(surface).toContain('handleRunSelectedServiceNow')
     expect(surface).toContain('handleEnableSelectedContactsBidirectional')

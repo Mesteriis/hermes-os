@@ -153,7 +153,7 @@ Supported environment variables:
 - `HERMES_SECRET_VAULT_KEY` - legacy database encrypted vault master key kept
   for migration compatibility only; do not commit, log or persist this value in
   PostgreSQL.
-- `HERMES_OLLAMA_BASE_URL` - Ollama runtime URL, defaults to `http://127.0.0.1:11434`.
+- `HERMES_OLLAMA_BASE_URL` - Ollama runtime URL, defaults to `http://192.168.1.2:11434`.
 - `HERMES_OLLAMA_CHAT_MODEL` - Ollama chat model, defaults to `qwen3:4b`.
 - `HERMES_OLLAMA_EMBED_MODEL` - Ollama embedding model, defaults to `qwen3-embedding:4b`.
 - `HERMES_OLLAMA_TIMEOUT_SECONDS` - Ollama request timeout, defaults to `120`.

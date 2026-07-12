@@ -1,10 +1,14 @@
 use super::super::*;
 use crate::domains::communications::archive_inspection::{
-    ArchiveInspectionLimits, ArchiveInspectionReport, inspect_zip_bytes,
+    ArchiveInspectionLimits, ArchiveInspectionReport, cached_archive_inspection_report,
+    inspect_zip_bytes,
 };
 use crate::domains::communications::attachment_search::{
     AttachmentSearchQuery, AttachmentSearchStore,
 };
+use axum::body::Body;
+use axum::http::{HeaderValue, StatusCode, header};
+use axum::response::Response;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 
@@ -12,7 +16,6 @@ const MAX_TEXT_PREVIEW_BYTES: usize = 64 * 1024;
 const MAX_IMAGE_PREVIEW_BYTES: usize = 5 * 1024 * 1024;
 const MAX_AUDIO_PREVIEW_BYTES: usize = 24 * 1024 * 1024;
 const MAX_VIDEO_PREVIEW_BYTES: usize = 32 * 1024 * 1024;
-const MAX_PDF_PREVIEW_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Deserialize)]
 pub(crate) struct AttachmentSearchRequest {
@@ -72,11 +75,124 @@ pub(crate) struct AttachmentPreviewResponse {
     pub(crate) max_preview_bytes: usize,
 }
 
+#[derive(Serialize)]
+pub(crate) struct AttachmentTextExtractionResponse {
+    pub(crate) attachment_id: String,
+    pub(crate) status: &'static str,
+    pub(crate) extracted_size_bytes: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct AttachmentExtractedTextResponse {
+    pub(crate) attachment_id: String,
+    pub(crate) text: String,
+    pub(crate) truncated: bool,
+    pub(crate) extracted_size_bytes: i64,
+}
+
+pub(crate) async fn post_v1_attachment_text_extraction(
+    State(state): State<AppState>,
+    Path(attachment_id): Path<String>,
+) -> Result<Json<AttachmentTextExtractionResponse>, ApiError> {
+    let Some(pool) = state.database.pool().cloned() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let service = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
+        pool,
+        crate::domains::communications::storage::LocalCommunicationBlobStore::new(
+            crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT,
+        ),
+    );
+    let outcome = service
+        .extract(&attachment_id)
+        .await
+        .map_err(map_attachment_text_extraction_error)?;
+
+    match outcome {
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionOutcome::Completed {
+            attachment_id,
+            extracted_size_bytes,
+            ..
+        } => Ok(Json(AttachmentTextExtractionResponse {
+            attachment_id,
+            status: "completed",
+            extracted_size_bytes: Some(extracted_size_bytes),
+        })),
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionOutcome::Unsupported {
+            attachment_id,
+        } => Ok(Json(AttachmentTextExtractionResponse {
+            attachment_id,
+            status: "unsupported",
+            extracted_size_bytes: None,
+        })),
+    }
+}
+
+pub(crate) async fn get_v1_attachment_extracted_text(
+    State(state): State<AppState>,
+    Path(attachment_id): Path<String>,
+) -> Result<Json<AttachmentExtractedTextResponse>, ApiError> {
+    let Some(pool) = state.database.pool().cloned() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let service = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
+        pool,
+        crate::domains::communications::storage::LocalCommunicationBlobStore::new(
+            crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT,
+        ),
+    );
+    let content = service
+        .completed_text(&attachment_id)
+        .await
+        .map_err(map_attachment_text_extraction_error)?
+        .ok_or(ApiError::NotFound)?;
+    Ok(Json(AttachmentExtractedTextResponse {
+        attachment_id: content.attachment_id,
+        text: content.text,
+        truncated: content.truncated,
+        extracted_size_bytes: content.extracted_size_bytes,
+    }))
+}
+
+fn map_attachment_text_extraction_error(
+    error: crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError,
+) -> ApiError {
+    match error {
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::NotFound => ApiError::NotFound,
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::Quarantined => {
+            ApiError::FailedPrecondition(error.to_string())
+        }
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::UnsupportedStorage
+        | crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::Extraction(_) => {
+            ApiError::InvalidCommunicationQuery("attachment text extraction is unavailable")
+        }
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::Storage(error) => {
+            ApiError::CommunicationStorage(error)
+        }
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::Sqlx(error) => {
+            tracing::error!(error = %error, "attachment text extraction persistence failed");
+            ApiError::InvalidCommunicationQuery("attachment text extraction failed")
+        }
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::Event(error) => {
+            tracing::error!(error = %error, "attachment text extraction event persistence failed");
+            ApiError::InvalidCommunicationQuery("attachment text extraction failed")
+        }
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::EventEnvelope(error) => {
+            tracing::error!(error = %error, "attachment text extraction event construction failed");
+            ApiError::InvalidCommunicationQuery("attachment text extraction failed")
+        }
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::InvalidDerivedText => {
+            ApiError::InvalidCommunicationQuery("attachment derived text is invalid")
+        }
+    }
+}
+
 pub(crate) async fn get_v1_attachment_preview(
     State(state): State<AppState>,
     Path(attachment_id): Path<String>,
 ) -> Result<Json<AttachmentPreviewResponse>, ApiError> {
-    let attachment = communication_storage_store(&state)?
+    let storage_store = communication_storage_store(&state)?;
+    let attachment = storage_store
         .attachment_by_id(&attachment_id)
         .await?
         .ok_or(ApiError::NotFound)?;
@@ -91,9 +207,41 @@ pub(crate) async fn get_v1_attachment_preview(
             "attachment preview is blocked by attachment scan status",
         ));
     }
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    if let Some(preview) =
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewService::new(
+            pool.clone(),
+            crate::app::api_support::communication_blob_store(),
+        )
+        .completed_preview(&attachment_id)
+        .await
+        .map_err(map_attachment_safe_preview_error)?
+    {
+        let byte_count = preview.bytes.len();
+        return image_attachment_preview(attachment, preview.bytes, byte_count);
+    }
+    if is_derived_text_preview_attachment(&attachment) {
+        let derived = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
+            pool,
+            crate::app::api_support::communication_blob_store(),
+        )
+        .completed_text(&attachment_id)
+        .await
+        .map_err(map_attachment_text_extraction_error)?
+        .ok_or(ApiError::FailedPrecondition(
+            "extract attachment text before preview".to_owned(),
+        ))?;
+        let bytes = derived.text.into_bytes();
+        let byte_count = bytes.len();
+        return text_attachment_preview(attachment, bytes, byte_count);
+    }
     let preview_kind =
         attachment_preview_kind(&attachment).ok_or(ApiError::InvalidCommunicationQuery(
-            "attachment preview supports text, image, audio, video and pdf attachments only",
+            "attachment preview supports text, image, audio and video attachments only",
         ))?;
 
     let bytes = crate::app::api_support::communication_blob_store()
@@ -106,7 +254,95 @@ pub(crate) async fn get_v1_attachment_preview(
         AttachmentPreviewKind::Image => image_attachment_preview(attachment, bytes, byte_count),
         AttachmentPreviewKind::Audio => audio_attachment_preview(attachment, bytes, byte_count),
         AttachmentPreviewKind::Video => video_attachment_preview(attachment, bytes, byte_count),
-        AttachmentPreviewKind::Pdf => pdf_attachment_preview(attachment, bytes, byte_count),
+    }
+}
+
+pub(crate) async fn get_v1_attachment_content_disarm(
+    State(state): State<AppState>,
+    Path(attachment_id): Path<String>,
+) -> Result<Response, ApiError> {
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let artifact = crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmService::new(
+        pool,
+        crate::app::api_support::communication_blob_store(),
+    )
+    .completed_artifact(&attachment_id)
+    .await
+    .map_err(map_attachment_content_disarm_error)?
+    .ok_or(ApiError::NotFound)?;
+    let mut response = Response::new(Body::from(artifact.bytes));
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/pdf"),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("attachment; filename=\"attachment-cdr.pdf\""),
+    );
+    Ok(response)
+}
+
+fn map_attachment_content_disarm_error(
+    error: crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmError,
+) -> ApiError {
+    match error {
+        crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmError::NotFound => ApiError::NotFound,
+        crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmError::Quarantined => ApiError::FailedPrecondition(error.to_string()),
+        crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmError::UnsupportedStorage
+        | crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmError::WorkerNotConfigured
+        | crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmError::Rendering(_)
+        | crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmError::InvalidArtifact => {
+            ApiError::InvalidCommunicationQuery("attachment CDR artifact is unavailable")
+        }
+        crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmError::Storage(error) => ApiError::CommunicationStorage(error),
+        crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmError::Sqlx(error) => {
+            tracing::error!(error = %error, "attachment CDR persistence failed");
+            ApiError::InvalidCommunicationQuery("attachment CDR artifact is unavailable")
+        }
+        crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmError::Event(error) => {
+            tracing::error!(error = %error, "attachment CDR event persistence failed");
+            ApiError::InvalidCommunicationQuery("attachment CDR artifact is unavailable")
+        }
+        crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmError::EventEnvelope(error) => {
+            tracing::error!(error = %error, "attachment CDR event envelope failed");
+            ApiError::InvalidCommunicationQuery("attachment CDR artifact is unavailable")
+        }
+    }
+}
+
+fn map_attachment_safe_preview_error(
+    error: crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError,
+) -> ApiError {
+    match error {
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::NotFound => ApiError::NotFound,
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::Quarantined => {
+            ApiError::FailedPrecondition(error.to_string())
+        }
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::UnsupportedStorage
+        | crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::Rendering(_)
+        | crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::InvalidArtifact => {
+            ApiError::InvalidCommunicationQuery("attachment safe preview is unavailable")
+        }
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::Storage(error) => {
+            ApiError::CommunicationStorage(error)
+        }
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::Sqlx(error) => {
+            tracing::error!(error = %error, "attachment safe preview persistence failed");
+            ApiError::InvalidCommunicationQuery("attachment safe preview is unavailable")
+        }
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::Event(error) => {
+            tracing::error!(error = %error, "attachment safe preview event persistence failed");
+            ApiError::InvalidCommunicationQuery("attachment safe preview is unavailable")
+        }
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::EventEnvelope(error) => {
+            tracing::error!(error = %error, "attachment safe preview event construction failed");
+            ApiError::InvalidCommunicationQuery("attachment safe preview is unavailable")
+        }
     }
 }
 
@@ -231,42 +467,12 @@ fn video_attachment_preview(
     }))
 }
 
-fn pdf_attachment_preview(
-    attachment: StoredCommunicationAttachmentWithBlob,
-    bytes: Vec<u8>,
-    byte_count: usize,
-) -> Result<Json<AttachmentPreviewResponse>, ApiError> {
-    if byte_count > MAX_PDF_PREVIEW_BYTES {
-        return Err(ApiError::InvalidCommunicationQuery(
-            "attachment pdf preview exceeds size limit",
-        ));
-    }
-    let content_type = preview_pdf_content_type(&attachment).unwrap_or("application/pdf");
-    let data_url = format!(
-        "data:{content_type};base64,{}",
-        BASE64_STANDARD.encode(bytes)
-    );
-
-    Ok(Json(AttachmentPreviewResponse {
-        attachment_id: attachment.attachment.attachment_id,
-        message_id: attachment.attachment.message_id,
-        filename: attachment.attachment.filename,
-        content_type: attachment.attachment.content_type,
-        scan_status: attachment.attachment.scan_status.as_str().to_owned(),
-        preview_kind: "pdf",
-        text: String::new(),
-        data_url: Some(data_url),
-        truncated: false,
-        byte_count,
-        max_preview_bytes: MAX_PDF_PREVIEW_BYTES,
-    }))
-}
-
 pub(crate) async fn get_v1_attachment_archive_inspection(
     State(state): State<AppState>,
     Path(attachment_id): Path<String>,
 ) -> Result<Json<AttachmentArchiveInspectionResponse>, ApiError> {
-    let attachment = communication_storage_store(&state)?
+    let storage_store = communication_storage_store(&state)?;
+    let attachment = storage_store
         .attachment_by_id(&attachment_id)
         .await?
         .ok_or(ApiError::NotFound)?;
@@ -276,24 +482,45 @@ pub(crate) async fn get_v1_attachment_archive_inspection(
             "attachment archive inspection requires a local blob",
         ));
     }
+    if !is_preview_allowed_by_scan_status(&attachment) {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "attachment archive inspection is blocked by attachment scan status",
+        ));
+    }
     if !is_zip_attachment(&attachment) {
         return Err(ApiError::InvalidCommunicationQuery(
             "attachment archive inspection supports ZIP attachments only",
         ));
     }
 
-    let bytes = crate::app::api_support::communication_blob_store()
-        .read_blob(&attachment.storage_path)
-        .await?;
-    let report =
-        inspect_zip_bytes(&bytes, ArchiveInspectionLimits::default()).map_err(|error| {
-            tracing::warn!(
-                attachment_id = %attachment.attachment.attachment_id,
-                error = %error,
-                "attachment archive inspection rejected archive"
-            );
-            ApiError::InvalidCommunicationQuery("attachment archive inspection failed")
-        })?;
+    let report = match cached_archive_inspection_report(
+        &attachment.attachment.scan_metadata,
+        &attachment.attachment.sha256,
+    ) {
+        Some(report) => report,
+        None => {
+            let bytes = crate::app::api_support::communication_blob_store()
+                .read_blob(&attachment.storage_path)
+                .await?;
+            let report =
+                inspect_zip_bytes(&bytes, ArchiveInspectionLimits::default()).map_err(|error| {
+                    tracing::warn!(
+                        attachment_id = %attachment.attachment.attachment_id,
+                        error = %error,
+                        "attachment archive inspection rejected archive"
+                    );
+                    ApiError::InvalidCommunicationQuery("attachment archive inspection failed")
+                })?;
+            storage_store
+                .persist_archive_inspection(
+                    &attachment.attachment.attachment_id,
+                    &attachment.attachment.sha256,
+                    &report,
+                )
+                .await?;
+            report
+        }
+    };
 
     Ok(Json(AttachmentArchiveInspectionResponse {
         attachment_id: attachment.attachment.attachment_id,
@@ -306,10 +533,7 @@ pub(crate) async fn get_v1_attachment_archive_inspection(
 }
 
 fn is_preview_allowed_by_scan_status(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
-    matches!(
-        attachment.attachment.scan_status.as_str(),
-        "not_scanned" | "clean"
-    )
+    attachment.attachment.scan_status.as_str() == "clean"
 }
 
 enum AttachmentPreviewKind {
@@ -317,7 +541,6 @@ enum AttachmentPreviewKind {
     Image,
     Audio,
     Video,
-    Pdf,
 }
 
 fn attachment_preview_kind(
@@ -335,10 +558,20 @@ fn attachment_preview_kind(
     if is_previewable_video_attachment(attachment) {
         return Some(AttachmentPreviewKind::Video);
     }
-    if is_previewable_pdf_attachment(attachment) {
-        return Some(AttachmentPreviewKind::Pdf);
-    }
     None
+}
+
+fn is_derived_text_preview_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
+    matches!(
+        crate::platform::communications::rich_attachment_extraction_kind(
+            &attachment.attachment.content_type,
+            attachment.attachment.filename.as_deref(),
+        ),
+        Some(
+            crate::platform::communications::RichAttachmentExtractionKind::Pdf
+                | crate::platform::communications::RichAttachmentExtractionKind::Docx
+        )
+    )
 }
 
 fn is_previewable_text_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
@@ -380,10 +613,6 @@ fn is_previewable_audio_attachment(attachment: &StoredCommunicationAttachmentWit
 
 fn is_previewable_video_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
     preview_video_content_type(attachment).is_some()
-}
-
-fn is_previewable_pdf_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
-    preview_pdf_content_type(attachment).is_some()
 }
 
 fn preview_image_content_type(
@@ -488,31 +717,6 @@ fn preview_video_content_type(
                 }
             }),
     }
-}
-
-fn preview_pdf_content_type(
-    attachment: &StoredCommunicationAttachmentWithBlob,
-) -> Option<&'static str> {
-    let content_type = attachment
-        .attachment
-        .content_type
-        .trim()
-        .to_ascii_lowercase();
-    if content_type == "application/pdf" {
-        return Some("application/pdf");
-    }
-    attachment
-        .attachment
-        .filename
-        .as_deref()
-        .and_then(|filename| {
-            let filename = filename.trim().to_ascii_lowercase();
-            if filename.ends_with(".pdf") {
-                Some("application/pdf")
-            } else {
-                None
-            }
-        })
 }
 
 fn is_zip_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {

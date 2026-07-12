@@ -7,6 +7,14 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_v1_communication_messages),
         )
         .route(
+            "/api/v1/communications/import/eml",
+            post(post_v1_import_eml),
+        )
+        .route(
+            "/api/v1/communications/import/mbox",
+            post(post_v1_import_mbox),
+        )
+        .route(
             "/api/v1/communications/messages/bulk-actions",
             post(post_v1_messages_bulk_action),
         )
@@ -19,6 +27,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         .route(
             "/api/v1/communications/messages/{message_id}/workflow-state",
             put(put_v1_message_workflow_state),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/read-state",
+            put(put_v1_message_read_state),
         )
         .route(
             "/api/v1/communications/messages/{message_id}/ai-state",
@@ -149,6 +161,14 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_v1_attachment_search),
         )
         .route(
+            "/api/v1/communications/provider-commands/diagnostics",
+            get(get_v1_provider_command_diagnostics),
+        )
+        .route(
+            "/api/v1/communications/provider-commands/{command_id}/retry",
+            post(post_v1_provider_command_retry),
+        )
+        .route(
             "/api/v1/communications/attachments/import",
             post(post_v1_attachment_import),
         )
@@ -157,8 +177,16 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_v1_translate_attachment),
         )
         .route(
+            "/api/v1/communications/attachments/{attachment_id}/extract-text",
+            get(get_v1_attachment_extracted_text).post(post_v1_attachment_text_extraction),
+        )
+        .route(
             "/api/v1/communications/attachments/{attachment_id}/preview",
             get(get_v1_attachment_preview),
+        )
+        .route(
+            "/api/v1/communications/attachments/{attachment_id}/content-disarm",
+            get(get_v1_attachment_content_disarm),
         )
         .route(
             "/api/v1/communications/attachments/{attachment_id}/archive-inspection",

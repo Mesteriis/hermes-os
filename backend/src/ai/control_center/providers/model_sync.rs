@@ -366,7 +366,7 @@ fn provider_ollama_base_url(provider: &AiProviderAccount) -> &str {
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or("http://127.0.0.1:11434")
+        .unwrap_or("http://192.168.1.2:11434")
 }
 
 fn provider_base_url(provider: &AiProviderAccount) -> Result<&str, AiControlCenterError> {

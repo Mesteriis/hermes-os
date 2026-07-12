@@ -11,6 +11,9 @@ use crate::platform::events::{EventStore, NewEventEnvelope};
 use crate::platform::observations::ObservationStoreError;
 
 const EVENT_TYPE_CHANGED: &str = "mail.ai_state.changed";
+pub const MAIL_AI_MAX_ATTEMPTS: i32 = 3;
+const MAIL_AI_PROCESSING_LEASE_SECONDS: i64 = 300;
+const MAIL_AI_RETRY_BASE_SECONDS: i64 = 30;
 use super::evidence::link_mail_entity_in_transaction;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -59,6 +62,9 @@ pub struct CommunicationAiStateRecord {
     pub ai_state: CommunicationAiState,
     pub review_reason: Option<String>,
     pub last_error: Option<String>,
+    pub retry_count: i32,
+    pub next_attempt_at: Option<DateTime<Utc>>,
+    pub processing_lease_expires_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -94,6 +100,9 @@ impl CommunicationAiStateStore {
                 COALESCE(s.ai_state, 'NEW') AS ai_state,
                 s.review_reason,
                 s.last_error,
+                COALESCE(s.retry_count, 0) AS retry_count,
+                s.next_attempt_at,
+                s.processing_lease_expires_at,
                 COALESCE(s.created_at, m.projected_at) AS created_at,
                 COALESCE(s.updated_at, m.projected_at) AS updated_at
             FROM communication_messages m
@@ -158,27 +167,20 @@ impl CommunicationAiStateStore {
             return Ok(None);
         };
 
-        let row = sqlx::query(
-            r#"
-            INSERT INTO communication_ai_states (message_id, ai_state, review_reason, last_error)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (message_id)
-            DO UPDATE SET
-                ai_state = EXCLUDED.ai_state,
-                review_reason = EXCLUDED.review_reason,
-                last_error = EXCLUDED.last_error,
-                updated_at = now()
-            RETURNING message_id, ai_state, review_reason, last_error, created_at, updated_at
-            "#,
+        let record = write_ai_state_in_transaction(
+            &mut transaction,
+            AiStateWrite {
+                message_id: &message_id,
+                ai_state: update.ai_state,
+                review_reason: update.review_reason.as_deref(),
+                last_error: update.last_error.as_deref(),
+                retry_count: manual_retry_count(previous.retry_count, update.ai_state),
+                next_attempt_at: None,
+                processing_lease_expires_at: processing_lease_for(update.ai_state, Utc::now()),
+            },
         )
-        .bind(&message_id)
-        .bind(update.ai_state.as_str())
-        .bind(update.review_reason.as_deref())
-        .bind(update.last_error.as_deref())
-        .fetch_one(&mut *transaction)
         .await?;
-        let record = row_to_ai_state(row)?;
-        let event = ai_state_changed_event(&record, previous.ai_state)?;
+        let event = ai_state_changed_event(&record, previous.ai_state, "hermes-frontend")?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
         if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
             link_mail_entity_in_transaction(
@@ -195,6 +197,170 @@ impl CommunicationAiStateStore {
             )
             .await?;
         }
+        transaction.commit().await?;
+
+        Ok(Some(record))
+    }
+
+    pub async fn recover_expired_mail_processing(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<usize, CommunicationAiStateError> {
+        let mut transaction = self.pool.begin().await?;
+        let message_ids = sqlx::query_scalar::<_, String>(
+            r#"
+            SELECT s.message_id
+            FROM communication_ai_states s
+            JOIN communication_messages m ON m.message_id = s.message_id
+            WHERE m.local_state = 'active'
+              AND m.channel_kind IN ('mail', 'email')
+              AND s.ai_state = 'PROCESSING'
+              AND s.processing_lease_expires_at IS NOT NULL
+              AND s.processing_lease_expires_at <= $1
+            ORDER BY s.processing_lease_expires_at ASC, s.message_id ASC
+            FOR UPDATE OF m SKIP LOCKED
+            "#,
+        )
+        .bind(now)
+        .fetch_all(&mut *transaction)
+        .await?;
+
+        for message_id in &message_ids {
+            let Some(previous) = select_current_ai_state(&mut transaction, message_id).await?
+            else {
+                continue;
+            };
+            if previous.ai_state != CommunicationAiState::Processing {
+                continue;
+            }
+            let retry_count = previous.retry_count.saturating_add(1);
+            let record = write_ai_state_in_transaction(
+                &mut transaction,
+                AiStateWrite {
+                    message_id,
+                    ai_state: CommunicationAiState::Failed,
+                    review_reason: None,
+                    last_error: Some("AI processing lease expired"),
+                    retry_count,
+                    next_attempt_at: retry_next_attempt_at(now, message_id, retry_count),
+                    processing_lease_expires_at: None,
+                },
+            )
+            .await?;
+            let event =
+                ai_state_changed_event(&record, previous.ai_state, "hermes-mail-ai-worker")?;
+            EventStore::append_in_transaction(&mut transaction, &event).await?;
+        }
+
+        transaction.commit().await?;
+        Ok(message_ids.len())
+    }
+
+    pub async fn claim_due_mail_messages(
+        &self,
+        limit: i64,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<String>, CommunicationAiStateError> {
+        let mut transaction = self.pool.begin().await?;
+        let message_ids = sqlx::query_scalar::<_, String>(
+            r#"
+            SELECT m.message_id
+            FROM communication_messages m
+            WHERE m.local_state = 'active'
+              AND m.channel_kind IN ('mail', 'email')
+              AND (
+                NOT EXISTS (
+                    SELECT 1
+                    FROM communication_ai_states s
+                    WHERE s.message_id = m.message_id
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM communication_ai_states s
+                    WHERE s.message_id = m.message_id
+                      AND (
+                        s.ai_state = 'NEW'
+                        OR (s.ai_state = 'FAILED' AND s.next_attempt_at IS NOT NULL AND s.next_attempt_at <= $1)
+                      )
+                )
+              )
+            ORDER BY COALESCE(m.occurred_at, m.projected_at) ASC, m.message_id ASC
+            LIMIT $2
+            FOR UPDATE SKIP LOCKED
+            "#,
+        )
+        .bind(now)
+        .bind(limit.clamp(1, 100))
+        .fetch_all(&mut *transaction)
+        .await?;
+
+        for message_id in &message_ids {
+            let Some(previous) = select_current_ai_state(&mut transaction, message_id).await?
+            else {
+                continue;
+            };
+            let record = write_ai_state_in_transaction(
+                &mut transaction,
+                AiStateWrite {
+                    message_id,
+                    ai_state: CommunicationAiState::Processing,
+                    review_reason: None,
+                    last_error: None,
+                    retry_count: previous.retry_count,
+                    next_attempt_at: None,
+                    processing_lease_expires_at: processing_lease_for(
+                        CommunicationAiState::Processing,
+                        now,
+                    ),
+                },
+            )
+            .await?;
+            let event =
+                ai_state_changed_event(&record, previous.ai_state, "hermes-mail-ai-worker")?;
+            EventStore::append_in_transaction(&mut transaction, &event).await?;
+        }
+
+        transaction.commit().await?;
+        Ok(message_ids)
+    }
+
+    pub async fn record_mail_processing_failure(
+        &self,
+        message_id: &str,
+        error: &str,
+        retryable: bool,
+        now: DateTime<Utc>,
+    ) -> Result<Option<CommunicationAiStateRecord>, CommunicationAiStateError> {
+        let message_id = normalize_required("message_id", message_id)?;
+        let error = normalize_required("error", error)?;
+        let mut transaction = self.pool.begin().await?;
+        let Some(previous) = select_current_ai_state(&mut transaction, &message_id).await? else {
+            transaction.rollback().await?;
+            return Ok(None);
+        };
+        if previous.ai_state != CommunicationAiState::Processing {
+            transaction.rollback().await?;
+            return Ok(Some(previous));
+        }
+
+        let retry_count = previous.retry_count.saturating_add(1);
+        let record = write_ai_state_in_transaction(
+            &mut transaction,
+            AiStateWrite {
+                message_id: &message_id,
+                ai_state: CommunicationAiState::Failed,
+                review_reason: None,
+                last_error: Some(&error),
+                retry_count,
+                next_attempt_at: retryable
+                    .then(|| retry_next_attempt_at(now, &message_id, retry_count))
+                    .flatten(),
+                processing_lease_expires_at: None,
+            },
+        )
+        .await?;
+        let event = ai_state_changed_event(&record, previous.ai_state, "hermes-mail-ai-worker")?;
+        EventStore::append_in_transaction(&mut transaction, &event).await?;
         transaction.commit().await?;
 
         Ok(Some(record))
@@ -252,6 +418,9 @@ async fn select_current_ai_state(
             COALESCE(s.ai_state, 'NEW') AS ai_state,
             s.review_reason,
             s.last_error,
+            COALESCE(s.retry_count, 0) AS retry_count,
+            s.next_attempt_at,
+            s.processing_lease_expires_at,
             COALESCE(s.created_at, m.projected_at) AS created_at,
             COALESCE(s.updated_at, m.projected_at) AS updated_at
         FROM communication_messages m
@@ -266,6 +435,66 @@ async fn select_current_ai_state(
     row.map(row_to_ai_state).transpose()
 }
 
+struct AiStateWrite<'a> {
+    message_id: &'a str,
+    ai_state: CommunicationAiState,
+    review_reason: Option<&'a str>,
+    last_error: Option<&'a str>,
+    retry_count: i32,
+    next_attempt_at: Option<DateTime<Utc>>,
+    processing_lease_expires_at: Option<DateTime<Utc>>,
+}
+
+async fn write_ai_state_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    write: AiStateWrite<'_>,
+) -> Result<CommunicationAiStateRecord, CommunicationAiStateError> {
+    let row = sqlx::query(
+        r#"
+        INSERT INTO communication_ai_states (
+            message_id,
+            ai_state,
+            review_reason,
+            last_error,
+            retry_count,
+            next_attempt_at,
+            processing_lease_expires_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (message_id)
+        DO UPDATE SET
+            ai_state = EXCLUDED.ai_state,
+            review_reason = EXCLUDED.review_reason,
+            last_error = EXCLUDED.last_error,
+            retry_count = EXCLUDED.retry_count,
+            next_attempt_at = EXCLUDED.next_attempt_at,
+            processing_lease_expires_at = EXCLUDED.processing_lease_expires_at,
+            updated_at = now()
+        RETURNING
+            message_id,
+            ai_state,
+            review_reason,
+            last_error,
+            retry_count,
+            next_attempt_at,
+            processing_lease_expires_at,
+            created_at,
+            updated_at
+        "#,
+    )
+    .bind(write.message_id)
+    .bind(write.ai_state.as_str())
+    .bind(write.review_reason)
+    .bind(write.last_error)
+    .bind(write.retry_count)
+    .bind(write.next_attempt_at)
+    .bind(write.processing_lease_expires_at)
+    .fetch_one(&mut **transaction)
+    .await?;
+
+    row_to_ai_state(row)
+}
+
 fn row_to_ai_state(row: PgRow) -> Result<CommunicationAiStateRecord, CommunicationAiStateError> {
     let ai_state: String = row.try_get("ai_state")?;
     Ok(CommunicationAiStateRecord {
@@ -273,6 +502,9 @@ fn row_to_ai_state(row: PgRow) -> Result<CommunicationAiStateRecord, Communicati
         ai_state: CommunicationAiState::try_from(ai_state.as_str())?,
         review_reason: row.try_get("review_reason")?,
         last_error: row.try_get("last_error")?,
+        retry_count: row.try_get("retry_count")?,
+        next_attempt_at: row.try_get("next_attempt_at")?,
+        processing_lease_expires_at: row.try_get("processing_lease_expires_at")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
     })
@@ -281,6 +513,7 @@ fn row_to_ai_state(row: PgRow) -> Result<CommunicationAiStateRecord, Communicati
 fn ai_state_changed_event(
     record: &CommunicationAiStateRecord,
     previous_ai_state: CommunicationAiState,
+    actor_id: &str,
 ) -> Result<NewEventEnvelope, CommunicationAiStateError> {
     Ok(NewEventEnvelope::builder(
         format!(
@@ -297,20 +530,65 @@ fn ai_state_changed_event(
             "message_id": record.message_id,
         }),
     )
-    .actor(json!({ "actor_id": "hermes-frontend" }))
+    .actor(json!({ "actor_id": actor_id }))
     .payload(json!({
         "message_id": record.message_id,
         "ai_state": record.ai_state.as_str(),
-        "previous_ai_state": previous_ai_state.as_str(),
-        "review_required": record.review_reason.is_some(),
-        "failed": record.last_error.is_some(),
+            "previous_ai_state": previous_ai_state.as_str(),
+            "review_required": record.review_reason.is_some(),
+            "failed": record.last_error.is_some(),
+            "retry_count": record.retry_count,
+            "next_attempt_at": record.next_attempt_at,
+            "processing_lease_expires_at": record.processing_lease_expires_at,
     }))
     .provenance(json!({
-        "source_kind": "local_api",
+        "source_kind": if actor_id == "hermes-frontend" { "local_api" } else { "automation" },
         "source_id": record.message_id,
     }))
     .correlation_id(record.message_id.clone())
     .build()?)
+}
+
+fn manual_retry_count(previous_retry_count: i32, ai_state: CommunicationAiState) -> i32 {
+    match ai_state {
+        CommunicationAiState::New
+        | CommunicationAiState::Processed
+        | CommunicationAiState::ReviewRequired
+        | CommunicationAiState::Archived => 0,
+        CommunicationAiState::Processing | CommunicationAiState::Failed => previous_retry_count,
+    }
+}
+
+fn processing_lease_for(
+    ai_state: CommunicationAiState,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    (ai_state == CommunicationAiState::Processing)
+        .then_some(now + chrono::Duration::seconds(MAIL_AI_PROCESSING_LEASE_SECONDS))
+}
+
+fn retry_next_attempt_at(
+    now: DateTime<Utc>,
+    message_id: &str,
+    retry_count: i32,
+) -> Option<DateTime<Utc>> {
+    if retry_count >= MAIL_AI_MAX_ATTEMPTS {
+        return None;
+    }
+
+    let retry_index = retry_count.saturating_sub(1).clamp(0, 10) as u32;
+    let delay_seconds = MAIL_AI_RETRY_BASE_SECONDS.saturating_mul(1_i64 << retry_index);
+    let jitter_seconds = stable_retry_jitter_seconds(message_id, retry_count);
+    Some(now + chrono::Duration::seconds(delay_seconds + jitter_seconds))
+}
+
+fn stable_retry_jitter_seconds(message_id: &str, retry_count: i32) -> i64 {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    message_id.hash(&mut hasher);
+    retry_count.hash(&mut hasher);
+    (hasher.finish() % 15) as i64
 }
 
 fn normalize_required(

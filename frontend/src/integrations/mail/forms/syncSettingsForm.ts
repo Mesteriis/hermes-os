@@ -16,7 +16,8 @@ export const syncSettingsFormSchema = z.object({
     .number()
     .int('Poll interval must be a whole number')
     .min(60, 'Poll interval must be at least 60 seconds')
-    .max(86400, 'Poll interval must be 86400 seconds or less')
+    .max(86400, 'Poll interval must be 86400 seconds or less'),
+  failure_threshold: z.coerce.number().int().min(1).max(10)
 })
 
 export type SyncSettingsFormValues = z.infer<typeof syncSettingsFormSchema>
@@ -27,7 +28,8 @@ export function syncSettingsFormDefaults(settings: MailSyncSettings | null): Syn
   return {
     sync_enabled: settings?.sync_enabled ?? true,
     batch_size: settings?.batch_size ?? 100,
-    poll_interval_seconds: settings?.poll_interval_seconds ?? 300
+    poll_interval_seconds: settings?.poll_interval_seconds ?? 300,
+    failure_threshold: settings?.failure_threshold ?? 3
   }
 }
 
@@ -35,6 +37,7 @@ export function syncSettingsFormToUpdate(values: SyncSettingsFormValues): MailSy
   return {
     sync_enabled: values.sync_enabled,
     batch_size: values.batch_size,
-    poll_interval_seconds: values.poll_interval_seconds
+    poll_interval_seconds: values.poll_interval_seconds,
+    failure_threshold: values.failure_threshold
   }
 }

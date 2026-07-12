@@ -54,6 +54,10 @@ message CommunicationMessage {
   int64 attachment_count = 25;
   optional string body_html = 26;
   optional string ai_state = 27;
+  bool is_read = 28;
+  optional string read_changed_at = 29;
+  string read_origin = 30;
+  string read_sync_status = 31;
 }
 
 message ListMessagesRequest {
@@ -66,6 +70,7 @@ message ListMessagesRequest {
   optional string local_state = 7;
   optional string cursor = 8;
   uint32 limit = 9;
+  optional bool is_read = 10;
 }
 
 message ListMessagesResponse {
@@ -701,12 +706,34 @@ message AttachmentSearchItem {
   string storage_path = 20;
   string created_at = 21;
   string updated_at = 22;
+  bool extracted_text_match = 23;
 }
 
 message AttachmentSearchResponse {
   repeated AttachmentSearchItem items = 1;
   optional string next_cursor = 2;
   bool has_more = 3;
+}
+
+message ExtractAttachmentTextRequest {
+  string attachment_id = 1;
+}
+
+message ExtractAttachmentTextResponse {
+  string attachment_id = 1;
+  string status = 2;
+  optional uint64 extracted_size_bytes = 3;
+}
+
+message GetAttachmentExtractedTextRequest {
+  string attachment_id = 1;
+}
+
+message GetAttachmentExtractedTextResponse {
+  string attachment_id = 1;
+  string text = 2;
+  bool truncated = 3;
+  uint64 extracted_size_bytes = 4;
 }
 
 message GetAttachmentPreviewRequest {
@@ -760,7 +787,7 @@ message GetAttachmentArchiveInspectionResponse {
 message TranslateAttachmentRequest {
   string attachment_id = 1;
   string target_language = 2;
-  string source_text = 3;
+  string source_text = 3 [deprecated = true];
 }
 
 message TranslateAttachmentResponse {
@@ -1006,6 +1033,17 @@ message MoveMessageToFolderResponse {
   FolderMessageActionResult item = 1;
 }
 
+message CommunicationDraftAttachmentRef {
+  string attachment_id = 1;
+  optional string filename = 2;
+  string content_type = 3;
+  int64 size_bytes = 4;
+  string scan_status = 5;
+  optional string scan_engine = 6;
+  optional string scan_checked_at = 7;
+  optional string scan_summary = 8;
+}
+
 message CommunicationDraft {
   string draft_id = 1;
   string account_id = 2;
@@ -1025,6 +1063,8 @@ message CommunicationDraft {
   string metadata_json = 16;
   string created_at = 17;
   string updated_at = 18;
+  repeated string attachment_ids = 19;
+  repeated CommunicationDraftAttachmentRef attachments = 20;
 }
 
 message ListDraftsRequest {
@@ -1053,6 +1093,8 @@ message CreateDraftRequest {
   optional string status = 12;
   optional string scheduled_send_at = 13;
   string metadata_json = 14;
+  repeated string attachment_ids = 15;
+  bool replace_attachments = 16;
 }
 
 message CreateDraftResponse {
@@ -1201,6 +1243,8 @@ service CommunicationsService {
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
   rpc RedirectMessage(RedirectMessageRequest) returns (RedirectMessageResponse);
   rpc SearchAttachments(AttachmentSearchRequest) returns (AttachmentSearchResponse);
+  rpc ExtractAttachmentText(ExtractAttachmentTextRequest) returns (ExtractAttachmentTextResponse);
+  rpc GetAttachmentExtractedText(GetAttachmentExtractedTextRequest) returns (GetAttachmentExtractedTextResponse);
   rpc GetAttachmentPreview(GetAttachmentPreviewRequest) returns (GetAttachmentPreviewResponse);
   rpc GetAttachmentArchiveInspection(GetAttachmentArchiveInspectionRequest) returns (GetAttachmentArchiveInspectionResponse);
   rpc TranslateAttachment(TranslateAttachmentRequest) returns (TranslateAttachmentResponse);

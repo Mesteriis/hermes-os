@@ -30,7 +30,7 @@ async fn v1_attachment_preview_reads_bounded_local_text_blob_against_postgres() 
         context.pool().clone(),
         "notes.txt",
         "text/plain",
-        AttachmentSafetyScanStatus::NotScanned,
+        AttachmentSafetyScanStatus::Clean,
         b"First line\nSecond line\n",
     )
     .await;
@@ -50,12 +50,184 @@ async fn v1_attachment_preview_reads_bounded_local_text_blob_against_postgres() 
     assert_eq!(body["message_id"], seeded.message_id);
     assert_eq!(body["filename"], "notes.txt");
     assert_eq!(body["content_type"], "text/plain");
-    assert_eq!(body["scan_status"], "not_scanned");
+    assert_eq!(body["scan_status"], "clean");
     assert_eq!(body["preview_kind"], "text");
     assert_eq!(body["text"], "First line\nSecond line\n");
     assert_eq!(body["truncated"], false);
     assert_eq!(body["byte_count"], 23);
     assert_eq!(body["max_preview_bytes"], 65536);
+}
+
+#[tokio::test]
+async fn v1_attachment_content_disarm_download_requires_current_clean_source() {
+    let context = TestContext::new().await;
+    let seeded = seed_text_attachment(
+        context.pool().clone(),
+        "source.pdf",
+        "application/pdf",
+        AttachmentSafetyScanStatus::Clean,
+        b"%PDF-1.4\nsource\n%%EOF",
+    )
+    .await;
+    store_completed_content_disarm(
+        context.pool(),
+        &seeded.attachment_id,
+        b"%PDF-1.4\nsafe\n%%EOF",
+    )
+    .await;
+    let app = router(&context.connection_string()).await;
+
+    let response = app
+        .clone()
+        .oneshot(get(&format!(
+            "/api/v1/communications/attachments/{}/content-disarm",
+            seeded.attachment_id
+        )))
+        .await
+        .expect("CDR download response");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "application/pdf");
+    assert_eq!(
+        response.headers()["content-disposition"],
+        "attachment; filename=\"attachment-cdr.pdf\""
+    );
+    assert_eq!(
+        to_bytes(response.into_body(), 3 * 1024 * 1024)
+            .await
+            .expect("CDR bytes"),
+        b"%PDF-1.4\nsafe\n%%EOF".as_slice()
+    );
+
+    sqlx::query("UPDATE communication_attachments SET sha256 = $1 WHERE attachment_id = $2")
+        .bind("sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd")
+        .bind(&seeded.attachment_id)
+        .execute(context.pool())
+        .await
+        .expect("invalidate CDR source hash");
+    let response = app
+        .oneshot(get(&format!(
+            "/api/v1/communications/attachments/{}/content-disarm",
+            seeded.attachment_id
+        )))
+        .await
+        .expect("stale CDR response");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn v1_attachment_text_extraction_persists_a_derived_blob_reference() {
+    let context = TestContext::new().await;
+    let seeded = seed_text_attachment(
+        context.pool().clone(),
+        "extract.txt",
+        "text/plain",
+        AttachmentSafetyScanStatus::Clean,
+        b"Searchable local attachment text.\r\n",
+    )
+    .await;
+    let app = router(&context.connection_string()).await;
+
+    let response = app
+        .clone()
+        .oneshot(post(&format!(
+            "/api/v1/communications/attachments/{}/extract-text",
+            seeded.attachment_id
+        )))
+        .await
+        .expect("attachment text extraction response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["attachment_id"], seeded.attachment_id);
+    assert_eq!(body["status"], "completed");
+    assert_eq!(body["extracted_size_bytes"], 34);
+
+    let stored: (String, String, i64) = sqlx::query_as(
+        "SELECT status, source_sha256, extracted_size_bytes FROM communication_attachment_extractions WHERE attachment_id = $1",
+    )
+    .bind(&seeded.attachment_id)
+    .fetch_one(context.pool())
+    .await
+    .expect("derived extraction reference");
+    assert_eq!(stored.0, "completed");
+    assert!(stored.1.starts_with("sha256:"));
+    assert_eq!(stored.2, 34);
+
+    let extraction_events = sqlx::query_scalar::<_, Value>(
+        r#"
+        SELECT payload
+        FROM event_log
+        WHERE event_type = 'communication.attachment.processing_changed.v1'
+          AND payload->>'attachment_id' = $1
+          AND payload->>'processing_kind' = 'text_extraction'
+        ORDER BY position ASC
+        "#,
+    )
+    .bind(&seeded.attachment_id)
+    .fetch_all(context.pool())
+    .await
+    .expect("attachment extraction lifecycle events");
+    assert_eq!(
+        extraction_events
+            .iter()
+            .filter_map(|event| event["status"].as_str())
+            .collect::<Vec<_>>(),
+        vec!["executing", "completed"]
+    );
+    assert!(extraction_events.iter().all(|event| {
+        event["extractor"] == "hermes.local_utf8.v1"
+            && event.get("text").is_none()
+            && event.get("storage_path").is_none()
+    }));
+
+    let response = app
+        .clone()
+        .oneshot(get(
+            "/api/v1/communications/attachments/search?q=searchable%20local",
+        ))
+        .await
+        .expect("derived text search response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["items"].as_array().expect("search items").len(), 1);
+    assert_eq!(body["items"][0]["attachment_id"], seeded.attachment_id);
+    assert_eq!(body["items"][0]["extracted_text_match"], true);
+
+    let response = app
+        .clone()
+        .oneshot(get(&format!(
+            "/api/v1/communications/attachments/{}/extract-text",
+            seeded.attachment_id
+        )))
+        .await
+        .expect("attachment extracted text response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["attachment_id"], seeded.attachment_id);
+    assert_eq!(body["text"], "Searchable local attachment text.\n");
+    assert_eq!(body["truncated"], false);
+    assert_eq!(body["extracted_size_bytes"], 34);
+
+    sqlx::query("UPDATE communication_attachments SET sha256 = $1 WHERE attachment_id = $2")
+        .bind("sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+        .bind(&seeded.attachment_id)
+        .execute(context.pool())
+        .await
+        .expect("invalidate extracted source hash");
+
+    let response = app
+        .oneshot(get(
+            "/api/v1/communications/attachments/search?q=searchable%20local",
+        ))
+        .await
+        .expect("stale derived text search response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert!(
+        body["items"]
+            .as_array()
+            .expect("stale search items")
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -65,13 +237,14 @@ async fn v1_attachment_preview_reads_bounded_local_image_blob_against_postgres()
         context.pool().clone(),
         "pixel.png",
         "image/png",
-        AttachmentSafetyScanStatus::NotScanned,
+        AttachmentSafetyScanStatus::Clean,
         b"\x89PNG\r\n\x1a\n",
     )
     .await;
     let app = router(&context.connection_string()).await;
 
     let response = app
+        .clone()
         .oneshot(get(&format!(
             "/api/v1/communications/attachments/{}/preview",
             seeded.attachment_id
@@ -92,19 +265,20 @@ async fn v1_attachment_preview_reads_bounded_local_image_blob_against_postgres()
 }
 
 #[tokio::test]
-async fn v1_attachment_preview_reads_bounded_local_pdf_blob_against_postgres() {
+async fn v1_attachment_preview_serves_pdf_derived_text_only_after_extraction() {
     let context = TestContext::new().await;
     let seeded = seed_text_attachment(
         context.pool().clone(),
         "spec.pdf",
         "application/pdf",
-        AttachmentSafetyScanStatus::NotScanned,
+        AttachmentSafetyScanStatus::Clean,
         b"%PDF-1.4\n",
     )
     .await;
     let app = router(&context.connection_string()).await;
 
     let response = app
+        .clone()
         .oneshot(get(&format!(
             "/api/v1/communications/attachments/{}/preview",
             seeded.attachment_id
@@ -112,17 +286,83 @@ async fn v1_attachment_preview_reads_bounded_local_pdf_blob_against_postgres() {
         .await
         .expect("attachment pdf preview response");
 
+    assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+    let body = response_json(response).await;
+    assert_eq!(body["error"], "failed_precondition");
+    assert_eq!(body["message"], "extract attachment text before preview");
+
+    store_completed_derived_text(
+        context.pool(),
+        &seeded.attachment_id,
+        "Safe text derived from the PDF artifact.",
+    )
+    .await;
+
+    let response = app
+        .oneshot(get(&format!(
+            "/api/v1/communications/attachments/{}/preview",
+            seeded.attachment_id
+        )))
+        .await
+        .expect("derived pdf preview response");
+
     assert_eq!(response.status(), StatusCode::OK);
     let body = response_json(response).await;
     assert_eq!(body["attachment_id"], seeded.attachment_id);
-    assert_eq!(body["filename"], "spec.pdf");
     assert_eq!(body["content_type"], "application/pdf");
-    assert_eq!(body["preview_kind"], "pdf");
+    assert_eq!(body["preview_kind"], "text");
+    assert_eq!(body["text"], "Safe text derived from the PDF artifact.");
+    assert!(body["data_url"].is_null());
+}
+
+#[tokio::test]
+async fn v1_attachment_preview_prefers_a_durable_safe_pdf_bitmap_artifact() {
+    let context = TestContext::new().await;
+    let seeded = seed_text_attachment(
+        context.pool().clone(),
+        "preview.pdf",
+        "application/pdf",
+        AttachmentSafetyScanStatus::Clean,
+        b"%PDF-1.4\n",
+    )
+    .await;
+    store_completed_safe_preview(context.pool(), &seeded.attachment_id, b"\x89PNG\r\n\x1a\n").await;
+    let app = router(&context.connection_string()).await;
+
+    let response = app
+        .clone()
+        .oneshot(get(&format!(
+            "/api/v1/communications/attachments/{}/preview",
+            seeded.attachment_id
+        )))
+        .await
+        .expect("safe pdf preview response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["attachment_id"], seeded.attachment_id);
+    assert_eq!(body["content_type"], "application/pdf");
+    assert_eq!(body["preview_kind"], "image");
     assert_eq!(body["text"], "");
-    assert_eq!(body["data_url"], "data:application/pdf;base64,JVBERi0xLjQK");
-    assert_eq!(body["truncated"], false);
-    assert_eq!(body["byte_count"], 9);
-    assert_eq!(body["max_preview_bytes"], 16777216);
+    assert_eq!(body["data_url"], "data:image/png;base64,iVBORw0KGgo=");
+
+    sqlx::query("UPDATE communication_attachments SET sha256 = $1 WHERE attachment_id = $2")
+        .bind("sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd")
+        .bind(&seeded.attachment_id)
+        .execute(context.pool())
+        .await
+        .expect("invalidate safe preview source hash");
+    let response = app
+        .oneshot(get(&format!(
+            "/api/v1/communications/attachments/{}/preview",
+            seeded.attachment_id
+        )))
+        .await
+        .expect("stale safe preview response");
+    assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+    let body = response_json(response).await;
+    assert_eq!(body["error"], "failed_precondition");
+    assert_eq!(body["message"], "extract attachment text before preview");
 }
 
 #[tokio::test]
@@ -145,6 +385,36 @@ async fn v1_attachment_preview_rejects_malicious_attachment_metadata() {
         )))
         .await
         .expect("attachment preview rejection response");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = response_json(response).await;
+    assert_eq!(body["error"], "invalid_communication_query");
+    assert_eq!(
+        body["message"],
+        "attachment preview is blocked by attachment scan status"
+    );
+}
+
+#[tokio::test]
+async fn v1_attachment_preview_rejects_unscanned_attachment_metadata() {
+    let context = TestContext::new().await;
+    let seeded = seed_text_attachment(
+        context.pool().clone(),
+        "pending.txt",
+        "text/plain",
+        AttachmentSafetyScanStatus::NotScanned,
+        b"This attachment remains quarantined until a clean verdict.",
+    )
+    .await;
+    let app = router(&context.connection_string()).await;
+
+    let response = app
+        .oneshot(get(&format!(
+            "/api/v1/communications/attachments/{}/preview",
+            seeded.attachment_id
+        )))
+        .await
+        .expect("attachment preview quarantine response");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body = response_json(response).await;
@@ -243,6 +513,115 @@ async fn seed_text_attachment(
     }
 }
 
+async fn store_completed_derived_text(pool: &sqlx::PgPool, attachment_id: &str, text: &str) {
+    let source_sha256: String =
+        sqlx::query_scalar("SELECT sha256 FROM communication_attachments WHERE attachment_id = $1")
+            .bind(attachment_id)
+            .fetch_one(pool)
+            .await
+            .expect("attachment source hash");
+    let local_blob_store = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+    let derived_blob = local_blob_store
+        .put_blob(text.as_bytes())
+        .await
+        .expect("write derived attachment text blob");
+    let stored_blob = CommunicationStorageStore::new(pool.clone())
+        .upsert_blob(
+            &NewCommunicationBlob::from_local_blob(&derived_blob)
+                .content_type("text/plain; charset=utf-8"),
+        )
+        .await
+        .expect("store derived attachment text blob metadata");
+
+    sqlx::query(
+        r#"
+        INSERT INTO communication_attachment_extractions (
+            attachment_id, status, extractor, source_sha256, extracted_blob_id,
+            extracted_size_bytes, extracted_at
+        ) VALUES ($1, 'completed', 'hermes.attachment-extractor.v1', $2, $3, $4, now())
+        ON CONFLICT (attachment_id) DO UPDATE SET
+            status = EXCLUDED.status,
+            extractor = EXCLUDED.extractor,
+            source_sha256 = EXCLUDED.source_sha256,
+            extracted_blob_id = EXCLUDED.extracted_blob_id,
+            extracted_size_bytes = EXCLUDED.extracted_size_bytes,
+            extracted_at = EXCLUDED.extracted_at,
+            failure_summary = NULL,
+            updated_at = now()
+        "#,
+    )
+    .bind(attachment_id)
+    .bind(source_sha256)
+    .bind(stored_blob.blob_id)
+    .bind(derived_blob.size_bytes)
+    .execute(pool)
+    .await
+    .expect("store completed derived attachment text");
+}
+
+async fn store_completed_safe_preview(pool: &sqlx::PgPool, attachment_id: &str, bytes: &[u8]) {
+    let source_sha256: String =
+        sqlx::query_scalar("SELECT sha256 FROM communication_attachments WHERE attachment_id = $1")
+            .bind(attachment_id)
+            .fetch_one(pool)
+            .await
+            .expect("attachment source hash");
+    let local_blob_store = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+    let preview_blob = local_blob_store
+        .put_blob(bytes)
+        .await
+        .expect("write safe preview blob");
+    let stored_blob = CommunicationStorageStore::new(pool.clone())
+        .upsert_blob(
+            &NewCommunicationBlob::from_local_blob(&preview_blob).content_type("image/png"),
+        )
+        .await
+        .expect("store safe preview blob metadata");
+
+    sqlx::query(
+        r#"
+        INSERT INTO communication_attachment_safe_previews (
+            attachment_id, status, renderer, source_sha256, preview_blob_id,
+            preview_content_type, preview_size_bytes, rendered_at
+        ) VALUES ($1, 'completed', 'hermes.attachment-extractor.pdf_preview.v1', $2, $3, 'image/png', $4, now())
+        "#,
+    )
+    .bind(attachment_id)
+    .bind(source_sha256)
+    .bind(stored_blob.blob_id)
+    .bind(preview_blob.size_bytes)
+    .execute(pool)
+    .await
+    .expect("store completed safe preview");
+}
+
+async fn store_completed_content_disarm(pool: &sqlx::PgPool, attachment_id: &str, bytes: &[u8]) {
+    let source_sha256: String =
+        sqlx::query_scalar("SELECT sha256 FROM communication_attachments WHERE attachment_id = $1")
+            .bind(attachment_id)
+            .fetch_one(pool)
+            .await
+            .expect("attachment source hash");
+    let blob_store = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+    let artifact = blob_store.put_blob(bytes).await.expect("write CDR blob");
+    let stored_blob = CommunicationStorageStore::new(pool.clone())
+        .upsert_blob(
+            &NewCommunicationBlob::from_local_blob(&artifact).content_type("application/pdf"),
+        )
+        .await
+        .expect("store CDR blob metadata");
+    sqlx::query(
+        "INSERT INTO communication_attachment_cdr_artifacts (attachment_id, status, renderer, source_sha256, artifact_blob_id, artifact_content_type, artifact_size_bytes, disarmed_at) VALUES ($1, 'completed', 'hermes.attachment-extractor.pdf_cdr.v1', $2, $3, 'application/pdf', $4, now())",
+    )
+    .bind(attachment_id)
+    .bind(source_sha256)
+    .bind(stored_blob.blob_id)
+    .bind(artifact.size_bytes)
+    .execute(pool)
+    .await
+    .expect("store completed CDR artifact");
+}
+
 async fn router(database_url: &str) -> axum::Router {
     let database = Database::connect(Some(database_url))
         .await
@@ -255,6 +634,15 @@ async fn router(database_url: &str) -> axum::Router {
 
 fn get(uri: &str) -> Request<Body> {
     Request::builder()
+        .uri(uri)
+        .header("x-hermes-secret", T)
+        .body(Body::empty())
+        .expect("request")
+}
+
+fn post(uri: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
         .uri(uri)
         .header("x-hermes-secret", T)
         .body(Body::empty())

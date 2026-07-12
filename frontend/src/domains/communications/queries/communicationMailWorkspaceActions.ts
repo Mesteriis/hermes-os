@@ -9,6 +9,9 @@ import type {
 import type { useCommunicationsPageSurface } from './useCommunicationsPageSurface'
 
 type CommunicationsPageSurface = ReturnType<typeof useCommunicationsPageSurface>
+type MailActionCapabilities = {
+  providerFlagMutationAvailable?: boolean
+}
 
 export async function selectMailWorkspaceAction(
   pageSurface: CommunicationsPageSurface,
@@ -45,6 +48,9 @@ export async function selectMailWorkspaceAction(
     case 'mark-spam':
       await pageSurface.handleMarkMessageSpam()
       return
+    case 'mark-not-spam':
+      await pageSurface.handleMarkMessageNotSpam()
+      return
     case 'mute':
       await pageSurface.handleMute()
       return
@@ -54,8 +60,14 @@ export async function selectMailWorkspaceAction(
     case 'important':
       await pageSurface.handleToggleImportant()
       return
+    case 'star':
+      await pageSurface.handleToggleStar()
+      return
     case 'analyze':
       await pageSurface.handleAnalyze()
+      return
+    case 'update-ai-state':
+      await pageSurface.handleRetryAi()
       return
     case 'translate':
       await pageSurface.handleTranslate()
@@ -87,8 +99,11 @@ export async function selectMailWorkspaceAction(
 }
 
 export function mailActionGroups(
-  source: CommunicationMessageDetailItem | CommunicationMessageSummary
+  source: CommunicationMessageDetailItem | CommunicationMessageSummary,
+  capabilities: MailActionCapabilities = {}
 ): CommunicationMessageActionGroupModel[] {
+  const providerFlagMutationAvailable = capabilities.providerFlagMutationAvailable ?? true
+
   return [
     {
       id: 'response',
@@ -108,7 +123,7 @@ export function mailActionGroups(
       actions: [
         mailAction('mark-read', 'Mark read', 'Mark this message as read.', 'tabler:mail-opened', 'info', 'communication.mail.read'),
         mailAction('mark-unread', 'Mark unread', 'Mark this message as unread.', 'tabler:mail', 'info', 'communication.mail.unread'),
-        mailAction('mark-spam', 'Mark spam', 'Move this message into spam workflow state.', 'tabler:mail-x', 'warning', 'communication.mail.workflow.spam'),
+        spamStateAction(source),
         mailAction('mute', 'Mute', 'Mute this message thread.', 'tabler:volume-off', undefined, 'communication.mail.mute')
       ]
     },
@@ -117,7 +132,8 @@ export function mailActionGroups(
       title: 'Organization',
       actions: [
         mailAction('pin', 'Pin', 'Toggle pin for this message.', 'tabler:pin', undefined, 'communication.mail.pin'),
-        mailAction('important', importantLabel(source), 'Toggle important marker for this message.', 'tabler:star', 'warning', 'communication.mail.important')
+        mailAction('important', importantLabel(source), providerFlagActionDescription('Toggle the important marker for this message.', providerFlagMutationAvailable), 'tabler:alert-circle', 'warning', 'communication.mail.important'),
+        mailAction('star', starLabel(source), providerFlagActionDescription('Toggle the provider-synchronized star for this message.', providerFlagMutationAvailable), 'tabler:star', 'warning', 'communication.mail.star')
       ]
     },
     {
@@ -159,6 +175,29 @@ export function mailActionGroups(
   ]
 }
 
+function spamStateAction(
+  source: CommunicationMessageDetailItem | CommunicationMessageSummary
+): CommunicationMessageActionModel {
+  if (source.workflow_state === 'spam') {
+    return mailAction(
+      'mark-not-spam',
+      'Not spam',
+      'Return this message to the inbox and synchronize the provider.',
+      'tabler:mail-check',
+      'success',
+      'communication.mail.workflow.not_spam'
+    )
+  }
+  return mailAction(
+    'mark-spam',
+    'Mark spam',
+    'Move this message into spam workflow state.',
+    'tabler:mail-x',
+    'warning',
+    'communication.mail.workflow.spam'
+  )
+}
+
 function mailAction(
   id: string,
   label: string,
@@ -172,4 +211,17 @@ function mailAction(
 
 function importantLabel(source: CommunicationMessageDetailItem | CommunicationMessageSummary): string {
   return (source.importance_score ?? 0) >= 75 ? 'Unmark important' : 'Mark important'
+}
+
+function starLabel(source: CommunicationMessageDetailItem | CommunicationMessageSummary): string {
+  return source.message_metadata?.starred === true ? 'Unstar message' : 'Star message'
+}
+
+function providerFlagActionDescription(
+  synchronizedDescription: string,
+  providerFlagMutationAvailable: boolean
+): string {
+  if (providerFlagMutationAvailable) return synchronizedDescription
+
+  return 'Update Hermes local state. Provider sync is unavailable until this account has mail flag permissions.'
 }

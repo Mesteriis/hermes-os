@@ -1,4 +1,5 @@
 use serde_json::Value;
+use sqlx::{Postgres, Transaction};
 
 use super::MessageProjectionStore;
 use crate::domains::communications::evidence::link_mail_entity_in_transaction;
@@ -37,7 +38,8 @@ impl MessageProjectionStore {
                 workflow_state, importance_score, ai_category,
                 ai_summary, ai_summary_generated_at,
                 (SELECT s.ai_state FROM communication_ai_states s WHERE s.message_id = communication_messages.message_id) AS ai_state,
-                local_state, local_state_changed_at, local_state_reason"#,
+                local_state, local_state_changed_at, local_state_reason,
+                is_read, read_changed_at, read_origin"#,
         )
         .bind(message_id.trim())
         .bind(category)
@@ -79,27 +81,9 @@ impl MessageProjectionStore {
             return Err(MessageProjectionError::InvalidMessageMetadata);
         }
         let mut transaction = self.pool.begin().await?;
-        let row = sqlx::query(
-            r#"UPDATE communication_messages SET message_metadata = $2, projected_at = now()
-            WHERE message_id = $1
-            RETURNING
-                message_id, raw_record_id, observation_id, account_id, provider_record_id,
-                subject, sender, recipients, body_text,
-                occurred_at, projected_at, channel_kind, conversation_id,
-                sender_display_name, delivery_state, message_metadata,
-                workflow_state, importance_score, ai_category,
-                ai_summary, ai_summary_generated_at,
-                (SELECT s.ai_state FROM communication_ai_states s WHERE s.message_id = communication_messages.message_id) AS ai_state,
-                local_state, local_state_changed_at, local_state_reason"#,
-        )
-        .bind(message_id.trim())
-        .bind(metadata)
-        .fetch_optional(&mut *transaction)
-        .await?;
-        let Some(row) = row else {
-            return Err(MessageProjectionError::MessageNotFound);
-        };
-        let message = row_to_projected_message(row)?;
+        let message =
+            Self::set_message_metadata_in_transaction(&mut transaction, message_id, metadata)
+                .await?;
         if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
             link_mail_entity_in_transaction(
                 &mut transaction,
@@ -114,5 +98,38 @@ impl MessageProjectionStore {
         }
         transaction.commit().await?;
         Ok(message)
+    }
+
+    pub(crate) async fn set_message_metadata_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        message_id: &str,
+        metadata: &Value,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        validate_non_empty("message_id", message_id)?;
+        if !metadata.is_object() {
+            return Err(MessageProjectionError::InvalidMessageMetadata);
+        }
+        let row = sqlx::query(
+            r#"UPDATE communication_messages SET message_metadata = $2, projected_at = now()
+            WHERE message_id = $1
+            RETURNING
+                message_id, raw_record_id, observation_id, account_id, provider_record_id,
+                subject, sender, recipients, body_text,
+                occurred_at, projected_at, channel_kind, conversation_id,
+                sender_display_name, delivery_state, message_metadata,
+                workflow_state, importance_score, ai_category,
+                ai_summary, ai_summary_generated_at,
+                (SELECT s.ai_state FROM communication_ai_states s WHERE s.message_id = communication_messages.message_id) AS ai_state,
+                local_state, local_state_changed_at, local_state_reason,
+                is_read, read_changed_at, read_origin"#,
+        )
+        .bind(message_id.trim())
+        .bind(metadata)
+        .fetch_optional(&mut **transaction)
+        .await?;
+        let Some(row) = row else {
+            return Err(MessageProjectionError::MessageNotFound);
+        };
+        row_to_projected_message(row)
     }
 }

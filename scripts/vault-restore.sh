@@ -43,14 +43,19 @@ done
 
 postgres_dump="$selected_backup/postgres.sql"
 vault_source="$selected_backup/vault"
+mail_blobs_source="$selected_backup/mail-blobs"
+mail_blobs_integrity_path="$selected_backup/mail-blobs.sha256"
 manifest_path="$selected_backup/manifest.json"
 
-if [ ! -f "$postgres_dump" ] || [ ! -f "$manifest_path" ] || [ ! -d "$vault_source" ]; then
+if [ ! -f "$postgres_dump" ] || [ ! -f "$manifest_path" ] || [ ! -d "$vault_source" ] \
+	|| [ ! -d "$mail_blobs_source" ] || [ ! -f "$mail_blobs_integrity_path" ]; then
 	error "Backup is incomplete: required files are missing in $selected_backup"
 	exit 1
 fi
 
-confirm_or_exit "Restore will replace database $HERMES_POSTGRES_DB and vault path $HERMES_HOST_VAULT_HOME." "RESTORE"
+verify_directory_integrity_manifest "$mail_blobs_source" "$mail_blobs_integrity_path"
+
+confirm_or_exit "Restore will replace database $HERMES_POSTGRES_DB, vault path $HERMES_HOST_VAULT_HOME, and mail blob path $MAIL_BLOB_ROOT." "RESTORE"
 
 info "Recreating PostgreSQL database $HERMES_POSTGRES_DB"
 PGPASSWORD="$HERMES_POSTGRES_PASSWORD" psql \
@@ -85,5 +90,28 @@ info "Restoring vault data"
 rm -rf "$HERMES_HOST_VAULT_HOME"
 mkdir -p "$HERMES_HOST_VAULT_HOME"
 cp -R "$vault_source"/. "$HERMES_HOST_VAULT_HOME"/
+
+# Materialize and verify the replacement before moving it into the live root.
+# The previous root remains available until the staging tree is complete.
+mail_blobs_staging="${MAIL_BLOB_ROOT}.restore.$$"
+mail_blobs_previous="${MAIL_BLOB_ROOT}.previous.$$"
+rm -rf "$mail_blobs_staging" "$mail_blobs_previous"
+mkdir -p "$mail_blobs_staging"
+cp -R "$mail_blobs_source"/. "$mail_blobs_staging"/
+verify_directory_integrity_manifest "$mail_blobs_staging" "$mail_blobs_integrity_path"
+
+info "Restoring mail blob storage"
+mkdir -p "$(dirname "$MAIL_BLOB_ROOT")"
+if [ -e "$MAIL_BLOB_ROOT" ]; then
+	mv "$MAIL_BLOB_ROOT" "$mail_blobs_previous"
+fi
+if ! mv "$mail_blobs_staging" "$MAIL_BLOB_ROOT"; then
+	if [ -e "$mail_blobs_previous" ]; then
+		mv "$mail_blobs_previous" "$MAIL_BLOB_ROOT"
+	fi
+	error "Unable to replace mail blob storage; previous storage was restored."
+	exit 1
+fi
+rm -rf "$mail_blobs_previous"
 
 success "Restore completed from $selected_backup"

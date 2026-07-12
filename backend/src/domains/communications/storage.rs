@@ -21,6 +21,7 @@ pub use models::{
 pub use scanner::{
     AttachmentSafetyScanReport, AttachmentSafetyScanRequest, AttachmentSafetyScanStatus,
     AttachmentSafetyScanner, HeuristicAttachmentSafetyScanner, NoopAttachmentSafetyScanner,
+    scan_attachment_with_clamav, scan_attachment_with_configured_clamav,
 };
 pub use store::CommunicationStorageStore;
 pub use store::CommunicationStorageStore as CommunicationBlobMetadataPort;

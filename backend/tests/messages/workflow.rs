@@ -140,7 +140,7 @@ fn workflow_state_serde_roundtrips() {
 
 #[tokio::test]
 async fn message_workflow_state_transition_against_postgres() {
-    let Some((_, communication_store, message_store)) =
+    let Some((_context, _, communication_store, message_store)) =
         live_projection_context("workflow state transition").await
     else {
         return;
@@ -199,7 +199,7 @@ async fn message_workflow_state_transition_against_postgres() {
 
 #[tokio::test]
 async fn message_state_counts_against_postgres() {
-    let Some((_, communication_store, message_store)) =
+    let Some((_context, _, communication_store, message_store)) =
         live_projection_context("message state counts").await
     else {
         return;
@@ -275,7 +275,7 @@ async fn message_state_counts_against_postgres() {
 
 #[tokio::test]
 async fn message_list_filtering_by_state_against_postgres() {
-    let Some((_, communication_store, message_store)) =
+    let Some((_context, _, communication_store, message_store)) =
         live_projection_context("message list filtering").await
     else {
         return;

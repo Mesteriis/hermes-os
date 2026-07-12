@@ -63,6 +63,7 @@ type MailListSavedFilter = {
 const props = defineProps<{
   items: readonly MailListItemModel[]
   hasMoreItems?: boolean
+  isImporting?: boolean
   isLoadingMore?: boolean
   searchQuery?: string
   syncStatus?: MailSyncStatus | null
@@ -70,6 +71,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   compose: []
+  'import-mail-file': [file: File]
   'load-more': []
   refresh: []
   'select-item': [item: MailListItemModel]
@@ -92,6 +94,7 @@ const searchBuilderState = ref<MailListSearchBuilderState>(createMailListSearchB
 const savedFilterName = ref('')
 const savedFilters = ref<MailListSavedFilter[]>([])
 const nextSavedFilterId = ref(1)
+const mailImportInput = ref<HTMLInputElement | null>(null)
 
 const plainSearchQuery = computed(() => props.searchQuery ?? '')
 const plainSearchIsActive = computed(() => plainSearchQuery.value.trim().length > 0)
@@ -226,6 +229,17 @@ function togglePlainSearch(): void {
   isPlainSearchOpen.value = !isPlainSearchOpen.value
 }
 
+function requestMailImport(): void {
+  mailImportInput.value?.click()
+}
+
+function handleMailImportFile(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (file) emit('import-mail-file', file)
+}
+
 function updatePlainSearchQuery(event: Event): void {
   emit('update-search-query', (event.target as HTMLInputElement).value)
 }
@@ -304,11 +318,28 @@ function selectMailView(option: TreeSelectOption): void {
 
 <template>
 	<div :class="['mail-list-stack', syncProgressVisible && 'mail-list-stack--sync-visible']">
+		<input
+			ref="mailImportInput"
+			type="file"
+			accept=".eml,.mbox,message/rfc822,application/mbox"
+			class="mail-list-action-card__file-input"
+			@change="handleMailImportFile"
+		>
 		<section class="mail-list-action-card" :aria-label="t('Mail actions')">
 			<Button class="mail-list-action-card__compose" icon="tabler:edit" size="sm" @click="emit('compose')">
 				{{ t('Compose') }}
 			</Button>
 			<div class="mail-list-action-card__tools">
+				<Button
+					class="mail-list-action-card__tool hermes-icon-button"
+					variant="outline"
+					size="sm"
+					icon="tabler:file-import"
+					:loading="isImporting"
+					:aria-label="t('Import EML or MBOX')"
+					:title="t('Import EML or MBOX')"
+					@click="requestMailImport"
+				/>
 				<Button
 					class="mail-list-action-card__tool hermes-icon-button"
 					variant="outline"

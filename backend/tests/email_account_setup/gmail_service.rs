@@ -62,7 +62,7 @@ async fn gmail_oauth_setup_builds_pkce_url_and_persists_token_bundle_against_pos
     );
     assert!(pending.authorization_url.contains("access_type=offline"));
     assert!(pending.authorization_url.contains("prompt=consent"));
-    assert!(pending.authorization_url.contains("gmail.readonly"));
+    assert!(pending.authorization_url.contains("gmail.modify"));
     assert!(pending.authorization_url.contains("gmail.send"));
     assert!(!pending.authorization_url.contains(&pending.code_verifier));
 

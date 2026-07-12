@@ -13,6 +13,10 @@ use hermes_hub_backend::domains::communications::core::{
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
+use hermes_hub_backend::domains::communications::provider_resources::{
+    MailProviderResourceKind, MailProviderResourceMappingUpdate, MailProviderResourceStore,
+    NewMailProviderResource,
+};
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
@@ -321,6 +325,104 @@ async fn v1_custom_folders_copy_move_and_events_against_postgres() {
         message_operations,
         vec!["copy".to_owned(), "move".to_owned()]
     );
+
+    let provider_command_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM communication_provider_commands
+        WHERE account_id = $1
+          AND channel_kind = 'mail'
+          AND command_kind IN ('copy_folder', 'move_folder')
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("unmapped folder actions do not enqueue provider commands");
+    assert_eq!(provider_command_count, 0);
+}
+
+#[tokio::test]
+async fn v1_copy_to_provider_mapped_folder_enqueues_mail_command_against_postgres() {
+    let context = TestContext::new().await;
+    let pool = context.pool().clone();
+    let suffix = uid();
+    let account_id = format!("acct-provider-mapped-folder-{suffix}");
+    let message_id = seed_projected_message(
+        pool.clone(),
+        &account_id,
+        &format!("provider-mapped-folder-{suffix}"),
+        "Provider mapped folder candidate",
+    )
+    .await;
+    let app = router(&context.connection_string()).await;
+
+    let response = app
+        .clone()
+        .oneshot(request(
+            Method::POST,
+            "/api/v1/communications/folders",
+            Some(json!({
+                "name": "Provider projects",
+                "account_id": account_id,
+            })),
+        ))
+        .await
+        .expect("create mapped folder");
+    assert_eq!(response.status(), StatusCode::OK);
+    let folder_id = response_json(response).await["folder_id"]
+        .as_str()
+        .expect("folder id")
+        .to_owned();
+
+    let resource_store = MailProviderResourceStore::new(pool.clone());
+    let resource = resource_store
+        .upsert_discovered(&NewMailProviderResource::new(
+            &account_id,
+            MailProviderResourceKind::Label,
+            "Label_ProviderProjects",
+            "Provider projects",
+        ))
+        .await
+        .expect("store provider resource");
+    resource_store
+        .set_manual_mapping(
+            &resource.mapping_id,
+            &MailProviderResourceMappingUpdate {
+                semantic_role: None,
+                local_folder_id: Some(folder_id.clone()),
+            },
+        )
+        .await
+        .expect("bind local folder");
+
+    let response = app
+        .oneshot(request(
+            Method::POST,
+            &format!("/api/v1/communications/folders/{folder_id}/messages/{message_id}/copy"),
+            None,
+        ))
+        .await
+        .expect("copy message to mapped folder");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let command: (String, String, Value, Value) = sqlx::query_as(
+        r#"
+        SELECT command_kind, status, target_ref, payload
+        FROM communication_provider_commands
+        WHERE account_id = $1
+          AND channel_kind = 'mail'
+          AND command_kind = 'copy_folder'
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("provider copy command");
+    assert_eq!(command.0, "copy_folder");
+    assert_eq!(command.1, "queued");
+    assert_eq!(command.2["message_id"], message_id);
+    assert_eq!(command.3["folder_id"], folder_id);
 }
 
 async fn seed_projected_message(

@@ -1,4 +1,5 @@
 pub mod ai_runtime;
+pub mod attachment_scanning;
 pub mod audit;
 pub mod calls;
 pub mod capabilities;

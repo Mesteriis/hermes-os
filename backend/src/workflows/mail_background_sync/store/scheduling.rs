@@ -7,6 +7,27 @@ use super::super::{DEFAULT_MAIL_SYNC_BATCH_SIZE, DEFAULT_MAIL_SYNC_POLL_INTERVAL
 use super::MailSyncStore;
 
 impl MailSyncStore {
+    pub async fn imap_idle_account_ids(&self, limit: i64) -> Result<Vec<String>, MailSyncError> {
+        let account_ids = sqlx::query_scalar::<_, String>(
+            r#"
+            SELECT account.account_id
+            FROM communication_provider_accounts account
+            LEFT JOIN communication_account_sync_settings settings
+                ON settings.account_id = account.account_id
+            WHERE account.provider_kind IN ('icloud', 'imap')
+              AND COALESCE(account.config->>'auth_state', '') <> 'deleted'
+              AND NOT (account.config ? 'deleted_at')
+              AND COALESCE(settings.sync_enabled, true)
+            ORDER BY account.account_id ASC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit.clamp(1, 100))
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(account_ids)
+    }
+
     pub async fn due_accounts(
         &self,
         now: DateTime<Utc>,

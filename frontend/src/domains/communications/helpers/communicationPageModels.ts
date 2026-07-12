@@ -194,7 +194,8 @@ export function replyComposeForm(
     bodyFormat: 'html',
     scheduledSendAt: '',
     undoSendSeconds: null,
-    inReplyTo: message.provider_record_id || null
+    inReplyTo: message.provider_record_id || null,
+    attachments: []
   }
 }
 
@@ -238,7 +239,8 @@ export function forwardComposeForm(
     bodyFormat: 'plain',
     scheduledSendAt: '',
     undoSendSeconds: null,
-    inReplyTo: null
+    inReplyTo: null,
+    attachments: []
   }
 }
 
@@ -262,7 +264,8 @@ export function threadReplyComposeForm(
     bodyFormat: 'html',
     scheduledSendAt: '',
     undoSendSeconds: null,
-    inReplyTo: message.provider_record_id || message.message_id
+    inReplyTo: message.provider_record_id || message.message_id,
+    attachments: []
   }
 }
 
@@ -280,7 +283,8 @@ export function newComposeForm(accountId: string, draftId: string): ComposeFormM
     bodyFormat: 'plain',
     scheduledSendAt: '',
     undoSendSeconds: null,
-    inReplyTo: null
+    inReplyTo: null,
+    attachments: []
   }
 }
 
@@ -392,6 +396,7 @@ function htmlToPlainText(value: string): string {
 }
 
 export function draftToComposeForm(draft: CommunicationDraft): ComposeFormModel {
+  const restoredAttachmentIds = new Set(draft.attachments.map((attachment) => attachment.attachment_id))
   return {
     mode: 'compose',
     draftId: draft.draft_id,
@@ -405,7 +410,31 @@ export function draftToComposeForm(draft: CommunicationDraft): ComposeFormModel 
     bodyFormat: draft.body_html ? 'html' : 'plain',
     scheduledSendAt: isoToDatetimeLocal(draft.scheduled_send_at),
     undoSendSeconds: null,
-    inReplyTo: draft.in_reply_to
+    inReplyTo: draft.in_reply_to,
+    attachments: [
+      ...draft.attachments.map((attachment) => ({
+        attachmentId: attachment.attachment_id,
+        filename: attachment.filename?.trim() || attachment.attachment_id,
+        contentType: attachment.content_type,
+        sizeBytes: attachment.size_bytes,
+        scanStatus: attachment.scan_status,
+        uploadStatus: attachment.scan_status === 'clean' ? 'ready' as const : 'blocked' as const,
+        error: attachment.scan_status === 'clean'
+          ? ''
+          : attachment.scan_summary || `Waiting for a clean scan verdict (${attachment.scan_status})`
+      })),
+      ...draft.attachment_ids
+        .filter((attachmentId) => !restoredAttachmentIds.has(attachmentId))
+        .map((attachmentId) => ({
+          attachmentId,
+          filename: attachmentId,
+          contentType: 'application/octet-stream',
+          sizeBytes: 0,
+          scanStatus: 'unknown',
+          uploadStatus: 'blocked' as const,
+          error: 'Attachment metadata is unavailable'
+        }))
+    ]
   }
 }
 

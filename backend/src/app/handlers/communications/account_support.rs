@@ -76,6 +76,65 @@ pub(super) struct EmailAccountImportSyncSettings {
     pub(super) sync_enabled: Option<bool>,
     pub(super) batch_size: Option<i32>,
     pub(super) poll_interval_seconds: Option<i32>,
+    pub(super) failure_threshold: Option<i32>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct MailSyncSettingsPatch {
+    pub(super) sync_enabled: Option<bool>,
+    pub(super) batch_size: Option<i32>,
+    pub(super) poll_interval_seconds: Option<i32>,
+    pub(super) failure_threshold: Option<i32>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct MailContentEgressSettings {
+    pub(super) body: bool,
+    pub(super) attachments: bool,
+    pub(super) extracted_text: bool,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct MailContentEgressSettingsPatch {
+    pub(super) body: Option<bool>,
+    pub(super) attachments: Option<bool>,
+    pub(super) extracted_text: Option<bool>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct MailSensitiveForwardingPolicyListResponse {
+    pub(super) items:
+        Vec<crate::domains::communications::sensitive_forwarding::StoredSensitiveForwardingPolicy>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct MailSensitiveForwardingPolicyUpsertRequest {
+    pub(super) policy_id: Option<String>,
+    pub(super) delivery_account_id: String,
+    pub(super) name: String,
+    pub(super) enabled: bool,
+    #[serde(default)]
+    pub(super) include_message_body: bool,
+    #[serde(default)]
+    pub(super) include_attachments: bool,
+    pub(super) fixed_recipients: Vec<String>,
+    pub(super) minimum_severity: String,
+    pub(super) subject_template: String,
+    pub(super) body_template: String,
+    pub(super) max_sends_per_hour: i32,
+    #[serde(default = "empty_json_object")]
+    pub(super) quiet_hours: Value,
+    pub(super) expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct MailSensitiveForwardingPolicyDeleteResponse {
+    pub(super) policy_id: String,
+    pub(super) deleted: bool,
+}
+
+fn empty_json_object() -> Value {
+    json!({})
 }
 pub(super) async fn email_account_or_not_found(
     state: &AppState,
@@ -127,6 +186,22 @@ pub(super) fn email_account_capabilities(account: &ProviderAccount) -> EmailAcco
         .get("gmail_send_enabled")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let gmail_modify_enabled = account
+        .config
+        .get("gmail_modify_enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or_else(|| {
+            account
+                .config
+                .get("requested_scopes")
+                .and_then(Value::as_array)
+                .is_some_and(|scopes| {
+                    scopes.iter().any(|scope| {
+                        scope.as_str() == Some("https://www.googleapis.com/auth/gmail.modify")
+                    })
+                })
+        });
+    let provider_mutations_enabled = !logged_out && (imap || gmail_modify_enabled);
 
     EmailAccountCapabilities {
         read: !logged_out,
@@ -135,10 +210,10 @@ pub(super) fn email_account_capabilities(account: &ProviderAccount) -> EmailAcco
         oauth,
         imap,
         smtp,
-        mutate_flags: !logged_out && imap,
-        mutate_mailboxes: false,
+        mutate_flags: provider_mutations_enabled,
+        mutate_mailboxes: provider_mutations_enabled,
         server_delete: false,
-        provider_folders: false,
+        provider_folders: provider_mutations_enabled,
         local_trash: true,
     }
 }
@@ -254,6 +329,11 @@ pub(super) fn mail_sync_service(
                 crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
             ),
         ),
+        std::sync::Arc::new(
+            crate::domains::communications::provider_resources::MailProviderResourceStore::new(
+                pool.clone(),
+            ),
+        ),
     ))
 }
 
@@ -298,6 +378,12 @@ pub(super) fn mail_sync_api_error(error: MailSyncError) -> ApiError {
         MailSyncError::Communication(error) => {
             tracing::error!(error = %error, "mail sync communication store failed");
             ApiError::InvalidCommunicationQuery("mail sync operation failed")
+        }
+        MailSyncError::EmailSyncPlan(_) => {
+            ApiError::FailedPrecondition("mail provider configuration is invalid".to_owned())
+        }
+        MailSyncError::ProviderSync(_) => {
+            ApiError::FailedPrecondition("mail provider is temporarily unavailable".to_owned())
         }
         MailSyncError::EventEnvelope(error) => ApiError::InvalidEnvelope(error),
         MailSyncError::EventLogPort(error) => ApiError::Store(error),
@@ -377,5 +463,40 @@ mod tests {
 
         assert!(!capabilities.smtp);
         assert!(!capabilities.send);
+        assert!(capabilities.mutate_flags);
+        assert!(capabilities.mutate_mailboxes);
+        assert!(capabilities.provider_folders);
+    }
+
+    #[test]
+    fn gmail_modify_scope_enables_provider_mutation_capabilities() {
+        let account = email_account(
+            EmailProviderKind::Gmail,
+            json!({
+                "requested_scopes": ["https://www.googleapis.com/auth/gmail.modify"],
+            }),
+        );
+
+        let capabilities = email_account_capabilities(&account);
+
+        assert!(capabilities.mutate_flags);
+        assert!(capabilities.mutate_mailboxes);
+        assert!(capabilities.provider_folders);
+    }
+
+    #[test]
+    fn gmail_without_modify_scope_does_not_advertise_provider_mutations() {
+        let account = email_account(
+            EmailProviderKind::Gmail,
+            json!({
+                "requested_scopes": ["https://www.googleapis.com/auth/gmail.send"],
+            }),
+        );
+
+        let capabilities = email_account_capabilities(&account);
+
+        assert!(!capabilities.mutate_flags);
+        assert!(!capabilities.mutate_mailboxes);
+        assert!(!capabilities.provider_folders);
     }
 }

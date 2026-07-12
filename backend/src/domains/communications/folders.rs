@@ -69,7 +69,7 @@ pub struct CommunicationFolderListQuery<'a> {
     pub limit: i64,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FolderMessageOperation {
     Copy,
@@ -505,13 +505,39 @@ impl CommunicationFolderStore {
         relationship_kind: &str,
         metadata: Option<serde_json::Value>,
     ) -> Result<Option<FolderMessageActionResponse>, CommunicationFolderError> {
+        let mut transaction = self.pool.begin().await?;
+        let response = Self::apply_message_action_in_transaction(
+            &mut transaction,
+            folder_id,
+            message_id,
+            operation,
+            observation_id,
+            relationship_kind,
+            metadata,
+        )
+        .await?;
+        if response.is_none() {
+            transaction.rollback().await?;
+            return Ok(None);
+        }
+        transaction.commit().await?;
+        Ok(response)
+    }
+
+    pub(crate) async fn apply_message_action_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        folder_id: &str,
+        message_id: &str,
+        operation: FolderMessageOperation,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<Option<FolderMessageActionResponse>, CommunicationFolderError> {
         let folder_id = normalize_required("folder_id", folder_id)?;
         let message_id = normalize_required("message_id", message_id)?;
-        let mut transaction = self.pool.begin().await?;
-        if !folder_exists(&mut transaction, &folder_id).await?
-            || !message_exists(&mut transaction, &message_id).await?
+        if !folder_exists(transaction, &folder_id).await?
+            || !message_exists(transaction, &message_id).await?
         {
-            transaction.rollback().await?;
             return Ok(None);
         }
 
@@ -524,18 +550,12 @@ impl CommunicationFolderStore {
             )
             .bind(&message_id)
             .bind(&folder_id)
-            .execute(&mut *transaction)
+            .execute(&mut **transaction)
             .await?;
         }
 
-        upsert_folder_message(
-            &mut transaction,
-            &folder_id,
-            &message_id,
-            operation.as_str(),
-        )
-        .await?;
-        let message = load_folder_message(&mut transaction, &folder_id, &message_id).await?;
+        upsert_folder_message(transaction, &folder_id, &message_id, operation.as_str()).await?;
+        let message = load_folder_message(transaction, &folder_id, &message_id).await?;
         let response = FolderMessageActionResponse {
             operation,
             folder_id,
@@ -543,7 +563,7 @@ impl CommunicationFolderStore {
             message,
         };
         let event = folder_message_event(&response)?;
-        EventStore::append_in_transaction(&mut transaction, &event).await?;
+        EventStore::append_in_transaction(transaction, &event).await?;
         if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
             let link_metadata = merge_metadata(
                 serde_json::json!({
@@ -553,7 +573,7 @@ impl CommunicationFolderStore {
                 metadata,
             );
             link_mail_entity_in_transaction(
-                &mut transaction,
+                transaction,
                 observation_id,
                 "communication_message",
                 response.message_id.clone(),
@@ -563,7 +583,6 @@ impl CommunicationFolderStore {
             )
             .await?;
         }
-        transaction.commit().await?;
         Ok(Some(response))
     }
 }
@@ -803,11 +822,19 @@ async fn upsert_folder_message(
 ) -> Result<(), CommunicationFolderError> {
     sqlx::query(
         r#"
-        INSERT INTO communication_folder_messages (folder_id, message_id, added_at, last_operation)
-        VALUES ($1, $2, now(), $3)
+        INSERT INTO communication_folder_messages (
+            folder_id, message_id, added_at, last_operation, metadata
+        )
+        VALUES ($1, $2, now(), $3, '{"source":"local_user"}'::jsonb)
         ON CONFLICT (folder_id, message_id)
         DO UPDATE SET added_at = EXCLUDED.added_at,
-                      last_operation = EXCLUDED.last_operation
+                      last_operation = EXCLUDED.last_operation,
+                      metadata = CASE
+                          WHEN communication_folder_messages.metadata->>'source'
+                              = 'provider_resource_mapping'
+                          THEN EXCLUDED.metadata
+                          ELSE communication_folder_messages.metadata
+                      END
         "#,
     )
     .bind(folder_id)

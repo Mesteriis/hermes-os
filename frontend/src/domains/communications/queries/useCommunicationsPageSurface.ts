@@ -8,8 +8,6 @@ import {
   useMailboxHealthQuery,
   useMailListQuery,
   useMessageQuery,
-  useSaveDraftMutation,
-  useSendMailMutation,
   useStateCountsQuery,
   useSyncStatusesQuery,
   useThreadMessagesQuery
@@ -18,11 +16,6 @@ import { useCommunicationActionNotifications } from './communicationActionNotifi
 import { useFolderMailList } from './folderMailList'
 import { useOutboxStatusStrip } from './outboxStatusStrip'
 import { useMailResourceOverview } from '../views/useMailResourceOverview'
-import { buildComposeDraftPayload } from '../forms/composeDraftAutosave'
-import {
-  composeFormToSendRequest,
-  draftToComposeForm
-} from '../helpers/communicationPageModels'
 import { isMailProviderKind } from '../helpers/mailProviderKinds'
 import {
   communicationSectionWorkflowState,
@@ -32,9 +25,7 @@ import {
 import type {
   BulkMessageActionRequest,
   CommunicationAccountOption,
-  ComposeFormModel,
   CommunicationSectionId,
-  CommunicationDraft,
   CommunicationThreadSummary,
   EmailAccountView
 } from '../types/communications'
@@ -42,6 +33,7 @@ import type { CommunicationSavedSearch } from '../types/savedSearches'
 import { useMailSyncActions } from '../views/useMailSyncActions'
 import { useThreadReplyActions } from '../views/useThreadReplyActions'
 import { useSelectedMessageActions } from '../views/useSelectedMessageActions'
+import { useMailComposeActions } from '../views/useMailComposeActions'
 
 type BulkActionCommand = Omit<BulkMessageActionRequest, 'message_ids'>
 
@@ -112,8 +104,6 @@ export function useCommunicationsPageSurface() {
     () => store.selectedThread?.subject ?? null
   )
   const deleteDraftMutation = useDeleteDraftMutation()
-  const saveDraftMutation = useSaveDraftMutation()
-  const sendMailMutation = useSendMailMutation()
   const bulkMessageActionMutation = useBulkMessageActionMutation()
   const {
     outboxItems,
@@ -157,6 +147,17 @@ export function useCommunicationsPageSurface() {
 
     return options[0]?.account_id ?? ''
   })
+
+  function isProviderFlagMutationAvailable(accountId: string | null | undefined): boolean {
+    const normalizedAccountId = accountId?.trim() ?? ''
+    if (!normalizedAccountId) return false
+
+    return (emailAccountsData.value?.items ?? []).some((view) =>
+      isEmailAccountView(view) &&
+      view.account.account_id === normalizedAccountId &&
+      view.capabilities.mutate_flags
+    )
+  }
   const drafts = computed(() => draftsData.value ?? [])
   const hasMoreDrafts = computed(() => Boolean(hasDraftNextPage.value))
   const isLoadingMoreDrafts = computed(() => isFetchingDraftNextPage.value)
@@ -311,6 +312,7 @@ export function useCommunicationsPageSurface() {
     handleCreateTask,
     handleExportMessage,
     handleMarkMessageRead,
+    handleMarkMessageNotSpam,
     handleMarkMessageSpam,
     handleMarkMessageUnread,
     handleForwardMessage,
@@ -319,12 +321,14 @@ export function useCommunicationsPageSurface() {
     handleNewMessage,
     handleRedirectMessage,
     handleRemoveLabel,
+    handleRetryAi,
     handleReply,
     handleReplyAll,
     handleReviewRecipients,
     handleReviewSecurity,
     handleSnoozeMessage,
     handleToggleImportant,
+    handleToggleStar,
     handleTogglePin,
     handleTranslate
   } = useSelectedMessageActions(store, {
@@ -375,10 +379,6 @@ export function useCommunicationsPageSurface() {
     resetSelectedMessageContext()
   }
 
-  function handleOpenDraft(draft: CommunicationDraft) {
-    store.openCompose(draftToComposeForm(draft))
-  }
-
   function notifyMailActionError(message: string) {
     store.setMailActionError(message)
     notifications.error('Mail action failed', message)
@@ -395,87 +395,19 @@ export function useCommunicationsPageSurface() {
     }
   }
 
-  async function handleSaveComposeDraft() {
-    store.setComposeStatusMessage('')
-    store.setComposeSendError('')
-    const form = composeFormWithAvailableMailAccount()
-    const accountError = composeAccountValidationError(form)
-    if (accountError) {
-      store.setComposeSendError(accountError)
-      notifications.error('Draft save failed', accountError)
-      return
-    }
-    if (form.accountId !== store.composeForm.accountId) {
-      store.updateComposeForm({ accountId: form.accountId })
-    }
-    store.setIsSendingMessage(true)
-    try {
-      const draft = await saveDraftMutation.mutateAsync(buildComposeDraftPayload(form))
-      store.openCompose(draftToComposeForm(draft))
-      store.setComposeStatusMessage('Draft saved')
-      notifications.success('Draft saved')
-      await refetchDrafts()
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Save draft failed'
-      store.setComposeSendError(message)
-      notifications.error('Draft save failed', message)
-    } finally {
-      store.setIsSendingMessage(false)
-    }
-  }
-
-  async function handleSendCompose() {
-    store.setComposeStatusMessage('')
-    store.setComposeSendError('')
-    const form = composeFormWithAvailableMailAccount()
-    const accountError = composeAccountValidationError(form)
-    if (accountError) {
-      store.setComposeSendError(accountError)
-      notifications.error('Send failed', accountError)
-      return
-    }
-    if (form.accountId !== store.composeForm.accountId) {
-      store.updateComposeForm({ accountId: form.accountId })
-    }
-    store.setIsSendingMessage(true)
-    try {
-      const result = await sendMailMutation.mutateAsync(composeFormToSendRequest(form))
-      store.closeCompose()
-      const status = result.status === 'sent' ? `Sent via ${result.transport}` : `Message ${result.status}`
-      store.setMailActionStatus(status)
-      notifications.success('Message queued', status)
-      await Promise.all([refetchMailList(), refetchDrafts()])
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Send failed'
-      store.setComposeSendError(message)
-      notifications.error('Send failed', message)
-    } finally {
-      store.setIsSendingMessage(false)
-    }
-  }
-
-  function composeFormWithAvailableMailAccount(): ComposeFormModel {
-    const form = store.composeForm
-    const accountId = form.accountId.trim()
-    const sendAccountOptions = sendCapableMailComposeAccountOptions.value
-    const currentAccountCanSend = Boolean(accountId) && (
-      sendAccountOptions.some((option) => option.account_id === accountId)
-    )
-    if (currentAccountCanSend) return form
-
-    const fallbackAccountId = defaultMailAccountId.value
-    return fallbackAccountId ? { ...form, accountId: fallbackAccountId } : form
-  }
-
-  function composeAccountValidationError(form: ComposeFormModel): string {
-    const accountId = form.accountId.trim()
-    if (!accountId) return 'Select a sender account'
-    const selectedAccount = mailComposeAccountOptions.value.find((option) => option.account_id === accountId)
-    if (selectedAccount && !selectedAccount.can_send) {
-      return selectedAccount.send_unavailable_reason
-    }
-    return ''
-  }
+  const {
+    handleComposeFiles,
+    handleOpenDraft,
+    handleRemoveComposeAttachment,
+    handleSaveComposeDraft,
+    handleSendCompose
+  } = useMailComposeActions(store, {
+    getDefaultMailAccountId: () => defaultMailAccountId.value,
+    getMailComposeAccountOptions: () => mailComposeAccountOptions.value,
+    getSendCapableMailComposeAccountOptions: () => sendCapableMailComposeAccountOptions.value,
+    refetchDrafts,
+    refetchMailList
+  })
 
   const {
     clearSyncStatus,
@@ -516,6 +448,7 @@ export function useCommunicationsPageSurface() {
     handleBulkAction,
     handleCreateNote,
     handleCreateTask,
+    handleComposeFiles,
     handleDeleteDraft,
     handleFolderDeleted,
     handleFolderSelect,
@@ -540,6 +473,8 @@ export function useCommunicationsPageSurface() {
     handleSavedSearchDeleted,
     handleSavedSearchSelect,
     handleRemoveLabel,
+    handleRetryAi,
+    handleRemoveComposeAttachment,
     handleReviewRecipients,
     handleReviewSecurity,
     handleSaveThreadReplyDraft,
@@ -549,6 +484,7 @@ export function useCommunicationsPageSurface() {
     handleSendThreadReply,
     handleSnoozeMessage,
     handleMarkMessageRead,
+    handleMarkMessageNotSpam,
     handleMarkMessageSpam,
     handleMarkMessageUnread,
     handleDeleteFromProvider,
@@ -556,6 +492,7 @@ export function useCommunicationsPageSurface() {
     handleSendCompose,
     handleSyncNow,
     handleToggleImportant,
+    handleToggleStar,
     handleTogglePin,
     handleTranslate,
     handleExportMessage,
@@ -564,6 +501,7 @@ export function useCommunicationsPageSurface() {
     hasThreadNextPage,
     hasVisibleNextPage,
     isAccountSetupOpen,
+    isProviderFlagMutationAvailable,
     isBulkActionRunning,
     isFetchingThreadNextPage,
     isFetchingVisibleNextPage,

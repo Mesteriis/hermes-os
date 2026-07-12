@@ -83,6 +83,10 @@ impl EventConsumerRunner {
                 .consumer_store
                 .has_processed_event(&self.config.consumer_name, event.position)
                 .await?
+                || self
+                    .consumer_store
+                    .has_processed_event_id(&self.config.consumer_name, &event.event.event_id)
+                    .await?
             {
                 self.consumer_store
                     .clear_failure(&self.config.consumer_name, event.position)
@@ -107,7 +111,8 @@ impl EventConsumerRunner {
 
             match handler(event.clone()).await {
                 Ok(()) => {
-                    self.consumer_store
+                    let inserted = self
+                        .consumer_store
                         .record_processed(&self.config.consumer_name, &event)
                         .await?;
                     self.consumer_store
@@ -122,7 +127,14 @@ impl EventConsumerRunner {
                     self.consumer_store
                         .save_position(&self.config.consumer_name, event.position)
                         .await?;
-                    report.processed += 1;
+                    if inserted {
+                        report.processed += 1;
+                    } else {
+                        // Another worker completed the same event after our preflight check.
+                        // The handler must already be idempotent, and the marker conflict is not
+                        // a processing failure or a reason to poison the consumer retry queue.
+                        report.skipped_duplicates += 1;
+                    }
                     report.last_processed_position = event.position;
                 }
                 Err(error) => {
@@ -552,6 +564,30 @@ impl EventConsumerStore {
         Ok(processed)
     }
 
+    pub async fn has_processed_event_id(
+        &self,
+        consumer_name: &str,
+        event_id: &str,
+    ) -> Result<bool, EventStoreError> {
+        validate_non_empty("consumer_name", consumer_name)?;
+        validate_non_empty("event_id", event_id)?;
+        let processed = sqlx::query_scalar::<_, bool>(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM event_consumer_processed_events
+                WHERE consumer_name = $1 AND event_id = $2
+            )
+            "#,
+        )
+        .bind(consumer_name.trim())
+        .bind(event_id.trim())
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(processed)
+    }
+
     pub async fn record_processed(
         &self,
         consumer_name: &str,
@@ -569,8 +605,7 @@ impl EventConsumerStore {
                 event_type
             )
             VALUES ($1, $2, $3, $4)
-            ON CONFLICT (consumer_name, event_position)
-            DO NOTHING
+            ON CONFLICT DO NOTHING
             RETURNING event_position
             "#,
         )

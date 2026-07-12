@@ -39,6 +39,8 @@ export function mailItem(
     sourceKind: 'mail',
     timestampLabel: messageTime(message.occurred_at ?? message.projected_at),
     workflowState: message.workflow_state,
+    isRead: message.is_read,
+    readSyncStatus: message.read_sync_status,
     localState: message.local_state,
     deliveryState: message.delivery_state,
     aiState: message.ai_state ?? undefined,
@@ -81,6 +83,7 @@ function mailItemMarkers(
   if (message.ai_state === 'PROCESSED') {
     markers.push('ai-processed')
   }
+  if (message.message_metadata.starred === true) markers.push('starred')
   if ((message.importance_score ?? 0) >= 75) markers.push('important')
   return markers
 }

@@ -62,7 +62,7 @@ describe('communications API attachment and folder helpers', () => {
     })
   })
 
-  it('posts attachment translation requests with provided extracted text', async () => {
+  it('posts attachment translation requests without caller-provided text', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -76,7 +76,7 @@ describe('communications API attachment and folder helpers', () => {
           target: 'en',
           model: null,
           reason: 'translation runtime unavailable',
-          source: 'caller_provided_extracted_text'
+          source: 'durable_extracted_text'
         }),
         {
           status: 200,
@@ -87,8 +87,7 @@ describe('communications API attachment and folder helpers', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await translateAttachment('mail_attachment:1', {
-      target_language: 'en',
-      source_text: 'Hola equipo'
+      target_language: 'en'
     })
 
     expect(fetchMock).toHaveBeenCalledOnce()
@@ -99,8 +98,7 @@ describe('communications API attachment and folder helpers', () => {
     expect(init.method).toBe('POST')
     expect(JSON.parse(decodeBody(init.body))).toEqual({
       attachmentId: 'mail_attachment:1',
-      targetLanguage: 'en',
-      sourceText: 'Hola equipo'
+      targetLanguage: 'en'
     })
   })
 

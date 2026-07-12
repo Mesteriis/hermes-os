@@ -1,72 +1,74 @@
 {
   "suite": "backend-full",
-  "generatedAt": "2026-06-30T01:57:12.363Z",
+  "generatedAt": "2026-07-11T03:50:34.631Z",
   "source": "target/nextest/default/junit.xml",
-  "totalTests": 1441,
+  "totalTests": 1566,
   "failedTests": 0,
-  "flakyTests": [],
-  "totalSeconds": 6715.71,
-  "averageSeconds": 4.66,
-  "p95Seconds": 11.699,
-  "p99Seconds": 16.011,
+  "flakyTests": [
+    "hermes-hub-backend::whatsapp::whatsapp_startup_restore_reconcile_uses_vault_session_without_user_action"
+  ],
+  "totalSeconds": 7933.529,
+  "averageSeconds": 5.066,
+  "p95Seconds": 12.093,
+  "p99Seconds": 19.758,
   "slowest": [
     {
-      "id": "hermes-hub-backend::graph_api::search::graph_summary_returns_empty_state_for_empty_database",
-      "timeSeconds": 35.663,
+      "id": "hermes-hub-backend::v1_communications_archive_inspection::v1_attachment_archive_inspection_reads_local_zip_blob_against_postgres",
+      "timeSeconds": 134.497,
       "failed": false,
       "flaky": false
     },
     {
-      "id": "hermes-hub-backend::graph_api::neighborhood::graph_neighborhood_caps_depth_one_edges_nodes_and_evidence",
-      "timeSeconds": 35.629,
+      "id": "hermes-hub-backend::v1_communications_attachment_preview::v1_attachment_preview_reads_bounded_local_pdf_blob_against_postgres",
+      "timeSeconds": 133.154,
       "failed": false,
       "flaky": false
     },
     {
-      "id": "hermes-hub-backend::graph_api::neighborhood::graph_neighborhood_caps_evidence_for_returned_edges",
-      "timeSeconds": 35.489,
+      "id": "hermes-hub-backend::v1_communications_attachment_preview::v1_attachment_preview_reads_bounded_local_text_blob_against_postgres",
+      "timeSeconds": 119.326,
       "failed": false,
       "flaky": false
     },
     {
-      "id": "hermes-hub-backend::graph_api::neighborhood::graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence",
-      "timeSeconds": 34.577,
-      "failed": false,
-      "flaky": false
-    },
-    {
-      "id": "hermes-hub-backend::graph_api::search::graph_nodes_returns_connected_picker_nodes_first",
-      "timeSeconds": 33.346,
-      "failed": false,
-      "flaky": false
-    },
-    {
-      "id": "hermes-hub-backend::v1_communications_api::v1_message_smart_cc_404",
-      "timeSeconds": 27.156,
-      "failed": false,
-      "flaky": false
-    },
-    {
-      "id": "hermes-hub-backend::v1_communications_api::v1_messages_list",
-      "timeSeconds": 25.751,
-      "failed": false,
-      "flaky": false
-    },
-    {
-      "id": "hermes-hub-backend::v1_communications_api::v1_message_states",
-      "timeSeconds": 22.157,
+      "id": "hermes-hub-backend::v1_communications_attachment_preview::v1_attachment_preview_reads_bounded_local_image_blob_against_postgres",
+      "timeSeconds": 119.259,
       "failed": false,
       "flaky": false
     },
     {
       "id": "hermes-hub-backend::graph_api::search::graph_search_returns_matching_nodes",
-      "timeSeconds": 20.894,
+      "timeSeconds": 32.88,
       "failed": false,
       "flaky": false
     },
     {
-      "id": "hermes-hub-backend::v1_communications_api::v1_threads_list",
-      "timeSeconds": 20.486,
+      "id": "hermes-hub-backend::graph_api::search::graph_summary_returns_empty_state_for_empty_database",
+      "timeSeconds": 26.177,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::gmail_send_api::gmail_send_api_queues_outbox_when_send_scope_enabled_against_postgres",
+      "timeSeconds": 24.117,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::zoom_provider_foundation::zoom_remote_transcript_downloads_are_blocked_until_privacy_opt_in_is_enabled",
+      "timeSeconds": 23.81,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::graph::graph_store_upserts_node_idempotently_against_postgres",
+      "timeSeconds": 21.407,
+      "failed": false,
+      "flaky": false
+    },
+    {
+      "id": "hermes-hub-backend::graph_api::neighborhood::graph_neighborhood_caps_depth_one_edges_nodes_and_evidence",
+      "timeSeconds": 21.302,
       "failed": false,
       "flaky": false
     }

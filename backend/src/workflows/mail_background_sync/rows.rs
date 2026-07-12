@@ -10,6 +10,7 @@ pub(super) fn row_to_settings(row: PgRow) -> Result<MailSyncSettings, MailSyncEr
         sync_enabled: row.try_get("sync_enabled")?,
         batch_size: row.try_get("batch_size")?,
         poll_interval_seconds: row.try_get("poll_interval_seconds")?,
+        failure_threshold: row.try_get("failure_threshold")?,
         updated_at: row.try_get("updated_at")?,
     })
 }
@@ -24,6 +25,7 @@ pub(super) fn row_to_status(row: PgRow) -> Result<MailSyncStatus, MailSyncError>
         processed_messages: row.try_get("processed_messages")?,
         estimated_total_messages: row.try_get("estimated_total_messages")?,
         current_batch_size: row.try_get("current_batch_size")?,
+        failure_threshold: row.try_get("failure_threshold")?,
         last_started_at: row.try_get("last_started_at")?,
         last_updated_at: row.try_get("last_updated_at")?,
         last_completed_at: row.try_get("last_completed_at")?,

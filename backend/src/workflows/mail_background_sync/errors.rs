@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::domains::communications::core::CommunicationIngestionError;
-use crate::platform::communications::EmailProviderSyncError;
+use crate::platform::communications::{EmailProviderSyncError, EmailSyncPlanError};
 use crate::platform::events::{EventEnvelopeError, EventLogPortError};
 use crate::platform::observations::ObservationPortError;
 use crate::workflows::email_sync_pipeline::EmailSyncPipelineError;
@@ -14,6 +14,12 @@ pub enum MailSyncError {
 
     #[error(transparent)]
     Communication(#[from] CommunicationIngestionError),
+
+    #[error(transparent)]
+    EmailSyncPlan(#[from] EmailSyncPlanError),
+
+    #[error(transparent)]
+    ProviderSync(#[from] EmailProviderSyncError),
 
     #[error(transparent)]
     EventEnvelope(#[from] EventEnvelopeError),

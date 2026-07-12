@@ -1,6 +1,37 @@
 use super::super::*;
 use crate::domains::communications::service::CommunicationCommandService;
 
+#[derive(Deserialize)]
+pub(crate) struct UpdateMessageReadStateRequest {
+    is_read: bool,
+}
+
+pub(crate) async fn put_v1_message_read_state(
+    State(state): State<AppState>,
+    Path(message_id): Path<String>,
+    Json(request): Json<UpdateMessageReadStateRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let updated = CommunicationCommandService::new(pool)
+        .set_message_read_local_with_provider_command(
+            &message_id,
+            request.is_read,
+            "hermes-local-user",
+        )
+        .await?;
+    Ok(Json(serde_json::json!({
+        "message_id": updated.message_id,
+        "is_read": updated.is_read,
+        "read_changed_at": updated.read_changed_at,
+        "read_origin": updated.read_origin,
+        "read_sync_status": "queued",
+    })))
+}
+
 pub(crate) async fn post_v1_imap_mark_read(
     State(state): State<AppState>,
     Path(message_id): Path<String>,

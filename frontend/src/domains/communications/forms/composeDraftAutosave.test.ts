@@ -19,9 +19,10 @@ function composeForm(overrides: Partial<ComposeFormModel> = {}): ComposeFormMode
 		bodyHtml: null,
 		bodyFormat: 'plain',
 		scheduledSendAt: '',
-		undoSendSeconds: null,
-		inReplyTo: null,
-		...overrides
+			undoSendSeconds: null,
+			inReplyTo: null,
+			attachments: [],
+			...overrides
 	}
 }
 
@@ -50,9 +51,10 @@ describe('compose draft autosave', () => {
 			bcc_recipients: [],
 			subject: '',
 			body_text: 'Autosaved body',
-			body_html: null,
-			in_reply_to: 'provider-message-1',
-			scheduled_send_at: null,
+				body_html: null,
+				in_reply_to: 'provider-message-1',
+				attachment_ids: [],
+				scheduled_send_at: null,
 			status: 'draft',
 			metadata: { compose_mode: 'reply' }
 		})
@@ -63,6 +65,17 @@ describe('compose draft autosave', () => {
 		expect(composeDraftHasAutosaveContent(composeForm({ toText: 'recipient@example.com' }))).toBe(true)
 		expect(composeDraftHasAutosaveContent(composeForm({ body: 'Draft body' }))).toBe(true)
 		expect(composeDraftHasAutosaveContent(composeForm({ bodyHtml: '<p>Draft body</p>', bodyFormat: 'html' }))).toBe(true)
+		expect(composeDraftHasAutosaveContent(composeForm({
+			attachments: [{
+				attachmentId: 'attachment-1',
+				filename: 'report.pdf',
+				contentType: 'application/pdf',
+				sizeBytes: 42,
+				scanStatus: 'clean',
+				uploadStatus: 'ready',
+				error: ''
+			}]
+		}))).toBe(true)
 	})
 
 	it('includes body_html for HTML drafts', () => {
@@ -115,9 +128,10 @@ describe('compose draft autosave', () => {
 			bcc_recipients: [],
 			subject: '',
 			body_text: 'Second body',
-			body_html: null,
-			in_reply_to: null,
-			scheduled_send_at: null,
+				body_html: null,
+				in_reply_to: null,
+				attachment_ids: [],
+				scheduled_send_at: null,
 			status: 'draft',
 			metadata: { compose_mode: 'compose' }
 		})

@@ -36,6 +36,16 @@ fn post(uri: &str, body: Value) -> Request<Body> {
         .expect("request")
 }
 
+fn put(uri: &str, body: Value) -> Request<Body> {
+    Request::builder()
+        .method(Method::PUT)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-hermes-secret", T)
+        .body(Body::from(body.to_string()))
+        .expect("request")
+}
+
 fn delete(uri: &str) -> Request<Body> {
     Request::builder()
         .method(Method::DELETE)
@@ -318,27 +328,29 @@ async fn v1_bulk_actions_mark_read_and_trash_messages_against_postgres() {
     assert_eq!(body["updated_count"], 2);
     assert_eq!(body["not_found"].as_array().expect("not_found").len(), 0);
 
-    let first_workflow_state: String = sqlx::query_scalar(
-        "SELECT workflow_state FROM communication_messages WHERE message_id = $1",
+    let (first_workflow_state, first_is_read): (String, bool) = sqlx::query_as(
+        "SELECT workflow_state, is_read FROM communication_messages WHERE message_id = $1",
     )
     .bind(&first_id)
     .fetch_one(&pool)
     .await
     .expect("first workflow state");
-    let second_workflow_state: String = sqlx::query_scalar(
-        "SELECT workflow_state FROM communication_messages WHERE message_id = $1",
+    let (second_workflow_state, second_is_read): (String, bool) = sqlx::query_as(
+        "SELECT workflow_state, is_read FROM communication_messages WHERE message_id = $1",
     )
     .bind(&second_id)
     .fetch_one(&pool)
     .await
     .expect("second workflow state");
-    assert_eq!(first_workflow_state, "reviewed");
-    assert_eq!(second_workflow_state, "reviewed");
+    assert_eq!(first_workflow_state, "new");
+    assert_eq!(second_workflow_state, "new");
+    assert!(first_is_read);
+    assert!(second_is_read);
     let read_event_count: i64 = sqlx::query_scalar(
         r#"
         SELECT count(*)::BIGINT
         FROM event_log
-        WHERE event_type = 'mail.message.read'
+        WHERE event_type = 'communication.message.read_state_changed.v1'
           AND payload->>'action' = 'mark_read'
           AND payload->>'updated_count' = '2'
           AND payload->'message_ids' ? $1
@@ -351,26 +363,26 @@ async fn v1_bulk_actions_mark_read_and_trash_messages_against_postgres() {
     .await
     .expect("read event count");
     assert_eq!(read_event_count, 1);
-    let workflow_links = sqlx::query(
+    let read_state_links = sqlx::query(
         "SELECT observation_id, entity_id, metadata
          FROM observation_links
          WHERE domain = 'communications'
            AND entity_kind = 'communication_message'
-           AND relationship_kind = 'workflow_state_transition'
+           AND relationship_kind = 'read_state_transition'
            AND entity_id = ANY($1)
          ORDER BY entity_id ASC, created_at ASC",
     )
     .bind(vec![first_id.clone(), second_id.clone()])
     .fetch_all(&pool)
     .await
-    .expect("workflow links");
-    assert_eq!(workflow_links.len(), 2);
-    for row in &workflow_links {
-        let metadata: Value = row.try_get("metadata").expect("workflow metadata");
-        assert_eq!(metadata["workflow_state"], "reviewed");
+    .expect("read-state links");
+    assert_eq!(read_state_links.len(), 2);
+    for row in &read_state_links {
+        let metadata: Value = row.try_get("metadata").expect("read-state metadata");
+        assert_eq!(metadata["is_read"], true);
         let observation_id: String = row
             .try_get("observation_id")
-            .expect("workflow observation id");
+            .expect("read-state observation id");
         let observation = sqlx::query(
             "SELECT origin_kind, payload
              FROM observations
@@ -379,11 +391,11 @@ async fn v1_bulk_actions_mark_read_and_trash_messages_against_postgres() {
         .bind(&observation_id)
         .fetch_one(&pool)
         .await
-        .expect("workflow observation");
+        .expect("read-state observation");
         let origin_kind: String = observation
             .try_get("origin_kind")
-            .expect("workflow origin kind");
-        let payload: Value = observation.try_get("payload").expect("workflow payload");
+            .expect("read-state origin kind");
+        let payload: Value = observation.try_get("payload").expect("read-state payload");
         assert_eq!(origin_kind, "manual");
         assert_eq!(payload["action"], "mark_read");
     }
@@ -466,6 +478,84 @@ async fn v1_bulk_actions_mark_read_and_trash_messages_against_postgres() {
     assert_eq!(trash_origin_kind, "manual");
     assert_eq!(trash_payload["action"], "trash");
     assert_eq!(trash_payload["not_found"], json!([missing_id]));
+
+    let provider_command_kinds = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT command_kind
+        FROM communication_provider_commands
+        WHERE account_id = $1
+          AND channel_kind = 'mail'
+        ORDER BY created_at ASC, command_id ASC
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_all(&pool)
+    .await
+    .expect("bulk provider command kinds");
+    assert_eq!(
+        provider_command_kinds,
+        vec!["mark_read", "mark_read", "trash"]
+    );
+}
+
+#[tokio::test]
+async fn v1_bulk_actions_star_and_unstar_enqueue_distinct_provider_commands() {
+    let context = TestContext::new().await;
+    let pool = context.pool().clone();
+    let suffix = uid();
+    let account_id = format!("acct-bulk-star-{suffix}");
+    let message_id = seed_projected_message(
+        pool.clone(),
+        &account_id,
+        &format!("provider-bulk-star-{suffix}"),
+        "Starred message",
+    )
+    .await;
+    let router = router(&context.connection_string()).await;
+
+    for (action, expected_starred) in [("star", true), ("unstar", false)] {
+        let response = router
+            .clone()
+            .oneshot(post(
+                "/api/v1/communications/messages/bulk-actions",
+                json!({ "action": action, "message_ids": [message_id] }),
+            ))
+            .await
+            .expect("star bulk response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_json(response).await;
+        assert_eq!(body["action"], action);
+        assert_eq!(body["updated_count"], 1);
+
+        let starred: bool = sqlx::query_scalar(
+            "SELECT COALESCE((message_metadata ->> 'starred')::boolean, false) FROM communication_messages WHERE message_id = $1",
+        )
+        .bind(&message_id)
+        .fetch_one(&pool)
+        .await
+        .expect("stored starred state");
+        assert_eq!(starred, expected_starred);
+    }
+
+    let command_kinds = sqlx::query_scalar::<_, String>(
+        "SELECT command_kind FROM communication_provider_commands WHERE account_id = $1 AND channel_kind = 'mail' ORDER BY created_at ASC, command_id ASC",
+    )
+    .bind(&account_id)
+    .fetch_all(&pool)
+    .await
+    .expect("star provider commands");
+    assert_eq!(command_kinds, vec!["star", "unstar"]);
+
+    let event_types = sqlx::query_scalar::<_, String>(
+        "SELECT event_type FROM event_log WHERE payload ->> 'action' IN ('star', 'unstar') ORDER BY position ASC",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("star events");
+    assert_eq!(
+        event_types,
+        vec!["mail.message.starred", "mail.message.unstarred"]
+    );
 }
 
 #[tokio::test]
@@ -512,26 +602,26 @@ async fn v1_local_state_endpoints_capture_observation_trail_against_postgres() {
         .expect("restore response");
     assert_eq!(restore.status(), StatusCode::OK);
 
-    let workflow_rows = sqlx::query(
+    let read_rows = sqlx::query(
         "SELECT metadata
          FROM observation_links
          WHERE domain = 'communications'
            AND entity_kind = 'communication_message'
            AND entity_id = $1
-           AND relationship_kind = 'workflow_state_transition'
+           AND relationship_kind = 'read_state_transition'
          ORDER BY created_at ASC",
     )
     .bind(&message_id)
     .fetch_all(&pool)
     .await
-    .expect("workflow observation links");
-    assert!(!workflow_rows.is_empty());
-    let workflow_metadata: Value = workflow_rows
+    .expect("read-state observation links");
+    assert!(!read_rows.is_empty());
+    let read_metadata: Value = read_rows
         .last()
-        .expect("workflow row")
+        .expect("read-state row")
         .try_get("metadata")
-        .expect("workflow metadata");
-    assert_eq!(workflow_metadata["workflow_state"], "reviewed");
+        .expect("read-state metadata");
+    assert_eq!(read_metadata["is_read"], true);
 
     let local_rows = sqlx::query(
         "SELECT observation_id, metadata
@@ -568,6 +658,226 @@ async fn v1_local_state_endpoints_capture_observation_trail_against_postgres() {
             .await
             .expect("restore observation origin");
     assert_eq!(origin_kind, "manual");
+
+    let provider_commands = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT command_kind
+        FROM communication_provider_commands
+        WHERE account_id = $1
+          AND channel_kind = 'mail'
+        ORDER BY created_at ASC, command_id ASC
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_all(&pool)
+    .await
+    .expect("local state provider commands");
+    assert_eq!(provider_commands, vec!["mark_read", "trash"]);
+}
+
+#[tokio::test]
+async fn v1_spam_workflow_state_enqueues_provider_sync_against_postgres() {
+    let context = TestContext::new().await;
+    let pool = context.pool().clone();
+    let suffix = uid();
+    let account_id = format!("acct-spam-state-{suffix}");
+    let message_id = seed_projected_message(
+        pool.clone(),
+        &account_id,
+        &format!("provider-spam-state-{suffix}"),
+        "Spam state synchronization",
+    )
+    .await;
+    let r = router(&context.connection_string()).await;
+
+    let response = r
+        .oneshot(put(
+            &format!("/api/v1/communications/messages/{message_id}/workflow-state"),
+            json!({ "workflow_state": "spam" }),
+        ))
+        .await
+        .expect("spam state response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["workflow_state"], "spam");
+    assert_eq!(body["previous_state"], "new");
+
+    let command: (String, String, Value) = sqlx::query_as(
+        r#"
+        SELECT command_kind, actor_id, target_ref
+        FROM communication_provider_commands
+        WHERE account_id = $1
+          AND channel_kind = 'mail'
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("spam provider command");
+    assert_eq!(command.0, "mark_spam");
+    assert_eq!(command.1, "hermes-frontend");
+    assert_eq!(command.2["message_id"], message_id);
+}
+
+#[tokio::test]
+async fn v1_not_spam_workflow_state_enqueues_provider_reconciliation_against_postgres() {
+    let context = TestContext::new().await;
+    let pool = context.pool().clone();
+    let suffix = uid();
+    let account_id = format!("acct-not-spam-state-{suffix}");
+    let message_id = seed_projected_message(
+        pool.clone(),
+        &account_id,
+        &format!("provider-not-spam-state-{suffix}"),
+        "Not spam reconciliation",
+    )
+    .await;
+    let r = router(&context.connection_string()).await;
+
+    let spam_response = r
+        .clone()
+        .oneshot(put(
+            &format!("/api/v1/communications/messages/{message_id}/workflow-state"),
+            json!({ "workflow_state": "spam" }),
+        ))
+        .await
+        .expect("spam state response");
+    assert_eq!(spam_response.status(), StatusCode::OK);
+
+    let response = r
+        .oneshot(put(
+            &format!("/api/v1/communications/messages/{message_id}/workflow-state"),
+            json!({ "workflow_state": "new" }),
+        ))
+        .await
+        .expect("not-spam state response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["workflow_state"], "new");
+    assert_eq!(body["previous_state"], "spam");
+
+    let command_kinds = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT command_kind
+        FROM communication_provider_commands
+        WHERE account_id = $1
+          AND channel_kind = 'mail'
+        ORDER BY created_at ASC, command_id ASC
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_all(&pool)
+    .await
+    .expect("not-spam provider commands");
+    assert_eq!(command_kinds, vec!["mark_spam", "mark_not_spam"]);
+
+    let (score, spam_count, non_spam_count, last_reason): (i16, i32, i32, String) = sqlx::query_as(
+        r#"
+            SELECT score, spam_count, non_spam_count, last_reason
+            FROM communication_sender_reputation
+            WHERE sender_key = 'sender@example.com'
+            "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("manual sender feedback");
+    assert_eq!(score, 60);
+    assert_eq!(spam_count, 1);
+    assert_eq!(non_spam_count, 1);
+    assert_eq!(last_reason, "manual_workflow_state_transition");
+}
+
+#[tokio::test]
+async fn v1_read_state_keeps_each_local_intent_durable_against_postgres() {
+    let context = TestContext::new().await;
+    let pool = context.pool().clone();
+    let suffix = uid();
+    let account_id = format!("acct-read-intent-{suffix}");
+    let message_id = seed_projected_message(
+        pool.clone(),
+        &account_id,
+        &format!("provider-read-intent-{suffix}"),
+        "Versioned read intent",
+    )
+    .await;
+    let r = router(&context.connection_string()).await;
+
+    for is_read in [true, false, true] {
+        let response = r
+            .clone()
+            .oneshot(put(
+                &format!("/api/v1/communications/messages/{message_id}/read-state"),
+                json!({ "is_read": is_read }),
+            ))
+            .await
+            .expect("read-state response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_json(response).await;
+        assert_eq!(body["message_id"], message_id);
+        assert_eq!(body["is_read"], is_read);
+        assert_eq!(body["read_sync_status"], "queued");
+    }
+
+    let command_rows = sqlx::query(
+        r#"
+        SELECT command_kind, idempotency_key, payload
+        FROM communication_provider_commands
+        WHERE account_id = $1
+          AND channel_kind = 'mail'
+        ORDER BY created_at ASC
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_all(&pool)
+    .await
+    .expect("read-state provider commands");
+    assert_eq!(command_rows.len(), 3);
+    let command_kinds = command_rows
+        .iter()
+        .map(|row| {
+            row.try_get::<String, _>("command_kind")
+                .expect("command kind")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(command_kinds, vec!["mark_read", "mark_unread", "mark_read"]);
+    let idempotency_keys = command_rows
+        .iter()
+        .map(|row| {
+            row.try_get::<String, _>("idempotency_key")
+                .expect("idempotency key")
+        })
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(idempotency_keys.len(), 3);
+    let desired_states = command_rows
+        .iter()
+        .map(|row| {
+            row.try_get::<Value, _>("payload").expect("command payload")["desired_is_read"]
+                .as_bool()
+                .expect("desired read state")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(desired_states, vec![true, false, true]);
+
+    let stored_is_read: bool =
+        sqlx::query_scalar("SELECT is_read FROM communication_messages WHERE message_id = $1")
+            .bind(&message_id)
+            .fetch_one(&pool)
+            .await
+            .expect("stored read state");
+    assert!(stored_is_read);
+
+    let read_list = r
+        .oneshot(get(&format!(
+            "/api/v1/communications/messages?account_id={account_id}&is_read=true"
+        )))
+        .await
+        .expect("read-only message list");
+    assert_eq!(read_list.status(), StatusCode::OK);
+    let read_list = response_json(read_list).await;
+    assert_eq!(read_list["items"].as_array().map(Vec::len), Some(1));
+    assert_eq!(read_list["items"][0]["message_id"], message_id);
+    assert_eq!(read_list["items"][0]["is_read"], true);
+    assert_eq!(read_list["items"][0]["read_sync_status"], "queued");
 }
 
 #[tokio::test]

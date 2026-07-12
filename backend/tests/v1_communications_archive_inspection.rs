@@ -26,7 +26,7 @@ use testkit::context::TestContext;
 const T: &str = "v1comms-archive-inspection-test-token";
 
 #[tokio::test]
-async fn v1_attachment_archive_inspection_reads_local_zip_blob_against_postgres() {
+async fn v1_attachment_archive_inspection_persists_a_hash_bound_zip_report() {
     let context = TestContext::new().await;
     let seeded = seed_zip_attachment(context.pool().clone()).await;
     let app = router(&context.connection_string()).await;
@@ -45,7 +45,7 @@ async fn v1_attachment_archive_inspection_reads_local_zip_blob_against_postgres(
     assert_eq!(body["message_id"], seeded.message_id);
     assert_eq!(body["filename"], "evidence.zip");
     assert_eq!(body["content_type"], "application/zip");
-    assert_eq!(body["scan_status"], "not_scanned");
+    assert_eq!(body["scan_status"], "clean");
     assert_eq!(body["report"]["archive_kind"], "zip");
     assert_eq!(body["report"]["entry_count"], 2);
     assert_eq!(body["report"]["total_uncompressed_bytes"], 17);
@@ -58,11 +58,33 @@ async fn v1_attachment_archive_inspection_reads_local_zip_blob_against_postgres(
         body["report"]["entries"][1]["normalized_path"],
         "invoice.txt"
     );
+
+    let scan_metadata = sqlx::query_scalar::<_, Value>(
+        "SELECT scan_metadata FROM communication_attachments WHERE attachment_id = $1",
+    )
+    .bind(&seeded.attachment_id)
+    .fetch_one(context.pool())
+    .await
+    .expect("persisted archive inspection metadata");
+    assert_eq!(
+        scan_metadata["archive_inspection"]["version"],
+        json!(1),
+        "archive inspection cache version"
+    );
+    assert_eq!(
+        scan_metadata["archive_inspection"]["source_sha256"], seeded.source_sha256,
+        "report must be bound to the currently attached blob"
+    );
+    assert_eq!(
+        scan_metadata["archive_inspection"]["report"]["entry_count"],
+        json!(2)
+    );
 }
 
 struct SeededAttachment {
     attachment_id: String,
     message_id: String,
+    source_sha256: String,
 }
 
 async fn seed_zip_attachment(pool: sqlx::PgPool) -> SeededAttachment {
@@ -132,7 +154,7 @@ async fn seed_zip_attachment(pool: sqlx::PgPool) -> SeededAttachment {
             .filename("evidence.zip")
             .disposition(CommunicationAttachmentDisposition::Attachment)
             .scan_report(AttachmentSafetyScanReport {
-                status: AttachmentSafetyScanStatus::NotScanned,
+                status: AttachmentSafetyScanStatus::Clean,
                 engine: None,
                 checked_at: None,
                 summary: None,
@@ -145,6 +167,7 @@ async fn seed_zip_attachment(pool: sqlx::PgPool) -> SeededAttachment {
     SeededAttachment {
         attachment_id: attachment.attachment_id,
         message_id,
+        source_sha256: attachment.sha256,
     }
 }
 

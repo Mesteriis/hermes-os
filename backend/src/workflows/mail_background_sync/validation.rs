@@ -27,6 +27,7 @@ pub(super) fn validate_account_id(account_id: &str) -> Result<(), MailSyncError>
 pub(super) fn validate_settings(
     batch_size: i32,
     poll_interval_seconds: i32,
+    failure_threshold: i32,
 ) -> Result<(), MailSyncError> {
     if !(1..=MAX_BATCH_SIZE).contains(&batch_size) {
         return Err(MailSyncError::InvalidSetting {
@@ -38,6 +39,12 @@ pub(super) fn validate_settings(
         return Err(MailSyncError::InvalidSetting {
             field: "poll_interval_seconds",
             message: "must be between 60 and 86400",
+        });
+    }
+    if !(1..=10).contains(&failure_threshold) {
+        return Err(MailSyncError::InvalidSetting {
+            field: "failure_threshold",
+            message: "must be between 1 and 10",
         });
     }
     Ok(())

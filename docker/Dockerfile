@@ -1,10 +1,13 @@
-FROM rust:1.89-bookworm AS dev
+# Keep the development image aligned with rust-toolchain.toml (`stable`).
+# Otherwise each newly created backend container downloads a second toolchain
+# before Cargo can use the persisted dependency and target caches.
+FROM rust:1.97-bookworm AS dev
 
 ARG NODE_MAJOR=22
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN rustup component add rustfmt clippy
+RUN rustup component add rustfmt clippy --toolchain stable
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -61,3 +64,27 @@ COPY --from=backend-builder \
 EXPOSE 8787
 
 CMD ["hermes-whatsapp-business-cloud-edge-proxy"]
+
+FROM python:3.13-slim-bookworm AS attachment-extractor
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        poppler-utils \
+        python3-pil \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        tesseract-ocr-rus \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY docker/attachment-extractor.py /usr/local/bin/hermes-attachment-extractor
+
+ENTRYPOINT ["/usr/bin/python3", "/usr/local/bin/hermes-attachment-extractor"]
+
+FROM python:3.13-slim-bookworm AS attachment-extractor-gateway
+
+COPY docker/attachment-extractor-gateway.py /usr/local/bin/hermes-attachment-extractor-gateway
+
+ENTRYPOINT ["python3", "/usr/local/bin/hermes-attachment-extractor-gateway"]

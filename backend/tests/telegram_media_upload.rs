@@ -89,6 +89,52 @@ async fn telegram_media_upload_imports_attachment_and_queues_provider_command() 
     assert_eq!(attachment_payload["content_type"], "text/plain");
     assert_eq!(attachment_payload["filename"], "upload-note.txt");
 
+    let unscanned_command_id = format!("tcmd_media_upload_unscanned_{suffix}");
+    let unscanned_response = app
+        .clone()
+        .oneshot(post(
+            "/api/v1/integrations/telegram/provider-media/upload",
+            json!({
+                "command_id": unscanned_command_id.clone(),
+                "account_id": account_id.clone(),
+                "provider_chat_id": "123456789",
+                "attachment_id": attachment_id.clone(),
+                "media_type": "document"
+            }),
+        ))
+        .await
+        .expect("unscanned upload response");
+    assert_eq!(unscanned_response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        provider_command_count(&pool, &unscanned_command_id).await,
+        0,
+        "unscanned media must not reach the provider outbox"
+    );
+
+    let blob_only_command_id = format!("tcmd_media_upload_blob_only_{suffix}");
+    let blob_only_response = app
+        .clone()
+        .oneshot(post(
+            "/api/v1/integrations/telegram/provider-media/upload",
+            json!({
+                "command_id": blob_only_command_id.clone(),
+                "account_id": account_id.clone(),
+                "provider_chat_id": "123456789",
+                "blob_id": blob_id,
+                "media_type": "document"
+            }),
+        ))
+        .await
+        .expect("blob-only upload response");
+    assert_eq!(blob_only_response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        provider_command_count(&pool, &blob_only_command_id).await,
+        0,
+        "a blob without an attachment scan must not reach the provider outbox"
+    );
+
+    mark_attachment_clean(&pool, &attachment_id).await;
+
     let command_id = format!("tcmd_media_upload_{suffix}");
     let upload_response = app
         .clone()
@@ -259,14 +305,35 @@ async fn telegram_media_upload_rejects_malicious_import_before_outbox_insert() {
         .expect("upload response");
     assert_eq!(upload_response.status(), StatusCode::BAD_REQUEST);
 
-    let command_count = sqlx::query_scalar::<_, i64>(
+    let command_count = provider_command_count(&pool, &command_id).await;
+    assert_eq!(command_count, 0);
+}
+
+async fn mark_attachment_clean(pool: &sqlx::PgPool, attachment_id: &str) {
+    sqlx::query(
+        r#"
+        UPDATE communication_attachment_imports
+        SET scan_status = 'clean',
+            scan_engine = 'test-scanner',
+            scan_checked_at = now(),
+            scan_summary = 'Synthetic fixture is clean'
+        WHERE attachment_id = $1
+        "#,
+    )
+    .bind(attachment_id)
+    .execute(pool)
+    .await
+    .expect("mark attachment clean");
+}
+
+async fn provider_command_count(pool: &sqlx::PgPool, command_id: &str) -> i64 {
+    sqlx::query_scalar(
         "SELECT COUNT(*) FROM telegram_provider_write_commands WHERE command_id = $1",
     )
-    .bind(&command_id)
-    .fetch_one(&pool)
+    .bind(command_id)
+    .fetch_one(pool)
     .await
-    .expect("command count");
-    assert_eq!(command_count, 0);
+    .expect("provider command count")
 }
 
 async fn create_tdlib_account(pool: &sqlx::PgPool, account_id: &str, suffix: &str) {

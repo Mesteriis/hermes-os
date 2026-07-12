@@ -1,5 +1,6 @@
 use super::*;
 use crate::domains::communications::messages::ProjectedMessagePageQuery;
+use crate::domains::communications::provider_commands::CommunicationProviderCommandStore;
 
 pub(crate) async fn get_v1_communication_messages(
     State(state): State<AppState>,
@@ -23,6 +24,7 @@ pub(crate) async fn get_v1_communication_messages(
         .list_messages_page(ProjectedMessagePageQuery {
             account_id: query.account_id.as_deref(),
             workflow_state,
+            is_read: query.is_read,
             channel_kind: query.channel_kind.as_deref(),
             conversation_id: query.conversation_id.as_deref(),
             query: query.q.as_deref(),
@@ -33,10 +35,31 @@ pub(crate) async fn get_v1_communication_messages(
             limit,
         })
         .await?;
+    let message_ids = page
+        .items
+        .iter()
+        .map(|summary| summary.message.message_id.clone())
+        .collect::<Vec<_>>();
+    let read_sync_statuses = CommunicationProviderCommandStore::new(
+        state
+            .database
+            .pool()
+            .ok_or(ApiError::DatabaseNotConfigured)?
+            .clone(),
+    )
+    .read_sync_statuses(&message_ids)
+    .await
+    .map_err(|error| ApiError::Messages(error.into()))?;
     let items = page
         .items
         .into_iter()
-        .map(CommunicationMessageSummaryResponse::from)
+        .map(|summary| {
+            let status = read_sync_statuses
+                .get(&summary.message.message_id)
+                .map(String::as_str)
+                .unwrap_or("synced");
+            CommunicationMessageSummaryResponse::from_with_read_sync_status(summary, status)
+        })
         .collect();
 
     Ok(Json(CommunicationMessagesResponse {
@@ -64,12 +87,25 @@ pub(crate) async fn get_v1_communication_message(
         .into_iter()
         .map(CommunicationAttachmentResponse::from)
         .collect();
+    let read_sync_status = CommunicationProviderCommandStore::new(
+        state
+            .database
+            .pool()
+            .ok_or(ApiError::DatabaseNotConfigured)?
+            .clone(),
+    )
+    .read_sync_statuses(std::slice::from_ref(&message.message_id))
+    .await
+    .map_err(|error| ApiError::Messages(error.into()))?
+    .remove(&message.message_id)
+    .unwrap_or_else(|| "synced".to_owned());
 
     Ok(Json(CommunicationMessageDetailResponse {
-        message: CommunicationMessageDetailItem::from_message_with_metadata(
+        message: CommunicationMessageDetailItem::from_message_with_metadata_and_read_sync_status(
             message,
             rich_detail.body_html,
             message_metadata,
+            &read_sync_status,
         ),
         attachments,
     }))

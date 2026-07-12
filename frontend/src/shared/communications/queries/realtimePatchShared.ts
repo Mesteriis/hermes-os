@@ -80,6 +80,7 @@ export type MailRealtimePatchQueryClient = {
 export type StoredEventEnvelope = {
 	event?: {
 		event_type?: unknown
+		occurred_at?: unknown
 		payload?: unknown
 	}
 }
@@ -111,10 +112,13 @@ export type OutboxPatchPayload = {
 }
 
 export type AiStatePatchPayload = {
-	message_id?: unknown
-	ai_state?: unknown
-	review_required?: unknown
-	failed?: unknown
+  message_id?: unknown
+  ai_state?: unknown
+  review_required?: unknown
+  failed?: unknown
+  retry_count?: unknown
+  next_attempt_at?: unknown
+  processing_lease_expires_at?: unknown
 }
 
 export type DraftPatchPayload = {
@@ -144,6 +148,17 @@ export type SyncPatchPayload = {
 	upserted_organizations?: unknown
 	error_code?: unknown
 	next_run_at?: unknown
+}
+
+export type ProviderCommandPatchPayload = {
+	command_id?: unknown
+	account_id?: unknown
+	status?: unknown
+	retry_count?: unknown
+	max_retries?: unknown
+	reconciliation_status?: unknown
+	next_attempt_at?: unknown
+	dead_lettered_at?: unknown
 }
 
 const AI_STATES = new Set<CommunicationAiState>([

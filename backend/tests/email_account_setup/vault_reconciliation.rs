@@ -16,7 +16,7 @@ use hermes_hub_backend::vault::{EntropyEvent, HostVault, HostVaultConfig, Secret
 use testkit::context::TestContext;
 
 use super::support::{
-    LOCAL_API_TOKEN, json_request_with_token_and_actor, unlock_test_vault,
+    LOCAL_API_TOKEN, json_body, json_request_with_token_and_actor, unlock_test_vault,
     wait_for_calendar_account, wait_for_manifest_metadata_key, wait_for_provider_account,
     wait_for_provider_account_secret_binding, wait_for_secret_reference,
 };
@@ -71,7 +71,9 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
         ))
         .await
         .expect("response");
-    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let status = response.status();
+    let body = json_body(response).await;
+    assert_eq!(status, axum::http::StatusCode::OK, "setup body: {body}");
 
     let pool = database.pool().expect("configured pool").clone();
     let vault = HostVault::new(HostVaultConfig {
@@ -125,6 +127,11 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
         .execute(&mut *wipe)
         .await
         .expect("delete secret binding");
+    sqlx::query("DELETE FROM communication_address_book_sync_runs WHERE account_id = $1")
+        .bind(account_id)
+        .execute(&mut *wipe)
+        .await
+        .expect("delete address book sync metadata");
     sqlx::query("DELETE FROM communication_provider_accounts WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *wipe)
@@ -159,7 +166,7 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
     assert_eq!(account.external_account_id, "recover@icloud.com");
     assert_eq!(
         account.config["connected_services"],
-        json!(["mail", "calendar"])
+        json!(["mail", "calendar", "contacts"])
     );
     let provider_account_observation_id: String = sqlx::query_scalar(
         "SELECT observation_id

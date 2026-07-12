@@ -85,6 +85,9 @@ pub struct ProjectedMessage {
     pub local_state: LocalMessageState,
     pub local_state_changed_at: Option<DateTime<Utc>>,
     pub local_state_reason: Option<String>,
+    pub is_read: bool,
+    pub read_changed_at: Option<DateTime<Utc>>,
+    pub read_origin: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -167,6 +170,7 @@ impl MessageSearchQuery {
 pub struct ProjectedMessagePageQuery<'a> {
     pub account_id: Option<&'a str>,
     pub workflow_state: Option<WorkflowState>,
+    pub is_read: Option<bool>,
     pub channel_kind: Option<&'a str>,
     pub conversation_id: Option<&'a str>,
     pub query: Option<&'a str>,

@@ -67,13 +67,9 @@ pub async fn analyze_ingested_message(
         || body_lower.contains("urgent action required"))
         && !message.sender.contains(&message.account_id);
 
-    let auto_state = if is_phishing || (is_spam && score < 20) {
-        WorkflowState::Spam
-    } else if score >= 75 {
-        WorkflowState::NeedsAction
-    } else {
-        WorkflowState::New
-    };
+    // Heuristics classify untrusted content but never move a message to spam.
+    // Spam is a user or policy decision because a false positive hides evidence.
+    let auto_state = automatic_workflow_state(score);
 
     store
         .set_ai_analysis(&message.message_id, category.as_deref(), None, Some(score))
@@ -123,6 +119,14 @@ fn heuristic_score(message: &ProjectedMessage) -> i16 {
     }
 
     score.clamp(0, 100)
+}
+
+fn automatic_workflow_state(score: i16) -> WorkflowState {
+    if score >= 75 {
+        WorkflowState::NeedsAction
+    } else {
+        WorkflowState::New
+    }
 }
 
 fn heuristic_category(message: &ProjectedMessage) -> Option<String> {
@@ -194,6 +198,9 @@ mod tests {
             local_state: LocalMessageState::Active,
             local_state_changed_at: None,
             local_state_reason: None,
+            is_read: false,
+            read_changed_at: None,
+            read_origin: "test_fixture".into(),
         }
     }
 
@@ -217,6 +224,20 @@ mod tests {
         );
         let score = heuristic_score(&msg);
         assert!(score <= 30, "newsletters should score low, got {score}");
+    }
+
+    #[test]
+    fn marketing_heuristics_do_not_auto_promote_to_spam() {
+        let msg = test_message(
+            "Limited offer",
+            "news@company.com",
+            "Buy now. Click here to unsubscribe from this email.",
+        );
+
+        assert_eq!(
+            automatic_workflow_state(heuristic_score(&msg)),
+            WorkflowState::New
+        );
     }
 
     #[test]

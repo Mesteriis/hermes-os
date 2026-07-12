@@ -1,11 +1,12 @@
 import type { CommunicationStatusPresentation } from '../communicationDomainElements'
 import { communicationWorkflowStatusPresentation } from '../communicationDomainElements'
 import type { ProviderIconKind } from '@/shared/ui'
+import type { MailReadSyncStatus } from '../../types/mailSync'
 
 export type MailListItemConfidence = 'high' | 'medium' | 'low'
 export type MailListItemCounterKind = 'attachments' | 'messages' | 'insights' | 'calendar'
 export type MailListItemDensity = 'compact' | 'comfortable' | 'cozy'
-export type MailListItemMarker = 'spam' | 'phishing' | 'important' | 'blocked' | 'archived' | 'ai-processed'
+export type MailListItemMarker = 'spam' | 'phishing' | 'starred' | 'important' | 'blocked' | 'archived' | 'ai-processed'
 export type MailListSearchField = 'subject' | 'body' | 'sender' | 'all'
 export type MailListSearchBuilderField = 'all' | 'from' | 'subject' | 'body'
 export type MailListSearchBuilderOperator = 'contains' | 'equals'
@@ -80,6 +81,8 @@ export type MailListItemModel = {
   sourceKind?: ProviderIconKind
   timestampLabel: string
   workflowState: string
+  isRead?: boolean
+  readSyncStatus?: MailReadSyncStatus
   localState?: string
   deliveryState?: string
   aiState?: string
@@ -184,6 +187,11 @@ const markerPresentation: Record<MailListItemMarker, MailListItemMarkerPresentat
     label: 'Phishing',
     tone: 'danger'
   },
+  starred: {
+    icon: 'tabler:star-filled',
+    label: 'Starred',
+    tone: 'warning'
+  },
   important: {
     icon: 'tabler:star-filled',
     label: 'Important',
@@ -219,6 +227,7 @@ export function mailListItemStatusClass(item: MailListItemModel): string {
 export function mailListItemHasSignal(item: MailListItemModel): boolean {
   return Boolean(
     item.hasOpenAction ||
+    item.isRead === false ||
     item.unreadCount ||
     mailListItemMarkers(item).some((marker) => signalMarkers.has(marker))
   )
@@ -269,9 +278,9 @@ export function mailListItemAiIndicator(
 ): MailListItemAiIndicatorPresentation | null {
   if (item.aiState === 'FAILED') {
     return {
-      icon: 'tabler:brain',
-      label: 'AI retry',
-      detail: 'AI processing needs another attempt. Open the message to review the available evidence.',
+      icon: 'tabler:alert-triangle',
+      label: 'AI attention',
+      detail: 'AI processing needs attention. Open the message to see its retry or review state.',
       tone: 'warning'
     }
   }

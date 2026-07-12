@@ -3,6 +3,9 @@ use crate::app::signal_hub_support::{
     remove_provider_account_signal_connection, sync_provider_account_signal_connection,
     sync_provider_account_signal_connection_with_status,
 };
+use crate::domains::communications::sensitive_forwarding::{
+    NewSensitiveForwardingPolicy, SensitiveForwardingError, SensitiveForwardingStore,
+};
 
 pub(crate) async fn get_v1_email_accounts(
     State(state): State<AppState>,
@@ -112,6 +115,7 @@ pub(crate) async fn post_v1_email_account_import(
             sync_enabled: current_settings.sync_enabled,
             batch_size: current_settings.batch_size,
             poll_interval_seconds: current_settings.poll_interval_seconds,
+            failure_threshold: current_settings.failure_threshold,
         },
         |settings| MailSyncSettingsUpdate {
             sync_enabled: settings
@@ -121,6 +125,9 @@ pub(crate) async fn post_v1_email_account_import(
             poll_interval_seconds: settings
                 .poll_interval_seconds
                 .unwrap_or(current_settings.poll_interval_seconds),
+            failure_threshold: settings
+                .failure_threshold
+                .unwrap_or(current_settings.failure_threshold),
         },
     );
     let sync_settings = mail_sync_store(&state)
@@ -172,6 +179,7 @@ pub(crate) async fn post_v1_email_account_logout(
                 sync_enabled: false,
                 batch_size: current_settings.batch_size,
                 poll_interval_seconds: current_settings.poll_interval_seconds,
+                failure_threshold: current_settings.failure_threshold,
             },
         )
         .await
@@ -342,15 +350,164 @@ pub(crate) async fn get_v1_email_account_sync_settings(
 pub(crate) async fn put_v1_email_account_sync_settings(
     State(state): State<AppState>,
     Path(account_id): Path<String>,
-    Json(request): Json<MailSyncSettingsUpdate>,
+    Json(request): Json<MailSyncSettingsPatch>,
 ) -> Result<Json<MailSyncSettings>, ApiError> {
+    let store = mail_sync_store(&state).map_err(mail_sync_api_error)?;
+    let current = store
+        .settings_for_account(&account_id)
+        .await
+        .map_err(mail_sync_api_error)?;
     Ok(Json(
-        mail_sync_store(&state)
-            .map_err(mail_sync_api_error)?
-            .update_settings(&account_id, request)
+        store
+            .update_settings(
+                &account_id,
+                MailSyncSettingsUpdate {
+                    sync_enabled: request.sync_enabled.unwrap_or(current.sync_enabled),
+                    batch_size: request.batch_size.unwrap_or(current.batch_size),
+                    poll_interval_seconds: request
+                        .poll_interval_seconds
+                        .unwrap_or(current.poll_interval_seconds),
+                    failure_threshold: request
+                        .failure_threshold
+                        .unwrap_or(current.failure_threshold),
+                },
+            )
             .await
             .map_err(mail_sync_api_error)?,
     ))
+}
+
+pub(crate) async fn get_v1_email_account_content_egress_settings(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<MailContentEgressSettings>, ApiError> {
+    let account = email_account_or_not_found(&state, &account_id).await?;
+    let permissions = crate::domains::communications::sensitive_forwarding::AccountContentEgressPermissions::from_account_config(&account.config);
+    Ok(Json(MailContentEgressSettings {
+        body: permissions.body,
+        attachments: permissions.attachments,
+        extracted_text: permissions.extracted_text,
+    }))
+}
+
+pub(crate) async fn put_v1_email_account_content_egress_settings(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+    Json(request): Json<MailContentEgressSettingsPatch>,
+) -> Result<Json<MailContentEgressSettings>, ApiError> {
+    let account = email_account_or_not_found(&state, &account_id).await?;
+    let current = crate::domains::communications::sensitive_forwarding::AccountContentEgressPermissions::from_account_config(&account.config);
+    let next = MailContentEgressSettings {
+        body: request.body.unwrap_or(current.body),
+        attachments: request.attachments.unwrap_or(current.attachments),
+        extracted_text: request.extracted_text.unwrap_or(current.extracted_text),
+    };
+    let mut config = account.config;
+    config["content_egress"] = json!({ "body": next.body, "attachments": next.attachments, "extracted_text": next.extracted_text });
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
+        .update_config(&account_id, &config)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    Ok(Json(next))
+}
+
+pub(crate) async fn get_v1_mail_sensitive_forwarding_policies(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<MailSensitiveForwardingPolicyListResponse>, ApiError> {
+    let account = email_account_or_not_found(&state, &account_id).await?;
+    let policies = sensitive_forwarding_store(&state)?
+        .policies_for_source_account(&account.account_id)
+        .await
+        .map_err(sensitive_forwarding_api_error)?;
+    Ok(Json(MailSensitiveForwardingPolicyListResponse {
+        items: policies,
+    }))
+}
+
+pub(crate) async fn post_v1_mail_sensitive_forwarding_policy(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+    Json(request): Json<MailSensitiveForwardingPolicyUpsertRequest>,
+) -> Result<Json<MailSensitiveForwardingPolicyListResponse>, ApiError> {
+    let source_account = email_account_or_not_found(&state, &account_id).await?;
+    let delivery_account = email_account_or_not_found(&state, &request.delivery_account_id).await?;
+    let policy_id = request
+        .policy_id
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| format!("mail-sensitive-forwarding:{}", uuid::Uuid::new_v4()));
+    let policy = NewSensitiveForwardingPolicy {
+        policy_id,
+        source_account_id: source_account.account_id.clone(),
+        delivery_account_id: delivery_account.account_id,
+        name: request.name,
+        enabled: request.enabled,
+        include_message_body: request.include_message_body,
+        include_attachments: request.include_attachments,
+        fixed_recipients: request.fixed_recipients,
+        minimum_severity: request.minimum_severity,
+        subject_template: request.subject_template,
+        body_template: request.body_template,
+        max_sends_per_hour: request.max_sends_per_hour,
+        quiet_hours: request.quiet_hours,
+        expires_at: request.expires_at,
+    };
+    let store = sensitive_forwarding_store(&state)?;
+    store
+        .upsert_policy(&policy)
+        .await
+        .map_err(sensitive_forwarding_api_error)?;
+    let policies = store
+        .policies_for_source_account(&source_account.account_id)
+        .await
+        .map_err(sensitive_forwarding_api_error)?;
+    Ok(Json(MailSensitiveForwardingPolicyListResponse {
+        items: policies,
+    }))
+}
+
+pub(crate) async fn delete_v1_mail_sensitive_forwarding_policy(
+    State(state): State<AppState>,
+    Path((account_id, policy_id)): Path<(String, String)>,
+) -> Result<Json<MailSensitiveForwardingPolicyDeleteResponse>, ApiError> {
+    let account = email_account_or_not_found(&state, &account_id).await?;
+    let deleted = sensitive_forwarding_store(&state)?
+        .delete_policy(&account.account_id, &policy_id)
+        .await
+        .map_err(sensitive_forwarding_api_error)?;
+    Ok(Json(MailSensitiveForwardingPolicyDeleteResponse {
+        policy_id,
+        deleted,
+    }))
+}
+
+fn sensitive_forwarding_store(state: &AppState) -> Result<SensitiveForwardingStore, ApiError> {
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    Ok(SensitiveForwardingStore::new(pool))
+}
+
+fn sensitive_forwarding_api_error(error: SensitiveForwardingError) -> ApiError {
+    match error {
+        SensitiveForwardingError::AccountNotFound => ApiError::NotFound,
+        SensitiveForwardingError::Invalid
+        | SensitiveForwardingError::PolicyNotFound
+        | SensitiveForwardingError::SourceAccountMismatch => {
+            ApiError::InvalidCommunicationQuery("invalid sensitive forwarding policy")
+        }
+        error => {
+            tracing::error!(error = %error, "sensitive forwarding policy storage failed");
+            ApiError::InvalidCommunicationQuery("sensitive forwarding policy is unavailable")
+        }
+    }
 }
 
 pub(crate) async fn post_v1_email_account_sync_now(

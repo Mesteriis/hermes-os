@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader
 use crate::platform::secrets::ResolvedSecret;
 
 pub use crate::platform::communications::{
-    EmailSendError, OutgoingEmail, SendResult, SmtpConfig, SmtpTransport,
+    EmailSendError, OutgoingEmail, OutgoingEmailAttachment, SendResult, SmtpConfig, SmtpTransport,
 };
 
 #[derive(Clone, Default)]
@@ -178,6 +178,13 @@ async fn write_cmd<W: AsyncWrite + Unpin>(
 pub fn build_rfc2822_message(email: &OutgoingEmail) -> String {
     let now = chrono::Utc::now().to_rfc2822();
     let mut message = format!("From: {}\r\nTo: {}\r\n", email.from, email.to.join(", "));
+    if let Some(message_id) = email
+        .message_id
+        .as_deref()
+        .filter(|value| safe_message_id(value))
+    {
+        message.push_str(&format!("Message-ID: {message_id}\r\n"));
+    }
     if !email.cc.is_empty() {
         message.push_str(&format!("Cc: {}\r\n", email.cc.join(", ")));
     }
@@ -192,6 +199,50 @@ pub fn build_rfc2822_message(email: &OutgoingEmail) -> String {
         email.subject
     ));
 
+    if email.attachments.is_empty() {
+        message.push_str(&render_email_body(email));
+        return message;
+    }
+
+    let boundary = multipart_mixed_boundary(email);
+    message.push_str(&format!(
+        "Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n"
+    ));
+    message.push_str(&format!("--{boundary}\r\n"));
+    message.push_str(&render_email_body(email));
+    message.push_str("\r\n");
+    for attachment in &email.attachments {
+        let filename = safe_attachment_filename(&attachment.filename);
+        let content_type = safe_content_type(&attachment.content_type);
+        let disposition = if attachment.disposition == "inline" {
+            "inline"
+        } else {
+            "attachment"
+        };
+        message.push_str(&format!(
+            "--{boundary}\r\nContent-Type: {content_type}; name=\"{filename}\"\r\nContent-Disposition: {disposition}; filename=\"{filename}\"\r\nContent-Transfer-Encoding: base64\r\n"
+        ));
+        if let Some(content_id) = attachment
+            .content_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty() && !value.contains(['\r', '\n', '\0']))
+        {
+            message.push_str(&format!(
+                "Content-ID: <{}>\r\n",
+                content_id.trim_matches(['<', '>'])
+            ));
+        }
+        message.push_str("\r\n");
+        message.push_str(&base64_mime_lines(&attachment.bytes));
+        message.push_str("\r\n");
+    }
+    message.push_str(&format!("--{boundary}--"));
+    message
+}
+
+fn render_email_body(email: &OutgoingEmail) -> String {
+    let mut body = String::new();
     match email
         .body_html
         .as_deref()
@@ -200,27 +251,26 @@ pub fn build_rfc2822_message(email: &OutgoingEmail) -> String {
     {
         Some(body_html) => {
             let boundary = multipart_alternative_boundary(email);
-            message.push_str(&format!(
+            body.push_str(&format!(
                 "Content-Type: multipart/alternative; boundary=\"{boundary}\"\r\n\r\n"
             ));
-            message.push_str(&format!(
+            body.push_str(&format!(
                 "--{boundary}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{}\r\n",
                 email.body_text
             ));
-            message.push_str(&format!(
+            body.push_str(&format!(
                 "--{boundary}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{body_html}\r\n"
             ));
-            message.push_str(&format!("--{boundary}--"));
+            body.push_str(&format!("--{boundary}--"));
         }
         None => {
-            message.push_str(&format!(
+            body.push_str(&format!(
                 "Content-Type: text/plain; charset=utf-8\r\n\r\n{}",
                 email.body_text
             ));
         }
     }
-
-    message
+    body
 }
 
 fn multipart_alternative_boundary(email: &OutgoingEmail) -> String {
@@ -248,6 +298,67 @@ fn multipart_alternative_boundary(email: &OutgoingEmail) -> String {
     format!("hermes-alt-{suffix}")
 }
 
+fn multipart_mixed_boundary(email: &OutgoingEmail) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut digest = Sha256::new();
+    digest.update(email.from.as_bytes());
+    digest.update(b"\0mixed\0");
+    digest.update(email.subject.as_bytes());
+    for attachment in &email.attachments {
+        digest.update(b"\0");
+        digest.update(attachment.filename.as_bytes());
+        digest.update(b"\0");
+        digest.update(&attachment.bytes);
+    }
+    let digest = digest.finalize();
+    let suffix = digest
+        .iter()
+        .take(12)
+        .flat_map(|byte| [hex_char(byte >> 4), hex_char(byte & 0x0f)])
+        .collect::<String>();
+    format!("hermes-mixed-{suffix}")
+}
+
+fn safe_attachment_filename(filename: &str) -> String {
+    let filename = filename
+        .trim()
+        .chars()
+        .map(|character| match character {
+            '\r' | '\n' | '\0' | '"' | '\\' => '_',
+            other => other,
+        })
+        .take(255)
+        .collect::<String>();
+    if filename.is_empty() {
+        "attachment.bin".to_owned()
+    } else {
+        filename
+    }
+}
+
+fn safe_content_type(content_type: &str) -> &str {
+    let content_type = content_type.trim();
+    if content_type.is_empty()
+        || content_type.contains(['\r', '\n', '\0'])
+        || !content_type.contains('/')
+    {
+        "application/octet-stream"
+    } else {
+        content_type
+    }
+}
+
+fn base64_mime_lines(bytes: &[u8]) -> String {
+    let encoded = base64(bytes);
+    encoded
+        .as_bytes()
+        .chunks(76)
+        .map(|chunk| std::str::from_utf8(chunk).unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\r\n")
+}
+
 fn hex_char(value: u8) -> char {
     match value {
         0..=9 => char::from(b'0' + value),
@@ -261,6 +372,16 @@ fn base64(data: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(data)
 }
 
+fn safe_message_id(value: &str) -> bool {
+    let value = value.trim();
+    value.len() >= 3
+        && value.starts_with('<')
+        && value.ends_with('>')
+        && !value
+            .bytes()
+            .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control() || byte == b'\0')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,6 +389,7 @@ mod tests {
     fn outgoing_email(body_html: Option<String>) -> OutgoingEmail {
         OutgoingEmail {
             from: "sender@example.com".to_owned(),
+            message_id: None,
             to: vec!["recipient@example.com".to_owned()],
             cc: vec!["copy@example.com".to_owned()],
             bcc: Vec::new(),
@@ -276,13 +398,17 @@ mod tests {
             body_html,
             in_reply_to: Some("<parent@example.com>".to_owned()),
             references: vec!["<root@example.com>".to_owned()],
+            attachments: Vec::new(),
         }
     }
 
     #[test]
     fn rfc2822_builder_sends_plain_only_messages_as_text_plain() {
-        let message = build_rfc2822_message(&outgoing_email(None));
+        let mut email = outgoing_email(None);
+        email.message_id = Some("<outbox@example.test>".to_owned());
+        let message = build_rfc2822_message(&email);
 
+        assert!(message.contains("Message-ID: <outbox@example.test>\r\n"));
         assert!(message.contains("Content-Type: text/plain; charset=utf-8\r\n"));
         assert!(!message.contains("multipart/alternative"));
         assert!(message.ends_with("Plain body"));
@@ -304,5 +430,31 @@ mod tests {
         ));
         assert!(message.contains("In-Reply-To: <parent@example.com>\r\n"));
         assert!(message.contains("References: <root@example.com>\r\n"));
+    }
+
+    #[test]
+    fn rfc2822_builder_wraps_clean_attachments_in_multipart_mixed() {
+        let mut email = outgoing_email(Some("<p>Rich body</p>".to_owned()));
+        email.attachments.push(OutgoingEmailAttachment {
+            filename: "report\r\nBcc: attacker@example.test.pdf".to_owned(),
+            content_type: "application/pdf".to_owned(),
+            disposition: "attachment".to_owned(),
+            content_id: None,
+            bytes: b"%PDF fixture".to_vec(),
+        });
+
+        let message = build_rfc2822_message(&email);
+
+        assert!(message.contains("Content-Type: multipart/mixed; boundary=\"hermes-mixed-"));
+        assert!(message.contains("Content-Type: multipart/alternative; boundary=\"hermes-alt-"));
+        assert!(message.contains(
+            "Content-Type: application/pdf; name=\"report__Bcc: attacker@example.test.pdf\""
+        ));
+        assert!(message.contains(
+            "Content-Disposition: attachment; filename=\"report__Bcc: attacker@example.test.pdf\""
+        ));
+        assert!(message.contains("Content-Transfer-Encoding: base64\r\n\r\nJVBERiBmaXh0dXJl"));
+        assert!(!message.contains("\r\nBcc: attacker@example.test"));
+        assert!(message.ends_with("--"));
     }
 }

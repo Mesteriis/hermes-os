@@ -6,7 +6,6 @@ import {
   senderEmail,
   senderLabel,
 } from '../stores/communications'
-import { aiSummaryContractFromMetadata } from '../helpers/communicationPageModels'
 import type {
   CommunicationAttachment,
   CommunicationMessageDetailItem,
@@ -19,12 +18,7 @@ import type {
   CommunicationConversationModel,
 } from '../components/communicationDomainElements'
 import type { MailListItemModel } from '../components/mail/mailElements'
-import type {
-  MailInspectorEntityItem,
-  MailInspectorModel,
-  MailInspectorSemanticFact,
-  MailInspectorTopic,
-} from '../components/mail/mailInspector'
+import type { MailInspectorModel } from '../components/mail/mailInspector'
 import type { MessengerListItemModel } from '../components/messengers/messengerElements'
 import {
   mailActionGroups,
@@ -57,7 +51,11 @@ import {
   useWhatsappBusinessMessagesQuery,
 } from './whatsappBusinessQueries'
 import { useMarkMessageReadMutation } from './mailActionQueries'
+import { useMailImportMutation } from './mailImportQueries'
 import { useDelayedMessageRead } from './useDelayedMessageRead'
+import { useMessageAiStateQuery } from './mailCoreQueries'
+import { buildMailInspector } from './mailInspectorPresentation'
+import { prepareMailImport } from '../forms/mailImport'
 
 export function useCommunicationsWorkspaceViewSurface(
   selectedRouteId?: MaybeRefOrGetter<string | undefined>
@@ -83,17 +81,21 @@ export function useCommunicationsWorkspaceViewSurface(
       : null
   )
   const markMessageReadMutation = useMarkMessageReadMutation()
+  const mailImportMutation = useMailImportMutation()
   const selectedMailMessageId = computed(() =>
     activeChannelId.value === 'mail'
       ? pageSurface.store.selectedCommunicationMessageId
       : ''
+  )
+  const messageAiStateQuery = useMessageAiStateQuery(() =>
+    selectedMailMessageId.value || null
   )
 
   useDelayedMessageRead(selectedMailMessageId, async (messageId) => {
     const message = pageSurface.visibleMailList.value.find(
       (item) => item.message_id === messageId
     )
-    if (!message || message.workflow_state === 'reviewed') return
+    if (!message || message.is_read) return
     await markMessageReadMutation.mutateAsync(messageId)
   }, (error) => {
     const message = error instanceof Error ? error.message : 'Provider read-state sync failed'
@@ -193,7 +195,8 @@ export function useCommunicationsWorkspaceViewSurface(
           messageTranslation(
             pageSurface.store.mailMessageInsight,
             source.message_id
-          )
+          ),
+          pageSurface.isProviderFlagMutationAvailable(source.account_id)
         ),
       ],
       draftPreview: pageSurface.store.composeForm.body,
@@ -208,7 +211,11 @@ export function useCommunicationsWorkspaceViewSurface(
       pageSurface.visibleMailList.value[0] ??
       null
 
-    return mailInspectorModel(detail ?? summary, attachments.length)
+    return buildMailInspector(
+      detail ?? summary,
+      attachments.length,
+      messageAiStateQuery.data.value ?? null
+    )
   })
 
   const telegramChatsQuery = useTelegramChatsQuery(
@@ -320,6 +327,7 @@ export function useCommunicationsWorkspaceViewSurface(
     activeChannelId,
     conversation,
     isMailActionRunning: computed(() => pageSurface.store.isMailActionRunning),
+    isMailImporting: computed(() => mailImportMutation.isPending.value),
     mailActionError: computed(() => pageSurface.store.mailActionError),
     mailActionStatus: computed(() => pageSurface.store.mailActionStatus),
     mailInspector,
@@ -329,6 +337,7 @@ export function useCommunicationsWorkspaceViewSurface(
     refreshMail,
     selectMailAction,
     handleVisibleMailItemIdsChange,
+    importMailFile,
     selectMailMessage,
     selectTelegramConversation,
     selectWhatsappConversation,
@@ -363,6 +372,31 @@ export function useCommunicationsWorkspaceViewSurface(
     syncVisibleMailSelection(pageSurface, itemIds)
   }
 
+  async function importMailFile(file: File): Promise<void> {
+    const accountId = pageSurface.store.selectedMailAccountId.trim()
+    if (!accountId) {
+      pageSurface.store.setMailActionError('Select a mailbox before importing mail.')
+      return
+    }
+
+    try {
+      const request = await prepareMailImport(file)
+      const result = await mailImportMutation.mutateAsync({ accountId, ...request })
+      await pageSurface.refetchMailList()
+      const reasons = [...new Set(result.failures.map((failure) => failure.reason))]
+      const skipped = result.failed_count > 0
+        ? ` ${result.failed_count} skipped${reasons.length ? ` (${reasons.join(', ')})` : ''}.`
+        : ''
+      pageSurface.store.setMailActionStatus(
+        `Imported ${result.imported_count} ${result.imported_count === 1 ? 'message' : 'messages'} locally.${skipped}`
+      )
+    } catch (error) {
+      pageSurface.store.setMailActionError(
+        error instanceof Error ? error.message : 'Mail import failed.'
+      )
+    }
+  }
+
   function openNotificationTarget(notification: NotificationItem | null): void {
     if (notification?.targetView !== 'communications-mail') return
 
@@ -384,6 +418,8 @@ export function useCommunicationsWorkspaceViewSurface(
   }
 }
 
+export { mailInspectorSummary } from './mailInspectorPresentation'
+
 function mailSyncStatusIsActive(status: string): boolean {
   return (
     status === 'queued' ||
@@ -403,7 +439,8 @@ function attachmentCount(
 function conversationMessage(
   source: CommunicationMessageDetailItem | CommunicationMessageSummary,
   attachments: readonly CommunicationAttachment[],
-  translation: TranslationResponse | null
+  translation: TranslationResponse | null,
+  providerFlagMutationAvailable: boolean
 ): CommunicationConversationMessageModel {
   return {
     id: source.message_id,
@@ -446,7 +483,7 @@ function conversationMessage(
       { id: 'workflow', label: 'workflow', value: source.workflow_state },
       { id: 'delivery', label: 'delivery', value: source.delivery_state },
     ],
-    actionGroups: mailActionGroups(source),
+    actionGroups: mailActionGroups(source, { providerFlagMutationAvailable }),
   }
 }
 
@@ -488,6 +525,7 @@ function conversationAttachment(
     meta: `${attachment.content_type} · ${attachment.scan_status}`,
     icon: attachmentIcon(attachment.content_type),
     tone: attachment.scan_status === 'clean' ? 'success' : 'warning',
+    scanStatus: attachment.scan_status,
   }
 }
 
@@ -502,207 +540,4 @@ function emptyConversation(): CommunicationConversationModel {
     messages: [],
     draftPreview: '',
   }
-}
-
-function mailInspectorModel(
-  message: CommunicationMessageDetailItem | CommunicationMessageSummary | null,
-  attachmentFallbackCount: number
-): MailInspectorModel {
-  if (!message) return emptyMailInspector()
-
-  const attachmentTotal = attachmentCount(message, attachmentFallbackCount)
-  const importanceScore = message.importance_score ?? 0
-
-  return {
-    intelligence: {
-      score: importanceScore,
-      maxScore: 100,
-      label: 'Projected importance',
-      summary: mailInspectorSummary(message),
-      checks: [
-        {
-          id: 'raw-record',
-          label: 'Raw record',
-          description: message.raw_record_id,
-          icon: 'tabler:file-database',
-          tone: 'neutral',
-        },
-        {
-          id: 'provider-record',
-          label: 'Provider record',
-          description: message.provider_record_id,
-          icon: 'tabler:mail-code',
-          tone: 'info',
-        },
-        {
-          id: 'attachments',
-          label: 'Attachments',
-          description: String(attachmentTotal),
-          icon: 'tabler:paperclip',
-          tone: attachmentTotal > 0 ? 'success' : 'neutral',
-        },
-      ],
-    },
-    entityGroups: mailInspectorEntityGroups(message),
-    topics: mailInspectorTopics(message),
-    semanticFacts: mailInspectorFacts(message, attachmentTotal),
-    suggestedActions: [],
-    relatedContext: [],
-  }
-}
-
-export function mailInspectorSummary(
-  message: Pick<CommunicationMessageDetailItem | CommunicationMessageSummary, 'ai_summary' | 'message_metadata'>
-): string {
-  const backendSummary = message.ai_summary?.trim()
-  if (backendSummary) return backendSummary
-
-  const contract = aiSummaryContractFromMetadata(message.message_metadata)
-  const structuredSummary = [...contract?.key_points ?? [], ...contract?.action_items ?? []]
-    .join(' ')
-    .trim()
-  if (structuredSummary) return structuredSummary
-
-  return 'No backend summary is available for this message.'
-}
-
-function emptyMailInspector(): MailInspectorModel {
-  return {
-    intelligence: {
-      score: 0,
-      maxScore: 100,
-      label: 'Projected importance',
-      summary: 'Select a message to inspect Communications evidence.',
-      checks: [
-        {
-          id: 'empty',
-          label: 'No message selected',
-          description: 'No backend message projection is currently selected.',
-          icon: 'tabler:circle-dashed',
-          tone: 'neutral',
-        },
-      ],
-    },
-    entityGroups: [],
-    topics: [],
-    semanticFacts: [],
-    suggestedActions: [],
-    relatedContext: [],
-  }
-}
-
-function mailInspectorEntityGroups(
-  message: CommunicationMessageDetailItem | CommunicationMessageSummary
-): MailInspectorModel['entityGroups'] {
-  const items: MailInspectorEntityItem[] = [
-    {
-      id: 'raw-record',
-      entity: 'document',
-      title: 'Raw provider record',
-      description: message.raw_record_id,
-      evidenceLabel: 'Source record retained before promotion',
-      tone: 'neutral',
-    },
-    {
-      id: 'provider-record',
-      entity: 'knowledge',
-      title: 'Provider record',
-      description: message.provider_record_id,
-      evidenceLabel: message.channel_kind,
-      tone: 'info',
-    },
-  ]
-
-  if (message.observation_id) {
-    items.push({
-      id: 'observation',
-      entity: 'knowledge',
-      title: 'Observation',
-      description: message.observation_id,
-      evidenceLabel: 'Canonical observation reference',
-      tone: 'info',
-    })
-  }
-
-  if (message.ai_summary) {
-    items.push({
-      id: 'ai-summary',
-      entity: 'knowledge',
-      title: 'AI summary candidate',
-      description: message.ai_summary,
-      evidenceLabel:
-        message.ai_summary_generated_at ??
-        'summary generated without timestamp',
-      tone: 'accent',
-    })
-  }
-
-  return [
-    {
-      id: 'source-evidence',
-      title: 'Source evidence',
-      items,
-    },
-  ]
-}
-
-function mailInspectorTopics(
-  message: CommunicationMessageDetailItem | CommunicationMessageSummary
-): MailInspectorTopic[] {
-  return message.ai_category
-    ? [
-        {
-          id: 'ai-category',
-          label: message.ai_category,
-          tone: 'info',
-        },
-      ]
-    : []
-}
-
-function mailInspectorFacts(
-  message: CommunicationMessageDetailItem | CommunicationMessageSummary,
-  attachmentTotal: number
-): MailInspectorSemanticFact[] {
-  const facts: MailInspectorSemanticFact[] = [
-    {
-      id: 'account',
-      label: 'Account',
-      value: message.account_id,
-    },
-    {
-      id: 'workflow',
-      label: 'Workflow',
-      value: message.workflow_state,
-    },
-    {
-      id: 'delivery',
-      label: 'Delivery',
-      value: message.delivery_state,
-    },
-    {
-      id: 'attachments',
-      label: 'Attachments',
-      value: String(attachmentTotal),
-    },
-  ]
-
-  if (message.importance_score !== null) {
-    facts.push({
-      id: 'importance',
-      label: 'Importance',
-      value: String(message.importance_score),
-      tone: message.importance_score >= 75 ? 'warning' : 'neutral',
-    })
-  }
-
-  if (message.occurred_at) {
-    facts.push({
-      id: 'occurred-at',
-      label: 'Observed',
-      value: messageTime(message.occurred_at),
-    })
-  }
-
-  return facts
 }

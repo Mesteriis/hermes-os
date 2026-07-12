@@ -21,6 +21,7 @@ import type { SignalRouteTargetKind } from '../components/signalHubSettingsPrese
 import { useSettingsPageSurface } from '../queries/useSettingsPageSurface'
 import type { AccountServiceRow } from '../queries/useIntegrationsSettingsSurface'
 import type { ApplicationSetting } from '../types/settings'
+import { eventChecked, eventValue } from './settingsEventValues'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -51,16 +52,6 @@ watch(() => store.actionMessage, (message) => {
 watch(() => store.errorMessage, (message) => {
   if (message) toast.error(t('Settings action failed'), message)
 })
-
-function eventValue(event: Event): string {
-  return event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement
-    ? event.target.value
-    : ''
-}
-
-function eventChecked(event: Event): boolean {
-  return event.target instanceof HTMLInputElement ? event.target.checked : false
-}
 
 function updateSettingDraft(setting: ApplicationSetting, event: Event) {
   applicationSettings.handleInput(setting, eventValue(event))

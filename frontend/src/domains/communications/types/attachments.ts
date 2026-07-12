@@ -30,6 +30,7 @@ export type AttachmentSearchResult = {
   scan_summary: string | null
   storage_kind: string
   storage_path: string
+  extracted_text_match: boolean
   created_at: string
   updated_at: string
 }
@@ -80,9 +81,21 @@ export type AttachmentPreviewResponse = {
   max_preview_bytes: number
 }
 
+export type AttachmentTextExtractionResponse = {
+  attachment_id: string
+  status: 'completed' | 'unsupported'
+  extracted_size_bytes: number | null
+}
+
+export type AttachmentExtractedTextResponse = {
+  attachment_id: string
+  text: string
+  truncated: boolean
+  extracted_size_bytes: number
+}
+
 export type AttachmentTranslationRequest = {
   target_language: string
-  source_text: string
 }
 
 export type AttachmentTranslationResponse = {
@@ -96,5 +109,5 @@ export type AttachmentTranslationResponse = {
   target: string
   model: string | null
   reason: string | null
-  source: 'caller_provided_extracted_text'
+  source: 'durable_extracted_text'
 }

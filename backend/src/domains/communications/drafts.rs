@@ -30,6 +30,8 @@ pub struct CommunicationDraft {
     pub body_html: Option<String>,
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
+    pub attachment_ids: Vec<String>,
+    pub attachments: Vec<CommunicationDraftAttachmentRef>,
     pub status: DraftStatus,
     pub scheduled_send_at: Option<DateTime<Utc>>,
     pub send_attempts: i32,
@@ -37,6 +39,18 @@ pub struct CommunicationDraft {
     pub metadata: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CommunicationDraftAttachmentRef {
+    pub attachment_id: String,
+    pub filename: Option<String>,
+    pub content_type: String,
+    pub size_bytes: i64,
+    pub scan_status: String,
+    pub scan_engine: Option<String>,
+    pub scan_checked_at: Option<DateTime<Utc>>,
+    pub scan_summary: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -92,6 +106,7 @@ pub struct NewCommunicationDraft {
     pub body_html: Option<String>,
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
+    pub attachment_ids: Option<Vec<String>>,
     pub status: DraftStatus,
     pub scheduled_send_at: Option<DateTime<Utc>>,
     pub metadata: Value,
@@ -104,6 +119,9 @@ impl NewCommunicationDraft {
         }
         if self.account_id.trim().is_empty() {
             return Err(CommunicationDraftError::Invalid("account_id empty"));
+        }
+        if let Some(attachment_ids) = &self.attachment_ids {
+            validate_attachment_ids(attachment_ids)?;
         }
         Ok(())
     }
@@ -179,7 +197,20 @@ impl CommunicationDraftStore {
         .bind(serde_json::to_value(&draft.references).unwrap_or_default())
         .bind(draft.status.as_str()).bind(draft.scheduled_send_at).bind(&draft.metadata)
         .fetch_one(&mut *transaction).await?;
-        let draft = row_to_draft(row)?;
+        if let Some(attachment_ids) = &draft.attachment_ids {
+            sync_draft_attachments_in_transaction(
+                &mut transaction,
+                &draft.draft_id,
+                &draft.account_id,
+                attachment_ids,
+            )
+            .await?;
+        }
+        let mut draft = row_to_draft(row)?;
+        draft.attachment_ids =
+            draft_attachment_ids_in_transaction(&mut transaction, &draft.draft_id).await?;
+        draft.attachments =
+            draft_attachment_refs_in_transaction(&mut transaction, &draft.draft_id).await?;
         let event_type = if existed {
             EVENT_TYPE_DRAFT_UPDATED
         } else {
@@ -229,6 +260,28 @@ impl CommunicationDraftStore {
                 body_html,
                 in_reply_to,
                 message_refs AS message_references,
+                ARRAY(
+                    SELECT attachment.attachment_id
+                    FROM communication_draft_attachments attachment
+                    WHERE attachment.draft_id = communication_drafts.draft_id
+                    ORDER BY attachment.sort_order
+                ) AS attachment_ids,
+                (
+                    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                        'attachment_id', attachment.attachment_id,
+                        'filename', imported.filename,
+                        'content_type', imported.content_type,
+                        'size_bytes', imported.size_bytes,
+                        'scan_status', imported.scan_status,
+                        'scan_engine', imported.scan_engine,
+                        'scan_checked_at', imported.scan_checked_at,
+                        'scan_summary', imported.scan_summary
+                    ) ORDER BY attachment.sort_order), '[]'::jsonb)
+                    FROM communication_draft_attachments attachment
+                    JOIN communication_attachment_imports imported
+                      ON imported.attachment_id = attachment.attachment_id
+                    WHERE attachment.draft_id = communication_drafts.draft_id
+                ) AS attachments,
                 status,
                 scheduled_send_at,
                 send_attempts,
@@ -275,6 +328,28 @@ impl CommunicationDraftStore {
                 body_html,
                 in_reply_to,
                 message_refs AS message_references,
+                ARRAY(
+                    SELECT attachment.attachment_id
+                    FROM communication_draft_attachments attachment
+                    WHERE attachment.draft_id = communication_drafts.draft_id
+                    ORDER BY attachment.sort_order
+                ) AS attachment_ids,
+                (
+                    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                        'attachment_id', attachment.attachment_id,
+                        'filename', imported.filename,
+                        'content_type', imported.content_type,
+                        'size_bytes', imported.size_bytes,
+                        'scan_status', imported.scan_status,
+                        'scan_engine', imported.scan_engine,
+                        'scan_checked_at', imported.scan_checked_at,
+                        'scan_summary', imported.scan_summary
+                    ) ORDER BY attachment.sort_order), '[]'::jsonb)
+                    FROM communication_draft_attachments attachment
+                    JOIN communication_attachment_imports imported
+                      ON imported.attachment_id = attachment.attachment_id
+                    WHERE attachment.draft_id = communication_drafts.draft_id
+                ) AS attachments,
                 status,
                 scheduled_send_at,
                 send_attempts,
@@ -337,6 +412,28 @@ impl CommunicationDraftStore {
                 body_html,
                 in_reply_to,
                 message_refs AS message_references,
+                ARRAY(
+                    SELECT attachment.attachment_id
+                    FROM communication_draft_attachments attachment
+                    WHERE attachment.draft_id = communication_drafts.draft_id
+                    ORDER BY attachment.sort_order
+                ) AS attachment_ids,
+                (
+                    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                        'attachment_id', attachment.attachment_id,
+                        'filename', imported.filename,
+                        'content_type', imported.content_type,
+                        'size_bytes', imported.size_bytes,
+                        'scan_status', imported.scan_status,
+                        'scan_engine', imported.scan_engine,
+                        'scan_checked_at', imported.scan_checked_at,
+                        'scan_summary', imported.scan_summary
+                    ) ORDER BY attachment.sort_order), '[]'::jsonb)
+                    FROM communication_draft_attachments attachment
+                    JOIN communication_attachment_imports imported
+                      ON imported.attachment_id = attachment.attachment_id
+                    WHERE attachment.draft_id = communication_drafts.draft_id
+                ) AS attachments,
                 status,
                 scheduled_send_at,
                 send_attempts,
@@ -381,6 +478,8 @@ impl CommunicationDraftStore {
                 body_html,
                 in_reply_to,
                 message_refs AS message_references,
+                ARRAY[]::text[] AS attachment_ids,
+                '[]'::jsonb AS attachments,
                 status,
                 scheduled_send_at,
                 send_attempts,
@@ -537,6 +636,12 @@ fn row_to_draft(row: PgRow) -> Result<CommunicationDraft, CommunicationDraftErro
         body_html: row.try_get("body_html")?,
         in_reply_to: row.try_get("in_reply_to")?,
         references: serde_json::from_value(row.try_get("message_references")?).unwrap_or_default(),
+        attachment_ids: row.try_get("attachment_ids").unwrap_or_default(),
+        attachments: row
+            .try_get::<Value, _>("attachments")
+            .ok()
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default(),
         status: DraftStatus::parse(&status_str).unwrap_or(DraftStatus::Draft),
         scheduled_send_at: row.try_get("scheduled_send_at")?,
         send_attempts: row.try_get("send_attempts")?,
@@ -545,6 +650,115 @@ fn row_to_draft(row: PgRow) -> Result<CommunicationDraft, CommunicationDraftErro
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
     })
+}
+
+const MAX_DRAFT_ATTACHMENTS: usize = 25;
+
+fn validate_attachment_ids(attachment_ids: &[String]) -> Result<(), CommunicationDraftError> {
+    if attachment_ids.len() > MAX_DRAFT_ATTACHMENTS {
+        return Err(CommunicationDraftError::Invalid(
+            "draft attachment count exceeds 25",
+        ));
+    }
+    let mut unique = std::collections::HashSet::with_capacity(attachment_ids.len());
+    for attachment_id in attachment_ids {
+        let attachment_id = attachment_id.trim();
+        if attachment_id.is_empty() {
+            return Err(CommunicationDraftError::Invalid("attachment_id empty"));
+        }
+        if !unique.insert(attachment_id) {
+            return Err(CommunicationDraftError::Invalid(
+                "duplicate draft attachment_id",
+            ));
+        }
+    }
+    Ok(())
+}
+
+async fn sync_draft_attachments_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    draft_id: &str,
+    account_id: &str,
+    attachment_ids: &[String],
+) -> Result<(), CommunicationDraftError> {
+    validate_attachment_ids(attachment_ids)?;
+    sqlx::query("DELETE FROM communication_draft_attachments WHERE draft_id = $1")
+        .bind(draft_id)
+        .execute(&mut **transaction)
+        .await?;
+    for (sort_order, attachment_id) in attachment_ids.iter().enumerate() {
+        let inserted = sqlx::query(
+            r#"
+            INSERT INTO communication_draft_attachments (
+                draft_id, attachment_id, disposition, sort_order
+            )
+            SELECT $1, attachment.attachment_id, 'attachment', $4
+            FROM communication_attachment_imports attachment
+            WHERE attachment.attachment_id = $2
+              AND (attachment.account_id IS NULL OR attachment.account_id = $3)
+              AND (attachment.channel_kind IS NULL OR attachment.channel_kind = 'mail')
+            "#,
+        )
+        .bind(draft_id)
+        .bind(attachment_id.trim())
+        .bind(account_id)
+        .bind(i32::try_from(sort_order).map_err(|_| {
+            CommunicationDraftError::Invalid("draft attachment sort order overflow")
+        })?)
+        .execute(&mut **transaction)
+        .await?;
+        if inserted.rows_affected() != 1 {
+            return Err(CommunicationDraftError::Invalid(
+                "attachment is unavailable for this mail account",
+            ));
+        }
+    }
+    Ok(())
+}
+
+async fn draft_attachment_ids_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    draft_id: &str,
+) -> Result<Vec<String>, CommunicationDraftError> {
+    Ok(sqlx::query_scalar(
+        r#"
+        SELECT attachment_id
+        FROM communication_draft_attachments
+        WHERE draft_id = $1
+        ORDER BY sort_order
+        "#,
+    )
+    .bind(draft_id)
+    .fetch_all(&mut **transaction)
+    .await?)
+}
+
+async fn draft_attachment_refs_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    draft_id: &str,
+) -> Result<Vec<CommunicationDraftAttachmentRef>, CommunicationDraftError> {
+    let value = sqlx::query_scalar::<_, Value>(
+        r#"
+        SELECT COALESCE(jsonb_agg(jsonb_build_object(
+            'attachment_id', attachment.attachment_id,
+            'filename', imported.filename,
+            'content_type', imported.content_type,
+            'size_bytes', imported.size_bytes,
+            'scan_status', imported.scan_status,
+            'scan_engine', imported.scan_engine,
+            'scan_checked_at', imported.scan_checked_at,
+            'scan_summary', imported.scan_summary
+        ) ORDER BY attachment.sort_order), '[]'::jsonb)
+        FROM communication_draft_attachments attachment
+        JOIN communication_attachment_imports imported
+          ON imported.attachment_id = attachment.attachment_id
+        WHERE attachment.draft_id = $1
+        "#,
+    )
+    .bind(draft_id)
+    .fetch_one(&mut **transaction)
+    .await?;
+    Ok(serde_json::from_value(value)?)
 }
 
 #[derive(Debug, Error)]
@@ -627,6 +841,7 @@ mod tests {
             body_html: None,
             in_reply_to: None,
             references: Vec::new(),
+            attachment_ids: None,
             status: DraftStatus::Draft,
             scheduled_send_at: None,
             metadata: json!({ "compose_mode": "compose" }),

@@ -122,6 +122,7 @@ pub(crate) async fn execute_workflow_action(
                 &mut transaction,
                 &command_id,
                 &event_id,
+                actor_id,
                 &request,
                 source_message.as_ref(),
             )

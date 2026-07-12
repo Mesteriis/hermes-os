@@ -7,7 +7,7 @@ use crate::domains::communications::messages::{
     project_accepted_signal_if_runtime_allows,
 };
 use crate::domains::communications::storage::{
-    AttachmentSafetyScanner, CommunicationBlobMetadataPort, LocalCommunicationBlobPort,
+    CommunicationBlobMetadataPort, LocalCommunicationBlobPort,
 };
 use crate::domains::signal_hub::dispatch_mail_raw_signal;
 
@@ -27,7 +27,6 @@ pub(crate) async fn project_raw_records(
     mail_store: &CommunicationBlobMetadataPort,
     blob_store: &LocalCommunicationBlobPort,
     raw_records: &[StoredRawCommunicationRecord],
-    attachment_scanner: &impl AttachmentSafetyScanner,
 ) -> Result<RawRecordProjectionReport, EmailSyncPipelineError> {
     let mut report = RawRecordProjectionReport::default();
     let message_store = CommunicationMessageProjectionPort::new(pool.clone());
@@ -50,7 +49,6 @@ pub(crate) async fn project_raw_records(
             raw_record,
             &message,
             &parsed.attachments,
-            attachment_scanner,
         )
         .await?;
 

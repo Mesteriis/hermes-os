@@ -24,14 +24,28 @@ pub(crate) struct CommunicationMessageSummaryResponse {
     pub(crate) conversation_id: Option<String>,
     pub(crate) sender_display_name: Option<String>,
     pub(crate) delivery_state: String,
+    pub(crate) workflow_state: String,
     pub(crate) message_metadata: Value,
     pub(crate) attachment_count: i64,
     pub(crate) local_state: String,
     pub(crate) local_state_changed_at: Option<DateTime<Utc>>,
+    pub(crate) is_read: bool,
+    pub(crate) read_changed_at: Option<DateTime<Utc>>,
+    pub(crate) read_origin: String,
+    pub(crate) read_sync_status: String,
 }
 
 impl From<ProjectedMessageSummary> for CommunicationMessageSummaryResponse {
     fn from(summary: ProjectedMessageSummary) -> Self {
+        Self::from_with_read_sync_status(summary, "synced")
+    }
+}
+
+impl CommunicationMessageSummaryResponse {
+    pub(crate) fn from_with_read_sync_status(
+        summary: ProjectedMessageSummary,
+        read_sync_status: &str,
+    ) -> Self {
         Self {
             message_id: summary.message.message_id,
             raw_record_id: summary.message.raw_record_id,
@@ -48,10 +62,15 @@ impl From<ProjectedMessageSummary> for CommunicationMessageSummaryResponse {
             conversation_id: summary.message.conversation_id,
             sender_display_name: summary.message.sender_display_name,
             delivery_state: summary.message.delivery_state,
+            workflow_state: summary.message.workflow_state.as_str().to_owned(),
             message_metadata: summary.message.message_metadata,
             attachment_count: summary.attachment_count,
             local_state: summary.message.local_state.as_str().to_owned(),
             local_state_changed_at: summary.message.local_state_changed_at,
+            is_read: summary.message.is_read,
+            read_changed_at: summary.message.read_changed_at,
+            read_origin: summary.message.read_origin,
+            read_sync_status: read_sync_status.to_owned(),
         }
     }
 }
@@ -80,22 +99,46 @@ pub(crate) struct CommunicationMessageDetailItem {
     pub(crate) conversation_id: Option<String>,
     pub(crate) sender_display_name: Option<String>,
     pub(crate) delivery_state: String,
+    pub(crate) workflow_state: String,
     pub(crate) message_metadata: Value,
     pub(crate) local_state: String,
     pub(crate) local_state_changed_at: Option<DateTime<Utc>>,
     pub(crate) local_state_reason: Option<String>,
+    pub(crate) is_read: bool,
+    pub(crate) read_changed_at: Option<DateTime<Utc>>,
+    pub(crate) read_origin: String,
+    pub(crate) read_sync_status: String,
 }
 
 impl CommunicationMessageDetailItem {
     pub(crate) fn from_message(message: ProjectedMessage, body_html: Option<String>) -> Self {
         let message_metadata = message.message_metadata.clone();
-        Self::from_message_with_metadata(message, body_html, message_metadata)
+        Self::from_message_with_metadata_and_read_sync_status(
+            message,
+            body_html,
+            message_metadata,
+            "synced",
+        )
     }
 
     pub(crate) fn from_message_with_metadata(
         message: ProjectedMessage,
         body_html: Option<String>,
         message_metadata: Value,
+    ) -> Self {
+        Self::from_message_with_metadata_and_read_sync_status(
+            message,
+            body_html,
+            message_metadata,
+            "synced",
+        )
+    }
+
+    pub(crate) fn from_message_with_metadata_and_read_sync_status(
+        message: ProjectedMessage,
+        body_html: Option<String>,
+        message_metadata: Value,
+        read_sync_status: &str,
     ) -> Self {
         Self {
             message_id: message.message_id,
@@ -114,10 +157,15 @@ impl CommunicationMessageDetailItem {
             conversation_id: message.conversation_id,
             sender_display_name: message.sender_display_name,
             delivery_state: message.delivery_state,
+            workflow_state: message.workflow_state.as_str().to_owned(),
             message_metadata,
             local_state: message.local_state.as_str().to_owned(),
             local_state_changed_at: message.local_state_changed_at,
             local_state_reason: message.local_state_reason,
+            is_read: message.is_read,
+            read_changed_at: message.read_changed_at,
+            read_origin: message.read_origin,
+            read_sync_status: read_sync_status.to_owned(),
         }
     }
 }

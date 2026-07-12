@@ -1,24 +1,24 @@
 # backend-full nextest report
 
-- Generated at: 2026-06-30T01:57:12.363Z
+- Generated at: 2026-07-11T03:50:34.631Z
 - Source JUnit: `target/nextest/default/junit.xml`
-- Total tests: 1441
+- Total tests: 1566
 - Failed tests: 0
-- Flaky tests: none detected
-- Total time: 6715.71s
-- Average time: 4.66s
-- p95: 11.699s
-- p99: 16.011s
+- Flaky tests: 1
+- Total time: 7933.529s
+- Average time: 5.066s
+- p95: 12.093s
+- p99: 19.758s
 
 ## Slowest tests
 
-1. `hermes-hub-backend::graph_api::search::graph_summary_returns_empty_state_for_empty_database` - 35.663s
-2. `hermes-hub-backend::graph_api::neighborhood::graph_neighborhood_caps_depth_one_edges_nodes_and_evidence` - 35.629s
-3. `hermes-hub-backend::graph_api::neighborhood::graph_neighborhood_caps_evidence_for_returned_edges` - 35.489s
-4. `hermes-hub-backend::graph_api::neighborhood::graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence` - 34.577s
-5. `hermes-hub-backend::graph_api::search::graph_nodes_returns_connected_picker_nodes_first` - 33.346s
-6. `hermes-hub-backend::v1_communications_api::v1_message_smart_cc_404` - 27.156s
-7. `hermes-hub-backend::v1_communications_api::v1_messages_list` - 25.751s
-8. `hermes-hub-backend::v1_communications_api::v1_message_states` - 22.157s
-9. `hermes-hub-backend::graph_api::search::graph_search_returns_matching_nodes` - 20.894s
-10. `hermes-hub-backend::v1_communications_api::v1_threads_list` - 20.486s
+1. `hermes-hub-backend::v1_communications_archive_inspection::v1_attachment_archive_inspection_reads_local_zip_blob_against_postgres` - 134.497s
+2. `hermes-hub-backend::v1_communications_attachment_preview::v1_attachment_preview_reads_bounded_local_pdf_blob_against_postgres` - 133.154s
+3. `hermes-hub-backend::v1_communications_attachment_preview::v1_attachment_preview_reads_bounded_local_text_blob_against_postgres` - 119.326s
+4. `hermes-hub-backend::v1_communications_attachment_preview::v1_attachment_preview_reads_bounded_local_image_blob_against_postgres` - 119.259s
+5. `hermes-hub-backend::graph_api::search::graph_search_returns_matching_nodes` - 32.88s
+6. `hermes-hub-backend::graph_api::search::graph_summary_returns_empty_state_for_empty_database` - 26.177s
+7. `hermes-hub-backend::gmail_send_api::gmail_send_api_queues_outbox_when_send_scope_enabled_against_postgres` - 24.117s
+8. `hermes-hub-backend::zoom_provider_foundation::zoom_remote_transcript_downloads_are_blocked_until_privacy_opt_in_is_enabled` - 23.81s
+9. `hermes-hub-backend::graph::graph_store_upserts_node_idempotently_against_postgres` - 21.407s
+10. `hermes-hub-backend::graph_api::neighborhood::graph_neighborhood_caps_depth_one_edges_nodes_and_evidence` - 21.302s

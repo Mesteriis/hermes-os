@@ -76,6 +76,7 @@ pub(super) async fn capture_policy_observation(
                 "enabled": policy.enabled,
                 "account_id": policy.account_id,
                 "allowed_chat_ids": policy.allowed_chat_ids,
+                "scopes": policy.scopes,
                 "trigger_kind": policy.trigger_kind,
                 "max_sends_per_hour": policy.max_sends_per_hour,
                 "quiet_hours": policy.quiet_hours,

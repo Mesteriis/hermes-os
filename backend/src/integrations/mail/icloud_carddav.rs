@@ -201,7 +201,10 @@ fn find_named_open_tag(xml: &str, name: &str) -> Option<usize> {
     let mut offset = 0;
     while let Some(found) = xml[offset..].find('<') {
         let start = offset + found;
-        let (tag, _) = open_tag_name_and_content_start(&xml[start..])?;
+        let Some((tag, _)) = open_tag_name_and_content_start(&xml[start..]) else {
+            offset = start + 1;
+            continue;
+        };
         if tag == name || tag.ends_with(&format!(":{name}")) {
             return Some(start);
         }
@@ -228,15 +231,53 @@ fn vcard_property(vcard: &str, name: &str) -> Option<String> {
     vcard_properties(vcard, name).into_iter().next()
 }
 fn vcard_properties(vcard: &str, name: &str) -> Vec<String> {
-    vcard
+    unfold_vcard_lines(vcard)
         .lines()
         .filter_map(|line| {
             let (key, value) = line.split_once(':')?;
-            (key.split(';').next()? == name)
-                .then(|| value.trim().to_owned())
+            (key.split(';').next()?.eq_ignore_ascii_case(name))
+                .then(|| unescape_vcard_text(value.trim()))
                 .filter(|value| !value.is_empty())
         })
         .collect()
+}
+
+fn unfold_vcard_lines(vcard: &str) -> String {
+    let mut unfolded = String::with_capacity(vcard.len());
+    for line in vcard.replace("\r\n", "\n").split('\n') {
+        if line.starts_with(' ') || line.starts_with('\t') {
+            unfolded.push_str(line.trim_start_matches([' ', '\t']));
+        } else {
+            if !unfolded.is_empty() {
+                unfolded.push('\n');
+            }
+            unfolded.push_str(line);
+        }
+    }
+    unfolded
+}
+
+fn unescape_vcard_text(value: &str) -> String {
+    let mut output = String::with_capacity(value.len());
+    let mut chars = value.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            output.push(ch);
+            continue;
+        }
+        match chars.next() {
+            Some('n' | 'N') => output.push('\n'),
+            Some(',') => output.push(','),
+            Some(';') => output.push(';'),
+            Some('\\') => output.push('\\'),
+            Some(other) => {
+                output.push('\\');
+                output.push(other);
+            }
+            None => output.push('\\'),
+        }
+    }
+    output
 }
 
 fn discovery_body() -> &'static str {
@@ -261,5 +302,17 @@ mod tests {
         assert_eq!(entry.display_name.as_deref(), Some("Ada Lovelace"));
         assert_eq!(entry.email_addresses, vec!["ada@example.test"]);
         assert_eq!(entry.phone_numbers, vec!["+123"]);
+    }
+
+    #[test]
+    fn parses_namespaced_folded_and_escaped_vcard_contact() {
+        let response = r#"<d:response xmlns:d="DAV:" xmlns:card="urn:ietf:params:xml:ns:carddav"><d:href>/card/grace.vcf</d:href><d:getetag>"v2"</d:getetag><card:address-data>BEGIN:VCARD&#10;FN:Grace\, Hopper&#10;EMAIL;TYPE=INTERNET:grace@exam&#10; ple.test&#10;TEL;TYPE=CELL:+456&#10;END:VCARD</card:address-data></d:response>"#;
+        let entry = carddav_entry(response).expect("namespaced CardDAV entry");
+
+        assert_eq!(entry.provider_address_book_entry_id, "/card/grace.vcf");
+        assert_eq!(entry.display_name.as_deref(), Some("Grace, Hopper"));
+        assert_eq!(entry.email_addresses, vec!["grace@example.test"]);
+        assert_eq!(entry.phone_numbers, vec!["+456"]);
+        assert_eq!(entry.etag.as_deref(), Some("\"v2\""));
     }
 }

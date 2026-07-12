@@ -617,6 +617,9 @@
 
 .settings-communications-section {
 	grid-template-columns: minmax(0, 1fr);
+	max-height: calc(100dvh - 164px);
+	overflow-y: auto;
+	scrollbar-gutter: stable;
 }
 
 .settings-communications-tabs {
@@ -668,6 +671,94 @@
 .settings-communications-fields {
 	display: grid;
 	gap: 5px;
+}
+
+.settings-command-diagnostics {
+	gap: var(--h-spacing-3);
+}
+
+.settings-command-diagnostics__counts {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: var(--h-spacing-2);
+}
+
+.settings-command-diagnostics__counts span {
+	display: grid;
+	gap: 2px;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface-raised);
+	padding: var(--h-spacing-2);
+	font-size: var(--h-font-size-xs);
+}
+
+.settings-command-diagnostics__filter {
+	display: grid;
+	grid-template-columns: auto minmax(150px, 240px);
+	align-items: center;
+	gap: var(--h-spacing-2);
+}
+
+.settings-command-diagnostics__filter select {
+	min-height: var(--h-control-height-md);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface-raised);
+	color: var(--h-color-text);
+	padding: 0 var(--h-spacing-2);
+}
+
+.settings-command-diagnostics__table-wrap {
+	overflow-x: auto;
+}
+
+.settings-command-diagnostics__table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--h-font-size-xs);
+}
+
+.settings-command-diagnostics__table th,
+.settings-command-diagnostics__table td {
+	border-bottom: 1px solid var(--h-color-border);
+	padding: var(--h-spacing-2);
+	text-align: left;
+	vertical-align: top;
+}
+
+.settings-command-diagnostics__table td:first-child {
+	display: grid;
+	gap: 2px;
+	min-width: 180px;
+}
+
+.settings-command-diagnostics__table td small {
+	max-width: 240px;
+	overflow: hidden;
+	color: var(--h-color-text-muted);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.settings-command-diagnostics__table [data-status='dead_letter'] {
+	color: var(--h-color-danger);
+	font-weight: 760;
+}
+
+.settings-command-diagnostics__table [data-status='retrying'] {
+	color: var(--h-color-warning);
+	font-weight: 760;
+}
+
+@media (max-width: 900px) {
+	.settings-command-diagnostics__counts {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.settings-command-diagnostics__filter {
+		grid-template-columns: minmax(0, 1fr);
+	}
 }
 
 .settings-communications-panel span,
@@ -756,6 +847,83 @@
 
 .settings-communications-fields {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-communications-egress {
+	display: grid;
+	gap: var(--h-spacing-2);
+	padding-top: var(--h-spacing-3);
+	border-top: 1px solid var(--h-color-border);
+}
+
+.settings-communications-egress > header {
+	display: flex;
+	align-items: start;
+	justify-content: space-between;
+	gap: var(--h-spacing-3);
+}
+
+.settings-communications-egress__switches {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--h-spacing-2);
+}
+
+.settings-communications-egress__switches .settings-switch {
+	justify-content: space-between;
+}
+
+.settings-provider-resources__list {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	gap: var(--h-spacing-2);
+}
+
+.settings-provider-resource {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(130px, 0.54fr);
+	gap: var(--h-spacing-2);
+	align-items: end;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-sm);
+	background: var(--h-color-bg-muted);
+	padding: var(--h-spacing-2);
+}
+
+.settings-provider-resource__identity {
+	display: flex;
+	align-items: center;
+	gap: var(--h-spacing-2);
+	min-width: 0;
+}
+
+.settings-provider-resource__identity > span,
+.settings-provider-resource > label {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+}
+
+.settings-provider-resource strong,
+.settings-provider-resource small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.settings-provider-resource select {
+	width: 100%;
+	min-height: var(--h-control-height-md);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-sm);
+	background: var(--h-color-surface-raised);
+	color: var(--h-color-text);
+	font: inherit;
+	padding: 0 var(--h-spacing-2);
+}
+
+.settings-provider-resource > small {
+	grid-column: 1 / -1;
 }
 
 .settings-accounts-section {
@@ -3147,7 +3315,9 @@
 	}
 
 	.settings-communications-policy,
-	.settings-communications-fields {
+	.settings-communications-fields,
+	.settings-communications-egress__switches,
+	.settings-provider-resource {
 		grid-template-columns: 1fr;
 	}
 

@@ -199,7 +199,7 @@ fn default_config_uses_local_ollama_and_qwen_models() {
     let config = AppConfig::default();
 
     assert_eq!(config.ai_provider(), AiRuntimeProvider::Ollama);
-    assert_eq!(config.ollama_base_url(), "http://127.0.0.1:11434");
+    assert_eq!(config.ollama_base_url(), "http://192.168.1.2:11434");
     assert_eq!(config.ollama_chat_model(), "qwen3:4b");
     assert_eq!(config.ollama_embed_model(), "qwen3-embedding:4b");
     assert_eq!(config.ollama_timeout_seconds(), 120);

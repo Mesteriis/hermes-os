@@ -1,7 +1,6 @@
 use super::super::*;
 
-const MAX_ATTACHMENT_TRANSLATION_SOURCE_CHARS: usize = 64_000;
-const ATTACHMENT_TRANSLATION_SOURCE: &str = "caller_provided_extracted_text";
+const ATTACHMENT_TRANSLATION_SOURCE: &str = "durable_extracted_text";
 
 pub(crate) async fn get_v1_detect_language(
     State(state): State<AppState>,
@@ -27,7 +26,6 @@ pub(crate) struct TranslateRequest {
 #[derive(Deserialize)]
 pub(crate) struct TranslateAttachmentRequest {
     pub(super) target_language: String,
-    pub(super) source_text: String,
 }
 
 #[derive(Deserialize)]
@@ -82,6 +80,12 @@ pub(crate) async fn post_v1_translate(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    crate::app::api_support::require_mail_ai_content_egress(
+        &state,
+        &msg.account_id,
+        crate::app::api_support::MailAiContentEgressKind::Body,
+    )
+    .await?;
     let service = email_multilingual_service(&state).await?;
     let detection =
         crate::domains::communications::multilingual::MultilingualService::detect_language(
@@ -139,29 +143,51 @@ pub(crate) async fn post_v1_translate_attachment(
         ));
     }
 
-    let source_text = req.source_text.trim();
-    if source_text.is_empty() {
-        return Err(ApiError::InvalidCommunicationQuery(
-            "source_text is required",
-        ));
-    }
-    if source_text.chars().count() > MAX_ATTACHMENT_TRANSLATION_SOURCE_CHARS {
-        return Err(ApiError::InvalidCommunicationQuery(
-            "source_text exceeds maximum length",
-        ));
-    }
-
     let attachment = communication_storage_store(&state)?
         .attachment_by_id(&attachment_id)
         .await?
         .ok_or(ApiError::NotFound)?;
+    if attachment.attachment.scan_status
+        != crate::domains::communications::storage::AttachmentSafetyScanStatus::Clean
+    {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "attachment translation requires a clean scan verdict",
+        ));
+    }
+    let message = message_store(&state)?
+        .message(&attachment.attachment.message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let source_text = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
+        pool,
+        crate::domains::communications::storage::LocalCommunicationBlobStore::new(
+            crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT,
+        ),
+    )
+    .completed_text(&attachment_id)
+    .await
+    .map_err(|_| ApiError::InvalidCommunicationQuery("attachment extracted text is unavailable"))?
+    .ok_or(ApiError::FailedPrecondition(
+        "extract attachment text before translation".to_owned(),
+    ))?;
+    crate::app::api_support::require_mail_ai_content_egress(
+        &state,
+        &message.account_id,
+        crate::app::api_support::MailAiContentEgressKind::ExtractedText,
+    )
+    .await?;
     let detection =
         crate::domains::communications::multilingual::MultilingualService::detect_language(
-            source_text,
+            &source_text.text,
         );
     let service = email_multilingual_service(&state).await?;
 
-    match service.translate(source_text, target_language).await {
+    match service.translate(&source_text.text, target_language).await {
         Ok(Some(translation)) => {
             if let Some(pool) = state.database.pool() {
                 crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
@@ -274,6 +300,12 @@ pub(crate) async fn post_v1_translate_thread(
     let messages = thread_store
         .thread_messages(account_id, subject, query.limit.unwrap_or(50))
         .await?;
+    crate::app::api_support::require_mail_ai_content_egress(
+        &state,
+        account_id,
+        crate::app::api_support::MailAiContentEgressKind::Body,
+    )
+    .await?;
     let service = email_multilingual_service(&state).await?;
     let mut items = Vec::with_capacity(messages.len());
 

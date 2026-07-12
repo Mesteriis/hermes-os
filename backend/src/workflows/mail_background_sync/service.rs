@@ -7,8 +7,9 @@ use sqlx::postgres::PgPool;
 use crate::domains::communications::core::CommunicationIngestionPort;
 use crate::domains::communications::core::CommunicationProviderAccountPort;
 use crate::platform::communications::{
-    SharedEmailProviderSyncPort, email_sync_plan_selects_all_imap_mailboxes,
-    email_sync_plan_stream_ids, imap_mailbox_stream_prefix, plan_email_sync,
+    SharedEmailProviderSyncPort, SharedMailProviderResourceCommandPort,
+    email_sync_plan_selects_all_imap_mailboxes, email_sync_plan_stream_ids,
+    imap_mailbox_stream_prefix, plan_email_sync,
 };
 use crate::vault::HostVault;
 
@@ -27,6 +28,7 @@ pub struct MailBackgroundSyncService {
     pub(super) vault: HostVault,
     pub(super) blob_root: PathBuf,
     pub(super) provider_sync: SharedEmailProviderSyncPort,
+    pub(super) provider_resource_commands: SharedMailProviderResourceCommandPort,
 }
 
 impl MailBackgroundSyncService {
@@ -35,12 +37,14 @@ impl MailBackgroundSyncService {
         vault: HostVault,
         blob_root: impl Into<PathBuf>,
         provider_sync: SharedEmailProviderSyncPort,
+        provider_resource_commands: SharedMailProviderResourceCommandPort,
     ) -> Self {
         Self {
             pool,
             vault,
             blob_root: blob_root.into(),
             provider_sync,
+            provider_resource_commands,
         }
     }
 
@@ -162,29 +166,33 @@ impl MailBackgroundSyncService {
             .await;
 
         match result {
-            Ok(summary) => store
-                .finish_run(
-                    &run.run_id,
-                    FinishRun {
-                        status: MailSyncRunStatus::Completed,
-                        phase: MailSyncPhase::Completed,
-                        progress_mode: ProgressMode::Determinate,
-                        progress_percent: Some(100),
-                        processed_messages: summary.processed_messages,
-                        estimated_total_messages: summary.estimated_total_messages,
-                        fetched_messages: summary.fetched_messages,
-                        projected_messages: summary.projected_messages,
-                        upserted_personas: summary.upserted_personas,
-                        upserted_organizations: summary.upserted_organizations,
-                        checkpoint_after: summary.checkpoint_after,
-                        checkpoint_saved: summary.checkpoint_saved,
-                        error_code: None,
-                        error_message: None,
-                        next_run_at: next_run_at(&settings),
-                    },
-                )
-                .await
-                .map(Into::into),
+            Ok(summary) => {
+                self.refresh_provider_resources(&plan.adapter_config, &account)
+                    .await;
+                store
+                    .finish_run(
+                        &run.run_id,
+                        FinishRun {
+                            status: MailSyncRunStatus::Completed,
+                            phase: MailSyncPhase::Completed,
+                            progress_mode: ProgressMode::Determinate,
+                            progress_percent: Some(100),
+                            processed_messages: summary.processed_messages,
+                            estimated_total_messages: summary.estimated_total_messages,
+                            fetched_messages: summary.fetched_messages,
+                            projected_messages: summary.projected_messages,
+                            upserted_personas: summary.upserted_personas,
+                            upserted_organizations: summary.upserted_organizations,
+                            checkpoint_after: summary.checkpoint_after,
+                            checkpoint_saved: summary.checkpoint_saved,
+                            error_code: None,
+                            error_message: None,
+                            next_run_at: next_run_at(&settings),
+                        },
+                    )
+                    .await
+                    .map(Into::into)
+            }
             Err(error) => store
                 .finish_run(
                     &run.run_id,

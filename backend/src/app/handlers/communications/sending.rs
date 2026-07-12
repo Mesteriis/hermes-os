@@ -18,6 +18,7 @@ pub(crate) use forwarding::{
 };
 pub(crate) use local_state::{
     post_v1_imap_delete, post_v1_imap_mark_read, post_v1_message_restore, post_v1_message_trash,
+    put_v1_message_read_state,
 };
 pub(crate) use multilingual::{
     get_v1_detect_language, post_v1_translate, post_v1_translate_attachment,

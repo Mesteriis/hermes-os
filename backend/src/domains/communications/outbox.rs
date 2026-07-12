@@ -3,6 +3,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use sqlx::Row;
 use sqlx::Transaction;
 use sqlx::postgres::{PgPool, PgRow, Postgres};
@@ -15,6 +16,7 @@ use crate::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
 };
 
+mod attachments;
 mod delivery;
 mod delivery_status;
 mod provider_send_store;
@@ -33,6 +35,11 @@ pub use provider_sender::CommunicationOutboxEmailSender;
 pub use smtp_sender::{
     SmtpOutboxEmailSender, outgoing_email_from_outbox_item, smtp_config_for_provider_account,
 };
+
+pub fn rfc822_message_id_for_outbox(outbox_id: &str) -> String {
+    let digest = Sha256::digest(outbox_id.trim().as_bytes());
+    format!("<hermes-outbox-{digest:x}@local.invalid>")
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -225,51 +232,8 @@ impl CommunicationOutboxStore {
         relationship_kind: &str,
         metadata: Option<Value>,
     ) -> Result<CommunicationOutboxItem, CommunicationOutboxError> {
-        item.validate()?;
         let mut transaction = self.pool.begin().await?;
-        ensure_canonical_account_in_transaction(&mut transaction, Some(item.account_id.as_str()))
-            .await?;
-        let draft_id =
-            existing_draft_id_in_transaction(&mut transaction, item.draft_id.as_deref()).await?;
-        let sql = outbox_returning_query(
-            r#"
-            INSERT INTO communication_outbox (
-                outbox_id,
-                account_id,
-                draft_id,
-                to_participants,
-                cc_participants,
-                bcc_participants,
-                subject,
-                body_text,
-                body_html,
-                status,
-                scheduled_send_at,
-                undo_deadline_at,
-                metadata
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            "#,
-            "communication_outbox",
-        );
-        let row = sqlx::query(&sql)
-            .bind(item.outbox_id.trim())
-            .bind(item.account_id.trim())
-            .bind(draft_id.as_deref())
-            .bind(serde_json::to_value(&item.to_recipients)?)
-            .bind(serde_json::to_value(&item.cc_recipients)?)
-            .bind(serde_json::to_value(&item.bcc_recipients)?)
-            .bind(&item.subject)
-            .bind(&item.body_text)
-            .bind(item.body_html.as_deref())
-            .bind(item.status.as_str())
-            .bind(item.scheduled_send_at)
-            .bind(item.undo_deadline_at)
-            .bind(&item.metadata)
-            .fetch_one(&mut *transaction)
-            .await?;
-
-        let outbox_item = row_to_outbox_item(row)?;
+        let outbox_item = enqueue_in_transaction(&mut transaction, item).await?;
         if let Some(observation_id) = observation_id.filter(|value| !value.trim().is_empty()) {
             let link_metadata = merge_metadata(
                 json!({
@@ -679,6 +643,72 @@ impl CommunicationOutboxStore {
     }
 }
 
+pub(crate) async fn enqueue_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    item: &NewCommunicationOutboxItem,
+) -> Result<CommunicationOutboxItem, CommunicationOutboxError> {
+    item.validate()?;
+    ensure_canonical_account_in_transaction(transaction, Some(item.account_id.as_str())).await?;
+    let draft_id =
+        existing_draft_id_in_transaction(transaction, item.draft_id.as_deref(), &item.account_id)
+            .await?;
+    let mut outbox_metadata = item.metadata.clone();
+    if let Some(object) = outbox_metadata.as_object_mut() {
+        object.insert(
+            "rfc822_message_id".to_owned(),
+            Value::String(rfc822_message_id_for_outbox(&item.outbox_id)),
+        );
+    }
+    let sql = outbox_returning_query(
+        r#"
+        INSERT INTO communication_outbox (
+            outbox_id,
+            account_id,
+            draft_id,
+            to_participants,
+            cc_participants,
+            bcc_participants,
+            subject,
+            body_text,
+            body_html,
+            status,
+            scheduled_send_at,
+            undo_deadline_at,
+            metadata
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        "#,
+        "communication_outbox",
+    );
+    let row = sqlx::query(&sql)
+        .bind(item.outbox_id.trim())
+        .bind(item.account_id.trim())
+        .bind(draft_id.as_deref())
+        .bind(serde_json::to_value(&item.to_recipients)?)
+        .bind(serde_json::to_value(&item.cc_recipients)?)
+        .bind(serde_json::to_value(&item.bcc_recipients)?)
+        .bind(&item.subject)
+        .bind(&item.body_text)
+        .bind(item.body_html.as_deref())
+        .bind(item.status.as_str())
+        .bind(item.scheduled_send_at)
+        .bind(item.undo_deadline_at)
+        .bind(&outbox_metadata)
+        .fetch_one(&mut **transaction)
+        .await?;
+
+    if let Some(draft_id) = draft_id.as_deref() {
+        copy_draft_attachments_to_outbox_in_transaction(
+            transaction,
+            item.outbox_id.trim(),
+            draft_id,
+        )
+        .await?;
+    }
+
+    row_to_outbox_item(row)
+}
+
 async fn capture_outbox_transition_observation(
     transaction: &mut Transaction<'_, Postgres>,
     item: &CommunicationOutboxItem,
@@ -726,17 +756,48 @@ async fn capture_outbox_transition_observation(
 async fn existing_draft_id_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     draft_id: Option<&str>,
+    account_id: &str,
 ) -> Result<Option<String>, CommunicationOutboxError> {
     let Some(draft_id) = draft_id.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
     };
-    let exists: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM communication_drafts WHERE draft_id = $1)")
-            .bind(draft_id)
-            .fetch_one(&mut **transaction)
-            .await?;
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM communication_drafts WHERE draft_id = $1 AND account_id = $2)",
+    )
+    .bind(draft_id)
+    .bind(account_id)
+    .fetch_one(&mut **transaction)
+    .await?;
 
-    Ok(exists.then(|| draft_id.to_owned()))
+    if !exists {
+        return Err(CommunicationOutboxError::Invalid(
+            "draft_id is unavailable for this account",
+        ));
+    }
+    Ok(Some(draft_id.to_owned()))
+}
+
+async fn copy_draft_attachments_to_outbox_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    outbox_id: &str,
+    draft_id: &str,
+) -> Result<(), CommunicationOutboxError> {
+    sqlx::query(
+        r#"
+        INSERT INTO communication_outbox_attachments (
+            outbox_id, attachment_id, disposition, content_id, sort_order
+        )
+        SELECT $1, attachment_id, disposition, content_id, sort_order
+        FROM communication_draft_attachments
+        WHERE draft_id = $2
+        ORDER BY sort_order
+        "#,
+    )
+    .bind(outbox_id)
+    .bind(draft_id)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
 }
 
 async fn ensure_canonical_account_in_transaction(

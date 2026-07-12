@@ -728,8 +728,101 @@
 
 .mail-compose-panel__field--from,
 .mail-compose-panel__field--subject,
+.mail-compose-attachments,
 .mail-compose-panel__body-field {
 	grid-column: 1 / -1;
+}
+
+.mail-compose-stage--drop-active .mail-compose-card {
+	box-shadow: inset 0 0 0 2px var(--h-color-accent);
+}
+
+.mail-compose-attachments {
+	display: grid;
+	gap: var(--h-spacing-2);
+	min-width: 0;
+	border: 1px dashed var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	background: color-mix(in srgb, var(--h-color-accent) 3%, var(--h-color-surface-raised));
+	padding: var(--h-spacing-2);
+}
+
+.mail-compose-attachments__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--h-spacing-2);
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+}
+
+.mail-compose-attachments__input {
+	display: none;
+}
+
+.mail-compose-attachments__hint {
+	margin: 0;
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+}
+
+.mail-compose-attachments__list {
+	display: grid;
+	gap: var(--h-spacing-1);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.mail-compose-attachment {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: var(--h-spacing-2);
+	min-width: 0;
+	border-radius: var(--h-radius-sm);
+	background: var(--h-color-surface-raised);
+	color: var(--h-color-text-muted);
+	padding: var(--h-spacing-2);
+}
+
+.mail-compose-attachment--ready {
+	color: var(--h-color-success);
+}
+
+.mail-compose-attachment--blocked,
+.mail-compose-attachment--failed {
+	color: var(--h-color-danger);
+}
+
+.mail-compose-attachment__name {
+	overflow: hidden;
+	color: var(--h-color-text);
+	font-size: var(--h-font-size-sm);
+	font-weight: 700;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mail-compose-attachment small {
+	font-size: var(--h-font-size-xs);
+	white-space: nowrap;
+}
+
+.mail-compose-attachment button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	background: transparent;
+	color: currentColor;
+	cursor: pointer;
+}
+
+.mail-compose-attachment p {
+	grid-column: 2 / -1;
+	margin: 0;
+	font-size: var(--h-font-size-xs);
 }
 
 .mail-compose-panel__recipient-row {
@@ -1254,6 +1347,14 @@
 	flex: 0 0 auto;
 	align-items: center;
 	gap: var(--h-spacing-1);
+}
+
+.mail-list-action-card__file-input {
+	position: fixed;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
 }
 
 .mail-list-action-card__tool.hermes-btn.hermes-icon-button {
@@ -2905,6 +3006,27 @@
 	color: var(--h-color-warning);
 }
 
+.mail-list-item__sync-indicator {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	color: var(--h-color-accent);
+}
+
+.mail-list-item__sync-indicator--warning {
+	color: var(--h-color-warning);
+}
+
+.mail-list-item__sync-indicator--danger {
+	color: var(--h-color-danger);
+}
+
+.mail-list-item__sync-indicator--muted {
+	color: var(--h-color-text-muted);
+}
+
 .mail-list-item__action-icon {
 	color: var(--h-color-warning);
 }
@@ -3667,6 +3789,59 @@
 	font-weight: 820;
 	line-height: 1;
 	text-transform: uppercase;
+}
+
+.communication-email-footer__attachment {
+	display: grid;
+	gap: 4px;
+	min-width: 0;
+}
+
+.communication-email-attachment-extraction {
+	display: grid;
+	gap: 4px;
+	min-width: 0;
+}
+
+.communication-email-attachment-extraction .hermes-btn {
+	justify-self: start;
+	padding-inline: 0;
+	color: var(--h-color-text-muted);
+}
+
+.communication-email-attachment-extraction__status,
+.communication-email-attachment-extraction__result p {
+	margin: 0;
+	color: var(--h-color-text-muted);
+	font-size: var(--h-font-size-xs);
+	line-height: 1.35;
+}
+
+.communication-email-attachment-extraction__result {
+	min-width: 0;
+	color: var(--h-color-text-soft);
+	font-size: var(--h-font-size-xs);
+}
+
+.communication-email-attachment-extraction__result summary {
+	cursor: pointer;
+	font-weight: 760;
+}
+
+.communication-email-attachment-extraction__result pre {
+	max-width: min(100%, 520px);
+	max-height: 220px;
+	margin: 6px 0 0;
+	overflow: auto;
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-sm);
+	background: var(--h-color-surface);
+	padding: var(--h-spacing-2);
+	color: var(--h-color-text-soft);
+	font: inherit;
+	line-height: 1.45;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }
 
 .communication-email-message__body-preview .hermes-html-preview__text {

@@ -149,7 +149,16 @@ pub(crate) async fn get_v1_spf_dkim(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    let auth = crate::domains::communications::spf_dkim::parse_auth_headers(&msg.body_text);
+    let auth = match communication_ingestion_store(&state)?
+        .raw_record(&msg.raw_record_id)
+        .await?
+    {
+        Some(raw) => {
+            crate::domains::communications::spf_dkim::parse_auth_headers_from_raw_record(&raw)
+                .await?
+        }
+        None => crate::domains::communications::spf_dkim::AuthResults::default(),
+    };
     let risk = crate::domains::communications::spf_dkim::assess_auth_risk(&auth);
     Ok(Json(serde_json::json!({"auth": auth, "risk": risk})))
 }

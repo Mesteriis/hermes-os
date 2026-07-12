@@ -74,6 +74,12 @@ pub(crate) async fn post_v1_bilingual_reply_flow(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    crate::app::api_support::require_mail_ai_content_egress(
+        &state,
+        &msg.account_id,
+        crate::app::api_support::MailAiContentEgressKind::Body,
+    )
+    .await?;
     let detection =
         crate::domains::communications::multilingual::MultilingualService::detect_language(
             &msg.body_text,

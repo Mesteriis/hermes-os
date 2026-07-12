@@ -8,11 +8,13 @@ use super::rows::{row_to_imported_attachment, row_to_mail_blob};
 use super::store::CommunicationStorageStore;
 use super::validation::validate_non_empty;
 use crate::domains::communications::evidence::link_mail_entity_in_transaction;
+use crate::platform::events::{EventStore, NewEventEnvelope};
 use crate::platform::storage::{
     ImportedAttachmentRecord, ImportedAttachmentRemovalResult, ImportedAttachmentStoragePort,
     ImportedAttachmentUpsert, LocalBlobRecord, SafetyScanReport, SafetyScanStatus, StorageError,
     StoredBlobRecord,
 };
+use chrono::Utc;
 
 impl CommunicationStorageStore {
     pub async fn upsert_imported_attachment(
@@ -156,6 +158,125 @@ impl CommunicationStorageStore {
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter().map(row_to_imported_attachment).collect()
+    }
+
+    pub async fn list_not_scanned_imported_attachments(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<ImportedCommunicationAttachment>, CommunicationStorageError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                i.attachment_id,
+                i.account_id,
+                i.channel_kind,
+                i.blob_id,
+                i.filename,
+                i.content_type,
+                i.size_bytes,
+                i.sha256,
+                i.source_kind,
+                i.imported_by,
+                i.scan_status,
+                i.scan_engine,
+                i.scan_checked_at,
+                i.scan_summary,
+                i.scan_metadata,
+                i.metadata,
+                b.storage_kind AS blob_storage_kind,
+                b.storage_path AS blob_storage_path,
+                i.created_at,
+                i.updated_at
+            FROM communication_attachment_imports i
+            JOIN communication_mail_blobs b ON b.blob_id = i.blob_id
+            WHERE i.scan_status = 'not_scanned'
+            ORDER BY i.created_at ASC, i.attachment_id ASC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit.clamp(1, 100))
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(row_to_imported_attachment).collect()
+    }
+
+    /// Stores a retry verdict only while the import still references the scanned immutable blob.
+    pub async fn persist_not_scanned_imported_attachment_verdict(
+        &self,
+        attachment_id: &str,
+        expected_sha256: &str,
+        report: &super::scanner::AttachmentSafetyScanReport,
+    ) -> Result<Option<ImportedCommunicationAttachment>, CommunicationStorageError> {
+        let attachment_id = validate_non_empty("attachment_id", attachment_id)?;
+        let expected_sha256 = validate_non_empty("expected_sha256", expected_sha256)?;
+        let report = report.validate()?;
+        let mut transaction = self.pool.begin().await?;
+        let updated = sqlx::query_scalar::<_, String>(
+            r#"
+            UPDATE communication_attachment_imports
+            SET
+                scan_status = $3,
+                scan_engine = $4,
+                scan_checked_at = $5,
+                scan_summary = $6,
+                scan_metadata = $7,
+                updated_at = now()
+            WHERE attachment_id = $1
+              AND sha256 = $2
+              AND scan_status = 'not_scanned'
+            RETURNING attachment_id
+            "#,
+        )
+        .bind(&attachment_id)
+        .bind(&expected_sha256)
+        .bind(report.status.as_str())
+        .bind(&report.engine)
+        .bind(report.checked_at)
+        .bind(&report.summary)
+        .bind(&report.metadata)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let Some(updated) = updated else {
+            transaction.commit().await?;
+            return Ok(None);
+        };
+        let row = sqlx::query(&imported_attachment_select_sql("i.attachment_id = $1"))
+            .bind(&updated)
+            .fetch_one(&mut *transaction)
+            .await?;
+        let imported = row_to_imported_attachment(row)?;
+        let occurred_at = Utc::now();
+        let event = NewEventEnvelope::builder(
+            format!(
+                "communication_attachment_processing:{}:{}:{}",
+                imported.attachment_id,
+                imported.scan_status.as_str(),
+                occurred_at.timestamp_micros()
+            ),
+            "communication.attachment.processing_changed.v1",
+            occurred_at,
+            serde_json::json!({ "kind": "communication_attachment_import" }),
+            serde_json::json!({
+                "kind": "communication_attachment_import",
+                "id": imported.attachment_id,
+            }),
+        )
+        .actor(serde_json::json!({ "actor_id": "hermes-attachment-scanner" }))
+        .payload(serde_json::json!({
+            "attachment_id": imported.attachment_id,
+            "previous_scan_status": "not_scanned",
+            "scan_status": imported.scan_status.as_str(),
+            "scan_engine": imported.scan_engine,
+            "scan_checked_at": imported.scan_checked_at,
+        }))
+        .provenance(serde_json::json!({
+            "source_kind": "communication_attachment_import_rescan",
+            "source_id": imported.attachment_id,
+        }))
+        .build()?;
+        EventStore::append_in_transaction(&mut transaction, &event).await?;
+        transaction.commit().await?;
+        Ok(Some(imported))
     }
 
     pub async fn list_expired_imported_attachments(

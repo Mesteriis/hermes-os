@@ -1,7 +1,7 @@
 use chrono::Utc;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use sqlx::postgres::PgPool;
-use uuid::Uuid;
 
 use super::service::signal_hub_raw_dispatcher_allows_processing;
 use super::{SignalHubError, SignalHubSignalService, SignalHubStore, SignalProcessingOutcome};
@@ -27,14 +27,19 @@ pub async fn dispatch_ai_helper_signal(
         provenance,
         correlation_id,
     )?;
-    event_store
+    let inserted = event_store
         .append_for_dispatch_idempotent(&raw_signal)
         .await?;
 
-    let raw_event = event_store
-        .get_by_id(&raw_signal.event_id)
-        .await?
-        .ok_or_else(|| SignalHubError::InvalidRawSignalEventType(raw_signal.event_type.clone()))?;
+    let raw_event = match inserted {
+        Some(_) => event_store.get_by_id(&raw_signal.event_id).await?,
+        None => {
+            event_store
+                .get_by_source_idempotency(&raw_signal.event_type, "signal_source", None, source_id)
+                .await?
+        }
+    }
+    .ok_or_else(|| SignalHubError::InvalidRawSignalEventType(raw_signal.event_type.clone()))?;
 
     if !signal_hub_raw_dispatcher_allows_processing(&signal_store).await? {
         return Ok(None);
@@ -60,7 +65,7 @@ fn build_ai_helper_signal(
     correlation_id: Option<&str>,
 ) -> Result<NewEventEnvelope, SignalHubError> {
     let builder = NewEventEnvelope::builder(
-        format!("evt_signal_raw_ai_{}", Uuid::now_v7()),
+        ai_helper_raw_signal_event_id(event_kind, source_id),
         format!("signal.raw.ai.{event_kind}.observed"),
         Utc::now(),
         json!({
@@ -79,6 +84,14 @@ fn build_ai_helper_signal(
     };
 
     Ok(builder.build()?)
+}
+
+fn ai_helper_raw_signal_event_id(event_kind: &str, source_id: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(event_kind.as_bytes());
+    hasher.update([0]);
+    hasher.update(source_id.as_bytes());
+    format!("evt_signal_raw_ai_{:x}", hasher.finalize())
 }
 
 pub async fn dispatch_ai_helper_signal_best_effort(

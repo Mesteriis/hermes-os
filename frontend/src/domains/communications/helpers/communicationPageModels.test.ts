@@ -63,6 +63,8 @@ function draft(): CommunicationDraft {
     body_html: null,
     in_reply_to: 'provider-1',
     references: [],
+    attachment_ids: [],
+    attachments: [],
     status: 'draft',
     scheduled_send_at: null,
     send_attempts: 0,
@@ -72,6 +74,32 @@ function draft(): CommunicationDraft {
     updated_at: '2026-06-15T10:01:00Z'
   }
 }
+
+it('restores clean draft attachment metadata into a send-ready compose model', () => {
+  const form = draftToComposeForm({ ...draft(),
+    attachment_ids: ['attachment-1'],
+    attachments: [{
+      attachment_id: 'attachment-1',
+      filename: 'report.pdf',
+      content_type: 'application/pdf',
+      size_bytes: 1024,
+      scan_status: 'clean',
+      scan_engine: 'clamav_clamd',
+      scan_checked_at: '2026-07-11T06:00:00Z',
+      scan_summary: 'ClamAV found no known malware'
+    }]
+  })
+
+  expect(form.attachments).toEqual([{
+    attachmentId: 'attachment-1',
+    filename: 'report.pdf',
+    contentType: 'application/pdf',
+    sizeBytes: 1024,
+    scanStatus: 'clean',
+    uploadStatus: 'ready',
+    error: ''
+  }])
+})
 
 function detailMessage(overrides: Partial<CommunicationMessageDetailItem> = {}): CommunicationMessageDetailItem {
   return {

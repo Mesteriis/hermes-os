@@ -1,6 +1,10 @@
+use chrono::Utc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
+use hermes_hub_backend::domains::communications::archive_inspection::{
+    ArchiveEntryInspection, ArchiveInspectionReport, cached_archive_inspection_report,
+};
 use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
@@ -8,9 +12,9 @@ use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
 use hermes_hub_backend::domains::communications::storage::{
-    AttachmentSafetyScanStatus, CommunicationAttachmentDisposition, CommunicationStorageError,
-    CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachment,
-    NewCommunicationBlob,
+    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
+    CommunicationStorageError, CommunicationStorageStore, LocalCommunicationBlobStore,
+    NewCommunicationAttachment, NewCommunicationBlob,
 };
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::json;
@@ -142,6 +146,129 @@ async fn mail_storage_records_attachment_metadata_against_postgres() {
     .await
     .expect("attachment count");
     assert_eq!(attachment_count, 1);
+
+    let event_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM event_log WHERE event_type = 'communication.attachment.processing_changed.v1' AND payload->>'attachment_id' = $1",
+    )
+    .bind(&attachment.attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("attachment processing event count");
+    assert_eq!(event_count, 1);
+
+    mail_store
+        .upsert_attachment(
+            &NewCommunicationAttachment::new(
+                &message.message_id,
+                &raw.raw_record_id,
+                &blob.blob_id,
+                "part-1",
+                "application/pdf",
+                local_blob.size_bytes,
+                &blob.sha256,
+            )
+            .filename("invoice.pdf")
+            .disposition(CommunicationAttachmentDisposition::Attachment),
+        )
+        .await
+        .expect("repeat unchanged attachment upsert");
+    let event_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM event_log WHERE event_type = 'communication.attachment.processing_changed.v1' AND payload->>'attachment_id' = $1",
+    )
+    .bind(&attachment.attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("unchanged attachment processing event count");
+    assert_eq!(event_count, 1);
+
+    let rescan = mail_store
+        .persist_not_scanned_attachment_verdict(
+            &attachment.attachment_id,
+            &blob.sha256,
+            &AttachmentSafetyScanReport {
+                status: AttachmentSafetyScanStatus::Clean,
+                engine: Some("test-clamav".to_owned()),
+                checked_at: Some(Utc::now()),
+                summary: Some("test scanner clean verdict".to_owned()),
+                metadata: json!({"verdict": "clean"}),
+            },
+        )
+        .await
+        .expect("persist conditional rescan")
+        .expect("not scanned attachment must accept its first verdict");
+    assert_eq!(rescan.scan_status, AttachmentSafetyScanStatus::Clean);
+    assert!(
+        mail_store
+            .persist_not_scanned_attachment_verdict(
+                &attachment.attachment_id,
+                &blob.sha256,
+                &AttachmentSafetyScanReport {
+                    status: AttachmentSafetyScanStatus::Malicious,
+                    engine: Some("test-clamav".to_owned()),
+                    checked_at: Some(Utc::now()),
+                    summary: Some("must not overwrite a newer scan state".to_owned()),
+                    metadata: json!({"verdict": "malicious"}),
+                },
+            )
+            .await
+            .expect("conditional rescan after state change")
+            .is_none(),
+        "retry must not overwrite a newer scan state"
+    );
+    let event_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM event_log WHERE event_type = 'communication.attachment.processing_changed.v1' AND payload->>'attachment_id' = $1",
+    )
+    .bind(&attachment.attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("conditional rescan event count");
+    assert_eq!(event_count, 2);
+
+    let archive_report = ArchiveInspectionReport {
+        archive_kind: "zip".to_owned(),
+        entry_count: 1,
+        total_uncompressed_bytes: 12,
+        has_nested_archive: false,
+        entries: vec![ArchiveEntryInspection {
+            name: "invoice.pdf".to_owned(),
+            normalized_path: "invoice.pdf".to_owned(),
+            compressed_size: 12,
+            uncompressed_size: 12,
+            is_dir: false,
+            is_nested_archive: false,
+        }],
+    };
+    assert!(
+        mail_store
+            .persist_archive_inspection(&attachment.attachment_id, &blob.sha256, &archive_report)
+            .await
+            .expect("persist archive inspection")
+    );
+    let stored_attachment = mail_store
+        .attachment_by_id(&attachment.attachment_id)
+        .await
+        .expect("load attachment")
+        .expect("attachment exists");
+    assert_eq!(
+        cached_archive_inspection_report(&stored_attachment.attachment.scan_metadata, &blob.sha256),
+        Some(archive_report)
+    );
+    assert!(
+        !mail_store
+            .persist_archive_inspection(
+                &attachment.attachment_id,
+                "sha256:replaced-blob",
+                &ArchiveInspectionReport {
+                    archive_kind: "zip".to_owned(),
+                    entry_count: 0,
+                    total_uncompressed_bytes: 0,
+                    has_nested_archive: false,
+                    entries: vec![],
+                },
+            )
+            .await
+            .expect("stale source is ignored")
+    );
 }
 
 #[tokio::test]

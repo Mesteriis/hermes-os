@@ -1,4 +1,5 @@
 import type { CommunicationTone, EntityIconKind, MessageDirection, ProviderIconKind, StatusIconKind, TreeSelectOption, UtilityTone } from '@/shared/ui'
+import type { AttachmentScanStatus } from '../types/attachments'
 import type { CommunicationOutboxItem, CommunicationThreadSummary } from '../types/communications'
 import { outboxStatusPresentation } from './outboxStatus'
 export type {
@@ -88,6 +89,7 @@ export type CommunicationConversationAttachmentModel = {
   meta: string
   icon: string
   tone?: UtilityTone
+  scanStatus?: AttachmentScanStatus
 }
 
 export type CommunicationEmailQuotedOriginalModel = {

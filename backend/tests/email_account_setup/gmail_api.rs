@@ -84,7 +84,7 @@ async fn gmail_oauth_start_api_uses_configured_google_desktop_client_against_pos
         .expect("authorization url");
     assert!(authorization_url.starts_with("https://accounts.google.com/o/oauth2/auth?"));
     assert!(authorization_url.contains("client_id=desktop-client-id.apps.googleusercontent.com"));
-    assert!(authorization_url.contains("gmail.readonly"));
+    assert!(authorization_url.contains("gmail.modify"));
     assert!(authorization_url.contains("gmail.send"));
     assert!(authorization_url.contains("calendar.readonly"));
     assert!(authorization_url.contains("contacts.readonly"));

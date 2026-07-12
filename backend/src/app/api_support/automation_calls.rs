@@ -32,7 +32,10 @@ pub(crate) struct PolicyApiRequest {
     pub(crate) name: String,
     pub(crate) enabled: bool,
     pub(crate) account_id: String,
+    #[serde(default)]
     pub(crate) allowed_chat_ids: Vec<String>,
+    #[serde(default)]
+    pub(crate) scopes: Vec<AutomationPolicyScope>,
     pub(crate) trigger_kind: String,
     pub(crate) max_sends_per_hour: i32,
     #[serde(default = "empty_json_object")]
@@ -51,6 +54,7 @@ impl PolicyApiRequest {
             enabled: self.enabled,
             account_id: self.account_id,
             allowed_chat_ids: self.allowed_chat_ids,
+            scopes: self.scopes,
             trigger_kind: self.trigger_kind,
             max_sends_per_hour: self.max_sends_per_hour,
             quiet_hours: self.quiet_hours,

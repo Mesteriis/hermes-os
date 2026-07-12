@@ -12,6 +12,11 @@ import {
 } from '../api/communications'
 import { updateMessageAiState } from '../api/aiState'
 import { prepareBilingualReplyFlow } from '../api/bilingualReplyFlow'
+import {
+  importCommunicationAttachment,
+  type CommunicationAttachmentImportRequest,
+  type CommunicationAttachmentImportResponse
+} from '../api/attachmentImportApi'
 import type { BilingualReplyFlowRequest, BilingualReplyFlowResponse } from '../types/bilingualReplyFlow'
 import type {
   BulkMessageActionRequest,
@@ -78,6 +83,16 @@ export function useOutboxQuery(accountId?: QueryParam<string>, status?: QueryPar
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),
     ...communicationRealtimeQueryOptions
+  })
+}
+
+export function useCommunicationAttachmentImportMutation() {
+  return useMutation<
+    CommunicationAttachmentImportResponse,
+    Error,
+    CommunicationAttachmentImportRequest
+  >({
+    mutationFn: importCommunicationAttachment
   })
 }
 
@@ -341,6 +356,8 @@ function optimisticDraftFromPayload(
     body_html: draft.body_html,
     in_reply_to: draft.in_reply_to,
     references: existing?.references ?? [],
+    attachment_ids: existing?.attachment_ids ?? [],
+    attachments: existing?.attachments ?? [],
     status: draft.status,
     scheduled_send_at: draft.scheduled_send_at,
     send_attempts: existing?.send_attempts ?? 0,

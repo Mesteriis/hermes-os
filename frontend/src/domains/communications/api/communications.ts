@@ -83,11 +83,14 @@ export {
   sendCommunicationConnect
 } from './connectCommunications'
 export {
+  extractAttachmentText,
+  fetchAttachmentExtractedText,
   searchAttachments,
   inspectAttachmentArchive,
   previewAttachment,
   translateAttachment
 } from './attachmentApi'
+export { importMailFile } from './mailImportApi'
 export {
   createMailCertificate,
   fetchExpiringMailCertificates,

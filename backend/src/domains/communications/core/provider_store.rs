@@ -733,6 +733,16 @@ impl CommunicationProviderAccountStore {
         .execute(&mut *transaction)
         .await?;
 
+        sqlx::query(
+            r#"
+            DELETE FROM communication_address_book_sync_runs
+            WHERE account_id = $1
+            "#,
+        )
+        .bind(account_id.trim())
+        .execute(&mut *transaction)
+        .await?;
+
         let account_row = sqlx::query(
             r#"
             DELETE FROM communication_provider_accounts

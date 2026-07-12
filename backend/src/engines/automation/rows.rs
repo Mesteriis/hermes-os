@@ -24,6 +24,7 @@ pub(super) fn row_to_policy(row: PgRow) -> Result<AutomationPolicy, AutomationEr
         enabled: row.try_get("enabled")?,
         account_id: row.try_get("account_id")?,
         allowed_chat_ids: string_vec_from_value(row.try_get("allowed_chat_ids")?)?,
+        scopes: Vec::new(),
         trigger_kind: row.try_get("trigger_kind")?,
         max_sends_per_hour: row.try_get("max_sends_per_hour")?,
         quiet_hours: row.try_get("quiet_hours")?,

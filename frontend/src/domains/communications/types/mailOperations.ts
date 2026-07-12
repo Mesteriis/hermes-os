@@ -1,3 +1,14 @@
+export type CommunicationDraftAttachmentRef = {
+  attachment_id: string
+  filename: string | null
+  content_type: string
+  size_bytes: number
+  scan_status: string
+  scan_engine: string | null
+  scan_checked_at: string | null
+  scan_summary: string | null
+}
+
 export type CommunicationDraft = {
   draft_id: string
   account_id: string
@@ -10,6 +21,8 @@ export type CommunicationDraft = {
   body_html: string | null
   in_reply_to: string | null
   references: string[]
+  attachment_ids: string[]
+  attachments: CommunicationDraftAttachmentRef[]
   status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed'
   scheduled_send_at: string | null
   send_attempts: number
@@ -37,6 +50,7 @@ export type DraftUpsertRequest = {
   body_html?: string | null
   in_reply_to?: string | null
   references?: string[]
+  attachment_ids?: string[]
   status?: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed'
   scheduled_send_at?: string | null
   metadata?: Record<string, unknown>
@@ -120,6 +134,8 @@ export type BulkMessageAction =
   | 'unpin'
   | 'important'
   | 'not_important'
+  | 'star'
+  | 'unstar'
   | 'add_label'
   | 'remove_label'
   | 'snooze'

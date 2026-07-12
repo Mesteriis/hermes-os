@@ -9,6 +9,7 @@ use crate::domains::communications::messages::{
 pub(crate) struct CommunicationMessagesQuery {
     pub(crate) account_id: Option<String>,
     pub(crate) workflow_state: Option<String>,
+    pub(crate) is_read: Option<bool>,
     pub(crate) channel_kind: Option<String>,
     pub(crate) conversation_id: Option<String>,
     pub(crate) q: Option<String>,
@@ -25,6 +26,7 @@ pub(crate) fn parse_communication_messages_query(
     let mut query = CommunicationMessagesQuery {
         account_id: None,
         workflow_state: None,
+        is_read: None,
         channel_kind: None,
         conversation_id: None,
         q: None,
@@ -40,6 +42,11 @@ pub(crate) fn parse_communication_messages_query(
             match key.as_ref() {
                 "account_id" => query.account_id = non_empty_query_value(value.as_ref()),
                 "workflow_state" => query.workflow_state = non_empty_query_value(value.as_ref()),
+                "is_read" => {
+                    query.is_read = Some(value.parse::<bool>().map_err(|_| {
+                        ApiError::InvalidCommunicationQuery("is_read must be true or false")
+                    })?);
+                }
                 "channel_kind" => query.channel_kind = non_empty_query_value(value.as_ref()),
                 "conversation_id" => query.conversation_id = non_empty_query_value(value.as_ref()),
                 "q" => query.q = non_empty_query_value(value.as_ref()),

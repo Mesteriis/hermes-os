@@ -1,9 +1,11 @@
 import {
   useAddMessageLabelMutation,
+  useBulkMessageActionMutation,
   useAnalyzeMessageMutation,
   useExportMessageMutation,
   useDeleteMessageFromProviderMutation,
   useMarkMessageReadMutation,
+  useMarkMessageNotSpamMutation,
   useMarkMessageSpamMutation,
   useMarkMessageUnreadMutation,
   useExtractMessageNotesMutation,
@@ -29,6 +31,7 @@ import {
   replyComposeForm
 } from '../helpers/communicationPageModels'
 import { useCommunicationActionNotifications } from '../queries/communicationActionNotifications'
+import { useUpdateMessageAiStateMutation } from '../queries/mailOperationQueries'
 import type { useCommunicationsStore } from '../stores/communications'
 import type {
   AiReplyResponse,
@@ -63,9 +66,11 @@ export function useSelectedMessageActions(
   const notifications = useCommunicationActionNotifications()
   const togglePinMutation = useToggleMessagePinMutation()
   const toggleImportantMutation = useToggleMessageImportantMutation()
+  const bulkMessageActionMutation = useBulkMessageActionMutation()
   const toggleMuteMutation = useToggleMessageMuteMutation()
   const exportMessageMutation = useExportMessageMutation()
   const markMessageReadMutation = useMarkMessageReadMutation()
+  const markMessageNotSpamMutation = useMarkMessageNotSpamMutation()
   const markMessageSpamMutation = useMarkMessageSpamMutation()
   const markMessageUnreadMutation = useMarkMessageUnreadMutation()
   const deleteMessageFromProviderMutation = useDeleteMessageFromProviderMutation()
@@ -80,6 +85,7 @@ export function useSelectedMessageActions(
   const translateMessageMutation = useTranslateMessageMutation()
   const extractMessageTasksMutation = useExtractMessageTasksMutation()
   const extractMessageNotesMutation = useExtractMessageNotesMutation()
+  const updateMessageAiStateMutation = useUpdateMessageAiStateMutation()
 
   function fallbackMailAccountId(): string {
     return deps.getDefaultMailAccountId?.() || store.selectedMailAccountId || ''
@@ -171,6 +177,17 @@ export function useSelectedMessageActions(
     })
   }
 
+  async function handleToggleStar() {
+    const isStarred = selectedReplyMessage()?.message_metadata.starred === true
+    await runSelectedMessageAction(async (messageId) => {
+      await bulkMessageActionMutation.mutateAsync({
+        action: isStarred ? 'unstar' : 'star',
+        message_ids: [messageId]
+      })
+      return isStarred ? 'Unstarred' : 'Starred'
+    })
+  }
+
   async function handleMute() {
     await runSelectedMessageAction(async (messageId) => {
       await toggleMuteMutation.mutateAsync(messageId)
@@ -207,6 +224,14 @@ export function useSelectedMessageActions(
       await markMessageSpamMutation.mutateAsync(messageId)
       await deps.refetchMessageDetail()
       return 'Marked as spam'
+    })
+  }
+
+  async function handleMarkMessageNotSpam() {
+    await runSelectedMessageAction(async (messageId) => {
+      await markMessageNotSpamMutation.mutateAsync(messageId)
+      await deps.refetchMessageDetail()
+      return 'Marked as not spam'
     })
   }
 
@@ -248,6 +273,21 @@ export function useSelectedMessageActions(
       await deps.refetchMessageDetail()
       return 'Analyzed'
     })
+  }
+
+  async function handleRetryAi() {
+    await runSelectedMessageAction(async (messageId) => {
+      await updateMessageAiStateMutation.mutateAsync({
+        messageId,
+        request: { ai_state: 'NEW' }
+      })
+      await deps.refetchMessageDetail()
+      return {
+        title: 'AI retry queued',
+        message: 'The local AI pipeline will retry this message shortly.',
+        tone: 'info'
+      }
+    }, 'ai-retry')
   }
 
   async function handleTranslate() {
@@ -357,6 +397,7 @@ export function useSelectedMessageActions(
     handleCreateTask,
     handleExportMessage,
     handleMarkMessageRead,
+    handleMarkMessageNotSpam,
     handleMarkMessageSpam,
     handleMarkMessageUnread,
     handleForwardMessage,
@@ -365,12 +406,14 @@ export function useSelectedMessageActions(
     handleNewMessage,
     handleRedirectMessage,
     handleRemoveLabel,
+    handleRetryAi,
     handleReply,
     handleReplyAll,
     handleReviewRecipients,
     handleReviewSecurity,
     handleSnoozeMessage,
     handleToggleImportant,
+    handleToggleStar,
     handleTogglePin,
     handleTranslate
   }

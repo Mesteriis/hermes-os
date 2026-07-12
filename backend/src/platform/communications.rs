@@ -11,15 +11,26 @@ use thiserror::Error;
 use crate::platform::observations::{ObservationOriginKind, ObservationStoreError};
 use crate::platform::secrets::{ResolvedSecret, SecretKind, SecretReference};
 
+mod attachment_text;
 mod email_sync;
+mod mbox;
 mod raw_signals;
 pub mod rfc822;
 
+pub use attachment_text::{
+    AttachmentTextExtractionError, MAX_ATTACHMENT_TEXT_EXTRACTION_BYTES,
+    RichAttachmentContentDisarm, RichAttachmentExtractionKind, RichAttachmentExtractionResult,
+    RichAttachmentSafePreview, disarm_rich_attachment, extract_local_attachment_text,
+    extract_rich_attachment_text, is_locally_extractable_text_type,
+    render_rich_attachment_safe_preview, rich_attachment_extraction_kind,
+    rich_attachment_extractor_address,
+};
 pub use email_sync::{
     EmailSyncPlanError, IMAP_ALL_MAILBOXES, email_sync_plan_selects_all_imap_mailboxes,
     email_sync_plan_stream_ids, imap_mailbox_stream_id, imap_mailbox_stream_prefix,
     plan_email_sync,
 };
+pub use mbox::{MboxParseError, split_mbox_messages};
 pub use raw_signals::{CommunicationRawSignalSource, build_communication_raw_signal_event};
 
 pub const DEFAULT_MAIL_SYNC_BLOB_ROOT: &str = "docker/data/mail";
@@ -745,6 +756,7 @@ pub struct ProviderCredential {
 #[derive(Clone, Debug)]
 pub struct OutgoingEmail {
     pub from: String,
+    pub message_id: Option<String>,
     pub to: Vec<String>,
     pub cc: Vec<String>,
     pub bcc: Vec<String>,
@@ -753,6 +765,16 @@ pub struct OutgoingEmail {
     pub body_html: Option<String>,
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
+    pub attachments: Vec<OutgoingEmailAttachment>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OutgoingEmailAttachment {
+    pub filename: String,
+    pub content_type: String,
+    pub disposition: String,
+    pub content_id: Option<String>,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Clone, Debug)]
@@ -862,6 +884,108 @@ pub struct ImapMailboxListRequest {
     pub username: String,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MailProviderResourceKind {
+    Folder,
+    Label,
+}
+
+impl MailProviderResourceKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Folder => "folder",
+            Self::Label => "label",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MailProviderSemanticRole {
+    Inbox,
+    Sent,
+    Drafts,
+    Archive,
+    Trash,
+    Junk,
+    All,
+    Flagged,
+    Important,
+    User,
+}
+
+impl MailProviderSemanticRole {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Inbox => "inbox",
+            Self::Sent => "sent",
+            Self::Drafts => "drafts",
+            Self::Archive => "archive",
+            Self::Trash => "trash",
+            Self::Junk => "junk",
+            Self::All => "all",
+            Self::Flagged => "flagged",
+            Self::Important => "important",
+            Self::User => "user",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DiscoveredMailProviderResource {
+    pub resource_kind: MailProviderResourceKind,
+    pub provider_resource_id: String,
+    pub display_name: String,
+    pub semantic_role: Option<MailProviderSemanticRole>,
+    pub selectable: bool,
+    pub writable: bool,
+    pub capabilities: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GmailResourceDiscoveryRequest {
+    pub account_id: String,
+}
+
+#[derive(Debug, Error)]
+#[error("mail provider resource port error: {0}")]
+pub struct MailProviderResourcePortError(pub String);
+
+impl MailProviderResourcePortError {
+    pub fn new(error: impl std::fmt::Display) -> Self {
+        Self(error.to_string())
+    }
+}
+
+pub trait MailProviderResourceCommandPort: Send + Sync {
+    fn record_discovered_resources<'a>(
+        &'a self,
+        account_id: &'a str,
+        resources: &'a [DiscoveredMailProviderResource],
+    ) -> Pin<Box<dyn Future<Output = Result<(), MailProviderResourcePortError>> + Send + 'a>>;
+}
+
+pub type SharedMailProviderResourceCommandPort = Arc<dyn MailProviderResourceCommandPort>;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImapIdleWaitRequest {
+    pub account_id: String,
+    pub host: String,
+    pub port: u16,
+    pub tls: bool,
+    pub mailbox: String,
+    pub username: String,
+    pub timeout: std::time::Duration,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ImapIdleWaitOutcome {
+    Changed,
+    TimedOut,
+    Unsupported,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EmailProviderSyncErrorKind {
     MissingCredential,
@@ -934,6 +1058,35 @@ pub trait EmailProviderSyncPort: Send + Sync {
         &'a self,
         request: ImapMailboxListRequest,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<String>, EmailProviderSyncError>> + Send + 'a>>;
+
+    fn discover_gmail_resources<'a>(
+        &'a self,
+        request: GmailResourceDiscoveryRequest,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<Vec<DiscoveredMailProviderResource>, EmailProviderSyncError>>
+                + Send
+                + 'a,
+        >,
+    >;
+
+    fn discover_imap_resources<'a>(
+        &'a self,
+        request: ImapMailboxListRequest,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<Vec<DiscoveredMailProviderResource>, EmailProviderSyncError>>
+                + Send
+                + 'a,
+        >,
+    >;
+
+    fn wait_for_imap_change<'a>(
+        &'a self,
+        request: ImapIdleWaitRequest,
+    ) -> Pin<
+        Box<dyn Future<Output = Result<ImapIdleWaitOutcome, EmailProviderSyncError>> + Send + 'a>,
+    >;
 }
 
 #[derive(Debug, Error)]

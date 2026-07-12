@@ -17,6 +17,12 @@ pub(crate) async fn post_v1_ai_reply(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    crate::app::api_support::require_mail_ai_content_egress(
+        &state,
+        &msg.account_id,
+        crate::app::api_support::MailAiContentEgressKind::Body,
+    )
+    .await?;
     let service = email_ai_reply_service(&state).await?;
     let opts = crate::domains::communications::ai_reply::AiReplyOptions {
         tone: req.tone,
@@ -75,6 +81,12 @@ pub(crate) async fn post_v1_ai_reply_variants(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    crate::app::api_support::require_mail_ai_content_egress(
+        &state,
+        &msg.account_id,
+        crate::app::api_support::MailAiContentEgressKind::Body,
+    )
+    .await?;
     let service = email_ai_reply_service(&state).await?;
     let languages = req
         .languages

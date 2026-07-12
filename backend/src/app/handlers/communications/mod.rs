@@ -1,28 +1,34 @@
 // ADR-0073: mail handlers are grouped by bounded context for the first
 // handlers.rs extraction; split by communications, accounts and workflow next.
 mod account_management;
+mod account_provider_resources;
 mod account_setup;
 mod account_support;
 mod communication_messages;
 mod communication_queries;
+mod eml_import;
 mod finance_analytics;
 mod legal_export;
 mod message_actions;
 mod message_ai_state;
+mod provider_command_recovery;
 mod remote_images;
 mod sending;
 mod templates_status;
 mod workflow_actions;
 mod workflow_state;
 pub(crate) use account_management::*;
+pub(crate) use account_provider_resources::*;
 pub(crate) use account_setup::*;
 use account_support::*;
 pub(crate) use communication_messages::*;
 pub(crate) use communication_queries::*;
+pub(crate) use eml_import::*;
 pub(crate) use finance_analytics::*;
 pub(crate) use legal_export::*;
 pub(crate) use message_actions::*;
 pub(crate) use message_ai_state::*;
+pub(crate) use provider_command_recovery::*;
 pub(crate) use remote_images::get_v1_communication_message_remote_image;
 pub(crate) use sending::*;
 pub(crate) use templates_status::*;

@@ -63,3 +63,5 @@ ADR status vocabulary:
 ## Recent Domain ADRs
 
 - [ADR-0174 Persona-Native Physical Identifier Columns](ADR-0174-persona-native-physical-identifier-columns.md)
+- [ADR-0176 Mail Closure: Local-First Reconciliation](ADR-0176-mail-closure-local-first-reconciliation.md)
+- [ADR-0177 Isolated Rich Document Extraction](ADR-0177-isolated-rich-document-extraction.md)

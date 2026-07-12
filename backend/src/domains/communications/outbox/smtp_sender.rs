@@ -14,13 +14,18 @@ use crate::domains::communications::core::{
 use crate::platform::communications::{OutgoingEmail, SmtpConfig, SmtpTransport};
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 
-use super::{CommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt};
+use super::attachments::load_sendable_attachments;
+use super::{
+    CommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt,
+    rfc822_message_id_for_outbox,
+};
 
 const ICLOUD_SMTP_HOST: &str = "smtp.mail.me.com";
 const ICLOUD_SMTP_PORT: u16 = 587;
 
 #[derive(Clone)]
 pub struct SmtpOutboxEmailSender<R, T> {
+    pool: PgPool,
     provider_account_store: CommunicationProviderAccountStore,
     provider_secret_binding_store: CommunicationProviderSecretBindingStore,
     secret_store: SecretReferenceStore,
@@ -35,6 +40,7 @@ where
 {
     pub fn new(pool: PgPool, resolver: R, transport: T) -> Self {
         Self {
+            pool: pool.clone(),
             provider_account_store: CommunicationProviderAccountStore::new(pool.clone()),
             provider_secret_binding_store: CommunicationProviderSecretBindingStore::new(
                 pool.clone(),
@@ -101,7 +107,8 @@ where
                     ));
                 }
             };
-            let email = outgoing_email_from_outbox_item(item, &account);
+            let mut email = outgoing_email_from_outbox_item(item, &account);
+            email.attachments = load_sendable_attachments(&self.pool, &item.outbox_id).await?;
             let result = self
                 .transport
                 .send(&smtp_config, &credential.secret, &email)
@@ -209,6 +216,8 @@ pub fn outgoing_email_from_outbox_item(
 ) -> OutgoingEmail {
     OutgoingEmail {
         from: account.external_account_id.clone(),
+        message_id: optional_metadata_string(&item.metadata, "rfc822_message_id")
+            .or_else(|| Some(rfc822_message_id_for_outbox(&item.outbox_id))),
         to: item.to_recipients.clone(),
         cc: item.cc_recipients.clone(),
         bcc: item.bcc_recipients.clone(),
@@ -217,6 +226,7 @@ pub fn outgoing_email_from_outbox_item(
         body_html: item.body_html.clone(),
         in_reply_to: optional_metadata_string(&item.metadata, "in_reply_to"),
         references: metadata_string_array(&item.metadata, "references"),
+        attachments: Vec::new(),
     }
 }
 

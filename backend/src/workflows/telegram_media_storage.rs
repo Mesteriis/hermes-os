@@ -1,13 +1,12 @@
 use std::path::Path;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 use sqlx::PgPool;
 use thiserror::Error;
 
 use crate::domains::communications::storage::{
-    AttachmentSafetyScanRequest, AttachmentSafetyScanStatus, AttachmentSafetyScanner,
-    CommunicationAttachmentDisposition, CommunicationBlobMetadataPort,
-    ImportedCommunicationAttachment, LocalCommunicationBlobPort, NewCommunicationAttachment,
+    AttachmentSafetyScanRequest, AttachmentSafetyScanner, CommunicationAttachmentDisposition,
+    CommunicationBlobMetadataPort, LocalCommunicationBlobPort, NewCommunicationAttachment,
     NewCommunicationBlob, NoopAttachmentSafetyScanner,
 };
 use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
@@ -236,78 +235,40 @@ pub(crate) async fn media_send_request(
 ) -> Result<TelegramPreparedMediaSendRequest, TelegramMediaStorageError> {
     let media_type = payload_string(command, "media_type")?;
     validate_media_type(&media_type)?;
-    let attachment_id = payload_optional_string(command, "attachment_id");
+    let attachment_id = payload_optional_string(command, "attachment_id").ok_or_else(|| {
+        TelegramMediaStorageError::InvalidRequest(
+            "send_media command requires attachment_id so a clean scan can be enforced".to_owned(),
+        )
+    })?;
     let blob_id = payload_optional_string(command, "blob_id");
-    if attachment_id.is_none() && blob_id.is_none() {
-        return Err(TelegramMediaStorageError::InvalidRequest(
-            "send_media command requires attachment_id or blob_id".to_owned(),
-        ));
-    }
 
     let mail_store = CommunicationBlobMetadataPort::new(pool.clone());
-    let imported = if let Some(attachment_id) = attachment_id.as_deref() {
-        mail_store
-            .imported_attachment_by_id(attachment_id)
-            .await
-            .map_err(|error| TelegramMediaStorageError::Storage(error.to_string()))?
-            .ok_or_else(|| {
-                TelegramMediaStorageError::InvalidRequest(format!(
-                    "attachment import `{attachment_id}` was not found"
-                ))
-            })?
-    } else {
-        let blob_id = blob_id.as_deref().expect("blob_id checked above");
-        if let Some(imported) = mail_store
-            .imported_attachment_by_blob_id(blob_id)
-            .await
-            .map_err(|error| TelegramMediaStorageError::Storage(error.to_string()))?
-        {
-            imported
-        } else {
-            let blob = mail_store
-                .blob_by_id(blob_id)
-                .await
-                .map_err(|error| TelegramMediaStorageError::Storage(error.to_string()))?
-                .ok_or_else(|| {
-                    TelegramMediaStorageError::InvalidRequest(format!(
-                        "blob `{blob_id}` was not found"
-                    ))
-                })?;
-            ImportedCommunicationAttachment {
-                attachment_id: format!("blob:{blob_id}"),
-                account_id: Some(command.account_id.clone()),
-                channel_kind: Some("telegram".to_owned()),
-                blob_id: blob.blob_id,
-                filename: payload_optional_string(command, "filename"),
-                content_type: blob
-                    .content_type
-                    .unwrap_or_else(|| "application/octet-stream".to_owned()),
-                size_bytes: blob.size_bytes,
-                sha256: blob.sha256,
-                source_kind: "blob_reuse".to_owned(),
-                imported_by: "telegram-outbox-worker".to_owned(),
-                scan_status: AttachmentSafetyScanStatus::NotScanned,
-                scan_engine: None,
-                scan_checked_at: None,
-                scan_summary: None,
-                scan_metadata: json!({}),
-                metadata: json!({}),
-                storage_kind: blob.storage_kind,
-                storage_path: blob.storage_path,
-                created_at: blob.created_at,
-                updated_at: blob.created_at,
-            }
-        }
-    };
+    let imported = mail_store
+        .imported_attachment_by_id(&attachment_id)
+        .await
+        .map_err(|error| TelegramMediaStorageError::Storage(error.to_string()))?
+        .ok_or_else(|| {
+            TelegramMediaStorageError::InvalidRequest(format!(
+                "attachment import `{attachment_id}` was not found"
+            ))
+        })?;
+
+    if let Some(blob_id) = blob_id.as_deref()
+        && blob_id != imported.blob_id
+    {
+        return Err(TelegramMediaStorageError::InvalidRequest(format!(
+            "blob_id `{blob_id}` does not match attachment import `{attachment_id}`"
+        )));
+    }
 
     if imported.storage_kind != "local_fs" {
         return Err(TelegramMediaStorageError::InvalidRequest(
             "send_media requires a local filesystem blob".to_owned(),
         ));
     }
-    if imported.scan_status.as_str() == "malicious" {
+    if imported.scan_status.as_str() != "clean" {
         return Err(TelegramMediaStorageError::InvalidRequest(
-            "send_media rejected a malicious attachment import".to_owned(),
+            "send_media requires a clean attachment import".to_owned(),
         ));
     }
     let local_path = std::path::Path::new(DEFAULT_MAIL_SYNC_BLOB_ROOT)

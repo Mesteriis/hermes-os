@@ -19,8 +19,8 @@ pub fn list_blockers() -> Vec<ArchitectureBlocker> {
         ArchitectureBlocker {
             section: "§8".into(),
             feature: "Безопасность вложений (sandbox, антивирус)".into(),
-            reason: "Conservative heuristic attachment scanning now flags obvious executable payloads, active-content extensions, macro-enabled office files and MIME/extension mismatch as suspicious or malicious during mail projection. Full clean/malware verdicts still require external tools: ClamAV, a containerized sandbox and an OLE macro parser.".into(),
-            resolution: "Интегрировать ClamAV как sidecar-контейнер в docker-compose, добавить real attachment_scanner backend and keep heuristic scanning as a prefilter/fallback. Do not mark attachments clean without the real scanner backend.".into(),
+            reason: "Conservative heuristic attachment scanning flags obvious executable payloads, active-content extensions, macro-enabled office files, MIME/extension mismatch, legacy OLE files and bounded OOXML macro markers as suspicious or malicious. Local attachment imports also stream through the project ClamAV sidecar and stay quarantined when the scanner is unavailable or returns an invalid verdict. A bounded local worker retries not-scanned mail and staged-send blobs after scanner recovery only after size/SHA-256 verification, but sandboxing, CDR and full OLE/macro analysis remain unavailable.".into(),
+            resolution: "Keep ClamAV as the mandatory local malware verdict for imported attachment bytes, then add a network-isolated sandbox, CDR and full OLE/macro analysis. Do not mark attachments clean when a required scanner verdict is unavailable.".into(),
         },
         ArchitectureBlocker {
             section: "§12 (крипто-проверка)".into(),

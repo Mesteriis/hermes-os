@@ -53,6 +53,22 @@ async fn ollama_client_strips_qwen_thinking_blocks_from_chat_content() {
 }
 
 #[tokio::test]
+async fn ollama_client_uses_json_mode_only_for_structured_chat() {
+    let base_url = spawn_fake_ollama(FakeOllamaMode::JsonFormatRequired).await;
+    let client = OllamaClient::new(
+        OllamaClientConfig::new(base_url, "qwen3:4b", "qwen3-embedding:4b").with_timeout_seconds(5),
+    )
+    .expect("client");
+
+    let chat = client
+        .chat_json_with_model("Return structured evidence", "qwen3:4b")
+        .await
+        .expect("structured chat");
+
+    assert_eq!(chat.content, "hermes-ai-ok");
+}
+
+#[tokio::test]
 async fn ollama_client_reports_missing_models_and_malformed_json() {
     let missing_url = spawn_fake_ollama(FakeOllamaMode::MissingModels).await;
     let client = OllamaClient::new(
@@ -80,6 +96,7 @@ async fn ollama_client_reports_missing_models_and_malformed_json() {
 enum FakeOllamaMode {
     Ok,
     ThinkingContent,
+    JsonFormatRequired,
     MissingModels,
     MalformedJson,
 }
@@ -105,8 +122,12 @@ async fn spawn_fake_ollama(mode: FakeOllamaMode) -> String {
         )
         .route(
             "/api/chat",
-            post(move |Json(_body): Json<Value>| async move {
+            post(move |Json(body): Json<Value>| async move {
                 match mode {
+                    FakeOllamaMode::JsonFormatRequired if body["format"] != "json" => (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({ "error": "JSON response format is required" })),
+                    ),
                     FakeOllamaMode::MalformedJson => (
                         StatusCode::OK,
                         Json(json!({ "model": "qwen3:4b", "message": {} })),

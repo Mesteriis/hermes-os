@@ -43,11 +43,14 @@ ifneq ($(strip $(SCCACHE_BIN)),)
 export RUSTC_WRAPPER := $(SCCACHE_BIN)
 endif
 
-.PHONY: help docker-env dev dev-desktop logs build migrate validate lint-architecture lint-rust lint-frontend architecture-check code-boundaries-check backend-fmt-check backend-clippy backend-test backend-validate frontend-lint frontend-test frontend-visual frontend-visual-update frontend-build frontend-validate test test-fast test-ci test-unit test-integration test-e2e test-architecture test-snapshot snapshot-test snapshot-accept coverage coverage-html coverage-ci mutants audit deny security udeps watch-test watch-unit watch-integration cache-stats cache-reset test-performance-report testcontainers-clean hermes-lab whatsapp-live-smoke-readiness whatsapp-native-md-sdk-gap-readiness whatsapp-live-smoke-evidence whatsapp-live-smoke-collect-evidence whatsapp-domain-closure-audit whatsapp-domain-closure-gate whatsapp-business-cloud-edge-readiness whatsapp-business-cloud-edge-config whatsapp-business-cloud-edge-up whatsapp-business-cloud-edge-stop whatsapp-business-cloud-edge-logs vault-backup vault-restore clean clean-dev clean-validate clean-build clean-data clean-vault
+.PHONY: help docker-env docker-app-config docker-app-up docker-app-stop docker-app-logs dev dev-desktop logs build migrate validate lint-architecture lint-rust lint-frontend architecture-check code-boundaries-check backend-fmt-check backend-clippy backend-test backend-validate frontend-lint frontend-test frontend-visual frontend-visual-update frontend-build frontend-validate test test-fast test-ci test-unit test-integration test-e2e test-architecture test-snapshot test-backup-integrity snapshot-test snapshot-accept coverage coverage-html coverage-ci mutants audit deny security udeps watch-test watch-unit watch-integration cache-stats cache-reset test-performance-report testcontainers-clean hermes-lab mail-domain-closure-audit mail-domain-closure-gate whatsapp-live-smoke-readiness whatsapp-native-md-sdk-gap-readiness whatsapp-live-smoke-evidence whatsapp-live-smoke-collect-evidence whatsapp-domain-closure-audit whatsapp-domain-closure-gate whatsapp-business-cloud-edge-readiness whatsapp-business-cloud-edge-config whatsapp-business-cloud-edge-up whatsapp-business-cloud-edge-stop whatsapp-business-cloud-edge-logs vault-backup vault-restore clean clean-dev clean-validate clean-build clean-data clean-vault
 
 help:
 	@printf '%s\n' 'Hermes development commands:'
 	@printf '%s\n' '  make docker-env    Create docker/.env from docker/.env.example when missing'
+	@printf '%s\n' '  make docker-app-up Start Hermes backend and frontend in Docker Compose'
+	@printf '%s\n' '  make docker-app-stop Stop the Docker Compose backend and frontend'
+	@printf '%s\n' '  make docker-app-logs Tail Docker Compose backend and frontend logs'
 	@printf '%s\n' '  make dev           Start PostgreSQL, backend watcher, and Vite dev server'
 	@printf '%s\n' '  make dev-desktop   Run make dev plus the Tauri desktop shell window'
 	@printf '%s\n' '  make logs          Tail the active live development log'
@@ -84,6 +87,8 @@ help:
 	@printf '%s\n' '  make hermes-lab ACTION=scenario PROVIDER=zulip EXECUTE=1 TESTCONTAINERS=1 BACKEND=1 Run provider scenario plus backend live evidence'
 	@printf '%s\n' '  make hermes-lab ACTION=compliance PROVIDER=zulip Generate Zulip Communication Compliance Suite report'
 	@printf '%s\n' '  make hermes-lab ACTION=compliance PROVIDER=zulip BACKEND=1 Run backend contract evidence before report'
+	@printf '%s\n' '  make mail-domain-closure-audit Report Mail closure gaps from gap-analysis.md'
+	@printf '%s\n' '  make mail-domain-closure-gate Fail until every Mail gap row is implemented or ADR-excluded'
 	@printf '%s\n' '  make whatsapp-live-smoke-readiness Run static WhatsApp live-smoke readiness checks'
 	@printf '%s\n' '  make whatsapp-native-md-sdk-gap-readiness Verify native MD wa-rs command gap inventory'
 	@printf '%s\n' '  make whatsapp-live-smoke-evidence Validate sanitized WhatsApp manual live-smoke evidence'
@@ -95,8 +100,8 @@ help:
 	@printf '%s\n' '  make whatsapp-business-cloud-edge-up Start the Business Cloud edge proxy compose profile'
 	@printf '%s\n' '  make whatsapp-business-cloud-edge-stop Stop the Business Cloud edge proxy compose service'
 	@printf '%s\n' '  make whatsapp-business-cloud-edge-logs Tail the Business Cloud edge proxy compose logs'
-	@printf '%s\n' '  make vault-backup  Create a timestamped PostgreSQL + vault backup'
-	@printf '%s\n' '  make vault-restore Interactively restore PostgreSQL + vault from a backup'
+	@printf '%s\n' '  make vault-backup  Create a timestamped PostgreSQL + vault + mail-blob backup'
+	@printf '%s\n' '  make vault-restore Interactively restore PostgreSQL, vault and mail blobs from a backup'
 	@printf '%s\n' '  make clean         Remove build artifacts, temporary files, and logs'
 	@printf '%s\n' '  make clean-dev     Remove dev watcher Cargo artifacts and local dev logs'
 	@printf '%s\n' '  make clean-validate  Remove validation Cargo artifacts'
@@ -106,6 +111,18 @@ help:
 
 docker-env:
 	@bash -lc 'source scripts/lib/env.sh; ensure_docker_env_file'
+
+docker-app-config: docker-env
+	@docker compose --env-file docker/.env --project-directory docker -f docker/docker-compose.yml --profile app config >/dev/null
+
+docker-app-up: docker-env
+	@docker compose --env-file docker/.env --project-directory docker -f docker/docker-compose.yml --profile app up -d --build backend frontend
+
+docker-app-stop: docker-env
+	@docker compose --env-file docker/.env --project-directory docker -f docker/docker-compose.yml --profile app stop backend frontend
+
+docker-app-logs: docker-env
+	@docker compose --env-file docker/.env --project-directory docker -f docker/docker-compose.yml --profile app logs -f backend frontend
 
 dev:
 	@./scripts/dev.sh
@@ -178,7 +195,10 @@ snapshot-test:
 snapshot-accept:
 	@bash -lc 'source scripts/lib/rust-tooling.sh; require_cargo_subcommand nextest "cargo install --locked cargo-nextest"; NEXTEST_SHOW_PROGRESS="$${NEXTEST_SHOW_PROGRESS:-bar}"; INSTA_UPDATE=always CARGO_TARGET_DIR="$(CARGO_VALIDATE_TARGET_DIR)" cargo nextest run --manifest-path backend/Cargo.toml --profile default --show-progress "$${NEXTEST_SHOW_PROGRESS}" --test-threads $(HERMES_NEXTEST_JOBS) $(foreach target,$(BACKEND_SNAPSHOT_TARGETS),--test $(target))'
 
-test-fast: test-unit test-architecture test-snapshot frontend-test
+test-fast: test-backup-integrity test-unit test-architecture test-snapshot frontend-test
+
+test-backup-integrity:
+	@./scripts/test/vault-backup-integrity.test.sh
 
 test-ci:
 	@CARGO_TARGET_DIR="$(CARGO_VALIDATE_TEST_TARGET_DIR)" ./scripts/test/run-nextest.sh ci --all-targets
@@ -235,6 +255,12 @@ testcontainers-clean:
 
 hermes-lab:
 	@node scripts/hermes-lab.mjs --provider "$(HERMES_LAB_PROVIDER)" $(HERMES_LAB_EXTRA_ARGS) "$(HERMES_LAB_ACTION)"
+
+mail-domain-closure-audit:
+	@node scripts/mail-domain-closure-audit.mjs
+
+mail-domain-closure-gate:
+	@node scripts/mail-domain-closure-audit.mjs --require-closed
 
 whatsapp-live-smoke-readiness:
 	@node scripts/whatsapp-live-smoke-readiness.mjs

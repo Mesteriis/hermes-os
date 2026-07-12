@@ -5543,21 +5543,21 @@ fn validate_whatsapp_media_upload_request(
     let account_id = required_string("account_id", &request.account_id)?;
     let provider_chat_id = required_string("provider_chat_id", &request.provider_chat_id)?;
     let media_type = required_string("media_type", &request.media_type)?;
-    let attachment_id = optional_string("attachment_id", request.attachment_id)?;
+    let attachment_id =
+        optional_string("attachment_id", request.attachment_id)?.ok_or_else(|| {
+            WhatsappWebError::InvalidRequest(
+                "attachment_id is required so WhatsApp media can be sent only after a clean scan"
+                    .to_owned(),
+            )
+        })?;
     let blob_id = optional_string("blob_id", request.blob_id)?;
-    if attachment_id.is_none() && blob_id.is_none() {
-        return Err(WhatsappWebError::InvalidRequest(
-            "attachment_id or blob_id is required".to_owned(),
-        )
-        .into());
-    }
 
     Ok(WhatsAppValidatedMediaUploadRequest {
         command_id: request.command_id,
         idempotency_key: optional_string("idempotency_key", request.idempotency_key)?,
         account_id,
         provider_chat_id,
-        attachment_id,
+        attachment_id: Some(attachment_id),
         blob_id,
         media_type,
         caption: optional_string("caption", request.caption)?,
@@ -6330,9 +6330,9 @@ async fn resolve_whatsapp_upload_attachment(
             )
             .into());
         }
-        if imported.scan_status == AttachmentSafetyScanStatus::Malicious {
+        if imported.scan_status != AttachmentSafetyScanStatus::Clean {
             return Err(WhatsappWebError::InvalidRequest(
-                "WhatsApp media upload rejected a malicious attachment import".to_owned(),
+                "WhatsApp media upload requires a clean attachment import".to_owned(),
             )
             .into());
         }
@@ -6348,35 +6348,7 @@ async fn resolve_whatsapp_upload_attachment(
         });
     }
 
-    let blob_id = request
-        .blob_id
-        .as_deref()
-        .expect("blob_id presence checked by validate_whatsapp_media_upload_request");
-    let blob = storage
-        .blob_by_id(blob_id)
-        .await
-        .map_err(|error| WhatsappWebError::InvalidRequest(error.to_string()))?
-        .ok_or_else(|| {
-            WhatsappWebError::InvalidRequest(format!("blob `{blob_id}` was not found"))
-        })?;
-    if blob.storage_kind != "local_fs" {
-        return Err(WhatsappWebError::InvalidRequest(
-            "WhatsApp media upload requires a local filesystem blob".to_owned(),
-        )
-        .into());
-    }
-
-    Ok(UploadAttachmentRef {
-        attachment_id: None,
-        blob_id: blob.blob_id,
-        content_type: blob
-            .content_type
-            .unwrap_or_else(|| "application/octet-stream".to_owned()),
-        filename: request.filename.clone(),
-        size_bytes: blob.size_bytes,
-        sha256: blob.sha256,
-        scan_status: AttachmentSafetyScanStatus::NotScanned.as_str().to_owned(),
-    })
+    unreachable!("validate_whatsapp_media_upload_request requires attachment_id")
 }
 
 fn whatsapp_media_upload_idempotency_key(

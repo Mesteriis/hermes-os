@@ -30,6 +30,7 @@ ensure_command cargo
 ensure_command curl
 postgres_up
 nats_up
+clamav_up
 
 reclaim_dev_port "$HERMES_BACKEND_PORT" "Backend"
 reclaim_dev_port "$HERMES_FRONTEND_PORT" "Frontend"
@@ -138,6 +139,8 @@ printf '%s\n' "PostgreSQL:"
 postgres_status
 printf '%s\n' "NATS:"
 nats_status
+printf '%s\n' "ClamAV:"
+clamav_status
 printf '%s\n' "Backend:  http://$HERMES_BACKEND_BIND:$HERMES_BACKEND_PORT (pid $backend_pid)"
 printf '%s\n' "Frontend: http://$HERMES_FRONTEND_BIND:$HERMES_FRONTEND_PORT (pid $frontend_pid)"
 if [ -n "$tauri_pid" ]; then

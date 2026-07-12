@@ -3,11 +3,74 @@ use super::ai_routing::ai_model_routing;
 use super::database::database_pool;
 use crate::ai::control_center::AiControlCenterStore;
 use crate::domains::signal_hub::{SignalHubError, SignalHubStore};
+use crate::platform::config::AiRuntimeProvider;
+use sqlx::postgres::PgPool;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
 const AI_REQUEST_RUNTIME: &str = "ai_request_runtime";
+
+/// Classifies the account-scoped content that an external AI runtime may receive.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MailAiContentEgressKind {
+    Body,
+    ExtractedText,
+}
+
+impl MailAiContentEgressKind {
+    fn setting_name(self) -> &'static str {
+        match self {
+            Self::Body => "body",
+            Self::ExtractedText => "extracted_text",
+        }
+    }
+}
+
+pub(crate) async fn require_mail_ai_content_egress(
+    state: &AppState,
+    account_id: &str,
+    kind: MailAiContentEgressKind,
+) -> Result<(), ApiError> {
+    let settings = ai_runtime_settings(state).await?;
+    let pool = database_pool(state)?;
+    if mail_ai_content_egress_allowed(&pool, settings.provider, account_id, kind).await {
+        return Ok(());
+    }
+
+    Err(ApiError::FailedPrecondition(format!(
+        "external AI {} egress is disabled for this mail account",
+        kind.setting_name()
+    )))
+}
+
+pub(crate) async fn mail_ai_content_egress_allowed(
+    pool: &PgPool,
+    runtime_provider: AiRuntimeProvider,
+    account_id: &str,
+    kind: MailAiContentEgressKind,
+) -> bool {
+    if runtime_provider == AiRuntimeProvider::Ollama {
+        return true;
+    }
+
+    match crate::domains::communications::sensitive_forwarding::SensitiveForwardingStore::new(
+        pool.clone(),
+    )
+    .content_egress_permissions(account_id)
+    .await
+    {
+        Ok(permissions) => match kind {
+            MailAiContentEgressKind::Body => permissions.body,
+            MailAiContentEgressKind::ExtractedText => permissions.extracted_text,
+        },
+        Err(error) => {
+            // An unavailable account policy must never permit external content egress.
+            tracing::warn!(error = %error, "mail AI content egress policy lookup failed");
+            false
+        }
+    }
+}
 
 #[derive(Clone)]
 struct PersonaProjectionAiPersonaAttributionPort {

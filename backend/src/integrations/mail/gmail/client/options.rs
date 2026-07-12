@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::platform::communications::EmailProviderKind;
 
 use super::errors::EmailProviderNetworkError;
@@ -156,6 +158,16 @@ pub struct ImapMailboxListOptions {
     pub username: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImapIdleOptions {
+    pub host: String,
+    pub port: u16,
+    pub tls: bool,
+    pub mailbox: String,
+    pub username: String,
+    pub timeout: Duration,
+}
+
 impl ImapFetchOptions {
     pub fn new(
         host: impl Into<String>,
@@ -238,6 +250,45 @@ impl ImapMailboxListOptions {
             });
         }
 
+        Ok(())
+    }
+}
+
+impl ImapIdleOptions {
+    pub fn new(
+        host: impl Into<String>,
+        port: u16,
+        tls: bool,
+        mailbox: impl Into<String>,
+        username: impl Into<String>,
+        timeout: Duration,
+    ) -> Self {
+        Self {
+            host: host.into(),
+            port,
+            tls,
+            mailbox: mailbox.into(),
+            username: username.into(),
+            timeout,
+        }
+    }
+
+    pub(super) fn validate(&self) -> Result<(), EmailProviderNetworkError> {
+        validate_non_empty("host", &self.host)?;
+        validate_non_empty("mailbox", &self.mailbox)?;
+        validate_non_empty("username", &self.username)?;
+        if self.port == 0 {
+            return Err(EmailProviderNetworkError::InvalidProviderRequest {
+                field: "port",
+                message: "must be greater than zero",
+            });
+        }
+        if self.timeout.is_zero() || self.timeout > Duration::from_secs(29 * 60) {
+            return Err(EmailProviderNetworkError::InvalidProviderRequest {
+                field: "timeout",
+                message: "must be between one nanosecond and 29 minutes",
+            });
+        }
         Ok(())
     }
 }

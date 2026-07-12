@@ -914,6 +914,17 @@ describe('communications API', () => {
             bccRecipients: [],
             subject: 'Draft',
             bodyText: 'Draft body',
+            attachmentIds: ['attachment-1'],
+            attachments: [{
+              attachmentId: 'attachment-1',
+              filename: 'report.pdf',
+              contentType: 'application/pdf',
+              sizeBytes: '1024',
+              scanStatus: 'clean',
+              scanEngine: 'clamav_clamd',
+              scanCheckedAt: '2026-06-23T09:59:00Z',
+              scanSummary: 'ClamAV found no known malware'
+            }],
             status: 'draft',
             sendAttempts: 0,
             metadataJson: '{"compose_mode":"compose"}',
@@ -939,11 +950,23 @@ describe('communications API', () => {
       to_recipients: ['bob@example.com'],
       subject: 'Draft',
       body_text: 'Draft body',
+      attachment_ids: ['attachment-1'],
       metadata: { compose_mode: 'compose' }
     })
     const deletion = await deleteDraft('draft-1')
 
     expect(draft.draft_id).toBe('draft-1')
+    expect(draft.attachment_ids).toEqual(['attachment-1'])
+    expect(draft.attachments).toEqual([{
+      attachment_id: 'attachment-1',
+      filename: 'report.pdf',
+      content_type: 'application/pdf',
+      size_bytes: 1024,
+      scan_status: 'clean',
+      scan_engine: 'clamav_clamd',
+      scan_checked_at: '2026-06-23T09:59:00Z',
+      scan_summary: 'ClamAV found no known malware'
+    }])
     expect(deletion.deleted).toBe(true)
     expect(fetchMock.mock.calls[0][0]).toBe(
       'http://127.0.0.1:8080/hermes.communications.v1.CommunicationsService/CreateDraft'
@@ -954,6 +977,8 @@ describe('communications API', () => {
       toRecipients: ['bob@example.com'],
       subject: 'Draft',
       bodyText: 'Draft body',
+      attachmentIds: ['attachment-1'],
+      replaceAttachments: true,
       metadataJson: '{"compose_mode":"compose"}'
     })
     expect(fetchMock.mock.calls[1][0]).toBe(

@@ -437,13 +437,14 @@ fn validate_media_upload_request(
         Some(command_id) => required_string("command_id", &command_id)?,
         None => lifecycle::new_command_id(),
     };
-    let attachment_id = optional_string("attachment_id", request.attachment_id)?;
+    let attachment_id =
+        optional_string("attachment_id", request.attachment_id)?.ok_or_else(|| {
+            TelegramError::InvalidRequest(
+                "attachment_id is required so Telegram media can be sent only after a clean scan"
+                    .to_owned(),
+            )
+        })?;
     let blob_id = optional_string("blob_id", request.blob_id)?;
-    if attachment_id.is_none() && blob_id.is_none() {
-        return Err(TelegramError::InvalidRequest(
-            "attachment_id or blob_id is required".to_owned(),
-        ));
-    }
     let caption = optional_string("caption", request.caption)?;
     let filename = optional_string("filename", request.filename)?;
 
@@ -451,7 +452,7 @@ fn validate_media_upload_request(
         command_id,
         account_id,
         provider_chat_id,
-        attachment_id,
+        attachment_id: Some(attachment_id),
         blob_id,
         media_type,
         caption,
@@ -499,9 +500,9 @@ async fn resolve_upload_attachment(
                 "Telegram media upload requires a local filesystem blob".to_owned(),
             ));
         }
-        if imported.scan_status == AttachmentSafetyScanStatus::Malicious {
+        if imported.scan_status != AttachmentSafetyScanStatus::Clean {
             return Err(TelegramError::InvalidRequest(
-                "Telegram media upload rejected a malicious attachment import".to_owned(),
+                "Telegram media upload requires a clean attachment import".to_owned(),
             ));
         }
 
@@ -516,32 +517,7 @@ async fn resolve_upload_attachment(
         });
     }
 
-    let blob_id = request
-        .blob_id
-        .as_deref()
-        .expect("blob_id presence checked by validate_media_upload_request");
-    let blob = mail_store
-        .blob_by_id(blob_id)
-        .await
-        .map_err(|error| TelegramError::MediaStorage(error.to_string()))?
-        .ok_or_else(|| TelegramError::InvalidRequest(format!("blob `{blob_id}` was not found")))?;
-    if blob.storage_kind != "local_fs" {
-        return Err(TelegramError::InvalidRequest(
-            "Telegram media upload requires a local filesystem blob".to_owned(),
-        ));
-    }
-
-    Ok(UploadAttachmentRef {
-        attachment_id: None,
-        blob_id: blob.blob_id,
-        content_type: blob
-            .content_type
-            .unwrap_or_else(|| "application/octet-stream".to_owned()),
-        filename: request.filename.clone(),
-        size_bytes: blob.size_bytes,
-        sha256: blob.sha256,
-        scan_status: AttachmentSafetyScanStatus::NotScanned.as_str().to_owned(),
-    })
+    unreachable!("validate_media_upload_request requires attachment_id")
 }
 
 fn media_upload_idempotency_key(

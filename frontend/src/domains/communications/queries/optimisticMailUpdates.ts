@@ -187,6 +187,10 @@ function applyBulkMessageActionToBaseMessage<T extends {
 			return applyMetadataUpdate(message, { important: true })
 		case 'not_important':
 			return applyMetadataUpdate(message, { important: false })
+		case 'star':
+			return applyMetadataUpdate(message, { starred: true })
+		case 'unstar':
+			return applyMetadataUpdate(message, { starred: false })
 		case 'add_label':
 			return addLabel(message, request.label)
 		case 'remove_label':

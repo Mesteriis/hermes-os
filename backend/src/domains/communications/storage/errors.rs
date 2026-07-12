@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::platform::events::{EventEnvelopeError, EventStoreError};
 use crate::platform::observations::ObservationStoreError;
 use thiserror::Error;
 
@@ -10,6 +11,12 @@ pub enum CommunicationStorageError {
 
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),
+
+    #[error(transparent)]
+    EventStore(#[from] EventStoreError),
+
+    #[error(transparent)]
+    EventEnvelope(#[from] EventEnvelopeError),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

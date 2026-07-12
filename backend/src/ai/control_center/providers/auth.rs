@@ -92,7 +92,7 @@ fn provider_auth_config(pending: &AiProviderAuthPendingGrant) -> Value {
         }
     });
     if pending.provider_kind == "built_in" && pending.provider_key == "ollama" {
-        config["base_url"] = json!("http://127.0.0.1:11434");
+        config["base_url"] = json!("http://192.168.1.2:11434");
         config["manager"] = json!("ollama");
     }
     if let Some(command_preset) = &pending.login_command {

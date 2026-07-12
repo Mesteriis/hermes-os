@@ -1,13 +1,14 @@
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 
-use crate::ai::hub::{AiHub, LocalAiInspection, SharedAiHub};
+use crate::ai::hub::{AiHub, LocalAiInspection, SensitivityLevel, SharedAiHub};
 use crate::domains::communications::ai_state::{
     CommunicationAiState, CommunicationAiStatePort, CommunicationAiStateTransitionRequest,
 };
 use crate::domains::communications::messages::{
     CommunicationMessageProjectionPort, ProjectedMessage, WorkflowState,
 };
+use crate::domains::communications::ports::SensitiveForwardingCommandPort;
 use crate::domains::communications::spam_reputation::{
     SenderReputationClassification, SenderReputationDecision, SenderReputationPort,
 };
@@ -19,13 +20,16 @@ use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
 use crate::workflows::email_intelligence::models::{EmailAnalysis, EmailKnowledgeCandidate};
 use crate::workflows::email_intelligence::service::EmailIntelligenceService;
 
-const DEFAULT_BATCH_LIMIT: i64 = 10;
+// A single local model invocation can take longer than a provider sync tick.
+// Claim one message until this worker has bounded concurrent processing.
+const MAX_IN_FLIGHT_MAIL_AI_CLAIMS: i64 = 1;
 
 #[derive(Clone)]
 pub struct MailAiPipelineService {
     pool: PgPool,
     hub: Option<SharedAiHub>,
     target_language: String,
+    external_body_egress_required: bool,
 }
 
 impl MailAiPipelineService {
@@ -34,7 +38,13 @@ impl MailAiPipelineService {
             pool,
             hub,
             target_language: normalize_target_language(target_language.into()),
+            external_body_egress_required: false,
         }
+    }
+
+    pub fn requiring_external_body_egress(mut self, required: bool) -> Self {
+        self.external_body_egress_required = required;
+        self
     }
 
     pub async fn process_next_batch(
@@ -42,11 +52,14 @@ impl MailAiPipelineService {
         limit: i64,
     ) -> Result<MailAiPipelineReport, EmailIntelligenceError> {
         let state_store = CommunicationAiStatePort::new(self.pool.clone());
+        let now = chrono::Utc::now();
+        let recovered = state_store.recover_expired_mail_processing(now).await?;
         let message_ids = state_store
-            .pending_mail_message_ids(limit.clamp(1, DEFAULT_BATCH_LIMIT))
+            .claim_due_mail_messages(mail_ai_claim_limit(limit), now)
             .await?;
         let mut report = MailAiPipelineReport {
             claimed: message_ids.len(),
+            recovered,
             ..MailAiPipelineReport::default()
         };
         let message_store = CommunicationMessageProjectionPort::new(self.pool.clone());
@@ -55,52 +68,34 @@ impl MailAiPipelineService {
             let Some(message) = message_store.message(&message_id).await? else {
                 continue;
             };
-            mark_ai_state(
-                &state_store,
-                &message.message_id,
-                CommunicationAiState::Processing,
-                None,
-                None,
-            )
-            .await?;
-
             match self.process_message(&message).await {
                 Ok(outcome) => {
-                    report.processed += 1;
-                    if outcome.suppressed {
-                        report.suppressed += 1;
+                    complete_mail_ai_outcome(&mut report, &state_store, &message, outcome).await?;
+                }
+                Err(EmailIntelligenceError::ParseError(_)) => {
+                    match self
+                        .process_unstructured_model_response(&message, &message_store)
+                        .await
+                    {
+                        Ok(outcome) => {
+                            complete_mail_ai_outcome(&mut report, &state_store, &message, outcome)
+                                .await?;
+                        }
+                        Err(error) => {
+                            record_mail_ai_failure(
+                                &mut report,
+                                &state_store,
+                                &self.pool,
+                                &message,
+                                &error,
+                            )
+                            .await;
+                        }
                     }
-                    report.review_candidates += outcome.review_candidates;
-                    mark_ai_state(
-                        &state_store,
-                        &message.message_id,
-                        CommunicationAiState::Processed,
-                        outcome.reason.as_deref(),
-                        None,
-                    )
-                    .await?;
                 }
                 Err(error) => {
-                    report.failed += 1;
-                    let reason = failure_reason(&error);
-                    mark_ai_state(
-                        &state_store,
-                        &message.message_id,
-                        CommunicationAiState::Failed,
-                        Some(reason),
-                        Some(&error.to_string()),
-                    )
-                    .await?;
-                    dispatch_mail_ai_signal(
-                        self.pool.clone(),
-                        &message,
-                        None,
-                        None,
-                        Some(reason),
-                        None,
-                        0,
-                    )
-                    .await;
+                    record_mail_ai_failure(&mut report, &state_store, &self.pool, &message, &error)
+                        .await;
                 }
             }
         }
@@ -118,6 +113,14 @@ impl MailAiPipelineService {
         if reputation.suppressed {
             return self
                 .process_reputation_suppressed_message(message, &message_store, &reputation)
+                .await;
+        }
+
+        if self.external_body_egress_required
+            && !self.external_body_egress_allowed(&message.account_id).await
+        {
+            return self
+                .process_egress_suppressed_message(message, &message_store)
                 .await;
         }
 
@@ -146,6 +149,31 @@ impl MailAiPipelineService {
         } else {
             emit_review_candidates(&self.pool, message, &analysis).await?
         };
+        let sensitive_forwarding_queued = if classification == SenderReputationClassification::Spam
+            || inspection.sensitivity == SensitivityLevel::Public
+        {
+            0
+        } else {
+            match SensitiveForwardingCommandPort::new(self.pool.clone())
+                .enqueue_for_message(
+                    &message.account_id,
+                    &message.message_id,
+                    sensitivity_label(inspection.sensitivity),
+                    chrono::Utc::now(),
+                )
+                .await
+            {
+                Ok(report) => report.queued,
+                Err(error) => {
+                    tracing::warn!(
+                        message_id = %message.message_id,
+                        error = %error,
+                        "sensitive forwarding policy evaluation failed"
+                    );
+                    0
+                }
+            }
+        };
         dispatch_mail_ai_signal(
             self.pool.clone(),
             message,
@@ -160,7 +188,61 @@ impl MailAiPipelineService {
         Ok(MailAiPipelineMessageOutcome {
             suppressed: false,
             review_candidates,
+            sensitive_forwarding_queued,
             reason: Some("mail_ai_processed".to_owned()),
+            final_ai_state: CommunicationAiState::Processed,
+        })
+    }
+
+    async fn external_body_egress_allowed(&self, account_id: &str) -> bool {
+        match SensitiveForwardingCommandPort::new(self.pool.clone())
+            .content_egress_permissions(account_id)
+            .await
+        {
+            Ok(permissions) => permissions.body,
+            Err(error) => {
+                tracing::warn!(
+                    account_id,
+                    error = %error,
+                    "mail AI pipeline could not load content-egress policy; denying external body egress"
+                );
+                false
+            }
+        }
+    }
+
+    async fn process_egress_suppressed_message(
+        &self,
+        message: &ProjectedMessage,
+        message_store: &CommunicationMessageProjectionPort,
+    ) -> Result<MailAiPipelineMessageOutcome, EmailIntelligenceError> {
+        let mut metadata = message.message_metadata.clone();
+        metadata["mail_ai_pipeline"] = json!({
+            "status": "review_required",
+            "reason": "body_egress_denied",
+            "llm_used": false,
+            "body_included": false,
+        });
+        message_store
+            .set_message_metadata(&message.message_id, &metadata)
+            .await?;
+        dispatch_mail_ai_signal(
+            self.pool.clone(),
+            message,
+            None,
+            None,
+            Some("body_egress_denied"),
+            None,
+            0,
+        )
+        .await;
+
+        Ok(MailAiPipelineMessageOutcome {
+            suppressed: true,
+            review_candidates: 0,
+            sensitive_forwarding_queued: 0,
+            reason: Some("body_egress_denied".to_owned()),
+            final_ai_state: CommunicationAiState::ReviewRequired,
         })
     }
 
@@ -207,9 +289,6 @@ impl MailAiPipelineService {
         message_store
             .set_message_metadata(&message.message_id, &metadata)
             .await?;
-        let _ = message_store
-            .transition_workflow_state(&message.message_id, WorkflowState::Spam)
-            .await;
         dispatch_mail_ai_signal(
             self.pool.clone(),
             message,
@@ -224,7 +303,59 @@ impl MailAiPipelineService {
         Ok(MailAiPipelineMessageOutcome {
             suppressed: true,
             review_candidates: 0,
+            sensitive_forwarding_queued: 0,
             reason: Some("sender_reputation_zero".to_owned()),
+            final_ai_state: CommunicationAiState::Processed,
+        })
+    }
+
+    async fn process_unstructured_model_response(
+        &self,
+        message: &ProjectedMessage,
+        message_store: &CommunicationMessageProjectionPort,
+    ) -> Result<MailAiPipelineMessageOutcome, EmailIntelligenceError> {
+        let category = EmailIntelligenceService::heuristic_category(message)
+            .unwrap_or_else(|| "unclassified".to_owned());
+        let importance_score = EmailIntelligenceService::heuristic_score(message);
+        let summary_contract = EmailIntelligenceService::heuristic_structured_summary(message);
+        let mut metadata = message.message_metadata.clone();
+        metadata["ai_summary_contract"] = serde_json::to_value(&summary_contract)
+            .map_err(|error| EmailIntelligenceError::ParseError(error.to_string()))?;
+        metadata["mail_ai_pipeline"] = json!({
+            "status": "review_required",
+            "reason": "model_response_invalid",
+            "llm_used": true,
+            "raw_model_output_persisted": false,
+            "summary_source": "deterministic_heuristic",
+        });
+        message_store
+            .set_ai_analysis(
+                &message.message_id,
+                Some(&category),
+                Some("AI returned an unstructured response; review the original message."),
+                Some(importance_score),
+            )
+            .await?;
+        message_store
+            .set_message_metadata(&message.message_id, &metadata)
+            .await?;
+        dispatch_mail_ai_signal(
+            self.pool.clone(),
+            message,
+            None,
+            None,
+            Some("model_response_invalid"),
+            None,
+            0,
+        )
+        .await;
+
+        Ok(MailAiPipelineMessageOutcome {
+            suppressed: false,
+            review_candidates: 0,
+            sensitive_forwarding_queued: 0,
+            reason: Some("model_response_invalid".to_owned()),
+            final_ai_state: CommunicationAiState::ReviewRequired,
         })
     }
 }
@@ -232,17 +363,81 @@ impl MailAiPipelineService {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct MailAiPipelineReport {
     pub claimed: usize,
+    pub recovered: usize,
     pub processed: usize,
     pub suppressed: usize,
     pub failed: usize,
+    pub retrying: usize,
     pub review_candidates: usize,
+    pub sensitive_forwarding_queued: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct MailAiPipelineMessageOutcome {
     suppressed: bool,
     review_candidates: usize,
+    sensitive_forwarding_queued: usize,
     reason: Option<String>,
+    final_ai_state: CommunicationAiState,
+}
+
+async fn complete_mail_ai_outcome(
+    report: &mut MailAiPipelineReport,
+    state_store: &CommunicationAiStatePort,
+    message: &ProjectedMessage,
+    outcome: MailAiPipelineMessageOutcome,
+) -> Result<(), EmailIntelligenceError> {
+    report.processed += 1;
+    if outcome.suppressed {
+        report.suppressed += 1;
+    }
+    report.review_candidates += outcome.review_candidates;
+    report.sensitive_forwarding_queued += outcome.sensitive_forwarding_queued;
+    let review_reason = (outcome.final_ai_state == CommunicationAiState::ReviewRequired)
+        .then_some(outcome.reason.as_deref())
+        .flatten();
+    mark_ai_state(
+        state_store,
+        &message.message_id,
+        outcome.final_ai_state,
+        review_reason,
+        None,
+    )
+    .await
+}
+
+async fn record_mail_ai_failure(
+    report: &mut MailAiPipelineReport,
+    state_store: &CommunicationAiStatePort,
+    pool: &PgPool,
+    message: &ProjectedMessage,
+    error: &EmailIntelligenceError,
+) {
+    report.failed += 1;
+    let reason = failure_reason(error);
+    match state_store
+        .record_mail_processing_failure(
+            &message.message_id,
+            &truncate_error(&error.to_string()),
+            ai_failure_is_retryable(error),
+            chrono::Utc::now(),
+        )
+        .await
+    {
+        Ok(record) => {
+            if record.and_then(|record| record.next_attempt_at).is_some() {
+                report.retrying += 1;
+            }
+        }
+        Err(state_error) => {
+            tracing::warn!(
+                message_id = %message.message_id,
+                error = %state_error,
+                "mail AI pipeline could not record message failure"
+            );
+        }
+    }
+    dispatch_mail_ai_signal(pool.clone(), message, None, None, Some(reason), None, 0).await;
 }
 
 async fn persist_analysis(
@@ -252,12 +447,7 @@ async fn persist_analysis(
     inspection: &LocalAiInspection,
     reputation: &SenderReputationDecision,
 ) -> Result<(), EmailIntelligenceError> {
-    let workflow_hint = if analysis.is_spam
-        || analysis.is_phishing
-        || reputation_classification(analysis) == SenderReputationClassification::Spam
-    {
-        Some(WorkflowState::Spam)
-    } else if analysis.importance_score >= 80 {
+    let workflow_hint = if analysis.importance_score >= 80 {
         Some(WorkflowState::NeedsAction)
     } else {
         None
@@ -288,6 +478,7 @@ async fn persist_analysis(
         } else {
             "emit_candidates"
         },
+        "spam_workflow_policy": "manual_decision_required",
     });
     message_store
         .set_message_metadata(&message.message_id, &metadata)
@@ -313,23 +504,22 @@ async fn emit_review_candidates(
     for (kind, group, candidates, default_confidence) in review_candidate_groups(analysis) {
         for candidate in candidates {
             let summary = candidate_summary(candidate, group);
-            let item = NewReviewItem::new(
-                kind,
-                candidate.title.clone(),
-                summary,
+            let confidence = normalized_candidate_confidence(
                 candidate.confidence.unwrap_or(default_confidence),
-            )
-            .metadata(json!({
-                "mirrored_from": "mail_ai_pipeline",
-                "message_id": message.message_id,
-                "observation_id": message.observation_id,
-                "candidate_group": group,
-                "candidate_kind": candidate.kind.as_deref(),
-                "candidate_title": candidate.title,
-                "identifiers": candidate.identifiers.clone(),
-                "model": analysis.model,
-                "prompt_version": analysis.prompt_version,
-            }));
+                default_confidence,
+            );
+            let item = NewReviewItem::new(kind, candidate.title.clone(), summary, confidence)
+                .metadata(json!({
+                    "mirrored_from": "mail_ai_pipeline",
+                    "message_id": message.message_id,
+                    "observation_id": message.observation_id,
+                    "candidate_group": group,
+                    "candidate_kind": candidate.kind.as_deref(),
+                    "candidate_title": candidate.title,
+                    "identifiers": candidate.identifiers.clone(),
+                    "model": analysis.model,
+                    "prompt_version": analysis.prompt_version,
+                }));
             let evidence = NewReviewItemEvidence::new(message.observation_id.clone())
                 .role("primary")
                 .metadata(json!({
@@ -428,6 +618,20 @@ fn candidate_summary(candidate: &EmailKnowledgeCandidate, group: &str) -> String
     }
 }
 
+fn normalized_candidate_confidence(value: f64, fallback: f64) -> f64 {
+    if !value.is_finite() {
+        return fallback;
+    }
+
+    // Models commonly return a percentage despite the prompt's decimal contract.
+    // Preserve that signal while keeping Review's persisted score within [0.0, 1.0].
+    if value > 1.0 {
+        return (value / 100.0).clamp(0.0, 1.0);
+    }
+
+    value.clamp(0.0, 1.0)
+}
+
 async fn mark_ai_state(
     state_store: &CommunicationAiStatePort,
     message_id: &str,
@@ -502,6 +706,16 @@ fn reputation_classification(analysis: &EmailAnalysis) -> SenderReputationClassi
     }
 }
 
+fn sensitivity_label(value: SensitivityLevel) -> &'static str {
+    match value {
+        SensitivityLevel::Public => "public",
+        SensitivityLevel::Low => "low",
+        SensitivityLevel::Medium => "medium",
+        SensitivityLevel::High => "high",
+        SensitivityLevel::Critical => "critical",
+    }
+}
+
 fn is_spam_category(category: &str) -> bool {
     matches!(
         category.trim().to_ascii_lowercase().as_str(),
@@ -518,6 +732,13 @@ fn failure_reason(error: &EmailIntelligenceError) -> &'static str {
     }
 }
 
+fn ai_failure_is_retryable(error: &EmailIntelligenceError) -> bool {
+    matches!(
+        error,
+        EmailIntelligenceError::Hub(_) | EmailIntelligenceError::Sqlx(_)
+    )
+}
+
 fn normalize_target_language(value: String) -> String {
     let value = value.trim().to_ascii_lowercase();
     if value.is_empty() {
@@ -525,6 +746,10 @@ fn normalize_target_language(value: String) -> String {
     } else {
         value
     }
+}
+
+fn mail_ai_claim_limit(requested: i64) -> i64 {
+    requested.clamp(1, MAX_IN_FLIGHT_MAIL_AI_CLAIMS)
 }
 
 fn truncate_error(error: &str) -> String {
@@ -583,5 +808,41 @@ mod tests {
             reputation_classification(&analysis("newsletter", false, false)),
             SenderReputationClassification::NonSpam
         );
+    }
+
+    #[test]
+    fn intelligence_spam_classification_never_selects_spam_workflow() {
+        let analysis = analysis("spam", true, true);
+        let workflow_hint = (analysis.importance_score >= 80).then_some(WorkflowState::NeedsAction);
+
+        assert_eq!(workflow_hint, None);
+    }
+
+    #[test]
+    fn sensitivity_labels_preserve_policy_ordering() {
+        assert_eq!(sensitivity_label(SensitivityLevel::Low), "low");
+        assert_eq!(sensitivity_label(SensitivityLevel::Medium), "medium");
+        assert_eq!(sensitivity_label(SensitivityLevel::High), "high");
+        assert_eq!(sensitivity_label(SensitivityLevel::Critical), "critical");
+    }
+
+    #[test]
+    fn candidate_confidence_accepts_percentages_from_ai_output() {
+        assert_eq!(normalized_candidate_confidence(100.0, 0.68), 1.0);
+        assert_eq!(normalized_candidate_confidence(75.0, 0.68), 0.75);
+    }
+
+    #[test]
+    fn candidate_confidence_keeps_decimal_contract_and_safe_fallback() {
+        assert_eq!(normalized_candidate_confidence(0.72, 0.68), 0.72);
+        assert_eq!(normalized_candidate_confidence(-0.5, 0.68), 0.0);
+        assert_eq!(normalized_candidate_confidence(f64::NAN, 0.68), 0.68);
+    }
+
+    #[test]
+    fn mail_ai_worker_never_claims_more_than_one_slow_model_invocation() {
+        assert_eq!(mail_ai_claim_limit(10), 1);
+        assert_eq!(mail_ai_claim_limit(1), 1);
+        assert_eq!(mail_ai_claim_limit(0), 1);
     }
 }

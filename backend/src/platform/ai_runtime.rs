@@ -58,6 +58,16 @@ pub trait AiRuntimePort: Send + Sync {
         model: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<AiChatResult, AiRuntimePortError>> + Send + 'a>>;
 
+    /// Requests a JSON object when the runtime supports structured generation.
+    /// Adapters without a native JSON mode preserve the normal chat contract.
+    fn chat_json_with_model<'a>(
+        &'a self,
+        prompt: &'a str,
+        model: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<AiChatResult, AiRuntimePortError>> + Send + 'a>> {
+        self.chat_with_model(prompt, model)
+    }
+
     fn embed_with_model<'a>(
         &'a self,
         input: &'a str,

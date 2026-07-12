@@ -47,6 +47,28 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_v1_email_account_sync_settings).put(put_v1_email_account_sync_settings),
         )
         .route(
+            "/api/v1/integrations/mail/accounts/{account_id}/content-egress-settings",
+            get(get_v1_email_account_content_egress_settings)
+                .put(put_v1_email_account_content_egress_settings),
+        )
+        .route(
+            "/api/v1/integrations/mail/accounts/{account_id}/sensitive-forwarding-policies",
+            get(get_v1_mail_sensitive_forwarding_policies)
+                .post(post_v1_mail_sensitive_forwarding_policy),
+        )
+        .route(
+            "/api/v1/integrations/mail/accounts/{account_id}/sensitive-forwarding-policies/{policy_id}",
+            delete(delete_v1_mail_sensitive_forwarding_policy),
+        )
+        .route(
+            "/api/v1/integrations/mail/accounts/{account_id}/provider-resources",
+            get(get_v1_email_account_provider_resources),
+        )
+        .route(
+            "/api/v1/integrations/mail/accounts/{account_id}/provider-resources/{mapping_id}",
+            put(put_v1_email_account_provider_resource_mapping),
+        )
+        .route(
             "/api/v1/integrations/mail/accounts/{account_id}/sync-now",
             post(post_v1_email_account_sync_now),
         )

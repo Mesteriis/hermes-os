@@ -1,9 +1,9 @@
 use crate::domains::communications::core::StoredRawCommunicationRecord;
 use crate::domains::communications::messages::ProjectedMessage;
 use crate::domains::communications::storage::{
-    AttachmentSafetyScanRequest, AttachmentSafetyScanStatus, AttachmentSafetyScanner,
-    CommunicationAttachmentDisposition, CommunicationBlobMetadataPort, LocalCommunicationBlobPort,
-    NewCommunicationAttachment, NewCommunicationBlob,
+    AttachmentSafetyScanRequest, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
+    CommunicationBlobMetadataPort, LocalCommunicationBlobPort, NewCommunicationAttachment,
+    NewCommunicationBlob, scan_attachment_with_configured_clamav,
 };
 use crate::platform::communications::rfc822::{
     ParsedEmailAttachment, ParsedEmailAttachmentDisposition,
@@ -24,7 +24,6 @@ pub(crate) async fn project_attachments(
     raw_record: &StoredRawCommunicationRecord,
     message: &ProjectedMessage,
     attachments: &[ParsedEmailAttachment],
-    attachment_scanner: &impl AttachmentSafetyScanner,
 ) -> Result<AttachmentProjectionReport, EmailSyncPipelineError> {
     let mut report = AttachmentProjectionReport::default();
 
@@ -36,7 +35,7 @@ pub(crate) async fn project_attachments(
                     .content_type(&parsed_attachment.content_type),
             )
             .await?;
-        let scan_report = attachment_scanner.scan(&AttachmentSafetyScanRequest {
+        let scan_report = scan_attachment_with_configured_clamav(&AttachmentSafetyScanRequest {
             provider_attachment_id: &parsed_attachment.provider_attachment_id,
             filename: parsed_attachment.filename.as_deref(),
             content_type: &parsed_attachment.content_type,
@@ -45,7 +44,8 @@ pub(crate) async fn project_attachments(
             storage_kind: &blob.storage_kind,
             storage_path: &blob.storage_path,
             bytes: &parsed_attachment.body_bytes,
-        })?;
+        })
+        .await?;
         let scan_status = scan_report.status;
 
         let mut attachment = NewCommunicationAttachment::new(

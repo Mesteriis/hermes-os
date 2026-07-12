@@ -49,6 +49,7 @@ pub struct AttachmentSearchResult {
     pub scan_summary: Option<String>,
     pub storage_kind: String,
     pub storage_path: String,
+    pub extracted_text_match: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -143,11 +144,19 @@ impl AttachmentSearchStore {
                 a.scan_summary,
                 b.storage_kind,
                 b.storage_path,
+                CASE
+                    WHEN $4::text IS NULL THEN FALSE
+                    ELSE COALESCE(e.search_vector @@ plainto_tsquery('simple', $4), FALSE)
+                END AS extracted_text_match,
                 a.created_at,
                 a.updated_at
             FROM communication_attachments a
             JOIN communication_messages m ON m.message_id = a.message_id
             JOIN communication_mail_blobs b ON b.blob_id = a.blob_id
+            LEFT JOIN communication_attachment_extractions e
+              ON e.attachment_id = a.attachment_id
+             AND e.status = 'completed'
+             AND e.source_sha256 = a.sha256
             WHERE m.local_state = 'active'
               AND ($1::text IS NULL OR m.account_id = $1)
               AND ($2::text IS NULL OR a.content_type ILIKE '%' || $2 || '%')
@@ -169,6 +178,10 @@ impl AttachmentSearchStore {
                         m.sender
                       )
                     ) NOT LIKE '%' || term || '%'
+                    AND NOT (
+                      COALESCE(e.search_vector, ''::tsvector)
+                        @@ plainto_tsquery('simple', term)
+                    )
                 )
               )
               AND (
@@ -239,6 +252,7 @@ fn row_to_attachment_search_result(
         scan_summary: row.try_get("scan_summary")?,
         storage_kind: row.try_get("storage_kind")?,
         storage_path: row.try_get("storage_path")?,
+        extracted_text_match: row.try_get("extracted_text_match")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
     })

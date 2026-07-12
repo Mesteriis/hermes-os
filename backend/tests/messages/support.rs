@@ -16,7 +16,12 @@ use hermes_hub_backend::platform::storage::Database;
 
 pub async fn live_projection_context(
     _test_name: &str,
-) -> Option<(PgPool, CommunicationIngestionStore, MessageProjectionStore)> {
+) -> Option<(
+    TestContext,
+    PgPool,
+    CommunicationIngestionStore,
+    MessageProjectionStore,
+)> {
     let test_context = TestContext::new().await;
     let database_url = test_context.connection_string();
 
@@ -26,6 +31,7 @@ pub async fn live_projection_context(
     let pool = database.pool().expect("configured pool").clone();
 
     Some((
+        test_context,
         pool.clone(),
         CommunicationIngestionStore::new(pool.clone()),
         MessageProjectionStore::new(pool),

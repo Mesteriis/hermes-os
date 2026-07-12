@@ -16,12 +16,14 @@ pub struct OutboxSendReceipt {
 pub enum OutboxDeliveryError {
     #[error("{0}")]
     Transport(String),
+    #[error("{0}")]
+    Permanent(String),
 }
 
 impl OutboxDeliveryError {
     pub fn public_message(&self) -> &str {
         match self {
-            Self::Transport(message) => message.as_str(),
+            Self::Transport(message) | Self::Permanent(message) => message.as_str(),
         }
     }
 }
@@ -138,7 +140,12 @@ where
                     report.sent += 1;
                 }
                 Err(error) => {
-                    if let Some(next_attempt_at) =
+                    if matches!(error, OutboxDeliveryError::Permanent(_)) {
+                        self.store
+                            .mark_failed(&item.outbox_id, now, error.public_message())
+                            .await?;
+                        report.failed += 1;
+                    } else if let Some(next_attempt_at) =
                         self.retry_policy.next_attempt_at(now, item.send_attempts)
                     {
                         self.store

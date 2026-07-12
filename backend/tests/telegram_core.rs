@@ -388,6 +388,10 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
             "enabled": true,
             "account_id": account_id,
             "allowed_chat_ids": [chat_id],
+            "scopes": [{
+                "scope_kind": "mail.account",
+                "scope_value": "mail-account-scope"
+            }],
             "trigger_kind": "ai_follow_up",
             "max_sends_per_hour": 3,
             "quiet_hours": {},
@@ -395,6 +399,21 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
         }),
     )
     .await;
+
+    let policies_response = app
+        .clone()
+        .oneshot(get_request_with_token("/api/v1/policies", LOCAL_API_TOKEN))
+        .await
+        .expect("policies response");
+    assert_eq!(policies_response.status(), StatusCode::OK);
+    let policies_body = json_body(policies_response).await;
+    assert_eq!(
+        policies_body["items"][0]["scopes"],
+        json!([
+            { "scope_kind": "mail.account", "scope_value": "mail-account-scope" },
+            { "scope_kind": "telegram.chat", "scope_value": chat_id }
+        ])
+    );
 
     let blocked_command_id = format!("dry-run-blocked-{suffix}");
     let blocked_chat_id = format!("other-chat-{suffix}");

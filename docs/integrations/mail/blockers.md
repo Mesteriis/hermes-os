@@ -9,21 +9,24 @@ Communications, Obligations, Decisions and Polygraph work is tracked in
 
 ## 1. §8 — Безопасность вложений (sandbox, антивирус)
 
-**Текущий статус**: Mail projection now runs a conservative heuristic
-attachment safety scanner. It can mark obvious executable payload magic bytes,
-active-content extensions, macro-enabled Office extensions and known
-MIME/filename mismatches as `malicious` or `suspicious` with structured
-metadata. Unmatched attachments intentionally remain `not_scanned`; Hermes does
-not mark attachments `clean` without a real scanner backend.
+**Текущий статус**: Mail projection runs a conservative heuristic attachment
+safety scanner and a timeout-bounded local ClamAV `INSTREAM` client. It can mark
+obvious executable payload magic bytes, active-content extensions, macro-enabled
+Office extensions and known MIME/filename mismatches as `malicious` or
+`suspicious`; unmatched or unavailable-scanner cases remain `not_scanned`, so
+Hermes does not mark an attachment `clean` without a real scanner verdict. The
+local Compose environment also runs an isolated PDF/DOCX/OCR worker: it has a
+read-only blob mount, no external route, dropped Linux capabilities, a
+read-only root filesystem and bounded CPU/memory/process/temp-storage.
 
-**Причина**: Full verdicts still require external tools — ClamAV,
-containerized sandboxing and OLE macro parsing. This remains infrastructure
-work, not only application code.
+**Остаётся**: CDR, full OLE stream analysis, sandboxed nested archive parsing,
+broader OCR language packs and safe bitmap previews for non-PDF rich documents.
 
-**План**: Интегрировать ClamAV как sidecar-контейнер в `docker-compose.yml`,
-add a real scanner backend, keep heuristic scanning as a prefilter/fallback and
-only replace `not_scanned` with `clean` when a real scanner backend produced the
-verdict.
+**План**: Keep heuristic scanning as a prefilter/fallback and only replace
+`not_scanned` with `clean` when ClamAV produced the verdict. Bounded CFB/OLE
+directory inspection detects macro storage names without opening a content stream. Add CDR and
+full document/archive analysis behind the same worker boundary without relaxing its
+mount, network or resource limits.
 
 ## 2. §12 — Криптографическая верификация подписей
 
@@ -70,9 +73,16 @@ it.
 
 ## 6. §9.3 — OCR (распознавание текста)
 
-**Причина**: Требует Tesseract OCR или облачного OCR-сервиса. Это тяжёлая зависимость (50+ MB trained data для каждого языка).
+**Текущий статус**: The isolated local worker uses Tesseract with the bundled
+English language pack for clean supported image attachments. OCR remains local;
+no attachment bytes are sent to an external OCR service.
 
-**План**: Опциональная фича под feature-флагом `ocr`. Добавить `tesseract-rs` крейт. Без флага — только извлечение текста из PDF/DOCX через существующие парсеры.
+**Остаётся**: Additional language packs, image pre-processing and durable
+preview artifacts.
+
+**План**: Add approved local language packs and bounded image pre-processing to
+the existing container image; keep external OCR disabled unless an account
+content-egress policy explicitly permits it.
 
 ## Не-блокеры (не входят в scope email-модуля)
 

@@ -683,6 +683,21 @@ async fn workflow_action_archive_transitions_message_locally() {
     .await
     .expect("workflow state");
     assert_eq!(workflow_state, "archived");
+    let provider_command: (String, String, Value) = sqlx::query_as(
+        r#"
+        SELECT command_kind, actor_id, target_ref
+        FROM communication_provider_commands
+        WHERE target_ref->>'message_id' = $1
+          AND channel_kind = 'mail'
+        "#,
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("archive provider command");
+    assert_eq!(provider_command.0, "archive");
+    assert_eq!(provider_command.1, "hermes-frontend");
+    assert_eq!(provider_command.2["message_id"], message_id);
 }
 
 async fn seed_projected_message(

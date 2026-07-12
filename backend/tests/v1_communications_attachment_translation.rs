@@ -9,6 +9,7 @@ use hermes_hub_backend::ai::control_center::{
     AiControlCenterStore, AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest,
 };
 use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::domains::communications::attachment_text_extraction::AttachmentTextExtractionService;
 use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
@@ -17,8 +18,10 @@ use hermes_hub_backend::domains::communications::messages::{
 };
 use hermes_hub_backend::domains::communications::storage::{
     AttachmentSafetyScanReport, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
-    CommunicationStorageStore, NewCommunicationAttachment, NewCommunicationBlob,
+    CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachment,
+    NewCommunicationBlob,
 };
+use hermes_hub_backend::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
@@ -29,6 +32,7 @@ const LOCAL_API_TOKEN: &str = "v1comms-attachment-translation-test-token";
 async fn v1_attachment_translation_uses_provided_extracted_text_against_postgres() {
     let context = TestContext::new().await;
     let seeded = seed_message_with_attachment(context.pool().clone()).await;
+    extract_attachment_text(context.pool().clone(), &seeded.attachment_id).await;
     let app = router(&context.connection_string()).await;
 
     let response = app
@@ -56,13 +60,14 @@ async fn v1_attachment_translation_uses_provided_extracted_text_against_postgres
     assert_eq!(body["text"], Value::Null);
     assert_eq!(body["model"], Value::Null);
     assert_eq!(body["reason"], "no LLM configured");
-    assert_eq!(body["source"], "caller_provided_extracted_text");
+    assert_eq!(body["source"], "durable_extracted_text");
 }
 
 #[tokio::test]
 async fn v1_attachment_translation_emits_signal_hub_ai_events_against_postgres() {
     let context = TestContext::new().await;
     let seeded = seed_message_with_attachment(context.pool().clone()).await;
+    extract_attachment_text(context.pool().clone(), &seeded.attachment_id).await;
     let ollama_base_url = spawn_fake_ollama().await;
     configure_fake_ollama_setting(context.pool(), &ollama_base_url).await;
     let app = router(&context.connection_string()).await;
@@ -104,7 +109,7 @@ async fn v1_attachment_translation_emits_signal_hub_ai_events_against_postgres()
 }
 
 #[tokio::test]
-async fn v1_attachment_translation_rejects_empty_source_text_against_postgres() {
+async fn v1_attachment_translation_requires_durable_extracted_text_against_postgres() {
     let context = TestContext::new().await;
     let seeded = seed_message_with_attachment(context.pool().clone()).await;
     let app = router(&context.connection_string()).await;
@@ -115,9 +120,33 @@ async fn v1_attachment_translation_rejects_empty_source_text_against_postgres() 
                 "/api/v1/communications/attachments/{}/translate",
                 seeded.attachment_id
             ),
+            json!({ "target_language": "en", "source_text": "untrusted caller text" }),
+        ))
+        .await
+        .expect("translation response");
+
+    assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+}
+
+#[tokio::test]
+async fn v1_attachment_translation_rejects_quarantined_attachment_against_postgres() {
+    let context = TestContext::new().await;
+    let seeded = seed_message_with_attachment_scan_status(
+        context.pool().clone(),
+        AttachmentSafetyScanStatus::NotScanned,
+    )
+    .await;
+    let app = router(&context.connection_string()).await;
+
+    let response = app
+        .oneshot(post(
+            &format!(
+                "/api/v1/communications/attachments/{}/translate",
+                seeded.attachment_id
+            ),
             json!({
                 "target_language": "en",
-                "source_text": "   "
+                "source_text": "Hola equipo, adjunto el contrato para revisión."
             }),
         ))
         .await
@@ -126,12 +155,63 @@ async fn v1_attachment_translation_rejects_empty_source_text_against_postgres() 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
+#[tokio::test]
+async fn v1_attachment_translation_blocks_external_ai_without_extracted_text_egress_permission() {
+    let context = TestContext::new().await;
+    let seeded = seed_message_with_attachment(context.pool().clone()).await;
+    extract_attachment_text(context.pool().clone(), &seeded.attachment_id).await;
+    ApplicationSettingsStore::new(context.pool().clone())
+        .update_setting_value("ai.provider", &json!("omniroute"), "hermes-frontend")
+        .await
+        .expect("configure external AI runtime");
+    let app = router(&context.connection_string()).await;
+
+    let response = app
+        .oneshot(post(
+            &format!(
+                "/api/v1/communications/attachments/{}/translate",
+                seeded.attachment_id
+            ),
+            json!({
+                "target_language": "en",
+                "source_text": "Hola equipo, adjunto el contrato para revisión."
+            }),
+        ))
+        .await
+        .expect("translation response");
+
+    assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+    let body = response_json(response).await;
+    assert_eq!(body["error"], "failed_precondition");
+    assert_eq!(
+        body["message"],
+        "external AI extracted_text egress is disabled for this mail account"
+    );
+}
+
 struct SeededAttachment {
     attachment_id: String,
     message_id: String,
 }
 
+async fn extract_attachment_text(pool: sqlx::PgPool, attachment_id: &str) {
+    AttachmentTextExtractionService::new(
+        pool,
+        LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT),
+    )
+    .extract(attachment_id)
+    .await
+    .expect("extract attachment text");
+}
+
 async fn seed_message_with_attachment(pool: sqlx::PgPool) -> SeededAttachment {
+    seed_message_with_attachment_scan_status(pool, AttachmentSafetyScanStatus::Clean).await
+}
+
+async fn seed_message_with_attachment_scan_status(
+    pool: sqlx::PgPool,
+    scan_status: AttachmentSafetyScanStatus,
+) -> SeededAttachment {
     let suffix = uid();
     let account_id = format!("acct-attachment-translation-{suffix}");
     let provider_record_id = format!("provider-attachment-translation-{suffix}");
@@ -168,17 +248,13 @@ async fn seed_message_with_attachment(pool: sqlx::PgPool) -> SeededAttachment {
         .await
         .expect("project message")
         .message_id;
-    let sha256 = format!("sha256:{:0>64}", "d");
+    let local_blob_store = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+    let local_blob = local_blob_store
+        .put_blob(b"Hola equipo, adjunto el contrato para revision.")
+        .await
+        .expect("write attachment blob");
     let blob = storage_store
-        .upsert_blob(
-            &NewCommunicationBlob::new(
-                "local_fs",
-                format!("attachments/{provider_record_id}/contrato.txt"),
-                &sha256,
-                512,
-            )
-            .content_type("text/plain"),
-        )
+        .upsert_blob(&NewCommunicationBlob::from_local_blob(&local_blob).content_type("text/plain"))
         .await
         .expect("store blob");
     let attachment = storage_store
@@ -189,13 +265,13 @@ async fn seed_message_with_attachment(pool: sqlx::PgPool) -> SeededAttachment {
                 blob.blob_id,
                 "part-contrato",
                 "text/plain",
-                512,
-                sha256,
+                local_blob.size_bytes,
+                local_blob.sha256,
             )
             .filename("contrato.txt")
             .disposition(CommunicationAttachmentDisposition::Attachment)
             .scan_report(AttachmentSafetyScanReport {
-                status: AttachmentSafetyScanStatus::NotScanned,
+                status: scan_status,
                 engine: None,
                 checked_at: None,
                 summary: None,

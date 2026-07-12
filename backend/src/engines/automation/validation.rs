@@ -1,7 +1,9 @@
 use serde_json::Value;
 
 use super::errors::AutomationError;
-use super::models::{NewAutomationPolicy, NewAutomationTemplate, TelegramSendDryRunRequest};
+use super::models::{
+    AutomationPolicyScope, NewAutomationPolicy, NewAutomationTemplate, TelegramSendDryRunRequest,
+};
 
 impl NewAutomationTemplate {
     pub(super) fn validate(&self) -> Result<(), AutomationError> {
@@ -27,15 +29,39 @@ impl NewAutomationPolicy {
                 "max_sends_per_hour must be greater than zero".to_owned(),
             ));
         }
-        if self.allowed_chat_ids.is_empty() {
+        let scopes = self.normalized_scopes();
+        if scopes.is_empty() {
             return Err(AutomationError::InvalidRequest(
-                "allowed_chat_ids must not be empty".to_owned(),
+                "automation policy must include at least one scope".to_owned(),
             ));
+        }
+        for scope in &scopes {
+            validate_scope(scope)?;
         }
         validate_object("quiet_hours", &self.quiet_hours)?;
         validate_object("conditions", &self.conditions)?;
         Ok(())
     }
+}
+
+fn validate_scope(scope: &AutomationPolicyScope) -> Result<(), AutomationError> {
+    let kind = validate_non_empty("scope_kind", &scope.scope_kind)?;
+    if kind.len() > 80
+        || !kind.chars().all(|ch| {
+            ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '.' | '_' | '-')
+        })
+    {
+        return Err(AutomationError::InvalidRequest(
+            "scope_kind must use lowercase ASCII letters, numbers, '.', '_' or '-'".to_owned(),
+        ));
+    }
+    let value = validate_non_empty("scope_value", &scope.scope_value)?;
+    if value.len() > 512 {
+        return Err(AutomationError::InvalidRequest(
+            "scope_value must be at most 512 bytes".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 impl TelegramSendDryRunRequest {

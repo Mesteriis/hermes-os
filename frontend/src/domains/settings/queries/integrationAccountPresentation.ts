@@ -128,6 +128,17 @@ export function accountConfigBoolean(account: ProviderAccount, key: string): boo
   return typeof value === 'boolean' ? value : null
 }
 
+export function accountContactsSyncEnabled(account: ProviderAccount): boolean {
+  return accountConfigBoolean(account, 'address_book_sync_enabled') ?? true
+}
+
+export function accountCredentialRequiresReauthorization(account: ProviderAccount): boolean {
+  return (
+    account.credential_state?.status === 'expired' &&
+    account.credential_state.requires_reauthorization === true
+  )
+}
+
 export function accountConfigString(account: ProviderAccount, key: string): string | null {
   const value = account.config?.[key]
   return typeof value === 'string' ? value : null

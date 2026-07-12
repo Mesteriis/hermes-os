@@ -143,6 +143,8 @@ template components and media bytes are excluded from the target payload.
 | `POST` | `/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/archive` | Queue archive command. |
 | `POST` | `/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/unarchive` | Queue unarchive command. |
 | `POST` | `/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/mute` | Queue mute command. |
+
+Media upload and voice-note routes require a locally imported `attachment_id` with a `clean` scan verdict. They reject raw bytes and a bare `blob_id`; when a `blob_id` is supplied with an attachment, Hermes validates that both references match.
 | `POST` | `/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/unmute` | Queue unmute command. |
 | `POST` | `/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/pin` | Queue pin command. |
 | `POST` | `/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/unpin` | Queue unpin command. |

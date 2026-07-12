@@ -36,6 +36,45 @@ impl EventStore {
         row.map(row_to_event).transpose()
     }
 
+    pub async fn get_by_source_idempotency(
+        &self,
+        event_type: &str,
+        source_kind: &str,
+        provider: Option<&str>,
+        source_id: &str,
+    ) -> Result<Option<EventEnvelope>, EventStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                event_id,
+                event_type,
+                schema_version,
+                occurred_at,
+                recorded_at,
+                source,
+                actor,
+                subject,
+                payload,
+                provenance,
+                causation_id,
+                correlation_id
+            FROM event_log
+            WHERE event_type = $1
+              AND source->>'kind' = $2
+              AND COALESCE(source->>'provider', '') = $3
+              AND source->>'source_id' = $4
+            "#,
+        )
+        .bind(event_type)
+        .bind(source_kind)
+        .bind(provider.unwrap_or_default())
+        .bind(source_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_event).transpose()
+    }
+
     pub async fn list_matching(
         &self,
         query: EventLogQuery,

@@ -15,9 +15,13 @@ use crate::vault::{HostVault, VaultMode};
 
 static MAIL_BACKGROUND_SYNC_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
+static MAIL_ATTACHMENT_SCAN_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 static ADDRESS_BOOK_SYNC_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static MAIL_OUTBOX_DELIVERY_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static MAIL_PROVIDER_COMMAND_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static MAIL_AI_PIPELINE_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -77,8 +81,10 @@ static SIGNAL_REPLAY_DISPATCHER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
 const MAIL_BACKGROUND_SYNC_RUNTIME: &str = "mail_background_sync";
+const MAIL_ATTACHMENT_SCAN_RUNTIME: &str = "mail_attachment_scan";
 const ADDRESS_BOOK_SYNC_RUNTIME: &str = "address_book_sync";
 const MAIL_OUTBOX_DELIVERY_RUNTIME: &str = "mail_outbox_delivery";
+const MAIL_PROVIDER_COMMAND_RUNTIME: &str = "mail_provider_commands";
 const MAIL_AI_PIPELINE_RUNTIME: &str = "mail_ai_pipeline";
 const TELEGRAM_COMMAND_EXECUTOR_RUNTIME: &str = "telegram_command_executor";
 const WHATSAPP_COMMAND_EXECUTOR_RUNTIME: &str = "whatsapp_command_executor";
@@ -143,8 +149,11 @@ pub(crate) struct ApplicationBootstrapContext {
 
 pub(crate) fn start_background_services(context: ApplicationBootstrapContext) {
     start_mail_background_sync(context.clone());
+    start_mail_attachment_scan_worker(context.clone());
+    crate::application::mail_imap_idle::start(context.clone());
     start_address_book_sync(context.clone());
     start_mail_outbox_delivery(context.clone());
+    start_mail_provider_command_executor(context.clone());
     start_mail_ai_pipeline(context.clone());
     start_telegram_command_executor(context.clone());
     start_whatsapp_command_executor(context.clone());
@@ -204,6 +213,11 @@ fn start_mail_background_sync(context: ApplicationBootstrapContext) {
                     crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
                 ),
             ),
+            Arc::new(
+                crate::domains::communications::provider_resources::MailProviderResourceStore::new(
+                    pool.clone(),
+                ),
+            ),
         );
         if let Err(error) = store.recover_interrupted_runs(Utc::now()).await {
             tracing::warn!(error = %error, "mail background sync startup recovery failed");
@@ -228,6 +242,62 @@ fn start_mail_background_sync(context: ApplicationBootstrapContext) {
             }
             if let Err(error) = service.run_due_accounts().await {
                 tracing::warn!(error = %error, "mail background sync scheduler tick failed");
+            }
+        }
+    });
+}
+
+fn start_mail_attachment_scan_worker(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_mail_attachment_scan_worker(&database_url) {
+        return;
+    }
+
+    tokio::spawn(async move {
+        let worker = crate::application::mail_attachment_scan_worker::MailAttachmentScanWorker::new(
+            pool.clone(),
+        );
+        let mut tick = tokio::time::interval(Duration::from_secs(60));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "mail",
+                MAIL_ATTACHMENT_SCAN_RUNTIME,
+                json!({
+                    "label": "Mail attachment malware rescan",
+                    "scope": "scheduler",
+                }),
+            )
+            .await
+            {
+                continue;
+            }
+            match worker.scan_due(50).await {
+                Ok(report)
+                    if report.candidates_seen > 0
+                        || report.verdicts_persisted > 0
+                        || report.failures > 0 =>
+                {
+                    tracing::info!(
+                        candidates_seen = report.candidates_seen,
+                        verdicts_persisted = report.verdicts_persisted,
+                        retry_deferred = report.retry_deferred,
+                        invalid_or_stale = report.invalid_or_stale,
+                        failures = report.failures,
+                        "mail attachment rescan tick completed"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(error = %error, "mail attachment rescan scheduler tick failed");
+                }
             }
         }
     });
@@ -354,6 +424,48 @@ fn start_mail_outbox_delivery(context: ApplicationBootstrapContext) {
     });
 }
 
+fn start_mail_provider_command_executor(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_mail_provider_command_scheduler(&database_url) {
+        return;
+    }
+    let vault = context.vault;
+    tokio::spawn(async move {
+        let worker =
+            crate::application::mail_provider_command_executor::MailProviderCommandWorker::new(
+                pool.clone(),
+                vault.clone(),
+                crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+            );
+        // Read-state intent is queued after the reader dwell threshold, so keep
+        // provider reconciliation responsive without polling full mailbox sync.
+        let mut tick = tokio::time::interval(Duration::from_secs(2));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tick.tick().await;
+            if !runtime_allows_processing(
+                &pool,
+                "mail",
+                MAIL_PROVIDER_COMMAND_RUNTIME,
+                json!({ "label": "Mail provider command reconciliation", "scope": "scheduler" }),
+            )
+            .await
+                || !host_vault_is_unlocked(&vault)
+            {
+                continue;
+            }
+            if let Err(error) = worker.execute_due(Utc::now(), 25).await {
+                tracing::warn!(error = %error, "mail provider command scheduler tick failed");
+            }
+        }
+    });
+}
+
 fn start_mail_ai_pipeline(context: ApplicationBootstrapContext) {
     let Some(pool) = context.pool else {
         return;
@@ -387,25 +499,36 @@ fn start_mail_ai_pipeline(context: ApplicationBootstrapContext) {
                 continue;
             }
 
-            let hub = mail_ai_hub_optional(&pool, &config, &vault).await;
+            let mail_ai_runtime = mail_ai_hub_optional(&pool, &config, &vault).await;
+            let (hub, external_body_egress_required) = match mail_ai_runtime {
+                Some((hub, external_body_egress_required)) => {
+                    (Some(hub), external_body_egress_required)
+                }
+                None => (None, false),
+            };
             let target_language = mail_ai_target_language(&pool).await;
             let service = crate::workflows::email_intelligence::MailAiPipelineService::new(
                 pool.clone(),
                 hub,
                 target_language,
-            );
+            )
+            .requiring_external_body_egress(external_body_egress_required);
             match service.process_next_batch(10).await {
                 Ok(report)
                     if report.claimed > 0
+                        || report.recovered > 0
                         || report.processed > 0
                         || report.failed > 0
+                        || report.retrying > 0
                         || report.suppressed > 0 =>
                 {
                     tracing::info!(
                         claimed = report.claimed,
+                        recovered = report.recovered,
                         processed = report.processed,
                         suppressed = report.suppressed,
                         failed = report.failed,
+                        retrying = report.retrying,
                         review_candidates = report.review_candidates,
                         "mail AI pipeline tick completed"
                     );
@@ -2292,6 +2415,16 @@ fn register_mail_background_sync_scheduler(database_url: &str) -> bool {
     }
 }
 
+fn register_mail_attachment_scan_worker(database_url: &str) -> bool {
+    match MAIL_ATTACHMENT_SCAN_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(error = %error, "mail attachment rescan scheduler registry is unavailable");
+            false
+        }
+    }
+}
+
 fn register_address_book_sync_scheduler(database_url: &str) -> bool {
     match ADDRESS_BOOK_SYNC_DATABASES.lock() {
         Ok(mut databases) => databases.insert(database_url.to_owned()),
@@ -2318,6 +2451,16 @@ fn register_mail_outbox_delivery_scheduler(database_url: &str) -> bool {
     }
 }
 
+fn register_mail_provider_command_scheduler(database_url: &str) -> bool {
+    match MAIL_PROVIDER_COMMAND_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(error = %error, "mail provider command scheduler registry is unavailable");
+            false
+        }
+    }
+}
+
 fn register_mail_ai_pipeline(database_url: &str) -> bool {
     match MAIL_AI_PIPELINE_DATABASES.lock() {
         Ok(mut databases) => databases.insert(database_url.to_owned()),
@@ -2335,7 +2478,7 @@ async fn mail_ai_hub_optional(
     pool: &PgPool,
     config: &AppConfig,
     vault: &HostVault,
-) -> Option<crate::ai::hub::SharedAiHub> {
+) -> Option<(crate::ai::hub::SharedAiHub, bool)> {
     let settings = match crate::platform::settings::ApplicationSettingsStore::new(pool.clone())
         .ai_runtime_settings(config)
         .await
@@ -2386,10 +2529,13 @@ async fn mail_ai_hub_optional(
             }
         };
 
-    Some(crate::ai::hub::AiHub::shared_with_usage_recorder(
-        Arc::new(runtime) as crate::platform::ai_runtime::SharedAiRuntimePort,
-        model_routing,
-        Arc::new(store) as crate::ai::hub::SharedAiHubUsageRecorder,
+    Some((
+        crate::ai::hub::AiHub::shared_with_usage_recorder(
+            Arc::new(runtime) as crate::platform::ai_runtime::SharedAiRuntimePort,
+            model_routing,
+            Arc::new(store) as crate::ai::hub::SharedAiHubUsageRecorder,
+        ),
+        provider.provider_kind == "api",
     ))
 }
 
@@ -2623,7 +2769,7 @@ fn register_zoom_retention_cleanup_scheduler(database_url: &str) -> bool {
     }
 }
 
-fn host_vault_is_unlocked(vault: &HostVault) -> bool {
+pub(super) fn host_vault_is_unlocked(vault: &HostVault) -> bool {
     match vault.status() {
         Ok(status) => status.state == VaultMode::Unlocked,
         Err(error) => {
@@ -2636,7 +2782,7 @@ fn host_vault_is_unlocked(vault: &HostVault) -> bool {
     }
 }
 
-async fn runtime_allows_processing(
+pub(super) async fn runtime_allows_processing(
     pool: &PgPool,
     source_code: &str,
     runtime_kind: &str,

@@ -56,6 +56,7 @@ impl_app_store_factory!(
     crate::domains::communications::messages::MessageProjectionStore,
     crate::domains::communications::outbox::CommunicationOutboxStore,
     crate::domains::communications::personas::CommunicationPersonaStore,
+    crate::domains::communications::provider_resources::MailProviderResourceStore,
     crate::domains::communications::read_receipts::CommunicationReadReceiptStore,
     crate::domains::communications::saved_searches::CommunicationSavedSearchStore,
     crate::domains::communications::signatures::CertificateStore,

@@ -94,6 +94,52 @@ async fn gmail_api_client_fetches_raw_messages_with_bearer_token() {
 }
 
 #[tokio::test]
+async fn gmail_api_client_modifies_single_and_batched_message_labels() {
+    let server = MockPeopleServer::start(vec!["{}".to_owned(), "{}".to_owned()]);
+    let token = ResolvedSecret::new("gmail-modify-token").expect("token");
+    let client = GmailApiClient::new(server.base_url()).user_id("me");
+
+    client
+        .modify_message(&token, "gmail-msg-1", &["IMPORTANT"], &["UNREAD"])
+        .await
+        .expect("modify Gmail message");
+    client
+        .batch_modify_messages(
+            &token,
+            &["gmail-msg-1".to_owned(), "gmail-msg-2".to_owned()],
+            &["STARRED"],
+            &["INBOX"],
+        )
+        .await
+        .expect("batch modify Gmail messages");
+
+    let requests = server.requests();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(
+        requests[0].request_line,
+        "POST /gmail/v1/users/me/messages/gmail-msg-1/modify HTTP/1.1"
+    );
+    assert_eq!(
+        requests[0].authorization.as_deref(),
+        Some("Bearer gmail-modify-token")
+    );
+    let single_body: serde_json::Value =
+        serde_json::from_str(&requests[0].body).expect("single modify body");
+    assert_eq!(single_body["addLabelIds"], json!(["IMPORTANT"]));
+    assert_eq!(single_body["removeLabelIds"], json!(["UNREAD"]));
+
+    assert_eq!(
+        requests[1].request_line,
+        "POST /gmail/v1/users/me/messages/batchModify HTTP/1.1"
+    );
+    let batch_body: serde_json::Value =
+        serde_json::from_str(&requests[1].body).expect("batch modify body");
+    assert_eq!(batch_body["ids"], json!(["gmail-msg-1", "gmail-msg-2"]));
+    assert_eq!(batch_body["addLabelIds"], json!(["STARRED"]));
+    assert_eq!(batch_body["removeLabelIds"], json!(["INBOX"]));
+}
+
+#[tokio::test]
 async fn imap_network_client_fetches_raw_messages_by_uid_without_mutating_mailbox() {
     let server = MockImapServer::start();
     let password = ResolvedSecret::new("imap-password").expect("password");
@@ -125,7 +171,10 @@ async fn imap_network_client_fetches_raw_messages_by_uid_without_mutating_mailbo
         }))
     );
     assert_eq!(batch.messages.len(), 1);
-    assert_eq!(batch.messages[0].provider_record_id, "imap:Archive:43");
+    assert_eq!(
+        batch.messages[0].provider_record_id,
+        "imap:v2:imap:Archive:999:43"
+    );
     assert_eq!(batch.messages[0].payload["provider"], "imap");
     assert_eq!(batch.messages[0].payload["mailbox"], "Archive");
     assert_eq!(
@@ -150,7 +199,7 @@ async fn imap_network_client_fetches_raw_messages_by_uid_without_mutating_mailbo
             .any(|command| command.contains("UID SEARCH UID 43:*"))
     );
     assert!(commands.iter().any(|command| {
-        command.contains("UID FETCH 43 (UID BODY.PEEK[] RFC822.SIZE INTERNALDATE)")
+        command.contains("UID FETCH 43 (UID FLAGS BODY.PEEK[] RFC822.SIZE INTERNALDATE)")
     }));
     for prohibited_command in ["SELECT", "STORE", "EXPUNGE", "COPY", "MOVE", "DELETE"] {
         assert!(

@@ -70,6 +70,8 @@ function draft(overrides: Partial<CommunicationDraft> = {}): CommunicationDraft 
 		body_html: null,
 		in_reply_to: null,
 		references: [],
+		attachment_ids: [],
+		attachments: [],
 		status: 'draft',
 		scheduled_send_at: null,
 		send_attempts: 0,

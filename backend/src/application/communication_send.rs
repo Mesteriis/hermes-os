@@ -70,6 +70,7 @@ pub(crate) async fn send_email(
         .ok_or(CommunicationSendError::ProviderAccountNotFound)?;
     let email = OutgoingEmail {
         from: account.external_account_id.clone(),
+        message_id: None,
         to: req.to,
         cc: req.cc,
         bcc: req.bcc,
@@ -78,6 +79,7 @@ pub(crate) async fn send_email(
         body_html: req.body_html,
         in_reply_to: req.in_reply_to,
         references: req.references,
+        attachments: Vec::new(),
     };
 
     if email

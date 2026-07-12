@@ -1064,9 +1064,13 @@ async fn projected_message_by_id(
             ai_category,
             ai_summary,
             ai_summary_generated_at,
+            (SELECT s.ai_state FROM communication_ai_states s WHERE s.message_id = communication_messages.message_id) AS ai_state,
             local_state,
             local_state_changed_at,
-            local_state_reason
+            local_state_reason,
+            is_read,
+            read_changed_at,
+            read_origin
         FROM communication_messages
         WHERE message_id = $1
         "#,

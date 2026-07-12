@@ -11,6 +11,9 @@ export type CommunicationAiStateRecord = {
   ai_state: CommunicationAiState
   review_reason: string | null
   last_error: string | null
+  retry_count: number
+  next_attempt_at: string | null
+  processing_lease_expires_at: string | null
   created_at: string
   updated_at: string
 }

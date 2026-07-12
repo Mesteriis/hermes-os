@@ -32,6 +32,9 @@ fn test_message(subject: &str, body: &str) -> ProjectedMessage {
         local_state: LocalMessageState::Active,
         local_state_changed_at: None,
         local_state_reason: None,
+        is_read: false,
+        read_changed_at: None,
+        read_origin: "test_fixture".into(),
     }
 }
 

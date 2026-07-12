@@ -5,7 +5,10 @@ use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use crate::integrations::mail::accounts::EmailAccountSetupService;
-use crate::integrations::mail::gmail::client::GmailApiClient;
+use crate::integrations::mail::gmail::client::{
+    EmailProviderNetworkError, GmailApiClient, ImapMailboxListOptions, ImapMailboxRole,
+    ImapNetworkClient,
+};
 use crate::integrations::mail::imap_write::{ImapWriteClient, ImapWriteConfig, ImapWriteError};
 use crate::platform::communications::{
     EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose,
@@ -20,6 +23,29 @@ pub struct EmailReadStateRequest<'a> {
     pub account: &'a ProviderAccount,
     pub provider_record_id: &'a str,
     pub message_metadata: &'a Value,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EmailProviderMessageMutation<'a> {
+    SetRead(bool),
+    SetImportant(bool),
+    SetStarred(bool),
+    Archive {
+        destination_mailbox: Option<&'a str>,
+    },
+    Trash {
+        destination_mailbox: Option<&'a str>,
+    },
+    MarkSpam {
+        destination_mailbox: Option<&'a str>,
+    },
+    UnmarkSpam {
+        destination_mailbox: Option<&'a str>,
+    },
+    AddLabel(&'a str),
+    RemoveLabel(&'a str),
+    MoveTo(&'a str),
+    CopyTo(&'a str),
 }
 
 #[derive(Clone)]
@@ -49,10 +75,32 @@ impl LiveEmailReadStateService {
         &self,
         request: EmailReadStateRequest<'_>,
     ) -> Result<(), EmailReadStateError> {
+        self.set_message_read(request, true).await
+    }
+
+    pub async fn set_message_read(
+        &self,
+        request: EmailReadStateRequest<'_>,
+        is_read: bool,
+    ) -> Result<(), EmailReadStateError> {
+        self.apply_message_mutation(request, EmailProviderMessageMutation::SetRead(is_read))
+            .await
+    }
+
+    pub async fn apply_message_mutation(
+        &self,
+        request: EmailReadStateRequest<'_>,
+        mutation: EmailProviderMessageMutation<'_>,
+    ) -> Result<(), EmailReadStateError> {
         match request.account.provider_kind {
-            EmailProviderKind::Gmail => self.mark_gmail_message_read(request).await,
+            EmailProviderKind::Gmail => self.mutate_gmail_message(request, mutation).await,
             EmailProviderKind::Icloud | EmailProviderKind::Imap => {
-                self.mark_imap_message_read(request).await
+                self.mutate_imap_messages(
+                    request.account,
+                    std::slice::from_ref(request.message_metadata),
+                    mutation,
+                )
+                .await
             }
             provider_kind => Err(EmailReadStateError::UnsupportedProvider(
                 provider_kind.as_str(),
@@ -60,51 +108,231 @@ impl LiveEmailReadStateService {
         }
     }
 
-    async fn mark_gmail_message_read(
+    pub async fn apply_gmail_batch_mutation(
+        &self,
+        account: &ProviderAccount,
+        provider_record_ids: &[String],
+        mutation: EmailProviderMessageMutation<'_>,
+    ) -> Result<(), EmailReadStateError> {
+        if account.provider_kind != EmailProviderKind::Gmail {
+            return Err(EmailReadStateError::UnsupportedProvider(
+                account.provider_kind.as_str(),
+            ));
+        }
+        let access_token = self.gmail_access_token(&account.account_id).await?;
+        let client = GmailApiClient::new(gmail_api_base_url(
+            &account.config,
+            &self.gmail_api_base_url,
+        ))
+        .user_id("me");
+        let (add_labels, remove_labels) = gmail_label_ids_for_mutation(mutation);
+        client
+            .batch_modify_messages(
+                &access_token,
+                provider_record_ids,
+                &add_labels,
+                &remove_labels,
+            )
+            .await
+            .map_err(EmailReadStateError::Gmail)
+    }
+
+    pub async fn apply_imap_batch_mutation(
+        &self,
+        account: &ProviderAccount,
+        message_metadata: &[Value],
+        mutation: EmailProviderMessageMutation<'_>,
+    ) -> Result<(), EmailReadStateError> {
+        if !matches!(
+            account.provider_kind,
+            EmailProviderKind::Icloud | EmailProviderKind::Imap
+        ) {
+            return Err(EmailReadStateError::UnsupportedProvider(
+                account.provider_kind.as_str(),
+            ));
+        }
+        self.mutate_imap_messages(account, message_metadata, mutation)
+            .await
+    }
+
+    async fn mutate_gmail_message(
         &self,
         request: EmailReadStateRequest<'_>,
+        mutation: EmailProviderMessageMutation<'_>,
     ) -> Result<(), EmailReadStateError> {
         let access_token = self.gmail_access_token(&request.account.account_id).await?;
-        GmailApiClient::new(gmail_api_base_url(
+        let client = GmailApiClient::new(gmail_api_base_url(
             &request.account.config,
             &self.gmail_api_base_url,
         ))
-        .user_id("me")
-        .mark_message_read(&access_token, request.provider_record_id)
-        .await
-        .map_err(EmailReadStateError::Gmail)
+        .user_id("me");
+        let (add_labels, remove_labels) = gmail_label_ids_for_mutation(mutation);
+        client
+            .modify_message(
+                &access_token,
+                request.provider_record_id,
+                &add_labels,
+                &remove_labels,
+            )
+            .await
+            .map_err(EmailReadStateError::Gmail)
     }
 
-    async fn mark_imap_message_read(
+    async fn mutate_imap_messages(
         &self,
-        request: EmailReadStateRequest<'_>,
+        account: &ProviderAccount,
+        message_metadata: &[Value],
+        mutation: EmailProviderMessageMutation<'_>,
     ) -> Result<(), EmailReadStateError> {
-        let config = imap_write_config(request.account, request.message_metadata)?;
+        let first_metadata = message_metadata
+            .first()
+            .ok_or(EmailReadStateError::InvalidConfig)?;
+        let config = imap_write_config(account, first_metadata)?;
+        let expected_uid_validity = imap_uid_validity(first_metadata);
+        let mut uids = Vec::with_capacity(message_metadata.len());
+        for metadata in message_metadata {
+            if imap_write_config(account, metadata)? != config {
+                return Err(EmailReadStateError::InvalidConfig);
+            }
+            if imap_uid_validity(metadata) != expected_uid_validity {
+                return Err(EmailReadStateError::InvalidConfig);
+            }
+            let uid = imap_uid(metadata)?;
+            if !uids.contains(&uid) {
+                uids.push(uid);
+            }
+        }
         let secret_store = SecretReferenceStore::new(self.pool.clone());
         let password = read_provider_secret(
             self.provider_secret_binding_store.as_ref(),
             &secret_store,
             &self.vault,
-            &request.account.account_id,
+            &account.account_id,
             ProviderAccountSecretPurpose::ImapPassword,
         )
         .await
         .map_err(|error| EmailReadStateError::Credential(error.to_string()))?;
-        let uid = imap_uid(request.message_metadata)?;
-        ImapWriteClient::new()
-            .mark_seen(
-                &ImapWriteConfig {
-                    host: &config.host,
-                    port: config.port,
-                    tls: config.tls,
-                    username: &config.username,
-                    password: &password,
-                    mailbox: &config.mailbox,
-                },
-                &[uid],
-            )
+        let discovered_destination = self
+            .discover_imap_destination(&config, &password, mutation)
+            .await?;
+        let config = ImapWriteConfig {
+            host: &config.host,
+            port: config.port,
+            tls: config.tls,
+            username: &config.username,
+            password: &password,
+            mailbox: &config.mailbox,
+            expected_uid_validity,
+        };
+        let client = ImapWriteClient::new();
+        match mutation {
+            EmailProviderMessageMutation::SetRead(true) => client.mark_seen(&config, &uids).await,
+            EmailProviderMessageMutation::SetRead(false) => {
+                client.mark_unseen(&config, &uids).await
+            }
+            EmailProviderMessageMutation::SetImportant(true) => {
+                client.add_flags(&config, &uids, &["\\Flagged"]).await
+            }
+            EmailProviderMessageMutation::SetImportant(false) => {
+                client.remove_flags(&config, &uids, &["\\Flagged"]).await
+            }
+            EmailProviderMessageMutation::SetStarred(true) => {
+                client.add_flags(&config, &uids, &["\\Flagged"]).await
+            }
+            EmailProviderMessageMutation::SetStarred(false) => {
+                client.remove_flags(&config, &uids, &["\\Flagged"]).await
+            }
+            EmailProviderMessageMutation::Archive {
+                destination_mailbox,
+            } => {
+                client
+                    .move_messages(
+                        &config,
+                        &uids,
+                        required_destination_mailbox(
+                            optional_destination_mailbox(destination_mailbox)
+                                .or(discovered_destination.as_deref()),
+                        )?,
+                    )
+                    .await
+            }
+            EmailProviderMessageMutation::Trash {
+                destination_mailbox,
+            }
+            | EmailProviderMessageMutation::MarkSpam {
+                destination_mailbox,
+            }
+            | EmailProviderMessageMutation::UnmarkSpam {
+                destination_mailbox,
+            } => {
+                client
+                    .move_messages(
+                        &config,
+                        &uids,
+                        required_destination_mailbox(
+                            optional_destination_mailbox(destination_mailbox)
+                                .or(discovered_destination.as_deref()),
+                        )?,
+                    )
+                    .await
+            }
+            EmailProviderMessageMutation::AddLabel(label) => {
+                client.add_flags(&config, &uids, &[label]).await
+            }
+            EmailProviderMessageMutation::RemoveLabel(label) => {
+                client.remove_flags(&config, &uids, &[label]).await
+            }
+            EmailProviderMessageMutation::MoveTo(mailbox) => {
+                client.move_messages(&config, &uids, mailbox).await
+            }
+            EmailProviderMessageMutation::CopyTo(mailbox) => {
+                client.copy_messages(&config, &uids, mailbox).await
+            }
+        }
+        .map_err(EmailReadStateError::Imap)
+    }
+
+    async fn discover_imap_destination(
+        &self,
+        config: &ImapWriteAccountConfig,
+        password: &ResolvedSecret,
+        mutation: EmailProviderMessageMutation<'_>,
+    ) -> Result<Option<String>, EmailReadStateError> {
+        let (provided, role, default_mailbox) = match mutation {
+            EmailProviderMessageMutation::Archive {
+                destination_mailbox,
+            } => (destination_mailbox, Some(ImapMailboxRole::Archive), None),
+            EmailProviderMessageMutation::Trash {
+                destination_mailbox,
+            } => (destination_mailbox, Some(ImapMailboxRole::Trash), None),
+            EmailProviderMessageMutation::MarkSpam {
+                destination_mailbox,
+            } => (destination_mailbox, Some(ImapMailboxRole::Junk), None),
+            EmailProviderMessageMutation::UnmarkSpam {
+                destination_mailbox,
+            } => (destination_mailbox, None, Some("INBOX")),
+            _ => (None, None, None),
+        };
+        if optional_destination_mailbox(provided).is_some() {
+            return Ok(None);
+        }
+        if let Some(mailbox) = default_mailbox {
+            return Ok(Some(mailbox.to_owned()));
+        }
+        let Some(role) = role else {
+            return Ok(None);
+        };
+        let options =
+            ImapMailboxListOptions::new(&config.host, config.port, config.tls, &config.username);
+        let mailboxes = ImapNetworkClient::new()
+            .discover_mailboxes(password, &options)
             .await
-            .map_err(EmailReadStateError::Imap)
+            .map_err(EmailReadStateError::ImapDiscovery)?;
+        mailboxes
+            .into_iter()
+            .find(|mailbox| mailbox.roles.contains(&role))
+            .map(|mailbox| Some(mailbox.name))
+            .ok_or(EmailReadStateError::MissingDestinationMailbox)
     }
 
     async fn gmail_access_token(
@@ -128,6 +356,36 @@ impl LiveEmailReadStateService {
     }
 }
 
+pub(crate) fn gmail_label_ids_for_mutation(
+    mutation: EmailProviderMessageMutation<'_>,
+) -> (Vec<&str>, Vec<&str>) {
+    match mutation {
+        EmailProviderMessageMutation::SetRead(true) => (vec![], vec!["UNREAD"]),
+        EmailProviderMessageMutation::SetRead(false) => (vec!["UNREAD"], vec![]),
+        EmailProviderMessageMutation::SetImportant(true) => (vec!["IMPORTANT"], vec![]),
+        EmailProviderMessageMutation::SetImportant(false) => (vec![], vec!["IMPORTANT"]),
+        EmailProviderMessageMutation::SetStarred(true) => (vec!["STARRED"], vec![]),
+        EmailProviderMessageMutation::SetStarred(false) => (vec![], vec!["STARRED"]),
+        EmailProviderMessageMutation::Archive { .. } => (vec![], vec!["INBOX"]),
+        EmailProviderMessageMutation::Trash { .. } => (vec!["TRASH"], vec!["INBOX", "SPAM"]),
+        EmailProviderMessageMutation::MarkSpam { .. } => (vec!["SPAM"], vec!["INBOX", "TRASH"]),
+        EmailProviderMessageMutation::UnmarkSpam { .. } => (vec!["INBOX"], vec!["SPAM"]),
+        EmailProviderMessageMutation::AddLabel(label)
+        | EmailProviderMessageMutation::CopyTo(label) => (vec![label], vec![]),
+        EmailProviderMessageMutation::RemoveLabel(label) => (vec![], vec![label]),
+        EmailProviderMessageMutation::MoveTo(label) => (vec![label], vec!["INBOX"]),
+    }
+}
+
+fn required_destination_mailbox(mailbox: Option<&str>) -> Result<&str, EmailReadStateError> {
+    optional_destination_mailbox(mailbox).ok_or(EmailReadStateError::MissingDestinationMailbox)
+}
+
+fn optional_destination_mailbox(mailbox: Option<&str>) -> Option<&str> {
+    mailbox.map(str::trim).filter(|value| !value.is_empty())
+}
+
+#[derive(Eq, PartialEq)]
 struct ImapWriteAccountConfig {
     host: String,
     port: u16,
@@ -164,6 +422,13 @@ fn imap_write_config(
     })
 }
 
+pub(crate) fn imap_source_mailbox(
+    account: &ProviderAccount,
+    message_metadata: &Value,
+) -> Result<String, EmailReadStateError> {
+    imap_write_config(account, message_metadata).map(|config| config.mailbox)
+}
+
 fn imap_uid(message_metadata: &Value) -> Result<u32, EmailReadStateError> {
     message_metadata
         .get("uid")
@@ -171,6 +436,14 @@ fn imap_uid(message_metadata: &Value) -> Result<u32, EmailReadStateError> {
         .filter(|value| *value > 0 && *value <= u64::from(u32::MAX))
         .map(|value| value as u32)
         .ok_or(EmailReadStateError::MissingImapUid)
+}
+
+fn imap_uid_validity(message_metadata: &Value) -> Option<u32> {
+    message_metadata
+        .get("uid_validity")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .filter(|value| *value > 0)
 }
 
 fn config_string(
@@ -203,21 +476,70 @@ pub enum EmailReadStateError {
     InvalidConfig,
     #[error("IMAP message metadata does not contain a UID")]
     MissingImapUid,
+    #[error("provider mutation requires a destination mailbox or label")]
+    MissingDestinationMailbox,
     #[error("provider credential is unavailable")]
     MissingCredential,
     #[error("provider credential could not be resolved: {0}")]
     Credential(String),
     #[error("Gmail read-state update failed: {0}")]
-    Gmail(crate::integrations::mail::gmail::client::EmailProviderNetworkError),
+    Gmail(EmailProviderNetworkError),
+    #[error("IMAP mailbox discovery failed: {0}")]
+    ImapDiscovery(EmailProviderNetworkError),
     #[error("IMAP read-state update failed: {0}")]
     Imap(ImapWriteError),
+}
+
+impl EmailReadStateError {
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            Self::MissingCredential | Self::Credential(_) => true,
+            Self::Gmail(error) | Self::ImapDiscovery(error) => {
+                provider_network_error_is_retryable(error)
+            }
+            Self::Imap(error) => !matches!(
+                error,
+                ImapWriteError::InvalidUidSet
+                    | ImapWriteError::InvalidFlag
+                    | ImapWriteError::InvalidMailbox
+                    | ImapWriteError::UidValidityMismatch
+            ),
+            Self::UnsupportedProvider(_)
+            | Self::InvalidConfig
+            | Self::MissingImapUid
+            | Self::MissingDestinationMailbox => false,
+        }
+    }
+}
+
+fn provider_network_error_is_retryable(error: &EmailProviderNetworkError) -> bool {
+    match error {
+        EmailProviderNetworkError::InvalidProviderRequest { .. } => false,
+        EmailProviderNetworkError::Http(error) => error.status().is_none_or(|status| {
+            status.is_server_error()
+                || status == reqwest::StatusCode::REQUEST_TIMEOUT
+                || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        }),
+        EmailProviderNetworkError::InvalidProviderResponse { .. }
+        | EmailProviderNetworkError::MissingProviderField { .. }
+        | EmailProviderNetworkError::UnexpectedProviderResponse { .. }
+        | EmailProviderNetworkError::ProviderTimeout { .. }
+        | EmailProviderNetworkError::Io(_)
+        | EmailProviderNetworkError::Tls(_)
+        | EmailProviderNetworkError::Imap(_) => true,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
-    use super::{imap_uid, imap_write_config};
+    use super::{
+        EmailProviderMessageMutation, EmailReadStateError, gmail_label_ids_for_mutation, imap_uid,
+        imap_write_config,
+    };
+    use crate::integrations::mail::gmail::client::EmailProviderNetworkError;
+    use crate::integrations::mail::imap_write::ImapWriteError;
     use crate::platform::communications::{EmailProviderKind, ProviderAccount};
 
     #[test]
@@ -242,5 +564,47 @@ mod tests {
         let config = imap_write_config(&account, &metadata).expect("config");
         assert_eq!(config.mailbox, "Archive");
         assert_eq!(imap_uid(&metadata).expect("uid"), 42);
+    }
+
+    #[test]
+    fn only_recoverable_provider_failures_are_retried() {
+        assert!(EmailReadStateError::MissingCredential.is_retryable());
+        assert!(EmailReadStateError::Credential("locked".to_owned()).is_retryable());
+        assert!(!EmailReadStateError::InvalidConfig.is_retryable());
+        assert!(!EmailReadStateError::MissingImapUid.is_retryable());
+        assert!(!EmailReadStateError::MissingDestinationMailbox.is_retryable());
+        assert!(!EmailReadStateError::UnsupportedProvider("mail").is_retryable());
+        assert!(
+            !EmailReadStateError::Gmail(EmailProviderNetworkError::InvalidProviderRequest {
+                field: "message_id",
+                message: "must not be empty",
+            })
+            .is_retryable()
+        );
+        assert!(!EmailReadStateError::Imap(ImapWriteError::InvalidMailbox).is_retryable());
+    }
+
+    #[test]
+    fn gmail_not_spam_returns_message_to_inbox_and_removes_spam_label() {
+        let (add_labels, remove_labels) =
+            gmail_label_ids_for_mutation(EmailProviderMessageMutation::UnmarkSpam {
+                destination_mailbox: None,
+            });
+
+        assert_eq!(add_labels, vec!["INBOX"]);
+        assert_eq!(remove_labels, vec!["SPAM"]);
+    }
+
+    #[test]
+    fn gmail_starred_mutation_uses_the_starred_system_label() {
+        let (add_labels, remove_labels) =
+            gmail_label_ids_for_mutation(EmailProviderMessageMutation::SetStarred(true));
+        assert_eq!(add_labels, vec!["STARRED"]);
+        assert!(remove_labels.is_empty());
+
+        let (add_labels, remove_labels) =
+            gmail_label_ids_for_mutation(EmailProviderMessageMutation::SetStarred(false));
+        assert!(add_labels.is_empty());
+        assert_eq!(remove_labels, vec!["STARRED"]);
     }
 }

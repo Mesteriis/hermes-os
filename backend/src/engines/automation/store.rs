@@ -5,8 +5,8 @@ use sqlx::postgres::PgPool;
 use super::errors::AutomationError;
 use super::evidence::{capture_policy_observation, capture_template_observation};
 use super::models::{
-    AutomationPolicy, AutomationTemplate, NewAutomationPolicy, NewAutomationTemplate,
-    TelegramSendDryRunRequest, TelegramSendDryRunResponse,
+    AutomationPolicy, AutomationPolicyScope, AutomationTemplate, NewAutomationPolicy,
+    NewAutomationTemplate, TelegramSendDryRunRequest, TelegramSendDryRunResponse,
 };
 use super::rows::{row_to_policy, row_to_template, string_vec_from_value};
 use super::validation::validate_non_empty;
@@ -79,6 +79,7 @@ impl AutomationStore {
         actor_id: &str,
     ) -> Result<AutomationPolicy, AutomationError> {
         policy.validate()?;
+        let scopes = policy.normalized_scopes();
         let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
@@ -140,7 +141,9 @@ impl AutomationStore {
         .fetch_one(&mut *transaction)
         .await?;
 
-        let stored = row_to_policy(row)?;
+        let mut stored = row_to_policy(row)?;
+        replace_policy_scopes(&mut transaction, &stored.policy_id, &scopes).await?;
+        stored.scopes = scopes;
         capture_policy_observation(
             &mut transaction,
             &stored,
@@ -197,7 +200,14 @@ impl AutomationStore {
         .fetch_all(&self.pool)
         .await?;
 
-        rows.into_iter().map(row_to_policy).collect()
+        let mut policies = rows
+            .into_iter()
+            .map(row_to_policy)
+            .collect::<Result<Vec<_>, _>>()?;
+        for policy in &mut policies {
+            policy.scopes = list_policy_scopes(&self.pool, &policy.policy_id).await?;
+        }
+        Ok(policies)
     }
 
     pub async fn dry_run_send(
@@ -244,22 +254,30 @@ impl AutomationStore {
         .await?
         .ok_or(AutomationError::PolicyNotFound)?;
 
+        let mut policy = AutomationPolicy {
+            policy_id: row.try_get("policy_id")?,
+            template_id: row.try_get("template_id")?,
+            name: row.try_get("policy_name")?,
+            enabled: row.try_get("enabled")?,
+            account_id: row.try_get("account_id")?,
+            allowed_chat_ids: string_vec_from_value(row.try_get("allowed_chat_ids")?)?,
+            scopes: list_policy_scopes(pool, &policy_id).await?,
+            trigger_kind: row.try_get("trigger_kind")?,
+            max_sends_per_hour: row.try_get("max_sends_per_hour")?,
+            quiet_hours: row.try_get("quiet_hours")?,
+            expires_at: row.try_get("expires_at")?,
+            conditions: row.try_get("conditions")?,
+            created_at: row.try_get("policy_created_at")?,
+            updated_at: row.try_get("policy_updated_at")?,
+        };
+        policy.scopes.sort_by(|left, right| {
+            left.scope_kind
+                .cmp(&right.scope_kind)
+                .then(left.scope_value.cmp(&right.scope_value))
+        });
+
         Ok((
-            AutomationPolicy {
-                policy_id: row.try_get("policy_id")?,
-                template_id: row.try_get("template_id")?,
-                name: row.try_get("policy_name")?,
-                enabled: row.try_get("enabled")?,
-                account_id: row.try_get("account_id")?,
-                allowed_chat_ids: string_vec_from_value(row.try_get("allowed_chat_ids")?)?,
-                trigger_kind: row.try_get("trigger_kind")?,
-                max_sends_per_hour: row.try_get("max_sends_per_hour")?,
-                quiet_hours: row.try_get("quiet_hours")?,
-                expires_at: row.try_get("expires_at")?,
-                conditions: row.try_get("conditions")?,
-                created_at: row.try_get("policy_created_at")?,
-                updated_at: row.try_get("policy_updated_at")?,
-            },
+            policy,
             AutomationTemplate {
                 template_id: row.try_get("template_id")?,
                 name: row.try_get("template_name")?,
@@ -270,4 +288,54 @@ impl AutomationStore {
             },
         ))
     }
+}
+
+async fn replace_policy_scopes(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    policy_id: &str,
+    scopes: &[AutomationPolicyScope],
+) -> Result<(), AutomationError> {
+    sqlx::query("DELETE FROM automation_policy_scopes WHERE policy_id = $1")
+        .bind(policy_id)
+        .execute(&mut **transaction)
+        .await?;
+    for scope in scopes {
+        sqlx::query(
+            r#"
+            INSERT INTO automation_policy_scopes (policy_id, scope_kind, scope_value)
+            VALUES ($1, $2, $3)
+            "#,
+        )
+        .bind(policy_id)
+        .bind(&scope.scope_kind)
+        .bind(&scope.scope_value)
+        .execute(&mut **transaction)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn list_policy_scopes(
+    pool: &PgPool,
+    policy_id: &str,
+) -> Result<Vec<AutomationPolicyScope>, AutomationError> {
+    let rows = sqlx::query(
+        r#"
+        SELECT scope_kind, scope_value
+        FROM automation_policy_scopes
+        WHERE policy_id = $1
+        ORDER BY scope_kind ASC, scope_value ASC
+        "#,
+    )
+    .bind(policy_id)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter()
+        .map(|row| {
+            Ok(AutomationPolicyScope {
+                scope_kind: row.try_get("scope_kind")?,
+                scope_value: row.try_get("scope_value")?,
+            })
+        })
+        .collect()
 }

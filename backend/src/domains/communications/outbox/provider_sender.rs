@@ -13,6 +13,7 @@ use crate::platform::communications::{
 };
 use crate::platform::secrets::SecretResolver;
 
+use super::attachments::load_sendable_attachments;
 use super::smtp_sender::SmtpOutboxEmailSender;
 use super::{
     CommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt,
@@ -21,6 +22,7 @@ use super::{
 
 #[derive(Clone)]
 pub struct CommunicationOutboxEmailSender<R, T, G> {
+    pool: PgPool,
     provider_account_store: CommunicationProviderAccountStore,
     provider_secret_binding_store: CommunicationProviderSecretBindingStore,
     smtp_sender: SmtpOutboxEmailSender<R, T>,
@@ -35,6 +37,7 @@ where
 {
     pub fn new(pool: PgPool, resolver: R, smtp_transport: T, gmail_transport: G) -> Self {
         Self {
+            pool: pool.clone(),
             provider_account_store: CommunicationProviderAccountStore::new(pool.clone()),
             provider_secret_binding_store: CommunicationProviderSecretBindingStore::new(
                 pool.clone(),
@@ -101,7 +104,8 @@ where
                     "Gmail OAuth credential is unavailable for this account".to_owned(),
                 )
             })?;
-        let email = outgoing_email_from_outbox_item(item, account);
+        let mut email = outgoing_email_from_outbox_item(item, account);
+        email.attachments = load_sendable_attachments(&self.pool, &item.outbox_id).await?;
         let result = self
             .gmail_transport
             .send(GmailOutboxSendRequest {

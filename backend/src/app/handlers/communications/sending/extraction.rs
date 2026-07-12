@@ -9,6 +9,12 @@ pub(crate) async fn post_v1_extract_tasks(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    crate::app::api_support::require_mail_ai_content_egress(
+        &state,
+        &msg.account_id,
+        crate::app::api_support::MailAiContentEgressKind::Body,
+    )
+    .await?;
     let svc = crate::domains::communications::extract::EmailExtractService::new(
         ai_hub_optional(&state).await?,
     );

@@ -1,8 +1,18 @@
 use chrono::{DateTime, Utc};
+use serde::Serialize;
 use serde_json::Value;
-use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
+
+use self::events::{
+    EVENT_COMPLETED, EVENT_EXECUTING, EVENT_FAILED, EVENT_REQUESTED, EVENT_RETRY_REQUESTED,
+    append_provider_command_event, append_provider_command_events,
+};
+use crate::platform::events::EventStoreError;
+
+mod diagnostics;
+mod events;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NewCommunicationProviderCommand {
@@ -132,6 +142,36 @@ pub struct CommunicationProviderCommand {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct CommunicationProviderCommandDiagnostic {
+    pub command_id: String,
+    pub account_id: String,
+    pub command_kind: String,
+    pub message_id: Option<String>,
+    pub status: String,
+    pub retry_count: i32,
+    pub max_retries: i32,
+    pub reconciliation_status: String,
+    pub next_attempt_at: Option<DateTime<Utc>>,
+    pub last_attempt_at: Option<DateTime<Utc>>,
+    pub dead_lettered_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct CommunicationProviderCommandStatusCount {
+    pub status: String,
+    pub count: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct CommunicationProviderCommandDiagnostics {
+    pub items: Vec<CommunicationProviderCommandDiagnostic>,
+    pub counts: Vec<CommunicationProviderCommandStatusCount>,
+}
+
 #[derive(Clone)]
 pub struct CommunicationProviderCommandStore {
     pool: PgPool,
@@ -146,8 +186,19 @@ impl CommunicationProviderCommandStore {
         &self,
         command: &NewCommunicationProviderCommand,
     ) -> Result<CommunicationProviderCommand, CommunicationProviderCommandError> {
+        let mut transaction = self.pool.begin().await?;
+        let stored = Self::enqueue_in_transaction(&mut transaction, command).await?;
+        transaction.commit().await?;
+        Ok(stored)
+    }
+
+    pub(crate) async fn enqueue_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        command: &NewCommunicationProviderCommand,
+    ) -> Result<CommunicationProviderCommand, CommunicationProviderCommandError> {
         command.validate()?;
-        ensure_canonical_communication_account(&self.pool, &command.account_id).await?;
+        ensure_canonical_communication_account_in_transaction(transaction, &command.account_id)
+            .await?;
         let row = sqlx::query(&provider_command_returning_sql(
             r#"
             INSERT INTO communication_provider_commands (
@@ -182,10 +233,13 @@ impl CommunicationProviderCommandStore {
         .bind(command.confirmation_decision.trim())
         .bind(command.max_retries)
         .bind(command.actor_id.trim())
-        .fetch_one(&self.pool)
+        .fetch_one(&mut **transaction)
         .await?;
 
-        row_to_provider_command(row)
+        let stored = row_to_provider_command(row)?;
+        append_provider_command_event(transaction, EVENT_REQUESTED, &stored, stored.created_at)
+            .await?;
+        Ok(stored)
     }
 
     pub async fn claim_due(
@@ -198,12 +252,15 @@ impl CommunicationProviderCommandStore {
         validate_non_empty("account_id", account_id)?;
         validate_non_empty("channel_kind", channel_kind)?;
         let limit = limit.clamp(1, 100);
+        let mut transaction = self.pool.begin().await?;
         let rows = sqlx::query(&provider_command_returning_sql_with_alias(
             r#"
             UPDATE communication_provider_commands command
             SET status = 'executing',
                 retry_count = retry_count + 1,
                 last_error = NULL,
+                last_attempt_at = $3,
+                next_attempt_at = NULL,
                 updated_at = $3
             FROM (
                 SELECT command_id
@@ -212,6 +269,7 @@ impl CommunicationProviderCommandStore {
                   AND channel_kind = $2
                   AND status IN ('queued', 'retrying')
                   AND retry_count < max_retries
+                  AND (next_attempt_at IS NULL OR next_attempt_at <= $3)
                 ORDER BY updated_at ASC, command_id ASC
                 LIMIT $4
                 FOR UPDATE SKIP LOCKED
@@ -224,10 +282,77 @@ impl CommunicationProviderCommandStore {
         .bind(channel_kind.trim())
         .bind(now)
         .bind(limit)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *transaction)
         .await?;
+        let commands = rows
+            .into_iter()
+            .map(row_to_provider_command)
+            .collect::<Result<Vec<_>, _>>()?;
+        append_provider_command_events(&mut transaction, EVENT_EXECUTING, &commands, now).await?;
+        transaction.commit().await?;
+        Ok(commands)
+    }
 
-        rows.into_iter().map(row_to_provider_command).collect()
+    pub async fn recover_stale_executing(
+        &self,
+        account_id: &str,
+        channel_kind: &str,
+        now: DateTime<Utc>,
+        execution_lease: chrono::Duration,
+    ) -> Result<Vec<CommunicationProviderCommand>, CommunicationProviderCommandError> {
+        validate_non_empty("account_id", account_id)?;
+        validate_non_empty("channel_kind", channel_kind)?;
+        if execution_lease <= chrono::Duration::zero() {
+            return Err(CommunicationProviderCommandError::Invalid(
+                "execution_lease must be greater than zero".to_owned(),
+            ));
+        }
+        let stale_before = now.checked_sub_signed(execution_lease).ok_or_else(|| {
+            CommunicationProviderCommandError::Invalid(
+                "execution_lease is outside the supported timestamp range".to_owned(),
+            )
+        })?;
+        let mut transaction = self.pool.begin().await?;
+        let rows = sqlx::query(&provider_command_returning_sql(
+            r#"
+            UPDATE communication_provider_commands
+            SET status = CASE
+                    WHEN retry_count >= max_retries THEN 'dead_letter'
+                    ELSE 'retrying'
+                END,
+                next_attempt_at = CASE
+                    WHEN retry_count >= max_retries THEN NULL
+                    ELSE $3
+                END,
+                dead_lettered_at = CASE
+                    WHEN retry_count >= max_retries THEN $3
+                    ELSE NULL
+                END,
+                last_error = 'provider command execution lease expired before completion',
+                result_payload = result_payload || jsonb_build_object(
+                    'kind', 'execution_lease_expired',
+                    'retryable', retry_count < max_retries
+                ),
+                updated_at = $3
+            WHERE account_id = $1
+              AND channel_kind = $2
+              AND status = 'executing'
+              AND last_attempt_at < $4
+            "#,
+        ))
+        .bind(account_id.trim())
+        .bind(channel_kind.trim())
+        .bind(now)
+        .bind(stale_before)
+        .fetch_all(&mut *transaction)
+        .await?;
+        let commands = rows
+            .into_iter()
+            .map(row_to_provider_command)
+            .collect::<Result<Vec<_>, _>>()?;
+        append_provider_command_events(&mut transaction, EVENT_FAILED, &commands, now).await?;
+        transaction.commit().await?;
+        Ok(commands)
     }
 
     pub async fn mark_completed(
@@ -244,6 +369,7 @@ impl CommunicationProviderCommandStore {
                 "result_payload must be a JSON object".to_owned(),
             ));
         }
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(&provider_command_returning_sql(
             r#"
             UPDATE communication_provider_commands
@@ -267,16 +393,21 @@ impl CommunicationProviderCommandStore {
                 updated_at = $3
             WHERE command_id = $1
               AND channel_kind = $2
+              AND status = 'executing'
             "#,
         ))
         .bind(command_id.trim())
         .bind(channel_kind.trim())
         .bind(now)
         .bind(result_payload)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
-
-        row.map(row_to_provider_command).transpose()
+        let command = row.map(row_to_provider_command).transpose()?;
+        if let Some(command) = &command {
+            append_provider_command_event(&mut transaction, EVENT_COMPLETED, command, now).await?;
+        }
+        transaction.commit().await?;
+        Ok(command)
     }
 
     pub async fn mark_observed_by_provider_message(
@@ -308,6 +439,7 @@ impl CommunicationProviderCommandStore {
             .iter()
             .map(|command_kind| command_kind.trim().to_owned())
             .collect::<Vec<_>>();
+        let mut transaction = self.pool.begin().await?;
         let rows = sqlx::query(&provider_command_returning_sql(
             r#"
             UPDATE communication_provider_commands
@@ -327,12 +459,25 @@ impl CommunicationProviderCommandStore {
             WHERE account_id = $1
               AND channel_kind = $2
               AND command_kind = ANY($4::text[])
-              AND status IN ('completed', 'executing')
+              AND status IN ('queued', 'retrying', 'completed', 'executing')
               AND reconciliation_status <> 'observed'
               AND (
                     provider_message_id = $3
                     OR result_payload #>> '{provider_message_id}' = $3
                     OR result_payload #>> '{message_id}' = $3
+              )
+              AND (
+                    (NOT ($6 ? 'is_read' OR $6 ? 'starred'))
+                    OR (
+                        ($6 ? 'is_read' AND (
+                            (command_kind = 'mark_read' AND ($6->>'is_read')::boolean)
+                            OR (command_kind = 'mark_unread' AND NOT ($6->>'is_read')::boolean)
+                        ))
+                        OR ($6 ? 'starred' AND (
+                            (command_kind = 'star' AND ($6->>'starred')::boolean)
+                            OR (command_kind = 'unstar' AND NOT ($6->>'starred')::boolean)
+                        ))
+                    )
               )
             "#,
         ))
@@ -342,10 +487,16 @@ impl CommunicationProviderCommandStore {
         .bind(command_kinds)
         .bind(observed_at)
         .bind(provider_state)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *transaction)
         .await?;
-
-        rows.into_iter().map(row_to_provider_command).collect()
+        let commands = rows
+            .into_iter()
+            .map(row_to_provider_command)
+            .collect::<Result<Vec<_>, _>>()?;
+        append_provider_command_events(&mut transaction, EVENT_COMPLETED, &commands, observed_at)
+            .await?;
+        transaction.commit().await?;
+        Ok(commands)
     }
 
     pub async fn mark_failed(
@@ -364,6 +515,7 @@ impl CommunicationProviderCommandStore {
                 "result_payload must be a JSON object".to_owned(),
             ));
         }
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(&provider_command_returning_sql(
             r#"
             UPDATE communication_provider_commands
@@ -371,11 +523,35 @@ impl CommunicationProviderCommandStore {
                     WHEN retry_count >= max_retries THEN 'dead_letter'
                     ELSE 'retrying'
                 END,
+                next_attempt_at = CASE
+                    WHEN retry_count >= max_retries THEN NULL
+                    ELSE $3 + (
+                        LEAST(
+                            3600::DOUBLE PRECISION,
+                            5::DOUBLE PRECISION * power(
+                                2::DOUBLE PRECISION,
+                                GREATEST(retry_count - 1, 0)::DOUBLE PRECISION
+                            )
+                        )
+                        + (
+                            mod(
+                                mod(hashtextextended(command_id || ':' || retry_count::TEXT, 0), 1000)
+                                    + 1000,
+                                1000
+                            )::DOUBLE PRECISION / 1000
+                        )
+                    ) * INTERVAL '1 second'
+                END,
+                dead_lettered_at = CASE
+                    WHEN retry_count >= max_retries THEN $3
+                    ELSE NULL
+                END,
                 last_error = $4,
                 result_payload = $5,
                 updated_at = $3
             WHERE command_id = $1
               AND channel_kind = $2
+              AND status = 'executing'
             "#,
         ))
         .bind(command_id.trim())
@@ -383,10 +559,60 @@ impl CommunicationProviderCommandStore {
         .bind(now)
         .bind(error.trim())
         .bind(result_payload)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
+        let command = row.map(row_to_provider_command).transpose()?;
+        if let Some(command) = &command {
+            append_provider_command_event(&mut transaction, EVENT_FAILED, command, now).await?;
+        }
+        transaction.commit().await?;
+        Ok(command)
+    }
 
-        row.map(row_to_provider_command).transpose()
+    pub async fn mark_terminal_failed(
+        &self,
+        command_id: &str,
+        channel_kind: &str,
+        now: DateTime<Utc>,
+        error: &str,
+        result_payload: Value,
+    ) -> Result<Option<CommunicationProviderCommand>, CommunicationProviderCommandError> {
+        validate_non_empty("command_id", command_id)?;
+        validate_non_empty("channel_kind", channel_kind)?;
+        validate_non_empty("error", error)?;
+        if !result_payload.is_object() {
+            return Err(CommunicationProviderCommandError::Invalid(
+                "result_payload must be a JSON object".to_owned(),
+            ));
+        }
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(&provider_command_returning_sql(
+            r#"
+            UPDATE communication_provider_commands
+            SET status = 'dead_letter',
+                next_attempt_at = NULL,
+                dead_lettered_at = $3,
+                last_error = $4,
+                result_payload = $5,
+                updated_at = $3
+            WHERE command_id = $1
+              AND channel_kind = $2
+              AND status = 'executing'
+            "#,
+        ))
+        .bind(command_id.trim())
+        .bind(channel_kind.trim())
+        .bind(now)
+        .bind(error.trim())
+        .bind(result_payload)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let command = row.map(row_to_provider_command).transpose()?;
+        if let Some(command) = &command {
+            append_provider_command_event(&mut transaction, EVENT_FAILED, command, now).await?;
+        }
+        transaction.commit().await?;
+        Ok(command)
     }
 
     pub async fn manual_retry(
@@ -397,6 +623,7 @@ impl CommunicationProviderCommandStore {
     ) -> Result<Option<CommunicationProviderCommand>, CommunicationProviderCommandError> {
         validate_non_empty("command_id", command_id)?;
         validate_non_empty("channel_kind", channel_kind)?;
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(&provider_command_returning_sql(
             r#"
             UPDATE communication_provider_commands
@@ -405,8 +632,11 @@ impl CommunicationProviderCommandStore {
                 completed_at = NULL,
                 last_error = NULL,
                 reconciliation_status = 'not_observed',
+                next_attempt_at = $3,
+                last_attempt_at = NULL,
                 provider_observed_at = NULL,
                 reconciled_at = NULL,
+                dead_lettered_at = NULL,
                 updated_at = $3
             WHERE command_id = $1
               AND channel_kind = $2
@@ -416,10 +646,15 @@ impl CommunicationProviderCommandStore {
         .bind(command_id.trim())
         .bind(channel_kind.trim())
         .bind(now)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
-
-        row.map(row_to_provider_command).transpose()
+        let command = row.map(row_to_provider_command).transpose()?;
+        if let Some(command) = &command {
+            append_provider_command_event(&mut transaction, EVENT_RETRY_REQUESTED, command, now)
+                .await?;
+        }
+        transaction.commit().await?;
+        Ok(command)
     }
 
     pub async fn list(
@@ -542,8 +777,8 @@ fn row_to_provider_command(
     })
 }
 
-async fn ensure_canonical_communication_account(
-    pool: &PgPool,
+async fn ensure_canonical_communication_account_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
     account_id: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
@@ -573,7 +808,7 @@ async fn ensure_canonical_communication_account(
         "#,
     )
     .bind(account_id.trim())
-    .execute(pool)
+    .execute(&mut **transaction)
     .await?;
     Ok(())
 }
@@ -596,4 +831,6 @@ pub enum CommunicationProviderCommandError {
     Invalid(String),
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Event(#[from] EventStoreError),
 }

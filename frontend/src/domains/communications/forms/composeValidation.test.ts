@@ -61,7 +61,8 @@ describe('compose validation', () => {
       bodyFormat: 'plain',
       scheduledSendAt: '',
       undoSendSeconds: null,
-      inReplyTo: 'provider-message-1'
+      inReplyTo: 'provider-message-1',
+      attachments: []
     })).toEqual({
       accountId: 'account-1',
       toText: 'recipient@example.com',

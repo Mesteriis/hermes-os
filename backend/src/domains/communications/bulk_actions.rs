@@ -4,13 +4,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::platform::events::{EventStore, NewEventEnvelope};
 use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 
 use super::evidence::link_mail_entity_in_transaction;
+use super::provider_commands::{
+    CommunicationProviderCommandError, CommunicationProviderCommandStore,
+    NewCommunicationProviderCommand,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BulkMessageAction {
@@ -23,6 +28,8 @@ pub enum BulkMessageAction {
     Unpin,
     Important,
     NotImportant,
+    Star,
+    Unstar,
     AddLabel(String),
     RemoveLabel(String),
     Snooze(DateTime<Utc>),
@@ -40,6 +47,8 @@ impl BulkMessageAction {
             Self::Unpin => "unpin",
             Self::Important => "important",
             Self::NotImportant => "not_important",
+            Self::Star => "star",
+            Self::Unstar => "unstar",
             Self::AddLabel(_) => "add_label",
             Self::RemoveLabel(_) => "remove_label",
             Self::Snooze(_) => "snooze",
@@ -48,8 +57,7 @@ impl BulkMessageAction {
 
     fn event_type(&self) -> &'static str {
         match self {
-            Self::MarkRead => "mail.message.read",
-            Self::MarkUnread => "mail.message.unread",
+            Self::MarkRead | Self::MarkUnread => "communication.message.read_state_changed.v1",
             Self::Archive => "mail.message.archived",
             Self::Trash => "mail.message.deleted",
             Self::Restore => "mail.message.restored",
@@ -57,6 +65,8 @@ impl BulkMessageAction {
             Self::Unpin => "mail.message.unpinned",
             Self::Important => "mail.message.important",
             Self::NotImportant => "mail.message.not_important",
+            Self::Star => "mail.message.starred",
+            Self::Unstar => "mail.message.unstarred",
             Self::AddLabel(_) => "mail.message.labeled",
             Self::RemoveLabel(_) => "mail.message.unlabeled",
             Self::Snooze(_) => "mail.message.snoozed",
@@ -91,11 +101,11 @@ impl BulkMessageActionStore {
         let mut transaction = self.pool.begin().await?;
         let updated_ids = match &action {
             BulkMessageAction::MarkRead => {
-                self.update_workflow_state(&mut transaction, &message_ids, "reviewed")
+                self.update_read_state(&mut transaction, &message_ids, true)
                     .await?
             }
             BulkMessageAction::MarkUnread => {
-                self.update_workflow_state(&mut transaction, &message_ids, "new")
+                self.update_read_state(&mut transaction, &message_ids, false)
                     .await?
             }
             BulkMessageAction::Archive => {
@@ -116,11 +126,19 @@ impl BulkMessageActionStore {
                     .await?
             }
             BulkMessageAction::Important => {
-                self.set_metadata_bool(&mut transaction, &message_ids, "important", true)
+                self.set_provider_flag_bool(&mut transaction, &message_ids, "important", true)
                     .await?
             }
             BulkMessageAction::NotImportant => {
-                self.set_metadata_bool(&mut transaction, &message_ids, "important", false)
+                self.set_provider_flag_bool(&mut transaction, &message_ids, "important", false)
+                    .await?
+            }
+            BulkMessageAction::Star => {
+                self.set_provider_flag_bool(&mut transaction, &message_ids, "starred", true)
+                    .await?
+            }
+            BulkMessageAction::Unstar => {
+                self.set_provider_flag_bool(&mut transaction, &message_ids, "starred", false)
                     .await?
             }
             BulkMessageAction::AddLabel(label) => {
@@ -138,6 +156,10 @@ impl BulkMessageActionStore {
         let outcome = outcome(action.as_str(), &message_ids, updated_ids.clone());
 
         if !updated_ids.is_empty() {
+            if provider_command_kind(&action).is_some() {
+                self.enqueue_provider_commands(&mut transaction, &updated_ids, &action)
+                    .await?;
+            }
             self.capture_observation_trail(&mut transaction, &action, &outcome, &updated_ids)
                 .await?;
             let event = bulk_message_action_event(&action, &outcome, &updated_ids)?;
@@ -167,6 +189,76 @@ impl BulkMessageActionStore {
         .fetch_all(&mut **transaction)
         .await
         .map_err(BulkMessageActionError::Sqlx)
+    }
+
+    async fn update_read_state(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        message_ids: &[String],
+        is_read: bool,
+    ) -> Result<Vec<String>, BulkMessageActionError> {
+        sqlx::query_scalar(
+            r#"
+            UPDATE communication_messages
+            SET is_read = $2,
+                read_changed_at = now(),
+                read_origin = 'local_user',
+                projected_at = now()
+            WHERE message_id = ANY($1)
+            RETURNING message_id
+            "#,
+        )
+        .bind(message_ids)
+        .bind(is_read)
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(BulkMessageActionError::Sqlx)
+    }
+
+    async fn enqueue_provider_commands(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        message_ids: &[String],
+        action: &BulkMessageAction,
+    ) -> Result<(), BulkMessageActionError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT message_id, account_id, provider_record_id, message_metadata
+            FROM communication_messages
+            WHERE message_id = ANY($1)
+            "#,
+        )
+        .bind(message_ids)
+        .fetch_all(&mut **transaction)
+        .await?;
+        let command_kind = provider_command_kind(action).ok_or(BulkMessageActionError::Invalid(
+            "action does not have a provider command",
+        ))?;
+        for row in rows {
+            let message_id: String = row.try_get("message_id")?;
+            let account_id: String = row.try_get("account_id")?;
+            let provider_record_id: String = row.try_get("provider_record_id")?;
+            let message_metadata: Value = row.try_get("message_metadata")?;
+            let command_id = format!("mail-command:{}", Uuid::new_v4());
+            let command = NewCommunicationProviderCommand::new(
+                &command_id,
+                account_id,
+                "mail",
+                command_kind,
+                &command_id,
+                "hermes-local-user",
+            )
+            .provider_message_id(&provider_record_id)
+            .target_ref(json!({ "message_id": message_id }))
+            .payload(provider_command_payload(
+                action,
+                &provider_record_id,
+                &message_metadata,
+            ));
+            CommunicationProviderCommandStore::enqueue_in_transaction(transaction, &command)
+                .await?;
+        }
+        Ok(())
     }
 
     async fn move_to_trash(
@@ -238,6 +330,43 @@ impl BulkMessageActionStore {
         .bind(message_ids)
         .bind(path)
         .bind(value)
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(BulkMessageActionError::Sqlx)
+    }
+
+    async fn set_provider_flag_bool(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        message_ids: &[String],
+        key: &str,
+        value: bool,
+    ) -> Result<Vec<String>, BulkMessageActionError> {
+        let value_path = vec![key.to_owned()];
+        let origin_path = vec![format!("{key}_origin")];
+        sqlx::query_scalar(
+            r#"
+            UPDATE communication_messages
+            SET message_metadata = jsonb_set(
+                    jsonb_set(
+                        COALESCE(message_metadata, '{}'::jsonb),
+                        $2,
+                        to_jsonb($3::boolean),
+                        true
+                    ),
+                    $4,
+                    '"local_user"'::jsonb,
+                    true
+                ),
+                projected_at = now()
+            WHERE message_id = ANY($1)
+            RETURNING message_id
+            "#,
+        )
+        .bind(message_ids)
+        .bind(value_path)
+        .bind(value)
+        .bind(origin_path)
         .fetch_all(&mut **transaction)
         .await
         .map_err(BulkMessageActionError::Sqlx)
@@ -405,24 +534,66 @@ impl BulkMessageActionStore {
 
 fn bulk_action_relationship_kind(action: &BulkMessageAction) -> &'static str {
     match action {
-        BulkMessageAction::MarkRead
-        | BulkMessageAction::MarkUnread
-        | BulkMessageAction::Archive => "workflow_state_transition",
+        BulkMessageAction::MarkRead | BulkMessageAction::MarkUnread => "read_state_transition",
+        BulkMessageAction::Archive => "workflow_state_transition",
         BulkMessageAction::Trash | BulkMessageAction::Restore => "local_state_transition",
         BulkMessageAction::Pin
         | BulkMessageAction::Unpin
         | BulkMessageAction::Important
         | BulkMessageAction::NotImportant
+        | BulkMessageAction::Star
+        | BulkMessageAction::Unstar
         | BulkMessageAction::AddLabel(_)
         | BulkMessageAction::RemoveLabel(_)
         | BulkMessageAction::Snooze(_) => "message_flag_update",
     }
 }
 
+fn provider_command_kind(action: &BulkMessageAction) -> Option<&'static str> {
+    match action {
+        BulkMessageAction::MarkRead => Some("mark_read"),
+        BulkMessageAction::MarkUnread => Some("mark_unread"),
+        BulkMessageAction::Archive => Some("archive"),
+        BulkMessageAction::Trash => Some("trash"),
+        BulkMessageAction::Important => Some("important"),
+        BulkMessageAction::NotImportant => Some("not_important"),
+        BulkMessageAction::Star => Some("star"),
+        BulkMessageAction::Unstar => Some("unstar"),
+        BulkMessageAction::AddLabel(_) => Some("add_label"),
+        BulkMessageAction::RemoveLabel(_) => Some("remove_label"),
+        _ => None,
+    }
+}
+
+fn provider_command_payload(
+    action: &BulkMessageAction,
+    provider_record_id: &str,
+    message_metadata: &Value,
+) -> Value {
+    let mut payload = json!({
+        "provider_record_id": provider_record_id,
+        "message_metadata": message_metadata,
+    });
+    if let Some(is_read) = match action {
+        BulkMessageAction::MarkRead => Some(true),
+        BulkMessageAction::MarkUnread => Some(false),
+        _ => None,
+    } {
+        payload["desired_is_read"] = json!(is_read);
+    }
+    match action {
+        BulkMessageAction::AddLabel(label) | BulkMessageAction::RemoveLabel(label) => {
+            payload["label"] = json!(label.trim());
+        }
+        _ => {}
+    }
+    payload
+}
+
 fn bulk_action_link_metadata(action: &BulkMessageAction) -> Value {
     match action {
-        BulkMessageAction::MarkRead => json!({ "workflow_state": "reviewed" }),
-        BulkMessageAction::MarkUnread => json!({ "workflow_state": "new" }),
+        BulkMessageAction::MarkRead => json!({ "is_read": true }),
+        BulkMessageAction::MarkUnread => json!({ "is_read": false }),
         BulkMessageAction::Archive => json!({ "workflow_state": "archived" }),
         BulkMessageAction::Trash => json!({ "local_state": "trash" }),
         BulkMessageAction::Restore => json!({ "local_state": "active" }),
@@ -430,6 +601,8 @@ fn bulk_action_link_metadata(action: &BulkMessageAction) -> Value {
         BulkMessageAction::Unpin => json!({ "pinned": false }),
         BulkMessageAction::Important => json!({ "important": true }),
         BulkMessageAction::NotImportant => json!({ "important": false }),
+        BulkMessageAction::Star => json!({ "starred": true }),
+        BulkMessageAction::Unstar => json!({ "starred": false }),
         BulkMessageAction::AddLabel(label) => json!({ "label": label.trim(), "action": "add" }),
         BulkMessageAction::RemoveLabel(label) => {
             json!({ "label": label.trim(), "action": "remove" })
@@ -572,6 +745,8 @@ pub enum BulkMessageActionError {
     EventStore(#[from] crate::platform::events::EventStoreError),
     #[error(transparent)]
     EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    #[error(transparent)]
+    ProviderCommand(#[from] CommunicationProviderCommandError),
     #[error("invalid bulk message action request: {0}")]
     Invalid(&'static str),
 }

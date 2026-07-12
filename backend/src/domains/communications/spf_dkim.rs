@@ -1,7 +1,14 @@
-// §7: SPF/DKIM/DMARC header parsing — технические проверки без внешних DNS-запросов
+// Unverified SPF/DKIM/DMARC header assertion parsing without DNS or crypto verification.
 use serde::Serialize;
 
-#[derive(Clone, Debug, Serialize)]
+use crate::domains::communications::core::StoredRawCommunicationRecord;
+use crate::domains::communications::messages::{
+    MessageProjectionError, parse_raw_email_message_from_blob,
+};
+use crate::domains::communications::storage::LocalCommunicationBlobStore;
+use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
+
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct AuthResults {
     pub spf: Option<SpfResult>,
     pub dkim: Option<DkimResult>,
@@ -89,6 +96,46 @@ pub fn parse_auth_headers(raw_headers: &str) -> AuthResults {
     }
 }
 
+/// Reads only authentication-related RFC822 fields from retained raw evidence.
+///
+/// Authentication assertions in a message body are untrusted message content;
+/// they must never influence a security result. Older records without a raw
+/// RFC822 blob return an empty report instead of falling back to body text.
+pub async fn parse_auth_headers_from_raw_record(
+    raw: &StoredRawCommunicationRecord,
+) -> Result<AuthResults, MessageProjectionError> {
+    if raw
+        .payload
+        .get("raw_blob_storage_kind")
+        .and_then(|value| value.as_str())
+        != Some("local_fs")
+        || raw
+            .payload
+            .get("raw_blob_storage_path")
+            .and_then(|value| value.as_str())
+            .is_none_or(|value| value.trim().is_empty())
+    {
+        return Ok(AuthResults::default());
+    }
+
+    let blob_store = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+    let parsed = parse_raw_email_message_from_blob(&blob_store, raw).await?;
+    Ok(parse_auth_header_pairs(&parsed.headers))
+}
+
+pub fn parse_auth_header_pairs(headers: &[(String, String)]) -> AuthResults {
+    let raw_headers = headers
+        .iter()
+        .filter(|(name, _)| {
+            name.eq_ignore_ascii_case("authentication-results")
+                || name.eq_ignore_ascii_case("received-spf")
+        })
+        .map(|(name, value)| format!("{name}: {value}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    parse_auth_headers(&raw_headers)
+}
+
 fn extract_value(line: &str, prefix: &str) -> Option<String> {
     let lower = line.to_lowercase();
     let pos = lower.find(prefix)?;
@@ -137,9 +184,10 @@ pub fn assess_auth_risk(auth: &AuthResults) -> SpfDkimReport {
     let is_spoofed =
         (has_spf && !spf_pass) || (has_dkim && !dkim_pass) || (has_dmarc && !dmarc_pass);
     let summary = if is_spoofed {
-        "Authentication failed: possible spoofing".into()
+        "Unverified authentication header assertion indicates possible spoofing".into()
     } else if has_spf || has_dkim || has_dmarc {
-        "Authentication checks passed".into()
+        "Unverified authentication header assertions; cryptographic verification is unavailable"
+            .into()
     } else {
         "No authentication headers present".into()
     };
@@ -214,5 +262,21 @@ mod tests {
         };
         let risk = assess_auth_risk(&auth);
         assert!(!risk.is_spoofed);
+    }
+
+    #[test]
+    fn ignores_authentication_looking_text_in_non_authentication_headers() {
+        let auth = parse_auth_header_pairs(&[
+            (
+                "Subject".to_owned(),
+                "Please note dkim=pass d=attacker.example".to_owned(),
+            ),
+            ("From".to_owned(), "sender@example.test".to_owned()),
+        ]);
+
+        assert!(auth.spf.is_none());
+        assert!(auth.dkim.is_none());
+        assert!(auth.dmarc.is_none());
+        assert!(auth.raw_headers.is_empty());
     }
 }

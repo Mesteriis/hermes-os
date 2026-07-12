@@ -25,19 +25,14 @@ use hermes_hub_backend::platform::communications::{
 };
 use hermes_hub_backend::platform::events::{
     EventConsumerConfig, EventConsumerRunner, EventDeadLetterReviewState, EventStore,
-    EventStoreError, NewEventEnvelope,
+    EventStoreError, NewEventEnvelope, StoredEventEnvelope,
 };
-use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
-async fn live_context(_test_name: &str) -> Option<(Database, EventStore)> {
+async fn live_context(_test_name: &str) -> Option<(TestContext, EventStore)> {
     let test_context = TestContext::new().await;
-    let database_url = test_context.connection_string();
-    let database = Database::connect(Some(&database_url))
-        .await
-        .expect("database connection");
-    let store = EventStore::new(database.pool().expect("configured pool").clone());
-    Some((database, store))
+    let store = EventStore::new(test_context.pool().clone());
+    Some((test_context, store))
 }
 
 fn unique_suffix() -> u128 {
@@ -78,12 +73,12 @@ async fn append_test_event(store: &EventStore, suffix: u128, marker: &str) -> i6
 
 #[tokio::test]
 async fn consumer_cursor_does_not_advance_before_success_against_postgres() {
-    let Some((database, store)) = live_context("event consumer cursor").await else {
+    let Some((context, store)) = live_context("event consumer cursor").await else {
         return;
     };
     let suffix = unique_suffix();
     let position = append_test_event(&store, suffix, "cursor").await;
-    let pool = database.pool().expect("configured pool").clone();
+    let pool = context.pool().clone();
     let consumer_name = format!("consumer_cursor_{suffix}");
     let runner = EventConsumerRunner::new(pool, consumer_config(consumer_name.clone(), 3));
     let starting_cursor = position - 1;
@@ -146,12 +141,12 @@ async fn consumer_cursor_does_not_advance_before_success_against_postgres() {
 
 #[tokio::test]
 async fn consumer_retries_then_dead_letters_after_max_attempts_against_postgres() {
-    let Some((database, store)) = live_context("event consumer DLQ").await else {
+    let Some((context, store)) = live_context("event consumer DLQ").await else {
         return;
     };
     let suffix = unique_suffix();
     let position = append_test_event(&store, suffix, "dlq").await;
-    let pool = database.pool().expect("configured pool").clone();
+    let pool = context.pool().clone();
     let consumer_name = format!("consumer_dlq_{suffix}");
     let runner = EventConsumerRunner::new(pool, consumer_config(consumer_name.clone(), 2));
     runner
@@ -214,12 +209,12 @@ async fn consumer_retries_then_dead_letters_after_max_attempts_against_postgres(
 
 #[tokio::test]
 async fn dead_letter_replay_marks_event_replayed_against_postgres() {
-    let Some((database, store)) = live_context("event consumer DLQ replay").await else {
+    let Some((context, store)) = live_context("event consumer DLQ replay").await else {
         return;
     };
     let suffix = unique_suffix();
     let position = append_test_event(&store, suffix, "replay").await;
-    let pool = database.pool().expect("configured pool").clone();
+    let pool = context.pool().clone();
     let consumer_name = format!("consumer_replay_{suffix}");
     let runner = EventConsumerRunner::new(pool, consumer_config(consumer_name.clone(), 1));
     runner
@@ -267,12 +262,12 @@ async fn dead_letter_replay_marks_event_replayed_against_postgres() {
 
 #[tokio::test]
 async fn duplicate_consumer_event_delivery_is_idempotent_against_postgres() {
-    let Some((database, store)) = live_context("event consumer idempotency").await else {
+    let Some((context, store)) = live_context("event consumer idempotency").await else {
         return;
     };
     let suffix = unique_suffix();
     let position = append_test_event(&store, suffix, "idempotent").await;
-    let pool = database.pool().expect("configured pool").clone();
+    let pool = context.pool().clone();
     let consumer_name = format!("consumer_idempotent_{suffix}");
     let runner = EventConsumerRunner::new(pool, consumer_config(consumer_name.clone(), 3));
     runner
@@ -334,7 +329,7 @@ async fn duplicate_consumer_event_delivery_is_idempotent_against_postgres() {
     )
     .bind(&consumer_name)
     .bind(position - 1)
-    .execute(database.pool().expect("configured pool"))
+    .execute(context.pool())
     .await
     .expect("rewind consumer cursor");
 
@@ -359,6 +354,59 @@ async fn duplicate_consumer_event_delivery_is_idempotent_against_postgres() {
             .processed_event_count(&consumer_name, position)
             .await
             .expect("processed marker still single"),
+        1
+    );
+}
+
+#[tokio::test]
+async fn processed_event_identity_is_idempotent_across_distinct_positions_against_postgres() {
+    let Some((context, store)) = live_context("event consumer event identity").await else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let position = append_test_event(&store, suffix, "identity").await;
+    let consumer_name = format!("consumer_event_identity_{suffix}");
+    let consumer_store = EventConsumerRunner::new(
+        context.pool().clone(),
+        consumer_config(consumer_name.clone(), 3),
+    )
+    .store()
+    .clone();
+    let stored = store
+        .list_after_position(position - 1, 1)
+        .await
+        .expect("stored test event")
+        .into_iter()
+        .next()
+        .expect("event exists");
+
+    assert!(
+        consumer_store
+            .record_processed(&consumer_name, &stored)
+            .await
+            .expect("first processed marker")
+    );
+    let duplicate = StoredEventEnvelope {
+        position: stored.position + 1_000_000,
+        event: stored.event.clone(),
+    };
+    assert!(
+        !consumer_store
+            .record_processed(&consumer_name, &duplicate)
+            .await
+            .expect("event-id duplicate must be ignored")
+    );
+    assert!(
+        consumer_store
+            .has_processed_event_id(&consumer_name, &stored.event.event_id)
+            .await
+            .expect("processed event ID")
+    );
+    assert_eq!(
+        consumer_store
+            .processed_event_count(&consumer_name, stored.position)
+            .await
+            .expect("processed marker count"),
         1
     );
 }

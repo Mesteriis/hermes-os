@@ -1,8 +1,23 @@
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
+use std::collections::HashSet;
+use std::io::Cursor;
+use zip::ZipArchive;
 
 use super::errors::{AttachmentSafetyScanError, CommunicationStorageError};
 use super::validation::validate_non_empty;
+use crate::platform::attachment_scanning::{ClamAvClient, ClamAvVerdict};
+
+const MAX_OOXML_INSPECTION_BYTES: usize = 50 * 1024 * 1024;
+const MAX_OOXML_INSPECTION_ENTRIES: usize = 10_000;
+const MAX_LEGACY_OLE_DIRECTORY_SECTORS: usize = 4_096;
+const LEGACY_OLE_MAGIC: &[u8] = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1";
+const LEGACY_OLE_END_OF_CHAIN: u32 = 0xFFFF_FFFE;
+const LEGACY_OLE_FREE_SECTOR: u32 = 0xFFFF_FFFF;
+const LEGACY_OLE_FAT_SECTOR: u32 = 0xFFFF_FFFD;
+const RAR4_MAGIC: &[u8] = b"Rar!\x1a\x07\x00";
+const RAR5_MAGIC: &[u8] = b"Rar!\x1a\x07\x01\x00";
+const SEVEN_Z_MAGIC: &[u8] = b"7z\xbc\xaf'\x1c";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AttachmentSafetyScanReport {
@@ -111,6 +126,57 @@ pub trait AttachmentSafetyScanner {
     ) -> Result<AttachmentSafetyScanReport, AttachmentSafetyScanError>;
 }
 
+/// Applies deterministic prefiltering first, then uses the local ClamAV verdict only when the
+/// prefilter found no reason to keep the attachment quarantined. Scanner failures deliberately
+/// retain `not_scanned`, so callers can retry without ever treating an unavailable verdict as
+/// clean.
+pub async fn scan_attachment_with_clamav(
+    request: &AttachmentSafetyScanRequest<'_>,
+    clamav: Option<&ClamAvClient>,
+) -> Result<AttachmentSafetyScanReport, AttachmentSafetyScanError> {
+    let heuristic = HeuristicAttachmentSafetyScanner.scan(request)?;
+    if heuristic.status != AttachmentSafetyScanStatus::NotScanned {
+        return Ok(heuristic);
+    }
+    let Some(clamav) = clamav else {
+        return Ok(heuristic);
+    };
+
+    match clamav.scan(request.bytes).await {
+        Ok(ClamAvVerdict::Clean) => Ok(AttachmentSafetyScanReport {
+            status: AttachmentSafetyScanStatus::Clean,
+            engine: Some("clamav_clamd".to_owned()),
+            checked_at: Some(Utc::now()),
+            summary: Some("ClamAV found no known malware".to_owned()),
+            metadata: json!({ "verdict": "clean" }),
+        }),
+        Ok(ClamAvVerdict::Malicious { signature }) => Ok(AttachmentSafetyScanReport {
+            status: AttachmentSafetyScanStatus::Malicious,
+            engine: Some("clamav_clamd".to_owned()),
+            checked_at: Some(Utc::now()),
+            summary: Some("ClamAV detected malware".to_owned()),
+            metadata: json!({ "verdict": "malicious", "signature": signature }),
+        }),
+        Err(error) => {
+            tracing::warn!(error = %error, "ClamAV attachment scan failed; attachment remains quarantined");
+            Ok(heuristic)
+        }
+    }
+}
+
+pub async fn scan_attachment_with_configured_clamav(
+    request: &AttachmentSafetyScanRequest<'_>,
+) -> Result<AttachmentSafetyScanReport, AttachmentSafetyScanError> {
+    let clamav = match ClamAvClient::from_env() {
+        Ok(client) => client,
+        Err(error) => {
+            tracing::warn!(error = %error, "ClamAV attachment scanner configuration is invalid");
+            None
+        }
+    };
+    scan_attachment_with_clamav(request, clamav.as_ref()).await
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct HeuristicAttachmentSafetyScanner;
 
@@ -123,6 +189,7 @@ impl AttachmentSafetyScanner for HeuristicAttachmentSafetyScanner {
         let content_type = normalized_content_type(request.content_type);
         let mut reasons = Vec::new();
         let mut status = AttachmentSafetyScanStatus::NotScanned;
+        let mut legacy_ole_inspection = None;
 
         if has_executable_magic(request.bytes) {
             status = AttachmentSafetyScanStatus::Malicious;
@@ -146,6 +213,51 @@ impl AttachmentSafetyScanner for HeuristicAttachmentSafetyScanner {
             reasons.push("mime_extension_mismatch");
         }
 
+        if has_legacy_ole_magic(request.bytes) {
+            status = max_scan_status(status, AttachmentSafetyScanStatus::Suspicious);
+            match inspect_legacy_ole_container(request.bytes) {
+                LegacyOleInspection::MacroMarkers => {
+                    reasons.push("legacy_ole_vba_storage");
+                    legacy_ole_inspection = Some("vba_markers");
+                }
+                LegacyOleInspection::NoMacroMarkers => {
+                    reasons.push("legacy_ole_compound_document");
+                    legacy_ole_inspection = Some("no_vba_markers");
+                }
+                LegacyOleInspection::Unreadable => {
+                    reasons.push("legacy_ole_container_unreadable");
+                    legacy_ole_inspection = Some("unreadable");
+                }
+                LegacyOleInspection::TooLarge => {
+                    reasons.push("legacy_ole_container_exceeds_inspection_limit");
+                    legacy_ole_inspection = Some("too_large");
+                }
+            }
+        }
+
+        if is_uninspected_archive(extension.as_deref(), &content_type, request.bytes) {
+            status = max_scan_status(status, AttachmentSafetyScanStatus::Suspicious);
+            reasons.push("uninspected_rar_or_7z_archive");
+        }
+
+        if is_ooxml_document(extension.as_deref(), &content_type) {
+            match inspect_ooxml_container(request.bytes) {
+                OoxmlInspection::MacroPayload => {
+                    status = max_scan_status(status, AttachmentSafetyScanStatus::Suspicious);
+                    reasons.push("ooxml_macro_payload");
+                }
+                OoxmlInspection::Unreadable => {
+                    status = max_scan_status(status, AttachmentSafetyScanStatus::Suspicious);
+                    reasons.push("ooxml_container_unreadable");
+                }
+                OoxmlInspection::TooLarge => {
+                    status = max_scan_status(status, AttachmentSafetyScanStatus::Suspicious);
+                    reasons.push("ooxml_container_exceeds_inspection_limit");
+                }
+                OoxmlInspection::NoMacroPayload => {}
+            }
+        }
+
         if status == AttachmentSafetyScanStatus::NotScanned {
             return Ok(AttachmentSafetyScanReport::not_scanned());
         }
@@ -160,6 +272,7 @@ impl AttachmentSafetyScanner for HeuristicAttachmentSafetyScanner {
                 "content_type": content_type,
                 "filename_extension": extension,
                 "size_bytes": request.size_bytes,
+                "legacy_ole_inspection": legacy_ole_inspection,
             }),
         })
     }
@@ -202,6 +315,217 @@ fn has_executable_magic(bytes: &[u8]) -> bool {
     bytes.starts_with(b"MZ") || bytes.starts_with(b"\x7fELF")
 }
 
+fn has_legacy_ole_magic(bytes: &[u8]) -> bool {
+    bytes.starts_with(LEGACY_OLE_MAGIC)
+}
+
+fn is_uninspected_archive(extension: Option<&str>, content_type: &str, bytes: &[u8]) -> bool {
+    matches!(extension, Some("rar" | "7z"))
+        || matches!(
+            content_type,
+            "application/vnd.rar" | "application/x-rar-compressed" | "application/x-7z-compressed"
+        )
+        || bytes.starts_with(RAR4_MAGIC)
+        || bytes.starts_with(RAR5_MAGIC)
+        || bytes.starts_with(SEVEN_Z_MAGIC)
+}
+
+fn is_ooxml_document(extension: Option<&str>, content_type: &str) -> bool {
+    matches!(
+        extension,
+        Some("docx" | "xlsx" | "pptx" | "docm" | "xlsm" | "pptm")
+    ) || matches!(
+        content_type,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            | "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            | "application/vnd.ms-word.document.macroenabled.12"
+            | "application/vnd.ms-excel.sheet.macroenabled.12"
+            | "application/vnd.ms-powerpoint.presentation.macroenabled.12"
+    )
+}
+
+enum OoxmlInspection {
+    NoMacroPayload,
+    MacroPayload,
+    Unreadable,
+    TooLarge,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LegacyOleInspection {
+    MacroMarkers,
+    NoMacroMarkers,
+    Unreadable,
+    TooLarge,
+}
+
+fn inspect_ooxml_container(bytes: &[u8]) -> OoxmlInspection {
+    if bytes.len() > MAX_OOXML_INSPECTION_BYTES {
+        return OoxmlInspection::TooLarge;
+    }
+
+    let mut archive = match ZipArchive::new(Cursor::new(bytes)) {
+        Ok(archive) => archive,
+        Err(_) => return OoxmlInspection::Unreadable,
+    };
+    if archive.len() > MAX_OOXML_INSPECTION_ENTRIES {
+        return OoxmlInspection::TooLarge;
+    }
+
+    for index in 0..archive.len() {
+        let file = match archive.by_index(index) {
+            Ok(file) => file,
+            Err(_) => return OoxmlInspection::Unreadable,
+        };
+        let name = file.name().to_ascii_lowercase();
+        if name.ends_with("vbaproject.bin") || name.ends_with("vbadata.xml") {
+            return OoxmlInspection::MacroPayload;
+        }
+    }
+    OoxmlInspection::NoMacroPayload
+}
+
+/// Inspects only CFB allocation metadata and directory entry names. It never follows document
+/// content streams, expands embedded objects, or writes a file to disk.
+fn inspect_legacy_ole_container(bytes: &[u8]) -> LegacyOleInspection {
+    if bytes.len() > MAX_OOXML_INSPECTION_BYTES {
+        return LegacyOleInspection::TooLarge;
+    }
+    let Some(header) = bytes.get(..512) else {
+        return LegacyOleInspection::Unreadable;
+    };
+    if !header.starts_with(LEGACY_OLE_MAGIC)
+        || read_u16(header, 28) != Some(0xFFFE)
+        || read_u16(header, 32) != Some(6)
+    {
+        return LegacyOleInspection::Unreadable;
+    }
+    let Some(sector_shift) = read_u16(header, 30) else {
+        return LegacyOleInspection::Unreadable;
+    };
+    if !matches!(sector_shift, 9 | 12) {
+        return LegacyOleInspection::Unreadable;
+    }
+    let sector_size = 1_usize << sector_shift;
+    let Some(payload_len) = bytes.len().checked_sub(512) else {
+        return LegacyOleInspection::Unreadable;
+    };
+    if payload_len == 0 || payload_len % sector_size != 0 {
+        return LegacyOleInspection::Unreadable;
+    }
+    let sector_count = payload_len / sector_size;
+    let Some(fat_sector_count) = read_u32(header, 44).map(|value| value as usize) else {
+        return LegacyOleInspection::Unreadable;
+    };
+    if fat_sector_count == 0 || fat_sector_count > 109 {
+        // The header can reference more FAT sectors through DIFAT chains. Refuse that complex
+        // case rather than attempting unbounded traversal in the synchronous safety scanner.
+        return LegacyOleInspection::Unreadable;
+    }
+    let Some(first_directory_sector) = read_u32(header, 48) else {
+        return LegacyOleInspection::Unreadable;
+    };
+    if !is_legacy_ole_sector_id(first_directory_sector, sector_count) {
+        return LegacyOleInspection::Unreadable;
+    }
+
+    let mut fat = Vec::with_capacity(fat_sector_count * (sector_size / 4));
+    for index in 0..fat_sector_count {
+        let Some(fat_sector_id) = read_u32(header, 76 + index * 4) else {
+            return LegacyOleInspection::Unreadable;
+        };
+        if !is_legacy_ole_sector_id(fat_sector_id, sector_count) {
+            return LegacyOleInspection::Unreadable;
+        }
+        let Some(sector) = legacy_ole_sector(bytes, sector_size, fat_sector_id) else {
+            return LegacyOleInspection::Unreadable;
+        };
+        for entry in sector.chunks_exact(4) {
+            let Some(value) = read_u32(entry, 0) else {
+                return LegacyOleInspection::Unreadable;
+            };
+            fat.push(value);
+        }
+    }
+
+    let mut sector_id = first_directory_sector;
+    let mut visited = HashSet::new();
+    for _ in 0..MAX_LEGACY_OLE_DIRECTORY_SECTORS {
+        if !visited.insert(sector_id) {
+            return LegacyOleInspection::Unreadable;
+        }
+        let Some(sector) = legacy_ole_sector(bytes, sector_size, sector_id) else {
+            return LegacyOleInspection::Unreadable;
+        };
+        for entry in sector.chunks_exact(128) {
+            match legacy_ole_directory_name(entry) {
+                Ok(Some(name)) if is_legacy_ole_macro_marker(&name) => {
+                    return LegacyOleInspection::MacroMarkers;
+                }
+                Ok(_) => {}
+                Err(()) => return LegacyOleInspection::Unreadable,
+            }
+        }
+        let Some(next_sector) = fat.get(sector_id as usize).copied() else {
+            return LegacyOleInspection::Unreadable;
+        };
+        if next_sector == LEGACY_OLE_END_OF_CHAIN {
+            return LegacyOleInspection::NoMacroMarkers;
+        }
+        if !is_legacy_ole_sector_id(next_sector, sector_count) {
+            return LegacyOleInspection::Unreadable;
+        }
+        sector_id = next_sector;
+    }
+    LegacyOleInspection::Unreadable
+}
+
+fn legacy_ole_sector(bytes: &[u8], sector_size: usize, sector_id: u32) -> Option<&[u8]> {
+    let offset = 512_usize.checked_add((sector_id as usize).checked_mul(sector_size)?)?;
+    bytes.get(offset..offset.checked_add(sector_size)?)
+}
+
+fn is_legacy_ole_sector_id(sector_id: u32, sector_count: usize) -> bool {
+    sector_id != LEGACY_OLE_END_OF_CHAIN
+        && sector_id != LEGACY_OLE_FREE_SECTOR
+        && sector_id != LEGACY_OLE_FAT_SECTOR
+        && (sector_id as usize) < sector_count
+}
+
+fn legacy_ole_directory_name(entry: &[u8]) -> Result<Option<String>, ()> {
+    if entry.len() != 128 || entry.get(66).copied() == Some(0) {
+        return Ok(None);
+    }
+    let name_len = read_u16(entry, 64).ok_or(())? as usize;
+    if !(2..=64).contains(&name_len) || !name_len.is_multiple_of(2) {
+        return Err(());
+    }
+    let name_bytes = entry.get(..name_len - 2).ok_or(())?;
+    let mut code_units = Vec::with_capacity(name_bytes.len() / 2);
+    for pair in name_bytes.chunks_exact(2) {
+        code_units.push(u16::from_le_bytes([pair[0], pair[1]]));
+    }
+    String::from_utf16(&code_units).map(Some).map_err(|_| ())
+}
+
+fn is_legacy_ole_macro_marker(name: &str) -> bool {
+    matches!(
+        name.trim().to_ascii_lowercase().as_str(),
+        "vba" | "_vba_project_cur" | "vba_project" | "macros"
+    )
+}
+
+fn read_u16(bytes: &[u8], offset: usize) -> Option<u16> {
+    let bytes = bytes.get(offset..offset.checked_add(2)?)?;
+    Some(u16::from_le_bytes([bytes[0], bytes[1]]))
+}
+
+fn read_u32(bytes: &[u8], offset: usize) -> Option<u32> {
+    let bytes = bytes.get(offset..offset.checked_add(4)?)?;
+    Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+}
+
 fn is_active_content_extension(extension: &str) -> bool {
     matches!(
         extension,
@@ -241,6 +565,8 @@ fn expected_extensions_for_content_type(content_type: &str) -> &'static [&'stati
     match content_type {
         "application/pdf" => &["pdf"],
         "application/zip" => &["zip"],
+        "application/vnd.rar" | "application/x-rar-compressed" => &["rar"],
+        "application/x-7z-compressed" => &["7z"],
         "image/jpeg" => &["jpg", "jpeg"],
         "image/png" => &["png"],
         "text/csv" => &["csv"],
@@ -283,7 +609,13 @@ fn scan_summary(status: AttachmentSafetyScanStatus) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Cursor, Write};
+    use std::time::Duration;
+
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+    use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
     fn request<'a>(
         filename: Option<&'a str>,
@@ -300,6 +632,60 @@ mod tests {
             storage_path: "aa/bb/blob",
             bytes,
         }
+    }
+
+    async fn fake_clamd(response: &'static [u8]) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind fake ClamAV");
+        let address = listener.local_addr().expect("listener address").to_string();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("accept scan");
+            let mut command = [0_u8; 10];
+            socket.read_exact(&mut command).await.expect("read command");
+            assert_eq!(&command, b"zINSTREAM\0");
+            loop {
+                let length = socket.read_u32().await.expect("read frame") as usize;
+                if length == 0 {
+                    break;
+                }
+                let mut chunk = vec![0_u8; length];
+                socket.read_exact(&mut chunk).await.expect("read body");
+            }
+            socket.write_all(response).await.expect("write verdict");
+        });
+        address
+    }
+
+    #[tokio::test]
+    async fn local_clamav_clean_verdict_transitions_unmatched_attachment_to_clean() {
+        let address = fake_clamd(b"stream: OK\0").await;
+        let client = ClamAvClient::new(address, Duration::from_secs(1)).expect("client");
+
+        let report = scan_attachment_with_clamav(
+            &request(Some("invoice.txt"), "text/plain", b"safe attachment"),
+            Some(&client),
+        )
+        .await
+        .expect("scan report");
+
+        assert_eq!(report.status, AttachmentSafetyScanStatus::Clean);
+        assert_eq!(report.engine.as_deref(), Some("clamav_clamd"));
+        assert_eq!(report.metadata, json!({ "verdict": "clean" }));
+    }
+
+    #[tokio::test]
+    async fn unavailable_clamav_retains_unmatched_attachment_quarantined() {
+        let client = ClamAvClient::new("127.0.0.1:1", Duration::from_millis(20)).expect("client");
+
+        let report = scan_attachment_with_clamav(
+            &request(Some("invoice.txt"), "text/plain", b"safe attachment"),
+            Some(&client),
+        )
+        .await
+        .expect("scan report");
+
+        assert_eq!(report, AttachmentSafetyScanReport::not_scanned());
     }
 
     #[test]
@@ -358,5 +744,171 @@ mod tests {
             report.metadata["reasons"],
             serde_json::json!(["mime_extension_mismatch"])
         );
+    }
+
+    #[test]
+    fn heuristic_scanner_marks_ooxml_macro_payloads_suspicious() {
+        let scanner = HeuristicAttachmentSafetyScanner;
+        let bytes = zip_bytes(&[
+            ("[Content_Types].xml", b"types" as &[u8]),
+            ("word/vbaProject.bin", b"macro payload"),
+        ]);
+
+        let report = scanner
+            .scan(&request(
+                Some("report.docx"),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                &bytes,
+            ))
+            .expect("scan report");
+
+        assert_eq!(report.status, AttachmentSafetyScanStatus::Suspicious);
+        assert_eq!(
+            report.metadata["reasons"],
+            serde_json::json!(["ooxml_macro_payload"])
+        );
+    }
+
+    #[test]
+    fn heuristic_scanner_marks_legacy_ole_documents_suspicious() {
+        let scanner = HeuristicAttachmentSafetyScanner;
+        let report = scanner
+            .scan(&request(
+                Some("legacy.doc"),
+                "application/msword",
+                b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1legacy",
+            ))
+            .expect("scan report");
+
+        assert_eq!(report.status, AttachmentSafetyScanStatus::Suspicious);
+        assert_eq!(
+            report.metadata["reasons"],
+            serde_json::json!(["legacy_ole_container_unreadable"])
+        );
+        assert_eq!(report.metadata["legacy_ole_inspection"], "unreadable");
+    }
+
+    #[test]
+    fn heuristic_scanner_detects_vba_storage_in_bounded_legacy_ole_directory() {
+        let scanner = HeuristicAttachmentSafetyScanner;
+        let bytes = legacy_ole_bytes(&["Root Entry", "VBA"]);
+        let report = scanner
+            .scan(&request(Some("macro.doc"), "application/msword", &bytes))
+            .expect("scan report");
+
+        assert_eq!(report.status, AttachmentSafetyScanStatus::Suspicious);
+        assert_eq!(
+            report.metadata["reasons"],
+            serde_json::json!(["legacy_ole_vba_storage"])
+        );
+        assert_eq!(report.metadata["legacy_ole_inspection"], "vba_markers");
+    }
+
+    #[test]
+    fn heuristic_scanner_records_legacy_ole_without_macro_markers() {
+        let scanner = HeuristicAttachmentSafetyScanner;
+        let bytes = legacy_ole_bytes(&["Root Entry", "WordDocument"]);
+        let report = scanner
+            .scan(&request(Some("legacy.doc"), "application/msword", &bytes))
+            .expect("scan report");
+
+        assert_eq!(report.status, AttachmentSafetyScanStatus::Suspicious);
+        assert_eq!(
+            report.metadata["reasons"],
+            serde_json::json!(["legacy_ole_compound_document"])
+        );
+        assert_eq!(report.metadata["legacy_ole_inspection"], "no_vba_markers");
+    }
+
+    #[test]
+    fn heuristic_scanner_quarantines_uninspected_rar_and_7z_archives() {
+        let scanner = HeuristicAttachmentSafetyScanner;
+
+        let rar = scanner
+            .scan(&request(
+                Some("archive.rar"),
+                "application/x-rar-compressed",
+                b"Rar!\x1a\x07\x00fixture",
+            ))
+            .expect("RAR scan report");
+        assert_eq!(rar.status, AttachmentSafetyScanStatus::Suspicious);
+        assert_eq!(
+            rar.metadata["reasons"],
+            serde_json::json!(["uninspected_rar_or_7z_archive"])
+        );
+
+        let seven_z = scanner
+            .scan(&request(
+                Some("archive.bin"),
+                "application/octet-stream",
+                b"7z\xbc\xaf'\x1cfixture",
+            ))
+            .expect("7z scan report");
+        assert_eq!(seven_z.status, AttachmentSafetyScanStatus::Suspicious);
+        assert_eq!(
+            seven_z.metadata["reasons"],
+            serde_json::json!(["uninspected_rar_or_7z_archive"])
+        );
+    }
+
+    fn zip_bytes(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        for (name, bytes) in entries {
+            writer.start_file(*name, options).expect("ZIP entry");
+            writer.write_all(bytes).expect("ZIP entry bytes");
+        }
+        writer.finish().expect("finish ZIP").into_inner()
+    }
+
+    fn legacy_ole_bytes(directory_names: &[&str]) -> Vec<u8> {
+        const SECTOR_SIZE: usize = 512;
+        let mut bytes = vec![0_u8; 512 + SECTOR_SIZE * 2];
+        bytes[..8].copy_from_slice(LEGACY_OLE_MAGIC);
+        write_u16(&mut bytes, 28, 0xFFFE);
+        write_u16(&mut bytes, 30, 9);
+        write_u16(&mut bytes, 32, 6);
+        write_u16(&mut bytes, 26, 3);
+        write_u32(&mut bytes, 44, 1);
+        write_u32(&mut bytes, 48, 1);
+        write_u32(&mut bytes, 56, 4_096);
+        write_u32(&mut bytes, 60, LEGACY_OLE_FREE_SECTOR);
+        write_u32(&mut bytes, 68, LEGACY_OLE_FREE_SECTOR);
+        for index in 0..109 {
+            write_u32(&mut bytes, 76 + index * 4, LEGACY_OLE_FREE_SECTOR);
+        }
+        write_u32(&mut bytes, 76, 0);
+
+        let fat_offset = 512;
+        for index in 0..SECTOR_SIZE / 4 {
+            write_u32(&mut bytes, fat_offset + index * 4, LEGACY_OLE_FREE_SECTOR);
+        }
+        write_u32(&mut bytes, fat_offset, LEGACY_OLE_FAT_SECTOR);
+        write_u32(&mut bytes, fat_offset + 4, LEGACY_OLE_END_OF_CHAIN);
+
+        let directory_offset = 512 + SECTOR_SIZE;
+        for (index, name) in directory_names.iter().enumerate() {
+            let entry_offset = directory_offset + index * 128;
+            write_legacy_ole_directory_name(&mut bytes, entry_offset, name);
+            bytes[entry_offset + 66] = if index == 0 { 5 } else { 1 };
+        }
+        bytes
+    }
+
+    fn write_legacy_ole_directory_name(bytes: &mut [u8], offset: usize, name: &str) {
+        let mut code_units: Vec<u16> = name.encode_utf16().collect();
+        code_units.push(0);
+        for (index, code_unit) in code_units.iter().enumerate() {
+            write_u16(bytes, offset + index * 2, *code_unit);
+        }
+        write_u16(bytes, offset + 64, (code_units.len() * 2) as u16);
+    }
+
+    fn write_u16(bytes: &mut [u8], offset: usize, value: u16) {
+        bytes[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
+    }
+
+    fn write_u32(bytes: &mut [u8], offset: usize, value: u32) {
+        bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
     }
 }

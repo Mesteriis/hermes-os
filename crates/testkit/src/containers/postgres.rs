@@ -8,7 +8,8 @@ use crate::containers::labels::{session_id_label_value, testkit_labels};
 
 const POSTGRES_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const POSTGRES_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(250);
-const TEST_POOL_MAX_CONNECTIONS: u32 = 2;
+const TEST_POOL_MAX_CONNECTIONS: u32 = 4;
+const TEST_POSTGRES_MAX_CONNECTIONS: &str = "300";
 pub const SESSION_POSTGRES_HOST_PORT_ENV: &str = "HERMES_TEST_POSTGRES_HOST_PORT";
 
 pub struct PostgresContainer {
@@ -44,6 +45,11 @@ impl PostgresContainer {
             .with_env_var("POSTGRES_DB", "testdb")
             .with_env_var("POSTGRES_USER", "testuser")
             .with_env_var("POSTGRES_PASSWORD", "testpass")
+            .with_cmd(vec![
+                "postgres".to_owned(),
+                "-c".to_owned(),
+                format!("max_connections={TEST_POSTGRES_MAX_CONNECTIONS}"),
+            ])
             .start()
             .await
             .expect("failed to start pgvector container");

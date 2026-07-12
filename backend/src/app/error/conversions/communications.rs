@@ -27,6 +27,29 @@ impl From<CommunicationStorageError> for ApiError {
     }
 }
 
+impl From<crate::domains::communications::provider_resources::MailProviderResourceError>
+    for ApiError
+{
+    fn from(
+        error: crate::domains::communications::provider_resources::MailProviderResourceError,
+    ) -> Self {
+        match error {
+            crate::domains::communications::provider_resources::MailProviderResourceError::EmptyField(_)
+            | crate::domains::communications::provider_resources::MailProviderResourceError::InvalidCapabilities
+            | crate::domains::communications::provider_resources::MailProviderResourceError::LocalFolderAccountMismatch(_) => {
+                ApiError::InvalidCommunicationQuery("invalid mail provider resource mapping")
+            }
+            crate::domains::communications::provider_resources::MailProviderResourceError::AccountNotFound(_) => {
+                ApiError::NotFound
+            }
+            error => {
+                tracing::error!(error = %error, "mail provider resource mapping operation failed");
+                ApiError::InvalidCommunicationQuery("mail provider resource mapping operation failed")
+            }
+        }
+    }
+}
+
 impl From<crate::domains::communications::threads::CommunicationThreadError> for ApiError {
     fn from(error: crate::domains::communications::threads::CommunicationThreadError) -> Self {
         match error {
@@ -319,7 +342,26 @@ impl From<CommunicationCommandServiceError> for ApiError {
             CommunicationCommandServiceError::MessageProjection(inner) => ApiError::from(inner),
             CommunicationCommandServiceError::CommunicationAiState(inner) => ApiError::from(inner),
             CommunicationCommandServiceError::MessageFlags(inner) => ApiError::from(inner),
+            CommunicationCommandServiceError::Sqlx(source) => {
+                tracing::error!(error = %source, "mail command database operation failed");
+                ApiError::InvalidCommunicationQuery("mail command database operation failed")
+            }
+            CommunicationCommandServiceError::ProviderCommand(source) => {
+                tracing::error!(error = %source, "mail provider command persistence failed");
+                ApiError::InvalidCommunicationQuery("mail provider command persistence failed")
+            }
         }
+    }
+}
+
+impl From<crate::domains::communications::provider_commands::CommunicationProviderCommandError>
+    for ApiError
+{
+    fn from(
+        error: crate::domains::communications::provider_commands::CommunicationProviderCommandError,
+    ) -> Self {
+        tracing::error!(error = %error, "mail provider command diagnostics failed");
+        ApiError::InvalidCommunicationQuery("mail provider command diagnostics failed")
     }
 }
 

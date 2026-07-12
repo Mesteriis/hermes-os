@@ -16,10 +16,28 @@ impl OllamaClient {
         prompt: &str,
         model: &str,
     ) -> Result<OllamaChatResult, OllamaError> {
+        self.chat_with_model_format(prompt, model, None).await
+    }
+
+    pub async fn chat_json_with_model(
+        &self,
+        prompt: &str,
+        model: &str,
+    ) -> Result<OllamaChatResult, OllamaError> {
+        self.chat_with_model_format(prompt, model, Some("json"))
+            .await
+    }
+
+    async fn chat_with_model_format(
+        &self,
+        prompt: &str,
+        model: &str,
+        response_format: Option<&str>,
+    ) -> Result<OllamaChatResult, OllamaError> {
         if model.trim().is_empty() {
             return Err(OllamaError::InvalidConfig("chat model is empty".to_owned()));
         }
-        let body = json!({
+        let mut body = json!({
             "model": model,
             "stream": false,
             "think": false,
@@ -30,6 +48,9 @@ impl OllamaClient {
                 }
             ],
         });
+        if let Some(response_format) = response_format {
+            body["format"] = json!(response_format);
+        }
         let response: ChatResponse = self.post_json("/api/chat", &body).await?;
         let content = response
             .message

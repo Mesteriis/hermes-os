@@ -27,6 +27,7 @@ function result(overrides: Partial<AttachmentSearchResult> = {}): AttachmentSear
     scan_summary: null,
     storage_kind: 'local',
     storage_path: 'mail/blob',
+    extracted_text_match: false,
     created_at: '2026-06-15T00:00:00Z',
     updated_at: '2026-06-15T00:00:00Z',
     ...overrides

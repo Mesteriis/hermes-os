@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+use crate::domains::communications::provider_commands::CommunicationProviderCommandError;
 use crate::domains::communications::storage::CommunicationStorageError;
 use crate::platform::communications::rfc822::EmailRfc822ParseError;
 use crate::platform::observations::ObservationStoreError;
@@ -17,6 +18,9 @@ pub enum MessageProjectionError {
 
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),
+
+    #[error(transparent)]
+    ProviderCommand(#[from] CommunicationProviderCommandError),
 
     #[error("raw email payload missing required field or wrong type: {0}")]
     MissingPayloadField(&'static str),

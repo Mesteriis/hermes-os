@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
+use uuid::Uuid;
 
 use super::ai_state::{
     CommunicationAiStateRecord, CommunicationAiStateStore, CommunicationAiStateTransitionRequest,
@@ -26,17 +27,22 @@ use super::outbox::{
     CommunicationOutboxStore, NewCommunicationOutboxItem, ProviderSendStore,
     ProviderSendStoreError,
 };
+use super::provider_commands::{
+    CommunicationProviderCommandError, CommunicationProviderCommandStore,
+    NewCommunicationProviderCommand,
+};
 use super::saved_searches::{
     CommunicationSavedSearch, CommunicationSavedSearchError, CommunicationSavedSearchStore,
     NewCommunicationSavedSearch, UpdateCommunicationSavedSearch,
 };
+use super::spam_reputation::{SenderReputationClassification, SenderReputationStore};
 use super::storage::{
-    AttachmentSafetyScanError, AttachmentSafetyScanRequest, AttachmentSafetyScanner,
-    CommunicationStorageError, CommunicationStorageStore, HeuristicAttachmentSafetyScanner,
-    ImportedCommunicationAttachment, LocalCommunicationBlobStore, NewCommunicationAttachmentImport,
-    NewCommunicationBlob, new_communication_attachment_import_id,
+    AttachmentSafetyScanError, AttachmentSafetyScanRequest, AttachmentSafetyScanStatus,
+    CommunicationStorageError, CommunicationStorageStore, ImportedCommunicationAttachment,
+    LocalCommunicationBlobStore, NewCommunicationAttachmentImport, NewCommunicationBlob,
+    new_communication_attachment_import_id, scan_attachment_with_configured_clamav,
 };
-use crate::domains::communications::evidence::merge_metadata;
+use crate::domains::communications::evidence::{link_mail_entity_in_transaction, merge_metadata};
 use crate::platform::communications::{DEFAULT_MAIL_SYNC_BLOB_ROOT, OutgoingEmail};
 use crate::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
@@ -44,6 +50,7 @@ use crate::platform::observations::{
 
 const MAX_ATTACHMENT_IMPORT_BYTES: usize = 50 * 1024 * 1024;
 const LOCAL_IMPORT_ACTOR_ID: &str = "hermes-frontend";
+const LOCAL_USER_ACTOR_ID: &str = "hermes-local-user";
 
 #[derive(Clone)]
 pub struct CommunicationCommandService {
@@ -115,6 +122,7 @@ impl CommunicationCommandService {
                     body_html: command.body_html,
                     in_reply_to: command.in_reply_to,
                     references: command.references.unwrap_or_default(),
+                    attachment_ids: command.attachment_ids,
                     status,
                     scheduled_send_at: command.scheduled_send_at,
                     metadata: command.metadata.unwrap_or_else(|| json!({})),
@@ -271,32 +279,12 @@ impl CommunicationCommandService {
         folder_id: &str,
         message_id: &str,
     ) -> Result<Option<FolderMessageActionResponse>, CommunicationCommandServiceError> {
-        let observation = self
-            .capture_observation(
-                "folder message copy",
-                "COMMUNICATION_MESSAGE",
-                json!({
-                    "folder_id": folder_id,
-                    "message_id": message_id,
-                    "operation": "folder_message_copy",
-                }),
-                format!("folder://{folder_id}/messages/{message_id}/copy"),
-                json!({
-                    "captured_by": "mail_service.copy_message_to_folder",
-                    "operation": "folder_message_copy",
-                }),
-            )
-            .await?;
-
-        Ok(CommunicationFolderStore::new(self.pool.clone())
-            .copy_message_with_observation(
-                folder_id,
-                message_id,
-                Some(&observation.observation_id),
-                "folder_message_transition",
-                None,
-            )
-            .await?)
+        self.apply_folder_message_action_with_provider_command(
+            folder_id,
+            message_id,
+            super::folders::FolderMessageOperation::Copy,
+        )
+        .await
     }
 
     pub async fn move_message_to_folder(
@@ -304,32 +292,107 @@ impl CommunicationCommandService {
         folder_id: &str,
         message_id: &str,
     ) -> Result<Option<FolderMessageActionResponse>, CommunicationCommandServiceError> {
-        let observation = self
-            .capture_observation(
-                "folder message move",
+        self.apply_folder_message_action_with_provider_command(
+            folder_id,
+            message_id,
+            super::folders::FolderMessageOperation::Move,
+        )
+        .await
+    }
+
+    async fn apply_folder_message_action_with_provider_command(
+        &self,
+        folder_id: &str,
+        message_id: &str,
+        operation: super::folders::FolderMessageOperation,
+    ) -> Result<Option<FolderMessageActionResponse>, CommunicationCommandServiceError> {
+        let message_store = MessageProjectionStore::new(self.pool.clone());
+        let Some(current) = message_store.message(message_id).await? else {
+            return Ok(None);
+        };
+        let operation_name = operation.as_str();
+        let mut transaction = self.pool.begin().await?;
+        let observation = ObservationStore::capture_in_transaction(
+            &mut transaction,
+            &NewObservation::new(
                 "COMMUNICATION_MESSAGE",
+                ObservationOriginKind::Manual,
+                Utc::now(),
                 json!({
                     "folder_id": folder_id,
                     "message_id": message_id,
-                    "operation": "folder_message_move",
+                    "operation": format!("folder_message_{operation_name}"),
                 }),
-                format!("folder://{folder_id}/messages/{message_id}/move"),
-                json!({
-                    "captured_by": "mail_service.move_message_to_folder",
-                    "operation": "folder_message_move",
-                }),
+                format!("folder://{folder_id}/messages/{message_id}/{operation_name}"),
             )
-            .await?;
+            .provenance(json!({
+                "captured_by": "mail_service.folder_message_action",
+                "operation": format!("folder_message_{operation_name}"),
+            })),
+        )
+        .await
+        .map_err(
+            |source| CommunicationCommandServiceError::ObservationCapture {
+                operation: "folder message evidence capture",
+                source,
+            },
+        )?;
+        let response = CommunicationFolderStore::apply_message_action_in_transaction(
+            &mut transaction,
+            folder_id,
+            message_id,
+            operation,
+            Some(&observation.observation_id),
+            "folder_message_transition",
+            None,
+        )
+        .await?;
+        let Some(response) = response else {
+            transaction.rollback().await?;
+            return Ok(None);
+        };
 
-        Ok(CommunicationFolderStore::new(self.pool.clone())
-            .move_message_with_observation(
-                folder_id,
-                message_id,
-                Some(&observation.observation_id),
-                "folder_message_transition",
-                None,
+        let mapped_provider_resource = sqlx::query_scalar::<_, bool>(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM communication_mail_provider_resources
+                WHERE account_id = $1
+                  AND local_folder_id = $2
+                  AND writable = true
             )
-            .await?)
+            "#,
+        )
+        .bind(&current.account_id)
+        .bind(&response.folder_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if mapped_provider_resource {
+            let command_id = format!("mail-{operation_name}-folder:{}", Uuid::new_v4());
+            let command = NewCommunicationProviderCommand::new(
+                &command_id,
+                &current.account_id,
+                "mail",
+                match operation_name {
+                    "copy" => "copy_folder",
+                    "move" => "move_folder",
+                    _ => unreachable!("folder operation is closed"),
+                },
+                &command_id,
+                LOCAL_USER_ACTOR_ID,
+            )
+            .provider_message_id(&current.provider_record_id)
+            .target_ref(json!({ "message_id": current.message_id }))
+            .payload(json!({
+                "folder_id": response.folder_id,
+                "provider_record_id": current.provider_record_id,
+                "message_metadata": current.message_metadata,
+            }));
+            CommunicationProviderCommandStore::enqueue_in_transaction(&mut transaction, &command)
+                .await?;
+        }
+        transaction.commit().await?;
+        Ok(Some(response))
     }
 
     pub async fn create_saved_search(
@@ -627,10 +690,19 @@ impl CommunicationCommandService {
         }
 
         let previous_state = current.workflow_state.as_str().to_owned();
-        let observation = self
-            .capture_observation(
-                "message workflow state transition",
+        let mut transaction = self.pool.begin().await?;
+        let updated = MessageProjectionStore::transition_workflow_state_in_transaction(
+            &mut transaction,
+            message_id,
+            new_state,
+        )
+        .await?;
+        let observation = ObservationStore::capture_in_transaction(
+            &mut transaction,
+            &NewObservation::new(
                 "COMMUNICATION_MESSAGE",
+                ObservationOriginKind::Manual,
+                Utc::now(),
                 json!({
                     "message_id": message_id,
                     "previous_state": previous_state,
@@ -639,23 +711,71 @@ impl CommunicationCommandService {
                     "actor_id": actor_id,
                 }),
                 format!("message://{message_id}/workflow-state"),
-                json!({
+            )
+            .provenance(json!({
                     "captured_by": "mail_service.transition_message_workflow_state",
                     "operation": "message_workflow_state_transition",
-                }),
+            })),
+        )
+        .await
+        .map_err(
+            |source| CommunicationCommandServiceError::ObservationCapture {
+                operation: "workflow state evidence capture",
+                source,
+            },
+        )?;
+        link_mail_entity_in_transaction(
+            &mut transaction,
+            &observation.observation_id,
+            "communication_message",
+            updated.message_id.clone(),
+            "workflow_state_transition",
+            json!({ "workflow_state": updated.workflow_state.as_str() }),
+            Some(json!({ "previous_state": previous_state })),
+        )
+        .await
+        .map_err(
+            |source| CommunicationCommandServiceError::ObservationCapture {
+                operation: "workflow state evidence link",
+                source,
+            },
+        )?;
+        if let Some(command_kind) = match (current.workflow_state, new_state) {
+            (_, WorkflowState::Spam) => Some("mark_spam"),
+            (WorkflowState::Spam, WorkflowState::New) => Some("mark_not_spam"),
+            (_, WorkflowState::Archived) => Some("archive"),
+            _ => None,
+        } {
+            let command_id = format!("mail-{command_kind}:{}", Uuid::new_v4());
+            Self::enqueue_mail_message_provider_command_in_transaction(
+                &mut transaction,
+                &command_id,
+                &updated,
+                command_kind,
+                actor_id,
             )
             .await?;
-        let updated = store
-            .transition_workflow_state_with_observation(
-                message_id,
-                new_state,
-                Some(&observation.observation_id),
-                "workflow_state_transition",
-                Some(json!({
-                    "previous_state": previous_state,
-                })),
-            )
-            .await?;
+        }
+        transaction.commit().await?;
+
+        // Reputation is derived calibration data. A failed update must never undo
+        // the user's canonical local workflow decision or its provider command.
+        if let Some(classification) = match (current.workflow_state, new_state) {
+            (_, WorkflowState::Spam) => Some(SenderReputationClassification::Spam),
+            (WorkflowState::Spam, WorkflowState::New) => {
+                Some(SenderReputationClassification::NonSpam)
+            }
+            _ => None,
+        } && let Err(error) = SenderReputationStore::new(self.pool.clone())
+            .record_analysis(&updated, classification, "manual_workflow_state_transition")
+            .await
+        {
+            tracing::warn!(
+                message_id = %updated.message_id,
+                error = %error,
+                "mail sender reputation feedback could not be recorded"
+            );
+        }
 
         Ok(CommunicationWorkflowStateTransitionResult {
             updated,
@@ -663,43 +783,156 @@ impl CommunicationCommandService {
         })
     }
 
+    pub(crate) async fn enqueue_archive_provider_command_in_transaction(
+        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        workflow_command_id: &str,
+        message: &ProjectedMessage,
+        actor_id: &str,
+    ) -> Result<(), CommunicationCommandServiceError> {
+        if workflow_command_id.trim().is_empty() || actor_id.trim().is_empty() {
+            return Err(CommunicationCommandServiceError::InvalidRequest(
+                "workflow_command_id and actor_id must not be empty",
+            ));
+        }
+        let command_id = format!("mail-archive:{}", workflow_command_id.trim());
+        Self::enqueue_mail_message_provider_command_in_transaction(
+            transaction,
+            &command_id,
+            message,
+            "archive",
+            actor_id,
+        )
+        .await
+    }
+
+    async fn enqueue_mail_message_provider_command_in_transaction(
+        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        command_id: &str,
+        message: &ProjectedMessage,
+        command_kind: &str,
+        actor_id: &str,
+    ) -> Result<(), CommunicationCommandServiceError> {
+        let command = NewCommunicationProviderCommand::new(
+            command_id,
+            &message.account_id,
+            "mail",
+            command_kind,
+            command_id,
+            actor_id,
+        )
+        .provider_message_id(&message.provider_record_id)
+        .target_ref(json!({ "message_id": message.message_id }))
+        .payload(json!({
+            "provider_record_id": message.provider_record_id,
+            "message_metadata": message.message_metadata,
+        }));
+        CommunicationProviderCommandStore::enqueue_in_transaction(transaction, &command).await?;
+        Ok(())
+    }
+
     pub async fn mark_message_read_local(
         &self,
         message_id: &str,
+    ) -> Result<ProjectedMessage, CommunicationCommandServiceError> {
+        self.set_message_read_local_with_provider_command(message_id, true, "hermes-local-user")
+            .await
+    }
+
+    pub async fn set_message_read_local_with_provider_command(
+        &self,
+        message_id: &str,
+        is_read: bool,
+        actor_id: &str,
     ) -> Result<ProjectedMessage, CommunicationCommandServiceError> {
         let store = MessageProjectionStore::new(self.pool.clone());
         let current = store
             .message(message_id)
             .await?
             .ok_or(MessageProjectionError::MessageNotFound)?;
-        let observation = self
-            .capture_observation(
-                "local mark read",
+        if actor_id.trim().is_empty() {
+            return Err(CommunicationCommandServiceError::InvalidRequest(
+                "actor_id must not be empty",
+            ));
+        }
+
+        let command_kind = if is_read { "mark_read" } else { "mark_unread" };
+        let operation = if is_read {
+            "local_mark_read"
+        } else {
+            "local_mark_unread"
+        };
+        let mut transaction = self.pool.begin().await?;
+        let updated = MessageProjectionStore::set_read_state_in_transaction(
+            &mut transaction,
+            message_id,
+            is_read,
+            "local_user",
+        )
+        .await?;
+        let observation = ObservationStore::capture_in_transaction(
+            &mut transaction,
+            &NewObservation::new(
                 "COMMUNICATION_MESSAGE",
+                ObservationOriginKind::Manual,
+                Utc::now(),
                 json!({
-                    "message_id": message_id,
-                    "previous_workflow_state": current.workflow_state.as_str(),
-                    "workflow_state": WorkflowState::Reviewed.as_str(),
-                    "operation": "local_mark_read",
+                    "message_id": updated.message_id,
+                    "previous_is_read": current.is_read,
+                    "is_read": is_read,
+                    "operation": operation,
                 }),
-                format!("message://{message_id}/local-mark-read"),
-                json!({
-                    "captured_by": "mail_service.mark_message_read_local",
-                    "operation": "local_mark_read",
-                }),
+                format!("message://{message_id}/{operation}"),
             )
+            .provenance(json!({
+                "captured_by": "mail_service.set_message_read_local_with_provider_command",
+                "operation": operation,
+            })),
+        )
+        .await
+        .map_err(
+            |source| CommunicationCommandServiceError::ObservationCapture {
+                operation: "read state evidence capture",
+                source,
+            },
+        )?;
+        link_mail_entity_in_transaction(
+            &mut transaction,
+            &observation.observation_id,
+            "communication_message",
+            updated.message_id.clone(),
+            "read_state_transition",
+            json!({ "is_read": is_read }),
+            None,
+        )
+        .await
+        .map_err(
+            |source| CommunicationCommandServiceError::ObservationCapture {
+                operation: "read state evidence link",
+                source,
+            },
+        )?;
+
+        let command_id = format!("mail-read:{}", Uuid::new_v4());
+        let command = NewCommunicationProviderCommand::new(
+            &command_id,
+            &updated.account_id,
+            "mail",
+            command_kind,
+            &command_id,
+            actor_id,
+        )
+        .provider_message_id(&updated.provider_record_id)
+        .target_ref(json!({ "message_id": updated.message_id }))
+        .payload(json!({
+            "desired_is_read": is_read,
+            "read_changed_at": updated.read_changed_at.map(|value| value.to_rfc3339()),
+            "provider_record_id": updated.provider_record_id,
+            "message_metadata": updated.message_metadata,
+        }));
+        CommunicationProviderCommandStore::enqueue_in_transaction(&mut transaction, &command)
             .await?;
-        Ok(store
-            .transition_workflow_state_with_observation(
-                message_id,
-                WorkflowState::Reviewed,
-                Some(&observation.observation_id),
-                "workflow_state_transition",
-                Some(json!({
-                    "previous_state": current.workflow_state.as_str(),
-                })),
-            )
-            .await?)
+        transaction.commit().await?;
+        Ok(updated)
     }
 
     pub async fn move_message_to_local_trash(
@@ -713,10 +946,19 @@ impl CommunicationCommandService {
             .message(message_id)
             .await?
             .ok_or(MessageProjectionError::MessageNotFound)?;
-        let observation = self
-            .capture_observation(
-                operation,
+        let mut transaction = self.pool.begin().await?;
+        let updated = MessageProjectionStore::move_to_local_trash_in_transaction(
+            &mut transaction,
+            message_id,
+            reason,
+        )
+        .await?;
+        let observation = ObservationStore::capture_in_transaction(
+            &mut transaction,
+            &NewObservation::new(
                 "COMMUNICATION_MESSAGE",
+                ObservationOriginKind::Manual,
+                Utc::now(),
                 json!({
                     "message_id": message_id,
                     "previous_local_state": current.local_state.as_str(),
@@ -724,23 +966,61 @@ impl CommunicationCommandService {
                     "operation": operation,
                 }),
                 format!("message://{message_id}/{}", operation.replace('_', "-")),
-                json!({
+            )
+            .provenance(json!({
                     "captured_by": "mail_service.move_message_to_local_trash",
                     "operation": operation,
-                }),
-            )
+            })),
+        )
+        .await
+        .map_err(
+            |source| CommunicationCommandServiceError::ObservationCapture {
+                operation: "trash state evidence capture",
+                source,
+            },
+        )?;
+        link_mail_entity_in_transaction(
+            &mut transaction,
+            &observation.observation_id,
+            "communication_message",
+            updated.message_id.clone(),
+            "local_state_transition",
+            json!({
+                "local_state": updated.local_state.as_str(),
+                "source": reason,
+            }),
+            Some(json!({
+                "previous_local_state": current.local_state.as_str(),
+            })),
+        )
+        .await
+        .map_err(
+            |source| CommunicationCommandServiceError::ObservationCapture {
+                operation: "trash state evidence link",
+                source,
+            },
+        )?;
+
+        let command_id = format!("mail-trash:{}", Uuid::new_v4());
+        let command = NewCommunicationProviderCommand::new(
+            &command_id,
+            &updated.account_id,
+            "mail",
+            "trash",
+            &command_id,
+            LOCAL_USER_ACTOR_ID,
+        )
+        .provider_message_id(&updated.provider_record_id)
+        .target_ref(json!({ "message_id": updated.message_id }))
+        .payload(json!({
+            "provider_record_id": updated.provider_record_id,
+            "message_metadata": updated.message_metadata,
+            "reason": reason,
+        }));
+        CommunicationProviderCommandStore::enqueue_in_transaction(&mut transaction, &command)
             .await?;
-        Ok(store
-            .move_to_local_trash_with_observation(
-                message_id,
-                reason,
-                Some(&observation.observation_id),
-                "local_state_transition",
-                Some(json!({
-                    "previous_local_state": current.local_state.as_str(),
-                })),
-            )
-            .await?)
+        transaction.commit().await?;
+        Ok(updated)
     }
 
     pub async fn restore_message_from_local_trash(
@@ -877,16 +1157,22 @@ impl CommunicationCommandService {
                 }),
             )
             .await?;
-        Ok(MessageFlags::toggle_important_with_observation(
-            &store,
-            message_id,
-            Some(&observation.observation_id),
-            "message_flag_update",
-            Some(json!({
-                "important": next_important,
-            })),
+        let mut metadata = current.message_metadata.clone();
+        metadata["important"] = json!(next_important);
+        self.persist_provider_synced_metadata(
+            &current,
+            &metadata,
+            if next_important {
+                "important"
+            } else {
+                "not_important"
+            },
+            json!({ "important": next_important }),
+            &observation.observation_id,
+            json!({ "important": next_important }),
         )
-        .await?)
+        .await?;
+        Ok(next_important)
     }
 
     pub async fn snooze_message(
@@ -974,16 +1260,19 @@ impl CommunicationCommandService {
                 }),
             )
             .await?;
-        MessageFlags::add_label_with_observation(
-            &store,
-            message_id,
-            label,
-            Some(&observation.observation_id),
-            "message_flag_update",
-            Some(json!({
-                "label": label,
-                "action": "add",
-            })),
+        let mut labels = MessageFlags::labels(&current);
+        if !labels.iter().any(|existing| existing == label) {
+            labels.push(label.to_owned());
+        }
+        let mut metadata = current.message_metadata.clone();
+        metadata["labels"] = json!(labels);
+        self.persist_provider_synced_metadata(
+            &current,
+            &metadata,
+            "add_label",
+            json!({ "label": label }),
+            &observation.observation_id,
+            json!({ "label": label, "action": "add" }),
         )
         .await?;
         Ok(())
@@ -1009,19 +1298,73 @@ impl CommunicationCommandService {
                 }),
             )
             .await?;
-        MessageFlags::remove_label_with_observation(
-            &store,
-            message_id,
-            label,
-            Some(&observation.observation_id),
-            "message_flag_update",
-            Some(json!({
-                "label": label,
-                "action": "remove",
-            })),
+        let mut labels = MessageFlags::labels(&current);
+        labels.retain(|existing| existing != label);
+        let mut metadata = current.message_metadata.clone();
+        metadata["labels"] = json!(labels);
+        self.persist_provider_synced_metadata(
+            &current,
+            &metadata,
+            "remove_label",
+            json!({ "label": label }),
+            &observation.observation_id,
+            json!({ "label": label, "action": "remove" }),
         )
         .await?;
         Ok(())
+    }
+
+    async fn persist_provider_synced_metadata(
+        &self,
+        current: &ProjectedMessage,
+        metadata: &Value,
+        command_kind: &str,
+        command_payload: Value,
+        observation_id: &str,
+        link_metadata: Value,
+    ) -> Result<ProjectedMessage, CommunicationCommandServiceError> {
+        let mut transaction = self.pool.begin().await?;
+        let updated = MessageProjectionStore::set_message_metadata_in_transaction(
+            &mut transaction,
+            &current.message_id,
+            metadata,
+        )
+        .await?;
+        link_mail_entity_in_transaction(
+            &mut transaction,
+            observation_id,
+            "communication_message",
+            updated.message_id.clone(),
+            "message_flag_update",
+            json!({}),
+            Some(link_metadata),
+        )
+        .await
+        .map_err(
+            |source| CommunicationCommandServiceError::ObservationCapture {
+                operation: "message flag evidence link",
+                source,
+            },
+        )?;
+        let command_id = format!("mail-command:{}", Uuid::new_v4());
+        let mut payload = command_payload;
+        payload["provider_record_id"] = json!(updated.provider_record_id);
+        payload["message_metadata"] = updated.message_metadata.clone();
+        let command = NewCommunicationProviderCommand::new(
+            &command_id,
+            &updated.account_id,
+            "mail",
+            command_kind,
+            &command_id,
+            LOCAL_USER_ACTOR_ID,
+        )
+        .provider_message_id(&updated.provider_record_id)
+        .target_ref(json!({ "message_id": updated.message_id }))
+        .payload(payload);
+        CommunicationProviderCommandStore::enqueue_in_transaction(&mut transaction, &command)
+            .await?;
+        transaction.commit().await?;
+        Ok(updated)
     }
 
     pub async fn enqueue_redirect_message(
@@ -1139,8 +1482,7 @@ impl CommunicationCommandService {
                 &NewCommunicationBlob::from_local_blob(&local_blob).content_type(&content_type),
             )
             .await?;
-        let scanner = HeuristicAttachmentSafetyScanner;
-        let scan_report = scanner.scan(&AttachmentSafetyScanRequest {
+        let scan_request = AttachmentSafetyScanRequest {
             provider_attachment_id: "local-import",
             filename: filename.as_deref(),
             content_type: &content_type,
@@ -1149,7 +1491,8 @@ impl CommunicationCommandService {
             storage_kind: &local_blob.storage_kind,
             storage_path: &local_blob.storage_path,
             bytes: &bytes,
-        })?;
+        };
+        let scan_report = scan_attachment_with_configured_clamav(&scan_request).await?;
         let seed = format!(
             "{}:{}:{}:{}",
             local_blob.sha256,
@@ -1284,6 +1627,7 @@ pub struct CommunicationDraftUpsertCommand {
     pub body_html: Option<String>,
     pub in_reply_to: Option<String>,
     pub references: Option<Vec<String>>,
+    pub attachment_ids: Option<Vec<String>>,
     pub status: Option<String>,
     pub scheduled_send_at: Option<DateTime<Utc>>,
     pub metadata: Option<Value>,
@@ -1316,6 +1660,9 @@ pub struct CommunicationWorkflowStateTransitionResult {
 
 #[derive(Debug, Error)]
 pub enum CommunicationCommandServiceError {
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+
     #[error("{operation} observation capture failed")]
     ObservationCapture {
         operation: &'static str,
@@ -1355,6 +1702,9 @@ pub enum CommunicationCommandServiceError {
 
     #[error(transparent)]
     MessageFlags(#[from] MessageFlagsError),
+
+    #[error(transparent)]
+    ProviderCommand(#[from] CommunicationProviderCommandError),
 }
 
 fn decode_import_bytes(content_base64: &str) -> Result<Vec<u8>, CommunicationCommandServiceError> {

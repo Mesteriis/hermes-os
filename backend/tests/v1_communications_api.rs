@@ -12,6 +12,7 @@ use hermes_hub_backend::domains::communications::core::{
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::mail_background_sync::MailSyncStore;
 use testkit::context::TestContext;
 
 const T: &str = "v1comms-test-token";
@@ -26,6 +27,16 @@ fn get(uri: &str) -> Request<Body> {
         .header("x-hermes-secret", T)
         .body(Body::empty())
         .expect("req")
+}
+
+fn put(uri: &str, body: Value) -> Request<Body> {
+    Request::builder()
+        .method(Method::PUT)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-hermes-secret", T)
+        .body(Body::from(body.to_string()))
+        .expect("put request")
 }
 
 fn pget(uri: &str, body: Value) -> Request<Body> {
@@ -129,6 +140,79 @@ v1_read_test!(
     "/api/v1/integrations/mail/accounts/sync-status"
 );
 
+#[tokio::test]
+async fn sync_status_degrades_only_after_consecutive_provider_network_failures() {
+    let context = TestContext::new().await;
+    let pool = context.pool().clone();
+    let account_id = format!("acct-sync-threshold-{}", uid());
+    CommunicationIngestionStore::new(pool.clone())
+        .upsert_provider_account(&NewProviderAccount::new(
+            &account_id,
+            EmailProviderKind::Imap,
+            "Threshold IMAP",
+            format!("threshold-{}@example.com", uid()),
+        ))
+        .await
+        .expect("store provider account");
+
+    for (index, error_code) in ["provider_network_error", "provider_network_error"]
+        .into_iter()
+        .enumerate()
+    {
+        sqlx::query(
+            "INSERT INTO communication_mail_sync_runs (run_id, account_id, trigger, status, phase, progress_mode, error_code, error_message, started_at) VALUES ($1, $2, 'scheduled', 'failed', 'failed', 'none', $3, 'sanitized', now() + ($4 * interval '1 second'))",
+        )
+        .bind(format!("threshold-run-{index}-{}", uid()))
+        .bind(&account_id)
+        .bind(error_code)
+        .bind(index as i64)
+        .execute(&pool)
+        .await
+        .expect("store failed sync run");
+    }
+
+    let warning = MailSyncStore::new(pool.clone())
+        .sync_statuses()
+        .await
+        .expect("load warning sync status")
+        .into_iter()
+        .find(|status| status.account_id == account_id)
+        .expect("account warning status");
+    assert_eq!(warning.consecutive_failures, 2);
+    assert_eq!(warning.status, "warning");
+
+    for (index, error_code) in [
+        "vault_locked",
+        "provider_network_error",
+        "provider_network_error",
+        "provider_network_error",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        sqlx::query(
+            "INSERT INTO communication_mail_sync_runs (run_id, account_id, trigger, status, phase, progress_mode, error_code, error_message, started_at) VALUES ($1, $2, 'scheduled', 'failed', 'failed', 'none', $3, 'sanitized', now() + (($4 + 2) * interval '1 second'))",
+        )
+        .bind(format!("threshold-reset-run-{index}-{}", uid()))
+        .bind(&account_id)
+        .bind(error_code)
+        .bind(index as i64)
+        .execute(&pool)
+        .await
+        .expect("store reset sync run");
+    }
+
+    let status = MailSyncStore::new(pool)
+        .sync_statuses()
+        .await
+        .expect("load sync statuses")
+        .into_iter()
+        .find(|status| status.account_id == account_id)
+        .expect("account status");
+    assert_eq!(status.consecutive_failures, 3);
+    assert_eq!(status.status, "degraded");
+}
+
 // ── Write-like endpoints (may fail gracefully without data) ────────────────
 
 macro_rules! v1_post_test {
@@ -202,30 +286,43 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
         .oneshot(get(&settings_path))
         .await
         .expect("get settings");
-    assert_eq!(resp.status(), StatusCode::OK);
+    let status = resp.status();
     let body: Value = serde_json::from_slice(
         &to_bytes(resp.into_body(), 1024 * 1024)
             .await
             .expect("read settings"),
     )
     .expect("settings json");
+    assert_eq!(status, StatusCode::OK, "sync-settings body: {body}");
     assert_eq!(body["account_id"], account_id);
     assert_eq!(body["sync_enabled"], true);
     assert_eq!(body["batch_size"], 100);
     assert_eq!(body["poll_interval_seconds"], 300);
+    assert_eq!(body["failure_threshold"], 3);
+
+    let statuses = MailSyncStore::new(pool.clone())
+        .sync_statuses()
+        .await
+        .expect("load typed sync statuses");
+    assert!(
+        statuses
+            .iter()
+            .any(|status| status.account_id == account_id)
+    );
 
     let resp = r
         .clone()
         .oneshot(get("/api/v1/integrations/mail/accounts/sync-status"))
         .await
         .expect("get sync statuses");
-    assert_eq!(resp.status(), StatusCode::OK);
+    let status = resp.status();
     let body: Value = serde_json::from_slice(
         &to_bytes(resp.into_body(), 1024 * 1024)
             .await
             .expect("read sync statuses"),
     )
     .expect("sync statuses json");
+    assert_eq!(status, StatusCode::OK, "sync-status body: {body}");
     let sync_status = body["items"]
         .as_array()
         .expect("sync status items")
@@ -255,6 +352,7 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
     assert_eq!(body["sync_enabled"], false);
     assert_eq!(body["batch_size"], 7);
     assert_eq!(body["poll_interval_seconds"], 600);
+    assert_eq!(body["failure_threshold"], 3);
 
     let resp = r
         .clone()
@@ -377,6 +475,55 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
     assert_eq!(body["account_id"], account_id);
     assert!(body.get("status").is_some());
     assert!(body.get("phase").is_some());
+}
+
+#[tokio::test]
+async fn v1_content_egress_settings_default_deny_and_partial_update() {
+    let context = TestContext::new().await;
+    let db = context.connection_string();
+    let pool = context.pool().clone();
+    let account_id = format!("acct-egress-api-{}", uid());
+    CommunicationIngestionStore::new(pool)
+        .upsert_provider_account(&NewProviderAccount::new(
+            &account_id,
+            EmailProviderKind::Imap,
+            "Egress API",
+            format!("{account_id}@example.test"),
+        ))
+        .await
+        .expect("provider account");
+    let router = router(&db).await;
+    let path = format!("/api/v1/integrations/mail/accounts/{account_id}/content-egress-settings");
+    let response = router
+        .clone()
+        .oneshot(get(&path))
+        .await
+        .expect("get egress settings");
+    let body: Value = serde_json::from_slice(
+        &to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body"),
+    )
+    .expect("json");
+    assert_eq!(
+        body,
+        json!({ "body": false, "attachments": false, "extracted_text": false })
+    );
+    let response = router
+        .oneshot(put(&path, json!({ "body": true })))
+        .await
+        .expect("put egress settings");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body"),
+    )
+    .expect("json");
+    assert_eq!(
+        body,
+        json!({ "body": true, "attachments": false, "extracted_text": false })
+    );
 }
 
 #[tokio::test]

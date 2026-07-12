@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use super::super::constants::GOOGLE_GMAIL_SEND_SCOPE;
+use super::super::constants::{GOOGLE_GMAIL_MODIFY_SCOPE, GOOGLE_GMAIL_SEND_SCOPE};
 use super::super::models::GmailOAuthPendingGrant;
 
 pub(in crate::integrations::mail::accounts::service) fn gmail_account_config(
@@ -12,6 +12,7 @@ pub(in crate::integrations::mail::accounts::service) fn gmail_account_config(
         "oauth_client_id": pending.request.client_id,
         "requested_scopes": pending.request.scopes,
         "gmail_send_enabled": gmail_send_scope_requested(pending),
+        "gmail_modify_enabled": gmail_modify_scope_requested(pending),
         "connected_services": ["mail", "calendar", "contacts"],
         "history_stream_id": "gmail:history"
     })
@@ -39,4 +40,12 @@ fn gmail_send_scope_requested(pending: &GmailOAuthPendingGrant) -> bool {
         .scopes
         .iter()
         .any(|scope| scope.trim() == GOOGLE_GMAIL_SEND_SCOPE)
+}
+
+fn gmail_modify_scope_requested(pending: &GmailOAuthPendingGrant) -> bool {
+    pending
+        .request
+        .scopes
+        .iter()
+        .any(|scope| scope.trim() == GOOGLE_GMAIL_MODIFY_SCOPE)
 }

@@ -34,7 +34,9 @@ use crate::contracts::hermes::communications::v1::{
     AttachmentSearchResponse, BulkMessageActionRequest as ProtoBulkMessageActionRequest,
     BulkMessageActionResponse as ProtoBulkMessageActionResponse,
     CommunicationArchitectureBlocker as ProtoCommunicationArchitectureBlocker,
-    CommunicationDraft as ProtoCommunicationDraft, CommunicationFolder as ProtoCommunicationFolder,
+    CommunicationDraft as ProtoCommunicationDraft,
+    CommunicationDraftAttachmentRef as ProtoCommunicationDraftAttachmentRef,
+    CommunicationFolder as ProtoCommunicationFolder,
     CommunicationMessage as ProtoCommunicationMessage,
     CommunicationMessageAttachment as ProtoCommunicationMessageAttachment,
     CommunicationOutboxItem as ProtoCommunicationOutboxItem,
@@ -49,11 +51,13 @@ use crate::contracts::hermes::communications::v1::{
     DeleteMessageFromProviderResponse, DeleteRichTemplateRequest, DeleteRichTemplateResponse,
     DeleteSavedSearchRequest, DeleteSavedSearchResponse, DetectMessageLanguageRequest,
     DetectMessageLanguageResponse, ExplainMessageRequest, ExplainMessageResponse,
-    ExtractMessageNotesRequest, ExtractMessageNotesResponse, ExtractMessageTasksRequest,
-    ExtractMessageTasksResponse, ExtractedNote as ProtoExtractedNote,
-    ExtractedTask as ProtoExtractedTask, FolderMessage as ProtoFolderMessage,
+    ExtractAttachmentTextRequest, ExtractAttachmentTextResponse, ExtractMessageNotesRequest,
+    ExtractMessageNotesResponse, ExtractMessageTasksRequest, ExtractMessageTasksResponse,
+    ExtractedNote as ProtoExtractedNote, ExtractedTask as ProtoExtractedTask,
+    FolderMessage as ProtoFolderMessage,
     FolderMessageActionResult as ProtoFolderMessageActionResult,
     GetAttachmentArchiveInspectionRequest, GetAttachmentArchiveInspectionResponse,
+    GetAttachmentExtractedTextRequest, GetAttachmentExtractedTextResponse,
     GetAttachmentPreviewRequest, GetAttachmentPreviewResponse, GetMailboxHealthRequest,
     GetMailboxHealthResponse, GetMessageAuthRequest, GetMessageAuthResponse,
     GetMessageExportRequest, GetMessageExportResponse, GetMessageRequest, GetMessageResponse,
@@ -99,7 +103,8 @@ use crate::domains::communications::analytics::{
     EmailAnalyticsError, EmailAnalyticsStore, MailboxHealth, SenderStats,
 };
 use crate::domains::communications::archive_inspection::{
-    ArchiveInspectionLimits, ArchiveInspectionReport, inspect_zip_bytes,
+    ArchiveInspectionLimits, ArchiveInspectionReport, cached_archive_inspection_report,
+    inspect_zip_bytes,
 };
 use crate::domains::communications::attachment_search::{
     AttachmentSearchError, AttachmentSearchPage, AttachmentSearchQuery, AttachmentSearchResult,
@@ -108,9 +113,7 @@ use crate::domains::communications::attachment_search::{
 use crate::domains::communications::bulk_actions::{
     BulkMessageAction, BulkMessageActionError, BulkMessageActionOutcome, BulkMessageActionStore,
 };
-use crate::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
-};
+use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::domains::communications::drafts::{
     CommunicationDraft, CommunicationDraftError, CommunicationDraftStore, DraftStatus,
 };
@@ -130,6 +133,7 @@ use crate::domains::communications::outbox::{
 use crate::domains::communications::personas::{
     CommunicationPersona, CommunicationPersonaError, CommunicationPersonaStore,
 };
+use crate::domains::communications::provider_commands::CommunicationProviderCommandStore;
 use crate::domains::communications::saved_searches::{
     CommunicationSavedSearch, CommunicationSavedSearchError, CommunicationSavedSearchListQuery,
     CommunicationSavedSearchStore, NewCommunicationSavedSearch, UpdateCommunicationSavedSearch,
@@ -153,7 +157,6 @@ use crate::domains::communications::threads::{
     ThreadMessageAttachment,
 };
 use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
-use crate::integrations::mail::read_state::{EmailReadStateRequest, LiveEmailReadStateService};
 use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
 use crate::integrations::omniroute::client::{
     OmniRouteClient, OmniRouteClientConfig, OmniRouteError,
@@ -164,13 +167,11 @@ use crate::platform::settings::ApplicationSettingsStore;
 use crate::vault::HostVault;
 
 const AI_REQUEST_RUNTIME: &str = "ai_request_runtime";
-const ATTACHMENT_TRANSLATION_SOURCE: &str = "caller_provided_extracted_text";
-const MAX_ATTACHMENT_TRANSLATION_SOURCE_CHARS: usize = 64_000;
+const ATTACHMENT_TRANSLATION_SOURCE: &str = "durable_extracted_text";
 const MAX_TEXT_PREVIEW_BYTES: usize = 64 * 1024;
 const MAX_IMAGE_PREVIEW_BYTES: usize = 5 * 1024 * 1024;
 const MAX_AUDIO_PREVIEW_BYTES: usize = 24 * 1024 * 1024;
 const MAX_VIDEO_PREVIEW_BYTES: usize = 32 * 1024 * 1024;
-const MAX_PDF_PREVIEW_BYTES: usize = 16 * 1024 * 1024;
 
 pub(crate) fn register(
     router: ConnectRouter,
@@ -190,6 +191,7 @@ struct CommunicationsConnectService {
     pool: PgPool,
     vault: HostVault,
     message_store: MessageProjectionStore,
+    provider_command_store: CommunicationProviderCommandStore,
     provider_account_store: CommunicationProviderAccountStore,
     analytics_store: EmailAnalyticsStore,
     subscription_store: SubscriptionStore,
@@ -212,6 +214,7 @@ impl CommunicationsConnectService {
             pool: pool.clone(),
             vault,
             message_store: MessageProjectionStore::new(pool.clone()),
+            provider_command_store: CommunicationProviderCommandStore::new(pool.clone()),
             provider_account_store: CommunicationProviderAccountStore::new(pool.clone()),
             analytics_store: EmailAnalyticsStore::new(pool.clone()),
             subscription_store: SubscriptionStore::new(pool.clone()),
@@ -255,6 +258,7 @@ impl CommunicationsService for CommunicationsConnectService {
             .list_messages_page(ProjectedMessagePageQuery {
                 account_id: req.account_id.as_deref(),
                 workflow_state,
+                is_read: req.is_read,
                 channel_kind: req.channel_kind.as_deref(),
                 conversation_id: req.conversation_id.as_deref(),
                 query: req.query.as_deref(),
@@ -266,9 +270,29 @@ impl CommunicationsService for CommunicationsConnectService {
             })
             .await
             .map_err(message_connect_error)?;
+        let message_ids = page
+            .items
+            .iter()
+            .map(|summary| summary.message.message_id.clone())
+            .collect::<Vec<_>>();
+        let read_sync_statuses = self
+            .provider_command_store
+            .read_sync_statuses(&message_ids)
+            .await
+            .map_err(|error| ConnectError::new(ErrorCode::Internal, error.to_string()))?;
 
         Response::ok(ListMessagesResponse {
-            items: page.items.into_iter().map(proto_message_summary).collect(),
+            items: page
+                .items
+                .into_iter()
+                .map(|summary| {
+                    let status = read_sync_statuses
+                        .get(&summary.message.message_id)
+                        .map(String::as_str)
+                        .unwrap_or("synced");
+                    proto_message_summary(summary, status)
+                })
+                .collect(),
             next_cursor: page.next_cursor,
             has_more: page.has_more,
             ..Default::default()
@@ -304,12 +328,20 @@ impl CommunicationsService for CommunicationsConnectService {
             crate::app::api_support::rich_body_html_for_message(self.pool.clone(), &message)
                 .await
                 .map_err(api_error_connect_error)?;
+        let read_sync_status = self
+            .provider_command_store
+            .read_sync_statuses(std::slice::from_ref(&message.message_id))
+            .await
+            .map_err(|error| ConnectError::new(ErrorCode::Internal, error.to_string()))?
+            .remove(&message.message_id)
+            .unwrap_or_else(|| "synced".to_owned());
 
         Response::ok(GetMessageResponse {
             item: Some(proto_message_with_body_html(
                 message,
                 attachments.len() as i64,
                 body_html,
+                &read_sync_status,
             ))
             .into(),
             attachments: attachments
@@ -406,53 +438,16 @@ impl CommunicationsService for CommunicationsConnectService {
         if req.message_id.trim().is_empty() {
             return Err(invalid_argument_error("message_id must not be empty"));
         }
-        let message = self
-            .message_store
-            .message(&req.message_id)
-            .await
-            .map_err(message_connect_error)?
-            .ok_or_else(|| ConnectError::new(ErrorCode::NotFound, "message was not found"))?;
-        let account = self
-            .provider_account_store
-            .get(&message.account_id)
-            .await
-            .map_err(|error| ConnectError::new(ErrorCode::Internal, error.to_string()))?
-            .ok_or_else(|| {
-                ConnectError::new(
-                    ErrorCode::FailedPrecondition,
-                    "provider account was not found",
-                )
-            })?;
-        // Hermes owns local read state. Provider sync is best-effort and must
-        // never undo or block the owner's action in the local workspace.
+        // Hermes owns local read state. The provider command is committed with
+        // that intent and is executed asynchronously after this response.
         let updated = CommunicationCommandService::new(self.pool.clone())
-            .mark_message_read_local(&req.message_id)
+            .set_message_read_local_with_provider_command(
+                &req.message_id,
+                true,
+                "hermes-local-user",
+            )
             .await
             .map_err(command_connect_error)?;
-
-        let provider_sync = LiveEmailReadStateService::new(
-            self.pool.clone(),
-            self.vault.clone(),
-            Arc::new(CommunicationProviderSecretBindingStore::new(
-                self.pool.clone(),
-            )),
-            crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
-        )
-        .mark_message_read(EmailReadStateRequest {
-            account: &account,
-            provider_record_id: &message.provider_record_id,
-            message_metadata: &message.message_metadata,
-        })
-        .await;
-        if let Err(error) = provider_sync {
-            tracing::warn!(
-                message_id = %updated.message_id,
-                account_id = %account.account_id,
-                provider_kind = account.provider_kind.as_str(),
-                error = %error,
-                "provider read-state synchronization failed after local read state was committed"
-            );
-        }
 
         Response::ok(MarkMessageReadResponse {
             message_id: updated.message_id,
@@ -864,7 +859,20 @@ impl CommunicationsService for CommunicationsConnectService {
             .ok_or_else(|| {
                 ConnectError::new(ErrorCode::NotFound, "communication message was not found")
             })?;
-        let auth = crate::domains::communications::spf_dkim::parse_auth_headers(&message.body_text);
+        let auth = match crate::domains::communications::core::CommunicationIngestionStore::new(
+            self.pool.clone(),
+        )
+        .raw_record(&message.raw_record_id)
+        .await
+        .map_err(raw_evidence_connect_error)?
+        {
+            Some(raw) => {
+                crate::domains::communications::spf_dkim::parse_auth_headers_from_raw_record(&raw)
+                    .await
+                    .map_err(message_connect_error)?
+            }
+            None => crate::domains::communications::spf_dkim::AuthResults::default(),
+        };
         let risk = crate::domains::communications::spf_dkim::assess_auth_risk(&auth);
 
         Response::ok(GetMessageAuthResponse {
@@ -926,6 +934,13 @@ impl CommunicationsService for CommunicationsConnectService {
             .ok_or_else(|| {
                 ConnectError::new(ErrorCode::NotFound, "communication message was not found")
             })?;
+        thread_require_mail_ai_content_egress(
+            &self.pool,
+            &self.config,
+            &message.account_id,
+            crate::app::api_support::MailAiContentEgressKind::Body,
+        )
+        .await?;
         let runtime = thread_ai_hub_optional(&self.pool, &self.config)
             .await
             .map_err(api_error_connect_error)?;
@@ -1007,6 +1022,13 @@ impl CommunicationsService for CommunicationsConnectService {
             .ok_or_else(|| {
                 ConnectError::new(ErrorCode::NotFound, "communication message was not found")
             })?;
+        thread_require_mail_ai_content_egress(
+            &self.pool,
+            &self.config,
+            &message.account_id,
+            crate::app::api_support::MailAiContentEgressKind::Body,
+        )
+        .await?;
         let runtime = thread_ai_hub_optional(&self.pool, &self.config)
             .await
             .map_err(api_error_connect_error)?;
@@ -1449,6 +1471,13 @@ impl CommunicationsService for CommunicationsConnectService {
             .ok_or_else(|| {
                 ConnectError::new(ErrorCode::NotFound, "communication message was not found")
             })?;
+        thread_require_mail_ai_content_egress(
+            &self.pool,
+            &self.config,
+            &message.account_id,
+            crate::app::api_support::MailAiContentEgressKind::Body,
+        )
+        .await?;
         let service = thread_multilingual_service(&self.pool, &self.config)
             .await
             .map_err(api_error_connect_error)?;
@@ -1534,6 +1563,13 @@ impl CommunicationsService for CommunicationsConnectService {
             .ok_or_else(|| {
                 ConnectError::new(ErrorCode::NotFound, "communication message was not found")
             })?;
+        thread_require_mail_ai_content_egress(
+            &self.pool,
+            &self.config,
+            &message.account_id,
+            crate::app::api_support::MailAiContentEgressKind::Body,
+        )
+        .await?;
         let service = crate::domains::communications::extract::EmailExtractService::new(
             thread_ai_hub_optional(&self.pool, &self.config)
                 .await
@@ -1680,6 +1716,13 @@ impl CommunicationsService for CommunicationsConnectService {
             .thread_messages(account_id, subject, normalize_limit(req.limit, 50, 100))
             .await
             .map_err(thread_connect_error)?;
+        thread_require_mail_ai_content_egress(
+            &self.pool,
+            &self.config,
+            account_id,
+            crate::app::api_support::MailAiContentEgressKind::Body,
+        )
+        .await?;
         let service = thread_multilingual_service(&self.pool, &self.config)
             .await
             .map_err(api_error_connect_error)?;
@@ -1926,6 +1969,7 @@ impl CommunicationsService for CommunicationsConnectService {
                 body_html: req.body_html,
                 in_reply_to: req.in_reply_to,
                 references: Some(req.references),
+                attachment_ids: req.replace_attachments.then_some(req.attachment_ids),
                 status: req.status,
                 scheduled_send_at,
                 metadata: Some(metadata),
@@ -2399,9 +2443,38 @@ impl CommunicationsService for CommunicationsConnectService {
                 "attachment preview is blocked by attachment scan status",
             ));
         }
+        if let Some(preview) = crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewService::new(
+            self.pool.clone(),
+            crate::app::api_support::communication_blob_store(),
+        )
+        .completed_preview(&req.attachment_id)
+        .await
+        .map_err(attachment_safe_preview_connect_error)?
+        {
+            let byte_count = preview.bytes.len();
+            return image_attachment_preview_proto(attachment, preview.bytes, byte_count);
+        }
+        if is_derived_text_preview_attachment(&attachment) {
+            let derived = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
+                self.pool.clone(),
+                crate::app::api_support::communication_blob_store(),
+            )
+            .completed_text(&req.attachment_id)
+            .await
+            .map_err(attachment_text_extraction_connect_error)?
+            .ok_or_else(|| {
+                ConnectError::new(
+                    ErrorCode::FailedPrecondition,
+                    "extract attachment text before preview",
+                )
+            })?;
+            let bytes = derived.text.into_bytes();
+            let byte_count = bytes.len();
+            return text_attachment_preview_proto(attachment, bytes, byte_count);
+        }
         let preview_kind = attachment_preview_kind(&attachment).ok_or_else(|| {
             invalid_argument_error(
-                "attachment preview supports text, image, audio, video and pdf attachments only",
+                "attachment preview supports text, image, audio and video attachments only",
             )
         })?;
 
@@ -2424,10 +2497,74 @@ impl CommunicationsService for CommunicationsConnectService {
             AttachmentPreviewKind::Video => {
                 video_attachment_preview_proto(attachment, bytes, byte_count)
             }
-            AttachmentPreviewKind::Pdf => {
-                pdf_attachment_preview_proto(attachment, bytes, byte_count)
-            }
         }
+    }
+
+    async fn extract_attachment_text(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, ExtractAttachmentTextRequest>,
+    ) -> ServiceResult<ExtractAttachmentTextResponse> {
+        let req = req.to_owned_message();
+        if req.attachment_id.trim().is_empty() {
+            return Err(invalid_argument_error("attachment_id must not be empty"));
+        }
+        let service = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
+            self.pool.clone(),
+            crate::app::api_support::communication_blob_store(),
+        );
+        let outcome = service
+            .extract(&req.attachment_id)
+            .await
+            .map_err(attachment_text_extraction_connect_error)?;
+        match outcome {
+            crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionOutcome::Completed {
+                attachment_id,
+                extracted_size_bytes,
+                ..
+            } => Response::ok(ExtractAttachmentTextResponse {
+                attachment_id,
+                status: "completed".to_owned(),
+                extracted_size_bytes: Some(extracted_size_bytes as u64),
+                ..Default::default()
+            }),
+            crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionOutcome::Unsupported {
+                attachment_id,
+            } => Response::ok(ExtractAttachmentTextResponse {
+                attachment_id,
+                status: "unsupported".to_owned(),
+                ..Default::default()
+            }),
+        }
+    }
+
+    async fn get_attachment_extracted_text(
+        &self,
+        _ctx: RequestContext,
+        req: ServiceRequest<'_, GetAttachmentExtractedTextRequest>,
+    ) -> ServiceResult<GetAttachmentExtractedTextResponse> {
+        let req = req.to_owned_message();
+        if req.attachment_id.trim().is_empty() {
+            return Err(invalid_argument_error("attachment_id must not be empty"));
+        }
+        let service = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
+            self.pool.clone(),
+            crate::app::api_support::communication_blob_store(),
+        );
+        let content = service
+            .completed_text(&req.attachment_id)
+            .await
+            .map_err(attachment_text_extraction_connect_error)?
+            .ok_or_else(|| {
+                ConnectError::new(ErrorCode::NotFound, "attachment text was not extracted")
+            })?;
+        Response::ok(GetAttachmentExtractedTextResponse {
+            attachment_id: content.attachment_id,
+            text: content.text,
+            truncated: content.truncated,
+            extracted_size_bytes: content.extracted_size_bytes as u64,
+            ..Default::default()
+        })
     }
 
     async fn get_attachment_archive_inspection(
@@ -2451,25 +2588,47 @@ impl CommunicationsService for CommunicationsConnectService {
                 "attachment archive inspection requires a local blob",
             ));
         }
+        if !is_preview_allowed_by_scan_status(&attachment) {
+            return Err(invalid_argument_error(
+                "attachment archive inspection is blocked by attachment scan status",
+            ));
+        }
         if !is_zip_attachment(&attachment) {
             return Err(invalid_argument_error(
                 "attachment archive inspection supports ZIP attachments only",
             ));
         }
 
-        let bytes = crate::app::api_support::communication_blob_store()
-            .read_blob(&attachment.storage_path)
-            .await
-            .map_err(storage_connect_error)?;
-        let report =
-            inspect_zip_bytes(&bytes, ArchiveInspectionLimits::default()).map_err(|error| {
-                tracing::warn!(
-                    attachment_id = %attachment.attachment.attachment_id,
-                    error = %error,
-                    "attachment archive inspection rejected archive"
-                );
-                invalid_argument_error("attachment archive inspection failed")
-            })?;
+        let report = match cached_archive_inspection_report(
+            &attachment.attachment.scan_metadata,
+            &attachment.attachment.sha256,
+        ) {
+            Some(report) => report,
+            None => {
+                let bytes = crate::app::api_support::communication_blob_store()
+                    .read_blob(&attachment.storage_path)
+                    .await
+                    .map_err(storage_connect_error)?;
+                let report = inspect_zip_bytes(&bytes, ArchiveInspectionLimits::default())
+                    .map_err(|error| {
+                        tracing::warn!(
+                            attachment_id = %attachment.attachment.attachment_id,
+                            error = %error,
+                            "attachment archive inspection rejected archive"
+                        );
+                        invalid_argument_error("attachment archive inspection failed")
+                    })?;
+                self.storage_store
+                    .persist_archive_inspection(
+                        &attachment.attachment.attachment_id,
+                        &attachment.attachment.sha256,
+                        &report,
+                    )
+                    .await
+                    .map_err(storage_connect_error)?;
+                report
+            }
+        };
 
         Response::ok(GetAttachmentArchiveInspectionResponse {
             attachment_id: attachment.attachment.attachment_id,
@@ -2495,29 +2654,58 @@ impl CommunicationsService for CommunicationsConnectService {
         if target_language.is_empty() {
             return Err(invalid_argument_error("target_language is required"));
         }
-        let source_text = req.source_text.trim();
-        if source_text.is_empty() {
-            return Err(invalid_argument_error("source_text is required"));
-        }
-        if source_text.chars().count() > MAX_ATTACHMENT_TRANSLATION_SOURCE_CHARS {
-            return Err(invalid_argument_error("source_text exceeds max length"));
-        }
-
         let attachment = self
             .storage_store
             .attachment_by_id(&req.attachment_id)
             .await
             .map_err(storage_connect_error)?
             .ok_or_else(|| ConnectError::new(ErrorCode::NotFound, "attachment was not found"))?;
+        if attachment.attachment.scan_status
+            != crate::domains::communications::storage::AttachmentSafetyScanStatus::Clean
+        {
+            return Err(invalid_argument_error(
+                "attachment translation requires a clean scan verdict",
+            ));
+        }
+        let message = self
+            .message_store
+            .message(&attachment.attachment.message_id)
+            .await
+            .map_err(message_connect_error)?
+            .ok_or_else(|| {
+                ConnectError::new(ErrorCode::NotFound, "communication message was not found")
+            })?;
+        let source_text = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
+            self.pool.clone(),
+            crate::domains::communications::storage::LocalCommunicationBlobStore::new(
+                crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT,
+            ),
+        )
+        .completed_text(&attachment.attachment.attachment_id)
+        .await
+        .map_err(attachment_text_extraction_connect_error)?
+        .ok_or_else(|| {
+            ConnectError::new(
+                ErrorCode::FailedPrecondition,
+                "extract attachment text before translation",
+            )
+        })?;
+        thread_require_mail_ai_content_egress(
+            &self.pool,
+            &self.config,
+            &message.account_id,
+            crate::app::api_support::MailAiContentEgressKind::ExtractedText,
+        )
+        .await?;
         let service = thread_multilingual_service(&self.pool, &self.config)
             .await
             .map_err(api_error_connect_error)?;
         let detection =
             crate::domains::communications::multilingual::MultilingualService::detect_language(
-                source_text,
+                &source_text.text,
             );
 
-        match service.translate(source_text, target_language).await {
+        match service.translate(&source_text.text, target_language).await {
             Ok(Some(translation)) => {
                 crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
                     self.pool.clone(),
@@ -2618,18 +2806,26 @@ impl CommunicationsService for CommunicationsConnectService {
     }
 }
 
-fn proto_message_summary(summary: ProjectedMessageSummary) -> ProtoCommunicationMessage {
-    proto_message(summary.message, summary.attachment_count)
+fn proto_message_summary(
+    summary: ProjectedMessageSummary,
+    read_sync_status: &str,
+) -> ProtoCommunicationMessage {
+    proto_message(summary.message, summary.attachment_count, read_sync_status)
 }
 
-fn proto_message(message: ProjectedMessage, attachment_count: i64) -> ProtoCommunicationMessage {
-    proto_message_with_body_html(message, attachment_count, None)
+fn proto_message(
+    message: ProjectedMessage,
+    attachment_count: i64,
+    read_sync_status: &str,
+) -> ProtoCommunicationMessage {
+    proto_message_with_body_html(message, attachment_count, None, read_sync_status)
 }
 
 fn proto_message_with_body_html(
     message: ProjectedMessage,
     attachment_count: i64,
     body_html: Option<String>,
+    read_sync_status: &str,
 ) -> ProtoCommunicationMessage {
     ProtoCommunicationMessage {
         message_id: message.message_id,
@@ -2658,6 +2854,10 @@ fn proto_message_with_body_html(
         local_state: message.local_state.as_str().to_owned(),
         local_state_changed_at: message.local_state_changed_at.map(timestamp_string),
         local_state_reason: message.local_state_reason,
+        is_read: message.is_read,
+        read_changed_at: message.read_changed_at.map(timestamp_string),
+        read_origin: message.read_origin,
+        read_sync_status: read_sync_status.to_owned(),
         attachment_count,
         ..Default::default()
     }
@@ -3132,6 +3332,7 @@ fn proto_attachment_search_item(item: AttachmentSearchResult) -> ProtoAttachment
         scan_summary: item.scan_summary,
         storage_kind: item.storage_kind,
         storage_path: item.storage_path,
+        extracted_text_match: item.extracted_text_match,
         created_at: timestamp_string(item.created_at),
         updated_at: timestamp_string(item.updated_at),
         ..Default::default()
@@ -3202,6 +3403,22 @@ fn proto_draft(item: CommunicationDraft) -> ProtoCommunicationDraft {
         body_html: item.body_html,
         in_reply_to: item.in_reply_to,
         references: item.references,
+        attachment_ids: item.attachment_ids,
+        attachments: item
+            .attachments
+            .into_iter()
+            .map(|attachment| ProtoCommunicationDraftAttachmentRef {
+                attachment_id: attachment.attachment_id,
+                filename: attachment.filename,
+                content_type: attachment.content_type,
+                size_bytes: attachment.size_bytes,
+                scan_status: attachment.scan_status,
+                scan_engine: attachment.scan_engine,
+                scan_checked_at: attachment.scan_checked_at.map(timestamp_string),
+                scan_summary: attachment.scan_summary,
+                ..Default::default()
+            })
+            .collect(),
         status: item.status.as_str().to_owned(),
         scheduled_send_at: item.scheduled_send_at.map(timestamp_string),
         send_attempts: item.send_attempts,
@@ -3388,6 +3605,8 @@ fn parse_bulk_action_request(
         "unpin" => Ok(BulkMessageAction::Unpin),
         "important" => Ok(BulkMessageAction::Important),
         "not_important" => Ok(BulkMessageAction::NotImportant),
+        "star" => Ok(BulkMessageAction::Star),
+        "unstar" => Ok(BulkMessageAction::Unstar),
         "add_label" => request
             .label
             .clone()
@@ -3456,10 +3675,7 @@ fn trim_non_empty_recipients(recipients: Vec<String>) -> Vec<String> {
 }
 
 fn is_preview_allowed_by_scan_status(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
-    matches!(
-        attachment.attachment.scan_status.as_str(),
-        "not_scanned" | "clean"
-    )
+    attachment.attachment.scan_status.as_str() == "clean"
 }
 
 enum AttachmentPreviewKind {
@@ -3467,7 +3683,6 @@ enum AttachmentPreviewKind {
     Image,
     Audio,
     Video,
-    Pdf,
 }
 
 fn attachment_preview_kind(
@@ -3485,10 +3700,20 @@ fn attachment_preview_kind(
     if is_previewable_video_attachment(attachment) {
         return Some(AttachmentPreviewKind::Video);
     }
-    if is_previewable_pdf_attachment(attachment) {
-        return Some(AttachmentPreviewKind::Pdf);
-    }
     None
+}
+
+fn is_derived_text_preview_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
+    matches!(
+        crate::platform::communications::rich_attachment_extraction_kind(
+            &attachment.attachment.content_type,
+            attachment.attachment.filename.as_deref(),
+        ),
+        Some(
+            crate::platform::communications::RichAttachmentExtractionKind::Pdf
+                | crate::platform::communications::RichAttachmentExtractionKind::Docx
+        )
+    )
 }
 
 fn is_previewable_text_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
@@ -3521,12 +3746,7 @@ fn is_previewable_text_attachment(attachment: &StoredCommunicationAttachmentWith
 }
 
 fn is_previewable_image_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
-    attachment
-        .attachment
-        .content_type
-        .trim()
-        .to_ascii_lowercase()
-        .starts_with("image/")
+    preview_image_content_type(attachment).is_some()
 }
 
 fn is_previewable_audio_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
@@ -3573,16 +3793,38 @@ fn is_previewable_video_attachment(attachment: &StoredCommunicationAttachmentWit
             .unwrap_or(false)
 }
 
-fn is_previewable_pdf_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
-    preview_pdf_content_type(attachment).is_some()
-}
-
-fn preview_image_content_type(attachment: &StoredCommunicationAttachmentWithBlob) -> Option<&str> {
-    let content_type = attachment.attachment.content_type.trim();
-    if content_type.is_empty() || !content_type.to_ascii_lowercase().starts_with("image/") {
-        return None;
+fn preview_image_content_type(
+    attachment: &StoredCommunicationAttachmentWithBlob,
+) -> Option<&'static str> {
+    let content_type = attachment
+        .attachment
+        .content_type
+        .trim()
+        .to_ascii_lowercase();
+    match content_type.as_str() {
+        "image/png" => Some("image/png"),
+        "image/jpeg" => Some("image/jpeg"),
+        "image/gif" => Some("image/gif"),
+        "image/webp" => Some("image/webp"),
+        _ => attachment
+            .attachment
+            .filename
+            .as_deref()
+            .and_then(|filename| {
+                let filename = filename.trim().to_ascii_lowercase();
+                if filename.ends_with(".png") {
+                    Some("image/png")
+                } else if filename.ends_with(".jpg") || filename.ends_with(".jpeg") {
+                    Some("image/jpeg")
+                } else if filename.ends_with(".gif") {
+                    Some("image/gif")
+                } else if filename.ends_with(".webp") {
+                    Some("image/webp")
+                } else {
+                    None
+                }
+            }),
     }
-    Some(content_type)
 }
 
 fn preview_audio_content_type(attachment: &StoredCommunicationAttachmentWithBlob) -> Option<&str> {
@@ -3631,26 +3873,6 @@ fn preview_video_content_type(attachment: &StoredCommunicationAttachmentWithBlob
                 Some("video/webm")
             } else if filename.ends_with(".mov") {
                 Some("video/quicktime")
-            } else {
-                None
-            }
-        })
-}
-
-fn preview_pdf_content_type(attachment: &StoredCommunicationAttachmentWithBlob) -> Option<&str> {
-    let content_type = attachment.attachment.content_type.trim();
-    let lowered = content_type.to_ascii_lowercase();
-    if lowered == "application/pdf" && !content_type.is_empty() {
-        return Some(content_type);
-    }
-    attachment
-        .attachment
-        .filename
-        .as_deref()
-        .and_then(|filename| {
-            let filename = filename.trim().to_ascii_lowercase();
-            if filename.ends_with(".pdf") {
-                Some("application/pdf")
             } else {
                 None
             }
@@ -3797,38 +4019,6 @@ fn video_attachment_preview_proto(
     })
 }
 
-fn pdf_attachment_preview_proto(
-    attachment: StoredCommunicationAttachmentWithBlob,
-    bytes: Vec<u8>,
-    byte_count: usize,
-) -> ServiceResult<GetAttachmentPreviewResponse> {
-    if byte_count > MAX_PDF_PREVIEW_BYTES {
-        return Err(invalid_argument_error(
-            "attachment pdf preview exceeds size limit",
-        ));
-    }
-    let content_type = preview_pdf_content_type(&attachment).unwrap_or("application/pdf");
-    let data_url = format!(
-        "data:{content_type};base64,{}",
-        BASE64_STANDARD.encode(bytes)
-    );
-
-    Response::ok(GetAttachmentPreviewResponse {
-        attachment_id: attachment.attachment.attachment_id,
-        message_id: attachment.attachment.message_id,
-        filename: attachment.attachment.filename,
-        content_type: attachment.attachment.content_type,
-        scan_status: attachment.attachment.scan_status.as_str().to_owned(),
-        preview_kind: "pdf".to_owned(),
-        text: String::new(),
-        data_url: Some(data_url),
-        truncated: false,
-        byte_count: byte_count as u64,
-        max_preview_bytes: MAX_PDF_PREVIEW_BYTES as u64,
-        ..Default::default()
-    })
-}
-
 async fn thread_multilingual_service(
     pool: &PgPool,
     config: &AppConfig,
@@ -3838,6 +4028,37 @@ async fn thread_multilingual_service(
             thread_ai_hub_optional(pool, config).await?,
         ),
     )
+}
+
+async fn thread_require_mail_ai_content_egress(
+    pool: &PgPool,
+    config: &AppConfig,
+    account_id: &str,
+    kind: crate::app::api_support::MailAiContentEgressKind,
+) -> Result<(), ConnectError> {
+    let settings = ApplicationSettingsStore::new(pool.clone())
+        .ai_runtime_settings(config)
+        .await
+        .map_err(|error| api_error_connect_error(ApiError::from(error)))?;
+    if crate::app::api_support::mail_ai_content_egress_allowed(
+        pool,
+        settings.provider,
+        account_id,
+        kind,
+    )
+    .await
+    {
+        return Ok(());
+    }
+
+    let setting_name = match kind {
+        crate::app::api_support::MailAiContentEgressKind::Body => "body",
+        crate::app::api_support::MailAiContentEgressKind::ExtractedText => "extracted_text",
+    };
+    Err(ConnectError::new(
+        ErrorCode::FailedPrecondition,
+        format!("external AI {setting_name} egress is disabled for this mail account"),
+    ))
 }
 
 async fn thread_ai_hub_optional(
@@ -4059,10 +4280,21 @@ fn message_connect_error(error: MessageProjectionError) -> ConnectError {
         MessageProjectionError::Sqlx(_)
         | MessageProjectionError::CommunicationStorage(_)
         | MessageProjectionError::Rfc822(_)
-        | MessageProjectionError::ObservationStore(_) => {
+        | MessageProjectionError::ObservationStore(_)
+        | MessageProjectionError::ProviderCommand(_) => {
             ConnectError::new(ErrorCode::Internal, error.to_string())
         }
     }
+}
+
+fn raw_evidence_connect_error(
+    error: crate::domains::communications::core::CommunicationIngestionError,
+) -> ConnectError {
+    tracing::error!(error = %error, "communication raw evidence query failed");
+    ConnectError::new(
+        ErrorCode::Internal,
+        "communication raw evidence query failed",
+    )
 }
 
 fn export_connect_error(
@@ -4128,13 +4360,83 @@ fn attachment_search_connect_error(error: AttachmentSearchError) -> ConnectError
     }
 }
 
+fn attachment_text_extraction_connect_error(
+    error: crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError,
+) -> ConnectError {
+    match error {
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::NotFound => {
+            ConnectError::new(ErrorCode::NotFound, "attachment was not found")
+        }
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::Quarantined => {
+            ConnectError::new(ErrorCode::FailedPrecondition, error.to_string())
+        }
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::UnsupportedStorage
+        | crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::Extraction(_)
+        | crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::InvalidDerivedText => {
+            invalid_argument_error("attachment text extraction is unavailable")
+        }
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::Storage(error) => {
+            storage_connect_error(error)
+        }
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::Sqlx(error) => {
+            tracing::error!(error = %error, "attachment text extraction persistence failed");
+            ConnectError::new(ErrorCode::Internal, "attachment text extraction failed")
+        }
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::Event(error) => {
+            tracing::error!(error = %error, "attachment text extraction event persistence failed");
+            ConnectError::new(ErrorCode::Internal, "attachment text extraction failed")
+        }
+        crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionServiceError::EventEnvelope(error) => {
+            tracing::error!(error = %error, "attachment text extraction event construction failed");
+            ConnectError::new(ErrorCode::Internal, "attachment text extraction failed")
+        }
+    }
+}
+
+fn attachment_safe_preview_connect_error(
+    error: crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError,
+) -> ConnectError {
+    match error {
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::NotFound => {
+            ConnectError::new(ErrorCode::NotFound, "attachment was not found")
+        }
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::Quarantined => {
+            ConnectError::new(
+                ErrorCode::FailedPrecondition,
+                "attachment preview is blocked by attachment scan status",
+            )
+        }
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::UnsupportedStorage
+        | crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::Rendering(_)
+        | crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::InvalidArtifact => {
+            invalid_argument_error("attachment safe preview is unavailable")
+        }
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::Storage(error) => {
+            storage_connect_error(error)
+        }
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::Sqlx(error) => {
+            tracing::error!(error = %error, "attachment safe preview persistence failed");
+            ConnectError::new(ErrorCode::Internal, "attachment safe preview is unavailable")
+        }
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::Event(error) => {
+            tracing::error!(error = %error, "attachment safe preview event persistence failed");
+            ConnectError::new(ErrorCode::Internal, "attachment safe preview is unavailable")
+        }
+        crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewServiceError::EventEnvelope(error) => {
+            tracing::error!(error = %error, "attachment safe preview event construction failed");
+            ConnectError::new(ErrorCode::Internal, "attachment safe preview is unavailable")
+        }
+    }
+}
+
 fn bulk_action_connect_error(error: BulkMessageActionError) -> ConnectError {
     match error {
         BulkMessageActionError::Invalid(message) => invalid_argument_error(message),
         BulkMessageActionError::Sqlx(_)
         | BulkMessageActionError::ObservationStore(_)
         | BulkMessageActionError::EventStore(_)
-        | BulkMessageActionError::EventEnvelope(_) => {
+        | BulkMessageActionError::EventEnvelope(_)
+        | BulkMessageActionError::ProviderCommand(_) => {
             ConnectError::new(ErrorCode::Internal, error.to_string())
         }
     }

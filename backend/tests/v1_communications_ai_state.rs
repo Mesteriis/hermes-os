@@ -7,6 +7,9 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::domains::communications::ai_state::{
+    CommunicationAiState, CommunicationAiStateStore, MAIL_AI_MAX_ATTEMPTS,
+};
 use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
@@ -179,6 +182,47 @@ async fn v1_message_ai_state_transitions_are_durable_and_emit_event_against_post
     assert_eq!(payload["previous_ai_state"], "NEW");
     assert!(payload.get("body_text").is_none());
 
+    let failed_response = r
+        .clone()
+        .oneshot(put(
+            &format!("/api/v1/communications/messages/{message_id}/ai-state"),
+            json!({"ai_state": "FAILED", "last_error": "AI runtime unavailable"}),
+        ))
+        .await
+        .expect("failed ai state response");
+    assert_eq!(failed_response.status(), StatusCode::OK);
+
+    let retry_response = r
+        .clone()
+        .oneshot(put(
+            &format!("/api/v1/communications/messages/{message_id}/ai-state"),
+            json!({"ai_state": "NEW"}),
+        ))
+        .await
+        .expect("retry ai state response");
+    assert_eq!(retry_response.status(), StatusCode::OK);
+    let retry_body = response_json(retry_response).await;
+    assert_eq!(retry_body["ai_state"], "NEW");
+    assert_eq!(retry_body["last_error"], Value::Null);
+
+    let retry_event = sqlx::query(
+        r#"
+        SELECT payload
+        FROM event_log
+        WHERE event_type = 'mail.ai_state.changed'
+          AND subject->>'id' = $1
+        ORDER BY position DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("retry ai state event");
+    let retry_payload = retry_event.try_get::<Value, _>("payload").unwrap();
+    assert_eq!(retry_payload["ai_state"], "NEW");
+    assert_eq!(retry_payload["previous_ai_state"], "FAILED");
+
     let response = r
         .oneshot(get(&format!(
             "/api/v1/communications/messages/{message_id}/ai-state"
@@ -187,7 +231,131 @@ async fn v1_message_ai_state_transitions_are_durable_and_emit_event_against_post
         .expect("current ai state response");
     assert_eq!(response.status(), StatusCode::OK);
     let body = response_json(response).await;
-    assert_eq!(body["ai_state"], "PROCESSING");
+    assert_eq!(body["ai_state"], "NEW");
+}
+
+#[tokio::test]
+async fn mail_ai_worker_claims_due_retries_and_recovers_expired_leases() {
+    let context = TestContext::new().await;
+    let pool = context.pool().clone();
+    let suffix = uid();
+    let account_id = format!("acct-ai-state-lifecycle-{suffix}");
+    let message_id = seed_projected_message(
+        pool.clone(),
+        &account_id,
+        &format!("provider-ai-state-lifecycle-{suffix}"),
+        "AI lifecycle",
+    )
+    .await;
+    let store = CommunicationAiStateStore::new(pool.clone());
+    let now = chrono::Utc::now();
+
+    assert_eq!(
+        store
+            .claim_due_mail_messages(10, now)
+            .await
+            .expect("claim new message"),
+        vec![message_id.clone()]
+    );
+    let claimed = store
+        .current(&message_id)
+        .await
+        .expect("read claimed state")
+        .expect("claimed state exists");
+    assert_eq!(claimed.ai_state, CommunicationAiState::Processing);
+    assert!(claimed.processing_lease_expires_at.is_some());
+
+    let first_failure = store
+        .record_mail_processing_failure(&message_id, "temporary runtime failure", true, now)
+        .await
+        .expect("record first retryable failure")
+        .expect("failure state exists");
+    assert_eq!(first_failure.ai_state, CommunicationAiState::Failed);
+    assert_eq!(first_failure.retry_count, 1);
+    let retry_at = first_failure
+        .next_attempt_at
+        .expect("retryable failure is scheduled");
+    assert!(
+        store
+            .claim_due_mail_messages(10, now)
+            .await
+            .expect("claim before due")
+            .is_empty()
+    );
+    assert_eq!(
+        store
+            .claim_due_mail_messages(10, retry_at)
+            .await
+            .expect("claim scheduled retry"),
+        vec![message_id.clone()]
+    );
+
+    for attempt in 2..=MAIL_AI_MAX_ATTEMPTS {
+        let failure = store
+            .record_mail_processing_failure(
+                &message_id,
+                "temporary runtime failure",
+                true,
+                retry_at + chrono::Duration::seconds(i64::from(attempt)),
+            )
+            .await
+            .expect("record bounded failure")
+            .expect("failure state exists");
+        assert_eq!(failure.retry_count, attempt);
+        if attempt == MAIL_AI_MAX_ATTEMPTS {
+            assert!(failure.next_attempt_at.is_none());
+        } else {
+            let due = failure
+                .next_attempt_at
+                .expect("intermediate retry is scheduled");
+            assert_eq!(
+                store
+                    .claim_due_mail_messages(10, due)
+                    .await
+                    .expect("claim intermediate retry"),
+                vec![message_id.clone()]
+            );
+        }
+    }
+
+    let lease_message_id = seed_projected_message(
+        pool.clone(),
+        &account_id,
+        &format!("provider-ai-state-lease-{suffix}"),
+        "AI lease recovery",
+    )
+    .await;
+    assert_eq!(
+        store
+            .claim_due_mail_messages(10, now)
+            .await
+            .expect("claim lease message"),
+        vec![lease_message_id.clone()]
+    );
+    sqlx::query(
+        "UPDATE communication_ai_states SET processing_lease_expires_at = $2 WHERE message_id = $1",
+    )
+    .bind(&lease_message_id)
+    .bind(now - chrono::Duration::seconds(1))
+    .execute(&pool)
+    .await
+    .expect("expire processing lease");
+
+    assert_eq!(
+        store
+            .recover_expired_mail_processing(now)
+            .await
+            .expect("recover expired lease"),
+        1
+    );
+    let recovered = store
+        .current(&lease_message_id)
+        .await
+        .expect("read recovered state")
+        .expect("recovered state exists");
+    assert_eq!(recovered.ai_state, CommunicationAiState::Failed);
+    assert_eq!(recovered.retry_count, 1);
+    assert!(recovered.next_attempt_at.is_some());
 }
 
 async fn response_json(response: axum::response::Response) -> Value {

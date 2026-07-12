@@ -16,7 +16,7 @@ use hermes_hub_backend::domains::communications::outbox::{
 use hermes_hub_backend::domains::communications::storage::{
     AttachmentSafetyScanReport, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
     CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachment,
-    NewCommunicationBlob,
+    NewCommunicationAttachmentImport, NewCommunicationBlob,
 };
 use hermes_hub_backend::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use serde_json::{Value, json};
@@ -60,7 +60,7 @@ async fn communications_connect_api_exposes_provider_neutral_queries_and_send() 
     let ingestion = CommunicationIngestionStore::new(pool.clone());
     let message_store = MessageProjectionStore::new(pool.clone());
     let draft_store = CommunicationDraftStore::new(pool.clone());
-    let outbox_store = CommunicationOutboxStore::new(pool);
+    let outbox_store = CommunicationOutboxStore::new(pool.clone());
 
     ingestion
         .upsert_provider_account(&NewProviderAccount::new(
@@ -125,6 +125,7 @@ async fn communications_connect_api_exposes_provider_neutral_queries_and_send() 
         &projected.message_id,
         "connectrpc-note.txt",
         "text/plain",
+        AttachmentSafetyScanStatus::Clean,
         b"Hola equipo\n",
     )
     .await;
@@ -134,9 +135,41 @@ async fn communications_connect_api_exposes_provider_neutral_queries_and_send() 
         &projected.message_id,
         "connectrpc-spec.pdf",
         "application/pdf",
+        AttachmentSafetyScanStatus::Clean,
         b"%PDF-1.4\n",
     )
     .await;
+    let draft_blob = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT)
+        .put_blob(b"ConnectRPC draft attachment")
+        .await
+        .expect("draft attachment blob");
+    let draft_blob_metadata = CommunicationStorageStore::new(pool.clone())
+        .upsert_blob(&NewCommunicationBlob::from_local_blob(&draft_blob).content_type("text/plain"))
+        .await
+        .expect("draft attachment blob metadata");
+    CommunicationStorageStore::new(pool.clone())
+        .upsert_imported_attachment(
+            &NewCommunicationAttachmentImport::new(
+                "draft-connectrpc-attachment",
+                draft_blob_metadata.blob_id,
+                "text/plain",
+                draft_blob.size_bytes,
+                draft_blob.sha256,
+                "communications-connectrpc-test",
+            )
+            .account_id("acct-connectrpc-mail")
+            .channel_kind("mail")
+            .filename("draft-note.txt")
+            .scan_report(AttachmentSafetyScanReport {
+                status: AttachmentSafetyScanStatus::Clean,
+                engine: Some("test_scanner".to_owned()),
+                checked_at: Some(Utc::now()),
+                summary: Some("Synthetic fixture is clean".to_owned()),
+                metadata: json!({"fixture": true}),
+            }),
+        )
+        .await
+        .expect("draft attachment import");
 
     draft_store
         .upsert(&NewCommunicationDraft {
@@ -151,6 +184,7 @@ async fn communications_connect_api_exposes_provider_neutral_queries_and_send() 
             body_html: None,
             in_reply_to: None,
             references: Vec::new(),
+            attachment_ids: Some(vec!["draft-connectrpc-attachment".to_owned()]),
             status: DraftStatus::Draft,
             scheduled_send_at: None,
             metadata: json!({"origin":"connectrpc_test"}),
@@ -849,6 +883,70 @@ async fn communications_connect_api_exposes_provider_neutral_queries_and_send() 
     assert_eq!(attachment_preview["previewKind"], "text");
     assert_eq!(attachment_preview["text"], "Hola equipo\n");
 
+    let attachment_extraction = response_json(
+        router
+            .clone()
+            .oneshot(post_json(
+                "/hermes.communications.v1.CommunicationsService/ExtractAttachmentText",
+                json!({ "attachment_id": seeded_attachment.attachment_id }),
+            ))
+            .await
+            .expect("attachment text extraction response"),
+    )
+    .await;
+    assert_eq!(
+        attachment_extraction["attachmentId"],
+        seeded_attachment.attachment_id
+    );
+    assert_eq!(attachment_extraction["status"], "completed");
+    assert_eq!(attachment_extraction["extractedSizeBytes"], "12");
+
+    let extracted_attachment_text = response_json(
+        router
+            .clone()
+            .oneshot(post_json(
+                "/hermes.communications.v1.CommunicationsService/GetAttachmentExtractedText",
+                json!({ "attachment_id": seeded_attachment.attachment_id }),
+            ))
+            .await
+            .expect("attachment extracted text response"),
+    )
+    .await;
+    assert_eq!(
+        extracted_attachment_text["attachmentId"],
+        seeded_attachment.attachment_id
+    );
+    assert_eq!(extracted_attachment_text["text"], "Hola equipo\n");
+    assert!(
+        extracted_attachment_text["truncated"].is_null(),
+        "ConnectJSON omits default false scalar fields"
+    );
+    assert_eq!(extracted_attachment_text["extractedSizeBytes"], "12");
+
+    let pdf_attachment_preview = router
+        .clone()
+        .oneshot(post_json(
+            "/hermes.communications.v1.CommunicationsService/GetAttachmentPreview",
+            json!({
+                "attachment_id": seeded_pdf_attachment.attachment_id
+            }),
+        ))
+        .await
+        .expect("attachment pdf preview response");
+    assert_eq!(pdf_attachment_preview.status(), StatusCode::BAD_REQUEST);
+    let preview_error = response_body_json(pdf_attachment_preview).await;
+    assert_eq!(preview_error["code"], "failed_precondition");
+    assert_eq!(
+        preview_error["message"],
+        "extract attachment text before preview"
+    );
+
+    store_connectrpc_completed_safe_preview(
+        &pool,
+        &seeded_pdf_attachment.attachment_id,
+        b"\x89PNG\r\n\x1a\n",
+    )
+    .await;
     let pdf_attachment_preview = response_json(
         router
             .clone()
@@ -859,18 +957,53 @@ async fn communications_connect_api_exposes_provider_neutral_queries_and_send() 
                 }),
             ))
             .await
-            .expect("attachment pdf preview response"),
+            .expect("derived attachment pdf preview response"),
     )
     .await;
     assert_eq!(
         pdf_attachment_preview["attachmentId"],
         seeded_pdf_attachment.attachment_id
     );
-    assert_eq!(pdf_attachment_preview["previewKind"], "pdf");
+    assert_eq!(pdf_attachment_preview["previewKind"], "image");
+    assert!(pdf_attachment_preview["text"].is_null());
     assert_eq!(
         pdf_attachment_preview["dataUrl"],
-        "data:application/pdf;base64,JVBERi0xLjQK"
+        "data:image/png;base64,iVBORw0KGgo="
     );
+
+    let quarantined_attachment = seed_connectrpc_attachment(
+        &app.context().pool().clone(),
+        &raw.raw_record_id,
+        &projected.message_id,
+        "connectrpc-pending.txt",
+        "text/plain",
+        AttachmentSafetyScanStatus::NotScanned,
+        b"Quarantined until ClamAV returns a clean verdict.",
+    )
+    .await;
+    let quarantined_preview = router
+        .clone()
+        .oneshot(post_json(
+            "/hermes.communications.v1.CommunicationsService/GetAttachmentPreview",
+            json!({ "attachment_id": quarantined_attachment.attachment_id }),
+        ))
+        .await
+        .expect("quarantined attachment preview response");
+    assert_eq!(quarantined_preview.status(), StatusCode::BAD_REQUEST);
+
+    let quarantined_translation = router
+        .clone()
+        .oneshot(post_json(
+            "/hermes.communications.v1.CommunicationsService/TranslateAttachment",
+            json!({
+                "attachment_id": quarantined_attachment.attachment_id,
+                "target_language": "en",
+                "source_text": "Quarantined text must not reach translation."
+            }),
+        ))
+        .await
+        .expect("quarantined attachment translation response");
+    assert_eq!(quarantined_translation.status(), StatusCode::BAD_REQUEST);
 
     let attachment_translation = response_json(
         router
@@ -891,10 +1024,7 @@ async fn communications_connect_api_exposes_provider_neutral_queries_and_send() 
         attachment_translation["attachmentId"],
         seeded_attachment.attachment_id
     );
-    assert_eq!(
-        attachment_translation["source"],
-        "caller_provided_extracted_text"
-    );
+    assert_eq!(attachment_translation["source"], "durable_extracted_text");
     assert!(
         !attachment_translation["translated"]
             .as_bool()
@@ -1126,6 +1256,18 @@ async fn communications_connect_api_exposes_provider_neutral_queries_and_send() 
     )
     .await;
     assert_eq!(list_drafts["items"][0]["draftId"], "draft-connectrpc-1");
+    assert_eq!(
+        list_drafts["items"][0]["attachmentIds"],
+        json!(["draft-connectrpc-attachment"])
+    );
+    assert_eq!(
+        list_drafts["items"][0]["attachments"][0]["filename"],
+        "draft-note.txt"
+    );
+    assert_eq!(
+        list_drafts["items"][0]["attachments"][0]["scanStatus"],
+        "clean"
+    );
 
     let created_draft = response_json(
         router
@@ -1285,6 +1427,13 @@ async fn response_json(response: axum::response::Response) -> Value {
     serde_json::from_slice(&bytes).expect("json body")
 }
 
+async fn response_body_json(response: axum::response::Response) -> Value {
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    serde_json::from_slice(&bytes).expect("json body")
+}
+
 struct SeededAttachment {
     attachment_id: String,
 }
@@ -1295,6 +1444,7 @@ async fn seed_connectrpc_attachment(
     message_id: &str,
     filename: &str,
     content_type: &str,
+    scan_status: AttachmentSafetyScanStatus,
     bytes: &[u8],
 ) -> SeededAttachment {
     let storage_store = CommunicationStorageStore::new(pool.clone());
@@ -1321,7 +1471,7 @@ async fn seed_connectrpc_attachment(
             .filename(filename)
             .disposition(CommunicationAttachmentDisposition::Attachment)
             .scan_report(AttachmentSafetyScanReport {
-                status: AttachmentSafetyScanStatus::NotScanned,
+                status: scan_status,
                 engine: None,
                 checked_at: None,
                 summary: None,
@@ -1334,4 +1484,44 @@ async fn seed_connectrpc_attachment(
     SeededAttachment {
         attachment_id: attachment.attachment_id,
     }
+}
+
+async fn store_connectrpc_completed_safe_preview(
+    pool: &sqlx::PgPool,
+    attachment_id: &str,
+    bytes: &[u8],
+) {
+    let source_sha256: String =
+        sqlx::query_scalar("SELECT sha256 FROM communication_attachments WHERE attachment_id = $1")
+            .bind(attachment_id)
+            .fetch_one(pool)
+            .await
+            .expect("connectrpc attachment source hash");
+    let local_blob_store = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+    let preview_blob = local_blob_store
+        .put_blob(bytes)
+        .await
+        .expect("write connectrpc safe preview blob");
+    let stored_blob = CommunicationStorageStore::new(pool.clone())
+        .upsert_blob(
+            &NewCommunicationBlob::from_local_blob(&preview_blob).content_type("image/png"),
+        )
+        .await
+        .expect("store connectrpc safe preview blob metadata");
+
+    sqlx::query(
+        r#"
+        INSERT INTO communication_attachment_safe_previews (
+            attachment_id, status, renderer, source_sha256, preview_blob_id,
+            preview_content_type, preview_size_bytes, rendered_at
+        ) VALUES ($1, 'completed', 'hermes.attachment-extractor.pdf_preview.v1', $2, $3, 'image/png', $4, now())
+        "#,
+    )
+    .bind(attachment_id)
+    .bind(source_sha256)
+    .bind(stored_blob.blob_id)
+    .bind(preview_blob.size_bytes)
+    .execute(pool)
+    .await
+    .expect("store connectrpc completed safe preview");
 }

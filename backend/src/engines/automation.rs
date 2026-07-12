@@ -11,7 +11,8 @@ mod validation;
 
 pub use errors::AutomationError;
 pub use models::{
-    AutomationPolicy, AutomationTemplate, NewAutomationPolicy, NewAutomationTemplate,
-    TelegramSendDryRunRequest, TelegramSendDryRunResponse, object_from_pairs,
+    AutomationPolicy, AutomationPolicyScope, AutomationTemplate, NewAutomationPolicy,
+    NewAutomationTemplate, TelegramSendDryRunRequest, TelegramSendDryRunResponse,
+    object_from_pairs,
 };
 pub use store::AutomationStore;

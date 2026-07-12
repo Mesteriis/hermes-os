@@ -59,8 +59,9 @@ use crate::domains::personas::expertise::{PersonaExpertiseError, PersonaExpertis
 use crate::domains::personas::export::{ExportError, ExportFormat, PersonaExportService};
 use crate::domains::personas::investigator::{InvestigatorError, PersonaInvestigator};
 use crate::engines::automation::{
-    AutomationError, AutomationPolicy, AutomationStore, AutomationTemplate, NewAutomationPolicy,
-    NewAutomationTemplate, TelegramSendDryRunRequest, TelegramSendDryRunResponse,
+    AutomationError, AutomationPolicy, AutomationPolicyScope, AutomationStore, AutomationTemplate,
+    NewAutomationPolicy, NewAutomationTemplate, TelegramSendDryRunRequest,
+    TelegramSendDryRunResponse,
 };
 use crate::platform::audit::{ApiAuditError, ApiAuditLog, ApiAuditRecord, NewApiAuditRecord};
 use crate::platform::calls::{

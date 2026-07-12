@@ -39,6 +39,13 @@ nats_up() {
 	compose_cmd up -d --wait nats
 }
 
+clamav_up() {
+	load_hermes_env
+	ensure_postgres_runtime_dependencies
+	info "Starting ClamAV container"
+	compose_cmd up -d --wait clamav
+}
+
 wait_for_postgres() {
 	local attempts=60
 	local index=1
@@ -62,6 +69,11 @@ postgres_status() {
 nats_status() {
 	load_hermes_env
 	compose_cmd ps nats
+}
+
+clamav_status() {
+	load_hermes_env
+	compose_cmd ps clamav
 }
 
 postgres_stop() {

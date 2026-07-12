@@ -7,7 +7,7 @@ use sqlx::PgPool;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::domains::communications::storage::{
-    CommunicationStorageStore, LocalCommunicationBlobStore,
+    AttachmentSafetyScanStatus, CommunicationStorageStore, LocalCommunicationBlobStore,
 };
 use crate::integrations::whatsapp::client::{
     NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage, NewWhatsappWebMessageDelete,
@@ -116,23 +116,39 @@ pub(crate) async fn execute_due_fixture_commands(
                 "whatsapp command executor: command execution failed"
             );
             let _ = publish_media_execution_failed_event(&fixture_ingest, &command, &error).await;
-            match reschedule_failed_command(
-                &pool,
-                &command.command_id,
-                Utc::now(),
-                &error.to_string(),
-                None,
-                None,
-            )
-            .await
-            {
+            let is_terminal = is_terminal_media_upload_resolution_error(&error);
+            let update_result = if is_terminal {
+                dead_letter_failed_command(
+                    &pool,
+                    &command.command_id,
+                    Utc::now(),
+                    &error,
+                    Some("media_attachment_rejected"),
+                )
+                .await
+            } else {
+                reschedule_failed_command(
+                    &pool,
+                    &command.command_id,
+                    Utc::now(),
+                    &error,
+                    None,
+                    None,
+                )
+                .await
+            };
+            match update_result {
                 Ok(Some(updated)) => {
                     let _ = publish_command_event(
                         &event_store,
                         &event_bus,
                         whatsapp_event_types::COMMAND_STATUS_CHANGED,
                         &updated,
-                        json!({"source": "command_executor", "error": error.to_string()}),
+                        json!({
+                            "source": "command_executor",
+                            "error": error,
+                            "retry_policy": if is_terminal { "terminal" } else { "retry_or_dead_letter" },
+                        }),
                     )
                     .await;
                 }
@@ -514,13 +530,7 @@ async fn prepare_live_business_cloud_media_upload(
 
     let media_blob = resolve_upload_media_blob_descriptor(pool, command)
         .await
-        .map_err(|error| {
-            WhatsAppProviderCommandExecutionError::new(
-                "business_cloud_media_blob_unavailable",
-                error,
-                Some(30),
-            )
-        })?;
+        .map_err(|error| media_upload_resolution_error("business_cloud", error))?;
     if media_blob.storage_kind != "local_fs" {
         return Err(WhatsAppProviderCommandExecutionError::new(
             "business_cloud_media_storage_kind_unsupported",
@@ -588,13 +598,7 @@ async fn prepare_live_native_md_media_upload(
 
     let media_blob = resolve_upload_media_blob_descriptor(pool, command)
         .await
-        .map_err(|error| {
-            WhatsAppProviderCommandExecutionError::new(
-                "native_md_media_blob_unavailable",
-                error,
-                Some(30),
-            )
-        })?;
+        .map_err(|error| media_upload_resolution_error("native_md", error))?;
     if media_blob.storage_kind != "local_fs" {
         return Err(WhatsAppProviderCommandExecutionError::new(
             "native_md_media_storage_kind_unsupported",
@@ -999,9 +1003,11 @@ async fn record_live_native_md_command_failure(
 ) {
     let _ = publish_media_execution_failed_event(media_event_ingest, command, &error.error_message)
         .await;
-    let is_terminal_unsupported =
-        error.error_code.as_deref() == Some("native_md_command_kind_unsupported");
-    let update_result = if is_terminal_unsupported {
+    let is_terminal = matches!(
+        error.error_code.as_deref(),
+        Some("native_md_command_kind_unsupported") | Some("native_md_media_attachment_rejected")
+    );
+    let update_result = if is_terminal {
         dead_letter_failed_command(
             pool,
             &command.command_id,
@@ -1024,12 +1030,16 @@ async fn record_live_native_md_command_failure(
 
     match update_result {
         Ok(Some(updated)) => {
-            let phase = if is_terminal_unsupported {
-                "terminal_unsupported_before_provider_observation"
+            let phase = if is_terminal {
+                if error.error_code.as_deref() == Some("native_md_command_kind_unsupported") {
+                    "terminal_unsupported_before_provider_observation"
+                } else {
+                    "terminal_attachment_rejected_before_provider_observation"
+                }
             } else {
                 "failed_before_provider_observation"
             };
-            let retry_policy = if is_terminal_unsupported {
+            let retry_policy = if is_terminal {
                 "terminal"
             } else {
                 "retry_or_dead_letter"
@@ -1071,16 +1081,29 @@ async fn record_live_business_cloud_command_failure(
 ) {
     let _ = publish_media_execution_failed_event(media_event_ingest, command, &error.error_message)
         .await;
-    match reschedule_failed_command(
-        pool,
-        &command.command_id,
-        Utc::now(),
-        &error.error_message,
-        error.error_code.as_deref(),
-        error.retry_after_seconds,
-    )
-    .await
-    {
+    let is_terminal =
+        error.error_code.as_deref() == Some("business_cloud_media_attachment_rejected");
+    let update_result = if is_terminal {
+        dead_letter_failed_command(
+            pool,
+            &command.command_id,
+            Utc::now(),
+            &error.error_message,
+            error.error_code.as_deref(),
+        )
+        .await
+    } else {
+        reschedule_failed_command(
+            pool,
+            &command.command_id,
+            Utc::now(),
+            &error.error_message,
+            error.error_code.as_deref(),
+            error.retry_after_seconds,
+        )
+        .await
+    };
+    match update_result {
         Ok(Some(updated)) => {
             let _ = publish_command_event(
                 event_store,
@@ -1089,10 +1112,11 @@ async fn record_live_business_cloud_command_failure(
                 &updated,
                 json!({
                     "source": "business_cloud_command_executor",
-                    "phase": "failed_before_provider_observation",
+                    "phase": if is_terminal { "terminal_before_provider_observation" } else { "failed_before_provider_observation" },
                     "error_code": error.error_code,
                     "retry_after_seconds": error.retry_after_seconds,
                     "payload_policy": "sanitized_metadata_only",
+                    "retry_policy": if is_terminal { "terminal" } else { "retry_or_dead_letter" },
                 }),
             )
             .await;
@@ -1895,6 +1919,35 @@ struct UploadMediaBlobDescriptor {
     storage_path: String,
 }
 
+fn media_upload_resolution_error(
+    provider: &str,
+    error: String,
+) -> WhatsAppProviderCommandExecutionError {
+    let terminal = is_terminal_media_upload_resolution_error(&error);
+    let suffix = if terminal {
+        "media_attachment_rejected"
+    } else {
+        "media_blob_unavailable"
+    };
+    WhatsAppProviderCommandExecutionError::new(
+        format!("{provider}_{suffix}"),
+        error,
+        (!terminal).then_some(30),
+    )
+}
+
+fn is_terminal_media_upload_resolution_error(error: &str) -> bool {
+    error.starts_with("payload.attachment_id is required")
+        || error.starts_with("attachment `")
+        || matches!(
+            error,
+            "attachment import belongs to a different account"
+                | "attachment import is not scoped to WhatsApp"
+                | "payload.blob_id does not match attachment import"
+                | "attachment import must have a clean scan verdict"
+        )
+}
+
 async fn resolve_fixture_upload_media_blob(
     fixture_ingest: &WhatsappFixtureIngestApplicationService,
     command: &WhatsAppProviderWriteCommand,
@@ -1907,52 +1960,49 @@ async fn resolve_upload_media_blob_descriptor(
     command: &WhatsAppProviderWriteCommand,
 ) -> Result<UploadMediaBlobDescriptor, String> {
     let storage = CommunicationStorageStore::new(pool.clone());
-
-    if let Some(attachment_id) = command.payload.get("attachment_id").and_then(Value::as_str) {
-        let attachment = storage
-            .imported_attachment_by_id(attachment_id)
-            .await
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| format!("attachment `{attachment_id}` is not available"))?;
-        return Ok(UploadMediaBlobDescriptor {
-            filename: attachment.filename,
-            content_type: attachment.content_type,
-            size_bytes: attachment.size_bytes,
-            sha256: attachment.sha256,
-            storage_kind: attachment.storage_kind,
-            storage_path: attachment.storage_path,
-        });
-    }
-
-    let blob_id = command
+    let attachment_id = command
         .payload
-        .get("blob_id")
+        .get("attachment_id")
         .and_then(Value::as_str)
-        .ok_or_else(|| "payload.blob_id is required".to_owned())?;
-    let blob = storage
-        .blob_by_id(blob_id)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "payload.attachment_id is required so media uploads cannot bypass quarantine".to_owned()
+        })?;
+    let attachment = storage
+        .imported_attachment_by_id(attachment_id)
         .await
         .map_err(|error| error.to_string())?
-        .ok_or_else(|| format!("blob `{blob_id}` is not available"))?;
+        .ok_or_else(|| format!("attachment `{attachment_id}` is not available"))?;
+    if let Some(account_id) = attachment.account_id.as_deref()
+        && account_id != command.account_id
+    {
+        return Err("attachment import belongs to a different account".to_owned());
+    }
+    if let Some(channel_kind) = attachment.channel_kind.as_deref()
+        && !matches!(
+            channel_kind,
+            "whatsapp" | "whatsapp_web" | "whatsapp_business_cloud"
+        )
+    {
+        return Err("attachment import is not scoped to WhatsApp".to_owned());
+    }
+    if let Some(blob_id) = command.payload.get("blob_id").and_then(Value::as_str)
+        && blob_id != attachment.blob_id
+    {
+        return Err("payload.blob_id does not match attachment import".to_owned());
+    }
+    if attachment.scan_status != AttachmentSafetyScanStatus::Clean {
+        return Err("attachment import must have a clean scan verdict".to_owned());
+    }
 
     Ok(UploadMediaBlobDescriptor {
-        filename: command
-            .payload
-            .get("filename")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        content_type: blob.content_type.unwrap_or_else(|| {
-            command
-                .payload
-                .get("content_type")
-                .and_then(Value::as_str)
-                .unwrap_or("application/octet-stream")
-                .to_owned()
-        }),
-        size_bytes: blob.size_bytes,
-        sha256: blob.sha256,
-        storage_kind: blob.storage_kind,
-        storage_path: blob.storage_path,
+        filename: attachment.filename,
+        content_type: attachment.content_type,
+        size_bytes: attachment.size_bytes,
+        sha256: attachment.sha256,
+        storage_kind: attachment.storage_kind,
+        storage_path: attachment.storage_path,
     })
 }
 
@@ -1966,4 +2016,35 @@ fn fixture_media_sha256(seed: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(seed.as_bytes());
     format!("sha256:{:x}", hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_terminal_media_upload_resolution_error, media_upload_resolution_error};
+
+    #[test]
+    fn unsafe_attachment_resolution_errors_are_terminal() {
+        let error = "attachment import must have a clean scan verdict";
+        assert!(is_terminal_media_upload_resolution_error(error));
+
+        let execution_error = media_upload_resolution_error("native_md", error.to_owned());
+        assert_eq!(
+            execution_error.error_code.as_deref(),
+            Some("native_md_media_attachment_rejected")
+        );
+        assert_eq!(execution_error.retry_after_seconds, None);
+    }
+
+    #[test]
+    fn storage_resolution_errors_remain_retriable() {
+        let error = "database connection was interrupted";
+        assert!(!is_terminal_media_upload_resolution_error(error));
+
+        let execution_error = media_upload_resolution_error("business_cloud", error.to_owned());
+        assert_eq!(
+            execution_error.error_code.as_deref(),
+            Some("business_cloud_media_blob_unavailable")
+        );
+        assert_eq!(execution_error.retry_after_seconds, Some(30));
+    }
 }

@@ -40,6 +40,6 @@ Shared Communication attachment and business read-model APIs live under:
 
 ## Notes
 
-- Provider media upload does not accept raw file bytes; it works from already imported local attachments/blobs.
+- Provider media upload does not accept raw file bytes or a bare blob reference. It requires an already imported local `attachment_id` with a `clean` scan verdict; an optional `blob_id` is checked only for consistency with that attachment.
 - Shared Communication attachment APIs remain the canonical safe access path for local preview and import.
 - Normal user-facing Communication search uses `/api/v1/communications/search/*`; provider search is runtime/debug/sync-assist only and must not return projected message or media items.

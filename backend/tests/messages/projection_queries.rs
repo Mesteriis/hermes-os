@@ -13,7 +13,7 @@ use super::support::{
 #[tokio::test]
 async fn message_projection_list_messages_filters_by_account_state_channel_and_query_against_postgres()
  {
-    let Some((_, communication_store, message_store)) =
+    let Some((_context, _, communication_store, message_store)) =
         live_projection_context("message filtered listing").await
     else {
         return;
@@ -104,7 +104,7 @@ async fn message_projection_list_messages_filters_by_account_state_channel_and_q
 #[tokio::test]
 async fn message_projection_channel_kind_telegram_alias_matches_user_and_bot_messages_against_postgres()
  {
-    let Some((_, communication_store, message_store)) =
+    let Some((_context, _, communication_store, message_store)) =
         live_projection_context("message telegram channel alias").await
     else {
         return;
@@ -214,6 +214,7 @@ async fn message_projection_channel_kind_telegram_alias_matches_user_and_bot_mes
         .list_messages_page(ProjectedMessagePageQuery {
             account_id: Some(&account_id),
             workflow_state: None,
+            is_read: None,
             channel_kind: Some("telegram"),
             conversation_id: None,
             query: None,
@@ -238,7 +239,7 @@ async fn message_projection_channel_kind_telegram_alias_matches_user_and_bot_mes
 
 #[tokio::test]
 async fn message_local_trash_hides_from_default_lists_and_survives_reprojection_against_postgres() {
-    let Some((_, communication_store, message_store)) =
+    let Some((_context, _, communication_store, message_store)) =
         live_projection_context("message local trash").await
     else {
         return;
@@ -332,7 +333,7 @@ async fn message_local_trash_hides_from_default_lists_and_survives_reprojection_
 
 #[tokio::test]
 async fn message_search_supports_any_mode_and_field_rules_against_postgres() {
-    let Some((_, communication_store, message_store)) =
+    let Some((_context, _, communication_store, message_store)) =
         live_projection_context("message search rules").await
     else {
         return;
@@ -373,11 +374,38 @@ async fn message_search_supports_any_mode_and_field_rules_against_postgres() {
     let travel_projected = project_raw_email_message(&message_store, &travel)
         .await
         .expect("project travel message");
+    message_store
+        .set_read_state(&quarterly_projected.message_id, true, "local_user")
+        .await
+        .expect("mark quarterly message read");
+
+    let read_only = message_store
+        .list_messages_page(ProjectedMessagePageQuery {
+            account_id: Some(&account_id),
+            workflow_state: None,
+            is_read: Some(true),
+            channel_kind: None,
+            conversation_id: None,
+            query: None,
+            match_mode: MessageSearchMatchMode::All,
+            search: MessageSearchQuery::default(),
+            local_state: LocalMessageState::Active,
+            cursor: None,
+            limit: 10,
+        })
+        .await
+        .expect("list read messages");
+    assert_eq!(read_only.items.len(), 1);
+    assert_eq!(
+        read_only.items[0].message.message_id,
+        quarterly_projected.message_id
+    );
 
     let any_mode = message_store
         .list_messages_page(ProjectedMessagePageQuery {
             account_id: Some(&account_id),
             workflow_state: None,
+            is_read: None,
             channel_kind: None,
             conversation_id: None,
             query: None,
@@ -407,6 +435,7 @@ async fn message_search_supports_any_mode_and_field_rules_against_postgres() {
         .list_messages_page(ProjectedMessagePageQuery {
             account_id: Some(&account_id),
             workflow_state: None,
+            is_read: None,
             channel_kind: None,
             conversation_id: None,
             query: None,
@@ -475,7 +504,7 @@ async fn message_projection_reports_missing_or_wrong_payload_fields() {
 
 #[tokio::test]
 async fn message_projection_rejects_direct_upsert_with_mismatched_raw_tuple_against_postgres() {
-    let Some((pool, communication_store, message_store)) =
+    let Some((_context, pool, communication_store, message_store)) =
         live_projection_context("direct message upsert raw tuple mismatch").await
     else {
         return;
@@ -564,7 +593,7 @@ async fn message_projection_rejects_direct_upsert_with_mismatched_raw_tuple_agai
 
 #[tokio::test]
 async fn message_projection_rejects_empty_fields_against_postgres() {
-    let Some((_, communication_store, message_store)) =
+    let Some((_context, _, communication_store, message_store)) =
         live_projection_context("message validation").await
     else {
         return;

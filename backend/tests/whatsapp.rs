@@ -4918,6 +4918,38 @@ async fn whatsapp_runtime_lifecycle_and_login_surfaces_are_blocked_safe() {
         .expect("WhatsApp attachment import response");
     assert_eq!(import_response.status(), StatusCode::OK);
     let imported_attachment = json_body(import_response).await;
+    let unscanned_command_id = format!("wa-media-upload-unscanned-{suffix}");
+    let unscanned_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/integrations/whatsapp/provider-media/upload",
+            json!({
+                "command_id": unscanned_command_id.clone(),
+                "account_id": account_id,
+                "provider_chat_id": provider_chat_id,
+                "attachment_id": imported_attachment["attachment_id"],
+                "media_type": "document"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("WhatsApp unscanned media upload response");
+    assert_eq!(unscanned_response.status(), StatusCode::BAD_REQUEST);
+    let unscanned_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM whatsapp_provider_write_commands WHERE command_id = $1",
+    )
+    .bind(&unscanned_command_id)
+    .fetch_one(&pool)
+    .await
+    .expect("unscanned command count");
+    assert_eq!(unscanned_count, 0);
+    mark_attachment_clean(
+        &pool,
+        imported_attachment["attachment_id"]
+            .as_str()
+            .expect("attachment id"),
+    )
+    .await;
     let upload_command_id = format!("wa-media-upload-{suffix}");
     let upload_response = app
         .clone()
@@ -14791,6 +14823,13 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_send_med
         .expect("attachment import response");
     assert_eq!(import_response.status(), StatusCode::OK);
     let import_body = json_body(import_response).await;
+    mark_attachment_clean(
+        &pool,
+        import_body["attachment_id"]
+            .as_str()
+            .expect("attachment id"),
+    )
+    .await;
 
     let send_media_response = app
         .clone()
@@ -16464,6 +16503,23 @@ async fn whatsapp_event_payloads(
     .fetch_all(pool)
     .await
     .unwrap_or_else(|_| panic!("load {event_type} payloads for {account_id}"))
+}
+
+async fn mark_attachment_clean(pool: &sqlx::PgPool, attachment_id: &str) {
+    sqlx::query(
+        r#"
+        UPDATE communication_attachment_imports
+        SET scan_status = 'clean',
+            scan_engine = 'test-scanner',
+            scan_checked_at = now(),
+            scan_summary = 'Synthetic fixture is clean'
+        WHERE attachment_id = $1
+        "#,
+    )
+    .bind(attachment_id)
+    .execute(pool)
+    .await
+    .expect("mark attachment clean");
 }
 
 async fn unlock_test_vault<S>(app: S)

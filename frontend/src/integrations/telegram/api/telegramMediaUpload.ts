@@ -4,7 +4,7 @@ export type TelegramMediaUploadRequest = {
   command_id?: string
   account_id: string
   provider_chat_id: string
-  attachment_id?: string
+  attachment_id: string
   blob_id?: string
   media_type: TelegramMediaUploadKind
   caption?: string

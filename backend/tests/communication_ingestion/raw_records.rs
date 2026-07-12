@@ -41,7 +41,27 @@ async fn communication_ingestion_records_raw_sources_idempotently_against_postgr
         .await
         .expect("record raw source");
 
-    let duplicate = store
+    let retry = store
+        .record_raw_source(
+            &NewRawCommunicationRecord::new(
+                first.raw_record_id.clone(),
+                &account_id,
+                "email_message",
+                &provider_record_id,
+                format!("sha256:{suffix}"),
+                format!("batch_{suffix}"),
+                json!({"id": provider_record_id, "provider": "gmail"}),
+            )
+            .occurred_at(Utc::now())
+            .provenance(json!({"source": "retry"})),
+        )
+        .await
+        .expect("retry raw source");
+    assert_eq!(retry.raw_record_id, first.raw_record_id);
+    assert_eq!(retry.observation_id, first.observation_id);
+    assert_eq!(retry.payload, first.payload);
+
+    let provider_update = store
         .record_raw_source(
             &NewRawCommunicationRecord::new(
                 format!("raw_duplicate_{suffix}"),
@@ -55,11 +75,15 @@ async fn communication_ingestion_records_raw_sources_idempotently_against_postgr
             .provenance(json!({"source": "retry"})),
         )
         .await
-        .expect("record duplicate raw source");
+        .expect("record provider update snapshot");
 
-    assert_eq!(duplicate.raw_record_id, first.raw_record_id);
-    assert_eq!(duplicate.observation_id, first.observation_id);
-    assert_eq!(duplicate.payload, first.payload);
+    assert_ne!(provider_update.raw_record_id, first.raw_record_id);
+    assert_eq!(
+        provider_update.raw_record_id,
+        format!("raw_duplicate_{suffix}")
+    );
+    assert_eq!(provider_update.observation_id, first.observation_id);
+    assert_eq!(provider_update.payload["changed"], json!(true));
 
     let count = sqlx::query_scalar::<_, i64>(
         r#"
@@ -75,7 +99,7 @@ async fn communication_ingestion_records_raw_sources_idempotently_against_postgr
     .fetch_one(&pool)
     .await
     .expect("raw record count");
-    assert_eq!(count, 1);
+    assert_eq!(count, 2);
 
     let observation = sqlx::query(
         r#"

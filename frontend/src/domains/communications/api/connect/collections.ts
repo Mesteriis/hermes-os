@@ -14,9 +14,11 @@ import type {
 } from '../../types/communications'
 import type {
   AttachmentArchiveInspectionResponse,
+  AttachmentExtractedTextResponse,
   AttachmentPreviewResponse,
   AttachmentSearchRequest,
   AttachmentSearchResponse,
+  AttachmentTextExtractionResponse,
   AttachmentTranslationResponse
 } from '../../types/attachments'
 import type {
@@ -177,6 +179,7 @@ export async function searchAttachmentsConnect(
       scan_summary: item.scanSummary ?? null,
       storage_kind: item.storageKind,
       storage_path: item.storagePath,
+      extracted_text_match: item.extractedTextMatch,
       created_at: item.createdAt,
       updated_at: item.updatedAt
     })),
@@ -243,15 +246,37 @@ export async function previewAttachmentConnect(
   }
 }
 
+export async function extractAttachmentTextConnect(
+  attachmentId: string
+): Promise<AttachmentTextExtractionResponse> {
+  const response = await getCommunicationsConnectClient().extractAttachmentText({ attachmentId })
+  return {
+    attachment_id: response.attachmentId,
+    status: response.status === 'unsupported' ? 'unsupported' : 'completed',
+    extracted_size_bytes:
+      response.extractedSizeBytes === undefined ? null : toNumber(response.extractedSizeBytes)
+  }
+}
+
+export async function fetchAttachmentExtractedTextConnect(
+  attachmentId: string
+): Promise<AttachmentExtractedTextResponse> {
+  const response = await getCommunicationsConnectClient().getAttachmentExtractedText({ attachmentId })
+  return {
+    attachment_id: response.attachmentId,
+    text: response.text,
+    truncated: response.truncated,
+    extracted_size_bytes: toNumber(response.extractedSizeBytes)
+  }
+}
+
 export async function translateAttachmentConnect(
   attachmentId: string,
-  targetLanguage: string,
-  sourceText: string
+  targetLanguage: string
 ): Promise<AttachmentTranslationResponse> {
   const response = await getCommunicationsConnectClient().translateAttachment({
     attachmentId,
-    targetLanguage,
-    sourceText
+    targetLanguage
   })
 
   return {
@@ -265,7 +290,7 @@ export async function translateAttachmentConnect(
     target: response.target,
     model: response.model ?? null,
     reason: response.reason ?? null,
-    source: 'caller_provided_extracted_text'
+    source: 'durable_extracted_text'
   }
 }
 
@@ -463,6 +488,8 @@ export async function createCommunicationDraftConnect(
     bodyHtml: request.body_html ?? undefined,
     inReplyTo: request.in_reply_to ?? undefined,
     references: request.references ?? [],
+    attachmentIds: request.attachment_ids ?? [],
+    replaceAttachments: request.attachment_ids !== undefined,
     status: request.status ?? undefined,
     scheduledSendAt: request.scheduled_send_at ?? undefined,
     metadataJson: JSON.stringify(request.metadata ?? {})

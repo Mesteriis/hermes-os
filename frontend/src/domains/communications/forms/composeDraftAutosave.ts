@@ -14,6 +14,7 @@ export type ComposeDraftPayload = {
 	body_text: string
 	body_html: string | null
 	in_reply_to: string | null
+	attachment_ids: string[]
 	scheduled_send_at: string | null
 	status: 'draft'
 	metadata: {
@@ -40,6 +41,13 @@ export function buildComposeDraftPayload(form: ComposeFormModel): ComposeDraftPa
 		body_text: form.body,
 		body_html: form.bodyFormat === 'html' ? form.bodyHtml : null,
 		in_reply_to: form.inReplyTo,
+		attachment_ids: form.attachments
+			.filter((attachment) =>
+				attachment.attachmentId &&
+				attachment.uploadStatus !== 'uploading' &&
+				attachment.uploadStatus !== 'failed'
+			)
+			.map((attachment) => attachment.attachmentId),
 		scheduled_send_at: datetimeLocalToIso(form.scheduledSendAt),
 		status: 'draft',
 		metadata: { compose_mode: form.mode }
@@ -54,6 +62,7 @@ export function composeDraftHasAutosaveContent(form: ComposeFormModel): boolean 
 			form.subject.trim() ||
 			form.body.trim() ||
 			Boolean(form.bodyHtml?.trim()) ||
+			form.attachments.length > 0 ||
 			Boolean(form.scheduledSendAt.trim())
 	)
 }

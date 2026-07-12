@@ -85,6 +85,26 @@ impl AiRuntimeClient {
         }
     }
 
+    pub async fn chat_json_with_model(
+        &self,
+        prompt: &str,
+        model: &str,
+    ) -> Result<AiChatResult, AiRuntimeError> {
+        match self {
+            Self::Ollama(client) => {
+                let result = client.chat_json_with_model(prompt, model).await?;
+                Ok(AiChatResult {
+                    model: result.model,
+                    content: result.content,
+                    total_duration_ns: result.total_duration_ns,
+                })
+            }
+            // OpenAI-compatible providers keep their existing prompt contract
+            // until a provider-neutral JSON-schema response contract is added.
+            Self::OmniRoute(_) => self.chat_with_model(prompt, model).await,
+        }
+    }
+
     pub async fn embed(&self, input: &str) -> Result<AiEmbedResult, AiRuntimeError> {
         self.embed_with_model(input, self.embedding_model()).await
     }
@@ -164,6 +184,18 @@ impl AiRuntimePort for AiRuntimeClient {
     ) -> Pin<Box<dyn Future<Output = Result<AiChatResult, AiRuntimePortError>> + Send + 'a>> {
         Box::pin(async move {
             self.chat_with_model(prompt, model)
+                .await
+                .map_err(Into::into)
+        })
+    }
+
+    fn chat_json_with_model<'a>(
+        &'a self,
+        prompt: &'a str,
+        model: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<AiChatResult, AiRuntimePortError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.chat_json_with_model(prompt, model)
                 .await
                 .map_err(Into::into)
         })

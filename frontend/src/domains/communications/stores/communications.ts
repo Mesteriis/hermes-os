@@ -35,6 +35,7 @@ const emptyComposeForm: ComposeFormModel = {
   scheduledSendAt: '',
   undoSendSeconds: null,
   inReplyTo: null,
+  attachments: [],
 }
 
 export const useCommunicationsStore = defineStore('communications-ui', () => {

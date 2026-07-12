@@ -142,8 +142,13 @@ test.describe('Hermes UI Storybook visual regression', () => {
 				if (message.type() === 'error') {
 					const text = message.text()
 					// Storybook serializes play-function assertion diagnostics to the browser console;
-					// they are reported by the interaction runner itself, not runtime browser errors.
-					if (!text.startsWith('UO:') && !text.startsWith('TestingLibraryElementError:')) {
+					// Playwright also attempts trace instrumentation inside script-less srcdoc sandboxes.
+					// Both are test-runner diagnostics rather than application runtime errors.
+					if (
+						!text.startsWith('UO:') &&
+						!text.startsWith('TestingLibraryElementError:') &&
+						text !== SCRIPTLESS_SRCDOC_TRACE_ERROR
+					) {
 						browserErrors.push(text)
 					}
 				}
@@ -176,6 +181,9 @@ test.describe('Hermes UI Storybook visual regression', () => {
 		})
 	}
 })
+
+const SCRIPTLESS_SRCDOC_TRACE_ERROR =
+	"Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set."
 
 function createGeneralBucketMatcher(componentNames: readonly string[]): (story: StorybookStory) => boolean {
 	const allowedComponentNames = new Set(componentNames)

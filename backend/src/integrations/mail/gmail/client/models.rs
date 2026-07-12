@@ -26,6 +26,22 @@ pub(super) struct GmailRawMessage {
 }
 
 #[derive(Debug, Deserialize)]
+pub(super) struct GmailLabelsResponse {
+    pub(super) labels: Option<Vec<GmailLabel>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct GmailLabel {
+    pub(super) id: Option<String>,
+    pub(super) name: Option<String>,
+    #[serde(rename = "type")]
+    pub(super) label_type: Option<String>,
+    pub(super) message_list_visibility: Option<String>,
+    pub(super) label_list_visibility: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub(super) struct GmailSendResponse {
     pub(super) id: Option<String>,
 }
@@ -42,6 +58,8 @@ pub(super) struct GmailHistoryResponse {
 #[serde(rename_all = "camelCase")]
 pub(super) struct GmailHistoryItem {
     pub(super) messages_added: Option<Vec<GmailHistoryMessageAdded>>,
+    pub(super) labels_added: Option<Vec<GmailHistoryMessageAdded>>,
+    pub(super) labels_removed: Option<Vec<GmailHistoryMessageAdded>>,
 }
 
 #[derive(Debug, Deserialize)]

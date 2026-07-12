@@ -573,8 +573,9 @@ async fn zulip_provider_commands_are_durable_idempotent_and_retryable() {
     assert_eq!(failed.status, "retrying");
     assert_eq!(failed.last_error.as_deref(), Some("provider timeout"));
 
+    let retry_at = failed.next_attempt_at.expect("scheduled retry time");
     let retried = store
-        .claim_due("zulip-command-account", "zulip", Utc::now(), 10)
+        .claim_due("zulip-command-account", "zulip", retry_at, 10)
         .await
         .expect("claim retrying Zulip commands");
     assert_eq!(retried.len(), 1);

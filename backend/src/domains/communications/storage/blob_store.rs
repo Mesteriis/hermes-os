@@ -29,8 +29,11 @@ impl LocalCommunicationBlobStore {
     ) -> Result<LocalCommunicationBlob, CommunicationStorageError> {
         let size_bytes =
             i64::try_from(bytes.len()).map_err(|_| CommunicationStorageError::BlobTooLarge)?;
-        let digest_hex = sha256_hex(bytes);
-        let storage_path = relative_blob_path(&digest_hex);
+        let sha256 = Self::sha256_for_bytes(bytes);
+        let digest_hex = sha256
+            .strip_prefix(SHA256_PREFIX)
+            .expect("sha256_for_bytes always uses the sha256 prefix");
+        let storage_path = relative_blob_path(digest_hex);
         let absolute_path = self.root.join(&storage_path);
 
         if let Some(parent) = absolute_path.parent() {
@@ -61,7 +64,7 @@ impl LocalCommunicationBlobStore {
         Ok(LocalCommunicationBlob {
             storage_kind: LOCAL_FS_STORAGE_KIND.to_owned(),
             storage_path,
-            sha256: format!("{SHA256_PREFIX}{digest_hex}"),
+            sha256,
             size_bytes,
         })
     }
@@ -85,6 +88,10 @@ impl LocalCommunicationBlobStore {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
             Err(error) => Err(error.into()),
         }
+    }
+
+    pub fn sha256_for_bytes(bytes: &[u8]) -> String {
+        format!("{SHA256_PREFIX}{}", sha256_hex(bytes))
     }
 }
 

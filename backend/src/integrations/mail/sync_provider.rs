@@ -2,17 +2,20 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use serde_json::json;
 use sqlx::postgres::PgPool;
 
 use crate::integrations::mail::accounts::EmailAccountSetupService;
 use crate::integrations::mail::gmail::client::{
     EmailProviderNetworkError, GmailApiClient, GmailFetchOptions, GmailHistoryFetchOptions,
-    ImapFetchOptions, ImapMailboxListOptions, ImapNetworkClient,
+    ImapFetchOptions, ImapIdleOptions, ImapIdleOutcome, ImapMailboxListOptions, ImapNetworkClient,
 };
 use crate::platform::communications::{
-    EmailProviderSyncError, EmailProviderSyncPort, EmailSyncBatch, GmailHistoryFetchRequest,
-    GmailMessageListFetchRequest, ImapMailboxListRequest, ImapMessageFetchRequest,
-    ProviderAccountSecretPurpose, ProviderSecretBindingLookupPort,
+    DiscoveredMailProviderResource, EmailProviderSyncError, EmailProviderSyncPort, EmailSyncBatch,
+    GmailHistoryFetchRequest, GmailMessageListFetchRequest, GmailResourceDiscoveryRequest,
+    ImapIdleWaitOutcome, ImapIdleWaitRequest, ImapMailboxListRequest, ImapMessageFetchRequest,
+    MailProviderResourceKind, MailProviderSemanticRole, ProviderAccountSecretPurpose,
+    ProviderSecretBindingLookupPort,
 };
 use crate::platform::secrets::{ResolvedSecret, SecretReferenceStore, SecretResolver};
 use crate::vault::HostVault;
@@ -201,4 +204,135 @@ impl EmailProviderSyncPort for LiveEmailProviderSyncPort {
                 .map_err(|error| EmailProviderSyncError::provider_network(error, false))
         })
     }
+
+    fn discover_gmail_resources<'a>(
+        &'a self,
+        request: GmailResourceDiscoveryRequest,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<Vec<DiscoveredMailProviderResource>, EmailProviderSyncError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let access_token = self.gmail_access_token(&request.account_id).await?;
+            GmailApiClient::new(&self.gmail_api_base_url)
+                .user_id("me")
+                .list_labels(&access_token)
+                .await
+                .map_err(|error| EmailProviderSyncError::provider_network(error, false))
+        })
+    }
+
+    fn discover_imap_resources<'a>(
+        &'a self,
+        request: ImapMailboxListRequest,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<Vec<DiscoveredMailProviderResource>, EmailProviderSyncError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let secret_store = SecretReferenceStore::new(self.pool.clone());
+            let credential = read_provider_secret(
+                self.provider_secret_binding_store.as_ref(),
+                &secret_store,
+                &self.vault,
+                &request.account_id,
+                ProviderAccountSecretPurpose::ImapPassword,
+            )
+            .await?;
+            let options = ImapMailboxListOptions::new(
+                &request.host,
+                request.port,
+                request.tls,
+                &request.username,
+            );
+            let mailboxes = ImapNetworkClient::new()
+                .discover_mailboxes(&credential, &options)
+                .await
+                .map_err(|error| EmailProviderSyncError::provider_network(error, false))?;
+            Ok(mailboxes
+                .into_iter()
+                .map(|mailbox| {
+                    let role_names = mailbox
+                        .roles
+                        .iter()
+                        .map(|role| format!("{role:?}").to_ascii_lowercase())
+                        .collect::<Vec<_>>();
+                    DiscoveredMailProviderResource {
+                        resource_kind: MailProviderResourceKind::Folder,
+                        semantic_role: imap_semantic_role(&mailbox.name, &mailbox.roles),
+                        provider_resource_id: mailbox.name.clone(),
+                        display_name: mailbox.name,
+                        selectable: true,
+                        writable: true,
+                        capabilities: json!({ "imap_special_use": role_names }),
+                    }
+                })
+                .collect())
+        })
+    }
+
+    fn wait_for_imap_change<'a>(
+        &'a self,
+        request: ImapIdleWaitRequest,
+    ) -> Pin<
+        Box<dyn Future<Output = Result<ImapIdleWaitOutcome, EmailProviderSyncError>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let secret_store = SecretReferenceStore::new(self.pool.clone());
+            let credential = read_provider_secret(
+                self.provider_secret_binding_store.as_ref(),
+                &secret_store,
+                &self.vault,
+                &request.account_id,
+                ProviderAccountSecretPurpose::ImapPassword,
+            )
+            .await?;
+            let options = ImapIdleOptions::new(
+                &request.host,
+                request.port,
+                request.tls,
+                &request.mailbox,
+                &request.username,
+                request.timeout,
+            );
+            let outcome = ImapNetworkClient::new()
+                .wait_for_change(&credential, &options)
+                .await
+                .map_err(|error| EmailProviderSyncError::provider_network(error, false))?;
+            Ok(match outcome {
+                ImapIdleOutcome::Changed => ImapIdleWaitOutcome::Changed,
+                ImapIdleOutcome::TimedOut => ImapIdleWaitOutcome::TimedOut,
+                ImapIdleOutcome::Unsupported => ImapIdleWaitOutcome::Unsupported,
+            })
+        })
+    }
+}
+
+fn imap_semantic_role(
+    mailbox_name: &str,
+    roles: &[crate::integrations::mail::gmail::client::ImapMailboxRole],
+) -> Option<MailProviderSemanticRole> {
+    use crate::integrations::mail::gmail::client::ImapMailboxRole;
+
+    if mailbox_name.eq_ignore_ascii_case("INBOX") {
+        return Some(MailProviderSemanticRole::Inbox);
+    }
+    roles
+        .iter()
+        .map(|role| match role {
+            ImapMailboxRole::All => MailProviderSemanticRole::All,
+            ImapMailboxRole::Archive => MailProviderSemanticRole::Archive,
+            ImapMailboxRole::Drafts => MailProviderSemanticRole::Drafts,
+            ImapMailboxRole::Flagged => MailProviderSemanticRole::Flagged,
+            ImapMailboxRole::Junk => MailProviderSemanticRole::Junk,
+            ImapMailboxRole::Sent => MailProviderSemanticRole::Sent,
+            ImapMailboxRole::Trash => MailProviderSemanticRole::Trash,
+        })
+        .next()
 }

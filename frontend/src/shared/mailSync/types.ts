@@ -3,13 +3,50 @@ export type MailSyncSettings = {
   sync_enabled: boolean
   batch_size: number
   poll_interval_seconds: number
+  failure_threshold?: number
   updated_at: string
+}
+
+export type MailContentEgressSettings = {
+  body: boolean
+  attachments: boolean
+  extracted_text: boolean
+}
+
+export type MailSensitiveForwardingPolicy = {
+  policy_id: string
+  source_account_id: string
+  delivery_account_id: string
+  name: string
+  enabled: boolean
+  include_message_body: boolean
+  include_attachments: boolean
+  fixed_recipients: string[]
+  minimum_severity: 'low' | 'medium' | 'high' | 'critical'
+  subject_template: string
+  body_template: string
+  max_sends_per_hour: number
+  quiet_hours: Record<string, unknown>
+  expires_at: string | null
+  updated_at: string
+}
+
+export type MailSensitiveForwardingPolicyInput = Omit<
+  MailSensitiveForwardingPolicy,
+  'policy_id' | 'source_account_id' | 'updated_at'
+> & {
+  policy_id?: string
+}
+
+export type MailSensitiveForwardingPolicyListResponse = {
+  items: MailSensitiveForwardingPolicy[]
 }
 
 export type MailSyncSettingsUpdate = {
   sync_enabled: boolean
   batch_size: number
   poll_interval_seconds: number
+  failure_threshold?: number
 }
 
 export type MailSyncStatus = {
@@ -21,6 +58,7 @@ export type MailSyncStatus = {
   processed_messages: number
   estimated_total_messages: number | null
   current_batch_size: number
+  failure_threshold?: number
   last_started_at: string | null
   last_updated_at: string | null
   last_completed_at: string | null

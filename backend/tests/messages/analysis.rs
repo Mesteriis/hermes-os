@@ -11,7 +11,7 @@ use super::support::{
 
 #[tokio::test]
 async fn message_set_ai_analysis_against_postgres() {
-    let Some((_, communication_store, message_store)) =
+    let Some((_context, _, communication_store, message_store)) =
         live_projection_context("ai analysis").await
     else {
         return;
@@ -124,7 +124,7 @@ async fn message_analytics_decodes_averages_against_postgres() {
 
 #[tokio::test]
 async fn message_set_ai_analysis_rejects_invalid_score() {
-    let Some((_, communication_store, message_store)) =
+    let Some((_context, _, communication_store, message_store)) =
         live_projection_context("ai analysis invalid score").await
     else {
         return;

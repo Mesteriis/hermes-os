@@ -14,7 +14,7 @@ fn gmail_oauth_setup_defaults_to_mail_send_calendar_and_contacts_scopes() {
     assert_eq!(
         request.scopes,
         [
-            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.modify",
             "https://www.googleapis.com/auth/gmail.send",
             "https://www.googleapis.com/auth/calendar.readonly",
             "https://www.googleapis.com/auth/contacts.readonly",

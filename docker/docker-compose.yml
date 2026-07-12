@@ -1,6 +1,111 @@
 name: hermes-hub-dev
 
 services:
+  backend:
+    profiles:
+      - app
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: dev
+    restart: unless-stopped
+    working_dir: /workspace
+    command:
+      - bash
+      - -c
+      - cargo run --manifest-path backend/Cargo.toml --bin hermes-hub-backend
+    environment:
+      DATABASE_URL: postgres://${HERMES_POSTGRES_USER:?Set HERMES_POSTGRES_USER in docker/.env}:${HERMES_POSTGRES_PASSWORD:?Set HERMES_POSTGRES_PASSWORD in docker/.env}@postgres:5432/${HERMES_POSTGRES_DB:?Set HERMES_POSTGRES_DB in docker/.env}
+      HERMES_HTTP_ADDR: 0.0.0.0:8080
+      HERMES_LOCAL_API_SECRET: ${HERMES_LOCAL_API_SECRET:?Set HERMES_LOCAL_API_SECRET in docker/.env}
+      HERMES_DEV_MODE: ${HERMES_DEV_MODE:-true}
+      HERMES_VAULT_HOME: /hermes-vault
+      HERMES_DEV_KEY_PATH: /hermes-vault/dev/master.key
+      HERMES_SECRET_VAULT_KEY: ${HERMES_SECRET_VAULT_KEY:?Set HERMES_SECRET_VAULT_KEY in docker/.env}
+      HERMES_NATS_SERVER_URL: nats://nats:4222
+      HERMES_CLAMAV_ADDR: clamav:3310
+      HERMES_CLAMAV_TIMEOUT_SECONDS: ${HERMES_CLAMAV_TIMEOUT_SECONDS:-30}
+      HERMES_ATTACHMENT_EXTRACTOR_ENABLED: ${HERMES_ATTACHMENT_EXTRACTOR_ENABLED:-true}
+      HERMES_ATTACHMENT_EXTRACTOR_ADDR: attachment-extractor-gateway:8788
+      HERMES_OLLAMA_BASE_URL: ${HERMES_OLLAMA_BASE_URL:-http://192.168.1.2:11434}
+      HERMES_OLLAMA_CHAT_MODEL: ${HERMES_OLLAMA_CHAT_MODEL:-qwen3:4b}
+      HERMES_OLLAMA_EMBED_MODEL: ${HERMES_OLLAMA_EMBED_MODEL:-qwen3-embedding:4b}
+      HERMES_OLLAMA_TIMEOUT_SECONDS: ${HERMES_OLLAMA_TIMEOUT_SECONDS:-120}
+      HERMES_LOG_FORMAT: ${HERMES_LOG_FORMAT:-json}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${HERMES_BACKEND_BIND:-127.0.0.1}:${HERMES_BACKEND_PORT:-8080}:8080"
+    volumes:
+      - type: bind
+        source: ..
+        target: /workspace
+      - type: bind
+        source: ${HOME:?Set HOME before starting the Docker app profile}/.hermes/vault
+        target: /hermes-vault
+      - type: volume
+        source: hermes-cargo-registry
+        target: /usr/local/cargo/registry
+      - type: volume
+        source: hermes-cargo-git
+        target: /usr/local/cargo/git
+      - type: volume
+        source: hermes-backend-target
+        target: /workspace/target
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+      attachment-extractor-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/healthz >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+
+  frontend:
+    profiles:
+      - app
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: dev
+    restart: unless-stopped
+    working_dir: /workspace/frontend
+    command:
+      - bash
+      - -c
+      - corepack pnpm install --frozen-lockfile && corepack pnpm dev --host 0.0.0.0 --port 5174 --strictPort
+    environment:
+      VITE_HERMES_API_BASE_URL: http://127.0.0.1:${HERMES_BACKEND_PORT:-8080}
+      VITE_HERMES_LOCAL_API_SECRET: ${HERMES_LOCAL_API_SECRET:?Set HERMES_LOCAL_API_SECRET in docker/.env}
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "${HERMES_FRONTEND_BIND:-127.0.0.1}:${HERMES_FRONTEND_PORT:-5174}:5174"
+    volumes:
+      - type: bind
+        source: ..
+        target: /workspace
+      - type: volume
+        source: hermes-frontend-node-modules
+        target: /workspace/frontend/node_modules
+      - type: volume
+        source: hermes-pnpm-store
+        target: /pnpm
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5174 >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
   postgres:
     image: pgvector/pgvector:0.8.2-pg16
     restart: unless-stopped
@@ -26,14 +131,93 @@ services:
     restart: unless-stopped
     command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
-      - "${HERMES_NATS_BIND:-127.0.0.1}:${HERMES_NATS_PORT:-4222}:4222"
-      - "${HERMES_NATS_MONITOR_BIND:-127.0.0.1}:${HERMES_NATS_MONITOR_PORT:-8222}:8222"
+      - "${HERMES_NATS_BIND:-127.0.0.1}:${HERMES_NATS_PORT:-34222}:4222"
+      - "${HERMES_NATS_MONITOR_BIND:-127.0.0.1}:${HERMES_NATS_MONITOR_PORT:-38222}:8222"
     volumes:
       - type: bind
         source: ./data/nats
         target: /data
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  clamav:
+    image: clamav/clamav:1.5.3-debian13-slim
+    restart: unless-stopped
+    ports:
+      - "${HERMES_CLAMAV_BIND:-127.0.0.1}:${HERMES_CLAMAV_PORT:-33310}:3310"
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+  attachment-extractor:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: attachment-extractor
+    restart: unless-stopped
+    environment:
+      HERMES_ATTACHMENT_EXTRACTOR_TCP_BIND: 0.0.0.0:8788
+      HERMES_ATTACHMENT_OCR_LANGUAGES: ${HERMES_ATTACHMENT_OCR_LANGUAGES:-eng+rus}
+    networks:
+      - attachment-extraction
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 512m
+    cpus: 1.0
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    volumes:
+      - type: bind
+        source: ./data/mail
+        target: /mail
+        read_only: true
+      - type: bind
+        source: ./data/attachment-extractor
+        target: /run/hermes-extractor
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import json,socket;s=socket.create_connection((\"127.0.0.1\",8788),2);s.sendall(json.dumps({\"operation\":\"health\"}).encode()+b\"\\n\");assert json.loads(s.recv(1024))[\"status\"] == \"ok\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  attachment-extractor-gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: attachment-extractor-gateway
+    restart: unless-stopped
+    depends_on:
+      attachment-extractor:
+        condition: service_healthy
+    ports:
+      - "${HERMES_ATTACHMENT_EXTRACTOR_BIND:-127.0.0.1}:${HERMES_ATTACHMENT_EXTRACTOR_PORT:-8788}:8788"
+    networks:
+      - default
+      - attachment-extraction
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 64m
+    cpus: 0.25
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import json,socket;s=socket.create_connection((\"127.0.0.1\",8788),2);s.sendall(json.dumps({\"operation\":\"health\"}).encode()+b\"\\n\");assert json.loads(s.recv(1024))[\"status\"] == \"ok\"'"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -64,3 +248,14 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+
+networks:
+  attachment-extraction:
+    internal: true
+
+volumes:
+  hermes-backend-target:
+  hermes-cargo-git:
+  hermes-cargo-registry:
+  hermes-frontend-node-modules:
+  hermes-pnpm-store:

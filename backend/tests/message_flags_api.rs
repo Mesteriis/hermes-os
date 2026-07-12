@@ -108,6 +108,10 @@ async fn message_important_endpoint_toggles_metadata_flag() {
         .await
         .expect("message");
     let message_id = projected.message_id;
+    message_store
+        .set_read_state(&message_id, true, "local_user")
+        .await
+        .expect("mark message read before metadata mutations");
 
     let app = app(&ctx).await;
     let uri = format!("/api/v1/communications/messages/{message_id}/important");
@@ -128,6 +132,7 @@ async fn message_important_endpoint_toggles_metadata_flag() {
         .expect("stored message")
         .expect("message exists");
     assert_eq!(stored.message_metadata["important"], true);
+    assert!(stored.is_read);
     let first_link = sqlx::query(
         "SELECT observation_id, metadata
          FROM observation_links
@@ -179,6 +184,7 @@ async fn message_important_endpoint_toggles_metadata_flag() {
         .expect("stored message")
         .expect("message exists");
     assert_eq!(stored.message_metadata["important"], false);
+    assert!(stored.is_read);
     let links_count = sqlx::query_scalar::<_, i64>(
         "SELECT count(*)
              FROM observation_links
@@ -192,6 +198,17 @@ async fn message_important_endpoint_toggles_metadata_flag() {
     .await
     .expect("message flag observation count");
     assert_eq!(links_count, 2);
+    let provider_command_kinds = sqlx::query_scalar::<_, String>(
+        "SELECT command_kind
+         FROM communication_provider_commands
+         WHERE account_id = $1 AND channel_kind = 'mail'
+         ORDER BY created_at ASC, command_id ASC",
+    )
+    .bind(&account_id)
+    .fetch_all(ctx.pool())
+    .await
+    .expect("important provider commands");
+    assert_eq!(provider_command_kinds, vec!["important", "not_important"]);
 }
 
 fn unique_suffix() -> String {

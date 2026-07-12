@@ -8,6 +8,8 @@ import {
   deleteCommunicationFolder,
   deleteRichTemplate,
   deleteSavedSearch,
+  extractAttachmentText,
+  fetchAttachmentExtractedText,
   fetchFolderMessages,
   fetchCommunicationBlockers,
   fetchExpiringMailCertificates,
@@ -49,10 +51,12 @@ import type {
 } from '../types/certificates'
 import type {
   AttachmentArchiveInspectionResponse,
+  AttachmentExtractedTextResponse,
   AttachmentPreviewResponse,
   AttachmentSearchRequest,
   AttachmentSearchResponse,
   AttachmentSearchResult,
+  AttachmentTextExtractionResponse,
   AttachmentTranslationRequest,
   AttachmentTranslationResponse
 } from '../types/attachments'
@@ -277,6 +281,37 @@ export function useAttachmentPreviewQuery(
     },
     enabled: computed(() => Boolean(toValue(attachmentId)) && toValue(enabled)),
     ...communicationDetailQueryOptions
+  })
+}
+
+export function useAttachmentExtractedTextQuery(
+  attachmentId: NullableQueryParam<string>,
+  enabled: QueryParam<boolean> = true
+) {
+  return useQuery<AttachmentExtractedTextResponse | null>({
+    queryKey: computed(() => ['communications-attachment-extracted-text', toValue(attachmentId)]),
+    queryFn: async () => {
+      const id = toValue(attachmentId)
+      if (!id) return null
+      return fetchAttachmentExtractedText(id)
+    },
+    enabled: computed(() => Boolean(toValue(attachmentId)) && toValue(enabled)),
+    ...communicationDetailQueryOptions
+  })
+}
+
+export function useExtractAttachmentTextMutation() {
+  const queryClient = useQueryClient()
+  return useMutation<AttachmentTextExtractionResponse, Error, { attachmentId: string }>({
+    mutationFn: async ({ attachmentId }) => extractAttachmentText(attachmentId),
+    onSuccess: async (_result, { attachmentId }) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['communications-attachment-extracted-text', attachmentId]
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['communications-attachment-preview', attachmentId]
+      })
+    }
   })
 }
 

@@ -9,6 +9,7 @@ import type {
   MailSyncStatus
 } from '../../types/communications'
 import { htmlToComposePlainText, plainTextToComposeHtml } from '../richComposeHtml'
+import { composeAttachmentSendError } from '../../forms/composeAttachmentUpload'
 import '../communicationDomainElements.css'
 import MailInspector from './MailInspector.vue'
 import MailList from './MailList.vue'
@@ -29,6 +30,7 @@ const props = defineProps<{
   inspector: MailInspectorModel
   hasMoreItems?: boolean
   isActionRunning?: boolean
+  isImporting?: boolean
   isLoadingMore?: boolean
   composeOpen?: boolean
   composeForm?: ComposeFormModel
@@ -42,6 +44,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'close-compose': []
+  'import-mail-file': [file: File]
+  'attach-compose-files': [files: File[]]
   'load-more': []
   'new-message': []
   refresh: []
@@ -49,6 +53,7 @@ const emit = defineEmits<{
   'select-action': [actionId: string]
   'select-message': [item: MailListItemModel]
   'send-compose': []
+  'remove-compose-attachment': [attachmentId: string]
   'toggle-inspector': []
   'update-search-query': [query: string]
   'visible-items-change': [itemIds: string[]]
@@ -62,6 +67,8 @@ const isContextComposePanelOpen = ref(false)
 const isComposeCloseConfirmOpen = ref(false)
 const isCcVisible = ref(false)
 const isBccVisible = ref(false)
+const isComposeDropActive = ref(false)
+const composeAttachmentInput = ref<HTMLInputElement | null>(null)
 const activeMessage = computed(() => props.conversation.messages[props.conversation.messages.length - 1])
 const composeAccountOptions = computed(() => props.composeAccountOptions ?? [])
 const composeSendAccountOptions = computed(() =>
@@ -77,6 +84,8 @@ const composeEditorHtml = computed(() => {
   if (!form) return '<p></p>'
   return form.bodyHtml?.trim() ? form.bodyHtml : plainTextToComposeHtml(form.body)
 })
+const composeAttachments = computed(() => props.composeForm?.attachments ?? [])
+const composeAttachmentsError = computed(() => composeAttachmentSendError(composeAttachments.value))
 const isComposeDialogOpen = computed(() => Boolean(props.composeOpen && props.composeForm))
 const composeTitle = computed(() => {
   switch (props.composeForm?.mode) {
@@ -180,7 +189,8 @@ function composeFormHasTypedContent(): boolean {
     form.bccText,
     form.subject,
     form.body,
-    bodyText
+    bodyText,
+    form.attachments.length > 0 ? 'attachment' : ''
   ].some((value) => value.trim().length > 0)
 }
 
@@ -223,6 +233,32 @@ function handleComposeBodyHtmlChange(bodyHtml: string): void {
   })
 }
 
+function openComposeAttachmentPicker(): void {
+  composeAttachmentInput.value?.click()
+}
+
+function handleComposeAttachmentInput(event: Event): void {
+  const input = event.target as HTMLInputElement
+  emitComposeFiles(input.files)
+  input.value = ''
+}
+
+function handleComposeDrop(event: DragEvent): void {
+  isComposeDropActive.value = false
+  emitComposeFiles(event.dataTransfer?.files)
+}
+
+function emitComposeFiles(files?: FileList | null): void {
+  const selected = files ? Array.from(files) : []
+  if (selected.length > 0) emit('attach-compose-files', selected)
+}
+
+function formatAttachmentSize(sizeBytes: number): string {
+  if (sizeBytes < 1024) return `${sizeBytes} B`
+  if (sizeBytes < 1024 * 1024) return `${Math.ceil(sizeBytes / 1024)} KiB`
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MiB`
+}
+
 function composeAccountOptionLabel(account: CommunicationAccountOption): string {
   const label = account.email && account.email !== account.label
     ? `${account.label} · ${account.email}`
@@ -232,7 +268,7 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 </script>
 
 <template>
-	<section
+				<section
 		:class="[
 			'communication-workspace-shell communication-workspace-shell--mail',
 			!isInspectorVisible && 'communication-workspace-shell--mail-inspector-hidden'
@@ -242,9 +278,11 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 			:items="items"
 			:has-more-items="hasMoreItems"
 			:is-loading-more="isLoadingMore"
+			:is-importing="isImporting"
 			:search-query="searchQuery"
 			:sync-status="syncStatus"
 			@compose="emit('new-message')"
+			@import-mail-file="emit('import-mail-file', $event)"
 			@load-more="emit('load-more')"
 			@refresh="emit('refresh')"
 			@select-item="emit('select-message', $event)"
@@ -373,12 +411,17 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 			<section
 				v-if="composeForm"
 				class="mail-compose-stage"
-				:class="[
-					isAiComposePanelOpen && 'mail-compose-stage--ai-open',
-					isContextComposePanelOpen && 'mail-compose-stage--context-open'
-				]"
+					:class="[
+						isAiComposePanelOpen && 'mail-compose-stage--ai-open',
+						isContextComposePanelOpen && 'mail-compose-stage--context-open',
+						isComposeDropActive && 'mail-compose-stage--drop-active'
+					]"
 				:data-active-panel="composeActivePanelState"
-				@keydown.esc.stop="handleComposeEscape"
+					@keydown.esc.stop="handleComposeEscape"
+					@dragenter.prevent="isComposeDropActive = true"
+					@dragover.prevent="isComposeDropActive = true"
+					@dragleave.self="isComposeDropActive = false"
+					@drop.prevent="handleComposeDrop"
 			>
 				<section class="mail-compose-panel mail-compose-card" :aria-label="composeTitle">
 					<div v-if="composeStatus" class="mail-compose-panel__status-row">
@@ -460,15 +503,63 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 								@input="emit('update-compose', { bccText: inputValue($event) })"
 							/>
 						</label>
-						<label class="mail-compose-panel__field mail-compose-panel__field--subject">
+							<label class="mail-compose-panel__field mail-compose-panel__field--subject">
 							<span>{{ t('Subject') }}</span>
 							<input
 								:value="composeForm.subject"
 								type="text"
 								@input="emit('update-compose', { subject: inputValue($event) })"
 							/>
-						</label>
-						<div class="mail-compose-panel__body-field">
+							</label>
+							<section class="mail-compose-attachments" :aria-label="t('Attachments')">
+								<div class="mail-compose-attachments__header">
+									<strong>{{ t('Attachments') }}</strong>
+									<button
+										type="button"
+										class="mail-compose-panel__field-toggle"
+										:disabled="isSending"
+										@click="openComposeAttachmentPicker"
+									>
+										<Icon icon="tabler:paperclip" size="1rem" />
+										{{ t('Attach files') }}
+									</button>
+									<input
+										ref="composeAttachmentInput"
+										class="mail-compose-attachments__input"
+										type="file"
+										multiple
+										@change="handleComposeAttachmentInput"
+									/>
+								</div>
+								<p v-if="composeAttachments.length === 0" class="mail-compose-attachments__hint">
+									{{ t('Drop files here or choose files. Files are sent only after a clean security scan.') }}
+								</p>
+								<ul v-else class="mail-compose-attachments__list">
+									<li
+										v-for="attachment in composeAttachments"
+										:key="attachment.attachmentId"
+										class="mail-compose-attachment"
+										:class="`mail-compose-attachment--${attachment.uploadStatus}`"
+									>
+										<Icon
+											:icon="attachment.uploadStatus === 'ready' ? 'tabler:shield-check' : 'tabler:paperclip'"
+											size="1rem"
+										/>
+										<span class="mail-compose-attachment__name">{{ attachment.filename }}</span>
+										<small>{{ formatAttachmentSize(attachment.sizeBytes) }} · {{ attachment.scanStatus }}</small>
+										<button
+											type="button"
+											:aria-label="`${t('Remove')} ${attachment.filename}`"
+											:disabled="isSending"
+											@click="emit('remove-compose-attachment', attachment.attachmentId)"
+										>
+											<Icon icon="tabler:x" size="0.9rem" />
+										</button>
+										<p v-if="attachment.error">{{ attachment.error }}</p>
+									</li>
+								</ul>
+							</section>
+							<div class="mail-compose-panel__body-field">
 							<RichTextEditor
 								class="mail-compose-panel__editor"
 								:model-value="composeEditorHtml"
@@ -495,8 +586,9 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 					</button>
 					<button
 						type="button"
-						class="mail-compose-panel__button mail-compose-panel__button--primary"
-						:disabled="isSending"
+							class="mail-compose-panel__button mail-compose-panel__button--primary"
+							:disabled="isSending || Boolean(composeAttachmentsError)"
+							:title="composeAttachmentsError"
 						@click="emit('send-compose')"
 					>
 						<Icon :icon="isSending ? 'tabler:loader-2' : 'tabler:send'" size="1rem" />

@@ -120,6 +120,9 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
     );
     assert_eq!(body["items"][0]["capabilities"]["send"], true);
     assert_eq!(body["items"][0]["capabilities"]["local_trash"], true);
+    assert_eq!(body["items"][0]["capabilities"]["mutate_flags"], true);
+    assert_eq!(body["items"][0]["capabilities"]["mutate_mailboxes"], true);
+    assert_eq!(body["items"][0]["capabilities"]["provider_folders"], true);
 
     let response = app
         .clone()

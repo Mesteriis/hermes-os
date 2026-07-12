@@ -38,10 +38,11 @@ impl EmailIntelligenceService {
             return Ok(None);
         };
         let prompt = build_email_analysis_prompt(message, target_language, inspection);
-        let result = hub.chat(AiModelRoute::MailIntelligence, &prompt).await?;
-        let mut analysis: EmailAnalysis =
-            serde_json::from_str(clean_json_response(&result.content))
-                .map_err(|e| EmailIntelligenceError::ParseError(e.to_string()))?;
+        let result = hub
+            .chat_json(AiModelRoute::MailIntelligence, &prompt)
+            .await?;
+        let mut analysis = parse_email_analysis_response(&result.content)
+            .map_err(|error| EmailIntelligenceError::ParseError(error.to_string()))?;
 
         analysis.model = result.model;
         analysis.prompt_version = EMAIL_INTELLIGENCE_PROMPT_VERSION.to_owned();
@@ -63,9 +64,7 @@ impl EmailIntelligenceService {
             return Ok(false);
         };
 
-        let workflow_hint = if analysis.is_spam || analysis.is_phishing {
-            Some(WorkflowState::Spam)
-        } else if analysis.importance_score >= 80 {
+        let workflow_hint = if analysis.importance_score >= 80 {
             Some(WorkflowState::NeedsAction)
         } else {
             None
@@ -90,6 +89,7 @@ impl EmailIntelligenceService {
             "language": analysis.language,
             "is_spam": analysis.is_spam,
             "is_phishing": analysis.is_phishing,
+            "spam_workflow_policy": "manual_decision_required",
         });
         store
             .set_message_metadata(&message.message_id, &metadata)
@@ -131,6 +131,30 @@ fn clean_json_response(content: &str) -> &str {
         .and_then(|value| value.strip_suffix("```"))
         .map(str::trim)
         .unwrap_or(content.trim())
+}
+
+fn parse_email_analysis_response(content: &str) -> Result<EmailAnalysis, serde_json::Error> {
+    let cleaned = clean_json_response(content);
+    let direct_error = match serde_json::from_str(cleaned) {
+        Ok(analysis) => return Ok(analysis),
+        Err(error) => error,
+    };
+
+    // Local models may prepend reasoning or a Markdown explanation despite the
+    // output contract. Accept only an embedded object that fully satisfies the
+    // typed EmailAnalysis schema; surrounding text is never persisted.
+    for (offset, _) in cleaned.match_indices('{') {
+        let mut values =
+            serde_json::Deserializer::from_str(&cleaned[offset..]).into_iter::<serde_json::Value>();
+        let Some(Ok(value)) = values.next() else {
+            continue;
+        };
+        if let Ok(analysis) = serde_json::from_value(value) {
+            return Ok(analysis);
+        }
+    }
+
+    Err(direct_error)
 }
 
 fn analysis_summary_contract(
@@ -243,6 +267,47 @@ fn attach_candidate_source_message_id(analysis: &mut EmailAnalysis, message_id: 
 #[cfg(test)]
 mod policy_tests {
     use super::*;
+
+    #[test]
+    fn parses_analysis_after_local_model_reasoning() {
+        let analysis = parse_email_analysis_response(
+            "<think>Reasoning that must not become message data.</think>\n{\n\
+                \"category\": \"work\",\n\
+                \"summary\": \"Follow up.\",\n\
+                \"key_points\": [], \"action_items\": [], \"risks\": [], \"deadlines\": [],\n\
+                \"event_candidates\": [], \"persona_candidates\": [], \"organization_candidates\": [],\n\
+                \"document_candidates\": [], \"agreement_candidates\": [], \"task_candidates\": [],\n\
+                \"decision_candidates\": [], \"obligation_candidates\": [], \"relationship_candidates\": [],\n\
+                \"fact_candidates\": [], \"importance_score\": 20, \"is_spam\": false,\n\
+                \"is_phishing\": false, \"suggested_action\": null, \"extracted_deadline\": null,\n\
+                \"language\": \"en\"\n\
+            }\nAdditional model commentary",
+        )
+        .expect("embedded typed JSON should be parsed");
+
+        assert_eq!(analysis.category, "work");
+        assert_eq!(analysis.summary, "Follow up.");
+    }
+
+    #[test]
+    fn parses_fenced_analysis_response() {
+        let analysis = parse_email_analysis_response(
+            "```json\n{\n\
+                \"category\": \"notification\",\n\
+                \"summary\": \"Notice.\",\n\
+                \"key_points\": [], \"action_items\": [], \"risks\": [], \"deadlines\": [],\n\
+                \"event_candidates\": [], \"persona_candidates\": [], \"organization_candidates\": [],\n\
+                \"document_candidates\": [], \"agreement_candidates\": [], \"task_candidates\": [],\n\
+                \"decision_candidates\": [], \"obligation_candidates\": [], \"relationship_candidates\": [],\n\
+                \"fact_candidates\": [], \"importance_score\": 5, \"is_spam\": false,\n\
+                \"is_phishing\": false, \"suggested_action\": null, \"extracted_deadline\": null,\n\
+                \"language\": \"en\"\n\
+            }\n```",
+        )
+        .expect("fenced JSON should be parsed");
+
+        assert_eq!(analysis.category, "notification");
+    }
 
     #[test]
     fn spam_category_clears_candidates() {

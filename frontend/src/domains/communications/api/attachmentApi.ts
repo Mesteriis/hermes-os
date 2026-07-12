@@ -1,4 +1,6 @@
 import {
+  extractAttachmentTextConnect,
+  fetchAttachmentExtractedTextConnect,
   inspectAttachmentArchiveConnect,
   previewAttachmentConnect,
   searchAttachmentsConnect,
@@ -6,9 +8,11 @@ import {
 } from './connectCommunications'
 import type {
   AttachmentArchiveInspectionResponse,
+  AttachmentExtractedTextResponse,
   AttachmentPreviewResponse,
   AttachmentSearchRequest,
   AttachmentSearchResponse,
+  AttachmentTextExtractionResponse,
   AttachmentTranslationRequest,
   AttachmentTranslationResponse
 } from '../types/attachments'
@@ -31,9 +35,21 @@ export async function previewAttachment(
   return previewAttachmentConnect(attachmentId)
 }
 
+export async function extractAttachmentText(
+  attachmentId: string
+): Promise<AttachmentTextExtractionResponse> {
+  return extractAttachmentTextConnect(attachmentId)
+}
+
+export async function fetchAttachmentExtractedText(
+  attachmentId: string
+): Promise<AttachmentExtractedTextResponse> {
+  return fetchAttachmentExtractedTextConnect(attachmentId)
+}
+
 export async function translateAttachment(
   attachmentId: string,
   request: AttachmentTranslationRequest
 ): Promise<AttachmentTranslationResponse> {
-  return translateAttachmentConnect(attachmentId, request.target_language, request.source_text)
+  return translateAttachmentConnect(attachmentId, request.target_language)
 }

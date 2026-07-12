@@ -19,10 +19,11 @@ import { useSettingsStore } from '../stores/settings'
 import type { ProviderAccount } from '../types/settings'
 import { communicationProviderBrand, providerBrandClass } from '../components/providerBranding'
 import {
-  accountConfigBoolean,
   accountConfigString,
   accountContactsRemoteWriteEnabled,
+  accountContactsSyncEnabled,
   accountContactsSyncDirection,
+  accountCredentialRequiresReauthorization,
   accountHasGoogleContactsWriteScope,
   accountSupportsContacts,
   defaultProviderIdFromAccount,
@@ -49,17 +50,6 @@ import {
 } from './integrationAccountPresentation'
 
 export type { AccountServiceRow, IntegrationAccountRow, IntegrationGroup, SelectedIntegrationSummary } from './integrationAccountPresentation'
-
-function accountContactsSyncEnabled(account: ProviderAccount): boolean {
-  return accountConfigBoolean(account, 'address_book_sync_enabled') ?? true
-}
-
-function accountCredentialRequiresReauthorization(account: ProviderAccount): boolean {
-  return (
-    account.credential_state?.status === 'expired' &&
-    account.credential_state.requires_reauthorization === true
-  )
-}
 
 export function useIntegrationsSettingsSurface() {
   const { t } = useI18n()
@@ -420,6 +410,7 @@ export function useIntegrationsSettingsSurface() {
           sync_enabled: enabled,
           batch_size: current.batch_size,
           poll_interval_seconds: current.poll_interval_seconds,
+          failure_threshold: current.failure_threshold ?? 3,
         },
       })
       store.setActionMessage(enabled ? t('Mail service enabled') : t('Mail service disabled'))

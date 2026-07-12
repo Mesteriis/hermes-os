@@ -128,6 +128,7 @@ const mailActionGroupDefinitions: readonly MailActionGroupDefinition[] = [
       'mark-read',
       'mark-unread',
       'mark-spam',
+      'mark-not-spam',
       'archive',
       'restore-trash',
       'bulk-actions',
@@ -141,7 +142,7 @@ const mailActionGroupDefinitions: readonly MailActionGroupDefinition[] = [
     label: 'Message organization',
     menuLabel: 'Open organization actions',
     icon: 'tabler:folder-symlink',
-    actionIds: ['pin', 'important', 'add-label', 'remove-label', 'move-folder', 'copy-folder']
+    actionIds: ['pin', 'important', 'star', 'add-label', 'remove-label', 'move-folder', 'copy-folder']
   },
   {
     id: 'hermes',

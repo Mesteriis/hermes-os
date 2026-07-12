@@ -1052,6 +1052,7 @@ describe('Communication domain elements', () => {
     expect(mailActionsSource).toContain('export-md')
     expect(mailActionsSource).toContain('Danger zone')
     expect(mailActionsSource).toContain('mark-spam')
+    expect(mailActionsSource).toContain('mark-not-spam')
     expect(mailActionsSource).toContain('delete-provider')
     expect(mailActionQueriesSource).toContain('useMarkMessageSpamMutation')
     expect(mailActionQueriesSource).toContain('useMarkMessageUnreadMutation')

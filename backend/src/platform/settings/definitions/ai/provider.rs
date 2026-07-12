@@ -22,12 +22,12 @@ pub(super) fn declared_settings() -> Vec<DeclaredApplicationSetting> {
             setting_key: "ai.ollama_base_url",
             category: "ai",
             value_kind: SettingValueKind::String,
-            default_value: json!("http://127.0.0.1:11434"),
+            default_value: json!("http://192.168.1.2:11434"),
             label: "Ollama base URL",
             description: "Local Ollama HTTP endpoint used by AI runtime requests.",
             metadata: json!({
                 "ui_control": "text",
-                "placeholder": "http://127.0.0.1:11434"
+                "placeholder": "http://192.168.1.2:11434"
             }),
             is_editable: true,
         },

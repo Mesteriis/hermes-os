@@ -4,6 +4,7 @@ use crate::app::ApiError;
 use crate::domains::communications::messages::{
     MessageProjectionStore, ProjectedMessage, WorkflowState,
 };
+use crate::domains::communications::service::CommunicationCommandService;
 
 use super::super::models::{
     WorkflowActionRequest, WorkflowActionResponse, WorkflowActionStatus, WorkflowActionTarget,
@@ -16,6 +17,7 @@ pub(in crate::app::handlers::communications::workflow_actions) async fn archive_
     transaction: &mut Transaction<'_, Postgres>,
     command_id: &str,
     event_id: &str,
+    actor_id: &str,
     request: &WorkflowActionRequest,
     message: Option<&ProjectedMessage>,
 ) -> Result<WorkflowActionResponse, ApiError> {
@@ -35,6 +37,13 @@ pub(in crate::app::handlers::communications::workflow_actions) async fn archive_
         )
         .await?
     };
+    CommunicationCommandService::enqueue_archive_provider_command_in_transaction(
+        transaction,
+        command_id,
+        &updated,
+        actor_id,
+    )
+    .await?;
     Ok(base_response(
         command_id,
         event_id,

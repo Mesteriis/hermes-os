@@ -32,7 +32,7 @@ pub(super) fn provider_presets() -> Vec<AiProviderPreset> {
             provider_key: "ollama".to_owned(),
             display_name: "Built-in Ollama".to_owned(),
             privacy: "local".to_owned(),
-            base_url: Some("http://127.0.0.1:11434".to_owned()),
+            base_url: Some("http://192.168.1.2:11434".to_owned()),
             command_preset: None,
             capabilities: vec![
                 "chat".to_owned(),

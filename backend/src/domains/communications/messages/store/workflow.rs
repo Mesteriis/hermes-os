@@ -9,6 +9,58 @@ use crate::domains::communications::messages::states::WorkflowState;
 use crate::domains::communications::messages::validation::validate_non_empty;
 
 impl MessageProjectionStore {
+    pub async fn set_read_state(
+        &self,
+        message_id: &str,
+        is_read: bool,
+        origin: &str,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        let mut transaction = self.pool.begin().await?;
+        let message =
+            Self::set_read_state_in_transaction(&mut transaction, message_id, is_read, origin)
+                .await?;
+        transaction.commit().await?;
+        Ok(message)
+    }
+
+    pub(crate) async fn set_read_state_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        message_id: &str,
+        is_read: bool,
+        origin: &str,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        validate_non_empty("message_id", message_id)?;
+        validate_non_empty("read_origin", origin)?;
+        let row = sqlx::query(
+            r#"
+            UPDATE communication_messages
+            SET is_read = $2,
+                read_changed_at = now(),
+                read_origin = $3,
+                projected_at = now()
+            WHERE message_id = $1
+            RETURNING
+                message_id, raw_record_id, observation_id, account_id, provider_record_id,
+                subject, sender, recipients, body_text,
+                occurred_at, projected_at, channel_kind, conversation_id,
+                sender_display_name, delivery_state, message_metadata,
+                workflow_state, importance_score, ai_category,
+                ai_summary, ai_summary_generated_at,
+                (SELECT s.ai_state FROM communication_ai_states s WHERE s.message_id = communication_messages.message_id) AS ai_state,
+                local_state, local_state_changed_at, local_state_reason,
+                is_read, read_changed_at, read_origin
+            "#,
+        )
+        .bind(message_id.trim())
+        .bind(is_read)
+        .bind(origin.trim())
+        .fetch_optional(&mut **transaction)
+        .await?;
+        row.map(row_to_projected_message)
+            .transpose()?
+            .ok_or(MessageProjectionError::MessageNotFound)
+    }
+
     pub async fn transition_workflow_state(
         &self,
         message_id: &str,
@@ -71,7 +123,8 @@ impl MessageProjectionStore {
                 workflow_state, importance_score, ai_category,
                 ai_summary, ai_summary_generated_at,
                 (SELECT s.ai_state FROM communication_ai_states s WHERE s.message_id = communication_messages.message_id) AS ai_state,
-                local_state, local_state_changed_at, local_state_reason"#,
+                local_state, local_state_changed_at, local_state_reason,
+                is_read, read_changed_at, read_origin"#,
         )
         .bind(message_id.trim())
         .bind(new_state.as_str())

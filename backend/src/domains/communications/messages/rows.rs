@@ -56,5 +56,10 @@ pub(crate) fn row_to_projected_message(
             .unwrap_or(LocalMessageState::Active),
         local_state_changed_at: row.try_get("local_state_changed_at")?,
         local_state_reason: row.try_get("local_state_reason")?,
+        is_read: row.try_get("is_read").unwrap_or(false),
+        read_changed_at: row.try_get("read_changed_at").ok(),
+        read_origin: row
+            .try_get::<String, _>("read_origin")
+            .unwrap_or_else(|_| "migration_inferred".to_owned()),
     })
 }
