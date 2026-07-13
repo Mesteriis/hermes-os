@@ -22,7 +22,7 @@ use crate::app::api_support::{
 use crate::app::{ApiError, AppState};
 use crate::application::telegram_runtime;
 use crate::domains::communications::storage::NewCommunicationBlob;
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::{TelegramError, TelegramLocalChatAvatarUpdate};
 use crate::integrations::telegram::runtime::TelegramMediaDownloadRequest;
 
 const MAX_CHAT_AVATAR_BYTES: usize = 8 * 1024 * 1024;
@@ -108,12 +108,14 @@ pub(crate) async fn post_telegram_chat_avatar_sync(
     service
         .apply_local_telegram_chat_avatar(
             &chat.telegram_chat_id,
-            avatar.tdlib_file_id,
-            avatar.remote_unique_id.as_deref(),
-            &stored_blob.blob_id,
-            content_type,
-            stored_blob.size_bytes,
-            &stored_blob.sha256,
+            &TelegramLocalChatAvatarUpdate {
+                tdlib_file_id: avatar.tdlib_file_id,
+                remote_unique_id: avatar.remote_unique_id,
+                blob_id: stored_blob.blob_id.clone(),
+                content_type: content_type.to_owned(),
+                size_bytes: stored_blob.size_bytes,
+                sha256: stored_blob.sha256.clone(),
+            },
         )
         .await?;
 

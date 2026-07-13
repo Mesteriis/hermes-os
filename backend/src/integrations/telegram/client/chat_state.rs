@@ -28,14 +28,9 @@ impl TelegramStore {
     pub async fn apply_local_chat_avatar(
         &self,
         telegram_chat_id: &str,
-        tdlib_file_id: i64,
-        remote_unique_id: Option<&str>,
-        blob_id: &str,
-        content_type: &str,
-        size_bytes: i64,
-        sha256: &str,
+        avatar: &TelegramLocalChatAvatarUpdate,
     ) -> Result<serde_json::Value, TelegramError> {
-        if tdlib_file_id <= 0 {
+        if avatar.tdlib_file_id <= 0 {
             return Err(TelegramError::InvalidRequest(
                 "tdlib_file_id must be a positive TDLib file id".to_owned(),
             ));
@@ -44,12 +39,12 @@ impl TelegramStore {
         metadata.insert(
             "avatar_local".to_owned(),
             json!({
-                "tdlib_file_id": tdlib_file_id,
-                "remote_unique_id": remote_unique_id,
-                "blob_id": blob_id,
-                "content_type": content_type,
-                "size_bytes": size_bytes,
-                "sha256": sha256,
+                "tdlib_file_id": avatar.tdlib_file_id,
+                "remote_unique_id": avatar.remote_unique_id,
+                "blob_id": avatar.blob_id,
+                "content_type": avatar.content_type,
+                "size_bytes": avatar.size_bytes,
+                "sha256": avatar.sha256,
                 "downloaded_at": Utc::now(),
             }),
         );
@@ -233,6 +228,16 @@ impl TelegramStore {
         );
         self.persist_chat_metadata(telegram_chat_id, metadata).await
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TelegramLocalChatAvatarUpdate {
+    pub tdlib_file_id: i64,
+    pub remote_unique_id: Option<String>,
+    pub blob_id: String,
+    pub content_type: String,
+    pub size_bytes: i64,
+    pub sha256: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

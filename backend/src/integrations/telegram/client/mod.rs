@@ -30,7 +30,8 @@ const TELEGRAM_ACCOUNT_LOGGED_OUT: &str = "logged_out";
 const TELEGRAM_ACCOUNT_REMOVED: &str = "removed";
 
 pub use self::chat_state::{
-    TelegramProviderChatPositionUpdate, reconcile_archive_commands_from_provider_state,
+    TelegramLocalChatAvatarUpdate, TelegramProviderChatPositionUpdate,
+    reconcile_archive_commands_from_provider_state,
     reconcile_folder_add_commands_from_provider_state,
     reconcile_folder_remove_commands_from_provider_state,
     reconcile_mark_read_commands_from_provider_state,

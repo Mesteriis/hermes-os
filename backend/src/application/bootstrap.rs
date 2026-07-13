@@ -164,12 +164,8 @@ pub(crate) fn mail_runtime_task_specs(
 }
 
 fn mail_background_sync_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_mail_background_sync_scheduler(&database_url) {
         return None;
     }
@@ -247,12 +243,8 @@ fn mail_background_sync_task(context: ApplicationBootstrapContext) -> Option<Run
 }
 
 fn mail_attachment_scan_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_mail_attachment_scan_worker(&database_url) {
         return None;
     }
@@ -316,12 +308,8 @@ fn mail_attachment_scan_task(context: ApplicationBootstrapContext) -> Option<Run
 }
 
 fn address_book_sync_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_address_book_sync_scheduler(&database_url) {
         return None;
     }
@@ -383,12 +371,8 @@ fn address_book_sync_task(context: ApplicationBootstrapContext) -> Option<Runtim
 }
 
 fn mail_outbox_delivery_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_mail_outbox_delivery_scheduler(&database_url) {
         return None;
     }
@@ -467,12 +451,8 @@ fn mail_outbox_delivery_task(context: ApplicationBootstrapContext) -> Option<Run
 fn mail_provider_command_executor_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_mail_provider_command_scheduler(&database_url) {
         return None;
     }
@@ -522,12 +502,8 @@ fn mail_provider_command_executor_task(
 }
 
 fn mail_ai_pipeline_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_mail_ai_pipeline(&database_url) {
         return None;
     }
@@ -630,12 +606,8 @@ pub(crate) fn telegram_runtime_task_specs(
 }
 
 fn telegram_command_executor_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_telegram_command_executor(&database_url) {
         return None;
     }
@@ -719,12 +691,8 @@ fn telegram_command_executor_task(context: ApplicationBootstrapContext) -> Optio
 fn telegram_runtime_reconciliation_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_telegram_runtime_reconciliation(&database_url) {
         return None;
     }
@@ -858,12 +826,8 @@ fn zoom_token_maintenance_task(context: ApplicationBootstrapContext) -> Option<R
     if !context.zoom_token_maintenance_scheduler_enabled {
         return None;
     }
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_zoom_token_maintenance_scheduler(&database_url) {
         return None;
     }
@@ -939,12 +903,8 @@ fn zoom_recording_sync_task(context: ApplicationBootstrapContext) -> Option<Runt
     if !context.zoom_recording_sync_scheduler_enabled {
         return None;
     }
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_zoom_recording_sync_scheduler(&database_url) {
         return None;
     }
@@ -1024,12 +984,8 @@ fn zoom_retention_cleanup_task(context: ApplicationBootstrapContext) -> Option<R
     if !context.zoom_retention_cleanup_scheduler_enabled {
         return None;
     }
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_zoom_retention_cleanup_scheduler(&database_url) {
         return None;
     }
@@ -1099,12 +1055,8 @@ fn zoom_retention_cleanup_task(context: ApplicationBootstrapContext) -> Option<R
 fn yandex_telemost_retention_cleanup_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_yandex_telemost_retention_cleanup_scheduler(&database_url) {
         return None;
     }
@@ -1175,12 +1127,8 @@ fn yandex_telemost_retention_cleanup_task(
 fn whatsapp_runtime_event_projection_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_whatsapp_runtime_event_consumer(&database_url) {
         return None;
     }
@@ -1254,12 +1202,8 @@ fn whatsapp_runtime_event_projection_task(
 fn whatsapp_provider_observation_reconciliation_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_whatsapp_provider_observation_reconciliation_consumer(&database_url) {
         return None;
     }
@@ -1333,12 +1277,8 @@ fn whatsapp_provider_observation_reconciliation_task(
 fn communication_provider_observation_projection_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_communication_provider_observation_consumer(&database_url) {
         return None;
     }
@@ -1404,12 +1344,8 @@ fn communication_provider_observation_projection_task(
 fn persona_derived_evidence_projection_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_persona_derived_evidence_consumer(&database_url) {
         return None;
     }
@@ -1473,12 +1409,8 @@ fn persona_derived_evidence_projection_task(
 fn zoom_calendar_matching_projection_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_zoom_calendar_matching_consumer(&database_url) {
         return None;
     }
@@ -1542,12 +1474,8 @@ fn zoom_calendar_matching_projection_task(
 fn zoom_signal_detection_projection_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_zoom_signal_detection_consumer(&database_url) {
         return None;
     }
@@ -1611,12 +1539,8 @@ fn zoom_signal_detection_projection_task(
 fn persona_identity_review_inbox_projection_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_persona_identity_review_inbox_consumer(&database_url) {
         return None;
     }
@@ -1680,12 +1604,8 @@ fn persona_identity_review_inbox_projection_task(
 fn zoom_participant_identity_projection_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_zoom_participant_identity_consumer(&database_url) {
         return None;
     }
@@ -1749,12 +1669,8 @@ fn zoom_participant_identity_projection_task(
 fn yandex_telemost_calendar_matching_projection_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_yandex_telemost_calendar_matching_consumer(&database_url) {
         return None;
     }
@@ -1818,12 +1734,8 @@ fn yandex_telemost_calendar_matching_projection_task(
 fn project_link_review_effects_projection_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_project_link_review_effects_consumer(&database_url) {
         return None;
     }
@@ -1893,12 +1805,8 @@ fn realtime_conversation_transcript_execution_task(
         );
         return None;
     }
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_realtime_conversation_transcript_execution_consumer(&database_url) {
         return None;
     }
@@ -1966,12 +1874,8 @@ fn realtime_conversation_transcript_execution_task(
 fn realtime_conversation_transcript_projection_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_realtime_conversation_transcript_projection_consumer(&database_url) {
         return None;
     }
@@ -2035,12 +1939,8 @@ fn realtime_conversation_transcript_projection_task(
 fn signal_hub_raw_signal_dispatcher_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_signal_hub_raw_signal_consumer(&database_url) {
         return None;
     }
@@ -2104,12 +2004,8 @@ fn signal_hub_raw_signal_dispatcher_task(
 }
 
 fn event_outbox_dispatcher_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     let Some(nats_server_url) = context.nats_server_url else {
         tracing::info!(
             "event outbox dispatcher skipped because HERMES_NATS_SERVER_URL is not configured"
@@ -2195,12 +2091,8 @@ fn event_outbox_dispatcher_task(context: ApplicationBootstrapContext) -> Option<
 }
 
 fn signal_replay_dispatcher_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_signal_replay_dispatcher(&database_url) {
         return None;
     }

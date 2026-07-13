@@ -14,9 +14,7 @@ pub(crate) const HOST_VAULT_MANIFEST_RECONCILIATION_RUNTIME: &str =
     "host_vault_manifest_reconciliation";
 
 pub(crate) fn host_vault_manifest_reconciliation_task(state: &AppState) -> Option<RuntimeTaskSpec> {
-    if state.config.database_url().is_none() {
-        return None;
-    }
+    state.config.database_url()?;
     let Ok(status) = state.vault.status() else {
         tracing::warn!("host vault reconciliation skipped: vault status unavailable");
         return None;
@@ -24,9 +22,7 @@ pub(crate) fn host_vault_manifest_reconciliation_task(state: &AppState) -> Optio
     if status.state != VaultMode::Unlocked {
         return None;
     }
-    let Some(pool) = state.database.pool().cloned() else {
-        return None;
-    };
+    let pool = state.database.pool().cloned()?;
     let vault = state.vault.clone();
 
     let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {

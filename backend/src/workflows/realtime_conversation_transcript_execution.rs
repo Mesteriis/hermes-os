@@ -119,9 +119,8 @@ async fn execute_realtime_conversation_transcript_request_event_inner(
         metadata: output.metadata,
     };
     let event_store = hermes_events_postgres::store::EventStore::new(pool.clone());
-    let _ =
-        complete_realtime_conversation_transcript_bridge(&event_store, Some(event_bus), &request)
-            .await?;
+    complete_realtime_conversation_transcript_bridge(&event_store, Some(event_bus), &request)
+        .await?;
     Ok(())
 }
 

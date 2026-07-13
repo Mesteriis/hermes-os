@@ -279,7 +279,7 @@ fn tdlib_chat_last_message_preview(raw: &Value) -> Option<String> {
         }
         _ => None,
     }
-    .or_else(|| match content_type {
+    .or(match content_type {
         "messagePhoto" => Some("Photo"),
         "messageVideo" => Some("Video"),
         "messageDocument" => Some("Document"),

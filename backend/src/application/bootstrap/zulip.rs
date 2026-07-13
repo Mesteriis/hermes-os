@@ -38,12 +38,8 @@ pub(crate) fn runtime_task_specs(context: ApplicationBootstrapContext) -> Vec<Ru
 }
 
 fn command_executor_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_once(
         &COMMAND_EXECUTOR_DATABASES,
         &database_url,
@@ -120,12 +116,8 @@ fn command_executor_task(context: ApplicationBootstrapContext) -> Option<Runtime
 }
 
 fn event_ingest_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_once(&EVENT_INGEST_DATABASES, &database_url, "zulip event ingest") {
         return None;
     }
@@ -199,12 +191,8 @@ fn event_ingest_task(context: ApplicationBootstrapContext) -> Option<RuntimeTask
 }
 
 fn attachment_download_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_once(
         &ATTACHMENT_DOWNLOAD_DATABASES,
         &database_url,
@@ -286,12 +274,8 @@ fn attachment_download_task(context: ApplicationBootstrapContext) -> Option<Runt
 fn observation_reconciliation_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_once(
         &OBSERVATION_RECONCILIATION_DATABASES,
         &database_url,

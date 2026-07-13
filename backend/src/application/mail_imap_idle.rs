@@ -31,12 +31,8 @@ const IDLE_TIMEOUT_SECONDS: u64 = 29 * 60;
 const POLL_FALLBACK_SECONDS: u64 = 300;
 
 pub(crate) fn runtime_task_spec(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
+    let pool = context.pool?;
+    let database_url = context.database_url?;
     if !register_scheduler(&database_url) {
         return None;
     }
