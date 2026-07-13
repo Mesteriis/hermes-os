@@ -148,8 +148,9 @@ use crate::domains::tasks::intelligence::TaskIntelligenceService;
 use crate::domains::tasks::rules::{TaskRuleError, TaskRuleStore, TaskTemplateStore};
 use crate::domains::tasks::sync::{export_task_json, export_task_md};
 use crate::integrations::mail::accounts::{
-    EmailAccountSetupError, EmailAccountSetupService, GmailOAuthPendingGrant,
-    GmailOAuthSetupRequest, ImapAccountSetupRequest,
+    errors::EmailAccountSetupError,
+    models::{GmailOAuthPendingGrant, GmailOAuthSetupRequest, ImapAccountSetupRequest},
+    service::EmailAccountSetupService,
 };
 use crate::integrations::ollama::client::OllamaClient;
 use crate::integrations::ollama::client::config::OllamaClientConfig;

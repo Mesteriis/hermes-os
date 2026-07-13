@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use sqlx::postgres::PgPool;
 
-use crate::integrations::mail::accounts::EmailAccountSetupService;
+use crate::integrations::mail::accounts::service::EmailAccountSetupService;
 use crate::integrations::mail::gmail::client::{
     gmail_api::GmailApiClient, options::GmailContactFetchOptions,
 };

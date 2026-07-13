@@ -8,7 +8,7 @@ use serde_json::Value;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::integrations::mail::accounts::EmailAccountSetupService;
+use crate::integrations::mail::accounts::service::EmailAccountSetupService;
 use crate::integrations::mail::gmail::client::{
     errors::EmailProviderNetworkError,
     gmail_api::GmailApiClient,

@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 
-use crate::integrations::mail::accounts::EmailAccountSetupError;
+use crate::integrations::mail::accounts::errors::EmailAccountSetupError;
 
 use super::ErrorParts;
 

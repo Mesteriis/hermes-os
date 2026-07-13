@@ -7,7 +7,7 @@ use std::sync::Arc;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 
-use crate::integrations::mail::accounts::EmailAccountSetupService;
+use crate::integrations::mail::accounts::service::EmailAccountSetupService;
 use crate::integrations::mail::gmail::client::{
     errors::EmailProviderNetworkError,
     gmail_api::GmailApiClient,

@@ -191,10 +191,10 @@ pub(crate) struct EmailAccountSetupApiResponse {
     pub(super) store_kind: crate::platform::secrets::SecretStoreKind,
 }
 
-impl From<crate::integrations::mail::accounts::EmailAccountSetupResult>
+impl From<crate::integrations::mail::accounts::models::EmailAccountSetupResult>
     for EmailAccountSetupApiResponse
 {
-    fn from(result: crate::integrations::mail::accounts::EmailAccountSetupResult) -> Self {
+    fn from(result: crate::integrations::mail::accounts::models::EmailAccountSetupResult) -> Self {
         Self {
             account_id: result.account_id,
             secret_ref: result.secret_ref,
