@@ -56,8 +56,6 @@ impl ApplicationRuntime {
 }
 
 pub(crate) fn start_application_runtime(components: &ApplicationComponents) -> ApplicationRuntime {
-    crate::application::bootstrap::start_background_services(components.bootstrap.clone());
-
     let lease = RuntimeLease(Arc::new(RuntimeLeaseState {
         shutdown: CancellationToken::new(),
     }));
@@ -89,7 +87,7 @@ pub(crate) fn start_application_runtime(components: &ApplicationComponents) -> A
     runtime_tasks.extend(crate::application::bootstrap::telemost::runtime_task_specs(
         components.bootstrap.clone(),
     ));
-    runtime_tasks.extend(crate::application::bootstrap::core_runtime_task_specs(
+    runtime_tasks.extend(crate::application::bootstrap::core::runtime_task_specs(
         components.bootstrap.clone(),
     ));
     let lifecycle_runtime = crate::app::runtime_lifecycle::build_lifecycle_projection_runtime(

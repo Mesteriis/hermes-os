@@ -30,7 +30,7 @@ const communicationMessageInsertOwner = 'backend/src/domains/communications/mess
 const communicationAcceptedSignalProjectionOwner =
 	'backend/src/domains/communications/messages/provider_observation_projection.rs';
 const communicationAcceptedSignalProjectionBootstrapOwner =
-	'backend/src/application/bootstrap.rs';
+	'backend/src/application/bootstrap/core/projections.rs';
 const reviewPromotionWorkflow = 'backend/src/workflows/review_promotion/mod.rs';
 const communicationProviderCrudFacadeOwners = new Set([
 	'backend/src/domains/communications/core/accounts.rs',
