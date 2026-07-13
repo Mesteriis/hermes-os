@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use chrono::Utc;
-use hermes_hub_backend::domains::communications::core::EmailProviderKind;
+use hermes_communications_api::accounts::CommunicationProviderKind;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::email_fixture_pipeline::{
@@ -48,11 +48,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match config.mode {
         EmailFixtureDevMode::Import => {
-            let report = import_fixture_email_messages_for_dev(pool, &request).await?;
+            let provider_accounts = hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(pool.clone());
+            let communication_evidence =
+                hermes_communications_postgres::store::CommunicationIngestionStore::new(
+                    pool.clone(),
+                );
+            let report = import_fixture_email_messages_for_dev(
+                &provider_accounts,
+                &communication_evidence,
+                &request,
+            )
+            .await?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
         EmailFixtureDevMode::Project => {
-            let report = project_fixture_email_messages(pool, &request).await?;
+            let provider_accounts = hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(pool.clone());
+            let communication_evidence =
+                hermes_communications_postgres::store::CommunicationIngestionStore::new(
+                    pool.clone(),
+                );
+            let report = project_fixture_email_messages(
+                pool,
+                &provider_accounts,
+                &communication_evidence,
+                &request,
+            )
+            .await?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
     }
@@ -66,7 +87,7 @@ struct EmailFixtureDevConfig {
     account_id: String,
     display_name: String,
     external_account_id: String,
-    provider_kind: EmailProviderKind,
+    provider_kind: CommunicationProviderKind,
     import_batch_id: String,
 }
 
@@ -116,8 +137,10 @@ fn parse_mode(value: &str) -> Result<EmailFixtureDevMode, EmailFixtureDevConfigE
     }
 }
 
-fn parse_provider_kind(value: &str) -> Result<EmailProviderKind, EmailFixtureDevConfigError> {
-    EmailProviderKind::try_from(value.trim())
+fn parse_provider_kind(
+    value: &str,
+) -> Result<CommunicationProviderKind, EmailFixtureDevConfigError> {
+    CommunicationProviderKind::try_from(value.trim())
         .map_err(|_| EmailFixtureDevConfigError::InvalidProviderKind(value.to_owned()))
 }
 

@@ -1,12 +1,13 @@
 use chrono::{Duration, Utc};
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
+};
 use serde_json::json;
 use sqlx::Row;
 use testkit::context::TestContext;
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
-};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::outbox::{
     CommunicationOutboxItem, CommunicationOutboxStatus, CommunicationOutboxStore,
     EmailOutboxDeliveryWorker, NewCommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender,
@@ -15,6 +16,7 @@ use hermes_hub_backend::domains::communications::outbox::{
 use hermes_hub_backend::integrations::mail::send::{
     EmailSendError, OutgoingEmail, SendResult, SmtpConfig,
 };
+
 use hermes_hub_backend::platform::secrets::{
     InMemorySecretResolver, NewSecretReference, ResolvedSecret, SecretKind, SecretReferenceStore,
     SecretStoreKind,
@@ -34,7 +36,7 @@ async fn outbox_claim_due_waits_for_schedule_and_undo_deadline_against_postgres(
     CommunicationIngestionStore::new(pool.clone())
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Outbox Store IMAP",
             format!("outbox-store-{suffix}@example.com"),
         ))
@@ -520,7 +522,7 @@ async fn seed_provider_account(pool: sqlx::PgPool, account_id: &str, suffix: i64
     CommunicationIngestionStore::new(pool)
         .upsert_provider_account(&NewProviderAccount::new(
             account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Outbox Delivery IMAP",
             format!("outbox-delivery-{suffix}@example.com"),
         ))
@@ -539,7 +541,7 @@ async fn seed_smtp_provider_account(
         .upsert_provider_account(
             &NewProviderAccount::new(
                 account_id,
-                EmailProviderKind::Imap,
+                CommunicationProviderKind::Imap,
                 "Outbox SMTP IMAP",
                 format!("outbox-delivery-{suffix}@example.com"),
             )
@@ -583,7 +585,7 @@ async fn seed_icloud_provider_account_with_imap_secret(
         .upsert_provider_account(
             &NewProviderAccount::new(
                 account_id,
-                EmailProviderKind::Icloud,
+                CommunicationProviderKind::Icloud,
                 "Outbox iCloud",
                 format!("icloud-delivery-{suffix}@example.com"),
             )

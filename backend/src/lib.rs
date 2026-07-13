@@ -2,7 +2,6 @@
 pub mod ai;
 pub mod app;
 pub mod application;
-pub mod contracts;
 pub mod domains;
 pub mod engines;
 pub mod integrations;

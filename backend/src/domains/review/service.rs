@@ -4,9 +4,9 @@ use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use super::{ReviewInboxError, ReviewInboxStore, ReviewItem, ReviewItemStatus};
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
-};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 #[derive(Clone)]
 pub struct ReviewInboxService {

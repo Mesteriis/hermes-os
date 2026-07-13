@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::platform::communications::CommunicationProviderKind;
-use crate::platform::communications::NewRawCommunicationRecord;
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 
 use super::errors::WhatsappWebError;
 use super::validation::{validate_non_empty, validate_object, validate_string_array};

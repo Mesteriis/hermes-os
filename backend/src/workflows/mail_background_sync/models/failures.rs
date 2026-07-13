@@ -74,11 +74,11 @@ impl From<ProviderSyncError> for SanitizedSyncFailure {
                     message: "Mail graph projection failed".to_owned(),
                 }
             }
-            ProviderSyncError::Communication(error) => {
-                tracing::error!(error = %error, "mail sync communication store failed");
+            ProviderSyncError::CommunicationEvidence(error) => {
+                tracing::error!(error = %error, "mail sync communication evidence port failed");
                 Self {
-                    code: "communication_store_error".to_owned(),
-                    message: "Mail sync communication store failed".to_owned(),
+                    code: "communication_evidence_error".to_owned(),
+                    message: "Mail sync communication evidence operation failed".to_owned(),
                 }
             }
             ProviderSyncError::SyncState(error) => {

@@ -1,24 +1,26 @@
 use chrono::{DateTime, Utc};
+use hermes_communications_api::evidence::StoredRawCommunicationRecord;
+use hermes_events_api::{NewEventEnvelope, StoredEventEnvelope};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
-use crate::domains::communications::core::{
-    CommunicationIngestionStore, CommunicationProviderAccountStore, CommunicationProviderKind,
-    StoredRawCommunicationRecord,
-};
 use crate::domains::communications::provider_commands::{
     CommunicationProviderCommand, CommunicationProviderCommandStore,
 };
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::zulip_event_types;
-use crate::platform::events::{EventBus, EventStore, NewEventEnvelope, StoredEventEnvelope};
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_events_postgres::store::EventStore;
 
 pub const ZULIP_PROVIDER_OBSERVATION_RECONCILIATION_CONSUMER: &str =
     "zulip_provider_observation_reconciliation";
 
 pub async fn reconcile_zulip_provider_observation_event(
     pool: PgPool,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
     event: StoredEventEnvelope,
 ) -> Result<(), String> {
     if !supports_zulip_provider_reconciliation_event(&event.event.event_type) {
@@ -131,7 +133,7 @@ fn provider_state_for_observation(
 
 async fn publish_zulip_command_events(
     event_store: &EventStore,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     parent: &StoredEventEnvelope,
     command: &CommunicationProviderCommand,
     source: &str,
@@ -176,7 +178,7 @@ async fn publish_zulip_command_events(
 
 async fn publish_zulip_command_event(
     event_store: &EventStore,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     parent: &StoredEventEnvelope,
     event_type: &str,
     command: &CommunicationProviderCommand,

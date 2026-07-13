@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use sqlx::Transaction;
 use sqlx::postgres::Postgres;
 
-use crate::platform::observations::link_domain_entity_in_transaction;
+use hermes_observations_postgres::review_links::link_domain_entity_in_transaction;
 
 use super::OrgCoreError;
 

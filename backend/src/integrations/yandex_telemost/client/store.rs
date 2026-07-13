@@ -1,3 +1,8 @@
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountCommandPort, ProviderAccountSecretPurpose,
+};
+use hermes_communications_api::accounts::{ProviderAccount, ProviderSecretBindingCommandPort};
+use hermes_events_api::NewEventEnvelope;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -8,29 +13,31 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::platform::communications::{
-    NewProviderAccountSecretBinding, ProviderAccount, ProviderAccountCommandPort,
-    ProviderAccountSecretPurpose, ProviderSecretBindingCommandPort,
-};
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::yandex_telemost_event_types;
-use crate::platform::events::{EventBus, EventLogQuery, EventStore, NewEventEnvelope};
 use crate::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
 use crate::platform::settings::ApplicationSettingsStore;
 use crate::vault::{HostVault, SecretEntryContext};
+use hermes_events_api::EventLogQuery;
+use hermes_events_postgres::store::EventStore;
 
-use super::{
+use super::errors::YandexTelemostError;
+use super::models::{
     TelemostCohost, YANDEX_TELEMOST_API_BASE_URL, YANDEX_TELEMOST_LIVE_RUNTIME_KIND,
     YANDEX_TELEMOST_PROVIDER_KIND_STR, YANDEX_TELEMOST_RUNTIME_KIND, YandexTelemostAccount,
     YandexTelemostAccountListResponse, YandexTelemostAccountSetupRequest,
     YandexTelemostAccountSetupResponse, YandexTelemostCapabilityState, YandexTelemostCohostPage,
     YandexTelemostConference, YandexTelemostConferencePatchRequest,
-    YandexTelemostConferenceRequest, YandexTelemostError, YandexTelemostRetentionCleanupItem,
+    YandexTelemostConferenceRequest, YandexTelemostRetentionCleanupItem,
     YandexTelemostRetentionCleanupRequest, YandexTelemostRetentionCleanupResponse,
-    YandexTelemostRuntimeStatus, sanitize_yandex_telemost_payload, telemost_provider_kind,
-    validate_api_base_url, validate_json_object, validate_required, yandex_telemost_capabilities,
-    yandex_telemost_default_config, yandex_telemost_oauth_token_secret_ref,
+    YandexTelemostRuntimeStatus, telemost_provider_kind, yandex_telemost_capabilities,
+    yandex_telemost_default_config,
+};
+use super::validation::{
+    sanitize_yandex_telemost_payload, validate_api_base_url, validate_json_object,
+    validate_required, yandex_telemost_oauth_token_secret_ref,
 };
 
 const YANDEX_TELEMOST_RECORDING_RETENTION_DAYS_SETTING_KEY: &str =
@@ -143,7 +150,7 @@ pub struct YandexTelemostStore {
     provider_account_store: Arc<dyn ProviderAccountCommandPort>,
     provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
     event_store: EventStore,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
 }
 
 impl YandexTelemostStore {
@@ -151,7 +158,7 @@ impl YandexTelemostStore {
         provider_account_store: Arc<dyn ProviderAccountCommandPort>,
         provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
         event_store: EventStore,
-        event_bus: EventBus,
+        event_bus: InMemoryEventBus,
     ) -> Self {
         Self {
             provider_account_store,

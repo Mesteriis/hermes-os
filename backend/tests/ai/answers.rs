@@ -1,7 +1,6 @@
 use crate::support::*;
-use hermes_hub_backend::domains::signal_hub::{
-    SignalHubStore, SignalPolicy, SignalPolicyMode, SignalPolicyScope,
-};
+use hermes_hub_backend::domains::signal_hub::store::SignalHubStore;
+use hermes_signal_hub_api::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
 use testkit::context::TestContext;
 
 #[tokio::test]

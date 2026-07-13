@@ -1,15 +1,13 @@
+use crate::domains::communications::messages::port::MessageProjectionPort;
+use crate::domains::communications::storage::port::{CommunicationAttachmentPort, LocalBlobPort};
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::core::StoredRawCommunicationRecord;
 use crate::domains::communications::ingestion::analyze_ingested_message;
 use crate::domains::communications::messages::{
-    CommunicationMessageProjectionPort, ProjectedMessage, parse_raw_email_message_from_blob,
-    project_accepted_signal_if_runtime_allows,
+    ProjectedMessage, parse_raw_email_message_from_blob, project_accepted_signal_if_runtime_allows,
 };
-use crate::domains::communications::storage::{
-    CommunicationBlobMetadataPort, LocalCommunicationBlobPort,
-};
-use crate::domains::signal_hub::dispatch_mail_raw_signal;
+use crate::domains::signal_hub::mail::dispatch_mail_raw_signal;
+use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 
 use super::attachments::project_attachments;
 use super::errors::EmailSyncPipelineError;
@@ -24,12 +22,12 @@ pub(crate) struct RawRecordProjectionReport {
 
 pub(crate) async fn project_raw_records(
     pool: &PgPool,
-    mail_store: &CommunicationBlobMetadataPort,
-    blob_store: &LocalCommunicationBlobPort,
+    mail_store: &CommunicationAttachmentPort,
+    blob_store: &LocalBlobPort,
     raw_records: &[StoredRawCommunicationRecord],
 ) -> Result<RawRecordProjectionReport, EmailSyncPipelineError> {
     let mut report = RawRecordProjectionReport::default();
-    let message_store = CommunicationMessageProjectionPort::new(pool.clone());
+    let message_store = MessageProjectionPort::new(pool.clone());
     for raw_record in raw_records {
         let Some(accepted_event) =
             dispatch_mail_raw_signal(pool.clone(), raw_record, Some(blob_store.root())).await?

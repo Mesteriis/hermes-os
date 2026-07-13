@@ -4,18 +4,17 @@ use reqwest::Url;
 
 mod catalog;
 mod chat;
-mod config;
+pub(crate) mod config;
 mod download;
 mod embeddings;
-mod error;
-mod models;
+pub(crate) mod error;
+pub(crate) mod models;
 mod responses;
 mod sanitization;
 mod transport;
 
-pub use config::OllamaClientConfig;
-pub use error::OllamaError;
-pub use models::{OllamaChatResult, OllamaEmbedResult};
+use config::OllamaClientConfig;
+use error::OllamaError;
 
 #[derive(Clone)]
 pub struct OllamaClient {

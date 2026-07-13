@@ -2,12 +2,13 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use crate::ai::control_center::AiProviderAuthPendingGrant;
+use crate::app::runtime::RuntimeLease;
 use crate::integrations::mail::accounts::GmailOAuthPendingGrant;
 use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::integrations::telegram::tdjson::PendingQrLoginMap;
-use crate::integrations::zoom::client::ZoomOAuthPendingGrant;
+use crate::integrations::zoom::client::models::ZoomOAuthPendingGrant;
 use crate::platform::config::AppConfig;
-use crate::platform::events::EventBus;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::storage::Database;
 use crate::vault::HostVault;
 
@@ -18,7 +19,8 @@ pub(crate) struct AppState {
     pub(crate) vault: HostVault,
     pub(crate) account_setup: AccountSetupState,
     pub(crate) telegram_runtime: TelegramRuntimeManager,
-    pub(crate) event_bus: EventBus,
+    pub(crate) event_bus: InMemoryEventBus,
+    pub(crate) runtime_lease: Option<RuntimeLease>,
 }
 
 #[derive(Clone, Default)]

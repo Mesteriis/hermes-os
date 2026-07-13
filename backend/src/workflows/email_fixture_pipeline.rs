@@ -1,12 +1,15 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::accounts::{
+    ProviderAccount, ProviderAccountCommandPort, ProviderAccountPortError,
+};
+use hermes_communications_api::evidence::{
+    CommunicationEvidencePortError, CommunicationRawEvidenceCommandPort,
+};
 use serde::Serialize;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::core::CommunicationProviderAccountPort;
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationIngestionPort, EmailProviderKind, NewProviderAccount,
-};
 use crate::domains::communications::import::{
     FixtureEmailImportError, FixtureEmailImportRequest, import_fixture_email_messages_with_records,
 };
@@ -18,17 +21,19 @@ use crate::domains::graph::core::{GraphProjectionPort, GraphProjectionPortError,
 use crate::domains::personas::api::{
     PersonaProjectionError, PersonaProjectionPort, upsert_personas_from_message_participants,
 };
-use crate::domains::signal_hub::{SignalHubError, dispatch_mail_raw_signal};
-use crate::workflows::graph_projection::{
-    GraphProjectionError, GraphProjectionReport, GraphProjectionService,
-};
+use crate::domains::signal_hub::mail::dispatch_mail_raw_signal;
+use crate::domains::signal_hub::store::SignalHubError;
+
+use crate::workflows::graph_projection::errors::GraphProjectionError;
+use crate::workflows::graph_projection::models::GraphProjectionReport;
+use crate::workflows::graph_projection::service::GraphProjectionService;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EmailFixturePipelineRequest {
     pub account_id: String,
     pub display_name: String,
     pub external_account_id: String,
-    pub provider_kind: EmailProviderKind,
+    pub provider_kind: CommunicationProviderKind,
     pub import_batch_id: String,
     pub fixture_json: String,
 }
@@ -38,7 +43,7 @@ impl EmailFixturePipelineRequest {
         account_id: impl Into<String>,
         display_name: impl Into<String>,
         external_account_id: impl Into<String>,
-        provider_kind: EmailProviderKind,
+        provider_kind: CommunicationProviderKind,
         import_batch_id: impl Into<String>,
         fixture_json: impl Into<String>,
     ) -> Self {
@@ -57,7 +62,7 @@ impl EmailFixturePipelineRequest {
 pub struct EmailFixtureImportPipelineReport {
     pub account_id: String,
     pub import_batch_id: String,
-    pub provider_kind: EmailProviderKind,
+    pub provider_kind: CommunicationProviderKind,
     pub imported_records: usize,
 }
 
@@ -65,7 +70,7 @@ pub struct EmailFixtureImportPipelineReport {
 pub struct EmailFixtureProjectionPipelineReport {
     pub account_id: String,
     pub import_batch_id: String,
-    pub provider_kind: EmailProviderKind,
+    pub provider_kind: CommunicationProviderKind,
     pub imported_records: usize,
     pub projected_messages: usize,
     pub upserted_personas: usize,
@@ -76,13 +81,13 @@ pub struct EmailFixtureProjectionPipelineReport {
 }
 
 pub async fn import_fixture_email_messages_for_dev(
-    pool: PgPool,
+    provider_accounts: &dyn ProviderAccountCommandPort,
+    communication_evidence: &dyn CommunicationRawEvidenceCommandPort,
     request: &EmailFixturePipelineRequest,
 ) -> Result<EmailFixtureImportPipelineReport, EmailFixturePipelineError> {
-    let communication_store = CommunicationIngestionPort::new(pool.clone());
-    upsert_fixture_provider_account(&pool, request).await?;
+    upsert_fixture_provider_account(provider_accounts, request).await?;
     let import_report = import_fixture_email_messages_with_records(
-        &communication_store,
+        communication_evidence,
         &FixtureEmailImportRequest::new(
             &request.account_id,
             &request.import_batch_id,
@@ -101,12 +106,13 @@ pub async fn import_fixture_email_messages_for_dev(
 
 pub async fn project_fixture_email_messages(
     pool: PgPool,
+    provider_accounts: &dyn ProviderAccountCommandPort,
+    communication_evidence: &dyn CommunicationRawEvidenceCommandPort,
     request: &EmailFixturePipelineRequest,
 ) -> Result<EmailFixtureProjectionPipelineReport, EmailFixturePipelineError> {
-    let communication_store = CommunicationIngestionPort::new(pool.clone());
-    upsert_fixture_provider_account(&pool, request).await?;
+    upsert_fixture_provider_account(provider_accounts, request).await?;
     let import_report = import_fixture_email_messages_with_records(
-        &communication_store,
+        communication_evidence,
         &FixtureEmailImportRequest::new(
             &request.account_id,
             &request.import_batch_id,
@@ -164,9 +170,9 @@ pub async fn project_fixture_email_messages(
 }
 
 async fn upsert_fixture_provider_account(
-    pool: &PgPool,
+    provider_accounts: &dyn ProviderAccountCommandPort,
     request: &EmailFixturePipelineRequest,
-) -> Result<(), CommunicationIngestionError> {
+) -> Result<(), ProviderAccountPortError> {
     let account = NewProviderAccount::new(
         &request.account_id,
         request.provider_kind,
@@ -174,36 +180,37 @@ async fn upsert_fixture_provider_account(
         &request.external_account_id,
     )
     .config(provider_config(request.provider_kind));
-    CommunicationProviderAccountPort::new(pool.clone())
-        .upsert(&account)
-        .await?;
+    provider_accounts.upsert(&account).await?;
     Ok(())
 }
 
-fn provider_config(provider_kind: EmailProviderKind) -> serde_json::Value {
+fn provider_config(provider_kind: CommunicationProviderKind) -> serde_json::Value {
     match provider_kind {
-        EmailProviderKind::Gmail => json!({"history_stream_id": "gmail:fixture"}),
-        EmailProviderKind::Icloud => {
+        CommunicationProviderKind::Gmail => json!({"history_stream_id": "gmail:fixture"}),
+        CommunicationProviderKind::Icloud => {
             json!({"host": "imap.mail.me.com", "port": 993, "tls": true, "mailbox": "INBOX"})
         }
-        EmailProviderKind::Imap => {
+        CommunicationProviderKind::Imap => {
             json!({"host": "localhost", "port": 993, "tls": true, "mailbox": "INBOX"})
         }
-        EmailProviderKind::TelegramUser
-        | EmailProviderKind::TelegramBot
-        | EmailProviderKind::WhatsappWeb
-        | EmailProviderKind::WhatsappBusinessCloud
-        | EmailProviderKind::ZulipBot
-        | EmailProviderKind::ZoomUser
-        | EmailProviderKind::ZoomServerToServer
-        | EmailProviderKind::YandexTelemostUser => json!({}),
+        CommunicationProviderKind::TelegramUser
+        | CommunicationProviderKind::TelegramBot
+        | CommunicationProviderKind::WhatsappWeb
+        | CommunicationProviderKind::WhatsappBusinessCloud
+        | CommunicationProviderKind::ZulipBot
+        | CommunicationProviderKind::ZoomUser
+        | CommunicationProviderKind::ZoomServerToServer
+        | CommunicationProviderKind::YandexTelemostUser => json!({}),
     }
 }
 
 #[derive(Debug, Error)]
 pub enum EmailFixturePipelineError {
     #[error(transparent)]
-    Communication(#[from] CommunicationIngestionError),
+    CommunicationEvidence(#[from] CommunicationEvidencePortError),
+
+    #[error(transparent)]
+    ProviderAccount(#[from] ProviderAccountPortError),
 
     #[error(transparent)]
     Import(#[from] FixtureEmailImportError),

@@ -1,18 +1,24 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::Utc;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_events_api::NewEventEnvelope;
+use hermes_events_postgres::store::EventStore;
+use hermes_hub_backend::application::review_transitions::{
+    TaskCandidateReviewApplicationError, TaskCandidateReviewApplicationService,
 };
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
 use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::domains::tasks::candidates::{
-    TaskCandidateReviewState, TaskCandidateStore,
+    TaskCandidateReviewCommand, TaskCandidateReviewCommandResult, TaskCandidateReviewState,
+    TaskCandidateStore,
 };
-use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
+
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::json;
 use sqlx::postgres::PgPool;
@@ -25,8 +31,19 @@ pub(crate) struct TaskCandidateTestContext {
     pub(crate) event_store: EventStore,
 }
 
+impl TaskCandidateTestContext {
+    pub(crate) async fn review(
+        &self,
+        command: &TaskCandidateReviewCommand,
+    ) -> Result<TaskCandidateReviewCommandResult, TaskCandidateReviewApplicationError> {
+        TaskCandidateReviewApplicationService::new(self.pool.clone())
+            .review_manual(command)
+            .await
+    }
+}
+
 pub(crate) async fn live_task_candidate_context() -> Option<TaskCandidateTestContext> {
-    let test_context = TestContext::new().await;
+    let test_context = Box::leak(Box::new(TestContext::new().await));
     let database_url = test_context.connection_string();
     task_candidate_context(&database_url).await
 }
@@ -58,7 +75,7 @@ pub(crate) async fn seed_message(
     ingestion_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Task Candidate Gmail",
             format!("task-candidate-{suffix}@example.com"),
         ))

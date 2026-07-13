@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 
 use crate::app::{ApiError, AppState};
 use crate::domains::tasks::api::{NewTask, Task, TaskListQuery, TaskStore, TaskUpdate};
-use crate::domains::tasks::service::TaskCommandService;
+use crate::domains::tasks::command_service::TaskCommandService;
 
 use super::support::database_pool;
 
@@ -27,7 +27,7 @@ pub(crate) async fn get_tasks(
     Query(q): Query<TaskListQueryParams>,
 ) -> Result<Json<TaskRecordsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<TaskStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<TaskStore>(pool)
         .list(&TaskListQuery {
             status: q.status,
             project_id: q.project_id,
@@ -54,7 +54,7 @@ pub(crate) async fn get_task(
     Path(task_id): Path<String>,
 ) -> Result<Json<Task>, ApiError> {
     let pool = database_pool(&state)?;
-    crate::app::api_support::app_store::<TaskStore>(pool)
+    crate::app::api_support::stores::domain_stores::app_store::<TaskStore>(pool)
         .get(&task_id)
         .await?
         .map(Json)

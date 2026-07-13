@@ -1,11 +1,13 @@
+use hermes_communications_api::accounts::{ProviderAccount, ProviderAccountPortError};
+use hermes_communications_api::evidence::CommunicationEvidencePortError;
+use hermes_events_api::EventEnvelopeError;
 use thiserror::Error;
 
-use crate::domains::communications::core::CommunicationIngestionError;
 use crate::platform::communications::{EmailProviderSyncError, EmailSyncPlanError};
-use crate::platform::events::{EventEnvelopeError, EventLogPortError};
-use crate::platform::observations::ObservationPortError;
-use crate::workflows::email_sync_pipeline::EmailSyncPipelineError;
-use crate::workflows::graph_projection::GraphProjectionError;
+use crate::workflows::email_sync_pipeline::errors::EmailSyncPipelineError;
+use crate::workflows::graph_projection::errors::GraphProjectionError;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, Error)]
 pub enum MailSyncError {
@@ -13,7 +15,7 @@ pub enum MailSyncError {
     Sqlx(#[from] sqlx::Error),
 
     #[error(transparent)]
-    Communication(#[from] CommunicationIngestionError),
+    CommunicationEvidence(#[from] CommunicationEvidencePortError),
 
     #[error(transparent)]
     EmailSyncPlan(#[from] EmailSyncPlanError),
@@ -22,13 +24,16 @@ pub enum MailSyncError {
     ProviderSync(#[from] EmailProviderSyncError),
 
     #[error(transparent)]
+    ProviderAccount(#[from] ProviderAccountPortError),
+
+    #[error(transparent)]
     EventEnvelope(#[from] EventEnvelopeError),
 
     #[error(transparent)]
-    EventLogPort(#[from] EventLogPortError),
+    EventStore(#[from] EventStoreError),
 
     #[error(transparent)]
-    ObservationPort(#[from] ObservationPortError),
+    ObservationPort(#[from] ObservationStoreError),
 
     #[error("mail sync account was not found")]
     AccountNotFound,
@@ -49,7 +54,7 @@ pub enum MailSyncError {
 #[derive(Debug, Error)]
 pub(super) enum ProviderSyncError {
     #[error(transparent)]
-    Communication(#[from] CommunicationIngestionError),
+    CommunicationEvidence(#[from] CommunicationEvidencePortError),
 
     #[error(transparent)]
     ProviderSync(#[from] EmailProviderSyncError),

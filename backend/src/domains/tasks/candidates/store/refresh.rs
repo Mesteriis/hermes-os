@@ -3,7 +3,8 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 
 use crate::engines::obligation::{
-    ObligationEngine, ObligationEntityKind, ObligationExtractionInput,
+    engine::ObligationEngine,
+    models::{ObligationEntityKind, ObligationExtractionInput},
 };
 
 use super::super::constants::OWNER_PERSONA_EXTRACTION_CONTEXT_ID;

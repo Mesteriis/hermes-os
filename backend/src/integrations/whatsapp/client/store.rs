@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::ProviderAccountCommandPort;
+use hermes_communications_api::accounts::ProviderSecretBindingCommandPort;
 mod accounts;
 mod evidence;
 mod ingestion;
@@ -9,9 +11,7 @@ use std::sync::Arc;
 
 use sqlx::postgres::PgPool;
 
-use crate::platform::communications::{
-    ProviderAccountCommandPort, ProviderChannelMessageLookupPort, ProviderSecretBindingCommandPort,
-};
+use crate::platform::communications::ProviderChannelMessageLookupPort;
 
 #[derive(Clone)]
 pub struct WhatsappWebStore {

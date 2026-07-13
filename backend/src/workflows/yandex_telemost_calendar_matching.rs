@@ -1,3 +1,4 @@
+use hermes_events_api::{EventEnvelope, StoredEventEnvelope};
 use std::collections::HashSet;
 
 use serde::Deserialize;
@@ -8,10 +9,10 @@ use thiserror::Error;
 use crate::domains::calendar::core::{CalendarCoreError, EventParticipantPort, EventRelationPort};
 use crate::domains::calendar::events::{CalendarError, CalendarEventQueryPort};
 use crate::platform::events::bus::yandex_telemost_event_types;
-use crate::platform::events::{EventEnvelope, EventStoreError, StoredEventEnvelope};
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationPort, ObservationStoreError,
-};
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 pub const YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER: &str = "yandex_telemost_calendar_matching";
 pub const YANDEX_TELEMOST_CALENDAR_MATCHING_PROJECTION: &str = "yandex_telemost_calendar_matching";
@@ -80,7 +81,7 @@ pub async fn project_yandex_telemost_calendar_matching(
         return Ok(());
     };
 
-    let observation = ObservationPort::new(pool.clone())
+    let observation = ObservationStore::new(pool.clone())
         .capture(
             &NewObservation::new(
                 "CALENDAR_EVENT",
@@ -154,7 +155,7 @@ async fn project_yandex_telemost_cohosts_into_calendar(
         .filter(|email| !email.is_empty())
         .collect::<HashSet<_>>();
 
-    let observation_store = ObservationPort::new(pool.clone());
+    let observation_store = ObservationStore::new(pool.clone());
     for cohost in cohosts {
         let email = cohost.email.trim().to_ascii_lowercase();
         if email.is_empty() || known_emails.contains(&email) {

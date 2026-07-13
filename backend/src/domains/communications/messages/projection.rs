@@ -1,11 +1,11 @@
 use serde_json::{Map, Value, json};
 
-use crate::domains::communications::core::StoredRawCommunicationRecord;
 use crate::domains::communications::storage::LocalCommunicationBlobStore;
 use crate::platform::communications::imap_mailbox_stream_id;
 use crate::platform::communications::rfc822::{
     ParsedCommunicationSourceMessage, parse_rfc822_message,
 };
+use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 
 use super::errors::MessageProjectionError;
 use super::ids::message_id;

@@ -2,20 +2,31 @@ use super::super::*;
 use super::database::database_pool;
 use std::sync::Arc;
 
+use crate::app::api_support::stores::domain_stores::{api_audit_log, event_store};
+
+use crate::application::provider_runtime_services::{
+    TelegramProviderRuntimeApplicationService, WhatsAppProviderRuntimeRef,
+    WhatsappProviderRuntimeApplicationService, YandexTelemostProviderRuntimeApplicationService,
+    ZoomProviderRuntimeApplicationService,
+    telegram_provider_runtime_service as build_telegram_provider_runtime_service,
+    telegram_provider_runtime_store, whatsapp_provider_runtime,
+    whatsapp_provider_runtime_service as build_whatsapp_provider_runtime_service,
+    yandex_telemost_provider_runtime_service as build_yandex_telemost_provider_runtime_service,
+    zoom_provider_runtime_service as build_zoom_provider_runtime_service,
+};
+
 fn build_telegram_provider_store(
     state: &AppState,
-) -> Result<crate::application::TelegramProviderRuntimeStore, ApiError> {
-    Ok(crate::application::telegram_provider_runtime_store(
-        database_pool(state)?,
-    ))
+) -> Result<crate::integrations::telegram::client::TelegramStore, ApiError> {
+    Ok(telegram_provider_runtime_store(database_pool(state)?))
 }
 
 pub(crate) fn telegram_provider_runtime_service(
     state: &AppState,
-) -> Result<crate::application::TelegramProviderRuntimeApplicationService, ApiError> {
-    Ok(crate::application::telegram_provider_runtime_service(
-        database_pool(state)?,
-    ))
+) -> Result<TelegramProviderRuntimeApplicationService, ApiError> {
+    Ok(build_telegram_provider_runtime_service(database_pool(
+        state,
+    )?))
 }
 
 pub(crate) fn telegram_secret_reference_store(
@@ -50,11 +61,11 @@ pub(crate) fn telegram_runtime_use_case_context(
         crate::application::telegram_runtime::TelegramRuntimeUseCaseContext::new(
             crate::application::telegram_runtime::TelegramRuntimeUseCaseStores {
                 provider_account_store:
-                    crate::domains::communications::core::CommunicationProviderAccountStore::new(
+                    hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
                         pool.clone(),
                     ),
                 provider_secret_binding_store:
-                    crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                    hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
                         pool.clone(),
                     ),
                 telegram_store: build_telegram_provider_store(state)?,
@@ -102,26 +113,22 @@ pub(crate) fn telegram_fixture_ingest_service(
     )
 }
 
-fn build_whatsapp_provider_store(
-    state: &AppState,
-) -> Result<crate::application::WhatsAppProviderRuntimeRef, ApiError> {
-    Ok(crate::application::whatsapp_provider_runtime(
-        database_pool(state)?,
-    ))
+fn build_whatsapp_provider_store(state: &AppState) -> Result<WhatsAppProviderRuntimeRef, ApiError> {
+    Ok(whatsapp_provider_runtime(database_pool(state)?))
 }
 
 pub(crate) fn whatsapp_provider_runtime_service(
     state: &AppState,
-) -> Result<crate::application::WhatsappProviderRuntimeApplicationService, ApiError> {
-    Ok(crate::application::whatsapp_provider_runtime_service(
-        database_pool(state)?,
-    ))
+) -> Result<WhatsappProviderRuntimeApplicationService, ApiError> {
+    Ok(build_whatsapp_provider_runtime_service(database_pool(
+        state,
+    )?))
 }
 
 pub(crate) fn zoom_provider_runtime_service(
     state: &AppState,
-) -> Result<crate::application::ZoomProviderRuntimeApplicationService, ApiError> {
-    Ok(crate::application::zoom_provider_runtime_service(
+) -> Result<ZoomProviderRuntimeApplicationService, ApiError> {
+    Ok(build_zoom_provider_runtime_service(
         database_pool(state)?,
         state.event_bus.clone(),
     ))
@@ -135,17 +142,17 @@ pub(crate) fn yandex_telemost_secret_reference_store(
 
 pub(crate) fn yandex_telemost_provider_runtime_store(
     state: &AppState,
-) -> Result<crate::integrations::yandex_telemost::client::YandexTelemostStore, ApiError> {
+) -> Result<crate::integrations::yandex_telemost::client::store::YandexTelemostStore, ApiError> {
     let pool = database_pool(state)?;
     Ok(
-        crate::integrations::yandex_telemost::client::YandexTelemostStore::new(
+        crate::integrations::yandex_telemost::client::store::YandexTelemostStore::new(
             Arc::new(
-                crate::domains::communications::core::CommunicationProviderAccountStore::new(
+                hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
                     pool.clone(),
                 ),
             ),
             Arc::new(
-                crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
                     pool.clone(),
                 ),
             ),
@@ -157,13 +164,11 @@ pub(crate) fn yandex_telemost_provider_runtime_store(
 
 pub(crate) fn yandex_telemost_provider_runtime_service(
     state: &AppState,
-) -> Result<crate::application::YandexTelemostProviderRuntimeApplicationService, ApiError> {
-    Ok(
-        crate::application::yandex_telemost_provider_runtime_service(
-            database_pool(state)?,
-            state.event_bus.clone(),
-        ),
-    )
+) -> Result<YandexTelemostProviderRuntimeApplicationService, ApiError> {
+    Ok(build_yandex_telemost_provider_runtime_service(
+        database_pool(state)?,
+        state.event_bus.clone(),
+    ))
 }
 
 pub(crate) fn whatsapp_fixture_ingest_service(
@@ -199,12 +204,12 @@ pub(crate) fn account_setup_service(
         SecretReferenceStore::new(pool.clone()),
         state.vault.clone(),
         Arc::new(
-            crate::domains::communications::core::CommunicationProviderAccountStore::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
                 pool.clone(),
             ),
         ),
         Arc::new(
-            crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
                 pool,
             ),
         ),

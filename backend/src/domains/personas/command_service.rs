@@ -4,9 +4,9 @@ use sha2::{Digest, Sha256};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
-};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 use super::api::{Persona, PersonaProjectionError, PersonaProjectionStore};
 use super::core::{
@@ -932,7 +932,7 @@ impl PersonaCommandService {
         payload: Value,
         source_ref: String,
         provenance: Value,
-    ) -> Result<crate::platform::observations::Observation, PersonaCommandServiceError> {
+    ) -> Result<hermes_observations_api::models::Observation, PersonaCommandServiceError> {
         Ok(ObservationStore::new(self.pool.clone())
             .capture(
                 &NewObservation::new(
@@ -954,7 +954,7 @@ impl PersonaCommandService {
         payload: Value,
         source_ref: String,
         provenance: Value,
-    ) -> Result<crate::platform::observations::Observation, PersonaCommandServiceError> {
+    ) -> Result<hermes_observations_api::models::Observation, PersonaCommandServiceError> {
         Ok(ObservationStore::new(self.pool.clone())
             .capture(
                 &NewObservation::new(

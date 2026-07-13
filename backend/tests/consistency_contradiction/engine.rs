@@ -1,6 +1,9 @@
 use hermes_hub_backend::engines::consistency::{
-    AcceptedClaim, ConsistencyEngine, ContradictionReviewState, ContradictionSeverity,
-    ContradictionSourceKind, EvidenceClaimExtractionInput, NewEvidenceClaim,
+    engine::ConsistencyEngine,
+    models::{
+        AcceptedClaim, ContradictionReviewState, ContradictionSeverity, ContradictionSourceKind,
+        EvidenceClaimExtractionInput, NewEvidenceClaim,
+    },
 };
 use serde_json::json;
 

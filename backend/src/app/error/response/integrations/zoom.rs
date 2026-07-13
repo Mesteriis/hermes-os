@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 
-use crate::application::provider_runtime_contracts::ZoomError;
+use crate::integrations::zoom::client::errors::ZoomError;
 
 use super::super::ErrorParts;
 

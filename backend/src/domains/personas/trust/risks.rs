@@ -1,7 +1,7 @@
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 
-use crate::engines::risk::RiskEngine;
+use crate::engines::risk::engine::RiskEngine;
 
 use super::errors::PersonaTrustError;
 use super::health_projection::sync_persona_health_status_in_transaction;

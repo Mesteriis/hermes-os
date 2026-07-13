@@ -2,21 +2,20 @@ use serde::Serialize;
 use serde_json::Value;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
+use std::sync::Arc;
 use thiserror::Error;
 
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationProviderAccountPort,
-    CommunicationProviderKind as DomainCommunicationProviderKind, ProviderAccount,
-};
-use crate::domains::personas::service::{
+use crate::domains::personas::command_service::{
     PersonaCommandService, PersonaCommandServiceError, ProviderAddressBookEntryPersonaCommand,
 };
 use crate::platform::communications::{
     AddressBookProviderEntry, AddressBookProviderFetchRequest, AddressBookProviderSyncError,
-    AddressBookProviderUpsertRequest,
-    CommunicationProviderKind as PlatformCommunicationProviderKind,
-    SharedAddressBookProviderSyncPort,
+    AddressBookProviderUpsertRequest, SharedAddressBookProviderSyncPort,
 };
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, ProviderAccount, ProviderAccountLookupPort, ProviderAccountPortError,
+};
+use hermes_communications_postgres::errors::CommunicationIngestionError;
 
 const ADDRESS_BOOK_SYNC_POLL_INTERVAL_SECONDS: i64 = 3600;
 const ADDRESS_BOOK_SYNC_PAGE_SIZE: u16 = 500;
@@ -29,6 +28,9 @@ pub enum AddressBookSyncError {
 
     #[error(transparent)]
     Communication(#[from] CommunicationIngestionError),
+
+    #[error(transparent)]
+    ProviderAccount(#[from] ProviderAccountPortError),
 
     #[error("address book sync provider account was not found: {0}")]
     AccountNotFound(String),
@@ -47,13 +49,19 @@ pub enum AddressBookSyncError {
 pub struct AddressBookSyncService {
     pool: PgPool,
     provider_sync: SharedAddressBookProviderSyncPort,
+    provider_accounts: Arc<dyn ProviderAccountLookupPort>,
 }
 
 impl AddressBookSyncService {
-    pub fn new(pool: PgPool, provider_sync: SharedAddressBookProviderSyncPort) -> Self {
+    pub fn new(
+        pool: PgPool,
+        provider_sync: SharedAddressBookProviderSyncPort,
+        provider_accounts: Arc<dyn ProviderAccountLookupPort>,
+    ) -> Self {
         Self {
             pool,
             provider_sync,
+            provider_accounts,
         }
     }
 
@@ -83,7 +91,8 @@ impl AddressBookSyncService {
         account_id: &str,
         trigger: AddressBookSyncTrigger,
     ) -> Result<AddressBookSyncAccountReport, AddressBookSyncError> {
-        let account = CommunicationProviderAccountPort::new(self.pool.clone())
+        let account = self
+            .provider_accounts
             .get(account_id)
             .await?
             .ok_or_else(|| AddressBookSyncError::AccountNotFound(account_id.to_owned()))?;
@@ -139,7 +148,7 @@ impl AddressBookSyncService {
                 .provider_sync
                 .fetch_entries(AddressBookProviderFetchRequest {
                     account_id: account.account_id.clone(),
-                    provider_kind: platform_provider_kind(account.provider_kind),
+                    provider_kind: account.provider_kind,
                     provider_config: account.config.clone(),
                     page_token,
                     page_size: ADDRESS_BOOK_SYNC_PAGE_SIZE,
@@ -241,7 +250,7 @@ impl AddressBookSyncService {
                 .provider_sync
                 .upsert_entry(AddressBookProviderUpsertRequest {
                     account_id: account.account_id.clone(),
-                    provider_kind: platform_provider_kind(account.provider_kind),
+                    provider_kind: account.provider_kind,
                     provider_address_book_entry_id: address_book_entry
                         .provider_address_book_entry_id
                         .clone(),
@@ -777,39 +786,9 @@ fn bidirectional_address_book_sync_enabled(account: &ProviderAccount) -> bool {
 
 fn remote_address_book_write_allowed(account: &ProviderAccount) -> bool {
     bidirectional_address_book_sync_enabled(account)
-        && account.provider_kind == DomainCommunicationProviderKind::Gmail
+        && account.provider_kind == CommunicationProviderKind::Gmail
         && requested_scopes_include(&account.config, GOOGLE_CONTACTS_WRITE_SCOPE)
         && json_bool(&account.config, "address_book_remote_write_enabled").unwrap_or(false)
-}
-
-fn platform_provider_kind(
-    provider_kind: DomainCommunicationProviderKind,
-) -> PlatformCommunicationProviderKind {
-    match provider_kind {
-        DomainCommunicationProviderKind::Gmail => PlatformCommunicationProviderKind::Gmail,
-        DomainCommunicationProviderKind::Icloud => PlatformCommunicationProviderKind::Icloud,
-        DomainCommunicationProviderKind::Imap => PlatformCommunicationProviderKind::Imap,
-        DomainCommunicationProviderKind::TelegramUser => {
-            PlatformCommunicationProviderKind::TelegramUser
-        }
-        DomainCommunicationProviderKind::TelegramBot => {
-            PlatformCommunicationProviderKind::TelegramBot
-        }
-        DomainCommunicationProviderKind::WhatsappWeb => {
-            PlatformCommunicationProviderKind::WhatsappWeb
-        }
-        DomainCommunicationProviderKind::WhatsappBusinessCloud => {
-            PlatformCommunicationProviderKind::WhatsappBusinessCloud
-        }
-        DomainCommunicationProviderKind::ZulipBot => PlatformCommunicationProviderKind::ZulipBot,
-        DomainCommunicationProviderKind::ZoomUser => PlatformCommunicationProviderKind::ZoomUser,
-        DomainCommunicationProviderKind::ZoomServerToServer => {
-            PlatformCommunicationProviderKind::ZoomServerToServer
-        }
-        DomainCommunicationProviderKind::YandexTelemostUser => {
-            PlatformCommunicationProviderKind::YandexTelemostUser
-        }
-    }
 }
 
 fn connected_services_include(config: &Value, service: &str) -> bool {
@@ -904,12 +883,12 @@ mod tests {
     #[test]
     fn platform_provider_kind_maps_domain_provider_kind() {
         assert_eq!(
-            platform_provider_kind(DomainCommunicationProviderKind::Gmail),
-            PlatformCommunicationProviderKind::Gmail
+            CommunicationProviderKind::Gmail,
+            CommunicationProviderKind::Gmail
         );
         assert_eq!(
-            platform_provider_kind(DomainCommunicationProviderKind::WhatsappWeb),
-            PlatformCommunicationProviderKind::WhatsappWeb
+            CommunicationProviderKind::WhatsappWeb,
+            CommunicationProviderKind::WhatsappWeb
         );
     }
 
@@ -1006,7 +985,7 @@ mod tests {
     fn provider_account(config: Value) -> ProviderAccount {
         ProviderAccount {
             account_id: "provider-account".to_owned(),
-            provider_kind: DomainCommunicationProviderKind::Gmail,
+            provider_kind: CommunicationProviderKind::Gmail,
             display_name: "Gmail".to_owned(),
             external_account_id: "owner@example.com".to_owned(),
             config,

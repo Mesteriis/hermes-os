@@ -1,9 +1,9 @@
 use super::super::*;
+use crate::domains::communications::command_service::CommunicationCommandService;
 use crate::domains::communications::saved_searches::{
     CommunicationSavedSearch, CommunicationSavedSearchListQuery, CommunicationSavedSearchStore,
     NewCommunicationSavedSearch, UpdateCommunicationSavedSearch,
 };
-use crate::domains::communications::service::CommunicationCommandService;
 
 #[derive(Deserialize)]
 pub(crate) struct SavedSearchesQuery {
@@ -97,7 +97,7 @@ fn saved_search_store(state: &AppState) -> Result<CommunicationSavedSearchStore,
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(crate::app::api_support::app_store::<
+    Ok(crate::app::api_support::stores::domain_stores::app_store::<
         CommunicationSavedSearchStore,
     >(pool))
 }

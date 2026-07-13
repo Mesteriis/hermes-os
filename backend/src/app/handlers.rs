@@ -17,8 +17,3 @@ pub(crate) mod review;
 pub(crate) mod settings;
 pub(crate) mod signal_hub;
 pub(crate) mod tasks;
-pub(crate) mod telegram;
-pub(crate) mod whatsapp;
-pub(crate) mod yandex_telemost;
-pub(crate) mod zoom;
-pub(crate) mod zulip;

@@ -3,7 +3,7 @@ use serde_json::json;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::models::TelegramChat;
 use crate::integrations::telegram::tdjson::TelegramTdlibChatPositionSnapshot;
-use crate::platform::events::EventBus;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
 
 use super::super::publish_chat_position_event;
@@ -46,7 +46,7 @@ async fn publish_chat_position_event_reconciles_archive_command_when_provider_ch
     .await
     .expect("seed archive command");
 
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     publish_chat_position_event(
         &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
@@ -133,7 +133,7 @@ async fn publish_chat_position_event_reconciles_unarchive_command_when_provider_
     .await
     .expect("seed unarchive command");
 
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     publish_chat_position_event(
         &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
@@ -219,7 +219,7 @@ async fn publish_chat_position_event_marks_archive_command_as_mismatch_when_prov
     .await
     .expect("seed archive mismatch command");
 
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     publish_chat_position_event(
         &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
@@ -319,7 +319,7 @@ async fn publish_chat_position_event_marks_unarchive_command_as_mismatch_when_pr
     .await
     .expect("seed unarchive mismatch command");
 
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     publish_chat_position_event(
         &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,

@@ -1,8 +1,9 @@
 use chrono::Utc;
+use hermes_events_api::EventEnvelope;
 use serde_json::Value;
 
-use crate::platform::events::{EventEnvelope, EventStore};
-use crate::platform::observations::materialize_review_transition_link_in_transaction;
+use hermes_events_postgres::store::EventStore;
+use hermes_observations_postgres::review_links::materialize_review_transition_link_in_transaction;
 
 use super::super::constants::{
     PERSONA_IDENTITY_REVIEW_PREFIX, is_persona_identity_review_event_type,

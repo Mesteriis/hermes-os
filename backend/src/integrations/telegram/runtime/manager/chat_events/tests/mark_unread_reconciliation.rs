@@ -4,7 +4,7 @@ use testkit::context::TestContext;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::models::TelegramChat;
 use crate::integrations::telegram::tdjson::TelegramTdlibChatMarkedAsUnreadSnapshot;
-use crate::platform::events::EventBus;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
 
 use super::super::publish_chat_marked_as_unread_event;
@@ -47,7 +47,7 @@ async fn publish_chat_marked_as_unread_event_reconciles_mark_unread_command_and_
     .await
     .expect("seed mark_unread command");
 
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     publish_chat_marked_as_unread_event(
         &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
@@ -131,7 +131,7 @@ async fn publish_chat_marked_as_unread_event_marks_mark_unread_as_mismatch_when_
     .await
     .expect("seed mark_unread command");
 
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     publish_chat_marked_as_unread_event(
         &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,

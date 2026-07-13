@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::engines::obligation::ObligationCandidate;
+use crate::engines::obligation::models::ObligationCandidate;
 
 use super::constants::{
     OBLIGATION_CANDIDATE_METADATA_KEY, REVIEW_TEXT_SNIPPET_CHARS, TITLE_PREVIEW_CHARS,

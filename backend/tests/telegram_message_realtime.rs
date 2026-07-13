@@ -1,19 +1,21 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use std::sync::Arc;
 
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, CommunicationProviderAccountStore, CommunicationProviderKind,
-    CommunicationProviderSecretBindingStore, NewProviderAccount,
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_events_api::EventLogQuery;
+use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::domains::communications::messages::{
     ProviderChannelMessageStore, consume_accepted_signal_event, project_provider_observation_event,
 };
-use hermes_hub_backend::domains::signal_hub::{
-    dispatch_telegram_raw_signal, process_signal_hub_raw_event,
-};
+use hermes_hub_backend::domains::signal_hub::service::process_signal_hub_raw_event;
+use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
 use hermes_hub_backend::integrations::telegram::client::lifecycle::{
     self, reconcile_delete_commands_from_provider_state,
     reconcile_edit_commands_from_provider_state,
@@ -23,11 +25,11 @@ use hermes_hub_backend::integrations::telegram::client::lifecycle::{
 use hermes_hub_backend::integrations::telegram::client::{
     NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramMessage, TelegramStore,
 };
+
 use hermes_hub_backend::platform::communications::{
     EventStoreProviderMessageObservationEventPort, ProviderMessageObservationEvent,
     ProviderMessageObservationEventPort,
 };
-use hermes_hub_backend::platform::events::{EventLogQuery, EventStore};
 use testkit::context::TestContext;
 
 #[tokio::test]
@@ -536,7 +538,7 @@ fn telegram_store(pool: &sqlx::PgPool) -> TelegramStore {
         Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
         Arc::new(
-            hermes_hub_backend::domains::communications::core::CommunicationIngestionStore::new(
+            hermes_communications_postgres::store::CommunicationIngestionStore::new(
                 pool.clone(),
             ),
         ),

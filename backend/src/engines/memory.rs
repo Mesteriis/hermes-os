@@ -1,17 +1,17 @@
 mod cards;
 mod context;
 mod cross_domain;
-mod errors;
+pub mod errors;
 mod facts;
 mod gaps;
-mod models;
+pub mod models;
 mod stale;
 mod validation;
 
 use chrono::{DateTime, Utc};
 
-pub use errors::MemoryEngineError;
-pub use models::{
+use errors::MemoryEngineError;
+use models::{
     CrossDomainMemoryContextPack, MemoryCardDraft, MemoryContextItem, MemoryContextPack,
     MemoryContextSource, MemoryCrossDomainContextItem, MemoryEntityRef, MemoryFactDraft,
     MemoryFactState, MemoryGap, MemoryStaleCandidate,

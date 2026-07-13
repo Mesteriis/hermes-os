@@ -1,11 +1,15 @@
 use chrono::Utc;
+use hermes_events_api::{EventEnvelope, NewEventEnvelope};
+use hermes_signal_hub_postgres::raw_signals::adapter::RawSignalStore;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::postgres::PgPool;
+use std::sync::Arc;
 
 use super::service::signal_hub_raw_dispatcher_allows_processing;
-use super::{SignalHubError, SignalHubSignalService, SignalHubStore, SignalProcessingOutcome};
-use crate::platform::events::{EventEnvelope, EventStore, NewEventEnvelope};
+use super::service::{SignalHubSignalService, SignalProcessingOutcome};
+use super::store::{SignalHubError, SignalHubStore};
+use hermes_events_postgres::store::EventStore;
 
 pub async fn dispatch_ai_helper_signal(
     pool: PgPool,
@@ -17,7 +21,7 @@ pub async fn dispatch_ai_helper_signal(
     correlation_id: Option<&str>,
 ) -> Result<Option<EventEnvelope>, SignalHubError> {
     let event_store = EventStore::new(pool.clone());
-    let signal_store = SignalHubStore::new(pool);
+    let signal_store = SignalHubStore::new(pool.clone());
     signal_store.restore_system_sources().await?;
     let raw_signal = build_ai_helper_signal(
         event_kind,
@@ -45,7 +49,8 @@ pub async fn dispatch_ai_helper_signal(
         return Ok(None);
     }
 
-    let service = SignalHubSignalService::new(signal_store, event_store.clone());
+    let service =
+        SignalHubSignalService::new(Arc::new(RawSignalStore::new(pool)), event_store.clone());
     match service.process_raw_signal(&raw_event).await? {
         SignalProcessingOutcome::Accepted { event_id } => {
             Ok(event_store.get_by_id(&event_id).await?)

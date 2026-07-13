@@ -89,8 +89,9 @@ compatibility matrix. Do not add Redis for Signal Hub events.
 ## Current Decision Summary
 
 - Build as modular monolith first.
-- No Redis sidecar.
-- No Telegram/Mail/WhatsApp sidecar processes for the initial implementation.
+- No Redis event substrate.
+- Provider connectors are optional ADR-0181 runtime topology, not Signal Hub
+  ownership; Telegram and WhatsApp remain in-process until connector gates pass.
 - NATS JetStream is the production event transport target from the start.
 - PostgreSQL `event_log` remains the audit/recovery source of truth.
 - ConnectRPC + Protobuf are the canonical API contract target from the start.

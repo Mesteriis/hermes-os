@@ -5,20 +5,28 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::app::{ApiError, AppState};
-use crate::application::review_promotion::ReviewPromotionService;
 use crate::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxService, ReviewInboxStore, ReviewItem,
     ReviewItemEvidenceRecord, ReviewItemKind, ReviewItemStatus, ReviewPromotionTarget,
 };
 use crate::engines::attention::{
-    AttentionCandidate, AttentionCard, AttentionEngine, AttentionEvidenceRef,
-    AttentionRelatedEntity, AttentionSuggestedAction,
+    engine::AttentionEngine,
+    models::{
+        AttentionCandidate, AttentionCard, AttentionEvidenceRef, AttentionRelatedEntity,
+        AttentionSuggestedAction,
+    },
 };
 use crate::engines::context_packs::{
-    ContextPack, ContextPackStore, ReviewContextPackEvidence, ReviewContextPackInput,
-    ReviewContextPackItem, build_review_context_pack,
+    models::ContextPack,
+    review::{
+        ReviewContextPackEvidence, ReviewContextPackInput, ReviewContextPackItem,
+        build_review_context_pack,
+    },
+    store::ContextPackStore,
 };
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use crate::workflows::review_promotion::ReviewPromotionService;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 
 const DEFAULT_REVIEW_LIMIT: i64 = 50;
 const MIN_REVIEW_LIMIT: i64 = 1;
@@ -219,31 +227,32 @@ pub(crate) async fn post_v1_review_item_promote(
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let observation = crate::app::api_support::app_store::<ObservationStore>(pool.clone())
-        .capture(
-            &NewObservation::new(
-                "REVIEW_TRANSITION",
-                ObservationOriginKind::Manual,
-                Utc::now(),
-                json!({
-                    "review_item_id": review_item_id,
-                    "operation": "review_item_promote",
-                    "target_domain": target.target_domain,
-                    "target_entity_kind": target.target_entity_kind,
-                    "target_entity_id": target.target_entity_id,
-                }),
-                format!("review-item://{review_item_id}/promote"),
+    let observation =
+        crate::app::api_support::stores::domain_stores::app_store::<ObservationStore>(pool.clone())
+            .capture(
+                &NewObservation::new(
+                    "REVIEW_TRANSITION",
+                    ObservationOriginKind::Manual,
+                    Utc::now(),
+                    json!({
+                        "review_item_id": review_item_id,
+                        "operation": "review_item_promote",
+                        "target_domain": target.target_domain,
+                        "target_entity_kind": target.target_entity_kind,
+                        "target_entity_id": target.target_entity_id,
+                    }),
+                    format!("review-item://{review_item_id}/promote"),
+                )
+                .provenance(json!({
+                    "captured_by": "review_api.post_v1_review_item_promote",
+                    "endpoint": "post_v1_review_item_promote",
+                })),
             )
-            .provenance(json!({
-                "captured_by": "review_api.post_v1_review_item_promote",
-                "endpoint": "post_v1_review_item_promote",
-            })),
-        )
-        .await
-        .map_err(|error| {
-            tracing::error!(error = %error, "review item promote observation capture failed");
-            ApiError::InvalidReviewQuery("review item promote observation capture failed")
-        })?;
+            .await
+            .map_err(|error| {
+                tracing::error!(error = %error, "review item promote observation capture failed");
+                ApiError::InvalidReviewQuery("review item promote observation capture failed")
+            })?;
 
     let item = ReviewPromotionService::new(pool.clone())
         .promote_with_observation(
@@ -290,9 +299,9 @@ fn review_store(state: &AppState) -> Result<ReviewInboxStore, ApiError> {
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    Ok(crate::app::api_support::app_store::<ReviewInboxStore>(
-        pool.clone(),
-    ))
+    Ok(crate::app::api_support::stores::domain_stores::app_store::<
+        ReviewInboxStore,
+    >(pool.clone()))
 }
 
 async fn list_review_items_for_query(
@@ -457,7 +466,8 @@ async fn enrich_review_pack_evidence_with_observations(
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    let observation_store = crate::app::api_support::app_store::<ObservationStore>(pool.clone());
+    let observation_store =
+        crate::app::api_support::stores::domain_stores::app_store::<ObservationStore>(pool.clone());
 
     let mut enriched = Vec::with_capacity(evidence.len());
     for mut record in evidence {

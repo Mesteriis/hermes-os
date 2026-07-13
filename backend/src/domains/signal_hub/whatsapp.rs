@@ -1,12 +1,16 @@
+use hermes_events_api::{EventEnvelope, NewEventEnvelope};
+use hermes_signal_hub_postgres::raw_signals::adapter::RawSignalStore;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::postgres::PgPool;
+use std::sync::Arc;
 
 use super::service::signal_hub_raw_dispatcher_allows_processing;
-use super::{SignalHubError, SignalHubSignalService, SignalHubStore, SignalProcessingOutcome};
-use crate::platform::communications::StoredRawCommunicationRecord;
-use crate::platform::events::{EventEnvelope, EventStore, NewEventEnvelope};
-use crate::platform::observations::observation_captured_event_id;
+use super::service::{SignalHubSignalService, SignalProcessingOutcome};
+use super::store::{SignalHubError, SignalHubStore};
+use hermes_communications_api::evidence::StoredRawCommunicationRecord;
+use hermes_events_postgres::store::EventStore;
+use hermes_observations_postgres::store::observation_captured_event_id;
 
 pub async fn dispatch_whatsapp_raw_signal(
     pool: PgPool,
@@ -23,12 +27,13 @@ pub async fn dispatch_whatsapp_raw_signal(
         .await?
         .ok_or_else(|| SignalHubError::InvalidRawSignalEventType(raw_signal.event_type.clone()))?;
 
-    let signal_store = SignalHubStore::new(pool);
+    let signal_store = SignalHubStore::new(pool.clone());
     if !signal_hub_raw_dispatcher_allows_processing(&signal_store).await? {
         return Ok(None);
     }
 
-    let service = SignalHubSignalService::new(signal_store, event_store.clone());
+    let service =
+        SignalHubSignalService::new(Arc::new(RawSignalStore::new(pool)), event_store.clone());
     match service.process_raw_signal(&raw_event).await? {
         SignalProcessingOutcome::Accepted { event_id } => {
             Ok(event_store.get_by_id(&event_id).await?)

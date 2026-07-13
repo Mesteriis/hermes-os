@@ -1,4 +1,4 @@
-use crate::platform::communications::ProviderAccount;
+use hermes_communications_api::accounts::ProviderAccount;
 
 use super::super::errors::TelegramError;
 use super::super::store::TelegramStore;

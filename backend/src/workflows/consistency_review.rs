@@ -8,14 +8,15 @@ use crate::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxPort, ReviewItemKind,
     ReviewItemStatus,
 };
-use crate::engines::consistency::evidence::link_consistency_entity_in_transaction;
 use crate::engines::consistency::{
-    ConsistencyError, ContradictionObservation, ContradictionObservationPort,
-    ContradictionReviewState,
+    errors::ConsistencyError,
+    evidence::link_consistency_entity_in_transaction,
+    models::{ContradictionObservation, ContradictionReviewState},
+    store::ContradictionObservationStore,
 };
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationPort, ObservationPortError,
-};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 #[derive(Clone)]
 pub struct ContradictionReviewService {
@@ -33,7 +34,7 @@ impl ContradictionReviewService {
         review_state: ContradictionReviewState,
         resolution: Option<&str>,
     ) -> Result<ContradictionObservation, ContradictionReviewServiceError> {
-        let review_observation = ObservationPort::new(self.pool.clone())
+        let review_observation = ObservationStore::new(self.pool.clone())
             .capture(
                 &NewObservation::new(
                     "REVIEW_TRANSITION",
@@ -55,7 +56,7 @@ impl ContradictionReviewService {
             )
             .await?;
 
-        let observation = ContradictionObservationPort::new(self.pool.clone())
+        let observation = ContradictionObservationStore::new(self.pool.clone())
             .set_review_state_with_observation(
                 observation_id,
                 review_state,
@@ -126,8 +127,8 @@ async fn ensure_contradiction_review_item_in_transaction(
 async fn capture_evidence_observation_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     contradiction: &ContradictionObservation,
-) -> Result<crate::platform::observations::Observation, ObservationPortError> {
-    ObservationPort::capture_in_transaction(
+) -> Result<hermes_observations_api::models::Observation, ObservationStoreError> {
+    ObservationStore::capture_in_transaction(
         transaction,
         &NewObservation::new(
             "CONTRADICTION_OBSERVATION",
@@ -202,7 +203,7 @@ pub enum ContradictionReviewWorkflowError {
     ReviewInbox(#[from] ReviewInboxError),
 
     #[error(transparent)]
-    Observation(#[from] ObservationPortError),
+    Observation(#[from] ObservationStoreError),
 }
 
 #[derive(Debug, Error)]
@@ -211,7 +212,7 @@ pub enum ContradictionReviewServiceError {
     Consistency(#[from] ConsistencyError),
 
     #[error(transparent)]
-    Observation(#[from] ObservationPortError),
+    Observation(#[from] ObservationStoreError),
 
     #[error(transparent)]
     ReviewWorkflow(#[from] ContradictionReviewWorkflowError),

@@ -74,10 +74,10 @@ pub(crate) async fn post_v1_bilingual_reply_flow(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    crate::app::api_support::require_mail_ai_content_egress(
+    crate::app::api_support::stores::ai_runtime::require_mail_ai_content_egress(
         &state,
         &msg.account_id,
-        crate::app::api_support::MailAiContentEgressKind::Body,
+        crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::Body,
     )
     .await?;
     let detection =
@@ -208,7 +208,7 @@ async fn bilingual_translation_step_with_signal(
     match service.translate(text, target_language).await {
         Ok(Some(translation)) => {
             if let Some(pool) = state.database.pool() {
-                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+                crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
                     pool.clone(),
                     signal.event_kind,
                     message_id,

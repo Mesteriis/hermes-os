@@ -11,7 +11,7 @@ use super::core::{
     OrgCoreError, OrgDomainStore, OrgIdentityStore, link_email_domain_projection_in_transaction,
     link_organization_in_transaction,
 };
-use crate::platform::observations::ObservationStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Organization {

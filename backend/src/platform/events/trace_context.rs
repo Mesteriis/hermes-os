@@ -1,5 +1,4 @@
-use super::builder::NewEventEnvelopeBuilder;
-use super::models::{EventEnvelope, StoredEventEnvelope};
+use hermes_events_api::{EventEnvelope, NewEventEnvelopeBuilder, StoredEventEnvelope};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TraceContext {

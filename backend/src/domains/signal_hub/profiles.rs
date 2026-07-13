@@ -1,12 +1,13 @@
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 
 use super::store::{
     SignalHubError, SignalHubStore, SignalProfile, SignalProfileCreate, SignalProfilePolicy,
     SignalProfileSummary, SignalProfileUpdate,
 };
-use crate::platform::events::{EventStore, NewEventEnvelope};
 use crate::platform::settings::ApplicationSettingsStore;
+use hermes_events_postgres::store::EventStore;
 
 const ACTIVE_PROFILE_SETTING_KEY: &str = "signal_hub.active_profile";
 

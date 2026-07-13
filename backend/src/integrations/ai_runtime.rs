@@ -3,8 +3,10 @@ use std::pin::Pin;
 
 use thiserror::Error;
 
-use crate::integrations::ollama::client::{OllamaClient, OllamaError};
-use crate::integrations::omniroute::client::{OmniRouteClient, OmniRouteError};
+use crate::integrations::ollama::client::OllamaClient;
+use crate::integrations::ollama::client::error::OllamaError;
+use crate::integrations::omniroute::client::OmniRouteClient;
+use crate::integrations::omniroute::client::error::OmniRouteError;
 use crate::platform::ai_runtime::{AiChatResult, AiEmbedResult, AiRuntimePort, AiRuntimePortError};
 
 #[derive(Clone)]

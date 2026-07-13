@@ -1,3 +1,8 @@
+use hermes_communications_api::accounts::ProviderSecretBindingCommandPort;
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountCommandPort, ProviderAccountSecretPurpose,
+};
+use hermes_events_api::NewEventEnvelope;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
@@ -11,12 +16,9 @@ use url::form_urlencoded::byte_serialize;
 use crate::platform::calls::{
     CallIntelligenceStore, NewCallTranscript, NewProviderCall, TranscriptStatus,
 };
-use crate::platform::communications::{
-    DEFAULT_MAIL_SYNC_BLOB_ROOT, NewProviderAccountSecretBinding, ProviderAccountCommandPort,
-    ProviderAccountSecretPurpose, ProviderSecretBindingCommandPort,
-};
+use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::zoom_event_types;
-use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
 use crate::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
@@ -27,15 +29,17 @@ use crate::platform::storage::{
     scan_attachment,
 };
 use crate::vault::{HostVault, SecretEntryContext};
+use hermes_events_postgres::store::EventStore;
 
-use super::{
+use super::errors::ZoomError;
+use super::models::{
     MAX_TRANSCRIPT_FILE_TEXT_BYTES, ZOOM_EXPLICIT_TOKEN_REFRESH_THRESHOLD_SECONDS,
     ZOOM_LIVE_AUTHORIZED_RUNTIME_KIND, ZOOM_MAX_RECORDING_MEDIA_DOWNLOAD_BYTES,
     ZOOM_MAX_TOKEN_REFRESH_THRESHOLD_SECONDS, ZOOM_PROVIDER_KIND, ZOOM_PROVIDER_KIND_STR,
     ZOOM_RUNTIME_KIND, ZOOM_TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS,
     ZOOM_TOKEN_MAINTENANCE_REFRESH_THRESHOLD_SECONDS, ZOOM_TOKEN_ROTATION_REQUIRED_BLOCKER,
     ZoomAccount, ZoomAccountListResponse, ZoomAccountSetupRequest, ZoomAccountSetupResponse,
-    ZoomAuditEventItem, ZoomAuditEventResponse, ZoomAuthShape, ZoomAuthorizationResult, ZoomError,
+    ZoomAuditEventItem, ZoomAuditEventResponse, ZoomAuthShape, ZoomAuthorizationResult,
     ZoomLiveAccountSetupRequest, ZoomMeetingIngestResult, ZoomMeetingObservationRequest,
     ZoomOAuthPendingGrant, ZoomOAuthStartRequest, ZoomOAuthTokenBundle, ZoomOAuthTokenResponse,
     ZoomRecordingImportAuditItem, ZoomRecordingImportAuditResponse,
@@ -64,7 +68,7 @@ pub struct ZoomStore {
     imported_attachment_store: Arc<dyn ImportedAttachmentStoragePort>,
     call_store: CallIntelligenceStore,
     event_store: EventStore,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
     http: reqwest::Client,
 }
 
@@ -89,7 +93,7 @@ impl ZoomStore {
         imported_attachment_store: Arc<dyn ImportedAttachmentStoragePort>,
         call_store: CallIntelligenceStore,
         event_store: EventStore,
-        event_bus: EventBus,
+        event_bus: InMemoryEventBus,
     ) -> Self {
         Self {
             pool,

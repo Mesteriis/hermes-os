@@ -2,11 +2,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 pub(crate) use chrono::Utc;
-pub(crate) use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewIngestionCheckpoint, NewProviderAccount,
-    NewProviderAccountSecretBinding, NewRawCommunicationRecord, ProviderAccountSecretPurpose,
+pub(crate) use hermes_communications_api::evidence::NewIngestionCheckpoint;
+pub(crate) use hermes_communications_postgres::store::CommunicationIngestionStore;
+pub(crate) use hermes_hub_backend::domains::communications::credentials::{
     ProviderCredentialError, ProviderCredentialReader,
 };
+
 pub(crate) use hermes_hub_backend::platform::secrets::{
     InMemorySecretResolver, NewSecretReference, SecretKind, SecretReferenceStore,
     SecretResolutionError, SecretResolver, SecretStoreKind,

@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::platform::observations::ObservationStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 use super::super::evidence::link_mail_entity_in_transaction;
 

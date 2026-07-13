@@ -1,7 +1,7 @@
 use sqlx::migrate::Migrator;
 use sqlx::postgres::PgPool;
 
-use super::errors::EventStoreError;
+use hermes_events_postgres::errors::EventStoreError;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 

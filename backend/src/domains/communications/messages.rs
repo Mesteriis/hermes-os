@@ -2,6 +2,7 @@ mod errors;
 mod ids;
 mod models;
 mod payload;
+pub mod port;
 mod projection;
 mod provider_channel_store;
 mod provider_observation_projection;
@@ -41,4 +42,3 @@ pub use search::{
 };
 pub use states::{LocalMessageState, WorkflowState};
 pub use store::MessageProjectionStore;
-pub use store::MessageProjectionStore as CommunicationMessageProjectionPort;

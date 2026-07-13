@@ -1,10 +1,10 @@
 use chrono::{Duration, Utc};
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use serde_json::json;
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
-};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::integrations::telegram::client::lifecycle;
+
 use testkit::context::TestContext;
 
 #[tokio::test]

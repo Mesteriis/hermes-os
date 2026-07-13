@@ -1,11 +1,10 @@
 pub mod api;
 pub mod brain;
 pub mod candidates;
-mod command_service;
+pub mod command_service;
 pub mod core;
 pub mod health;
 pub mod intelligence;
-pub mod ports;
 pub mod rules;
-pub mod service;
 pub mod sync;
+pub mod workflow_commands;

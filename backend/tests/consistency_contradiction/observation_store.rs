@@ -1,6 +1,9 @@
 use hermes_hub_backend::engines::consistency::{
-    ContradictionObservationStore, ContradictionReviewState, ContradictionSeverity,
-    ContradictionSourceKind, NewContradictionObservation,
+    models::{
+        ContradictionReviewState, ContradictionSeverity, ContradictionSourceKind,
+        NewContradictionObservation,
+    },
+    store::ContradictionObservationStore,
 };
 use serde_json::json;
 

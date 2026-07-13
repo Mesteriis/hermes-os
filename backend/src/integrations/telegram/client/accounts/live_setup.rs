@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 
-use crate::platform::communications::NewProviderAccount;
 use crate::platform::secrets::SecretReferenceStore;
+use hermes_communications_api::accounts::NewProviderAccount;
 
 use super::super::errors::TelegramError;
 use super::super::models::{TelegramAccountSetupResponse, TelegramLiveAccountSetupRequest};

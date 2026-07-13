@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
 use chrono::Utc;
-use hermes_hub_backend::domains::communications::core::{
+use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
+use hermes_events_api::EventLogQuery;
+use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::integrations::zoom::client::{
     ZoomAccountSetupRequest, ZoomMeetingObservationRequest, ZoomParticipantSnapshot, ZoomStore,
 };
 use hermes_hub_backend::platform::calls::CallIntelligenceStore;
-use hermes_hub_backend::platform::events::{EventBus, EventLogQuery, EventStore};
+use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::review_inbox::project_persona_identity_review_event;
 use hermes_hub_backend::workflows::zoom_participant_identity::project_zoom_participant_identity;
@@ -39,7 +41,7 @@ async fn zoom_participant_identity_candidates_flow_into_review_inbox() {
         .await
         .expect("seed display name");
 
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     let zoom_store = ZoomStore::new(
         pool.clone(),
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),

@@ -1,8 +1,10 @@
 use chrono::{DateTime, Duration, Utc};
 
-use super::errors::EventStoreError;
-use super::models::DispatchableEventOutboxItem;
-use super::{EventBus, EventStore, NatsJetStreamEventBus, NatsJetStreamEventBusError};
+use crate::platform::events::bus::InMemoryEventBus;
+use hermes_events_api::DispatchableEventOutboxItem;
+use hermes_events_nats::jetstream::{NatsJetStreamEventBus, NatsJetStreamEventBusError};
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
 const DEFAULT_DISPATCH_BATCH_SIZE: u32 = 100;
 const DEFAULT_STALE_DISPATCH_AFTER_SECONDS: i64 = 60;
@@ -11,7 +13,7 @@ const DEFAULT_STALE_DISPATCH_AFTER_SECONDS: i64 = 60;
 pub struct EventOutboxDispatcher {
     store: EventStore,
     bus: NatsJetStreamEventBus,
-    realtime_bus: Option<EventBus>,
+    realtime_bus: Option<InMemoryEventBus>,
     batch_size: u32,
     stale_dispatch_after: Duration,
 }
@@ -27,7 +29,7 @@ impl EventOutboxDispatcher {
         }
     }
 
-    pub fn with_realtime_bus(mut self, realtime_bus: EventBus) -> Self {
+    pub fn with_realtime_bus(mut self, realtime_bus: InMemoryEventBus) -> Self {
         self.realtime_bus = Some(realtime_bus);
         self
     }

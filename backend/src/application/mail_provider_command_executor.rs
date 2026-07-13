@@ -1,3 +1,6 @@
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, NewProviderAccount, ProviderAccount,
+};
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
@@ -5,10 +8,6 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationProviderAccountStore, CommunicationProviderKind,
-    CommunicationProviderSecretBindingStore,
-};
 use crate::domains::communications::messages::{MessageProjectionError, MessageProjectionStore};
 use crate::domains::communications::provider_commands::{
     CommunicationProviderCommand, CommunicationProviderCommandError,
@@ -21,8 +20,11 @@ use crate::domains::communications::provider_resources::{
 use crate::integrations::mail::read_state::{
     EmailProviderMessageMutation, EmailReadStateError, LiveEmailReadStateService,
 };
-use crate::platform::communications::ProviderAccount;
 use crate::vault::HostVault;
+use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
 
 mod gmail_batches;
 mod imap_batches;
@@ -355,9 +357,6 @@ mod tests {
     use super::{
         MailProviderCommandWorker, mutation_for_command, resolve_provider_command_payload,
     };
-    use crate::domains::communications::core::{
-        CommunicationProviderAccountStore, CommunicationProviderKind, NewProviderAccount,
-    };
     use crate::domains::communications::provider_commands::{
         CommunicationProviderCommandStore, NewCommunicationProviderCommand,
     };
@@ -368,7 +367,11 @@ mod tests {
     use crate::integrations::mail::read_state::{
         EmailProviderMessageMutation, EmailReadStateError,
     };
-    use crate::platform::communications::ProviderAccount;
+    use hermes_communications_api::accounts::{
+        CommunicationProviderKind, NewProviderAccount, ProviderAccount,
+    };
+    use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+
     use crate::vault::{HostVault, HostVaultConfig};
 
     fn provider_account(

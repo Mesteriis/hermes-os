@@ -2,26 +2,29 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::Utc;
-use hermes_hub_backend::application::OrganizationPersonaLinkApplicationService;
+use hermes_hub_backend::application::organization_persona_links::OrganizationPersonaLinkApplicationService;
+use hermes_hub_backend::application::relationship_graph::RelationshipGraphCoordinator;
 use hermes_hub_backend::domains::graph::core::{GraphNodeKind, node_id};
 use hermes_hub_backend::domains::organizations::api::OrganizationStore;
 use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
-    RelationshipEvidenceSourceKind, RelationshipReviewState, RelationshipStore,
-    RelationshipStoreError,
-};
-use hermes_hub_backend::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore,
+    errors::RelationshipStoreError,
+    models::{
+        NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
+        RelationshipEvidenceSourceKind, RelationshipReviewState,
+    },
+    store::RelationshipStore,
 };
 use hermes_hub_backend::platform::storage::Database;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 
 #[tokio::test]
 async fn relationship_store_upserts_persona_relationship_with_evidence_against_postgres() {
-    let Some((pool, person_store, relationship_store)) =
+    let Some((_test_context, pool, person_store, relationship_store)) =
         live_relationship_context("persona relationship upsert").await
     else {
         return;
@@ -123,7 +126,7 @@ async fn relationship_store_upserts_persona_relationship_with_evidence_against_p
 
 #[tokio::test]
 async fn relationship_store_projects_persona_relationship_into_graph_against_postgres() {
-    let Some((pool, person_store, relationship_store)) =
+    let Some((_test_context, pool, person_store, _relationship_store)) =
         live_relationship_context("persona relationship graph projection").await
     else {
         return;
@@ -147,7 +150,7 @@ async fn relationship_store_projects_persona_relationship_into_graph_against_pos
         0.83,
         RelationshipReviewState::Suggested,
     );
-    let stored = relationship_store
+    let stored = RelationshipGraphCoordinator::new(pool.clone())
         .upsert_with_evidence(
             &relationship,
             &[NewRelationshipEvidence::new(
@@ -209,7 +212,7 @@ async fn relationship_store_projects_persona_relationship_into_graph_against_pos
 #[tokio::test]
 async fn relationship_store_projects_supported_cross_domain_relationship_into_graph_against_postgres()
  {
-    let Some((pool, _person_store, relationship_store)) =
+    let Some((_test_context, pool, _person_store, _relationship_store)) =
         live_relationship_context("cross-domain relationship graph projection").await
     else {
         return;
@@ -231,7 +234,7 @@ async fn relationship_store_projects_supported_cross_domain_relationship_into_gr
         valid_to: None,
         metadata: json!({"source": "relationships_cross_domain_test"}),
     };
-    let stored = relationship_store
+    let stored = RelationshipGraphCoordinator::new(pool.clone())
         .upsert_with_evidence(
             &relationship,
             &[NewRelationshipEvidence::new(
@@ -312,7 +315,7 @@ async fn relationship_store_projects_supported_cross_domain_relationship_into_gr
 
 #[tokio::test]
 async fn relationship_store_projects_organization_task_relationship_into_graph_against_postgres() {
-    let Some((pool, _person_store, relationship_store)) =
+    let Some((_test_context, pool, _person_store, _relationship_store)) =
         live_relationship_context("organization task relationship graph projection").await
     else {
         return;
@@ -334,7 +337,7 @@ async fn relationship_store_projects_organization_task_relationship_into_graph_a
         valid_to: None,
         metadata: json!({"source": "relationships_organization_task_graph_test"}),
     };
-    let stored = relationship_store
+    let stored = RelationshipGraphCoordinator::new(pool.clone())
         .upsert_with_evidence(
             &relationship,
             &[NewRelationshipEvidence::new(
@@ -586,7 +589,7 @@ async fn relationship_store_rejects_identical_persona_endpoints_before_database_
 
 #[tokio::test]
 async fn relationship_store_rejects_missing_observation_evidence_against_postgres() {
-    let Some((_pool, _persons, store)) =
+    let Some((_test_context, _pool, _persons, store)) =
         live_relationship_context("missing relationship observation evidence").await
     else {
         return;
@@ -618,7 +621,7 @@ async fn relationship_store_rejects_missing_observation_evidence_against_postgre
 
 #[tokio::test]
 async fn relationship_store_materializes_support_link_for_observation_evidence_against_postgres() {
-    let Some((pool, person_store, store)) =
+    let Some((_test_context, pool, person_store, store)) =
         live_relationship_context("relationship support link").await
     else {
         return;
@@ -689,7 +692,12 @@ async fn relationship_store_materializes_support_link_for_observation_evidence_a
 
 async fn live_relationship_context(
     _test_name: &str,
-) -> Option<(PgPool, PersonaProjectionStore, RelationshipStore)> {
+) -> Option<(
+    TestContext,
+    PgPool,
+    PersonaProjectionStore,
+    RelationshipStore,
+)> {
     let test_context = TestContext::new().await;
     let database_url = test_context.connection_string();
 
@@ -698,6 +706,7 @@ async fn live_relationship_context(
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
     Some((
+        test_context,
         pool.clone(),
         PersonaProjectionStore::new(pool.clone()),
         RelationshipStore::new(pool),

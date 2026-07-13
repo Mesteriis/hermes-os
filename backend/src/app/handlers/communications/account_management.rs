@@ -6,6 +6,9 @@ use crate::app::signal_hub_support::{
 use crate::domains::communications::sensitive_forwarding::{
     NewSensitiveForwardingPolicy, SensitiveForwardingError, SensitiveForwardingStore,
 };
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, NewProviderAccount, ProviderAccount,
+};
 
 pub(crate) async fn get_v1_email_accounts(
     State(state): State<AppState>,
@@ -15,13 +18,15 @@ pub(crate) async fn get_v1_email_accounts(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let accounts = crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
-        .list()
-        .await?
-        .into_iter()
-        .filter(|account| account.provider_kind.is_email() && !account.is_deleted())
-        .map(email_account_view)
-        .collect();
+    let accounts = crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationProviderAccountStore,
+    >(pool)
+    .list()
+    .await?
+    .into_iter()
+    .filter(|account| account.provider_kind.is_email() && !account.is_deleted())
+    .map(email_account_view)
+    .collect();
 
     Ok(Json(EmailAccountListResponse { items: accounts }))
 }
@@ -69,7 +74,7 @@ pub(crate) async fn post_v1_email_account_import(
 
     let request: EmailAccountImportRequest = serde_json::from_value(payload)
         .map_err(|_| ApiError::InvalidCommunicationQuery("invalid account import payload"))?;
-    let provider_kind = EmailProviderKind::try_from(request.account.provider_kind.as_str())
+    let provider_kind = CommunicationProviderKind::try_from(request.account.provider_kind.as_str())
         .map_err(|_| ApiError::InvalidCommunicationQuery("unsupported email provider kind"))?;
     if !provider_kind.is_email() {
         return Err(ApiError::InvalidCommunicationQuery(
@@ -92,17 +97,19 @@ pub(crate) async fn post_v1_email_account_import(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let account = crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
-        .upsert(
-            &crate::domains::communications::core::NewProviderAccount::new(
-                request.account.account_id,
-                provider_kind,
-                request.account.display_name,
-                request.account.external_account_id,
-            )
-            .config(config),
+    let account = crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationProviderAccountStore,
+    >(pool)
+    .upsert(
+        &hermes_communications_api::accounts::NewProviderAccount::new(
+            request.account.account_id,
+            provider_kind,
+            request.account.display_name,
+            request.account.external_account_id,
         )
-        .await?;
+        .config(config),
+    )
+    .await?;
     sync_provider_account_signal_connection(&state, &account, None).await?;
 
     let current_settings = mail_sync_store(&state)
@@ -154,11 +161,12 @@ pub(crate) async fn post_v1_email_account_logout(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let updated_account =
-        crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
-            .mark_logged_out(&account.account_id)
-            .await?
-            .ok_or(ApiError::NotFound)?;
+    let updated_account = crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationProviderAccountStore,
+    >(pool)
+    .mark_logged_out(&account.account_id)
+    .await?
+    .ok_or(ApiError::NotFound)?;
     sync_provider_account_signal_connection_with_status(
         &state,
         &updated_account,
@@ -202,8 +210,9 @@ pub(crate) async fn delete_v1_email_account(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store =
-        crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool.clone());
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationProviderAccountStore,
+    >(pool.clone());
     let usage = store.usage(&account.account_id).await?;
     if account_has_host_vault_secret_refs(&pool, &account.account_id).await? {
         require_unlocked_host_vault(&state)?;
@@ -409,10 +418,12 @@ pub(crate) async fn put_v1_email_account_content_egress_settings(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
-        .update_config(&account_id, &config)
-        .await?
-        .ok_or(ApiError::NotFound)?;
+    crate::app::api_support::stores::domain_stores::app_store::<CommunicationProviderAccountStore>(
+        pool,
+    )
+    .update_config(&account_id, &config)
+    .await?
+    .ok_or(ApiError::NotFound)?;
     Ok(Json(next))
 }
 

@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fs;
@@ -8,45 +9,61 @@ use std::path::{Path as FsPath, PathBuf};
 use uuid::Uuid;
 
 use crate::app::api_support::{
-    app_store, event_store, settings_store, yandex_telemost_provider_runtime_service,
-    yandex_telemost_provider_runtime_store, yandex_telemost_secret_reference_store,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::{ApiError, AppState};
 use crate::domains::calendar::events::CalendarEventQueryPort;
 use crate::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxStore, ReviewItemKind,
 };
-use crate::integrations::yandex_telemost::client::{
+use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
+use crate::integrations::yandex_telemost::client::models::{
     TelemostCohost, YANDEX_TELEMOST_API_BASE_URL, YANDEX_TELEMOST_PROVIDER_KIND_STR,
     YANDEX_TELEMOST_WEB_ORIGIN, YandexTelemostAccountListResponse,
     YandexTelemostAccountSetupRequest, YandexTelemostAccountSetupResponse,
     YandexTelemostCapabilityState, YandexTelemostCohostPage, YandexTelemostConference,
     YandexTelemostConferenceOpenRequest, YandexTelemostConferencePatchRequest,
     YandexTelemostConferenceRequest, YandexTelemostConferenceWebviewManifest,
-    YandexTelemostCreateConferenceCommand, YandexTelemostError,
-    YandexTelemostLocalRecordingManifest, YandexTelemostLocalRecordingPolicy,
-    YandexTelemostRecordingBridgeRequest, YandexTelemostRecordingBridgeResponse,
-    YandexTelemostRetentionCleanupRequest, YandexTelemostRetentionCleanupResponse,
-    YandexTelemostRuntimeStatus, YandexTelemostSpeakerTimelinePolicy,
-    YandexTelemostTranscriptBridgeRequest, YandexTelemostTranscriptBridgeResponse,
-    sanitize_yandex_telemost_payload, validate_telemost_join_url, webview_manifest_for_request,
+    YandexTelemostCreateConferenceCommand, YandexTelemostLocalRecordingManifest,
+    YandexTelemostLocalRecordingPolicy, YandexTelemostRecordingBridgeRequest,
+    YandexTelemostRecordingBridgeResponse, YandexTelemostRetentionCleanupRequest,
+    YandexTelemostRetentionCleanupResponse, YandexTelemostRuntimeStatus,
+    YandexTelemostSpeakerTimelinePolicy, YandexTelemostTranscriptBridgeRequest,
+    YandexTelemostTranscriptBridgeResponse, webview_manifest_for_request,
     yandex_telemost_capabilities,
 };
+use crate::integrations::yandex_telemost::client::validation::{
+    sanitize_yandex_telemost_payload, validate_required, validate_telemost_join_url,
+};
 use crate::integrations::yandex_telemost::runtime_bridge::complete_yandex_telemost_transcript_bridge;
-use crate::platform::events::NewEventEnvelope;
+
 use crate::platform::events::bus::yandex_telemost_event_types;
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
-use crate::platform::realtime_conversation::{
-    CallBundleManifest, REALTIME_CONVERSATION_AUDIO_CAPTURE_COMPLETED,
-    REALTIME_CONVERSATION_CALL_BUNDLE_CREATED, REALTIME_CONVERSATION_RADAR_SIGNALS_DETECTED,
-    REALTIME_CONVERSATION_SPEAKER_HINT_OBSERVED, REALTIME_CONVERSATION_TRANSCRIPT_REQUESTED,
-    RealtimeConversationProviderKind, SpeakerTimelineHint, build_call_bundle_manifest,
+use crate::platform::realtime_conversation::bundle::build_call_bundle_manifest;
+use crate::platform::realtime_conversation::events::{
+    REALTIME_CONVERSATION_AUDIO_CAPTURE_COMPLETED, REALTIME_CONVERSATION_CALL_BUNDLE_CREATED,
+    REALTIME_CONVERSATION_RADAR_SIGNALS_DETECTED, REALTIME_CONVERSATION_SPEAKER_HINT_OBSERVED,
+    REALTIME_CONVERSATION_TRANSCRIPT_REQUESTED,
+};
+use crate::platform::realtime_conversation::models::{
+    CallBundleManifest, RealtimeConversationProviderKind, SpeakerTimelineHint,
 };
 use crate::vault::VaultMode;
 use crate::workflows::realtime_conversation_memory_pipeline::plan_memory_pipeline;
 use crate::workflows::realtime_conversation_radar_projection::{
     RealtimeConversationRadarProjectionContext, call_bundle_radar_candidates,
 };
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 
 const REALTIME_CONVERSATION_RADAR_SIGNAL_OBSERVATION_KIND: &str =
     "REALTIME_CONVERSATION_RADAR_SIGNAL";
@@ -420,14 +437,8 @@ fn validate_yandex_telemost_recording_bridge_request(
             "Telemost recording stop time must be after start time".to_owned(),
         ));
     }
-    crate::integrations::yandex_telemost::client::validate_required(
-        "account_id",
-        &request.account_id,
-    )?;
-    crate::integrations::yandex_telemost::client::validate_required(
-        "recording_session_id",
-        &request.recording_session_id,
-    )?;
+    validate_required("account_id", &request.account_id)?;
+    validate_required("recording_session_id", &request.recording_session_id)?;
     validate_telemost_join_url(&request.join_url)?;
     Ok(())
 }
@@ -610,9 +621,8 @@ fn materialize_yandex_telemost_call_bundle(
             "artifacts_ready": ["audio.mp3", "speaker-hints.jsonl", "speaker-timeline.txt", "event-track.jsonl", "radar-signals.json"],
         }))?,
     )?;
-    manifest
-        .artifacts
-        .push(crate::platform::realtime_conversation::CallBundleArtifact {
+    manifest.artifacts.push(
+        crate::platform::realtime_conversation::models::CallBundleArtifact {
             kind: "radar_signals".to_owned(),
             relative_path: manifest.layout.radar_signals_json.clone(),
             source: "telemost_runtime_bootstrap".to_owned(),
@@ -621,7 +631,8 @@ fn materialize_yandex_telemost_call_bundle(
             description: Some(
                 "Bootstrap Radar candidates derived from local Telemost capture context".to_owned(),
             ),
-        });
+        },
+    );
     let manifest_path = bundle_root.join(&manifest.layout.manifest);
     fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)?)?;
 

@@ -8,12 +8,22 @@ use super::chats::{
     list_canonical_communication_conversations, normalized_channel_kind,
 };
 use crate::app::api_support::{
-    telegram_provider_runtime_service, telegram_runtime_use_case_context,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::{TelegramError, models::TelegramChat};
 use crate::application::telegram_runtime;
 use crate::domains::communications::messages::ProviderChannelMessageStore;
+use crate::integrations::telegram::client::{TelegramChat, TelegramError};
 use crate::platform::communications::ProviderChannelMessage;
 
 const COMMUNICATION_SEARCH_CHANNEL_KINDS: &[&str] = &[
@@ -66,7 +76,7 @@ pub(crate) struct TelegramPinnedMessagesQuery {
 #[derive(Serialize)]
 pub(crate) struct TelegramSearchResponse {
     pub(crate) query: String,
-    pub(crate) items: Vec<crate::application::provider_runtime_contracts::TelegramMessage>,
+    pub(crate) items: Vec<crate::integrations::telegram::client::models::messages::TelegramMessage>,
     pub(crate) total: usize,
 }
 
@@ -123,11 +133,9 @@ pub(crate) async fn search_telegram_messages(
     let channel_kinds = search_channel_kinds(query.channel_kind.as_deref());
 
     if search_q.is_empty() {
-        return Err(ApiError::Telegram(
-            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
-                "search query `q` is required".to_owned(),
-            ),
-        ));
+        return Err(ApiError::Telegram(TelegramError::InvalidRequest(
+            "search query `q` is required".to_owned(),
+        )));
     }
 
     let pool = state
@@ -135,7 +143,7 @@ pub(crate) async fn search_telegram_messages(
         .pool()
         .expect("database pool configured")
         .clone();
-    let items: Vec<crate::application::provider_runtime_contracts::TelegramMessage> =
+    let items: Vec<crate::integrations::telegram::client::models::messages::TelegramMessage> =
         ProviderChannelMessageStore::new(pool)
             .search_messages(
                 query.account_id.as_deref(),
@@ -167,19 +175,15 @@ pub(crate) async fn post_telegram_provider_search(
     let account_id = payload.account_id.trim();
 
     if account_id.is_empty() {
-        return Err(ApiError::Telegram(
-            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
-                "search payload account_id is required".to_owned(),
-            ),
-        ));
+        return Err(ApiError::Telegram(TelegramError::InvalidRequest(
+            "search payload account_id is required".to_owned(),
+        )));
     }
 
     if search_q.is_empty() {
-        return Err(ApiError::Telegram(
-            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
-                "search query `q` is required".to_owned(),
-            ),
-        ));
+        return Err(ApiError::Telegram(TelegramError::InvalidRequest(
+            "search query `q` is required".to_owned(),
+        )));
     }
 
     let runtime_context = telegram_runtime_use_case_context(&state)?;
@@ -224,11 +228,9 @@ pub(crate) async fn search_telegram_chats(
     let channel_kind = normalized_channel_kind(query.channel_kind.as_deref());
 
     if search_q.is_empty() {
-        return Err(ApiError::Telegram(
-            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
-                "search query `q` is required".to_owned(),
-            ),
-        ));
+        return Err(ApiError::Telegram(TelegramError::InvalidRequest(
+            "search query `q` is required".to_owned(),
+        )));
     }
 
     let mut items = if includes_telegram_channel_kind(channel_kind) {
@@ -264,7 +266,10 @@ pub(crate) async fn get_telegram_pinned_messages(
     State(state): State<AppState>,
     Path(conversation_id): Path<String>,
     Query(query): Query<TelegramPinnedMessagesQuery>,
-) -> Result<Json<crate::app::api_support::TelegramMessageListResponse>, ApiError> {
+) -> Result<
+    Json<crate::app::api_support::messaging_integrations::TelegramMessageListResponse>,
+    ApiError,
+> {
     let limit = query.limit.unwrap_or(100).clamp(1, 200);
     let items = match telegram_provider_runtime_service(&state)?
         .pinned_messages(&conversation_id, limit)
@@ -277,9 +282,9 @@ pub(crate) async fn get_telegram_pinned_messages(
         Err(error) => return Err(error.into()),
     };
 
-    Ok(Json(crate::app::api_support::TelegramMessageListResponse {
-        items,
-    }))
+    Ok(Json(
+        crate::app::api_support::messaging_integrations::TelegramMessageListResponse { items },
+    ))
 }
 
 /// GET /api/v1/communications/search/media?account_id=&provider_chat_id=&kind=&limit=
@@ -499,8 +504,8 @@ pub(crate) async fn search_telegram_media(
 
 fn provider_channel_message_to_search_message(
     message: ProviderChannelMessage,
-) -> crate::application::provider_runtime_contracts::TelegramMessage {
-    crate::application::provider_runtime_contracts::TelegramMessage {
+) -> crate::integrations::telegram::client::models::messages::TelegramMessage {
+    crate::integrations::telegram::client::models::messages::TelegramMessage {
         message_id: message.message_id,
         raw_record_id: message.raw_record_id,
         account_id: message.account_id,
@@ -559,7 +564,8 @@ async fn canonical_pinned_messages(
     state: &AppState,
     conversation_id: &str,
     limit: i64,
-) -> Result<Vec<crate::application::provider_runtime_contracts::TelegramMessage>, ApiError> {
+) -> Result<Vec<crate::integrations::telegram::client::models::messages::TelegramMessage>, ApiError>
+{
     let pool = state
         .database
         .pool()

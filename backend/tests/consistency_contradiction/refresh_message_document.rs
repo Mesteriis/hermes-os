@@ -1,7 +1,8 @@
 use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::engines::consistency::{
-    ContradictionObservationStore, ContradictionSeverity, ContradictionSourceKind,
+    models::{ContradictionSeverity, ContradictionSourceKind},
+    store::ContradictionObservationStore,
 };
 use serde_json::json;
 

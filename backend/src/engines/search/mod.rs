@@ -1,7 +1,3 @@
-mod engine;
-mod errors;
-mod models;
-
-pub use engine::SearchIndex;
-pub use errors::SearchError;
-pub use models::{SearchDocument, SearchResult};
+pub mod engine;
+pub mod errors;
+pub mod models;

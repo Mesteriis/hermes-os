@@ -1,10 +1,12 @@
 use serde::Serialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
-use crate::platform::events::{EventStoreError, expected_migration_summary, run_migrations};
+use crate::platform::events::migrations::expected_migration_summary;
+use crate::platform::events::migrations::run_migrations;
 use crate::platform::settings::{ApplicationSettingsStore, SettingsError};
 use crate::platform::storage::errors::StorageError;
 use crate::platform::storage::models::{DatabaseReadiness, MigrationReadiness};
+use hermes_events_postgres::errors::EventStoreError;
 
 const DEFAULT_DATABASE_MAX_CONNECTIONS: u32 = 32;
 
@@ -138,7 +140,7 @@ struct AppliedMigrationSummary {
 }
 
 impl AppliedMigrationSummary {
-    fn matches(&self, expected: crate::platform::events::MigrationSummary) -> bool {
+    fn matches(&self, expected: crate::platform::events::migrations::MigrationSummary) -> bool {
         self.failed_count == 0
             && self.applied_count == expected.count
             && self.latest_version == expected.latest_version

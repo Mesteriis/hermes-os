@@ -1,4 +1,5 @@
 use super::*;
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 
 #[derive(Serialize)]
 pub(crate) struct MailSyncStatusListResponse {
@@ -143,10 +144,11 @@ pub(super) async fn email_account_or_not_found(
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let Some(account) =
-        crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
-            .get(account_id)
-            .await?
+    let Some(account) = crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationProviderAccountStore,
+    >(pool)
+    .get(account_id)
+    .await?
     else {
         return Err(ApiError::NotFound);
     };
@@ -173,9 +175,9 @@ pub(super) fn email_account_capabilities(account: &ProviderAccount) -> EmailAcco
     let smtp = smtp_configured(account);
     let imap = matches!(
         account.provider_kind,
-        EmailProviderKind::Icloud | EmailProviderKind::Imap
+        CommunicationProviderKind::Icloud | CommunicationProviderKind::Imap
     );
-    let oauth = matches!(account.provider_kind, EmailProviderKind::Gmail)
+    let oauth = matches!(account.provider_kind, CommunicationProviderKind::Gmail)
         || account
             .config
             .get("auth")
@@ -225,7 +227,7 @@ pub(super) fn smtp_configured(account: &ProviderAccount) -> bool {
         .is_some_and(has_explicit_smtp_config);
 
     explicit_smtp
-        || (matches!(account.provider_kind, EmailProviderKind::Icloud)
+        || (matches!(account.provider_kind, CommunicationProviderKind::Icloud)
             && !account.external_account_id.trim().is_empty())
 }
 
@@ -300,9 +302,9 @@ pub(super) fn mail_sync_store(state: &AppState) -> Result<MailSyncStore, MailSyn
         });
     };
 
-    Ok(crate::app::api_support::app_store::<MailSyncStore>(
-        pool.clone(),
-    ))
+    Ok(crate::app::api_support::stores::domain_stores::app_store::<
+        MailSyncStore,
+    >(pool.clone()))
 }
 
 pub(super) fn mail_sync_service(
@@ -323,14 +325,24 @@ pub(super) fn mail_sync_service(
             crate::integrations::mail::sync_provider::LiveEmailProviderSyncPort::new(
                 pool.clone(),
                 state.vault.clone(),
-                std::sync::Arc::new(crate::app::api_support::app_store::<
-                    crate::domains::communications::core::CommunicationProviderSecretBindingStore,
+                std::sync::Arc::new(crate::app::api_support::stores::domain_stores::app_store::<
+                    hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore,
                 >(pool.clone())),
-                crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+                crate::workflows::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
             ),
         ),
         std::sync::Arc::new(
             crate::domains::communications::provider_resources::MailProviderResourceStore::new(
+                pool.clone(),
+            ),
+        ),
+        std::sync::Arc::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
+                pool.clone(),
+            ),
+        ),
+        std::sync::Arc::new(
+            hermes_communications_postgres::store::CommunicationIngestionStore::new(
                 pool.clone(),
             ),
         ),
@@ -350,12 +362,13 @@ pub(super) fn address_book_sync_service(
             crate::integrations::mail::address_book_sync_provider::LiveAddressBookProviderSyncPort::new(
                 pool.clone(),
                 state.vault.clone(),
-                std::sync::Arc::new(crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                std::sync::Arc::new(hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
                     pool.clone(),
                 )),
-                crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+                crate::workflows::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
             ),
         ),
+        std::sync::Arc::new(hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(pool.clone())),
     ))
 }
 
@@ -375,8 +388,8 @@ pub(super) fn mail_sync_api_error(error: MailSyncError) -> ApiError {
             tracing::error!(error = %error, "mail sync database operation failed");
             ApiError::InvalidCommunicationQuery("mail sync operation failed")
         }
-        MailSyncError::Communication(error) => {
-            tracing::error!(error = %error, "mail sync communication store failed");
+        MailSyncError::CommunicationEvidence(error) => {
+            tracing::error!(error = %error, "mail sync communication evidence port failed");
             ApiError::InvalidCommunicationQuery("mail sync operation failed")
         }
         MailSyncError::EmailSyncPlan(_) => {
@@ -385,8 +398,12 @@ pub(super) fn mail_sync_api_error(error: MailSyncError) -> ApiError {
         MailSyncError::ProviderSync(_) => {
             ApiError::FailedPrecondition("mail provider is temporarily unavailable".to_owned())
         }
+        MailSyncError::ProviderAccount(error) => {
+            tracing::error!(error = %error, "mail sync provider account port failed");
+            ApiError::InvalidCommunicationQuery("mail sync operation failed")
+        }
         MailSyncError::EventEnvelope(error) => ApiError::InvalidEnvelope(error),
-        MailSyncError::EventLogPort(error) => ApiError::Store(error),
+        MailSyncError::EventStore(error) => ApiError::Store(error),
         MailSyncError::ObservationPort(error) => {
             tracing::error!(error = %error, "mail sync observation store failed");
             ApiError::InvalidCommunicationQuery("mail sync operation failed")
@@ -406,6 +423,10 @@ pub(super) fn address_book_sync_api_error(error: AddressBookSyncError) -> ApiErr
             tracing::error!(error = %error, "address book sync communication store failed");
             ApiError::InvalidCommunicationQuery("address book sync operation failed")
         }
+        AddressBookSyncError::ProviderAccount(error) => {
+            tracing::error!(error = %error, "address book sync provider account port failed");
+            ApiError::InvalidCommunicationQuery("address book sync operation failed")
+        }
         AddressBookSyncError::PersonaCommand(error) => {
             tracing::error!(error = %error, "address book sync persona projection failed");
             ApiError::InvalidCommunicationQuery("address book sync operation failed")
@@ -423,7 +444,7 @@ mod tests {
     use chrono::Utc;
     use serde_json::json;
 
-    fn email_account(provider_kind: EmailProviderKind, config: Value) -> ProviderAccount {
+    fn email_account(provider_kind: CommunicationProviderKind, config: Value) -> ProviderAccount {
         ProviderAccount {
             account_id: "account:test".to_owned(),
             provider_kind,
@@ -437,7 +458,7 @@ mod tests {
 
     #[test]
     fn icloud_without_explicit_smtp_is_send_capable_via_default_smtp() {
-        let account = email_account(EmailProviderKind::Icloud, json!({}));
+        let account = email_account(CommunicationProviderKind::Icloud, json!({}));
 
         let capabilities = email_account_capabilities(&account);
 
@@ -447,7 +468,7 @@ mod tests {
 
     #[test]
     fn icloud_with_non_object_config_is_send_capable_via_default_smtp() {
-        let account = email_account(EmailProviderKind::Icloud, Value::Null);
+        let account = email_account(CommunicationProviderKind::Icloud, Value::Null);
 
         let capabilities = email_account_capabilities(&account);
 
@@ -457,7 +478,7 @@ mod tests {
 
     #[test]
     fn imap_without_explicit_smtp_stays_read_only_for_send() {
-        let account = email_account(EmailProviderKind::Imap, json!({}));
+        let account = email_account(CommunicationProviderKind::Imap, json!({}));
 
         let capabilities = email_account_capabilities(&account);
 
@@ -471,7 +492,7 @@ mod tests {
     #[test]
     fn gmail_modify_scope_enables_provider_mutation_capabilities() {
         let account = email_account(
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             json!({
                 "requested_scopes": ["https://www.googleapis.com/auth/gmail.modify"],
             }),
@@ -487,7 +508,7 @@ mod tests {
     #[test]
     fn gmail_without_modify_scope_does_not_advertise_provider_mutations() {
         let account = email_account(
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             json!({
                 "requested_scopes": ["https://www.googleapis.com/auth/gmail.send"],
             }),

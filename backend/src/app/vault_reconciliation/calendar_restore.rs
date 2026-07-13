@@ -1,5 +1,6 @@
 use crate::domains::calendar::events::CalendarAccountStore;
-use crate::domains::communications::core::{EmailProviderKind, ProviderAccountSecretPurpose};
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 
 use super::errors::HostVaultReconciliationError;
 use super::provider_recovery::RecoverableProviderSecret;
@@ -9,7 +10,7 @@ pub(super) async fn restore_linked_calendar_account(
     secret: &RecoverableProviderSecret,
 ) -> Result<bool, HostVaultReconciliationError> {
     match secret.provider_kind {
-        EmailProviderKind::Gmail => {
+        CommunicationProviderKind::Gmail => {
             let calendar_account_id = format!("google-calendar:{}", secret.account_id);
             if calendar_store.get(&calendar_account_id).await?.is_some() {
                 return Ok(false);
@@ -24,7 +25,7 @@ pub(super) async fn restore_linked_calendar_account(
                 .await?;
             Ok(true)
         }
-        EmailProviderKind::Icloud => {
+        CommunicationProviderKind::Icloud => {
             if secret.secret_purpose != ProviderAccountSecretPurpose::ImapPassword {
                 return Ok(false);
             }

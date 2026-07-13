@@ -5,7 +5,9 @@ use testkit::context::TestContext;
 use chrono::Utc;
 use serde_json::json;
 
-use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope, ProjectionCursorStore};
+use hermes_events_api::NewEventEnvelope;
+use hermes_events_postgres::cursors::ProjectionCursorStore;
+use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::platform::projections::{
     ProjectionBatchOutcome, ProjectionHandlerError, run_projection_batch,
 };

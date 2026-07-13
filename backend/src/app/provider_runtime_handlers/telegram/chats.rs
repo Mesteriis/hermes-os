@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use sqlx::Row;
 
@@ -8,18 +9,29 @@ use super::helpers::{
     AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed, publish_telegram_event,
 };
 use crate::app::api_support::{
-    TelegramChatListResponse, TelegramListQuery, api_audit_log, telegram_provider_runtime_service,
-    telegram_runtime_use_case_context,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::{
-    TelegramChat, TelegramChatGroupFilterListResponse, TelegramChatMember, TelegramChatSyncRequest,
-    TelegramChatSyncResponse, TelegramError, TelegramHistorySyncRequest,
+use crate::application::telegram_runtime;
+use crate::integrations::telegram::client::{
+    TelegramChat, TelegramChatGroupFilterListResponse, TelegramChatMember, TelegramError,
+};
+use crate::integrations::telegram::runtime::{
+    TelegramChatSyncRequest, TelegramChatSyncResponse, TelegramHistorySyncRequest,
     TelegramHistorySyncResponse,
 };
-use crate::application::telegram_runtime;
 use crate::platform::audit::NewApiAuditRecord;
-use crate::platform::events::NewEventEnvelope;
+
 use crate::platform::events::bus::telegram_event_types;
 
 const COMMUNICATION_CONVERSATION_CHANNEL_KINDS: &[&str] = &[

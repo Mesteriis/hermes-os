@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
+use hermes_events_api::NewEventEnvelope;
 use serde_json::{Value, json};
-
-use crate::platform::events::NewEventEnvelope;
 
 use super::constants::{
     TASK_CANDIDATE_REVIEW_EVENT_TYPE, TASK_CANDIDATE_REVIEW_SOURCE_KIND,

@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use hermes_hub_backend::domains::communications::core::EmailProviderKind;
+use hermes_communications_api::accounts::CommunicationProviderKind;
 use hermes_hub_backend::domains::communications::fixtures::export::{
     EmailFixtureExportOptions, export_fixture_messages_from_sync_batch,
 };
@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.mailbox.clone(),
         config.username,
     )
-    .provider_kind(EmailProviderKind::Icloud)
+    .provider_kind(CommunicationProviderKind::Icloud)
     .max_messages(config.max_messages)
     .latest_messages();
 

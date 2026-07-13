@@ -6,10 +6,10 @@ use crate::application::communication_provider_writes::{
     CommunicationForwardRequest, CommunicationProviderMessageCommandResponse,
     CommunicationReplyRequest, new_telegram_command_id,
 };
-use crate::application::provider_runtime_contracts::{
+use crate::domains::communications::command_service::CommunicationCommandService;
+use crate::integrations::whatsapp::runtime::contracts::{
     WhatsAppForwardRequest, WhatsAppProviderCommandResponse, WhatsAppReplyRequest,
 };
-use crate::domains::communications::service::CommunicationCommandService;
 
 pub(crate) async fn post_v1_reply(
     State(state): State<AppState>,

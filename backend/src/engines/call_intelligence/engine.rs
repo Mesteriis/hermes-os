@@ -1,4 +1,4 @@
-use crate::platform::realtime_conversation::CallBundleManifest;
+use crate::platform::realtime_conversation::models::CallBundleManifest;
 
 use super::models::{
     CallIntelligenceArtifactRequirement, CallIntelligencePipelinePlan, CallIntelligenceStep,

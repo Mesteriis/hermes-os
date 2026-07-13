@@ -1,9 +1,9 @@
 use super::super::types::ApiError;
 use crate::domains::personas::api::PersonaProjectionError;
+use crate::domains::personas::command_service::PersonaCommandServiceError;
 use crate::domains::personas::core::PersonaCoreError;
 use crate::domains::personas::identity::PersonaIdentityError;
 use crate::domains::personas::memory::PersonaMemoryError;
-use crate::domains::personas::service::PersonaCommandServiceError;
 
 impl From<PersonaIdentityError> for ApiError {
     fn from(error: PersonaIdentityError) -> Self {

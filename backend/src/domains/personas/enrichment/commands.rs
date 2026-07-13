@@ -1,4 +1,5 @@
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use sqlx::Row;
 use sqlx::{Postgres, Transaction};
@@ -7,7 +8,8 @@ use uuid::Uuid;
 use crate::domains::personas::core::link_persona_entity_in_transaction;
 use crate::domains::personas::enrichment::PERSONA_TRUST_SCORE_CHANGED_EVENT_TYPE;
 use crate::domains::personas::intelligence::CommunicationFingerprint;
-use crate::platform::events::{EventStore, EventStoreError, NewEventEnvelope};
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
 use super::errors::PersonaEnrichmentError;
 use super::materialization::{

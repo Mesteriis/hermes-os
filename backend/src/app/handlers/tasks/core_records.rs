@@ -4,12 +4,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::app::{ApiError, AppState};
+use crate::application::task_relationship::TaskRelationshipApplicationService;
+use crate::domains::tasks::command_service::TaskCommandService;
 use crate::domains::tasks::core::{
     ExternalTaskIdentity, ExternalTaskIdentityStore, TaskChecklist, TaskChecklistStore,
     TaskContextPack, TaskContextPackStore, TaskEvidence, TaskEvidenceStore, TaskRelation,
     TaskRelationStore, TaskSubtask, TaskSubtaskStore,
 };
-use crate::domains::tasks::service::TaskCommandService;
 
 use super::support::database_pool;
 
@@ -18,10 +19,11 @@ pub(crate) async fn get_task_context_pack(
     Path(task_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    let pack = crate::app::api_support::app_store::<TaskContextPackStore>(pool)
-        .get(&task_id)
-        .await
-        .map_err(ApiError::from)?;
+    let pack =
+        crate::app::api_support::stores::domain_stores::app_store::<TaskContextPackStore>(pool)
+            .get(&task_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&pack).unwrap_or_default()))
 }
 
@@ -40,17 +42,18 @@ pub(crate) async fn post_task_context_pack(
     Json(req): Json<UpsertContextPackRequest>,
 ) -> Result<Json<TaskContextPack>, ApiError> {
     let pool = database_pool(&state)?;
-    let pack = crate::app::api_support::app_store::<TaskContextPackStore>(pool)
-        .upsert(
-            &task_id,
-            req.summary.as_deref(),
-            req.open_questions.unwrap_or(json!([])),
-            req.blockers.unwrap_or(json!([])),
-            req.risks.unwrap_or(json!([])),
-            req.suggested_next_action.as_deref(),
-        )
-        .await
-        .map_err(ApiError::from)?;
+    let pack =
+        crate::app::api_support::stores::domain_stores::app_store::<TaskContextPackStore>(pool)
+            .upsert(
+                &task_id,
+                req.summary.as_deref(),
+                req.open_questions.unwrap_or(json!([])),
+                req.blockers.unwrap_or(json!([])),
+                req.risks.unwrap_or(json!([])),
+                req.suggested_next_action.as_deref(),
+            )
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(pack))
 }
 
@@ -64,10 +67,11 @@ pub(crate) async fn get_task_evidence(
     Path(task_id): Path<String>,
 ) -> Result<Json<TaskEvidenceResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<TaskEvidenceStore>(pool)
-        .list(&task_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<TaskEvidenceStore>(pool)
+            .list(&task_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(TaskEvidenceResponse { items }))
 }
 
@@ -107,10 +111,11 @@ pub(crate) async fn get_task_relations(
     Path(task_id): Path<String>,
 ) -> Result<Json<TaskRelationsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<TaskRelationStore>(pool)
-        .list(&task_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<TaskRelationStore>(pool)
+            .list(&task_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(TaskRelationsResponse { items }))
 }
 
@@ -127,8 +132,8 @@ pub(crate) async fn post_task_relation(
     Json(req): Json<NewRelationReq>,
 ) -> Result<Json<TaskRelation>, ApiError> {
     let pool = database_pool(&state)?;
-    let relation = TaskCommandService::new(pool)
-        .add_relation_manual(
+    let relation = TaskRelationshipApplicationService::new(pool)
+        .add_manual(
             &task_id,
             &req.entity_type,
             &req.entity_id,
@@ -143,10 +148,11 @@ pub(crate) async fn get_task_checklist(
     Path(task_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    let checklist = crate::app::api_support::app_store::<TaskChecklistStore>(pool)
-        .get(&task_id)
-        .await
-        .map_err(ApiError::from)?;
+    let checklist =
+        crate::app::api_support::stores::domain_stores::app_store::<TaskChecklistStore>(pool)
+            .get(&task_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&checklist).unwrap_or_default()))
 }
 
@@ -179,7 +185,7 @@ pub(crate) async fn get_task_subtasks(
     Path(task_id): Path<String>,
 ) -> Result<Json<TaskSubtasksResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<TaskSubtaskStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<TaskSubtaskStore>(pool)
         .list(&task_id)
         .await
         .map_err(ApiError::from)?;
@@ -214,9 +220,11 @@ pub(crate) async fn get_task_external(
     Path(task_id): Path<String>,
 ) -> Result<Json<ExtIdentitiesResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<ExternalTaskIdentityStore>(pool)
-        .list(&task_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items = crate::app::api_support::stores::domain_stores::app_store::<
+        ExternalTaskIdentityStore,
+    >(pool)
+    .list(&task_id)
+    .await
+    .map_err(ApiError::from)?;
     Ok(Json(ExtIdentitiesResponse { items }))
 }

@@ -114,15 +114,19 @@ pub(crate) async fn post_v1_import_mbox(
     }))
 }
 
-fn eml_import_service(state: &AppState) -> Result<crate::application::EmlImportService, ApiError> {
+fn eml_import_service(
+    state: &AppState,
+) -> Result<crate::application::eml_import::EmlImportService, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    Ok(crate::application::EmlImportService::new(
-        crate::domains::communications::core::CommunicationIngestionStore::new(pool.clone()),
-        crate::domains::communications::core::CommunicationProviderAccountStore::new(pool.clone()),
+    Ok(crate::application::eml_import::EmlImportService::new(
+        hermes_communications_postgres::store::CommunicationIngestionStore::new(pool.clone()),
+        hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
+            pool.clone(),
+        ),
         crate::domains::communications::messages::MessageProjectionStore::new(pool.clone()),
         crate::domains::communications::storage::CommunicationStorageStore::new(pool),
         crate::domains::communications::storage::LocalCommunicationBlobStore::new(
@@ -131,20 +135,24 @@ fn eml_import_service(state: &AppState) -> Result<crate::application::EmlImportS
     ))
 }
 
-fn eml_import_api_error(error: crate::application::EmlImportError) -> ApiError {
+fn eml_import_api_error(error: crate::application::eml_import::EmlImportError) -> ApiError {
     match error {
-        crate::application::EmlImportError::AccountNotFound => ApiError::NotFound,
-        crate::application::EmlImportError::UnsupportedAccountKind
-        | crate::application::EmlImportError::Rfc822(_)
-        | crate::application::EmlImportError::Mbox(_) => {
+        crate::application::eml_import::EmlImportError::AccountNotFound => ApiError::NotFound,
+        crate::application::eml_import::EmlImportError::UnsupportedAccountKind
+        | crate::application::eml_import::EmlImportError::Rfc822(_)
+        | crate::application::eml_import::EmlImportError::Mbox(_) => {
             ApiError::InvalidCommunicationQuery("mail import payload is invalid")
         }
-        crate::application::EmlImportError::Ingestion(error) => {
+        crate::application::eml_import::EmlImportError::Ingestion(error) => {
             ApiError::CommunicationIngestion(error)
         }
-        crate::application::EmlImportError::MessageProjection(error) => ApiError::Messages(error),
-        crate::application::EmlImportError::Storage(error) => ApiError::CommunicationStorage(error),
-        crate::application::EmlImportError::Scan(error) => {
+        crate::application::eml_import::EmlImportError::MessageProjection(error) => {
+            ApiError::Messages(error)
+        }
+        crate::application::eml_import::EmlImportError::Storage(error) => {
+            ApiError::CommunicationStorage(error)
+        }
+        crate::application::eml_import::EmlImportError::Scan(error) => {
             ApiError::FailedPrecondition(error.to_string())
         }
     }

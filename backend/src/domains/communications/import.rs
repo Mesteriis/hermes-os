@@ -1,10 +1,10 @@
+use hermes_communications_api::evidence::{
+    CommunicationEvidencePortError, CommunicationRawEvidenceCommandPort, NewRawCommunicationRecord,
+    StoredRawCommunicationRecord,
+};
 use serde_json::json;
 use thiserror::Error;
 
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationIngestionStore, NewRawCommunicationRecord,
-    StoredRawCommunicationRecord,
-};
 use crate::domains::communications::sources::{
     FixtureEmailSourceError, parse_fixture_email_messages,
 };
@@ -43,7 +43,7 @@ pub struct FixtureEmailImportWithRecordsReport {
 }
 
 pub async fn import_fixture_email_messages(
-    store: &CommunicationIngestionStore,
+    store: &dyn CommunicationRawEvidenceCommandPort,
     request: &FixtureEmailImportRequest,
 ) -> Result<FixtureEmailImportReport, FixtureEmailImportError> {
     let report = import_fixture_email_messages_with_records(store, request).await?;
@@ -54,7 +54,7 @@ pub async fn import_fixture_email_messages(
 }
 
 pub async fn import_fixture_email_messages_with_records(
-    store: &CommunicationIngestionStore,
+    store: &dyn CommunicationRawEvidenceCommandPort,
     request: &FixtureEmailImportRequest,
 ) -> Result<FixtureEmailImportWithRecordsReport, FixtureEmailImportError> {
     let messages = parse_fixture_email_messages(&request.fixture_json)?;
@@ -118,5 +118,5 @@ pub enum FixtureEmailImportError {
     Source(#[from] FixtureEmailSourceError),
 
     #[error(transparent)]
-    Communication(#[from] CommunicationIngestionError),
+    CommunicationEvidence(#[from] CommunicationEvidencePortError),
 }

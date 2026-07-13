@@ -4,9 +4,9 @@ use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use crate::domains::calendar::events::{CalendarAccountStore, CalendarSourceStore};
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
-};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 use super::core::{
     CalendarCoreError, EventAgenda, EventAgendaStore, EventChecklist, EventChecklistStore,
@@ -750,7 +750,7 @@ impl CalendarCommandService {
         payload: Value,
         source_ref: String,
         provenance: Value,
-    ) -> Result<crate::platform::observations::Observation, ObservationStoreError> {
+    ) -> Result<hermes_observations_api::models::Observation, ObservationStoreError> {
         ObservationStore::new(self.pool.clone())
             .capture(
                 &NewObservation::new(

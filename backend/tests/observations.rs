@@ -3,11 +3,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::{TimeZone, Utc};
-use hermes_hub_backend::platform::observations::{
-    NewObservation, NewObservationIngestionRun, NewObservationLink, ObservationIngestionRunStatus,
-    ObservationOriginKind, ObservationStore,
-};
 use hermes_hub_backend::platform::storage::Database;
+use hermes_observations_api::models::{
+    NewObservation, NewObservationIngestionRun, NewObservationLink, ObservationIngestionRunStatus,
+    ObservationOriginKind,
+};
+use hermes_observations_postgres::store::ObservationStore;
 use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::PgPool;

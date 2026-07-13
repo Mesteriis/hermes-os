@@ -1,32 +1,60 @@
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::PgPool;
 
-use crate::application::provider_runtime_contracts::{
-    TelegramAccount, TelegramAccountSetupRequest, TelegramAccountSetupResponse,
-    TelegramAttachmentDownloadStateUpdate, TelegramChat, TelegramChatMember,
-    TelegramCommandListResponse, TelegramError, TelegramLiveAccountSetupRequest, TelegramMessage,
-    TelegramProviderRuntimeStore, TelegramProviderWriteCommand, TelegramSecretVault, TelegramTopic,
-    TelegramTopicLifecycleResponse, TelegramTopicListResponse,
+use crate::integrations::telegram::client::commands::list_commands_filtered as list_telegram_commands_filtered;
+use crate::integrations::telegram::client::lifecycle;
+use crate::integrations::telegram::client::models::messages::{
+    TelegramCommandListResponse, TelegramMessage, TelegramProviderWriteCommand,
+};
+use crate::integrations::telegram::client::topics::{
+    get_topic as get_telegram_topic, list_topic_message_ids as list_telegram_topic_message_ids,
+    list_topics as list_telegram_topics, search_topics as search_telegram_topics_projection,
+};
+use crate::integrations::telegram::client::{
+    NewTelegramMessage, ProviderCommunicationMessage, TelegramAccount, TelegramAccountSetupRequest,
+    TelegramAccountSetupResponse, TelegramAttachmentDownloadStateUpdate, TelegramChat,
+    TelegramChatMember, TelegramError, TelegramLiveAccountSetupRequest,
+    TelegramMessageIngestResult, TelegramSecretVault,
+    TelegramStore as TelegramProviderRuntimeStore, TelegramTopic, TelegramTopicLifecycleResponse,
+    TelegramTopicListResponse, ensure_telegram_account_active, telegram_chat_id,
+};
+use crate::integrations::telegram::runtime::{
+    TelegramChatSyncRequest, TelegramHistorySyncRequest, TelegramMediaDownloadRequest,
+    TelegramMediaSendType, TelegramRuntimeStatus,
+};
+use crate::integrations::whatsapp::client::{
+    WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupRequest,
+    WhatsappWebAccountSetupResponse, WhatsappWebError, WhatsappWebMessage, WhatsappWebSession,
+};
+use crate::integrations::whatsapp::runtime::contracts::{
     WhatsAppAuthorizedSessionCredentialWrite, WhatsAppConversationCommandRequest,
     WhatsAppCredentialBinding, WhatsAppDeleteRequest, WhatsAppEditRequest, WhatsAppForwardRequest,
     WhatsAppMediaDownloadRequest, WhatsAppMediaUploadRequest, WhatsAppPairCodeSession,
     WhatsAppPairCodeStartRequest, WhatsAppProviderCommand, WhatsAppProviderCommandListResponse,
-    WhatsAppProviderCommandResponse, WhatsAppProviderRuntimeRef, WhatsAppProviderRuntimeShape,
-    WhatsAppQrLinkSession, WhatsAppQrLinkStartRequest, WhatsAppReactionRequest,
-    WhatsAppReplyRequest, WhatsAppRuntimeHealth, WhatsAppRuntimeRelinkRequest,
-    WhatsAppRuntimeRemoveRequest, WhatsAppRuntimeRemoveResponse, WhatsAppRuntimeRevokeRequest,
-    WhatsAppRuntimeStartRequest, WhatsAppRuntimeStatus, WhatsAppRuntimeStopRequest,
-    WhatsAppStatusPublishRequest, WhatsAppTextSendRequest, WhatsAppVoiceNoteSendRequest,
-    WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupRequest,
-    WhatsappWebAccountSetupResponse, WhatsappWebError, WhatsappWebMessage, WhatsappWebSession,
+    WhatsAppProviderCommandResponse, WhatsAppProviderRuntimeShape, WhatsAppQrLinkSession,
+    WhatsAppQrLinkStartRequest, WhatsAppReactionRequest, WhatsAppReplyRequest,
+    WhatsAppRuntimeHealth, WhatsAppRuntimeRelinkRequest, WhatsAppRuntimeRemoveRequest,
+    WhatsAppRuntimeRemoveResponse, WhatsAppRuntimeRevokeRequest, WhatsAppRuntimeStartRequest,
+    WhatsAppRuntimeStatus, WhatsAppRuntimeStopRequest, WhatsAppStatusPublishRequest,
+    WhatsAppTextSendRequest, WhatsAppVoiceNoteSendRequest,
+};
+use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
+use crate::integrations::yandex_telemost::client::models::{
+    YandexTelemostAccountListResponse, YandexTelemostRetentionCleanupRequest,
+    YandexTelemostRetentionCleanupResponse,
+};
+use crate::integrations::yandex_telemost::client::store::YandexTelemostStore;
+use crate::integrations::zoom::client::errors::ZoomError;
+use crate::integrations::zoom::client::models::{
     ZoomAccountListResponse, ZoomAccountSetupRequest, ZoomAccountSetupResponse,
-    ZoomAuditEventResponse, ZoomAuthorizationResult, ZoomError, ZoomLiveAccountSetupRequest,
+    ZoomAuditEventResponse, ZoomAuthorizationResult, ZoomLiveAccountSetupRequest,
     ZoomMeetingIngestResult, ZoomMeetingObservationRequest, ZoomOAuthPendingGrant,
-    ZoomOAuthStartRequest, ZoomProviderRuntimeStore, ZoomRecordingImportAuditResponse,
-    ZoomRecordingImportRemoveRequest, ZoomRecordingImportRemoveResponse, ZoomRecordingIngestResult,
+    ZoomOAuthStartRequest, ZoomRecordingImportAuditResponse, ZoomRecordingImportRemoveRequest,
+    ZoomRecordingImportRemoveResponse, ZoomRecordingIngestResult,
     ZoomRecordingMediaDownloadRequest, ZoomRecordingMediaImportResult,
     ZoomRecordingObservationRequest, ZoomRecordingSyncRequest, ZoomRecordingSyncResult,
     ZoomRetentionCleanupRequest, ZoomRetentionCleanupResponse, ZoomRuntimeRemoveRequest,
@@ -36,14 +64,16 @@ use crate::application::provider_runtime_contracts::{
     ZoomTranscriptFileImportResult, ZoomTranscriptIngestResult, ZoomTranscriptObservationRequest,
     ZoomWebhookSubscriptionReconcileRequest, ZoomWebhookSubscriptionReconcileResult,
     ZoomWebhookSubscriptionRemoveRequest, ZoomWebhookSubscriptionRemoveResult,
-    ZoomWebhookSubscriptionStatusRequest, ZoomWebhookSubscriptionStatusResult, get_telegram_topic,
-    lifecycle, list_telegram_commands_filtered, list_telegram_topic_message_ids,
-    list_telegram_topics, search_telegram_topics_projection,
+    ZoomWebhookSubscriptionStatusRequest, ZoomWebhookSubscriptionStatusResult,
 };
-use crate::platform::communications::ProviderAccount;
-use crate::platform::events::EventBus;
+use crate::integrations::zoom::client::store::ZoomStore as ZoomProviderRuntimeStore;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::secrets::SecretReferenceStore;
 use crate::vault::HostVault;
+use hermes_communications_api::accounts::ProviderAccount;
+
+pub(crate) type WhatsAppProviderRuntimeRef =
+    Arc<dyn crate::integrations::whatsapp::runtime::contracts::WhatsAppProviderRuntime>;
 
 #[derive(Clone)]
 pub(crate) struct TelegramProviderRuntimeApplicationService {
@@ -57,7 +87,7 @@ pub(crate) struct ZoomProviderRuntimeApplicationService {
 
 #[derive(Clone)]
 pub(crate) struct YandexTelemostProviderRuntimeApplicationService {
-    store: crate::application::provider_runtime_contracts::YandexTelemostProviderRuntimeStore,
+    store: YandexTelemostStore,
 }
 
 impl ZoomProviderRuntimeApplicationService {
@@ -309,30 +339,22 @@ impl ZoomProviderRuntimeApplicationService {
 }
 
 impl YandexTelemostProviderRuntimeApplicationService {
-    pub(crate) fn new(
-        store: crate::application::provider_runtime_contracts::YandexTelemostProviderRuntimeStore,
-    ) -> Self {
+    pub(crate) fn new(store: YandexTelemostStore) -> Self {
         Self { store }
     }
 
     pub(crate) async fn list_accounts(
         &self,
         include_removed: bool,
-    ) -> Result<
-        crate::integrations::yandex_telemost::client::YandexTelemostAccountListResponse,
-        crate::integrations::yandex_telemost::client::YandexTelemostError,
-    > {
+    ) -> Result<YandexTelemostAccountListResponse, YandexTelemostError> {
         self.store.list_accounts(include_removed).await
     }
 
     pub(crate) async fn cleanup_retention(
         &self,
         account_id: &str,
-        request: &crate::application::provider_runtime_contracts::YandexTelemostRetentionCleanupRequest,
-    ) -> Result<
-        crate::application::provider_runtime_contracts::YandexTelemostRetentionCleanupResponse,
-        crate::application::provider_runtime_contracts::YandexTelemostError,
-    > {
+        request: &YandexTelemostRetentionCleanupRequest,
+    ) -> Result<YandexTelemostRetentionCleanupResponse, YandexTelemostError> {
         self.store.cleanup_retention(account_id, request).await
     }
 }
@@ -399,10 +421,8 @@ impl TelegramProviderRuntimeApplicationService {
     pub(crate) async fn list_chat_group_filters(
         &self,
         account_id: Option<&str>,
-    ) -> Result<
-        Vec<crate::application::provider_runtime_contracts::TelegramChatGroupFilter>,
-        TelegramError,
-    > {
+    ) -> Result<Vec<crate::integrations::telegram::client::TelegramChatGroupFilter>, TelegramError>
+    {
         self.store.list_chat_group_filters(account_id).await
     }
 
@@ -647,10 +667,8 @@ impl TelegramProviderRuntimeApplicationService {
         account_id: &str,
         provider_chat_id: &str,
         provider_message_id: &str,
-    ) -> Result<
-        crate::application::provider_runtime_contracts::TelegramAttachmentAnchor,
-        TelegramError,
-    > {
+    ) -> Result<crate::integrations::telegram::client::TelegramAttachmentAnchor, TelegramError>
+    {
         self.store
             .attachment_anchor_for_message(account_id, provider_chat_id, provider_message_id)
             .await
@@ -1105,49 +1123,145 @@ impl WhatsappProviderRuntimeApplicationService {
 pub(crate) fn telegram_provider_runtime_service(
     pool: PgPool,
 ) -> TelegramProviderRuntimeApplicationService {
-    TelegramProviderRuntimeApplicationService::new(
-        crate::application::telegram_provider_runtime_store(pool),
-    )
+    TelegramProviderRuntimeApplicationService::new(telegram_provider_runtime_store(pool))
 }
 
 pub(crate) fn whatsapp_provider_runtime_service(
     pool: PgPool,
 ) -> WhatsappProviderRuntimeApplicationService {
-    WhatsappProviderRuntimeApplicationService::new(crate::application::whatsapp_provider_runtime(
-        pool,
-    ))
+    WhatsappProviderRuntimeApplicationService::new(whatsapp_provider_runtime(pool))
 }
 
 pub(crate) fn zoom_provider_runtime_service(
     pool: PgPool,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
 ) -> ZoomProviderRuntimeApplicationService {
-    ZoomProviderRuntimeApplicationService::new(
-        crate::application::provider_runtime_contracts::zoom_provider_runtime_store(
-            pool, event_bus,
-        ),
-    )
+    ZoomProviderRuntimeApplicationService::new(zoom_provider_runtime_store(pool, event_bus))
 }
 
 pub(crate) fn yandex_telemost_provider_runtime_service(
     pool: PgPool,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
 ) -> YandexTelemostProviderRuntimeApplicationService {
-    YandexTelemostProviderRuntimeApplicationService::new(
-        crate::application::provider_runtime_contracts::YandexTelemostProviderRuntimeStore::new(
-            Arc::new(
-                crate::domains::communications::core::CommunicationProviderAccountStore::new(
-                    pool.clone(),
-                ),
+    YandexTelemostProviderRuntimeApplicationService::new(YandexTelemostStore::new(
+        Arc::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
+                pool.clone(),
             ),
-            Arc::new(
-                crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
-                    pool.clone(),
-                ),
-            ),
-            crate::platform::events::EventStore::new(pool),
-            event_bus,
         ),
+        Arc::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
+                pool.clone(),
+            ),
+        ),
+        hermes_events_postgres::store::EventStore::new(pool),
+        event_bus,
+    ))
+}
+
+pub(crate) fn telegram_provider_runtime_store(
+    pool: PgPool,
+) -> crate::integrations::telegram::client::TelegramStore {
+    crate::integrations::telegram::client::TelegramStore::new(
+        pool.clone(),
+        Arc::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            crate::domains::communications::messages::ProviderChannelMessageStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            hermes_communications_postgres::store::CommunicationIngestionStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            crate::platform::communications::EventStoreProviderMessageObservationEventPort::new(
+                pool,
+            ),
+        ),
+    )
+}
+
+pub(crate) fn whatsapp_provider_runtime(pool: PgPool) -> WhatsAppProviderRuntimeRef {
+    let provider_account_store = Arc::new(
+        hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
+            pool.clone(),
+        ),
+    );
+    let provider_secret_binding_store = Arc::new(
+        hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
+            pool.clone(),
+        ),
+    );
+    let provider_channel_message_store = Arc::new(
+        crate::domains::communications::messages::ProviderChannelMessageStore::new(pool.clone()),
+    );
+    let whatsapp_runtime_event_sink = Arc::new(
+        crate::application::whatsapp_runtime_signal_ingest::WhatsappRuntimeSignalIngestService::new(
+            pool.clone(),
+        ),
+    );
+    let web_companion_runtime =
+        crate::integrations::whatsapp::runtime::whatsapp_web_companion_runtime(
+            pool.clone(),
+            provider_account_store.clone(),
+            provider_secret_binding_store.clone(),
+            provider_channel_message_store.clone(),
+        );
+    let native_md_runtime = crate::integrations::whatsapp::runtime::whatsapp_native_md_runtime(
+        pool.clone(),
+        provider_account_store.clone(),
+        provider_secret_binding_store.clone(),
+        provider_channel_message_store.clone(),
+        whatsapp_runtime_event_sink,
+    );
+    let business_cloud_runtime =
+        crate::integrations::whatsapp::runtime::whatsapp_business_cloud_runtime(
+            pool,
+            provider_account_store.clone(),
+            provider_secret_binding_store.clone(),
+            provider_channel_message_store.clone(),
+        );
+    crate::integrations::whatsapp::runtime::whatsapp_provider_runtime_mux(
+        provider_account_store,
+        web_companion_runtime,
+        native_md_runtime,
+        business_cloud_runtime,
+    )
+}
+
+pub(crate) fn zoom_provider_runtime_store(
+    pool: PgPool,
+    event_bus: InMemoryEventBus,
+) -> crate::integrations::zoom::client::store::ZoomStore {
+    crate::integrations::zoom::client::store::ZoomStore::new(
+        pool.clone(),
+        Arc::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            crate::domains::communications::storage::CommunicationStorageStore::new(pool.clone()),
+        ),
+        crate::platform::calls::CallIntelligenceStore::new(pool.clone()),
+        hermes_events_postgres::store::EventStore::new(pool),
+        event_bus,
     )
 }
 
@@ -1159,7 +1273,6 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::application::provider_runtime_contracts::WhatsAppProviderRuntime;
     use crate::integrations::whatsapp::client::{
         NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
         NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
@@ -1173,9 +1286,10 @@ mod tests {
         WhatsappWebObservedRuntimeEvent, WhatsappWebObservedStatus,
         WhatsappWebObservedStatusDelete, WhatsappWebObservedStatusView,
     };
-    use crate::integrations::whatsapp::runtime::WhatsAppProviderRuntimeFuture;
-    use crate::platform::communications::{CommunicationProviderKind, NewRawCommunicationRecord};
+    use crate::integrations::whatsapp::runtime::contracts::WhatsAppProviderRuntime;
+    use crate::integrations::whatsapp::runtime::contracts::WhatsAppProviderRuntimeFuture;
     use crate::platform::secrets::{SecretKind, SecretStoreKind};
+    use hermes_communications_api::accounts::CommunicationProviderKind;
 
     #[derive(Default)]
     struct FakeWhatsAppProviderRuntime {

@@ -17,7 +17,7 @@ use crate::integrations::telegram::tdjson::{
     TelegramTdlibMessagePinnedSnapshot, TelegramTdlibMessageSendFailedSnapshot,
     TelegramTdlibMessageSendSucceededSnapshot, TelegramTdlibMessageSnapshot,
 };
-use crate::platform::events::EventBus;
+use crate::platform::events::bus::InMemoryEventBus;
 
 use super::realtime_events::{
     TelegramRuntimeEventBridgeContext, publish_command_reconciled_events,
@@ -38,7 +38,7 @@ use projection::{
 
 pub(super) async fn publish_message_created_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessageSnapshot,
 ) {
@@ -70,7 +70,7 @@ pub(super) async fn publish_message_created_event(
 
 pub(super) async fn publish_message_deleted_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessageDeleteSnapshot,
 ) {
@@ -139,7 +139,7 @@ pub(super) async fn publish_message_deleted_event(
 
 pub(super) async fn publish_message_send_failed_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessageSendFailedSnapshot,
 ) {
@@ -191,7 +191,7 @@ pub(super) async fn publish_message_send_failed_event(
 
 pub(super) async fn publish_message_send_succeeded_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessageSendSucceededSnapshot,
 ) {
@@ -248,7 +248,7 @@ pub(super) async fn publish_message_send_succeeded_event(
 
 pub(super) async fn publish_message_content_updated_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessageContentSnapshot,
 ) {
@@ -354,7 +354,7 @@ pub(super) async fn publish_message_content_updated_event(
 
 pub(super) async fn publish_message_edited_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessageEditedSnapshot,
 ) {
@@ -408,7 +408,7 @@ pub(super) async fn publish_message_edited_event(
 
 pub(super) async fn publish_message_pinned_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessagePinnedSnapshot,
 ) {
@@ -488,7 +488,7 @@ pub(super) async fn publish_message_pinned_event(
 
 pub(super) async fn publish_reaction_changed_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessageInteractionInfoSnapshot,
 ) {

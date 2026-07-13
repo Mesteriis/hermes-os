@@ -1,3 +1,4 @@
+use hermes_events_api::NewEventEnvelope;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
@@ -5,7 +6,6 @@ use serde_json::json;
 
 use super::errors::MailSyncError;
 use super::models::MailSyncRun;
-use crate::platform::events::NewEventEnvelope;
 
 const EVENT_TYPE_STARTED: &str = "mail.sync.started";
 const EVENT_TYPE_PROGRESS: &str = "mail.sync.progress";

@@ -1,17 +1,16 @@
+use crate::domains::communications::messages::port::MessageProjectionPort;
+use crate::domains::communications::storage::port::{CommunicationAttachmentPort, LocalBlobPort};
 use std::path::Path;
 
 use serde_json::{Map, Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::messages::{
-    CommunicationMessageProjectionPort, MessageProjectionError,
-};
+use crate::domains::communications::messages::MessageProjectionError;
 use crate::domains::communications::storage::{
     AttachmentSafetyScanError, AttachmentSafetyScanRequest, AttachmentSafetyScanner,
-    CommunicationAttachmentDisposition, CommunicationBlobMetadataPort, CommunicationStorageError,
-    HeuristicAttachmentSafetyScanner, LocalCommunicationBlobPort, NewCommunicationAttachment,
-    NewCommunicationBlob,
+    CommunicationAttachmentDisposition, CommunicationStorageError,
+    HeuristicAttachmentSafetyScanner, NewCommunicationAttachment, NewCommunicationBlob,
 };
 use crate::platform::communications::{
     ProviderChannelMessageLookupPort, ProviderCommunicationMessagePortError,
@@ -77,9 +76,9 @@ pub async fn persist_zulip_attachment_bytes(
             provider_message_id: provider_message_id.to_owned(),
         })?;
 
-    let blob_store = LocalCommunicationBlobPort::new(blob_root);
+    let blob_store = LocalBlobPort::new(blob_root);
     let local_blob = blob_store.put_blob(&request.bytes).await?;
-    let metadata_store = CommunicationBlobMetadataPort::new(pool.clone());
+    let metadata_store = CommunicationAttachmentPort::new(pool.clone());
     let stored_blob = metadata_store
         .upsert_blob(
             &NewCommunicationBlob::from_local_blob(&local_blob).content_type(&content_type),
@@ -128,7 +127,7 @@ pub async fn persist_zulip_attachment_bytes(
             scan_status: &scan_status,
         },
     )?;
-    let projected = CommunicationMessageProjectionPort::new(pool)
+    let projected = MessageProjectionPort::new(pool)
         .set_message_metadata(&message.message_id, &updated_metadata)
         .await?;
 

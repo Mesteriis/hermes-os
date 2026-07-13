@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
+use hermes_events_api::NewEventEnvelope;
 use serde_json::{Value, json};
-
-use crate::platform::events::NewEventEnvelope;
 
 use super::constants::{
     PERSONA_IDENTITY_REVIEW_EVENT_TYPE, PERSONA_IDENTITY_REVIEW_SOURCE_KIND,

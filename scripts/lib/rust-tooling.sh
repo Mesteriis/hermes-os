@@ -27,3 +27,11 @@ require_binary() {
 	echo "Install it with: ${install_hint}" >&2
 	exit 1
 }
+
+disable_sccache_for_incremental() {
+	if [[ "${CARGO_INCREMENTAL:-1}" != "0" ]]; then
+		# An empty environment override takes precedence over a global Cargo
+		# rustc-wrapper setting, whereas `unset` does not.
+		export RUSTC_WRAPPER=""
+	fi
+}

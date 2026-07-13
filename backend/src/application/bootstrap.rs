@@ -1,17 +1,26 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use chrono::Utc;
+use hermes_desktop_runtime::{
+    RuntimeExitPolicy, RuntimeTaskClass, RuntimeTaskError, RuntimeTaskFactory, RuntimeTaskFuture,
+    RuntimeTaskSpec,
+};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
-use uuid::Uuid;
+use tokio_util::sync::CancellationToken;
 
 use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::platform::config::AppConfig;
-use crate::platform::events::EventBus;
-use crate::platform::settings::AiRuntimeSettings;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::vault::{HostVault, VaultMode};
+
+mod mail_ai;
+mod telegram;
+mod whatsapp;
+pub(crate) mod zulip;
 
 static MAIL_BACKGROUND_SYNC_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -30,14 +39,6 @@ static TELEGRAM_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
 static TELEGRAM_RUNTIME_RECONCILIATION_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static WHATSAPP_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static ZULIP_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static ZULIP_EVENT_INGEST_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static ZULIP_ATTACHMENT_DOWNLOAD_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static ZULIP_PROVIDER_OBSERVATION_RECONCILIATION_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -95,11 +96,6 @@ const TELEGRAM_RUNTIME_CHAT_SYNC_LIMIT: i64 = 100;
 const TELEGRAM_RUNTIME_RECONNECT_INITIAL_DELAY_SECONDS: u64 = 5;
 const TELEGRAM_RUNTIME_RECONNECT_MAX_DELAY_SECONDS: u64 = 300;
 const WHATSAPP_COMMAND_EXECUTOR_RUNTIME: &str = "whatsapp_command_executor";
-const ZULIP_COMMAND_EXECUTOR_RUNTIME: &str = "zulip_command_executor";
-const ZULIP_EVENT_INGEST_RUNTIME: &str = "zulip_event_ingest";
-const ZULIP_ATTACHMENT_DOWNLOAD_RUNTIME: &str = "zulip_attachment_download";
-const ZULIP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME: &str =
-    "zulip_provider_observation_reconciliation";
 const WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_RUNTIME: &str =
     "whatsapp_runtime_restore_reconciliation";
 const WHATSAPP_NATIVE_MD_STARTUP_RESTORE_CONFIG_KEY: &str = "native_md_live_smoke_enabled";
@@ -155,74 +151,62 @@ pub(crate) struct ApplicationBootstrapContext {
     pub(crate) zoom_retention_cleanup_scheduler_enabled: bool,
     pub(crate) vault: HostVault,
     pub(crate) telegram_runtime: TelegramRuntimeManager,
-    pub(crate) event_bus: EventBus,
+    pub(crate) event_bus: InMemoryEventBus,
 }
 
 pub(crate) fn start_background_services(context: ApplicationBootstrapContext) {
-    start_mail_background_sync(context.clone());
-    start_mail_attachment_scan_worker(context.clone());
-    crate::application::mail_imap_idle::start(context.clone());
-    start_address_book_sync(context.clone());
-    start_mail_outbox_delivery(context.clone());
-    start_mail_provider_command_executor(context.clone());
-    start_mail_ai_pipeline(context.clone());
-    start_telegram_command_executor(context.clone());
-    start_telegram_runtime_reconciliation(context.clone());
-    start_whatsapp_command_executor(context.clone());
-    start_zulip_event_ingest(context.clone());
-    start_zulip_attachment_download(context.clone());
-    start_zulip_command_executor(context.clone());
-    start_zulip_provider_observation_reconciliation(context.clone());
-    start_whatsapp_runtime_restore_reconciliation(context.clone());
-    start_zoom_token_maintenance(context.clone());
-    start_zoom_recording_sync(context.clone());
-    start_zoom_retention_cleanup(context.clone());
-    start_yandex_telemost_retention_cleanup(context.clone());
-    start_whatsapp_runtime_event_projection(context.clone());
-    start_whatsapp_provider_observation_reconciliation(context.clone());
-    start_communication_provider_observation_projection(context.clone());
-    start_persona_derived_evidence_projection(context.clone());
-    start_zoom_signal_detection_projection(context.clone());
-    start_zoom_calendar_matching_projection(context.clone());
-    start_zoom_participant_identity_projection(context.clone());
-    start_yandex_telemost_calendar_matching_projection(context.clone());
-    start_realtime_conversation_transcript_execution(context.clone());
-    start_persona_identity_review_inbox_projection(context.clone());
-    start_project_link_review_effects_projection(context.clone());
-    start_realtime_conversation_transcript_projection(context.clone());
-    start_signal_hub_raw_signal_dispatcher(context.clone());
-    start_event_outbox_dispatcher(context.clone());
-    start_signal_replay_dispatcher(context);
+    let _ = context;
 }
 
-fn start_mail_background_sync(context: ApplicationBootstrapContext) {
+pub(crate) fn mail_runtime_task_specs(
+    context: ApplicationBootstrapContext,
+) -> Vec<RuntimeTaskSpec> {
+    [
+        mail_background_sync_task(context.clone()),
+        mail_attachment_scan_task(context.clone()),
+        crate::application::mail_imap_idle::runtime_task_spec(context.clone()),
+        address_book_sync_task(context.clone()),
+        mail_outbox_delivery_task(context.clone()),
+        mail_provider_command_executor_task(context.clone()),
+        mail_ai_pipeline_task(context),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|task| task.with_lifecycle_source("mail"))
+    .collect()
+}
+
+fn mail_background_sync_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_mail_background_sync_scheduler(&database_url) {
-        return;
+        return None;
     }
     let vault = context.vault;
 
-    tokio::spawn(async move {
-        let store = crate::application::mail_background_sync::MailSyncStore::new(pool.clone());
-        let service = crate::application::mail_background_sync::MailBackgroundSyncService::new(
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let vault = vault.clone();
+        Box::pin(async move {
+            let store = crate::workflows::mail_background_sync::MailSyncStore::new(pool.clone());
+            let service = crate::workflows::mail_background_sync::MailBackgroundSyncService::new(
             pool.clone(),
             vault.clone(),
-            crate::application::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT,
+            crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT,
             Arc::new(
                 crate::integrations::mail::sync_provider::LiveEmailProviderSyncPort::new(
                     pool.clone(),
                     vault,
                     Arc::new(
-                        crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                        hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
                             pool.clone(),
                         ),
                     ),
-                    crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+                    crate::workflows::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
                 ),
             ),
             Arc::new(
@@ -230,237 +214,302 @@ fn start_mail_background_sync(context: ApplicationBootstrapContext) {
                     pool.clone(),
                 ),
             ),
+            Arc::new(hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(pool.clone())),
+            Arc::new(
+                hermes_communications_postgres::store::CommunicationIngestionStore::new(
+                    pool.clone(),
+                ),
+            ),
         );
-        if let Err(error) = store.recover_interrupted_runs(Utc::now()).await {
-            tracing::warn!(error = %error, "mail background sync startup recovery failed");
-        }
-        let mut tick = tokio::time::interval(Duration::from_secs(30));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            if let Err(error) = store.recover_interrupted_runs(Utc::now()).await {
+                tracing::warn!(error = %error, "mail background sync startup recovery failed");
+            }
+            let mut tick = tokio::time::interval(Duration::from_secs(30));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "mail",
-                MAIL_BACKGROUND_SYNC_RUNTIME,
-                json!({
-                    "label": "Mail background sync",
-                    "scope": "scheduler",
-                }),
-            )
-            .await
-            {
-                continue;
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "mail",
+                    MAIL_BACKGROUND_SYNC_RUNTIME,
+                    json!({
+                        "label": "Mail background sync",
+                        "scope": "scheduler",
+                    }),
+                )
+                .await
+                {
+                    continue;
+                }
+                if let Err(error) = service.run_due_accounts().await {
+                    tracing::warn!(error = %error, "mail background sync scheduler tick failed");
+                }
             }
-            if let Err(error) = service.run_due_accounts().await {
-                tracing::warn!(error = %error, "mail background sync scheduler tick failed");
-            }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        MAIL_BACKGROUND_SYNC_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_mail_attachment_scan_worker(context: ApplicationBootstrapContext) {
+fn mail_attachment_scan_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_mail_attachment_scan_worker(&database_url) {
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
-        let worker = crate::application::mail_attachment_scan_worker::MailAttachmentScanWorker::new(
-            pool.clone(),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(60));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "mail",
-                MAIL_ATTACHMENT_SCAN_RUNTIME,
-                json!({
-                    "label": "Mail attachment malware rescan",
-                    "scope": "scheduler",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            match worker.scan_due(50).await {
-                Ok(report)
-                    if report.candidates_seen > 0
-                        || report.verdicts_persisted > 0
-                        || report.failures > 0 =>
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        Box::pin(async move {
+            let worker =
+                crate::application::mail_attachment_scan_worker::MailAttachmentScanWorker::new(
+                    pool.clone(),
+                );
+            let mut tick = tokio::time::interval(Duration::from_secs(60));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "mail",
+                    MAIL_ATTACHMENT_SCAN_RUNTIME,
+                    json!({
+                        "label": "Mail attachment malware rescan",
+                        "scope": "scheduler",
+                    }),
+                )
+                .await
                 {
-                    tracing::info!(
-                        candidates_seen = report.candidates_seen,
-                        verdicts_persisted = report.verdicts_persisted,
-                        retry_deferred = report.retry_deferred,
-                        invalid_or_stale = report.invalid_or_stale,
-                        failures = report.failures,
-                        "mail attachment rescan tick completed"
-                    );
+                    continue;
                 }
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(error = %error, "mail attachment rescan scheduler tick failed");
+                match worker.scan_due(50).await {
+                    Ok(report)
+                        if report.candidates_seen > 0
+                            || report.verdicts_persisted > 0
+                            || report.failures > 0 =>
+                    {
+                        tracing::info!(
+                            candidates_seen = report.candidates_seen,
+                            verdicts_persisted = report.verdicts_persisted,
+                            retry_deferred = report.retry_deferred,
+                            invalid_or_stale = report.invalid_or_stale,
+                            failures = report.failures,
+                            "mail attachment rescan tick completed"
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::warn!(error = %error, "mail attachment rescan scheduler tick failed");
+                    }
                 }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        MAIL_ATTACHMENT_SCAN_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_address_book_sync(context: ApplicationBootstrapContext) {
+fn address_book_sync_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_address_book_sync_scheduler(&database_url) {
-        return;
+        return None;
     }
     let vault = context.vault;
 
-    tokio::spawn(async move {
-        let service = crate::application::address_book_sync::AddressBookSyncService::new(
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let vault = vault.clone();
+        Box::pin(async move {
+            let service = crate::workflows::address_book_sync::AddressBookSyncService::new(
             pool.clone(),
             Arc::new(
                 crate::integrations::mail::address_book_sync_provider::LiveAddressBookProviderSyncPort::new(
                     pool.clone(),
                     vault,
                     Arc::new(
-                        crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                        hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
                             pool.clone(),
                         ),
                     ),
-                    crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+                    crate::workflows::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
                 ),
             ),
+            Arc::new(hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(pool.clone())),
         );
-        let mut tick = tokio::time::interval(Duration::from_secs(300));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut tick = tokio::time::interval(Duration::from_secs(300));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "mail",
-                ADDRESS_BOOK_SYNC_RUNTIME,
-                json!({
-                    "label": "Address book sync",
-                    "scope": "scheduler",
-                }),
-            )
-            .await
-            {
-                continue;
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "mail",
+                    ADDRESS_BOOK_SYNC_RUNTIME,
+                    json!({
+                        "label": "Address book sync",
+                        "scope": "scheduler",
+                    }),
+                )
+                .await
+                {
+                    continue;
+                }
+                if let Err(error) = service.run_due_accounts().await {
+                    tracing::warn!(error = %error, "address book sync scheduler tick failed");
+                }
             }
-            if let Err(error) = service.run_due_accounts().await {
-                tracing::warn!(error = %error, "address book sync scheduler tick failed");
-            }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        ADDRESS_BOOK_SYNC_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_mail_outbox_delivery(context: ApplicationBootstrapContext) {
+fn mail_outbox_delivery_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_mail_outbox_delivery_scheduler(&database_url) {
-        return;
+        return None;
     }
     let vault = context.vault;
 
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(10));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let vault = vault.clone();
+        Box::pin(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(10));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "mail",
-                MAIL_OUTBOX_DELIVERY_RUNTIME,
-                json!({
-                    "label": "Mail outbox delivery",
-                    "scope": "scheduler",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            if !host_vault_is_unlocked(&vault) {
-                continue;
-            }
-            let store =
-                crate::domains::communications::outbox::CommunicationOutboxStore::new(pool.clone());
-            let sender =
-                crate::domains::communications::outbox::CommunicationOutboxEmailSender::new(
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "mail",
+                    MAIL_OUTBOX_DELIVERY_RUNTIME,
+                    json!({
+                        "label": "Mail outbox delivery",
+                        "scope": "scheduler",
+                    }),
+                )
+                .await
+                {
+                    continue;
+                }
+                if !host_vault_is_unlocked(&vault) {
+                    continue;
+                }
+                let store = crate::domains::communications::outbox::CommunicationOutboxStore::new(
                     pool.clone(),
-                    vault.clone(),
-                    crate::integrations::mail::send::smtp_outbox_transport(),
-                    crate::integrations::mail::outbox::gmail_outbox_transport(
+                );
+                let sender =
+                    crate::domains::communications::outbox::CommunicationOutboxEmailSender::new(
                         pool.clone(),
                         vault.clone(),
-                    ),
-                );
-            let worker = crate::domains::communications::outbox::EmailOutboxDeliveryWorker::new(
-                store, sender,
-            );
-            match worker.deliver_due(Utc::now(), 25).await {
-                Ok(report) if report.claimed > 0 => {
-                    tracing::info!(
-                        claimed = report.claimed,
-                        sent = report.sent,
-                        failed = report.failed,
-                        retried = report.retried,
-                        "mail outbox delivery scheduler tick completed"
+                        crate::integrations::mail::send::smtp_outbox_transport(),
+                        crate::integrations::mail::outbox::gmail_outbox_transport(
+                            pool.clone(),
+                            vault.clone(),
+                        ),
                     );
-                }
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(error = %error, "mail outbox delivery scheduler tick failed");
+                let worker = crate::domains::communications::outbox::EmailOutboxDeliveryWorker::new(
+                    store, sender,
+                );
+                match worker.deliver_due(Utc::now(), 25).await {
+                    Ok(report) if report.claimed > 0 => {
+                        tracing::info!(
+                            claimed = report.claimed,
+                            sent = report.sent,
+                            failed = report.failed,
+                            retried = report.retried,
+                            "mail outbox delivery scheduler tick completed"
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::warn!(error = %error, "mail outbox delivery scheduler tick failed");
+                    }
                 }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        MAIL_OUTBOX_DELIVERY_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_mail_provider_command_executor(context: ApplicationBootstrapContext) {
+fn mail_provider_command_executor_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_mail_provider_command_scheduler(&database_url) {
-        return;
+        return None;
     }
     let vault = context.vault;
-    tokio::spawn(async move {
-        let worker =
-            crate::application::mail_provider_command_executor::MailProviderCommandWorker::new(
-                pool.clone(),
-                vault.clone(),
-                crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
-            );
-        // Read-state intent is queued after the reader dwell threshold, so keep
-        // provider reconciliation responsive without polling full mailbox sync.
-        let mut tick = tokio::time::interval(Duration::from_secs(2));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let vault = vault.clone();
+        Box::pin(async move {
+            let worker =
+                crate::application::mail_provider_command_executor::MailProviderCommandWorker::new(
+                    pool.clone(),
+                    vault.clone(),
+                    crate::workflows::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+                );
+            // Read-state intent is queued after the reader dwell threshold, so keep
+            // provider reconciliation responsive without polling full mailbox sync.
+            let mut tick = tokio::time::interval(Duration::from_secs(2));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
                 &pool,
                 "mail",
                 MAIL_PROVIDER_COMMAND_RUNTIME,
@@ -471,98 +520,137 @@ fn start_mail_provider_command_executor(context: ApplicationBootstrapContext) {
             {
                 continue;
             }
-            if let Err(error) = worker.execute_due(Utc::now(), 25).await {
-                tracing::warn!(error = %error, "mail provider command scheduler tick failed");
+                if let Err(error) = worker.execute_due(Utc::now(), 25).await {
+                    tracing::warn!(error = %error, "mail provider command scheduler tick failed");
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        MAIL_PROVIDER_COMMAND_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_mail_ai_pipeline(context: ApplicationBootstrapContext) {
+fn mail_ai_pipeline_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_mail_ai_pipeline(&database_url) {
-        return;
+        return None;
     }
     let config = context.config;
     let vault = context.vault;
 
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(10));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let config = config.clone();
+        let vault = vault.clone();
+        Box::pin(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(10));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "ai",
-                MAIL_AI_PIPELINE_RUNTIME,
-                json!({
-                    "label": "Mail AI pipeline",
-                    "scope": "worker",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-
-            let mail_ai_runtime = mail_ai_hub_optional(&pool, &config, &vault).await;
-            let (hub, external_body_egress_required) = match mail_ai_runtime {
-                Some((hub, external_body_egress_required)) => {
-                    (Some(hub), external_body_egress_required)
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
                 }
-                None => (None, false),
-            };
-            let target_language = mail_ai_target_language(&pool).await;
-            let service = crate::workflows::email_intelligence::MailAiPipelineService::new(
-                pool.clone(),
-                hub,
-                target_language,
-            )
-            .requiring_external_body_egress(external_body_egress_required);
-            match service.process_next_batch(10).await {
-                Ok(report)
-                    if report.claimed > 0
-                        || report.recovered > 0
-                        || report.processed > 0
-                        || report.failed > 0
-                        || report.retrying > 0
-                        || report.suppressed > 0 =>
+                if !runtime_allows_processing(
+                    &pool,
+                    "ai",
+                    MAIL_AI_PIPELINE_RUNTIME,
+                    json!({
+                        "label": "Mail AI pipeline",
+                        "scope": "worker",
+                    }),
+                )
+                .await
                 {
-                    tracing::info!(
-                        claimed = report.claimed,
-                        recovered = report.recovered,
-                        processed = report.processed,
-                        suppressed = report.suppressed,
-                        failed = report.failed,
-                        retrying = report.retrying,
-                        review_candidates = report.review_candidates,
-                        "mail AI pipeline tick completed"
-                    );
+                    continue;
                 }
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(error = %error, "mail AI pipeline tick failed");
+
+                let mail_ai_runtime = mail_ai::mail_ai_hub_optional(&pool, &config, &vault).await;
+                let (hub, external_body_egress_required) = match mail_ai_runtime {
+                    Some((hub, external_body_egress_required)) => {
+                        (Some(hub), external_body_egress_required)
+                    }
+                    None => (None, false),
+                };
+                let target_language = mail_ai::mail_ai_target_language(&pool).await;
+                let service = crate::workflows::email_intelligence::pipeline::MailAiPipelineService::new(
+                    pool.clone(),
+                    hub,
+                    target_language,
+                    std::sync::Arc::new(
+                        crate::domains::communications::sensitive_forwarding::SensitiveForwardingStore::new(
+                            pool.clone(),
+                        ),
+                    ),
+                )
+                .requiring_external_body_egress(external_body_egress_required);
+                match service.process_next_batch(10).await {
+                    Ok(report)
+                        if report.claimed > 0
+                            || report.recovered > 0
+                            || report.processed > 0
+                            || report.failed > 0
+                            || report.retrying > 0
+                            || report.suppressed > 0 =>
+                    {
+                        tracing::info!(
+                            claimed = report.claimed,
+                            recovered = report.recovered,
+                            processed = report.processed,
+                            suppressed = report.suppressed,
+                            failed = report.failed,
+                            retrying = report.retrying,
+                            review_candidates = report.review_candidates,
+                            "mail AI pipeline tick completed"
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::warn!(error = %error, "mail AI pipeline tick failed");
+                    }
                 }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        MAIL_AI_PIPELINE_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_telegram_command_executor(context: ApplicationBootstrapContext) {
+pub(crate) fn telegram_runtime_task_specs(
+    context: ApplicationBootstrapContext,
+) -> Vec<RuntimeTaskSpec> {
+    [
+        telegram_command_executor_task(context.clone()),
+        telegram_runtime_reconciliation_task(context),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|task| task.with_lifecycle_source("telegram"))
+    .collect()
+}
+
+fn telegram_command_executor_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_telegram_command_executor(&database_url) {
-        return;
+        return None;
     }
     let runtime_pool = pool.clone();
     let runtime = context.telegram_runtime;
@@ -570,12 +658,12 @@ fn start_telegram_command_executor(context: ApplicationBootstrapContext) {
     let telegram_store = crate::integrations::telegram::client::TelegramStore::new(
         pool.clone(),
         Arc::new(
-            crate::domains::communications::core::CommunicationProviderAccountStore::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
                 pool.clone(),
             ),
         ),
         Arc::new(
-            crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
                 pool.clone(),
             ),
         ),
@@ -585,7 +673,9 @@ fn start_telegram_command_executor(context: ApplicationBootstrapContext) {
             ),
         ),
         Arc::new(
-            crate::domains::communications::core::CommunicationIngestionStore::new(pool.clone()),
+            hermes_communications_postgres::store::CommunicationIngestionStore::new(
+                pool.clone(),
+            ),
         ),
         Arc::new(
             crate::platform::communications::EventStoreProviderMessageObservationEventPort::new(
@@ -594,45 +684,62 @@ fn start_telegram_command_executor(context: ApplicationBootstrapContext) {
         ),
     );
 
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let runtime_pool = runtime_pool.clone();
+        let runtime = runtime.clone();
+        let event_bus = event_bus.clone();
+        let telegram_store = telegram_store.clone();
+        Box::pin(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &runtime_pool,
-                "telegram",
-                TELEGRAM_COMMAND_EXECUTOR_RUNTIME,
-                json!({
-                    "label": "Telegram command executor",
-                    "scope": "runtime",
-                }),
-            )
-            .await
-            {
-                continue;
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &runtime_pool,
+                    "telegram",
+                    TELEGRAM_COMMAND_EXECUTOR_RUNTIME,
+                    json!({
+                        "label": "Telegram command executor",
+                        "scope": "runtime",
+                    }),
+                )
+                .await
+                {
+                    continue;
+                }
+                crate::integrations::telegram::runtime::execute_queued_commands(
+                    &telegram_store,
+                    &runtime,
+                    &event_bus,
+                    10,
+                )
+                .await;
             }
-            crate::integrations::telegram::runtime::execute_queued_commands(
-                &telegram_store,
-                &runtime,
-                &event_bus,
-                10,
-            )
-            .await;
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        TELEGRAM_COMMAND_EXECUTOR_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_telegram_runtime_reconciliation(context: ApplicationBootstrapContext) {
+fn telegram_runtime_reconciliation_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_telegram_runtime_reconciliation(&database_url) {
-        return;
+        return None;
     }
 
     let vault = context.vault;
@@ -640,900 +747,878 @@ fn start_telegram_runtime_reconciliation(context: ApplicationBootstrapContext) {
     let event_bus = context.event_bus;
     let runtime = context.telegram_runtime;
 
-    tokio::spawn(async move {
-        let mut reconnects = HashMap::new();
-        let mut tick = tokio::time::interval(Duration::from_secs(
-            TELEGRAM_RUNTIME_RECONCILIATION_TICK_SECONDS,
-        ));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let vault = vault.clone();
+        let config = config.clone();
+        let event_bus = event_bus.clone();
+        let runtime = runtime.clone();
+        Box::pin(async move {
+            let mut reconnects = HashMap::<String, telegram::RuntimeReconnectState>::new();
+            let mut tick = tokio::time::interval(Duration::from_secs(
+                TELEGRAM_RUNTIME_RECONCILIATION_TICK_SECONDS,
+            ));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "telegram",
-                TELEGRAM_RUNTIME_RECONCILIATION_RUNTIME,
-                json!({
-                    "label": "Telegram runtime reconciliation",
-                    "scope": "runtime",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "telegram",
+                    TELEGRAM_RUNTIME_RECONCILIATION_RUNTIME,
+                    json!({
+                        "label": "Telegram runtime reconciliation",
+                        "scope": "runtime",
+                    }),
+                )
+                .await
+                {
+                    continue;
+                }
 
-            if let Err(error) = reconcile_telegram_runtime_once(
-                &pool,
-                &vault,
-                &config,
-                &event_bus,
-                &runtime,
-                &mut reconnects,
-            )
-            .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "telegram runtime reconciliation tick failed"
-                );
+                if let Err(error) = telegram::reconcile_runtime_once(
+                    &pool,
+                    &vault,
+                    &config,
+                    &event_bus,
+                    &runtime,
+                    &mut reconnects,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "telegram runtime reconciliation tick failed"
+                    );
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        TELEGRAM_RUNTIME_RECONCILIATION_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_whatsapp_command_executor(context: ApplicationBootstrapContext) {
+pub(crate) fn whatsapp_runtime_task_specs(
+    context: ApplicationBootstrapContext,
+) -> Vec<RuntimeTaskSpec> {
+    [
+        whatsapp_command_executor_task(context.clone()),
+        whatsapp_runtime_restore_reconciliation_task(context.clone()),
+        whatsapp_runtime_event_projection_task(context.clone()),
+        whatsapp_provider_observation_reconciliation_task(context),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|task| task.with_lifecycle_source("whatsapp"))
+    .collect()
+}
+
+pub(crate) fn zoom_runtime_task_specs(
+    context: ApplicationBootstrapContext,
+) -> Vec<RuntimeTaskSpec> {
+    [
+        zoom_token_maintenance_task(context.clone()),
+        zoom_recording_sync_task(context.clone()),
+        zoom_retention_cleanup_task(context.clone()),
+        zoom_calendar_matching_projection_task(context.clone()),
+        zoom_signal_detection_projection_task(context.clone()),
+        zoom_participant_identity_projection_task(context),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|task| task.with_lifecycle_source("zoom"))
+    .collect()
+}
+
+pub(crate) fn yandex_telemost_runtime_task_specs(
+    context: ApplicationBootstrapContext,
+) -> Vec<RuntimeTaskSpec> {
+    [
+        yandex_telemost_retention_cleanup_task(context.clone()),
+        yandex_telemost_calendar_matching_projection_task(context),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|task| task.with_lifecycle_source("yandex_telemost"))
+    .collect()
+}
+
+pub(crate) fn core_runtime_task_specs(
+    context: ApplicationBootstrapContext,
+) -> Vec<RuntimeTaskSpec> {
+    [
+        communication_provider_observation_projection_task(context.clone()),
+        signal_hub_raw_signal_dispatcher_task(context.clone()),
+        event_outbox_dispatcher_task(context.clone()),
+        signal_replay_dispatcher_task(context.clone()),
+        realtime_conversation_transcript_execution_task(context.clone()),
+        realtime_conversation_transcript_projection_task(context.clone()),
+        persona_derived_evidence_projection_task(context.clone()),
+        persona_identity_review_inbox_projection_task(context.clone()),
+        project_link_review_effects_projection_task(context),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+fn whatsapp_command_executor_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_whatsapp_command_executor(&database_url) {
-        return;
+        return None;
     }
     let runtime_pool = pool.clone();
     let vault = context.vault;
     let event_bus = context.event_bus;
-    let runtime = crate::application::whatsapp_provider_runtime(pool.clone());
-    let event_store = crate::platform::events::EventStore::new(pool.clone());
+    let runtime =
+        crate::application::provider_runtime_services::whatsapp_provider_runtime(pool.clone());
+    let event_store = hermes_events_postgres::store::EventStore::new(pool.clone());
 
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let runtime_pool = runtime_pool.clone();
+        let vault = vault.clone();
+        let event_bus = event_bus.clone();
+        let runtime = runtime.clone();
+        let event_store = event_store.clone();
+        Box::pin(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &runtime_pool,
-                "whatsapp",
-                WHATSAPP_COMMAND_EXECUTOR_RUNTIME,
-                json!({
-                    "label": "WhatsApp command executor",
-                    "scope": "runtime",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            crate::application::execute_due_fixture_commands(
-                pool.clone(),
-                runtime.clone(),
-                event_store.clone(),
-                event_bus.clone(),
-                10,
-            )
-            .await;
-            crate::application::execute_due_live_native_md_commands(
-                pool.clone(),
-                runtime.clone(),
-                vault.clone(),
-                event_store.clone(),
-                event_bus.clone(),
-                10,
-            )
-            .await;
-            crate::application::execute_due_live_business_cloud_commands(
-                pool.clone(),
-                runtime.clone(),
-                vault.clone(),
-                event_store.clone(),
-                event_bus.clone(),
-                10,
-            )
-            .await;
-        }
-    });
-}
-
-fn start_zulip_command_executor(context: ApplicationBootstrapContext) {
-    let Some(pool) = context.pool else {
-        return;
-    };
-    let Some(database_url) = context.database_url else {
-        return;
-    };
-    if !register_zulip_command_executor(&database_url) {
-        return;
-    }
-    let runtime_pool = pool.clone();
-    let vault = context.vault;
-
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &runtime_pool,
-                "zulip",
-                ZULIP_COMMAND_EXECUTOR_RUNTIME,
-                json!({
-                    "label": "Zulip command executor",
-                    "scope": "runtime",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            if !host_vault_is_unlocked(&vault) {
-                continue;
-            }
-            let worker = crate::application::ZulipCommandWorker::new(pool.clone(), vault.clone());
-            match worker.execute_due(Utc::now(), 10).await {
-                Ok(report)
-                    if report.claimed > 0
-                        || report.accounts_failed > 0
-                        || report.dead_lettered > 0 =>
-                {
-                    tracing::info!(
-                        accounts_scanned = report.accounts_scanned,
-                        accounts_failed = report.accounts_failed,
-                        claimed = report.claimed,
-                        completed = report.completed,
-                        retrying = report.retrying,
-                        dead_lettered = report.dead_lettered,
-                        "zulip command executor tick completed"
-                    );
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
                 }
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(error = %error, "zulip command executor tick failed");
-                }
-            }
-        }
-    });
-}
-
-fn start_zulip_event_ingest(context: ApplicationBootstrapContext) {
-    let Some(pool) = context.pool else {
-        return;
-    };
-    let Some(database_url) = context.database_url else {
-        return;
-    };
-    if !register_zulip_event_ingest(&database_url) {
-        return;
-    }
-    let runtime_pool = pool.clone();
-    let vault = context.vault;
-
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &runtime_pool,
-                "zulip",
-                ZULIP_EVENT_INGEST_RUNTIME,
-                json!({
-                    "label": "Zulip event ingest",
-                    "scope": "runtime",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            if !host_vault_is_unlocked(&vault) {
-                continue;
-            }
-            let worker =
-                crate::application::ZulipEventIngestWorker::new(pool.clone(), vault.clone());
-            match worker.poll_due(Utc::now()).await {
-                Ok(report)
-                    if report.events_received > 0
-                        || report.accounts_failed > 0
-                        || report.queues_registered > 0 =>
-                {
-                    tracing::info!(
-                        accounts_scanned = report.accounts_scanned,
-                        accounts_failed = report.accounts_failed,
-                        queues_registered = report.queues_registered,
-                        events_received = report.events_received,
-                        raw_records_recorded = report.raw_records_recorded,
-                        accepted_signals = report.accepted_signals,
-                        checkpoints_saved = report.checkpoints_saved,
-                        "zulip event ingest tick completed"
-                    );
-                }
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(error = %error, "zulip event ingest tick failed");
-                }
-            }
-        }
-    });
-}
-
-fn start_zulip_attachment_download(context: ApplicationBootstrapContext) {
-    let Some(pool) = context.pool else {
-        return;
-    };
-    let Some(database_url) = context.database_url else {
-        return;
-    };
-    if !register_zulip_attachment_download(&database_url) {
-        return;
-    }
-    let runtime_pool = pool.clone();
-    let vault = context.vault;
-
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(10));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &runtime_pool,
-                "zulip",
-                ZULIP_ATTACHMENT_DOWNLOAD_RUNTIME,
-                json!({
-                    "label": "Zulip attachment download",
-                    "scope": "runtime",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            if !host_vault_is_unlocked(&vault) {
-                continue;
-            }
-            let worker =
-                crate::application::ZulipAttachmentDownloadWorker::new(pool.clone(), vault.clone());
-            match worker.download_due(Utc::now(), 10).await {
-                Ok(report)
-                    if report.candidates_seen > 0
-                        || report.attachments_materialized > 0
-                        || report.attachments_failed > 0
-                        || report.accounts_failed > 0 =>
-                {
-                    tracing::info!(
-                        accounts_scanned = report.accounts_scanned,
-                        accounts_failed = report.accounts_failed,
-                        candidates_seen = report.candidates_seen,
-                        attachments_downloaded = report.attachments_downloaded,
-                        attachments_materialized = report.attachments_materialized,
-                        attachments_skipped = report.attachments_skipped,
-                        attachments_failed = report.attachments_failed,
-                        "zulip attachment download tick completed"
-                    );
-                }
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(error = %error, "zulip attachment download tick failed");
-                }
-            }
-        }
-    });
-}
-
-fn start_zulip_provider_observation_reconciliation(context: ApplicationBootstrapContext) {
-    let Some(pool) = context.pool else {
-        return;
-    };
-    let Some(database_url) = context.database_url else {
-        return;
-    };
-    if !register_zulip_provider_observation_reconciliation_consumer(&database_url) {
-        return;
-    }
-    let event_bus = context.event_bus;
-
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::application::ZULIP_PROVIDER_OBSERVATION_RECONCILIATION_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "zulip",
-                ZULIP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME,
-                json!({
-                    "label": "Zulip provider observation reconciliation consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            let handler_event_bus = event_bus.clone();
-            if let Err(error) = runner
-                .process_next_batch(|event| {
-                    let handler_pool = handler_pool.clone();
-                    let handler_event_bus = handler_event_bus.clone();
-                    async move {
-                        crate::application::reconcile_zulip_provider_observation_event(
-                            handler_pool.clone(),
-                            handler_event_bus.clone(),
-                            event,
-                        )
-                        .await
-                        .map_err(crate::platform::events::EventStoreError::ConsumerHandlerFailed)
-                    }
-                })
+                if !runtime_allows_processing(
+                    &runtime_pool,
+                    "whatsapp",
+                    WHATSAPP_COMMAND_EXECUTOR_RUNTIME,
+                    json!({
+                        "label": "WhatsApp command executor",
+                        "scope": "runtime",
+                    }),
+                )
                 .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "zulip provider observation reconciliation consumer tick failed"
-                );
+                {
+                    continue;
+                }
+                crate::application::whatsapp_command_executor::execute_due_fixture_commands(
+                    pool.clone(),
+                    runtime.clone(),
+                    event_store.clone(),
+                    event_bus.clone(),
+                    10,
+                )
+                .await;
+                crate::application::whatsapp_command_executor::execute_due_live_native_md_commands(
+                    pool.clone(),
+                    runtime.clone(),
+                    vault.clone(),
+                    event_store.clone(),
+                    event_bus.clone(),
+                    10,
+                )
+                .await;
+                crate::application::whatsapp_command_executor::execute_due_live_business_cloud_commands(
+                pool.clone(),
+                runtime.clone(),
+                vault.clone(),
+                event_store.clone(),
+                event_bus.clone(),
+                10,
+            )
+            .await;
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        WHATSAPP_COMMAND_EXECUTOR_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_whatsapp_runtime_restore_reconciliation(context: ApplicationBootstrapContext) {
+fn whatsapp_runtime_restore_reconciliation_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_whatsapp_runtime_restore_reconciliation(&database_url) {
-        return;
+        return None;
     }
     let runtime_pool = pool.clone();
     let vault = context.vault;
     let event_bus = context.event_bus;
-    let runtime = crate::application::whatsapp_provider_runtime(pool.clone());
+    let runtime =
+        crate::application::provider_runtime_services::whatsapp_provider_runtime(pool.clone());
 
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let runtime_pool = runtime_pool.clone();
+        let vault = vault.clone();
+        let event_bus = event_bus.clone();
+        let runtime = runtime.clone();
+        Box::pin(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &runtime_pool,
-                "whatsapp",
-                WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_RUNTIME,
-                json!({
-                    "label": "WhatsApp runtime restore reconciliation",
-                    "scope": "runtime",
-                }),
-            )
-            .await
-            {
-                continue;
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &runtime_pool,
+                    "whatsapp",
+                    WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_RUNTIME,
+                    json!({
+                        "label": "WhatsApp runtime restore reconciliation",
+                        "scope": "runtime",
+                    }),
+                )
+                .await
+                {
+                    continue;
+                }
+                if !host_vault_is_unlocked(&vault) {
+                    continue;
+                }
+                if let Err(error) = whatsapp::reconcile_whatsapp_runtime_restore_once(
+                    &pool,
+                    &vault,
+                    &event_bus,
+                    runtime.clone(),
+                )
+                .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "whatsapp runtime restore reconciliation tick failed"
+                    );
+                }
             }
-            if !host_vault_is_unlocked(&vault) {
-                continue;
-            }
-            if let Err(error) =
-                reconcile_whatsapp_runtime_restore_once(&pool, &vault, &event_bus, runtime.clone())
-                    .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "whatsapp runtime restore reconciliation tick failed"
-                );
-            }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_zoom_token_maintenance(context: ApplicationBootstrapContext) {
+fn zoom_token_maintenance_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
     if !context.zoom_token_maintenance_scheduler_enabled {
-        return;
+        return None;
     }
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_zoom_token_maintenance_scheduler(&database_url) {
-        return;
+        return None;
     }
     let vault = context.vault;
     let event_bus = context.event_bus;
 
-    tokio::spawn(async move {
-        let mut tick =
-            tokio::time::interval(Duration::from_secs(ZOOM_TOKEN_MAINTENANCE_TICK_SECONDS));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let vault = vault.clone();
+        let event_bus = event_bus.clone();
+        Box::pin(async move {
+            let mut tick =
+                tokio::time::interval(Duration::from_secs(ZOOM_TOKEN_MAINTENANCE_TICK_SECONDS));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "zoom",
-                ZOOM_TOKEN_MAINTENANCE_RUNTIME,
-                json!({
-                    "label": "Zoom token maintenance",
-                    "scope": "scheduler",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            if !host_vault_is_unlocked(&vault) {
-                continue;
-            }
-            match run_zoom_token_maintenance_once(&pool, &vault, &event_bus).await {
-                Ok(result)
-                    if result.checked_count > 0
-                        || result.refreshed_count > 0
-                        || result.failed_count > 0 =>
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "zoom",
+                    ZOOM_TOKEN_MAINTENANCE_RUNTIME,
+                    json!({
+                        "label": "Zoom token maintenance",
+                        "scope": "scheduler",
+                    }),
+                )
+                .await
                 {
-                    tracing::info!(
-                        checked = result.checked_count,
-                        refreshed = result.refreshed_count,
-                        skipped = result.skipped_count,
-                        failed = result.failed_count,
-                        refresh_expiring_within_seconds = result.refresh_expiring_within_seconds,
-                        "zoom token maintenance scheduler tick completed"
-                    );
+                    continue;
                 }
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(
-                        error = %error,
-                        "zoom token maintenance scheduler tick failed"
-                    );
+                if !host_vault_is_unlocked(&vault) {
+                    continue;
+                }
+                match run_zoom_token_maintenance_once(&pool, &vault, &event_bus).await {
+                    Ok(result)
+                        if result.checked_count > 0
+                            || result.refreshed_count > 0
+                            || result.failed_count > 0 =>
+                    {
+                        tracing::info!(
+                            checked = result.checked_count,
+                            refreshed = result.refreshed_count,
+                            skipped = result.skipped_count,
+                            failed = result.failed_count,
+                            refresh_expiring_within_seconds =
+                                result.refresh_expiring_within_seconds,
+                            "zoom token maintenance scheduler tick completed"
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::warn!(
+                            error = %error,
+                            "zoom token maintenance scheduler tick failed"
+                        );
+                    }
                 }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        ZOOM_TOKEN_MAINTENANCE_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_zoom_recording_sync(context: ApplicationBootstrapContext) {
+fn zoom_recording_sync_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
     if !context.zoom_recording_sync_scheduler_enabled {
-        return;
+        return None;
     }
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_zoom_recording_sync_scheduler(&database_url) {
-        return;
+        return None;
     }
     let vault = context.vault;
     let event_bus = context.event_bus;
 
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(ZOOM_RECORDING_SYNC_TICK_SECONDS));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let vault = vault.clone();
+        let event_bus = event_bus.clone();
+        Box::pin(async move {
+            let mut tick =
+                tokio::time::interval(Duration::from_secs(ZOOM_RECORDING_SYNC_TICK_SECONDS));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "zoom",
-                ZOOM_RECORDING_SYNC_RUNTIME,
-                json!({
-                    "label": "Zoom recording sync",
-                    "scope": "scheduler",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            if !host_vault_is_unlocked(&vault) {
-                continue;
-            }
-            match run_zoom_recording_sync_once(&pool, &vault, &event_bus).await {
-                Ok(result)
-                    if result.accounts_checked > 0
-                        || result.accounts_synced > 0
-                        || result.failed_count > 0
-                        || result.meetings_recorded > 0
-                        || result.recordings_recorded > 0
-                        || result.media_downloads_recorded > 0
-                        || result.transcripts_recorded > 0 =>
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "zoom",
+                    ZOOM_RECORDING_SYNC_RUNTIME,
+                    json!({
+                        "label": "Zoom recording sync",
+                        "scope": "scheduler",
+                    }),
+                )
+                .await
                 {
-                    tracing::info!(
-                        accounts_checked = result.accounts_checked,
-                        accounts_synced = result.accounts_synced,
-                        accounts_skipped = result.accounts_skipped,
-                        failed = result.failed_count,
-                        meetings_recorded = result.meetings_recorded,
-                        recordings_recorded = result.recordings_recorded,
-                        media_downloads_recorded = result.media_downloads_recorded,
-                        transcripts_recorded = result.transcripts_recorded,
-                        lookback_days = result.lookback_days,
-                        "zoom recording sync scheduler tick completed"
-                    );
+                    continue;
                 }
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(error = %error, "zoom recording sync scheduler tick failed");
+                if !host_vault_is_unlocked(&vault) {
+                    continue;
+                }
+                match run_zoom_recording_sync_once(&pool, &vault, &event_bus).await {
+                    Ok(result)
+                        if result.accounts_checked > 0
+                            || result.accounts_synced > 0
+                            || result.failed_count > 0
+                            || result.meetings_recorded > 0
+                            || result.recordings_recorded > 0
+                            || result.media_downloads_recorded > 0
+                            || result.transcripts_recorded > 0 =>
+                    {
+                        tracing::info!(
+                            accounts_checked = result.accounts_checked,
+                            accounts_synced = result.accounts_synced,
+                            accounts_skipped = result.accounts_skipped,
+                            failed = result.failed_count,
+                            meetings_recorded = result.meetings_recorded,
+                            recordings_recorded = result.recordings_recorded,
+                            media_downloads_recorded = result.media_downloads_recorded,
+                            transcripts_recorded = result.transcripts_recorded,
+                            lookback_days = result.lookback_days,
+                            "zoom recording sync scheduler tick completed"
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::warn!(error = %error, "zoom recording sync scheduler tick failed");
+                    }
                 }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        ZOOM_RECORDING_SYNC_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_zoom_retention_cleanup(context: ApplicationBootstrapContext) {
+fn zoom_retention_cleanup_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
     if !context.zoom_retention_cleanup_scheduler_enabled {
-        return;
+        return None;
     }
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_zoom_retention_cleanup_scheduler(&database_url) {
-        return;
+        return None;
     }
     let event_bus = context.event_bus;
 
-    tokio::spawn(async move {
-        let mut tick =
-            tokio::time::interval(Duration::from_secs(ZOOM_RETENTION_CLEANUP_TICK_SECONDS));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let event_bus = event_bus.clone();
+        Box::pin(async move {
+            let mut tick =
+                tokio::time::interval(Duration::from_secs(ZOOM_RETENTION_CLEANUP_TICK_SECONDS));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "zoom",
-                ZOOM_RETENTION_CLEANUP_RUNTIME,
-                json!({
-                    "label": "Zoom retention cleanup",
-                    "scope": "scheduler",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            match run_zoom_retention_cleanup_once(&pool, &event_bus).await {
-                Ok(result)
-                    if result.accounts_checked > 0
-                        || result.accounts_cleaned > 0
-                        || result.recordings_removed > 0
-                        || result.transcripts_removed > 0 =>
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "zoom",
+                    ZOOM_RETENTION_CLEANUP_RUNTIME,
+                    json!({
+                        "label": "Zoom retention cleanup",
+                        "scope": "scheduler",
+                    }),
+                )
+                .await
                 {
-                    tracing::info!(
-                        accounts_checked = result.accounts_checked,
-                        accounts_cleaned = result.accounts_cleaned,
-                        recordings_removed = result.recordings_removed,
-                        transcripts_removed = result.transcripts_removed,
-                        limit_per_account = result.limit_per_account,
-                        "zoom retention cleanup scheduler tick completed"
-                    );
+                    continue;
                 }
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(
-                        error = %error,
-                        "zoom retention cleanup scheduler tick failed"
-                    );
+                match run_zoom_retention_cleanup_once(&pool, &event_bus).await {
+                    Ok(result)
+                        if result.accounts_checked > 0
+                            || result.accounts_cleaned > 0
+                            || result.recordings_removed > 0
+                            || result.transcripts_removed > 0 =>
+                    {
+                        tracing::info!(
+                            accounts_checked = result.accounts_checked,
+                            accounts_cleaned = result.accounts_cleaned,
+                            recordings_removed = result.recordings_removed,
+                            transcripts_removed = result.transcripts_removed,
+                            limit_per_account = result.limit_per_account,
+                            "zoom retention cleanup scheduler tick completed"
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::warn!(
+                            error = %error,
+                            "zoom retention cleanup scheduler tick failed"
+                        );
+                    }
                 }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        ZOOM_RETENTION_CLEANUP_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_yandex_telemost_retention_cleanup(context: ApplicationBootstrapContext) {
+fn yandex_telemost_retention_cleanup_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_yandex_telemost_retention_cleanup_scheduler(&database_url) {
-        return;
+        return None;
     }
     let event_bus = context.event_bus;
 
-    tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(
-            YANDEX_TELEMOST_RETENTION_CLEANUP_TICK_SECONDS,
-        ));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let event_bus = event_bus.clone();
+        Box::pin(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(
+                YANDEX_TELEMOST_RETENTION_CLEANUP_TICK_SECONDS,
+            ));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "yandex_telemost",
-                YANDEX_TELEMOST_RETENTION_CLEANUP_RUNTIME,
-                json!({
-                    "label": "Yandex Telemost retention cleanup",
-                    "scope": "scheduler",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            match run_yandex_telemost_retention_cleanup_once(&pool, &event_bus).await {
-                Ok(result)
-                    if result.accounts_checked > 0
-                        || result.accounts_cleaned > 0
-                        || result.audio_files_removed > 0
-                        || result.speaker_hint_files_removed > 0 =>
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "yandex_telemost",
+                    YANDEX_TELEMOST_RETENTION_CLEANUP_RUNTIME,
+                    json!({
+                        "label": "Yandex Telemost retention cleanup",
+                        "scope": "scheduler",
+                    }),
+                )
+                .await
                 {
-                    tracing::info!(
-                        accounts_checked = result.accounts_checked,
-                        accounts_cleaned = result.accounts_cleaned,
-                        audio_files_removed = result.audio_files_removed,
-                        speaker_hint_files_removed = result.speaker_hint_files_removed,
-                        limit_per_account = result.limit_per_account,
-                        "yandex telemost retention cleanup scheduler tick completed"
-                    );
+                    continue;
                 }
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(
-                        error = %error,
-                        "yandex telemost retention cleanup scheduler tick failed"
-                    );
+                match run_yandex_telemost_retention_cleanup_once(&pool, &event_bus).await {
+                    Ok(result)
+                        if result.accounts_checked > 0
+                            || result.accounts_cleaned > 0
+                            || result.audio_files_removed > 0
+                            || result.speaker_hint_files_removed > 0 =>
+                    {
+                        tracing::info!(
+                            accounts_checked = result.accounts_checked,
+                            accounts_cleaned = result.accounts_cleaned,
+                            audio_files_removed = result.audio_files_removed,
+                            speaker_hint_files_removed = result.speaker_hint_files_removed,
+                            limit_per_account = result.limit_per_account,
+                            "yandex telemost retention cleanup scheduler tick completed"
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::warn!(
+                            error = %error,
+                            "yandex telemost retention cleanup scheduler tick failed"
+                        );
+                    }
                 }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        YANDEX_TELEMOST_RETENTION_CLEANUP_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_whatsapp_runtime_event_projection(context: ApplicationBootstrapContext) {
+fn whatsapp_runtime_event_projection_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_whatsapp_runtime_event_consumer(&database_url) {
-        return;
+        return None;
     }
     let vault = context.vault;
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::application::WHATSAPP_RUNTIME_EVENT_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let vault = vault.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
+                pool.clone(),
+                hermes_events_postgres::consumers::EventConsumerConfig::new(
+                    crate::application::whatsapp_runtime_event_projection::WHATSAPP_RUNTIME_EVENT_CONSUMER,
+                ),
+            );
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "whatsapp",
-                WHATSAPP_RUNTIME_EVENT_CONSUMER_RUNTIME,
-                json!({
-                    "label": "WhatsApp runtime-event projection consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            let handler_vault = vault.clone();
-            if let Err(error) = runner
-                .process_next_batch(|event| {
-                    let handler_pool = handler_pool.clone();
-                    let handler_vault = handler_vault.clone();
-                    async move {
-                        crate::application::project_whatsapp_runtime_event(
-                            handler_pool.clone(),
-                            handler_vault.clone(),
-                            event,
-                        )
-                        .await
-                        .map_err(crate::platform::events::EventStoreError::ConsumerHandlerFailed)
-                    }
-                })
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "whatsapp",
+                    WHATSAPP_RUNTIME_EVENT_CONSUMER_RUNTIME,
+                    json!({
+                        "label": "WhatsApp runtime-event projection consumer",
+                        "scope": "consumer",
+                    }),
+                )
                 .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "whatsapp runtime-event projection consumer tick failed"
-                );
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                let handler_vault = vault.clone();
+                if let Err(error) = runner
+                    .process_next_batch(|event| {
+                        let handler_pool = handler_pool.clone();
+                        let handler_vault = handler_vault.clone();
+                        async move {
+                            crate::application::whatsapp_runtime_event_projection::project_whatsapp_runtime_event(
+                                handler_pool.clone(),
+                                handler_vault.clone(),
+                                event,
+                            )
+                            .await
+                            .map_err(hermes_events_postgres::errors::EventStoreError::ConsumerHandlerFailed)
+                        }
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "whatsapp runtime-event projection consumer tick failed"
+                    );
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        WHATSAPP_RUNTIME_EVENT_CONSUMER_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_whatsapp_provider_observation_reconciliation(context: ApplicationBootstrapContext) {
+fn whatsapp_provider_observation_reconciliation_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_whatsapp_provider_observation_reconciliation_consumer(&database_url) {
-        return;
+        return None;
     }
     let event_bus = context.event_bus;
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::application::WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let event_bus = event_bus.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
+                pool.clone(),
+                hermes_events_postgres::consumers::EventConsumerConfig::new(
+                    crate::application::whatsapp_provider_observation_reconciliation::WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_CONSUMER,
+                ),
+            );
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "whatsapp",
-                WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME,
-                json!({
-                    "label": "WhatsApp provider observation reconciliation consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            let handler_event_bus = event_bus.clone();
-            if let Err(error) = runner
-                .process_next_batch(|event| {
-                    let handler_pool = handler_pool.clone();
-                    let handler_event_bus = handler_event_bus.clone();
-                    async move {
-                        crate::application::reconcile_whatsapp_provider_observation_event(
-                            handler_pool.clone(),
-                            handler_event_bus.clone(),
-                            event,
-                        )
-                        .await
-                        .map_err(crate::platform::events::EventStoreError::ConsumerHandlerFailed)
-                    }
-                })
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "whatsapp",
+                    WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME,
+                    json!({
+                        "label": "WhatsApp provider observation reconciliation consumer",
+                        "scope": "consumer",
+                    }),
+                )
                 .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "whatsapp provider observation reconciliation consumer tick failed"
-                );
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                let handler_event_bus = event_bus.clone();
+                if let Err(error) = runner
+                    .process_next_batch(|event| {
+                        let handler_pool = handler_pool.clone();
+                        let handler_event_bus = handler_event_bus.clone();
+                        async move {
+                            crate::application::whatsapp_provider_observation_reconciliation::reconcile_whatsapp_provider_observation_event(
+                                handler_pool.clone(),
+                                handler_event_bus.clone(),
+                                event,
+                            )
+                            .await
+                            .map_err(hermes_events_postgres::errors::EventStoreError::ConsumerHandlerFailed)
+                        }
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "whatsapp provider observation reconciliation consumer tick failed"
+                    );
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_communication_provider_observation_projection(context: ApplicationBootstrapContext) {
+fn communication_provider_observation_projection_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_communication_provider_observation_consumer(&database_url) {
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::domains::communications::messages::COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_millis(
-            REALTIME_SIGNAL_PROJECTION_TICK_MILLIS,
-        ));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
+                pool.clone(),
+                hermes_events_postgres::consumers::EventConsumerConfig::new(
+                    crate::domains::communications::messages::COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER,
+                ),
+            );
+            let mut tick = tokio::time::interval(Duration::from_millis(
+                REALTIME_SIGNAL_PROJECTION_TICK_MILLIS,
+            ));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "system",
-                COMMUNICATION_PROVIDER_OBSERVATION_RUNTIME,
-                json!({
-                    "label": "Communications accepted-signal consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            if let Err(error) = runner
-                .process_next_batch(|event| {
-                    crate::domains::communications::messages::project_provider_observation_event(
-                        handler_pool.clone(),
-                        event,
-                    )
-                })
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "system",
+                    COMMUNICATION_PROVIDER_OBSERVATION_RUNTIME,
+                    json!({
+                        "label": "Communications accepted-signal consumer",
+                        "scope": "consumer",
+                    }),
+                )
                 .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "communication provider observation projection consumer tick failed"
-                );
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                if let Err(error) = runner
+                    .process_next_batch(|event| {
+                        crate::domains::communications::messages::project_provider_observation_event(
+                            handler_pool.clone(),
+                            event,
+                        )
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "communication provider observation projection consumer tick failed"
+                    );
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        COMMUNICATION_PROVIDER_OBSERVATION_RUNTIME,
+        RuntimeTaskClass::Essential,
+        RuntimeExitPolicy::ShutdownRuntime,
+        task,
+    ))
 }
 
-fn start_persona_derived_evidence_projection(context: ApplicationBootstrapContext) {
+fn persona_derived_evidence_projection_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_persona_derived_evidence_consumer(&database_url) {
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::application::PERSONA_DERIVED_EVIDENCE_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
+                pool.clone(),
+                hermes_events_postgres::consumers::EventConsumerConfig::new(
+                    crate::workflows::persona_derived_evidence::PERSONA_DERIVED_EVIDENCE_CONSUMER,
+                ),
+            );
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "system",
-                PERSONA_DERIVED_EVIDENCE_RUNTIME,
-                json!({
-                    "label": "Persona derived evidence consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            if let Err(error) = runner
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "system",
+                    PERSONA_DERIVED_EVIDENCE_RUNTIME,
+                    json!({
+                        "label": "Persona derived evidence consumer",
+                        "scope": "consumer",
+                    }),
+                )
+                .await
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                if let Err(error) = runner
                 .process_next_batch(|event| {
-                    crate::application::project_persona_derived_evidence_event(
+                    crate::workflows::persona_derived_evidence::project_persona_derived_evidence_event(
                         handler_pool.clone(),
                         event,
                     )
@@ -1545,325 +1630,409 @@ fn start_persona_derived_evidence_projection(context: ApplicationBootstrapContex
                     "persona derived evidence projection consumer tick failed"
                 );
             }
-        }
+            }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        PERSONA_DERIVED_EVIDENCE_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_zoom_calendar_matching_projection(context: ApplicationBootstrapContext) {
+fn zoom_calendar_matching_projection_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_zoom_calendar_matching_consumer(&database_url) {
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::application::ZOOM_CALENDAR_MATCHING_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
+                pool.clone(),
+                hermes_events_postgres::consumers::EventConsumerConfig::new(
+                    crate::workflows::zoom_calendar_matching::ZOOM_CALENDAR_MATCHING_CONSUMER,
+                ),
+            );
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "zoom",
-                ZOOM_CALENDAR_MATCHING_RUNTIME,
-                json!({
-                    "label": "Zoom calendar matching consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            if let Err(error) = runner
-                .process_next_batch(|event| {
-                    crate::application::project_zoom_calendar_matching_event(
-                        handler_pool.clone(),
-                        event,
-                    )
-                })
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "zoom",
+                    ZOOM_CALENDAR_MATCHING_RUNTIME,
+                    json!({
+                        "label": "Zoom calendar matching consumer",
+                        "scope": "consumer",
+                    }),
+                )
                 .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "zoom calendar matching projection consumer tick failed"
-                );
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                if let Err(error) = runner
+                    .process_next_batch(|event| {
+                        crate::workflows::zoom_calendar_matching::project_zoom_calendar_matching_event(
+                            handler_pool.clone(),
+                            event,
+                        )
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "zoom calendar matching projection consumer tick failed"
+                    );
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        ZOOM_CALENDAR_MATCHING_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_zoom_signal_detection_projection(context: ApplicationBootstrapContext) {
+fn zoom_signal_detection_projection_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_zoom_signal_detection_consumer(&database_url) {
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::application::ZOOM_SIGNAL_DETECTION_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
+                pool.clone(),
+                hermes_events_postgres::consumers::EventConsumerConfig::new(
+                    crate::workflows::zoom_signal_detection::ZOOM_SIGNAL_DETECTION_CONSUMER,
+                ),
+            );
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "zoom",
-                ZOOM_SIGNAL_DETECTION_RUNTIME,
-                json!({
-                    "label": "Zoom signal detection consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            if let Err(error) = runner
-                .process_next_batch(|event| {
-                    crate::application::project_zoom_signal_detection_event(
-                        handler_pool.clone(),
-                        event,
-                    )
-                })
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "zoom",
+                    ZOOM_SIGNAL_DETECTION_RUNTIME,
+                    json!({
+                        "label": "Zoom signal detection consumer",
+                        "scope": "consumer",
+                    }),
+                )
                 .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "zoom signal detection projection consumer tick failed"
-                );
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                if let Err(error) = runner
+                    .process_next_batch(|event| {
+                        crate::workflows::zoom_signal_detection::project_zoom_signal_detection_event(
+                            handler_pool.clone(),
+                            event,
+                        )
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "zoom signal detection projection consumer tick failed"
+                    );
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        ZOOM_SIGNAL_DETECTION_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_persona_identity_review_inbox_projection(context: ApplicationBootstrapContext) {
+fn persona_identity_review_inbox_projection_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_persona_identity_review_inbox_consumer(&database_url) {
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::application::PERSONA_IDENTITY_REVIEW_INBOX_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
+                pool.clone(),
+                hermes_events_postgres::consumers::EventConsumerConfig::new(
+                    crate::workflows::review_inbox::PERSONA_IDENTITY_REVIEW_INBOX_CONSUMER,
+                ),
+            );
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "system",
-                PERSONA_IDENTITY_REVIEW_INBOX_RUNTIME,
-                json!({
-                    "label": "Persona identity review inbox consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            if let Err(error) = runner
-                .process_next_batch(|event| {
-                    crate::application::project_persona_identity_review_event(
-                        handler_pool.clone(),
-                        event,
-                    )
-                })
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "system",
+                    PERSONA_IDENTITY_REVIEW_INBOX_RUNTIME,
+                    json!({
+                        "label": "Persona identity review inbox consumer",
+                        "scope": "consumer",
+                    }),
+                )
                 .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "persona identity review inbox projection consumer tick failed"
-                );
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                if let Err(error) = runner
+                    .process_next_batch(|event| {
+                        crate::workflows::review_inbox::project_persona_identity_review_event(
+                            handler_pool.clone(),
+                            event,
+                        )
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "persona identity review inbox projection consumer tick failed"
+                    );
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        PERSONA_IDENTITY_REVIEW_INBOX_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_zoom_participant_identity_projection(context: ApplicationBootstrapContext) {
+fn zoom_participant_identity_projection_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_zoom_participant_identity_consumer(&database_url) {
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::application::ZOOM_PARTICIPANT_IDENTITY_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
+                pool.clone(),
+                hermes_events_postgres::consumers::EventConsumerConfig::new(
+                    crate::workflows::zoom_participant_identity::ZOOM_PARTICIPANT_IDENTITY_CONSUMER,
+                ),
+            );
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "zoom",
-                ZOOM_PARTICIPANT_IDENTITY_RUNTIME,
-                json!({
-                    "label": "Zoom participant identity consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            if let Err(error) = runner
-                .process_next_batch(|event| {
-                    crate::application::project_zoom_participant_identity_event(
-                        handler_pool.clone(),
-                        event,
-                    )
-                })
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "zoom",
+                    ZOOM_PARTICIPANT_IDENTITY_RUNTIME,
+                    json!({
+                        "label": "Zoom participant identity consumer",
+                        "scope": "consumer",
+                    }),
+                )
                 .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "zoom participant identity projection consumer tick failed"
-                );
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                if let Err(error) = runner
+                    .process_next_batch(|event| {
+                        crate::workflows::zoom_participant_identity::project_zoom_participant_identity_event(
+                            handler_pool.clone(),
+                            event,
+                        )
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "zoom participant identity projection consumer tick failed"
+                    );
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        ZOOM_PARTICIPANT_IDENTITY_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_yandex_telemost_calendar_matching_projection(context: ApplicationBootstrapContext) {
+fn yandex_telemost_calendar_matching_projection_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_yandex_telemost_calendar_matching_consumer(&database_url) {
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
+                pool.clone(),
+                hermes_events_postgres::consumers::EventConsumerConfig::new(
+                    crate::workflows::yandex_telemost_calendar_matching::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                ),
+            );
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "yandex_telemost",
-                YANDEX_TELEMOST_CALENDAR_MATCHING_RUNTIME,
-                json!({
-                    "label": "Yandex Telemost calendar matching consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            if let Err(error) = runner
-                .process_next_batch(|event| {
-                    crate::application::project_yandex_telemost_calendar_matching_event(
-                        handler_pool.clone(),
-                        event,
-                    )
-                })
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "yandex_telemost",
+                    YANDEX_TELEMOST_CALENDAR_MATCHING_RUNTIME,
+                    json!({
+                        "label": "Yandex Telemost calendar matching consumer",
+                        "scope": "consumer",
+                    }),
+                )
                 .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "yandex telemost calendar matching projection consumer tick failed"
-                );
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                if let Err(error) = runner
+                    .process_next_batch(|event| {
+                        crate::workflows::yandex_telemost_calendar_matching::project_yandex_telemost_calendar_matching_event(
+                            handler_pool.clone(),
+                            event,
+                        )
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "yandex telemost calendar matching projection consumer tick failed"
+                    );
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        YANDEX_TELEMOST_CALENDAR_MATCHING_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_project_link_review_effects_projection(context: ApplicationBootstrapContext) {
+fn project_link_review_effects_projection_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_project_link_review_effects_consumer(&database_url) {
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
             pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::application::PROJECT_LINK_REVIEW_EFFECTS_CONSUMER,
+            hermes_events_postgres::consumers::EventConsumerConfig::new(
+                crate::workflows::project_link_review_effects::PROJECT_LINK_REVIEW_EFFECTS_CONSUMER,
             ),
         );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "system",
-                PROJECT_LINK_REVIEW_EFFECTS_RUNTIME,
-                json!({
-                    "label": "Project link review effects consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            if let Err(error) = runner
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "system",
+                    PROJECT_LINK_REVIEW_EFFECTS_RUNTIME,
+                    json!({
+                        "label": "Project link review effects consumer",
+                        "scope": "consumer",
+                    }),
+                )
+                .await
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                if let Err(error) = runner
                 .process_next_batch(|event| {
-                    crate::application::project_link_review_effect_event(
+                    crate::workflows::project_link_review_effects::project_link_review_effect_event(
                         handler_pool.clone(),
                         event,
                     )
@@ -1875,310 +2044,389 @@ fn start_project_link_review_effects_projection(context: ApplicationBootstrapCon
                     "project link review effects projection consumer tick failed"
                 );
             }
-        }
+            }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        PROJECT_LINK_REVIEW_EFFECTS_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_realtime_conversation_transcript_execution(context: ApplicationBootstrapContext) {
-    if !crate::application::realtime_conversation_transcriber_is_configured() {
+fn realtime_conversation_transcript_execution_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
+    if !crate::workflows::realtime_conversation_transcript_execution::realtime_conversation_transcriber_is_configured() {
         tracing::info!(
             "HERMES_REALTIME_CONVERSATION_TRANSCRIBER is not configured; realtime conversation transcript execution consumer is disabled"
         );
-        return;
+        return None;
     }
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_realtime_conversation_transcript_execution_consumer(&database_url) {
-        return;
+        return None;
     }
     let event_bus = context.event_bus.clone();
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::application::REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let event_bus = event_bus.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
+                pool.clone(),
+                hermes_events_postgres::consumers::EventConsumerConfig::new(
+                    crate::workflows::realtime_conversation_transcript_execution::REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_CONSUMER,
+                ),
+            );
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "system",
-                REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_RUNTIME,
-                json!({
-                    "label": "Realtime conversation transcript execution consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            let handler_event_bus = event_bus.clone();
-            if let Err(error) = runner
-                .process_next_batch(|event| {
-                    crate::application::execute_realtime_conversation_transcript_request_event(
-                        handler_pool.clone(),
-                        handler_event_bus.clone(),
-                        event,
-                    )
-                })
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "system",
+                    REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_RUNTIME,
+                    json!({
+                        "label": "Realtime conversation transcript execution consumer",
+                        "scope": "consumer",
+                    }),
+                )
                 .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "realtime conversation transcript execution consumer tick failed"
-                );
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                let handler_event_bus = event_bus.clone();
+                if let Err(error) = runner
+                    .process_next_batch(|event| {
+                        crate::workflows::realtime_conversation_transcript_execution::execute_realtime_conversation_transcript_request_event(
+                            handler_pool.clone(),
+                            handler_event_bus.clone(),
+                            event,
+                        )
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "realtime conversation transcript execution consumer tick failed"
+                    );
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_realtime_conversation_transcript_projection(context: ApplicationBootstrapContext) {
+fn realtime_conversation_transcript_projection_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_realtime_conversation_transcript_projection_consumer(&database_url) {
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::application::REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
+                pool.clone(),
+                hermes_events_postgres::consumers::EventConsumerConfig::new(
+                    crate::workflows::realtime_conversation_transcript_projection::REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER,
+                ),
+            );
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "system",
-                REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_RUNTIME,
-                json!({
-                    "label": "Realtime conversation transcript projection consumer",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            if let Err(error) = runner
-                .process_next_batch(|event| {
-                    crate::application::project_realtime_conversation_transcript_event(
-                        handler_pool.clone(),
-                        event,
-                    )
-                })
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "system",
+                    REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_RUNTIME,
+                    json!({
+                        "label": "Realtime conversation transcript projection consumer",
+                        "scope": "consumer",
+                    }),
+                )
                 .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "realtime conversation transcript projection consumer tick failed"
-                );
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                if let Err(error) = runner
+                    .process_next_batch(|event| {
+                        crate::workflows::realtime_conversation_transcript_projection::project_realtime_conversation_transcript_event(
+                            handler_pool.clone(),
+                            event,
+                        )
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "realtime conversation transcript projection consumer tick failed"
+                    );
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
-fn start_signal_hub_raw_signal_dispatcher(context: ApplicationBootstrapContext) {
+fn signal_hub_raw_signal_dispatcher_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_signal_hub_raw_signal_consumer(&database_url) {
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
-        let runner = crate::platform::events::EventConsumerRunner::new(
-            pool.clone(),
-            crate::platform::events::EventConsumerConfig::new(
-                crate::domains::signal_hub::SIGNAL_HUB_RAW_SIGNAL_CONSUMER,
-            ),
-        );
-        let mut tick = tokio::time::interval(Duration::from_millis(
-            REALTIME_SIGNAL_PROJECTION_TICK_MILLIS,
-        ));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        Box::pin(async move {
+            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
+                pool.clone(),
+                hermes_events_postgres::consumers::EventConsumerConfig::new(
+                    crate::domains::signal_hub::service::SIGNAL_HUB_RAW_SIGNAL_CONSUMER,
+                ),
+            );
+            let mut tick = tokio::time::interval(Duration::from_millis(
+                REALTIME_SIGNAL_PROJECTION_TICK_MILLIS,
+            ));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "system",
-                SIGNAL_HUB_RAW_SIGNAL_RUNTIME,
-                json!({
-                    "label": "Signal Hub raw signal dispatcher",
-                    "scope": "consumer",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
-            let handler_pool = pool.clone();
-            if let Err(error) = runner
-                .process_next_batch(|event| {
-                    crate::domains::signal_hub::process_signal_hub_raw_event(
-                        handler_pool.clone(),
-                        event,
-                    )
-                })
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "system",
+                    SIGNAL_HUB_RAW_SIGNAL_RUNTIME,
+                    json!({
+                        "label": "Signal Hub raw signal dispatcher",
+                        "scope": "consumer",
+                    }),
+                )
                 .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "signal hub raw signal dispatcher consumer tick failed"
-                );
+                {
+                    continue;
+                }
+                let handler_pool = pool.clone();
+                if let Err(error) = runner
+                    .process_next_batch(|event| {
+                        crate::domains::signal_hub::service::process_signal_hub_raw_event(
+                            handler_pool.clone(),
+                            event,
+                        )
+                    })
+                    .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "signal hub raw signal dispatcher consumer tick failed"
+                    );
+                }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        SIGNAL_HUB_RAW_SIGNAL_RUNTIME,
+        RuntimeTaskClass::Essential,
+        RuntimeExitPolicy::ShutdownRuntime,
+        task,
+    ))
 }
 
-fn start_event_outbox_dispatcher(context: ApplicationBootstrapContext) {
+fn event_outbox_dispatcher_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     let Some(nats_server_url) = context.nats_server_url else {
         tracing::info!(
             "event outbox dispatcher skipped because HERMES_NATS_SERVER_URL is not configured"
         );
-        return;
+        return None;
     };
     if !register_event_outbox_dispatcher(&database_url) {
-        return;
+        return None;
     }
 
     let realtime_bus = context.event_bus.clone();
-    tokio::spawn(async move {
-        let bus =
-            match crate::platform::events::NatsJetStreamEventBus::connect(&nats_server_url).await {
-                Ok(bus) => bus,
-                Err(error) => {
-                    tracing::warn!(
-                        error = %error,
-                        nats_server_url,
-                        "event outbox dispatcher failed to initialize JetStream bus"
-                    );
-                    return;
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let realtime_bus = realtime_bus.clone();
+        let nats_server_url = nats_server_url.clone();
+        Box::pin(async move {
+            let bus = tokio::select! {
+                _ = cancellation.cancelled() => return Ok(()),
+                result = hermes_events_nats::jetstream::NatsJetStreamEventBus::connect(&nats_server_url) => {
+                    result.map_err(|error| {
+                        tracing::warn!(
+                            error = %error,
+                            nats_server_url,
+                            "event outbox dispatcher failed to initialize JetStream bus"
+                        );
+                        RuntimeTaskError::Coded {
+                            code: "event_outbox_nats_connect_failed".to_owned(),
+                        }
+                    })?
                 }
             };
-        let dispatcher = crate::platform::events::EventOutboxDispatcher::new(
-            crate::platform::events::EventStore::new(pool.clone()),
-            bus,
-        )
-        .with_realtime_bus(realtime_bus);
-        let mut tick = tokio::time::interval(Duration::from_secs(2));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "system",
-                EVENT_OUTBOX_DISPATCHER_RUNTIME,
-                json!({
-                    "label": "Event outbox dispatcher",
-                    "scope": "dispatcher",
-                    "transport": "nats_jetstream",
-                }),
+            let dispatcher = crate::platform::events::dispatcher::EventOutboxDispatcher::new(
+                hermes_events_postgres::store::EventStore::new(pool.clone()),
+                bus,
             )
-            .await
-            {
-                continue;
-            }
-            match dispatcher.dispatch_pending_once().await {
-                Ok(report) if report.claimed > 0 || report.recovered > 0 => {
-                    tracing::info!(
-                        recovered = report.recovered,
-                        claimed = report.claimed,
-                        published = report.published,
-                        retried = report.retried,
-                        "event outbox dispatcher tick completed"
-                    );
+            .with_realtime_bus(realtime_bus);
+            let mut tick = tokio::time::interval(Duration::from_secs(2));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
                 }
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(error = %error, "event outbox dispatcher tick failed");
+                if !runtime_allows_processing(
+                    &pool,
+                    "system",
+                    EVENT_OUTBOX_DISPATCHER_RUNTIME,
+                    json!({
+                        "label": "Event outbox dispatcher",
+                        "scope": "dispatcher",
+                        "transport": "nats_jetstream",
+                    }),
+                )
+                .await
+                {
+                    continue;
+                }
+                match dispatcher.dispatch_pending_once().await {
+                    Ok(report) if report.claimed > 0 || report.recovered > 0 => {
+                        tracing::info!(
+                            recovered = report.recovered,
+                            claimed = report.claimed,
+                            published = report.published,
+                            retried = report.retried,
+                            "event outbox dispatcher tick completed"
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::warn!(error = %error, "event outbox dispatcher tick failed");
+                    }
                 }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        EVENT_OUTBOX_DISPATCHER_RUNTIME,
+        RuntimeTaskClass::Essential,
+        RuntimeExitPolicy::ShutdownRuntime,
+        task,
+    ))
 }
 
-fn start_signal_replay_dispatcher(context: ApplicationBootstrapContext) {
+fn signal_replay_dispatcher_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
     let Some(pool) = context.pool else {
-        return;
+        return None;
     };
     let Some(database_url) = context.database_url else {
-        return;
+        return None;
     };
     if !register_signal_replay_dispatcher(&database_url) {
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
-        let replay_service = crate::application::SignalHubReplayService::new(
-            crate::domains::signal_hub::SignalHubStore::new(pool.clone()),
-            crate::platform::events::EventStore::new(pool.clone()),
-        );
-        let mut tick = tokio::time::interval(Duration::from_secs(5));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        Box::pin(async move {
+            let replay_service = crate::application::signal_hub_replay::SignalHubReplayService::new(
+                crate::domains::signal_hub::store::SignalHubStore::new(pool.clone()),
+                hermes_events_postgres::store::EventStore::new(pool.clone()),
+            );
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        loop {
-            tick.tick().await;
-            if !runtime_allows_processing(
-                &pool,
-                "system",
-                SIGNAL_REPLAY_DISPATCHER_RUNTIME,
-                json!({
-                    "label": "Signal replay dispatcher",
-                    "scope": "dispatcher",
-                }),
-            )
-            .await
-            {
-                continue;
-            }
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "system",
+                    SIGNAL_REPLAY_DISPATCHER_RUNTIME,
+                    json!({
+                        "label": "Signal replay dispatcher",
+                        "scope": "dispatcher",
+                    }),
+                )
+                .await
+                {
+                    continue;
+                }
 
-            match replay_service.process_next_request().await {
-                Ok(Some(report)) => {
-                    tracing::info!(
-                        request_id = %report.request_id,
-                        replayed_count = report.replayed_count,
-                        "signal replay dispatcher tick completed"
-                    );
-                }
-                Ok(None) => {}
-                Err(error) => {
-                    tracing::warn!(error = %error, "signal replay dispatcher tick failed");
+                match replay_service.process_next_request().await {
+                    Ok(Some(report)) => {
+                        tracing::info!(
+                            request_id = %report.request_id,
+                            replayed_count = report.replayed_count,
+                            "signal replay dispatcher tick completed"
+                        );
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        tracing::warn!(error = %error, "signal replay dispatcher tick failed");
+                    }
                 }
             }
-        }
+        }) as RuntimeTaskFuture
     });
+    Some(RuntimeTaskSpec::new(
+        SIGNAL_REPLAY_DISPATCHER_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
 }
 
 fn register_telegram_command_executor(database_url: &str) -> bool {
@@ -2214,55 +2462,6 @@ fn register_whatsapp_command_executor(database_url: &str) -> bool {
             tracing::warn!(
                 error = %error,
                 "whatsapp command executor registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_zulip_command_executor(database_url: &str) -> bool {
-    match ZULIP_COMMAND_EXECUTOR_DATABASES.lock() {
-        Ok(mut urls) => urls.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "zulip command executor registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_zulip_event_ingest(database_url: &str) -> bool {
-    match ZULIP_EVENT_INGEST_DATABASES.lock() {
-        Ok(mut urls) => urls.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(error = %error, "zulip event ingest registry is unavailable");
-            false
-        }
-    }
-}
-
-fn register_zulip_attachment_download(database_url: &str) -> bool {
-    match ZULIP_ATTACHMENT_DOWNLOAD_DATABASES.lock() {
-        Ok(mut urls) => urls.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "zulip attachment download registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_zulip_provider_observation_reconciliation_consumer(database_url: &str) -> bool {
-    match ZULIP_PROVIDER_OBSERVATION_RECONCILIATION_DATABASES.lock() {
-        Ok(mut urls) => urls.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "zulip provider observation reconciliation consumer registry is unavailable"
             );
             false
         }
@@ -2561,262 +2760,6 @@ fn register_mail_ai_pipeline(database_url: &str) -> bool {
     }
 }
 
-async fn mail_ai_hub_optional(
-    pool: &PgPool,
-    config: &AppConfig,
-    vault: &HostVault,
-) -> Option<(crate::ai::hub::SharedAiHub, bool)> {
-    let settings = match crate::platform::settings::ApplicationSettingsStore::new(pool.clone())
-        .ai_runtime_settings(config)
-        .await
-    {
-        Ok(settings) => settings,
-        Err(error) => {
-            tracing::warn!(error = %error, "mail AI pipeline settings lookup failed");
-            AiRuntimeSettings::from_config(config)
-        }
-    };
-    let store = crate::ai::control_center::AiControlCenterStore::new(pool.clone());
-    let model_routing = match resolve_mail_ai_model_routing(&store).await {
-        Ok(routing) => routing,
-        Err(error) => {
-            tracing::warn!(error = %error, "mail AI pipeline routing unavailable");
-            return None;
-        }
-    };
-    let mail_provider_id = match mail_ai_route_provider_id(&model_routing) {
-        Some(provider_id) => provider_id,
-        None => {
-            tracing::warn!("mail AI pipeline route target is unavailable");
-            return None;
-        }
-    };
-    let provider = match store.provider(mail_provider_id).await {
-        Ok(Some(provider)) => provider,
-        Ok(None) => {
-            tracing::warn!(
-                provider_id = %mail_provider_id,
-                "mail AI pipeline provider is missing"
-            );
-            return None;
-        }
-        Err(error) => {
-            tracing::warn!(error = %error, "mail AI pipeline provider lookup failed");
-            return None;
-        }
-    };
-    let runtime =
-        match mail_ai_runtime_client(pool, &store, vault, &settings, &provider, &model_routing)
-            .await
-        {
-            Ok(runtime) => runtime,
-            Err(error) => {
-                tracing::warn!(error = %error, "mail AI pipeline runtime unavailable");
-                return None;
-            }
-        };
-
-    Some((
-        crate::ai::hub::AiHub::shared_with_usage_recorder(
-            Arc::new(runtime) as crate::platform::ai_runtime::SharedAiRuntimePort,
-            model_routing,
-            Arc::new(store) as crate::ai::hub::SharedAiHubUsageRecorder,
-        ),
-        provider.provider_kind == "api",
-    ))
-}
-
-async fn resolve_mail_ai_model_routing(
-    store: &crate::ai::control_center::AiControlCenterStore,
-) -> Result<crate::ai::core::AiModelRouting, crate::ai::control_center::AiControlCenterError> {
-    let mail_intelligence = resolve_mail_ai_slot_model(store, "mail_intelligence").await?;
-    let mail_model_key = mail_intelligence.model_key.clone();
-
-    Ok(crate::ai::core::AiModelRouting {
-        default_chat: mail_model_key.clone(),
-        reasoning: mail_model_key.clone(),
-        summarization: mail_model_key.clone(),
-        mail_intelligence: mail_model_key.clone(),
-        reply_draft: mail_model_key.clone(),
-        extraction: mail_model_key.clone(),
-        embeddings: mail_model_key.clone(),
-        meeting_prep: mail_model_key,
-        targets: vec![mail_intelligence],
-    })
-}
-
-async fn resolve_mail_ai_slot_model(
-    store: &crate::ai::control_center::AiControlCenterStore,
-    slot: &str,
-) -> Result<crate::ai::core::AiModelRouteTarget, crate::ai::control_center::AiControlCenterError> {
-    let Some(route) = store.route_for_slot(slot).await? else {
-        return Err(
-            crate::ai::control_center::AiControlCenterError::InvalidRequest(format!(
-                "route_not_configured:{slot}: use Hub route settings"
-            )),
-        );
-    };
-    let Some(provider) = store.provider(&route.provider_id).await? else {
-        return Err(
-            crate::ai::control_center::AiControlCenterError::InvalidRequest(format!(
-                "route_provider_missing:{}",
-                route.provider_id
-            )),
-        );
-    };
-    store
-        .ensure_model_ready_for_private_context(&route.provider_id, &route.model_key)
-        .await?;
-
-    Ok(crate::ai::core::AiModelRouteTarget {
-        capability_slot: slot.to_owned(),
-        provider_id: route.provider_id,
-        model_key: route.model_key,
-    })
-}
-
-fn mail_ai_route_provider_id(routing: &crate::ai::core::AiModelRouting) -> Option<&str> {
-    routing
-        .targets
-        .iter()
-        .find(|target| target.capability_slot == "mail_intelligence")
-        .map(|target| target.provider_id.as_str())
-}
-
-async fn mail_ai_runtime_client(
-    pool: &PgPool,
-    store: &crate::ai::control_center::AiControlCenterStore,
-    vault: &HostVault,
-    settings: &AiRuntimeSettings,
-    provider: &crate::ai::control_center::AiProviderAccount,
-    routing: &crate::ai::core::AiModelRouting,
-) -> Result<crate::integrations::ai_runtime::AiRuntimeClient, MailAiRuntimeBuildError> {
-    match (
-        provider.provider_kind.as_str(),
-        provider.provider_key.as_str(),
-    ) {
-        ("built_in", "ollama") => Ok(crate::integrations::ai_runtime::AiRuntimeClient::Ollama(
-            crate::integrations::ollama::client::OllamaClient::new(
-                crate::integrations::ollama::client::OllamaClientConfig::new(
-                    mail_ai_provider_base_url(provider)
-                        .as_deref()
-                        .unwrap_or(&settings.base_url),
-                    &routing.mail_intelligence,
-                    &routing.embeddings,
-                )
-                .with_timeout_seconds(settings.timeout_seconds),
-            )
-            .map_err(crate::integrations::ai_runtime::AiRuntimeError::from)?,
-        )),
-        ("api", _) => {
-            let base_url = mail_ai_provider_base_url(provider).ok_or_else(|| {
-                MailAiRuntimeBuildError::MissingBaseUrl(provider.provider_id.clone())
-            })?;
-            let api_key =
-                mail_ai_provider_api_key(pool, store, vault, &provider.provider_id).await?;
-            Ok(crate::integrations::ai_runtime::AiRuntimeClient::OmniRoute(
-                crate::integrations::omniroute::client::OmniRouteClient::new(
-                    crate::integrations::omniroute::client::OmniRouteClientConfig::new(
-                        base_url,
-                        &routing.mail_intelligence,
-                        &routing.embeddings,
-                        api_key,
-                    )
-                    .with_timeout_seconds(settings.timeout_seconds),
-                )
-                .map_err(crate::integrations::ai_runtime::AiRuntimeError::from)?,
-            ))
-        }
-        _ => Err(MailAiRuntimeBuildError::UnsupportedProvider {
-            provider_kind: provider.provider_kind.clone(),
-            provider_key: provider.provider_key.clone(),
-        }),
-    }
-}
-
-async fn mail_ai_provider_api_key(
-    pool: &PgPool,
-    store: &crate::ai::control_center::AiControlCenterStore,
-    vault: &HostVault,
-    provider_id: &str,
-) -> Result<crate::platform::secrets::ResolvedSecret, MailAiRuntimeBuildError> {
-    let secret_ref = store
-        .api_key_secret_ref(provider_id)
-        .await?
-        .ok_or_else(|| MailAiRuntimeBuildError::MissingApiKey(provider_id.to_owned()))?;
-    let reference = crate::platform::secrets::SecretReferenceStore::new(pool.clone())
-        .secret_reference(&secret_ref)
-        .await?
-        .ok_or_else(|| MailAiRuntimeBuildError::MissingSecretReference(secret_ref.clone()))?;
-    Ok(vault.resolve_host_secret(&reference)?)
-}
-
-fn mail_ai_provider_base_url(
-    provider: &crate::ai::control_center::AiProviderAccount,
-) -> Option<String> {
-    provider
-        .config
-        .get("base_url")
-        .and_then(|value| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-}
-
-#[derive(Debug, thiserror::Error)]
-enum MailAiRuntimeBuildError {
-    #[error("AI provider is not supported by mail AI runtime: {provider_kind}:{provider_key}")]
-    UnsupportedProvider {
-        provider_kind: String,
-        provider_key: String,
-    },
-
-    #[error("AI API provider base_url is missing: {0}")]
-    MissingBaseUrl(String),
-
-    #[error("AI API provider key is not configured: {0}")]
-    MissingApiKey(String),
-
-    #[error("AI API provider secret reference is missing: {0}")]
-    MissingSecretReference(String),
-
-    #[error(transparent)]
-    ControlCenter(#[from] crate::ai::control_center::AiControlCenterError),
-
-    #[error(transparent)]
-    SecretReference(#[from] crate::platform::secrets::SecretReferenceError),
-
-    #[error(transparent)]
-    SecretResolution(#[from] crate::platform::secrets::SecretResolutionError),
-
-    #[error(transparent)]
-    Runtime(#[from] crate::integrations::ai_runtime::AiRuntimeError),
-}
-
-async fn mail_ai_target_language(pool: &PgPool) -> String {
-    let language = sqlx::query_scalar::<_, String>(
-        r#"
-        SELECT language
-        FROM personas
-        WHERE is_self = true
-          AND language IS NOT NULL
-          AND length(trim(language)) > 0
-        ORDER BY updated_at DESC
-        LIMIT 1
-        "#,
-    )
-    .fetch_optional(pool)
-    .await;
-
-    let Ok(language) = language else {
-        return "ru".to_owned();
-    };
-    language
-        .map(|value| value.trim().to_ascii_lowercase())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "ru".to_owned())
-}
-
 fn register_zoom_token_maintenance_scheduler(database_url: &str) -> bool {
     match ZOOM_TOKEN_MAINTENANCE_DATABASES.lock() {
         Ok(mut databases) => databases.insert(database_url.to_owned()),
@@ -2875,7 +2818,7 @@ pub(super) async fn runtime_allows_processing(
     runtime_kind: &str,
     metadata: serde_json::Value,
 ) -> bool {
-    let store = crate::domains::signal_hub::SignalHubStore::new(pool.clone());
+    let store = crate::domains::signal_hub::store::SignalHubStore::new(pool.clone());
     if let Err(error) = store.restore_system_sources().await {
         tracing::warn!(
             error = %error,
@@ -2886,7 +2829,7 @@ pub(super) async fn runtime_allows_processing(
         return true;
     }
 
-    match crate::platform::events::runtime_allows_processing(
+    match crate::platform::events::runtime::runtime_allows_processing(
         pool,
         source_code,
         runtime_kind,
@@ -2910,12 +2853,14 @@ pub(super) async fn runtime_allows_processing(
 async fn run_zoom_token_maintenance_once(
     pool: &PgPool,
     vault: &HostVault,
-    event_bus: &EventBus,
-) -> Result<crate::application::provider_runtime_contracts::ZoomTokenMaintenanceResult, String> {
+    event_bus: &InMemoryEventBus,
+) -> Result<crate::integrations::zoom::client::models::ZoomTokenMaintenanceResult, String> {
     let secret_store = crate::platform::secrets::SecretReferenceStore::new(pool.clone());
-    let service =
-        crate::application::zoom_provider_runtime_service(pool.clone(), event_bus.clone());
-    let request = crate::application::provider_runtime_contracts::ZoomTokenMaintenanceRequest {
+    let service = crate::application::provider_runtime_services::zoom_provider_runtime_service(
+        pool.clone(),
+        event_bus.clone(),
+    );
+    let request = crate::integrations::zoom::client::models::ZoomTokenMaintenanceRequest {
         account_id: None,
         force: false,
         refresh_expiring_within_seconds: Some(
@@ -2959,7 +2904,7 @@ struct YandexTelemostRetentionCleanupSchedulerResult {
 async fn run_zoom_recording_sync_once(
     pool: &PgPool,
     vault: &HostVault,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
 ) -> Result<ZoomRecordingSyncSchedulerResult, String> {
     let settings = crate::platform::settings::ApplicationSettingsStore::new(pool.clone());
     let allow_remote_transcript_downloads = settings
@@ -2976,8 +2921,10 @@ async fn run_zoom_recording_sync_once(
         .unwrap_or(false);
 
     let secret_store = crate::platform::secrets::SecretReferenceStore::new(pool.clone());
-    let service =
-        crate::application::zoom_provider_runtime_service(pool.clone(), event_bus.clone());
+    let service = crate::application::provider_runtime_services::zoom_provider_runtime_service(
+        pool.clone(),
+        event_bus.clone(),
+    );
     let accounts = service
         .list_accounts(false)
         .await
@@ -3013,16 +2960,16 @@ async fn run_zoom_recording_sync_once(
             result.accounts_skipped += 1;
             continue;
         }
-        let request = crate::application::provider_runtime_contracts::ZoomRecordingSyncRequest {
+        let request = crate::integrations::zoom::client::models::ZoomRecordingSyncRequest {
             account_id: account.account_id.clone(),
             user_id: None,
             from: from.clone(),
             to: to.clone(),
             page_size: Some(
-                crate::integrations::zoom::client::ZOOM_PROVIDER_SYNC_DEFAULT_PAGE_SIZE,
+                crate::integrations::zoom::client::models::ZOOM_PROVIDER_SYNC_DEFAULT_PAGE_SIZE,
             ),
             max_meetings: Some(
-                crate::integrations::zoom::client::ZOOM_PROVIDER_SYNC_DEFAULT_MAX_MEETINGS,
+                crate::integrations::zoom::client::models::ZOOM_PROVIDER_SYNC_DEFAULT_MAX_MEETINGS,
             ),
             api_base_url: None,
         };
@@ -3062,10 +3009,12 @@ async fn run_zoom_recording_sync_once(
 
 async fn run_zoom_retention_cleanup_once(
     pool: &PgPool,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
 ) -> Result<ZoomRetentionCleanupSchedulerResult, String> {
-    let service =
-        crate::application::zoom_provider_runtime_service(pool.clone(), event_bus.clone());
+    let service = crate::application::provider_runtime_services::zoom_provider_runtime_service(
+        pool.clone(),
+        event_bus.clone(),
+    );
     let accounts = service
         .list_accounts(false)
         .await
@@ -3087,7 +3036,7 @@ async fn run_zoom_retention_cleanup_once(
         let response = service
             .cleanup_retention(
                 &account.account_id,
-                &crate::application::provider_runtime_contracts::ZoomRetentionCleanupRequest {
+                &crate::integrations::zoom::client::models::ZoomRetentionCleanupRequest {
                     remove_recordings: true,
                     remove_transcripts: true,
                     limit: ZOOM_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT,
@@ -3107,12 +3056,13 @@ async fn run_zoom_retention_cleanup_once(
 
 async fn run_yandex_telemost_retention_cleanup_once(
     pool: &PgPool,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
 ) -> Result<YandexTelemostRetentionCleanupSchedulerResult, String> {
-    let service = crate::application::yandex_telemost_provider_runtime_service(
-        pool.clone(),
-        event_bus.clone(),
-    );
+    let service =
+        crate::application::provider_runtime_services::yandex_telemost_provider_runtime_service(
+            pool.clone(),
+            event_bus.clone(),
+        );
     let accounts = service
         .list_accounts(false)
         .await
@@ -3134,7 +3084,7 @@ async fn run_yandex_telemost_retention_cleanup_once(
         let response = service
             .cleanup_retention(
                 &account.account_id,
-                &crate::application::provider_runtime_contracts::YandexTelemostRetentionCleanupRequest {
+                &crate::integrations::yandex_telemost::client::models::YandexTelemostRetentionCleanupRequest {
                     remove_audio: true,
                     remove_speaker_hints: true,
                     limit: YANDEX_TELEMOST_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT,
@@ -3152,392 +3102,8 @@ async fn run_yandex_telemost_retention_cleanup_once(
     Ok(result)
 }
 
-async fn reconcile_whatsapp_runtime_restore_once(
-    pool: &PgPool,
-    vault: &HostVault,
-    event_bus: &EventBus,
-    runtime: crate::application::provider_runtime_contracts::WhatsAppProviderRuntimeRef,
-) -> Result<(), String> {
-    let account_store =
-        crate::domains::communications::core::CommunicationProviderAccountStore::new(pool.clone());
-    let secret_store = crate::platform::secrets::SecretReferenceStore::new(pool.clone());
-    let signal_store = crate::domains::signal_hub::SignalHubStore::new(pool.clone());
-    let event_store = crate::platform::events::EventStore::new(pool.clone());
-    let fixture_ingest = crate::application::communication_fixture_ingest::WhatsappFixtureIngestApplicationService::new(
-        pool.clone(),
-        runtime.clone(),
-        event_store.clone(),
-        event_bus.clone(),
-    );
-
-    let accounts = account_store
-        .list()
-        .await
-        .map_err(|error| error.to_string())?;
-    for account in accounts
-        .into_iter()
-        .filter(|account| account.provider_kind.is_whatsapp())
-    {
-        let status = runtime
-            .runtime_status(&secret_store, vault, &account.account_id)
-            .await
-            .map_err(|error| error.to_string())?;
-        if !should_reconcile_whatsapp_runtime_restore(&status) {
-            continue;
-        }
-        let (status, event_source) = restore_whatsapp_runtime_from_vault_session_if_enabled(
-            runtime.clone(),
-            &secret_store,
-            vault,
-            &account,
-            status,
-        )
-        .await;
-
-        let existing_connection = signal_store
-            .find_connection_by_account("whatsapp", &account.account_id)
-            .await
-            .map_err(|error| error.to_string())?;
-        let snapshot_changed =
-            whatsapp_runtime_snapshot_changed(existing_connection.as_ref(), &status);
-
-        crate::application::sync_whatsapp_runtime_signal_connection_for_pool(
-            pool,
-            &account,
-            &status,
-            status.session_secret_ref.clone(),
-        )
-        .await
-        .map_err(|error| error.to_string())?;
-
-        if !snapshot_changed {
-            continue;
-        }
-
-        capture_whatsapp_runtime_lifecycle_signal(&fixture_ingest, &status, event_source).await?;
-        publish_whatsapp_runtime_status_event(&event_store, event_bus, &status, event_source)
-            .await?;
-        publish_whatsapp_session_link_state_event(
-            &event_store,
-            event_bus,
-            &status.account_id,
-            &status.provider_shape,
-            &status.runtime_kind,
-            &status.status,
-            event_source,
-            status.updated_at,
-        )
-        .await?;
-    }
-
-    Ok(())
-}
-
-#[derive(Default)]
-struct TelegramRuntimeReconnectState {
-    consecutive_failures: u32,
-    retry_after: Option<tokio::time::Instant>,
-}
-
-async fn reconcile_telegram_runtime_once(
-    pool: &PgPool,
-    vault: &HostVault,
-    config: &AppConfig,
-    event_bus: &EventBus,
-    runtime: &TelegramRuntimeManager,
-    reconnects: &mut HashMap<String, TelegramRuntimeReconnectState>,
-) -> Result<(), String> {
-    let account_store =
-        crate::domains::communications::core::CommunicationProviderAccountStore::new(pool.clone());
-    let accounts = account_store
-        .list()
-        .await
-        .map_err(|error| error.to_string())?;
-    let enabled_account_ids = accounts
-        .iter()
-        .filter(|account| telegram_runtime_reconciliation_enabled(account))
-        .map(|account| account.account_id.as_str())
-        .collect::<HashSet<_>>();
-
-    for account in accounts
-        .iter()
-        .filter(|account| account.provider_kind.is_telegram())
-        .filter(|account| !enabled_account_ids.contains(account.account_id.as_str()))
-    {
-        if let Err(error) = runtime.stop_account(&account.account_id) {
-            tracing::warn!(
-                error = %error,
-                account_id = %account.account_id,
-                "telegram runtime reconciliation could not stop a disabled account"
-            );
-        }
-        reconnects.remove(&account.account_id);
-    }
-
-    let runtime_context = crate::application::telegram_runtime::TelegramRuntimeUseCaseContext::new(
-        crate::application::telegram_runtime::TelegramRuntimeUseCaseStores {
-            provider_account_store:
-                crate::domains::communications::core::CommunicationProviderAccountStore::new(
-                    pool.clone(),
-                ),
-            provider_secret_binding_store:
-                crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
-                    pool.clone(),
-                ),
-            telegram_store: crate::application::telegram_provider_runtime_store(pool.clone()),
-            secret_store: crate::platform::secrets::SecretReferenceStore::new(pool.clone()),
-        },
-        crate::application::telegram_runtime::TelegramRuntimeUseCaseRuntime {
-            secret_resolver: vault,
-            config,
-            event_bus,
-            runtime,
-        },
-    );
-
-    for account in accounts
-        .iter()
-        .filter(|account| telegram_runtime_reconciliation_enabled(account))
-    {
-        let account_id = &account.account_id;
-        let now = tokio::time::Instant::now();
-        if reconnects
-            .get(account_id)
-            .and_then(|state| state.retry_after)
-            .is_some_and(|retry_after| retry_after > now)
-        {
-            continue;
-        }
-
-        let status = match crate::application::telegram_runtime::runtime_status(
-            &runtime_context,
-            account_id,
-        )
-        .await
-        {
-            Ok(status) => status,
-            Err(error) => {
-                record_telegram_runtime_reconciliation_failure(reconnects, account_id, &error);
-                continue;
-            }
-        };
-
-        if status.status != "running" {
-            let _ = runtime.stop_account(account_id);
-            match crate::application::telegram_runtime::start_runtime(
-                &runtime_context,
-                &crate::integrations::telegram::runtime::TelegramRuntimeStartRequest {
-                    account_id: account_id.clone(),
-                },
-            )
-            .await
-            {
-                Ok(status) if status.status == "running" => {
-                    tracing::info!(
-                        account_id = %account_id,
-                        runtime_kind = %status.runtime_kind,
-                        "telegram runtime restored"
-                    );
-                }
-                Ok(status) => {
-                    record_telegram_runtime_reconciliation_failure(
-                        reconnects,
-                        account_id,
-                        &format!("runtime entered `{}`", status.status),
-                    );
-                    continue;
-                }
-                Err(error) => {
-                    record_telegram_runtime_reconciliation_failure(reconnects, account_id, &error);
-                    continue;
-                }
-            }
-        }
-
-        match crate::application::telegram_runtime::sync_chats(
-            &runtime_context,
-            &crate::integrations::telegram::runtime::TelegramChatSyncRequest {
-                account_id: account_id.clone(),
-                limit: Some(TELEGRAM_RUNTIME_CHAT_SYNC_LIMIT),
-            },
-        )
-        .await
-        {
-            Ok(report) => {
-                reconnects.remove(account_id);
-                if report.synced_count > 0 {
-                    tracing::debug!(
-                        account_id = %account_id,
-                        synced_count = report.synced_count,
-                        "telegram runtime chat fallback sync completed"
-                    );
-                }
-            }
-            Err(error) => {
-                let _ = runtime.stop_account(account_id);
-                record_telegram_runtime_reconciliation_failure(reconnects, account_id, &error);
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn telegram_runtime_reconciliation_enabled(
-    account: &crate::platform::communications::ProviderAccount,
-) -> bool {
-    if !account.provider_kind.is_telegram() || account.is_deleted() {
-        return false;
-    }
-
-    let lifecycle_state = account
-        .config
-        .get("lifecycle_state")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|state| !state.is_empty())
-        .unwrap_or("active");
-    if lifecycle_state != "active" {
-        return false;
-    }
-
-    if matches!(
-        account.config.get("auth_state").and_then(Value::as_str),
-        Some("logged_out" | "deleted")
-    ) {
-        return false;
-    }
-
-    if matches!(
-        account
-            .config
-            .get("runtime_enabled")
-            .and_then(Value::as_bool),
-        Some(false)
-    ) || matches!(
-        account.config.get("sync_enabled").and_then(Value::as_bool),
-        Some(false)
-    ) {
-        return false;
-    }
-
-    matches!(
-        account.config.get("runtime").and_then(Value::as_str),
-        Some("fixture" | "tdlib_qr_authorized")
-    )
-}
-
-fn record_telegram_runtime_reconciliation_failure(
-    reconnects: &mut HashMap<String, TelegramRuntimeReconnectState>,
-    account_id: &str,
-    error: &impl std::fmt::Display,
-) {
-    let state = reconnects.entry(account_id.to_owned()).or_default();
-    state.consecutive_failures = state.consecutive_failures.saturating_add(1);
-    let exponent = state.consecutive_failures.saturating_sub(1).min(6);
-    let delay_seconds = TELEGRAM_RUNTIME_RECONNECT_INITIAL_DELAY_SECONDS
-        .saturating_mul(2_u64.pow(exponent))
-        .min(TELEGRAM_RUNTIME_RECONNECT_MAX_DELAY_SECONDS);
-    state.retry_after = Some(tokio::time::Instant::now() + Duration::from_secs(delay_seconds));
-
-    if matches!(state.consecutive_failures, 1 | 3 | 6) {
-        tracing::warn!(
-            account_id = %account_id,
-            consecutive_failures = state.consecutive_failures,
-            retry_after_seconds = delay_seconds,
-            error = %error,
-            "telegram runtime reconciliation failed; retrying without degrading the system"
-        );
-    }
-}
-
-async fn restore_whatsapp_runtime_from_vault_session_if_enabled(
-    runtime: crate::application::provider_runtime_contracts::WhatsAppProviderRuntimeRef,
-    secret_store: &crate::platform::secrets::SecretReferenceStore,
-    vault: &HostVault,
-    account: &crate::platform::communications::ProviderAccount,
-    status: crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus,
-) -> (
-    crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus,
-    &'static str,
-) {
-    if !should_start_whatsapp_runtime_from_restored_session(account, &status) {
-        return (status, "startup_restore_reconcile");
-    }
-    let request = crate::application::provider_runtime_contracts::WhatsAppRuntimeStartRequest {
-        account_id: status.account_id.clone(),
-    };
-    match runtime.start_runtime(secret_store, vault, &request).await {
-        Ok(started_status) => (started_status, "startup_restore_start"),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                account_id = %status.account_id,
-                provider_shape = %status.provider_shape,
-                "whatsapp startup restore failed to start provider runtime"
-            );
-            (
-                whatsapp_startup_restore_failed_status(status),
-                "startup_restore_start_failed",
-            )
-        }
-    }
-}
-
-fn should_start_whatsapp_runtime_from_restored_session(
-    account: &crate::platform::communications::ProviderAccount,
-    status: &crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus,
-) -> bool {
-    status.provider_shape == "whatsapp_native_md"
-        && status.session_restore_available
-        && native_md_startup_restore_enabled(&account.config)
-        && !status
-            .runtime_blockers
-            .iter()
-            .any(|blocker| blocker == WHATSAPP_NATIVE_MD_RUNTIME_FEATURE_DISABLED_BLOCKER)
-}
-
-fn native_md_startup_restore_enabled(config: &Value) -> bool {
-    config
-        .get(WHATSAPP_NATIVE_MD_STARTUP_RESTORE_CONFIG_KEY)
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-        || config
-            .get(WHATSAPP_NATIVE_MD_STARTUP_RESTORE_ALIAS_CONFIG_KEY)
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-}
-
-fn whatsapp_startup_restore_failed_status(
-    mut status: crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus,
-) -> crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus {
-    status.status = "degraded".to_owned();
-    status.live_runtime_available = false;
-    status.live_send_available = false;
-    status.media_download_available = false;
-    status.media_upload_available = false;
-    if !status
-        .runtime_blockers
-        .iter()
-        .any(|blocker| blocker == WHATSAPP_STARTUP_RESTORE_FAILED_BLOCKER)
-    {
-        status
-            .runtime_blockers
-            .push(WHATSAPP_STARTUP_RESTORE_FAILED_BLOCKER.to_owned());
-    }
-    status.last_error = Some(WHATSAPP_STARTUP_RESTORE_FAILED_BLOCKER.to_owned());
-    status.updated_at = Utc::now();
-    status
-}
-
-fn should_reconcile_whatsapp_runtime_restore(
-    status: &crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus,
-) -> bool {
-    status.session_restore_available || matches!(status.status.as_str(), "available" | "linked")
-}
-
 fn should_run_zoom_recording_sync(
-    status: &crate::application::provider_runtime_contracts::ZoomRuntimeStatus,
+    status: &crate::integrations::zoom::client::models::ZoomRuntimeStatus,
 ) -> bool {
     status.live_runtime_available
         && matches!(status.status.as_str(), "running" | "degraded")
@@ -3545,219 +3111,6 @@ fn should_run_zoom_recording_sync(
             .runtime_blockers
             .iter()
             .any(|blocker| blocker == "zoom_token_rotation_required")
-}
-
-fn whatsapp_runtime_snapshot_changed(
-    existing_connection: Option<&crate::domains::signal_hub::SignalConnection>,
-    status: &crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus,
-) -> bool {
-    let Some(connection) = existing_connection else {
-        return true;
-    };
-    let stored_last_error = connection
-        .settings
-        .get("whatsapp_last_error")
-        .cloned()
-        .unwrap_or(Value::Null);
-    connection
-        .settings
-        .get("whatsapp_runtime_status")
-        .and_then(Value::as_str)
-        != Some(status.status.as_str())
-        || connection
-            .settings
-            .get("whatsapp_provider_shape")
-            .and_then(Value::as_str)
-            != Some(status.provider_shape.as_str())
-        || connection
-            .settings
-            .get("whatsapp_runtime_kind")
-            .and_then(Value::as_str)
-            != Some(status.runtime_kind.as_str())
-        || connection
-            .settings
-            .get("whatsapp_session_restore_available")
-            .and_then(Value::as_bool)
-            != Some(status.session_restore_available)
-        || stored_last_error != json!(status.last_error)
-}
-
-async fn publish_whatsapp_runtime_status_event(
-    event_store: &crate::platform::events::EventStore,
-    event_bus: &EventBus,
-    status: &crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus,
-    source: &str,
-) -> Result<(), String> {
-    let now = Utc::now();
-    let source_id = format!(
-        "{}:{}:{}:{}",
-        status.account_id,
-        source,
-        status.status,
-        status.updated_at.timestamp_micros()
-    );
-    let event = crate::platform::events::NewEventEnvelope::builder(
-        whatsapp_event_id("runtime", &status.account_id, now),
-        crate::platform::events::bus::whatsapp_event_types::RUNTIME_STATUS_CHANGED.to_owned(),
-        now,
-        json!({
-            "channel": "whatsapp",
-            "account_id": status.account_id,
-            "actor_id": "hermes-frontend",
-            "kind": "whatsapp_runtime_status",
-            "source_id": source_id,
-        }),
-        json!({
-            "id": status.account_id,
-            "entity_id": status.account_id,
-            "kind": "whatsapp_runtime",
-        }),
-    )
-    .payload(crate::platform::events::bus::sanitize_event_payload(
-        json!({
-            "account_id": status.account_id,
-            "provider_kind": status.provider_kind,
-            "provider_shape": status.provider_shape,
-            "runtime_kind": status.runtime_kind,
-            "status": status.status,
-            "fixture_runtime": status.fixture_runtime,
-            "live_runtime_available": status.live_runtime_available,
-            "live_send_available": status.live_send_available,
-            "qr_pairing_available": status.qr_pairing_available,
-            "pair_code_available": status.pair_code_available,
-            "media_download_available": status.media_download_available,
-            "media_upload_available": status.media_upload_available,
-            "session_restore_available": status.session_restore_available,
-            "runtime_blockers": status.runtime_blockers,
-            "last_error": status.last_error,
-            "source": source,
-        }),
-    ))
-    .build()
-    .map_err(|error| error.to_string())?;
-    event_store
-        .append(&event)
-        .await
-        .map_err(|error| error.to_string())?;
-    let _ = event_bus.broadcast(event);
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn publish_whatsapp_session_link_state_event(
-    event_store: &crate::platform::events::EventStore,
-    event_bus: &EventBus,
-    account_id: &str,
-    provider_shape: &str,
-    runtime_kind: &str,
-    link_state: &str,
-    source: &str,
-    observed_at: chrono::DateTime<chrono::Utc>,
-) -> Result<(), String> {
-    let now = Utc::now();
-    let source_id = format!(
-        "{}:{}:{}:{}",
-        account_id,
-        source,
-        link_state,
-        observed_at.timestamp_micros()
-    );
-    let event = crate::platform::events::NewEventEnvelope::builder(
-        whatsapp_event_id("session", account_id, now),
-        crate::platform::events::bus::whatsapp_event_types::SESSION_LINK_STATE_CHANGED.to_owned(),
-        now,
-        json!({
-            "channel": "whatsapp",
-            "account_id": account_id,
-            "actor_id": "hermes-frontend",
-            "kind": "whatsapp_session_link_state",
-            "source_id": source_id,
-        }),
-        json!({
-            "id": account_id,
-            "entity_id": account_id,
-            "kind": "whatsapp_session",
-        }),
-    )
-    .payload(crate::platform::events::bus::sanitize_event_payload(
-        json!({
-            "account_id": account_id,
-            "provider_shape": provider_shape,
-            "runtime_kind": runtime_kind,
-            "link_state": link_state,
-            "source": source,
-        }),
-    ))
-    .build()
-    .map_err(|error| error.to_string())?;
-    event_store
-        .append(&event)
-        .await
-        .map_err(|error| error.to_string())?;
-    let _ = event_bus.broadcast(event);
-    Ok(())
-}
-
-async fn capture_whatsapp_runtime_lifecycle_signal(
-    fixture_ingest: &crate::application::communication_fixture_ingest::WhatsappFixtureIngestApplicationService,
-    status: &crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus,
-    source: &str,
-) -> Result<(), String> {
-    let provider_event_id = format!(
-        "{}:{}:{}",
-        status.account_id,
-        source,
-        status.updated_at.timestamp_micros()
-    );
-    let metadata = json!({
-        "source": source,
-        "provider_kind": status.provider_kind,
-        "provider_shape": status.provider_shape,
-        "runtime_kind": status.runtime_kind,
-        "fixture_runtime": status.fixture_runtime,
-        "live_runtime_available": status.live_runtime_available,
-        "live_send_available": status.live_send_available,
-        "qr_pairing_available": status.qr_pairing_available,
-        "pair_code_available": status.pair_code_available,
-        "media_download_available": status.media_download_available,
-        "media_upload_available": status.media_upload_available,
-        "session_restore_available": status.session_restore_available,
-        "runtime_blockers": status.runtime_blockers,
-        "last_error": status.last_error,
-    });
-    fixture_ingest
-        .capture_runtime_lifecycle_event(
-            &status.account_id,
-            &provider_event_id,
-            "runtime.status_changed",
-            Some(&status.status),
-            Some(&status.status),
-            Some(
-                if status.status == "available" || status.status == "linked" {
-                    "info"
-                } else if status.status == "degraded" {
-                    "warning"
-                } else {
-                    "blocked"
-                },
-            ),
-            metadata,
-            source,
-            status.updated_at,
-        )
-        .await
-        .map(|_| ())
-        .map_err(|error| error.to_string())
-}
-
-fn whatsapp_event_id(scope: &str, entity: &str, now: chrono::DateTime<chrono::Utc>) -> String {
-    format!(
-        "evt_whatsapp_{}_{}_{}_{}",
-        scope,
-        entity,
-        now.timestamp_micros(),
-        Uuid::now_v7()
-    )
 }
 
 #[cfg(test)]
@@ -3778,9 +3131,10 @@ mod tests {
     #[test]
     fn telegram_runtime_reconciliation_only_runs_enabled_runnable_accounts() {
         let now = Utc::now();
-        let account = |config| crate::platform::communications::ProviderAccount {
+        let account = |config| hermes_communications_api::accounts::ProviderAccount {
             account_id: "telegram-account".to_owned(),
-            provider_kind: crate::platform::communications::CommunicationProviderKind::TelegramUser,
+            provider_kind:
+                hermes_communications_api::accounts::CommunicationProviderKind::TelegramUser,
             display_name: "Telegram".to_owned(),
             external_account_id: "telegram:1".to_owned(),
             config,
@@ -3788,21 +3142,21 @@ mod tests {
             updated_at: now,
         };
 
-        assert!(telegram_runtime_reconciliation_enabled(&account(json!({
+        assert!(telegram::runtime_reconciliation_enabled(&account(json!({
             "runtime": "fixture"
         }))));
-        assert!(telegram_runtime_reconciliation_enabled(&account(json!({
+        assert!(telegram::runtime_reconciliation_enabled(&account(json!({
             "runtime": "tdlib_qr_authorized"
         }))));
-        assert!(!telegram_runtime_reconciliation_enabled(&account(json!({
+        assert!(!telegram::runtime_reconciliation_enabled(&account(json!({
             "runtime": "tdlib_qr_authorized",
             "runtime_enabled": false
         }))));
-        assert!(!telegram_runtime_reconciliation_enabled(&account(json!({
+        assert!(!telegram::runtime_reconciliation_enabled(&account(json!({
             "runtime": "fixture",
             "lifecycle_state": "logged_out"
         }))));
-        assert!(!telegram_runtime_reconciliation_enabled(&account(json!({
+        assert!(!telegram::runtime_reconciliation_enabled(&account(json!({
             "runtime": "live_blocked"
         }))));
     }
@@ -3838,52 +3192,6 @@ mod tests {
 
         assert!(register_signal_replay_dispatcher(&database_url));
         assert!(!register_signal_replay_dispatcher(&database_url));
-    }
-
-    #[test]
-    fn zulip_command_executor_registration_is_once_per_database_url() {
-        let database_url = format!(
-            "postgres://zulip-command-executor-test/{}",
-            Utc::now().timestamp_nanos_opt().unwrap_or_default()
-        );
-
-        assert!(register_zulip_command_executor(&database_url));
-        assert!(!register_zulip_command_executor(&database_url));
-    }
-
-    #[test]
-    fn zulip_event_ingest_registration_is_once_per_database_url() {
-        let database_url = format!(
-            "postgres://zulip-event-ingest-test/{}",
-            Utc::now().timestamp_nanos_opt().unwrap_or_default()
-        );
-
-        assert!(register_zulip_event_ingest(&database_url));
-        assert!(!register_zulip_event_ingest(&database_url));
-    }
-
-    #[test]
-    fn zulip_attachment_download_registration_is_once_per_database_url() {
-        let database_url = format!(
-            "postgres://zulip-attachment-download-test/{}",
-            Utc::now().timestamp_nanos_opt().unwrap_or_default()
-        );
-
-        assert!(register_zulip_attachment_download(&database_url));
-        assert!(!register_zulip_attachment_download(&database_url));
-    }
-
-    #[test]
-    fn zulip_provider_observation_reconciliation_registration_is_once_per_database_url() {
-        let database_url = format!(
-            "postgres://zulip-provider-reconciliation-test/{}",
-            Utc::now().timestamp_nanos_opt().unwrap_or_default()
-        );
-
-        assert!(register_zulip_provider_observation_reconciliation_consumer(
-            &database_url
-        ));
-        assert!(!register_zulip_provider_observation_reconciliation_consumer(&database_url));
     }
 
     #[test]

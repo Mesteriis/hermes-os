@@ -5,7 +5,8 @@ use sqlx::{Postgres, Transaction};
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatFolderSnapshot, TelegramTdlibChatSnapshot,
 };
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 
 use super::TELEGRAM_CHAT_RECORD_KIND;
 use super::chat_metadata::tdlib_chat_projection_metadata;

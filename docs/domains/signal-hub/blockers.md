@@ -6,7 +6,7 @@ Status: active planning blockers.
 
 | Blocker | Required decision |
 |---|---|
-| NATS dev/test lifecycle | define local/testcontainer NATS JetStream setup without sidecar provider runtimes |
+| NATS dev/test lifecycle | define local/testcontainer NATS JetStream setup for in-process and connector fixtures |
 | ConnectRPC Rust wiring | choose exact crate versions and codegen layout for Axum-hosted ConnectRPC |
 | Protobuf package layout | decide whether contracts live at repository root or under backend first |
 | Signal Hub migration order | create tables before source fixtures; loader must run after schema exists |
@@ -21,7 +21,7 @@ Status: active planning blockers.
 | Provider-specific code still leaking into Communications | Signal Hub controls could inherit provider naming and break neutrality |
 | Event family naming | `integration.*` compatibility vs `signal.*` canonical family must be explicit |
 | Direct imports | integrations/domains/workflows must not bypass event contracts |
-| Sidecar temptation | premature process extraction would increase local dev/test complexity |
+| Connector rollout | a connector requires a crate boundary, durable acknowledgement, lease fencing and fixture evidence |
 | Redis temptation | second event substrate would fragment replay/audit semantics |
 
 ## Product Blockers
@@ -37,7 +37,7 @@ Status: active planning blockers.
 
 These are intentionally not blockers for the first implementation:
 
-- extracting provider runtimes into sidecars;
+- extracting a provider runtime only after its connector acceptance gates pass;
 - Redis;
 - Kafka;
 - WebSocket hub;

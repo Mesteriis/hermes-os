@@ -1,13 +1,18 @@
+use hermes_events_api::EventEnvelope;
 mod list;
 mod refresh;
 mod review;
 mod task_activation;
 
-use sqlx::postgres::PgPool;
+use sqlx::Transaction;
+use sqlx::postgres::{PgPool, Postgres};
 
 use super::errors::TaskCandidateError;
-use super::models::{TaskCandidate, TaskCandidateReviewCommand, TaskCandidateReviewCommandResult};
-use crate::platform::events::EventEnvelope;
+use super::models::{
+    StoredCandidateRow, TaskCandidate, TaskCandidateReviewCommand,
+    TaskCandidateReviewCommandResult, TaskCandidateReviewState,
+};
+
 use serde_json::Value;
 
 #[derive(Clone)]
@@ -27,33 +32,33 @@ impl TaskCandidateStore {
         refresh::refresh_deterministic_candidates(&self.pool, limit).await
     }
 
-    pub async fn set_review_state(
-        &self,
+    pub(crate) async fn set_review_state_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
         command: &TaskCandidateReviewCommand,
-    ) -> Result<TaskCandidateReviewCommandResult, TaskCandidateError> {
-        review::set_review_state(&self.pool, command).await
-    }
-
-    pub async fn set_review_state_with_observation(
-        &self,
-        command: &TaskCandidateReviewCommand,
-        observation_id: &str,
-        metadata: Value,
-    ) -> Result<TaskCandidateReviewCommandResult, TaskCandidateError> {
-        review::set_review_state_with_observation(
-            &self.pool,
+        observation_id: Option<&str>,
+        metadata: Option<Value>,
+    ) -> Result<(TaskCandidateReviewCommandResult, StoredCandidateRow), TaskCandidateError> {
+        review::set_candidate_review_state_in_transaction(
+            transaction,
             command,
-            Some(observation_id),
-            Some(metadata),
+            observation_id,
+            metadata,
         )
         .await
     }
 
-    pub async fn apply_review_event(
-        &self,
+    pub(crate) async fn apply_review_event_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
         event: &EventEnvelope,
+    ) -> Result<(String, TaskCandidateReviewState, StoredCandidateRow), TaskCandidateError> {
+        review::apply_candidate_review_event_in_transaction(transaction, event).await
+    }
+
+    pub(crate) async fn delete_task_for_candidate_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        task_candidate_id: &str,
     ) -> Result<(), TaskCandidateError> {
-        review::apply_review_event(&self.pool, event).await
+        review::delete_task_for_candidate_in_transaction(transaction, task_candidate_id).await
     }
 
     pub async fn list_candidates(

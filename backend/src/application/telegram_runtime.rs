@@ -1,6 +1,3 @@
-use crate::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
-};
 use crate::integrations::telegram::client::models::messages::{
     TelegramForwardRequest, TelegramManualSendRequest, TelegramManualSendResponse,
     TelegramReplyRequest,
@@ -15,9 +12,12 @@ use crate::integrations::telegram::runtime::{
     TelegramRuntimeStatus, TelegramRuntimeStopRequest,
 };
 use crate::platform::config::AppConfig;
-use crate::platform::events::EventBus;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::secrets::SecretReferenceStore;
 use crate::vault::HostVault;
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
 
 pub(crate) struct TelegramRuntimeUseCaseContext<'a> {
     pub(crate) provider_account_store: CommunicationProviderAccountStore,
@@ -26,7 +26,7 @@ pub(crate) struct TelegramRuntimeUseCaseContext<'a> {
     pub(crate) secret_store: SecretReferenceStore,
     pub(crate) secret_resolver: &'a HostVault,
     pub(crate) config: &'a AppConfig,
-    pub(crate) event_bus: &'a EventBus,
+    pub(crate) event_bus: &'a InMemoryEventBus,
     pub(crate) runtime: &'a TelegramRuntimeManager,
 }
 
@@ -40,7 +40,7 @@ pub(crate) struct TelegramRuntimeUseCaseStores {
 pub(crate) struct TelegramRuntimeUseCaseRuntime<'a> {
     pub(crate) secret_resolver: &'a HostVault,
     pub(crate) config: &'a AppConfig,
-    pub(crate) event_bus: &'a EventBus,
+    pub(crate) event_bus: &'a InMemoryEventBus,
     pub(crate) runtime: &'a TelegramRuntimeManager,
 }
 

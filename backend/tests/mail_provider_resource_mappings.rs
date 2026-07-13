@@ -1,6 +1,5 @@
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderKind, NewProviderAccount,
-};
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 use hermes_hub_backend::domains::communications::folders::{
     CommunicationFolderStore, NewCommunicationFolder,
 };
@@ -8,6 +7,7 @@ use hermes_hub_backend::domains::communications::provider_resources::{
     MailProviderResourceKind, MailProviderResourceMappingUpdate, MailProviderResourceStore,
     MailProviderSemanticRole, NewMailProviderResource,
 };
+
 use hermes_hub_backend::platform::communications::{
     DiscoveredMailProviderResource, MailProviderResourceCommandPort,
 };

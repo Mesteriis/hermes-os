@@ -2,6 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::{Duration, Utc};
+use hermes_hub_backend::application::task_relationship::TaskRelationshipApplicationService;
 use hermes_hub_backend::domains::decisions::{
     DecisionEvidenceSourceKind, DecisionReviewState, DecisionStore, NewDecision,
     NewDecisionEvidence,
@@ -11,8 +12,8 @@ use hermes_hub_backend::domains::obligations::{
     ObligationReviewState, ObligationStore,
 };
 use hermes_hub_backend::domains::relationships::{
-    RelationshipEntityKind, RelationshipEvidenceSourceKind, RelationshipReviewState,
-    RelationshipStore,
+    models::{RelationshipEntityKind, RelationshipEvidenceSourceKind, RelationshipReviewState},
+    store::RelationshipStore,
 };
 use hermes_hub_backend::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxStore, ReviewItemKind,
@@ -26,10 +27,9 @@ use hermes_hub_backend::domains::tasks::core::{
 use hermes_hub_backend::domains::tasks::health::TaskWatchtowerService;
 use hermes_hub_backend::domains::tasks::intelligence::TaskIntelligenceService;
 use hermes_hub_backend::domains::tasks::rules::{TaskRuleStore, TaskTemplateStore};
-use hermes_hub_backend::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore,
-};
 use hermes_hub_backend::platform::storage::Database;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 use serde_json::json;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Row};
@@ -45,6 +45,7 @@ async fn live_pool() -> Option<PgPool> {
     let test_context = TestContext::new().await;
     let url = test_context.connection_string();
     let db = Database::connect(Some(&url)).await.expect("connect");
+    Box::leak(Box::new(test_context));
     Some(db.pool().expect("pool").clone())
 }
 
@@ -781,7 +782,6 @@ async fn task_relation_materializes_first_class_relationship_against_postgres() 
         return;
     };
     let store = TaskStore::new(pool.clone());
-    let rel = TaskRelationStore::new(pool.clone());
     let relationship_store = RelationshipStore::new(pool.clone());
     let suffix = unique_suffix();
     let task = store
@@ -794,7 +794,7 @@ async fn task_relation_materializes_first_class_relationship_against_postgres() 
         .expect("create");
     let project_id = format!("project:v1:task-relation:{suffix}");
 
-    let relation = rel
+    let relation = TaskRelationshipApplicationService::new(pool.clone())
         .link(
             &task.task_id,
             "project",
@@ -871,7 +871,6 @@ async fn task_relation_store_materializes_observation_link_against_postgres() {
         return;
     };
     let store = TaskStore::new(pool.clone());
-    let rel = TaskRelationStore::new(pool.clone());
     let observation = ObservationStore::new(pool.clone())
         .capture(
             &NewObservation::new(
@@ -899,7 +898,7 @@ async fn task_relation_store_materializes_observation_link_against_postgres() {
         .expect("create");
     let project_id = format!("project:v1:task-relation-observation:{suffix}");
 
-    let relation = rel
+    let relation = TaskRelationshipApplicationService::new(pool.clone())
         .link(
             &task.task_id,
             "project",

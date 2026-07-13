@@ -1,7 +1,6 @@
 use crate::ai::hub::{AiHub, AiModelRoute, LocalAiInspection, SharedAiHub};
-use crate::domains::communications::messages::{
-    CommunicationMessageProjectionPort, ProjectedMessage, WorkflowState,
-};
+use crate::domains::communications::messages::port::MessageProjectionPort;
+use crate::domains::communications::messages::{ProjectedMessage, WorkflowState};
 use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
 use crate::workflows::email_intelligence::heuristics;
 use crate::workflows::email_intelligence::models::{EmailAnalysis, EmailSummaryContract};
@@ -57,7 +56,7 @@ impl EmailIntelligenceService {
 
     pub async fn analyze_and_persist(
         &self,
-        store: &CommunicationMessageProjectionPort,
+        store: &MessageProjectionPort,
         message: &ProjectedMessage,
     ) -> Result<bool, EmailIntelligenceError> {
         let Some(analysis) = self.analyze_message(message).await? else {

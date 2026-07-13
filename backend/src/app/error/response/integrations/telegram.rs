@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 
-use crate::application::provider_runtime_contracts::TelegramError;
+use crate::integrations::telegram::client::TelegramError;
 
 use super::super::ErrorParts;
 
@@ -62,6 +62,12 @@ pub(super) fn telegram_error_parts(error: TelegramError) -> ErrorParts {
             "Telegram communication message port operation failed",
             "telegram_message_port_error",
             "Telegram message read model operation failed",
+        ),
+        TelegramError::CommunicationEvidencePort(error) => internal(
+            error,
+            "Telegram communication evidence port operation failed",
+            "telegram_evidence_port_error",
+            "Telegram evidence recording failed",
         ),
         TelegramError::SecretReference(error) => internal(
             error,

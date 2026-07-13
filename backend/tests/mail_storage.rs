@@ -1,12 +1,12 @@
 use chrono::Utc;
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::archive_inspection::{
     ArchiveEntryInspection, ArchiveInspectionReport, cached_archive_inspection_report,
-};
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
@@ -16,6 +16,7 @@ use hermes_hub_backend::domains::communications::storage::{
     CommunicationStorageError, CommunicationStorageStore, LocalCommunicationBlobStore,
     NewCommunicationAttachment, NewCommunicationBlob,
 };
+
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::json;
 
@@ -62,7 +63,7 @@ async fn mail_storage_records_attachment_metadata_against_postgres() {
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Icloud,
+            CommunicationProviderKind::Icloud,
             "Mail storage account",
             format!("mail-storage-{suffix}@example.invalid"),
         ))

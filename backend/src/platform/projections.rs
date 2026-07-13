@@ -1,10 +1,11 @@
+use hermes_events_api::StoredEventEnvelope;
 use std::future::Future;
 
 use thiserror::Error;
 
-use crate::platform::events::{
-    EventStore, EventStoreError, ProjectionCursorStore, StoredEventEnvelope,
-};
+use hermes_events_postgres::cursors::ProjectionCursorStore;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectionBatchOutcome {

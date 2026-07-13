@@ -1,16 +1,29 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 
 use super::helpers::{
     AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed, publish_telegram_event,
 };
-use crate::app::api_support::{api_audit_log, telegram_provider_runtime_service};
+use crate::app::api_support::{
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
+};
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::{TelegramChat, lifecycle};
+use crate::integrations::telegram::client::{TelegramChat, lifecycle};
 use crate::platform::audit::NewApiAuditRecord;
-use crate::platform::events::NewEventEnvelope;
+
 use crate::platform::events::bus::telegram_event_types;
 use crate::platform::settings::ApplicationSettingsStore;
 
@@ -706,8 +719,6 @@ pub(crate) async fn post_telegram_chat_mark_read(
     Path(telegram_chat_id): Path<String>,
     Json(request): Json<TelegramChatActionRequest>,
 ) -> Result<Json<TelegramChatActionResponse>, ApiError> {
-    ensure_telegram_account_operation_allowed(&state, &request.account_id, "dialogs.mark_read")
-        .await?;
     let service = telegram_provider_runtime_service(&state)?;
     let chat = service
         .telegram_chat_by_id(&telegram_chat_id)
@@ -723,6 +734,10 @@ pub(crate) async fn post_telegram_chat_mark_read(
         ));
     }
     let report_to_provider = telegram_read_receipt_reports_enabled(&state, &chat).await?;
+    if report_to_provider {
+        ensure_telegram_account_operation_allowed(&state, &request.account_id, "dialogs.mark_read")
+            .await?;
+    }
     service
         .set_chat_last_read_at(&telegram_chat_id, Some(Utc::now()))
         .await?;

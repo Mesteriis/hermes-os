@@ -9,10 +9,10 @@ pub(crate) async fn post_v1_extract_tasks(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    crate::app::api_support::require_mail_ai_content_egress(
+    crate::app::api_support::stores::ai_runtime::require_mail_ai_content_egress(
         &state,
         &msg.account_id,
-        crate::app::api_support::MailAiContentEgressKind::Body,
+        crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::Body,
     )
     .await?;
     let svc = crate::domains::communications::extract::EmailExtractService::new(
@@ -26,7 +26,7 @@ pub(crate) async fn post_v1_extract_tasks(
     if external_llm_task_count > 0
         && let Some(pool) = state.database.pool()
     {
-        crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+        crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
             pool.clone(),
             "message_task_extraction",
             &message_id,

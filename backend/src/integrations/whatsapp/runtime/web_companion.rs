@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::ProviderAccountCommandPort;
+use hermes_communications_api::accounts::ProviderSecretBindingCommandPort;
 use std::sync::Arc;
 
 use serde_json::{Value, json};
@@ -7,9 +9,7 @@ use super::{
     ShapedWhatsAppProviderRuntime, WhatsAppProviderRuntime, WhatsAppProviderRuntimeShape,
     WhatsappWebStore,
 };
-use crate::platform::communications::{
-    ProviderAccountCommandPort, ProviderChannelMessageLookupPort, ProviderSecretBindingCommandPort,
-};
+use crate::platform::communications::ProviderChannelMessageLookupPort;
 
 pub(crate) fn build_runtime(
     pool: PgPool,

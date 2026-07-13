@@ -1,3 +1,4 @@
+use hermes_communications_api::evidence::IngestionCheckpointQueryPort;
 use serde_json::Value;
 
 use crate::platform::communications::{
@@ -61,7 +62,7 @@ impl MailBackgroundSyncService {
     ) -> Result<(), ProviderSyncError> {
         let stream_id = imap_mailbox_stream_id(mailbox);
         let checkpoint_before = context
-            .communication_store
+            .communication_evidence
             .checkpoint(&context.account.account_id, &stream_id)
             .await?
             .map(|checkpoint| checkpoint.checkpoint);

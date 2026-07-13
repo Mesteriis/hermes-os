@@ -77,7 +77,7 @@ pub(crate) async fn get_persona_snapshots(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<
+    let items = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::personas::memory::PersonaSnapshotStore,
     >(pool)
     .list(&persona_id)
@@ -108,7 +108,7 @@ pub(crate) async fn get_persona_history_diff(
     let to_date = DateTime::parse_from_rfc3339(&query.to)
         .map_err(|_| ApiError::InvalidCommunicationQuery("invalid to date"))?
         .with_timezone(&Utc);
-    let diff = crate::app::api_support::app_store::<
+    let diff = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::personas::memory::PersonaSnapshotStore,
     >(pool)
     .history_diff(&persona_id, from_date, to_date)
@@ -149,7 +149,7 @@ pub(crate) async fn put_identity_candidate_review(
         ))
         .await?;
 
-    let result = crate::domains::personas::service::PersonaCommandService::new(pool)
+    let result = crate::domains::personas::command_service::PersonaCommandService::new(pool)
         .review_identity_candidate_manual(&command)
         .await?;
 

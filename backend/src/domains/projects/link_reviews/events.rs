@@ -1,7 +1,6 @@
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::{Value, json};
-
-use crate::platform::events::NewEventEnvelope;
 
 use super::constants::{
     PROJECT_LINK_REVIEW_EVENT_TYPE, PROJECT_LINK_REVIEW_SOURCE_KIND,

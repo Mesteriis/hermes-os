@@ -1,10 +1,10 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::{TimeZone, Utc};
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
-};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
@@ -13,8 +13,9 @@ use hermes_hub_backend::domains::decisions::{
     DecisionStore, DecisionStoreError, NewDecision, NewDecisionEvidence, NewDecisionImpactedEntity,
 };
 use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
+
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::graph_projection::GraphProjectionService;
+use hermes_hub_backend::workflows::graph_projection::service::GraphProjectionService;
 use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -627,7 +628,7 @@ async fn seed_decision_message(
     ingestion_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Decision Candidate Gmail",
             format!("decision-candidate-{suffix}@example.com"),
         ))

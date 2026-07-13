@@ -1,6 +1,7 @@
 use chrono::Utc;
-use hermes_hub_backend::domains::signal_hub::dispatch_ai_helper_signal;
-use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
+use hermes_events_api::NewEventEnvelope;
+use hermes_events_postgres::store::EventStore;
+use hermes_hub_backend::domains::signal_hub::ai::dispatch_ai_helper_signal;
 use serde_json::json;
 use testkit::app::TestApp;
 
@@ -89,7 +90,7 @@ async fn repeated_new_ai_signal_reuses_deterministic_event_identity() {
 async fn dispatch_test_mail_ai_signal(
     pool: sqlx::PgPool,
     source_id: &str,
-) -> Option<hermes_hub_backend::platform::events::EventEnvelope> {
+) -> Option<hermes_events_api::EventEnvelope> {
     dispatch_ai_helper_signal(
         pool,
         "mail_intelligence",

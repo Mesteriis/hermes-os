@@ -1,5 +1,5 @@
-use crate::platform::communications::NewProviderAccountSecretBinding;
 use crate::platform::secrets::{NewSecretReference, SecretReferenceStore};
+use hermes_communications_api::accounts::NewProviderAccountSecretBinding;
 
 use super::super::errors::TelegramError;
 use super::super::identifiers::telegram_secret_ref;

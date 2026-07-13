@@ -16,7 +16,7 @@ pub(crate) async fn get_persona_health(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    crate::app::api_support::app_store::<PersonaHealthStore>(pool)
+    crate::app::api_support::stores::domain_stores::app_store::<PersonaHealthStore>(pool)
         .get(&persona_id)
         .await
         .map_err(ApiError::from)?
@@ -32,10 +32,11 @@ pub(crate) async fn get_personas_health(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<PersonaHealthStore>(pool)
-        .list_health()
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<PersonaHealthStore>(pool)
+            .list_health()
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(PersonaHealthResponse { items }))
 }
 
@@ -47,10 +48,11 @@ pub(crate) async fn get_personas_watchlist(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<PersonaHealthStore>(pool)
-        .list_watchlist()
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<PersonaHealthStore>(pool)
+            .list_watchlist()
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(PersonaHealthResponse { items }))
 }
 
@@ -63,7 +65,7 @@ pub(crate) async fn post_persona_watchlist_toggle(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let on = crate::domains::personas::service::PersonaCommandService::new(pool)
+    let on = crate::domains::personas::command_service::PersonaCommandService::new(pool)
         .toggle_watchlist_manual(&persona_id)
         .await?;
     Ok(Json(json!({"watchlist": on})))

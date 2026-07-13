@@ -1,6 +1,6 @@
 use crate::domains::organizations::api::OrganizationError;
 use crate::domains::organizations::core::OrgCoreError;
-use crate::platform::observations::ObservationStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::postgres::PgPool;

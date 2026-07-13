@@ -1,19 +1,20 @@
+use crate::domains::communications::storage::port::{CommunicationAttachmentPort, LocalBlobPort};
+use hermes_communications_api::evidence::{
+    CommunicationEvidencePort, CommunicationRawEvidenceCommandPort, IngestionCheckpointCommandPort,
+    NewIngestionCheckpoint, NewRawCommunicationRecord,
+};
 use serde_json::json;
-
-use crate::domains::communications::core::{CommunicationIngestionPort, NewIngestionCheckpoint};
-use crate::domains::communications::storage::{
-    CommunicationBlobMetadataPort, LocalCommunicationBlobPort, NewCommunicationBlob,
-};
-use crate::platform::communications::{
-    EmailSyncBatch, EmailSyncBlobImportReport, EmailSyncImportReport, NewRawCommunicationRecord,
-};
 
 use super::errors::EmailSyncRecordError;
 use super::ids::{EMAIL_MESSAGE_RECORD_KIND, raw_record_id};
 use super::raw_payload::{payload_with_raw_blob_reference, raw_message_bytes};
+use crate::domains::communications::storage::NewCommunicationBlob;
+use crate::platform::communications::{
+    EmailSyncBatch, EmailSyncBlobImportReport, EmailSyncImportReport,
+};
 
 pub async fn record_email_sync_batch(
-    store: &CommunicationIngestionPort,
+    store: &dyn CommunicationEvidencePort,
     account_id: &str,
     import_batch_id: &str,
     batch: &EmailSyncBatch,
@@ -62,9 +63,9 @@ pub async fn record_email_sync_batch(
 }
 
 pub async fn record_email_sync_batch_with_mail_blobs(
-    store: &CommunicationIngestionPort,
-    mail_store: &CommunicationBlobMetadataPort,
-    blob_store: &LocalCommunicationBlobPort,
+    store: &dyn CommunicationEvidencePort,
+    mail_store: &CommunicationAttachmentPort,
+    blob_store: &LocalBlobPort,
     account_id: &str,
     import_batch_id: &str,
     batch: &EmailSyncBatch,
@@ -128,7 +129,7 @@ pub async fn record_email_sync_batch_with_mail_blobs(
 }
 
 async fn save_checkpoint_if_present(
-    store: &CommunicationIngestionPort,
+    store: &dyn CommunicationEvidencePort,
     account_id: &str,
     batch: &EmailSyncBatch,
 ) -> Result<bool, EmailSyncRecordError> {

@@ -3,8 +3,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
+use hermes_events_postgres::consumers::EventConsumerConfig;
+use hermes_events_postgres::consumers::EventConsumerRunner;
 use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
-use hermes_hub_backend::platform::events::{EventConsumerConfig, EventConsumerRunner};
 use hermes_hub_backend::workflows::persona_derived_evidence::{
     PERSONA_DERIVED_EVIDENCE_CONSUMER, project_persona_derived_evidence_event,
 };

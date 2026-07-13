@@ -1,7 +1,7 @@
-use crate::domains::communications::storage::LocalCommunicationBlobPort;
+use crate::domains::communications::storage::port::LocalBlobPort;
 use crate::platform::communications::EmailSyncBatch;
-use crate::workflows::email_sync_pipeline::project_email_sync_batch_with_mail_blobs;
-use crate::workflows::graph_projection::GraphProjectionService;
+use crate::workflows::email_sync_pipeline::service::project_email_sync_batch_with_mail_blobs;
+use crate::workflows::graph_projection::service::GraphProjectionService;
 
 use super::super::errors::ProviderSyncError;
 use super::super::models::{MailSyncPhase, MailSyncSettings, ProgressMode, ProgressUpdate};
@@ -37,9 +37,10 @@ impl MailBackgroundSyncService {
             })
             .await?;
 
-        let blob_store = LocalCommunicationBlobPort::new(&self.blob_root);
+        let blob_store = LocalBlobPort::new(&self.blob_root);
         let report = project_email_sync_batch_with_mail_blobs(
             self.pool.clone(),
+            self.communication_evidence.as_ref(),
             &blob_store,
             account_id,
             &format!("{run_id}:batch:{}", summary.processed_messages),

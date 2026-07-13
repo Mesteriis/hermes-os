@@ -1,8 +1,12 @@
 use chrono::{DateTime, Utc};
+use hermes_events_api::StoredEventEnvelope;
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use crate::application::relationship_graph::{
+    RelationshipGraphCoordinator, RelationshipGraphCoordinatorError,
+};
 use crate::domains::obligations::{
     NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationReviewPort,
     ObligationReviewState, ObligationStoreError,
@@ -13,15 +17,17 @@ use crate::domains::personas::core::{
 use crate::domains::personas::enrichment::PERSONA_TRUST_SCORE_CHANGED_EVENT_TYPE;
 use crate::domains::personas::trust::PERSONA_PROMISE_CREATED_EVENT_TYPE;
 use crate::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewPort,
-    RelationshipReviewState, RelationshipStoreError, relationship_id,
+    ids::relationship_id,
+    models::{
+        NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
+    },
 };
-use crate::engines::trust::{TrustEngine, TrustEngineError};
-use crate::platform::events::{EventStoreError, StoredEventEnvelope};
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationPort, ObservationStoreError,
-};
+use crate::engines::trust::{engine::TrustEngine, errors::TrustEngineError};
 use crate::workflows::review_mirror::{ReviewMirrorError, ensure_relationship_review_item};
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 pub const PERSONA_DERIVED_EVIDENCE_CONSUMER: &str = "persona_derived_evidence";
 const LEGACY_PERSON_ROLE_ASSIGNED_EVENT_TYPE: &str = "person.role.assigned";
@@ -41,7 +47,7 @@ pub enum PersonaDerivedEvidenceWorkflowError {
     Observation(#[from] ObservationStoreError),
 
     #[error(transparent)]
-    Relationship(#[from] RelationshipStoreError),
+    RelationshipGraph(#[from] RelationshipGraphCoordinatorError),
 
     #[error(transparent)]
     Obligation(#[from] ObligationStoreError),
@@ -100,7 +106,7 @@ async fn materialize_role_assigned(
         .map(str::to_owned)
         .unwrap_or_else(|| persona_role_knowledge_id(role));
 
-    let observation = ObservationPort::new(pool.clone())
+    let observation = ObservationStore::new(pool.clone())
         .capture(
             &NewObservation::new(
                 "PERSONA_ROLE",
@@ -145,7 +151,7 @@ async fn materialize_role_assigned(
             "compatibility_source": "persona_roles",
         }));
 
-    let _ = RelationshipReviewPort::new(pool.clone())
+    let _ = RelationshipGraphCoordinator::new(pool.clone())
         .upsert_with_evidence(&relationship, &[evidence])
         .await?;
     Ok(())
@@ -168,8 +174,13 @@ async fn materialize_role_removed(
         &role_knowledge_id,
     );
 
-    let _ = RelationshipReviewPort::new(pool.clone())
-        .set_review_state(&relationship_id, RelationshipReviewState::UserRejected)
+    let _ = RelationshipGraphCoordinator::new(pool.clone())
+        .set_review_state_with_observation(
+            &relationship_id,
+            RelationshipReviewState::UserRejected,
+            None,
+            None,
+        )
         .await?;
     Ok(())
 }
@@ -189,7 +200,7 @@ async fn materialize_trust_score(
         normalized_confidence,
     )?;
 
-    let observation = ObservationPort::new(pool.clone())
+    let observation = ObservationStore::new(pool.clone())
         .capture(
             &NewObservation::new(
                 "PERSONA_TRUST_SIGNAL",
@@ -241,7 +252,7 @@ async fn materialize_trust_score(
                 "confidence": source_reliability.confidence,
             }
         }));
-    let relationship = RelationshipReviewPort::new(pool.clone())
+    let relationship = RelationshipGraphCoordinator::new(pool.clone())
         .upsert_with_evidence(&relationship, &[evidence])
         .await?;
     let _ = ensure_relationship_review_item(
@@ -277,7 +288,7 @@ async fn materialize_promise(
             .unwrap_or(Value::Null),
     )?;
 
-    let observation = ObservationPort::new(pool.clone())
+    let observation = ObservationStore::new(pool.clone())
         .capture(
             &NewObservation::new(
                 "PERSONA_PROMISE",

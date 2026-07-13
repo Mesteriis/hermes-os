@@ -1,5 +1,6 @@
+use crate::domains::communications::messages::port::MessageProjectionPort;
 use crate::domains::communications::messages::{
-    MessageProjectionError, MessageProjectionStore, ProjectedMessage, WorkflowState,
+    MessageProjectionError, ProjectedMessage, WorkflowState,
 };
 
 const URGENT_WORDS: &[&str] = &[
@@ -50,7 +51,7 @@ pub struct IngestionAnalysis {
 /// This is the mandatory analysis step for every ingested email —
 /// provider spam classification is completely ignored.
 pub async fn analyze_ingested_message(
-    store: &MessageProjectionStore,
+    store: &MessageProjectionPort,
     message: &ProjectedMessage,
 ) -> Result<IngestionAnalysis, MessageProjectionError> {
     let score = heuristic_score(message);

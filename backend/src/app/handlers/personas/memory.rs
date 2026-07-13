@@ -16,7 +16,7 @@ pub(crate) async fn get_persona_facts(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<PersonaFactStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<PersonaFactStore>(pool)
         .list(&persona_id)
         .await
         .map_err(ApiError::from)?;
@@ -43,7 +43,7 @@ pub(crate) async fn post_persona_fact(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     Ok(Json(
-        crate::domains::personas::service::PersonaCommandService::new(pool)
+        crate::domains::personas::command_service::PersonaCommandService::new(pool)
             .upsert_persona_fact_manual(
                 &persona_id,
                 &req.fact_type,
@@ -71,10 +71,11 @@ pub(crate) async fn get_persona_memory_cards(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<PersonaMemoryCardStore>(pool)
-        .list(&persona_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<PersonaMemoryCardStore>(pool)
+            .list(&persona_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(PersonaMemoryCardsResponse { items }))
 }
 
@@ -98,7 +99,7 @@ pub(crate) async fn post_persona_memory_card(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     Ok(Json(
-        crate::domains::personas::service::PersonaCommandService::new(pool)
+        crate::domains::personas::command_service::PersonaCommandService::new(pool)
             .upsert_persona_memory_card_manual(
                 &persona_id,
                 &req.title,
@@ -126,10 +127,11 @@ pub(crate) async fn get_persona_preferences(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<PersonaPreferenceStore>(pool)
-        .list(&persona_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<PersonaPreferenceStore>(pool)
+            .list(&persona_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(PersonaPreferencesResponse { items }))
 }
 
@@ -152,7 +154,7 @@ pub(crate) async fn post_persona_preference(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     Ok(Json(
-        crate::domains::personas::service::PersonaCommandService::new(pool)
+        crate::domains::personas::command_service::PersonaCommandService::new(pool)
             .upsert_persona_preference_manual(
                 &persona_id,
                 &req.preference_type,
@@ -180,10 +182,11 @@ pub(crate) async fn get_persona_timeline(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<RelationshipEventStore>(pool)
-        .timeline(&persona_id, query.limit.unwrap_or(50))
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<RelationshipEventStore>(pool)
+            .timeline(&persona_id, query.limit.unwrap_or(50))
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(RelationshipTimelineResponse { items }))
 }
 
@@ -203,7 +206,7 @@ pub(crate) async fn post_relationship_event(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     Ok(Json(
-        crate::domains::personas::service::PersonaCommandService::new(pool)
+        crate::domains::personas::command_service::PersonaCommandService::new(pool)
             .add_relationship_event_manual(&NewRelationshipEvent {
                 persona_id,
                 event_type: req.event_type,

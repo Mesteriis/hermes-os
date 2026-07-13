@@ -1,4 +1,6 @@
-use crate::platform::communications::{CommunicationProviderKind, ProviderAccountSecretPurpose};
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+
 use crate::platform::secrets::{DatabaseEncryptedSecretVault, SecretKind, SecretStoreKind};
 use crate::vault::{HostVault, SecretEntryContext};
 

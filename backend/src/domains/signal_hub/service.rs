@@ -1,12 +1,15 @@
 use chrono::Utc;
+use hermes_events_api::{EventEnvelope, NewEventEnvelope, StoredEventEnvelope};
+use hermes_signal_hub_api::raw_signals::RawSignalPersistencePort;
+use hermes_signal_hub_postgres::raw_signals::adapter::RawSignalStore;
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
+use std::sync::Arc;
 
 use super::policies::{SignalPolicyDecision, SignalPolicyEvaluator};
 use super::store::{SignalHubError, SignalHubStore};
-use crate::platform::events::{
-    EventEnvelope, EventStore, EventStoreError, NewEventEnvelope, StoredEventEnvelope,
-};
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
 pub const SIGNAL_HUB_RAW_SIGNAL_CONSUMER: &str = "signal_hub_raw_signal_dispatcher";
 const SIGNAL_HUB_RAW_SIGNAL_RUNTIME_SOURCE: &str = "system";
@@ -19,8 +22,10 @@ pub async fn process_signal_hub_raw_event(
         return Ok(());
     }
 
-    let service =
-        SignalHubSignalService::new(SignalHubStore::new(pool.clone()), EventStore::new(pool));
+    let service = SignalHubSignalService::new(
+        Arc::new(RawSignalStore::new(pool.clone())),
+        EventStore::new(pool),
+    );
     service
         .process_raw_signal(&event.event)
         .await
@@ -32,7 +37,7 @@ pub async fn signal_hub_raw_dispatcher_allows_processing(
     signal_store: &SignalHubStore,
 ) -> Result<bool, SignalHubError> {
     signal_store.restore_system_sources().await?;
-    Ok(crate::platform::events::runtime_allows_processing(
+    Ok(crate::platform::events::runtime::runtime_allows_processing(
         signal_store.pool(),
         SIGNAL_HUB_RAW_SIGNAL_RUNTIME_SOURCE,
         SIGNAL_HUB_RAW_SIGNAL_CONSUMER,
@@ -46,14 +51,17 @@ pub async fn signal_hub_raw_dispatcher_allows_processing(
 
 #[derive(Clone)]
 pub struct SignalHubSignalService {
-    signal_store: SignalHubStore,
+    raw_signal_store: Arc<dyn RawSignalPersistencePort>,
     event_store: EventStore,
 }
 
 impl SignalHubSignalService {
-    pub fn new(signal_store: SignalHubStore, event_store: EventStore) -> Self {
+    pub fn new(
+        raw_signal_store: Arc<dyn RawSignalPersistencePort>,
+        event_store: EventStore,
+    ) -> Self {
         Self {
-            signal_store,
+            raw_signal_store,
             event_store,
         }
     }
@@ -64,10 +72,10 @@ impl SignalHubSignalService {
     ) -> Result<SignalProcessingOutcome, SignalHubError> {
         let parsed = ParsedRawSignal::parse(raw_event)?;
         let connection_id = self
-            .signal_store
-            .resolve_connection_id_for_event(&parsed.source_code, raw_event)
+            .raw_signal_store
+            .resolve_connection_id(&parsed.source_code, raw_event)
             .await?;
-        let policies = self.signal_store.list_active_policies().await?;
+        let policies = self.raw_signal_store.list_active_policies().await?;
         let decision = SignalPolicyEvaluator::new(Utc::now()).decide(
             &parsed.source_code,
             connection_id.as_deref(),
@@ -126,7 +134,7 @@ impl SignalHubSignalService {
                 Ok(SignalProcessingOutcome::Muted { reason })
             }
             SignalPolicyDecision::Paused { reason } => {
-                self.signal_store
+                self.raw_signal_store
                     .record_paused_event(
                         raw_event,
                         &parsed.source_code,
@@ -157,8 +165,8 @@ impl SignalHubSignalService {
     ) -> Result<SignalProcessingOutcome, SignalHubError> {
         let parsed = ParsedRawSignal::parse(raw_event)?;
         let connection_id = self
-            .signal_store
-            .resolve_connection_id_for_event(&parsed.source_code, raw_event)
+            .raw_signal_store
+            .resolve_connection_id(&parsed.source_code, raw_event)
             .await?;
         let accepted = build_derived_event(
             raw_event,

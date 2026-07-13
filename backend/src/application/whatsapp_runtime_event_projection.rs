@@ -1,15 +1,21 @@
 use chrono::{DateTime, Utc};
+use hermes_communications_api::accounts::ProviderAccount;
+use hermes_communications_api::accounts::ProviderAccountMutationOrigin;
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+use hermes_events_api::StoredEventEnvelope;
 use serde_json::{Map, Value, json};
 use sqlx::postgres::PgPool;
 
-use crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus;
-use crate::domains::communications::core::{
-    CommunicationIngestionStore, CommunicationProviderAccountStore,
-    CommunicationProviderSecretBindingStore, ProviderAccount, ProviderAccountSecretPurpose,
+use crate::domains::signal_hub::connections::SignalHubConnectionService;
+use crate::domains::signal_hub::store::{SignalHubError, SignalHubStore};
+use crate::integrations::whatsapp::runtime::contracts::WhatsAppRuntimeStatus;
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
-use crate::domains::signal_hub::{SignalHubConnectionService, SignalHubError, SignalHubStore};
-use crate::platform::events::EventStore;
-use crate::platform::events::StoredEventEnvelope;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+
+use hermes_events_postgres::store::EventStore;
+
 use crate::platform::secrets::SecretReferenceStore;
 use crate::vault::{HostVault, HostVaultError};
 
@@ -71,7 +77,8 @@ pub(crate) async fn project_whatsapp_runtime_event(
     let account_store = CommunicationProviderAccountStore::new(pool.clone());
     let binding_store = CommunicationProviderSecretBindingStore::new(pool.clone());
     let secret_store = SecretReferenceStore::new(pool.clone());
-    let runtime = crate::application::whatsapp_provider_runtime(pool.clone());
+    let runtime =
+        crate::application::provider_runtime_services::whatsapp_provider_runtime(pool.clone());
 
     let Some(current_account) = account_store
         .get(&raw_record.account_id)
@@ -217,7 +224,7 @@ fn reconcile_decision_from_effective_state(
 
 async fn update_whatsapp_account_lifecycle_state(
     account_store: &CommunicationProviderAccountStore,
-    account: &crate::platform::communications::ProviderAccount,
+    account: &hermes_communications_api::accounts::ProviderAccount,
     lifecycle_state: &str,
     observed_at: DateTime<Utc>,
 ) -> Result<(), String> {
@@ -247,7 +254,7 @@ async fn update_whatsapp_account_lifecycle_state(
         .update_config_with_origin(
             &account.account_id,
             &config,
-            crate::platform::observations::ObservationOriginKind::LocalRuntime,
+            ProviderAccountMutationOrigin::LocalRuntime,
             "application.whatsapp_runtime_event_projection",
             "runtime_event_reconcile",
         )
@@ -317,11 +324,12 @@ async fn clear_whatsapp_restorable_session(
 }
 
 async fn remove_whatsapp_signal_connection(pool: &PgPool, account_id: &str) -> Result<(), String> {
-    let signal_store = crate::domains::signal_hub::SignalHubStore::new(pool.clone());
-    let connection_service = crate::domains::signal_hub::SignalHubConnectionService::new(
-        signal_store,
-        crate::platform::events::EventStore::new(pool.clone()),
-    );
+    let signal_store = crate::domains::signal_hub::store::SignalHubStore::new(pool.clone());
+    let connection_service =
+        crate::domains::signal_hub::connections::SignalHubConnectionService::new(
+            signal_store,
+            hermes_events_postgres::store::EventStore::new(pool.clone()),
+        );
     connection_service
         .remove_account_connection("whatsapp", account_id)
         .await

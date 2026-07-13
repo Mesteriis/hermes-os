@@ -15,11 +15,16 @@ require_cargo_subcommand "nextest" "cargo install --locked cargo-nextest"
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${REPO_ROOT}/target/validate-test}"
 NEXTEST_SHOW_PROGRESS="${NEXTEST_SHOW_PROGRESS:-bar}"
 export CARGO_TARGET_DIR
-export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
+export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-1}"
+
+# sccache rejects incremental compilation. Local nextest loops intentionally
+# prefer incremental builds, while CI sets CARGO_INCREMENTAL=0 explicitly and
+# can keep the compiler cache enabled.
+disable_sccache_for_incremental
 
 cd "${REPO_ROOT}"
 
-cargo run --manifest-path crates/testkit/Cargo.toml --bin hermes_test_session -- \
+cargo run --manifest-path crates/test-session/Cargo.toml --bin hermes-test-session -- \
 	cargo nextest run \
 		--manifest-path backend/Cargo.toml \
 		--profile "${PROFILE}" \

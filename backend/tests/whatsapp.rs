@@ -1,3 +1,7 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
@@ -10,13 +14,12 @@ use sqlx::Row;
 use tempfile::tempdir;
 use tower::ServiceExt;
 
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
-    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
-};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_events_api::EventLogQuery;
+use hermes_events_postgres::store::EventStore;
+use hermes_hub_backend::app::{build_router_with_database, build_router_with_database_and_runtime};
 use hermes_hub_backend::engines::timeline::TimelineEngine;
-use hermes_hub_backend::platform::events::{EventLogQuery, EventStore};
+
 use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore};
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::vault::{EntropyEvent, HostVault, HostVaultConfig, SecretEntryContext};
@@ -13843,7 +13846,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_edit_com
     let provider_chat_id = format!("wa-executor-chat-{suffix}");
     let provider_message_id = format!("wa-executor-message-{suffix}");
     let command_id = format!("wa-executor-edit-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -13970,7 +13973,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_delete_c
     let provider_chat_id = format!("wa-executor-delete-chat-{suffix}");
     let provider_message_id = format!("wa-executor-delete-message-{suffix}");
     let command_id = format!("wa-executor-delete-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -14100,7 +14103,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_send_tex
     let account_id = format!("whatsapp-executor-send-{suffix}");
     let provider_chat_id = format!("wa-executor-send-chat-{suffix}");
     let command_id = format!("wa-executor-send-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -14206,7 +14209,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_react_co
     let provider_chat_id = format!("wa-executor-react-chat-{suffix}");
     let provider_message_id = format!("wa-executor-react-message-{suffix}");
     let command_id = format!("wa-executor-react-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -14334,7 +14337,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_unreact_
     let provider_chat_id = format!("wa-executor-unreact-chat-{suffix}");
     let provider_message_id = format!("wa-executor-unreact-message-{suffix}");
     let command_id = format!("wa-executor-unreact-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -14483,7 +14486,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_reply_co
     let provider_chat_id = format!("wa-executor-reply-chat-{suffix}");
     let source_provider_message_id = format!("wa-executor-reply-source-{suffix}");
     let command_id = format!("wa-executor-reply-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -14635,7 +14638,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_forward_
     let origin_provider_chat_id = format!("wa-executor-forward-origin-chat-{suffix}");
     let source_provider_message_id = format!("wa-executor-forward-source-{suffix}");
     let command_id = format!("wa-executor-forward-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -14785,7 +14788,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_send_med
     let account_id = format!("whatsapp-executor-media-{suffix}");
     let provider_chat_id = format!("wa-executor-media-chat-{suffix}");
     let command_id = format!("wa-executor-media-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -15060,7 +15063,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_send_voi
     let account_id = format!("whatsapp-executor-voice-note-{suffix}");
     let provider_chat_id = format!("wa-executor-voice-note-chat-{suffix}");
     let command_id = format!("wa-executor-voice-note-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -15098,6 +15101,13 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_send_voi
         .expect("voice note import response");
     assert_eq!(import_response.status(), StatusCode::OK);
     let import_body = json_body(import_response).await;
+    mark_attachment_clean(
+        &pool,
+        import_body["attachment_id"]
+            .as_str()
+            .expect("voice note attachment id"),
+    )
+    .await;
 
     let voice_note_response = app
         .clone()
@@ -15295,7 +15305,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_download
     let provider_chat_id = format!("wa-executor-download-chat-{suffix}");
     let provider_message_id = format!("wa-executor-download-message-{suffix}");
     let command_id = format!("wa-executor-download-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -15529,7 +15539,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_dialog_s
     let mute_command_id = format!("wa-executor-mute-{suffix}");
     let pin_command_id = format!("wa-executor-pin-{suffix}");
     let unread_command_id = format!("wa-executor-unread-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -15672,7 +15682,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_inverse_
     let unmute_command_id = format!("wa-executor-unmute-{suffix}");
     let unpin_command_id = format!("wa-executor-unpin-{suffix}");
     let read_command_id = format!("wa-executor-read-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -15831,7 +15841,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_join_and
     let provider_chat_id = format!("wa-executor-membership-chat-{suffix}");
     let join_command_id = format!("wa-executor-join-{suffix}");
     let leave_command_id = format!("wa-executor-leave-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,
@@ -15973,7 +15983,7 @@ async fn whatsapp_background_command_executor_completes_retried_fixture_publish_
     let suffix = unique_suffix();
     let account_id = format!("whatsapp-executor-status-{suffix}");
     let command_id = format!("wa-executor-status-{suffix}");
-    let app = build_router_with_database(
+    let app = build_router_with_database_and_runtime(
         testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
             .with_test_dev_mode(),
         database,

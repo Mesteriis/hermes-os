@@ -149,6 +149,8 @@ lint-frontend: frontend-lint
 
 architecture-check:
 	@node scripts/check-architecture-contract.test.mjs
+	@node scripts/check-cargo-architecture.test.mjs
+	@node scripts/check-cargo-architecture.mjs
 	@node scripts/check-architecture.mjs --self-test
 	@node scripts/check-architecture.mjs
 
@@ -159,16 +161,16 @@ backend-fmt-check:
 	@cargo fmt --check --manifest-path backend/Cargo.toml
 
 backend-clippy:
-	@CARGO_TARGET_DIR="$(CARGO_VALIDATE_CLIPPY_TARGET_DIR)" CARGO_INCREMENTAL=0 cargo clippy --manifest-path backend/Cargo.toml --all-targets --all-features -- -D warnings
+	@CARGO_TARGET_DIR="$(CARGO_VALIDATE_CLIPPY_TARGET_DIR)" CARGO_INCREMENTAL=0 cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 backend-test:
-	@CARGO_TARGET_DIR="$(CARGO_VALIDATE_TEST_TARGET_DIR)" ./scripts/test/run-nextest.sh default --all-targets
+	@CARGO_TARGET_DIR="$(CARGO_VALIDATE_TEST_TARGET_DIR)" ./scripts/test/run-nextest.sh default --workspace --all-targets
 	@node scripts/test/analyze-nextest-junit.mjs --input target/nextest/default/junit.xml --suite backend-full --output reports/test-performance/backend-full
 
 backend-validate: backend-fmt-check backend-clippy backend-test
 
 test-unit:
-	@bash -lc 'source scripts/lib/rust-tooling.sh; require_cargo_subcommand nextest "cargo install --locked cargo-nextest"; NEXTEST_SHOW_PROGRESS="$${NEXTEST_SHOW_PROGRESS:-bar}"; CARGO_TARGET_DIR="$(CARGO_VALIDATE_TARGET_DIR)" cargo nextest run --workspace --lib --profile default --show-progress "$${NEXTEST_SHOW_PROGRESS}" --test-threads $(HERMES_NEXTEST_JOBS)'
+	@bash -lc 'source scripts/lib/rust-tooling.sh; require_cargo_subcommand nextest "cargo install --locked cargo-nextest"; NEXTEST_SHOW_PROGRESS="$${NEXTEST_SHOW_PROGRESS:-bar}"; export CARGO_INCREMENTAL="$${CARGO_INCREMENTAL:-1}"; disable_sccache_for_incremental; CARGO_TARGET_DIR="$(CARGO_VALIDATE_TARGET_DIR)" cargo nextest run --workspace --lib --profile default --show-progress "$${NEXTEST_SHOW_PROGRESS}" --test-threads $(HERMES_NEXTEST_JOBS)'
 	@node scripts/test/analyze-nextest-junit.mjs --input target/nextest/default/junit.xml --suite unit --output reports/test-performance/unit
 
 test-integration:
@@ -180,20 +182,18 @@ test-e2e:
 	@node scripts/test/analyze-nextest-junit.mjs --input target/nextest/integration/junit.xml --suite e2e --output reports/test-performance/e2e
 
 test-architecture:
-	@node scripts/check-architecture-contract.test.mjs
-	@node scripts/check-architecture.mjs --self-test
-	@node scripts/check-architecture.mjs
-	@bash -lc 'source scripts/lib/rust-tooling.sh; require_cargo_subcommand nextest "cargo install --locked cargo-nextest"; NEXTEST_SHOW_PROGRESS="$${NEXTEST_SHOW_PROGRESS:-bar}"; CARGO_TARGET_DIR="$(CARGO_VALIDATE_TARGET_DIR)" cargo nextest run --manifest-path backend/Cargo.toml --profile default --show-progress "$${NEXTEST_SHOW_PROGRESS}" --test-threads $(HERMES_NEXTEST_JOBS) $(foreach target,$(BACKEND_ARCHITECTURE_TARGETS),--test $(target))'
+	@$(MAKE) architecture-check
+	@bash -lc 'source scripts/lib/rust-tooling.sh; require_cargo_subcommand nextest "cargo install --locked cargo-nextest"; NEXTEST_SHOW_PROGRESS="$${NEXTEST_SHOW_PROGRESS:-bar}"; export CARGO_INCREMENTAL="$${CARGO_INCREMENTAL:-1}"; disable_sccache_for_incremental; CARGO_TARGET_DIR="$(CARGO_VALIDATE_TARGET_DIR)" cargo nextest run --manifest-path backend/Cargo.toml --profile default --show-progress "$${NEXTEST_SHOW_PROGRESS}" --test-threads $(HERMES_NEXTEST_JOBS) $(foreach target,$(BACKEND_ARCHITECTURE_TARGETS),--test $(target))'
 	@node scripts/test/analyze-nextest-junit.mjs --input target/nextest/default/junit.xml --suite architecture --output reports/test-performance/architecture
 
 test-snapshot: snapshot-test
 
 snapshot-test:
-	@bash -lc 'source scripts/lib/rust-tooling.sh; require_cargo_subcommand nextest "cargo install --locked cargo-nextest"; NEXTEST_SHOW_PROGRESS="$${NEXTEST_SHOW_PROGRESS:-bar}"; CARGO_TARGET_DIR="$(CARGO_VALIDATE_TARGET_DIR)" cargo nextest run --manifest-path backend/Cargo.toml --profile default --show-progress "$${NEXTEST_SHOW_PROGRESS}" --test-threads $(HERMES_NEXTEST_JOBS) $(foreach target,$(BACKEND_SNAPSHOT_TARGETS),--test $(target))'
+	@bash -lc 'source scripts/lib/rust-tooling.sh; require_cargo_subcommand nextest "cargo install --locked cargo-nextest"; NEXTEST_SHOW_PROGRESS="$${NEXTEST_SHOW_PROGRESS:-bar}"; export CARGO_INCREMENTAL="$${CARGO_INCREMENTAL:-1}"; disable_sccache_for_incremental; CARGO_TARGET_DIR="$(CARGO_VALIDATE_TARGET_DIR)" cargo nextest run --manifest-path backend/Cargo.toml --profile default --show-progress "$${NEXTEST_SHOW_PROGRESS}" --test-threads $(HERMES_NEXTEST_JOBS) $(foreach target,$(BACKEND_SNAPSHOT_TARGETS),--test $(target))'
 	@node scripts/test/analyze-nextest-junit.mjs --input target/nextest/default/junit.xml --suite snapshot --output reports/test-performance/snapshot
 
 snapshot-accept:
-	@bash -lc 'source scripts/lib/rust-tooling.sh; require_cargo_subcommand nextest "cargo install --locked cargo-nextest"; NEXTEST_SHOW_PROGRESS="$${NEXTEST_SHOW_PROGRESS:-bar}"; INSTA_UPDATE=always CARGO_TARGET_DIR="$(CARGO_VALIDATE_TARGET_DIR)" cargo nextest run --manifest-path backend/Cargo.toml --profile default --show-progress "$${NEXTEST_SHOW_PROGRESS}" --test-threads $(HERMES_NEXTEST_JOBS) $(foreach target,$(BACKEND_SNAPSHOT_TARGETS),--test $(target))'
+	@bash -lc 'source scripts/lib/rust-tooling.sh; require_cargo_subcommand nextest "cargo install --locked cargo-nextest"; NEXTEST_SHOW_PROGRESS="$${NEXTEST_SHOW_PROGRESS:-bar}"; export CARGO_INCREMENTAL="$${CARGO_INCREMENTAL:-1}"; disable_sccache_for_incremental; INSTA_UPDATE=always CARGO_TARGET_DIR="$(CARGO_VALIDATE_TARGET_DIR)" cargo nextest run --manifest-path backend/Cargo.toml --profile default --show-progress "$${NEXTEST_SHOW_PROGRESS}" --test-threads $(HERMES_NEXTEST_JOBS) $(foreach target,$(BACKEND_SNAPSHOT_TARGETS),--test $(target))'
 
 test-fast: test-backup-integrity test-unit test-architecture test-snapshot frontend-test
 

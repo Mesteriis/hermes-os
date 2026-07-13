@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::integrations::yandex_telemost::client::YandexTelemostError;
-use crate::platform::communications::{CommunicationProviderKind, ProviderAccount};
+use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
 
 pub const YANDEX_TELEMOST_PROVIDER_KIND_STR: &str = "yandex_telemost_user";
 pub const YANDEX_TELEMOST_RUNTIME_KIND: &str = "yandex_telemost_webview_runtime";

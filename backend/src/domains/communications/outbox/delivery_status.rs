@@ -1,11 +1,13 @@
 use chrono::{DateTime, Utc};
+use hermes_events_api::NewEventEnvelope;
 use serde::Serialize;
 use serde_json::json;
 use sqlx::Transaction;
 use sqlx::postgres::Postgres;
 
-use crate::platform::events::{EventStore, NewEventEnvelope};
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use hermes_events_postgres::store::EventStore;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 
 use super::super::evidence::link_mail_entity_in_transaction;
 use super::{

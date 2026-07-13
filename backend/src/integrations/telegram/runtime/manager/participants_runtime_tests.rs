@@ -10,7 +10,7 @@ use crate::integrations::telegram::client::{
     NewTelegramChatParticipant, TelegramError, TelegramStore,
 };
 use crate::platform::config::AppConfig;
-use crate::platform::events::EventBus;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
 use crate::platform::secrets::{InMemorySecretResolver, SecretReferenceStore};
 use serde_json::json;
@@ -82,7 +82,7 @@ async fn sync_provider_roster_snapshots_appends_join_reconciliation_after_partic
     let config = AppConfig::default();
     let event_bridge = Some(TelegramRuntimeEventBridgeContext::new(
         Some(telegram_store.clone()),
-        EventBus::new(),
+        InMemoryEventBus::new(),
     ));
     let context = TelegramMemberSyncContext {
         provider_account_store: &provider_account_store,
@@ -244,7 +244,7 @@ async fn sync_provider_roster_snapshots_appends_leave_reconciliation_after_absen
     let config = AppConfig::default();
     let event_bridge = Some(TelegramRuntimeEventBridgeContext::new(
         Some(telegram_store.clone()),
-        EventBus::new(),
+        InMemoryEventBus::new(),
     ));
     let context = TelegramMemberSyncContext {
         provider_account_store: &provider_account_store,

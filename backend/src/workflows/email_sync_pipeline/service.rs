@@ -1,10 +1,8 @@
+use crate::domains::communications::storage::port::{CommunicationAttachmentPort, LocalBlobPort};
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::core::CommunicationIngestionPort;
-use crate::domains::communications::storage::{
-    CommunicationBlobMetadataPort, LocalCommunicationBlobPort,
-};
 use crate::platform::communications::EmailSyncBatch;
+use hermes_communications_api::evidence::CommunicationEvidencePort;
 
 use super::errors::EmailSyncPipelineError;
 use super::knowledge::project_message_knowledge;
@@ -14,15 +12,15 @@ use super::report::EmailSyncPipelineReport;
 
 pub async fn project_email_sync_batch_with_mail_blobs(
     pool: PgPool,
-    blob_store: &LocalCommunicationBlobPort,
+    communication_evidence: &dyn CommunicationEvidencePort,
+    blob_store: &LocalBlobPort,
     account_id: &str,
     import_batch_id: impl AsRef<str>,
     batch: &EmailSyncBatch,
 ) -> Result<EmailSyncPipelineReport, EmailSyncPipelineError> {
-    let communication_store = CommunicationIngestionPort::new(pool.clone());
-    let mail_store = CommunicationBlobMetadataPort::new(pool.clone());
+    let mail_store = CommunicationAttachmentPort::new(pool.clone());
     let import_report = record_email_sync_batch_with_mail_blobs(
-        &communication_store,
+        communication_evidence,
         &mail_store,
         blob_store,
         account_id,

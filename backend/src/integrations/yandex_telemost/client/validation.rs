@@ -1,6 +1,7 @@
 use serde_json::Value;
 
-use super::{YANDEX_TELEMOST_API_BASE_URL, YANDEX_TELEMOST_PROVIDER_KIND_STR, YandexTelemostError};
+use super::errors::YandexTelemostError;
+use super::models::{YANDEX_TELEMOST_API_BASE_URL, YANDEX_TELEMOST_PROVIDER_KIND_STR};
 
 pub(crate) fn validate_required(
     field: &'static str,

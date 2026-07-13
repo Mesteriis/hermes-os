@@ -1,4 +1,2 @@
-pub mod labels;
-pub mod nats;
-pub mod postgres;
+pub use hermes_test_session::containers::{labels, nats, postgres};
 pub mod zulip;

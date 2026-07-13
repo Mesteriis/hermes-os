@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 
-use crate::application::provider_runtime_contracts::YandexTelemostError;
+use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
 
 use super::super::ErrorParts;
 

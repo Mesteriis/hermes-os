@@ -1,9 +1,10 @@
+use hermes_events_api::EventEnvelope;
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
-use crate::platform::events::{EventEnvelope, EventStore};
-use crate::platform::observations::materialize_review_transition_link_in_transaction;
+use hermes_events_postgres::store::EventStore;
+use hermes_observations_postgres::review_links::materialize_review_transition_link_in_transaction;
 
 use super::constants::PROJECT_LINK_REVIEW_EVENT_TYPE;
 use super::errors::ProjectLinkReviewError;

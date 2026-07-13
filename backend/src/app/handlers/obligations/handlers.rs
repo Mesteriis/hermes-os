@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::models::{ObligationListQuery, ObligationListResponse, ObligationReviewApiRequest};
 use crate::app::{ApiError, AppState};
-use crate::application::ObligationReviewApplicationService;
+use crate::application::review_transitions::ObligationReviewApplicationService;
 use crate::domains::obligations::{
     Obligation, ObligationEntityKind, ObligationReviewState, ObligationStore,
 };
@@ -83,9 +83,9 @@ fn obligation_store(state: &AppState) -> Result<ObligationStore, ApiError> {
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    Ok(crate::app::api_support::app_store::<ObligationStore>(
-        pool.clone(),
-    ))
+    Ok(crate::app::api_support::stores::domain_stores::app_store::<
+        ObligationStore,
+    >(pool.clone()))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {

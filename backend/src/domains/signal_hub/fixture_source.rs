@@ -1,3 +1,4 @@
+use hermes_events_api::NewEventEnvelope;
 use std::sync::LazyLock;
 
 use chrono::{DateTime, Utc};
@@ -6,7 +7,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::store::{SignalHubError, SignalHubStore};
-use crate::platform::events::{EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
 
 const TEST_SIGNAL_FIXTURES_TOML: &str =
     include_str!("../../../fixtures/signal_hub/test_signals.toml");

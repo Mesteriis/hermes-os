@@ -10,22 +10,21 @@ use tokio::net::TcpListener;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
-use crate::app::vault_reconciliation::spawn_host_vault_manifest_reconciliation;
 use crate::app::{AccountSetupState, AppError, AppState};
 use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::platform::config::AppConfig;
-use crate::platform::events::EventBus;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::storage::{Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus};
 use crate::vault::{HostVault, HostVaultConfig};
 
 mod routes;
 
-pub fn build_router(config: AppConfig) -> Router {
-    build_router_with_database(config, Database::disabled())
+pub(crate) struct ApplicationComponents {
+    pub(crate) state: AppState,
+    pub(crate) bootstrap: crate::application::bootstrap::ApplicationBootstrapContext,
 }
 
-pub fn build_router_with_database(config: AppConfig, database: Database) -> Router {
-    let api_secret = config.local_api_secret().unwrap_or_default().to_owned();
+pub(crate) fn compose_application(config: AppConfig, database: Database) -> ApplicationComponents {
     let nats_server_url = config.nats_server_url().map(ToOwned::to_owned);
     let vault = HostVault::new(HostVaultConfig {
         home: config.vault_home().to_path_buf(),
@@ -42,29 +41,54 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         vault,
         account_setup: AccountSetupState::default(),
         telegram_runtime: TelegramRuntimeManager::default(),
-        event_bus: EventBus::new(),
+        event_bus: InMemoryEventBus::new(),
+        runtime_lease: None,
     };
-    spawn_host_vault_manifest_reconciliation(&state);
-    crate::application::bootstrap::start_background_services(
-        crate::application::bootstrap::ApplicationBootstrapContext {
-            pool: state.database.pool().cloned(),
-            database_url: state.database.database_url().map(ToOwned::to_owned),
-            nats_server_url,
-            config: state.config.clone(),
-            zoom_token_maintenance_scheduler_enabled: state
-                .config
-                .zoom_token_maintenance_scheduler_enabled(),
-            zoom_recording_sync_scheduler_enabled: state
-                .config
-                .zoom_recording_sync_scheduler_enabled(),
-            zoom_retention_cleanup_scheduler_enabled: state
-                .config
-                .zoom_retention_cleanup_scheduler_enabled(),
-            vault: state.vault.clone(),
-            telegram_runtime: state.telegram_runtime.clone(),
-            event_bus: state.event_bus.clone(),
-        },
-    );
+    let bootstrap = crate::application::bootstrap::ApplicationBootstrapContext {
+        pool: state.database.pool().cloned(),
+        database_url: state.database.database_url().map(ToOwned::to_owned),
+        nats_server_url,
+        config: state.config.clone(),
+        zoom_token_maintenance_scheduler_enabled: state
+            .config
+            .zoom_token_maintenance_scheduler_enabled(),
+        zoom_recording_sync_scheduler_enabled: state.config.zoom_recording_sync_scheduler_enabled(),
+        zoom_retention_cleanup_scheduler_enabled: state
+            .config
+            .zoom_retention_cleanup_scheduler_enabled(),
+        vault: state.vault.clone(),
+        telegram_runtime: state.telegram_runtime.clone(),
+        event_bus: state.event_bus.clone(),
+    };
+    ApplicationComponents { state, bootstrap }
+}
+
+pub fn build_router(config: AppConfig) -> Router {
+    build_router_with_database(config, Database::disabled())
+}
+
+pub fn build_router_with_database(config: AppConfig, database: Database) -> Router {
+    build_router_from_state(compose_application(config, database).state)
+}
+
+/// Builds an HTTP router and explicitly starts the current background runtime.
+///
+/// Normal router construction is intentionally side-effect free. Test scenarios
+/// that assert worker behavior must opt into this composition entry point.
+pub fn build_router_with_database_and_runtime(config: AppConfig, database: Database) -> Router {
+    let components = compose_application(config, database);
+    let runtime = crate::app::runtime::start_application_runtime(&components);
+    let mut state = components.state;
+    state.runtime_lease = Some(runtime.lease());
+    build_router_from_state(state)
+}
+
+pub(crate) fn build_router_from_state(state: AppState) -> Router {
+    let api_secret = state
+        .config
+        .local_api_secret()
+        .unwrap_or_default()
+        .to_owned();
 
     let connect_routes = crate::app::connectrpc::protected_routes(
         state.database.pool().cloned(),
@@ -107,7 +131,17 @@ pub async fn run(config: AppConfig) -> Result<(), AppError> {
 
     tracing::info!(%http_addr, "starting Hermes Hub backend");
 
-    axum::serve(listener, build_router_with_database(config, database)).await?;
+    let components = compose_application(config, database);
+    let runtime = crate::app::runtime::start_application_runtime(&components);
+    let termination = runtime.termination_signal();
+    let server_result = axum::serve(listener, build_router_from_state(components.state))
+        .with_graceful_shutdown(async move { termination.cancelled().await })
+        .await;
+    let runtime_failure = runtime.shutdown().await;
+    server_result?;
+    if let Some(error) = runtime_failure {
+        return Err(io::Error::other(error).into());
+    }
 
     Ok(())
 }

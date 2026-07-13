@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::ProviderAccountCommandPort;
+use hermes_communications_api::accounts::ProviderSecretBindingCommandPort;
 mod constructors;
 mod gmail_complete;
 mod gmail_payloads;
@@ -12,9 +14,6 @@ use reqwest::Client;
 use sqlx::postgres::PgPool;
 use std::sync::Arc;
 
-use crate::platform::communications::{
-    ProviderAccountCommandPort, ProviderSecretBindingCommandPort,
-};
 use crate::platform::secrets::SecretReferenceStore;
 
 use super::vault::AccountSecretVault;

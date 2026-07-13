@@ -2,8 +2,8 @@ use serde_json::json;
 use tempfile::tempdir;
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::CommunicationIngestionStore;
 use hermes_hub_backend::platform::secrets::SecretReferenceStore;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::vault::{HostVault, HostVaultConfig};

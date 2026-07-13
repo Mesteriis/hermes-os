@@ -1,5 +1,5 @@
 pub mod brain;
-mod command_service;
+pub mod command_service;
 pub mod core;
 pub mod events;
 pub(crate) mod evidence;
@@ -9,5 +9,4 @@ pub mod meetings;
 pub mod reminders;
 pub mod rules;
 pub mod scheduling;
-pub mod service;
 pub mod sync;

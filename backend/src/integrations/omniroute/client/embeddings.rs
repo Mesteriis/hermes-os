@@ -1,8 +1,9 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use super::OmniRouteClient;
+use super::error::OmniRouteError;
 use super::models::OmniRouteEmbedResult;
-use super::{OmniRouteClient, OmniRouteError};
 
 impl OmniRouteClient {
     pub async fn embed(&self, input: &str) -> Result<OmniRouteEmbedResult, OmniRouteError> {

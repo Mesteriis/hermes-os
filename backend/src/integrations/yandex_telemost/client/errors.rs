@@ -1,14 +1,17 @@
+use hermes_communications_api::accounts::ProviderAccountPortError;
+use hermes_communications_api::accounts::ProviderSecretBindingPortError;
+use hermes_events_api::EventEnvelopeError;
 use thiserror::Error;
 
 use std::io;
 
 use crate::domains::review::ReviewInboxError;
-use crate::platform::communications::{ProviderAccountPortError, ProviderSecretBindingPortError};
-use crate::platform::events::{EventEnvelopeError, EventStoreError};
-use crate::platform::observations::ObservationStoreError;
+
 use crate::platform::secrets::{SecretReferenceError, SecretResolutionError};
 use crate::platform::settings::SettingsError;
 use crate::vault::HostVaultError;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, Error)]
 pub enum YandexTelemostError {

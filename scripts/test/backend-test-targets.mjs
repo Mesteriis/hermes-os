@@ -80,6 +80,7 @@ const summary = {
   generatedAt: new Date().toISOString(),
   rustUnitTestAttributes: countRustTests([
     path.join(repoRoot, "backend", "src"),
+    path.join(repoRoot, "crates", "test-session", "src"),
     path.join(repoRoot, "crates", "testkit", "src"),
   ]),
   backendIntegrationTargets: TOP_LEVEL_TARGETS.length,

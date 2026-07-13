@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::domains::communications::core::CommunicationIngestionError;
+use crate::application::relationship_graph::RelationshipGraphCoordinatorError;
 use crate::domains::communications::messages::{
     CommunicationSignalProjectionError, MessageProjectionError,
 };
@@ -11,10 +11,10 @@ use crate::domains::decisions::DecisionReviewPortError;
 use crate::domains::organizations::api::OrganizationError;
 use crate::domains::organizations::core::OrgCoreError;
 use crate::domains::personas::memory::PersonaMemoryError;
-use crate::domains::relationships::RelationshipReviewPortError;
-use crate::domains::signal_hub::SignalHubError;
+use crate::domains::signal_hub::store::SignalHubError;
 use crate::domains::tasks::candidates::TaskCandidateError;
 use crate::workflows::review_inbox::ReviewInboxWorkflowError;
+use hermes_communications_api::evidence::CommunicationEvidencePortError;
 
 #[derive(Debug, Error)]
 pub enum EmailSyncRecordError {
@@ -22,7 +22,7 @@ pub enum EmailSyncRecordError {
     EmptyField(&'static str),
 
     #[error(transparent)]
-    Communication(#[from] CommunicationIngestionError),
+    CommunicationEvidence(#[from] CommunicationEvidencePortError),
 
     #[error(transparent)]
     CommunicationStorage(#[from] CommunicationStorageError),
@@ -77,7 +77,7 @@ pub enum EmailSyncPipelineError {
     OrganizationCore(#[from] OrgCoreError),
 
     #[error(transparent)]
-    Relationship(#[from] RelationshipReviewPortError),
+    RelationshipGraph(#[from] RelationshipGraphCoordinatorError),
 
     #[error(transparent)]
     TaskCandidate(#[from] TaskCandidateError),

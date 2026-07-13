@@ -2,6 +2,7 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 
 use crate::ai::core::{
@@ -11,12 +12,21 @@ use crate::ai::core::{
     run_id_from_command, text_preview, v3_agents,
 };
 use crate::app::api_support::{
-    AiRunListResponse, AiRunsQuery, ai_persona_attribution_port_optional, ai_run_store,
-    ai_runtime_client, ai_runtime_settings, ai_service,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::dispatch_ai_runtime_signal;
-use crate::platform::events::{EventStore, NewEventEnvelope};
+use crate::application::ai_signal_dispatch::dispatch_ai_runtime_signal;
+use hermes_events_postgres::store::EventStore;
 pub(crate) async fn get_ai_status(
     State(state): State<AppState>,
 ) -> Result<Json<AiStatusResponse>, ApiError> {
@@ -241,7 +251,7 @@ pub(crate) async fn post_ai_meeting_prep(
 }
 
 async fn ensure_ai_requests_allowed(state: &AppState) -> Result<(), ApiError> {
-    if crate::app::api_support::ai_requests_allowed(state).await? {
+    if crate::app::api_support::stores::ai_runtime::ai_requests_allowed(state).await? {
         return Ok(());
     }
 

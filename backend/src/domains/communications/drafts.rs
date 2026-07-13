@@ -1,3 +1,4 @@
+use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
@@ -10,8 +11,8 @@ use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 use crate::domains::communications::evidence::{link_mail_entity_in_transaction, merge_metadata};
-use crate::platform::events::{EventStore, NewEventEnvelope};
-use crate::platform::observations::ObservationStoreError;
+use hermes_events_postgres::store::EventStore;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 const EVENT_TYPE_DRAFT_CREATED: &str = "mail.draft.created";
 const EVENT_TYPE_DRAFT_UPDATED: &str = "mail.draft.updated";
@@ -768,9 +769,9 @@ pub enum CommunicationDraftError {
     #[error(transparent)]
     Observation(#[from] ObservationStoreError),
     #[error(transparent)]
-    EventStore(#[from] crate::platform::events::EventStoreError),
+    EventStore(#[from] hermes_events_postgres::errors::EventStoreError),
     #[error(transparent)]
-    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    EventEnvelope(#[from] hermes_events_api::EventEnvelopeError),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
     #[error("invalid draft: {0}")]

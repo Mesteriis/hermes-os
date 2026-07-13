@@ -1,4 +1,4 @@
-use crate::platform::realtime_conversation::CallBundleManifest;
+use crate::platform::realtime_conversation::models::CallBundleManifest;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

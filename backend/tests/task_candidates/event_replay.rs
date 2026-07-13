@@ -1,3 +1,4 @@
+use hermes_hub_backend::application::review_transitions::TaskCandidateReviewApplicationService;
 use hermes_hub_backend::domains::tasks::candidates::TaskCandidateReviewState;
 
 use super::support::{
@@ -71,8 +72,7 @@ async fn task_candidate_review_event_rebuilds_state_against_postgres() {
         .await
         .expect("load confirm event")
         .expect("confirm event exists");
-    context
-        .store
+    TaskCandidateReviewApplicationService::new(context.pool.clone())
         .apply_review_event(&confirm_event)
         .await
         .expect("apply confirm event");
@@ -82,8 +82,7 @@ async fn task_candidate_review_event_rebuilds_state_against_postgres() {
         .await
         .expect("load reject event")
         .expect("reject event exists");
-    context
-        .store
+    TaskCandidateReviewApplicationService::new(context.pool.clone())
         .apply_review_event(&reject_event)
         .await
         .expect("apply reject event");

@@ -1,7 +1,9 @@
 use chrono::{Duration, TimeZone, Utc};
 use hermes_hub_backend::engines::memory::{
-    MemoryCardDraft, MemoryContextSource, MemoryEngine, MemoryEntityRef, MemoryFactDraft,
-    MemoryFactState,
+    MemoryEngine,
+    models::{
+        MemoryCardDraft, MemoryContextSource, MemoryEntityRef, MemoryFactDraft, MemoryFactState,
+    },
 };
 
 #[test]

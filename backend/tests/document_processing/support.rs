@@ -2,6 +2,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 pub(crate) use chrono::Utc;
+pub(crate) use hermes_events_api::NewEventEnvelope;
+use hermes_events_postgres::store::EventStore;
 pub(crate) use hermes_hub_backend::domains::documents::core::{
     DocumentImportStore, NewDocumentImport,
 };
@@ -9,7 +11,6 @@ pub(crate) use hermes_hub_backend::domains::documents::processing::{
     DocumentProcessingError, DocumentProcessingRetryCommand, DocumentProcessingStatus,
     DocumentProcessingStore,
 };
-pub(crate) use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
 pub(crate) use hermes_hub_backend::platform::storage::Database;
 pub(crate) use serde_json::json;
 pub(crate) use sqlx::postgres::PgPool;

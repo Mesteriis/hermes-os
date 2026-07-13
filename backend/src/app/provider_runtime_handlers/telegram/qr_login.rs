@@ -4,17 +4,20 @@ use base64::Engine as _;
 use serde_json::{Value, json};
 
 use super::helpers::{telegram_api_hash_from_config, telegram_secret_store};
-use crate::app::api_support::telegram_provider_runtime_service;
+use crate::app::api_support::stores::integration_stores::telegram_provider_runtime_service;
 use crate::app::signal_hub_support::{
     provider_account_or_not_found, sync_provider_account_signal_connection,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::{
+use crate::integrations::telegram::client::{
     TelegramError, TelegramLiveAccountSetupRequest, TelegramQrLoginPasswordRequest,
     TelegramQrLoginStartRequest, TelegramQrLoginStatus, TelegramQrLoginStatusResponse,
-    TelegramSecretVault, qr_login, tdlib_database_directory,
+    TelegramSecretVault,
 };
-use crate::platform::communications::CommunicationProviderKind;
+use crate::integrations::telegram::tdjson::{
+    cancel_qr_login, start_qr_login, submit_qr_login_password, tdlib_database_directory,
+};
+use hermes_communications_api::accounts::CommunicationProviderKind;
 
 pub(crate) async fn post_telegram_qr_login_start(
     State(state): State<AppState>,
@@ -26,7 +29,7 @@ pub(crate) async fn post_telegram_qr_login_start(
     );
 
     Ok(Json(
-        qr_login::start_qr_login(
+        start_qr_login(
             state.config.clone(),
             state.account_setup.pending_telegram_qr_login.clone(),
             request,
@@ -62,7 +65,7 @@ pub(crate) async fn delete_telegram_qr_login(
     Path(setup_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let setup_id = setup_id.trim().to_owned();
-    qr_login::cancel_qr_login(
+    cancel_qr_login(
         state.account_setup.pending_telegram_qr_login.clone(),
         &setup_id,
     )?;
@@ -78,7 +81,7 @@ pub(crate) async fn post_telegram_qr_login_password(
     Path(setup_id): Path<String>,
     Json(request): Json<TelegramQrLoginPasswordRequest>,
 ) -> Result<Json<TelegramQrLoginStatusResponse>, ApiError> {
-    Ok(Json(qr_login::submit_qr_login_password(
+    Ok(Json(submit_qr_login_password(
         state.account_setup.pending_telegram_qr_login.clone(),
         &setup_id,
         request,

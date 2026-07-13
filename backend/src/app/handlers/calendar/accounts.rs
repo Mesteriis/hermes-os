@@ -19,7 +19,7 @@ pub(crate) async fn get_calendar_accounts(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<
+    let items = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::calendar::events::CalendarAccountStore,
     >(pool)
     .list(query.provider.as_deref())
@@ -58,9 +58,9 @@ pub(crate) async fn get_calendar_account(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    crate::app::api_support::app_store::<crate::domains::calendar::events::CalendarAccountStore>(
-        pool,
-    )
+    crate::app::api_support::stores::domain_stores::app_store::<
+        crate::domains::calendar::events::CalendarAccountStore,
+    >(pool)
     .get(&account_id)
     .await?
     .map(Json)
@@ -114,7 +114,7 @@ pub(crate) async fn get_calendar_sources(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<
+    let items = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::calendar::events::CalendarSourceStore,
     >(pool)
     .list_by_account(&account_id)

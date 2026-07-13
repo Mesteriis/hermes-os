@@ -7,8 +7,9 @@ use super::link_document_entity_in_transaction;
 use super::models::{ImportedDocument, ImportedDocumentWithProcessing, NewDocumentImport};
 use super::rows::row_to_imported_document;
 use crate::domains::documents::processing::DocumentProcessingStore;
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 use chrono::Utc;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 
 #[derive(Clone)]
 pub struct DocumentImportStore {

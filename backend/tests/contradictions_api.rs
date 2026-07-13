@@ -10,8 +10,11 @@ use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::engines::consistency::{
-    ContradictionObservation, ContradictionObservationStore, ContradictionReviewState,
-    ContradictionSeverity, ContradictionSourceKind, NewContradictionObservation,
+    models::{
+        ContradictionObservation, ContradictionReviewState, ContradictionSeverity,
+        ContradictionSourceKind, NewContradictionObservation,
+    },
+    store::ContradictionObservationStore,
 };
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::consistency_review::sync_contradiction_review_item;

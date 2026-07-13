@@ -1,3 +1,4 @@
+use hermes_events_api::NewEventEnvelope;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::Utc;
@@ -10,12 +11,12 @@ use crate::application::communication_fixture_ingest::{
     build_event, telegram_message_snapshot_payload,
 };
 use crate::application::telegram_runtime::{self, TelegramRuntimeUseCaseContext};
-use crate::domains::communications::core::CommunicationIngestionPort;
 use crate::domains::communications::messages::{
     CommunicationSignalProjectionError, ProviderChannelMessageStore,
     project_accepted_signal_if_runtime_allows,
 };
-use crate::domains::signal_hub::{SignalHubError, dispatch_telegram_raw_signal};
+use crate::domains::signal_hub::store::SignalHubError;
+use crate::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
 use crate::integrations::telegram::client::lifecycle;
 use crate::integrations::telegram::client::models::messages::{
     TelegramDeleteRequest, TelegramEditRequest, TelegramForwardChainResponse, TelegramForwardRef,
@@ -29,8 +30,10 @@ use crate::integrations::telegram::client::models::messages::{
 };
 use crate::integrations::telegram::client::{TelegramError, TelegramStore};
 use crate::platform::audit::{ApiAuditError, ApiAuditLog, NewApiAuditRecord};
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
-use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_events_postgres::store::EventStore;
 
 const AUDIT_ACTOR_ID: &str = "hermes-frontend";
 const CANONICAL_REFERENCE_CHAIN_DEPTH: usize = 16;
@@ -563,7 +566,7 @@ pub(crate) struct TelegramMessageWriteApplicationService {
     store: TelegramStore,
     audit_log: ApiAuditLog,
     event_store: EventStore,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
 }
 
 impl TelegramMessageWriteApplicationService {
@@ -571,7 +574,7 @@ impl TelegramMessageWriteApplicationService {
         store: TelegramStore,
         audit_log: ApiAuditLog,
         event_store: EventStore,
-        event_bus: EventBus,
+        event_bus: InMemoryEventBus,
     ) -> Self {
         Self {
             store,
@@ -1269,7 +1272,7 @@ impl TelegramMessageWriteApplicationService {
             )
             .into());
         };
-        let stored_raw = CommunicationIngestionPort::new(self.store.pool().clone())
+        let stored_raw = CommunicationIngestionStore::new(self.store.pool().clone())
             .record_raw_source(&raw)
             .await?;
         let Some(accepted_event) =
@@ -1381,7 +1384,7 @@ pub(crate) enum TelegramMessageWriteError {
     Telegram(#[from] TelegramError),
 
     #[error(transparent)]
-    Communication(#[from] crate::domains::communications::core::CommunicationIngestionError),
+    Communication(#[from] hermes_communications_postgres::errors::CommunicationIngestionError),
 
     #[error(transparent)]
     SignalHub(#[from] SignalHubError),

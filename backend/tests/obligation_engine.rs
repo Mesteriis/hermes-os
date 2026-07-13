@@ -1,6 +1,9 @@
 use hermes_hub_backend::engines::obligation::{
-    ObligationCandidateKind, ObligationEngine, ObligationEntityKind, ObligationEvidenceSourceKind,
-    ObligationExtractionInput, ObligationReviewState,
+    engine::ObligationEngine,
+    models::{
+        ObligationCandidateKind, ObligationEntityKind, ObligationEvidenceSourceKind,
+        ObligationExtractionInput, ObligationReviewState,
+    },
 };
 
 #[test]

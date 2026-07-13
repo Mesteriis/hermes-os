@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::platform::communications::EmailProviderKind;
+use hermes_communications_api::accounts::CommunicationProviderKind;
 
 use super::errors::EmailProviderNetworkError;
 use super::helpers::validate_non_empty;
@@ -139,7 +139,7 @@ impl GmailHistoryFetchOptions {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImapFetchOptions {
-    pub provider_kind: EmailProviderKind,
+    pub provider_kind: CommunicationProviderKind,
     pub host: String,
     pub port: u16,
     pub tls: bool,
@@ -177,7 +177,7 @@ impl ImapFetchOptions {
         username: impl Into<String>,
     ) -> Self {
         Self {
-            provider_kind: EmailProviderKind::Imap,
+            provider_kind: CommunicationProviderKind::Imap,
             host: host.into(),
             port,
             tls,
@@ -189,7 +189,7 @@ impl ImapFetchOptions {
         }
     }
 
-    pub fn provider_kind(mut self, provider_kind: EmailProviderKind) -> Self {
+    pub fn provider_kind(mut self, provider_kind: CommunicationProviderKind) -> Self {
         self.provider_kind = provider_kind;
         self
     }

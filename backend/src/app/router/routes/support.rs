@@ -3,7 +3,19 @@ pub(super) use axum::{Router, middleware};
 
 pub(super) use crate::ai::api::*;
 pub(super) use crate::app::AppState;
-pub(super) use crate::app::api_support::*;
+pub(super) use crate::app::api_support::{
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
+};
 pub(super) use crate::app::guard;
 pub(super) use crate::app::handlers::automation::*;
 pub(super) use crate::app::handlers::calendar::*;
@@ -24,8 +36,8 @@ pub(super) use crate::app::handlers::review::*;
 pub(super) use crate::app::handlers::settings::*;
 pub(super) use crate::app::handlers::signal_hub::*;
 pub(super) use crate::app::handlers::tasks::*;
-pub(super) use crate::app::handlers::telegram::*;
-pub(super) use crate::app::handlers::whatsapp::*;
-pub(super) use crate::app::handlers::yandex_telemost::*;
-pub(super) use crate::app::handlers::zoom::*;
-pub(super) use crate::app::handlers::zulip::*;
+pub(super) use crate::app::provider_runtime_handlers::telegram::*;
+pub(super) use crate::app::provider_runtime_handlers::whatsapp::*;
+pub(super) use crate::app::provider_runtime_handlers::yandex_telemost::*;
+pub(super) use crate::app::provider_runtime_handlers::zoom::*;
+pub(super) use crate::app::provider_runtime_handlers::zulip::*;

@@ -5,9 +5,11 @@ use sqlx::Row;
 use testkit::context::TestContext;
 use tokio::time::{Duration, timeout};
 
-use hermes_hub_backend::platform::events::{
-    EventOutboxDispatcher, EventStore, InMemoryEventBus, NatsJetStreamEventBus, NewEventEnvelope,
-};
+use hermes_events_api::NewEventEnvelope;
+use hermes_events_nats::jetstream::NatsJetStreamEventBus;
+use hermes_events_postgres::store::EventStore;
+use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
+use hermes_hub_backend::platform::events::dispatcher::EventOutboxDispatcher;
 
 #[tokio::test]
 async fn append_for_dispatch_records_event_and_pending_outbox_subject() {
@@ -149,7 +151,7 @@ async fn event_outbox_dispatcher_publishes_pending_events_to_nats() {
         .await
         .expect("message receive timeout")
         .expect("subscription yields message");
-    let published_event: hermes_hub_backend::platform::events::EventEnvelope =
+    let published_event: hermes_events_api::EventEnvelope =
         serde_json::from_slice(&message.payload).expect("decode published event");
     assert_eq!(published_event.event_id, event.event_id);
     assert_eq!(published_event.event_type, event.event_type);
@@ -314,7 +316,7 @@ async fn event_outbox_dispatcher_recovers_stale_dispatching_items() {
         .await
         .expect("message receive timeout")
         .expect("subscription yields message");
-    let published_event: hermes_hub_backend::platform::events::EventEnvelope =
+    let published_event: hermes_events_api::EventEnvelope =
         serde_json::from_slice(&message.payload).expect("decode published event");
     assert_eq!(published_event.event_id, event.event_id);
 }

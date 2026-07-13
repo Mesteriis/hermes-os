@@ -21,7 +21,7 @@ export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
 cd "${REPO_ROOT}"
 
 cargo llvm-cov clean --workspace
-cargo run --manifest-path crates/testkit/Cargo.toml --bin hermes_test_session -- \
+cargo run --manifest-path crates/test-session/Cargo.toml --bin hermes-test-session -- \
 	cargo llvm-cov nextest \
 		--manifest-path backend/Cargo.toml \
 		--profile "${PROFILE}" \

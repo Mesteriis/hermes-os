@@ -5,7 +5,7 @@ use crate::domains::communications::ai_state::CommunicationAiStateError;
 use crate::domains::communications::messages::MessageProjectionError;
 use crate::domains::communications::spam_reputation::SenderReputationError;
 use crate::domains::review::ReviewInboxError;
-use crate::domains::signal_hub::SignalHubError;
+use crate::domains::signal_hub::store::SignalHubError;
 use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 
 #[derive(Debug, Error)]

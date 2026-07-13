@@ -4,15 +4,14 @@ use reqwest::Url;
 
 mod catalog;
 mod chat;
-mod config;
+pub(crate) mod config;
 mod embeddings;
-mod error;
-mod models;
+pub(crate) mod error;
+pub(crate) mod models;
 mod transport;
 
-pub use config::OmniRouteClientConfig;
-pub use error::OmniRouteError;
-pub use models::{OmniRouteChatResult, OmniRouteEmbedResult};
+use config::OmniRouteClientConfig;
+use error::OmniRouteError;
 
 #[derive(Clone)]
 pub struct OmniRouteClient {

@@ -1,13 +1,14 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 
 use super::helpers::publish_telegram_event;
-use crate::app::api_support::telegram_provider_runtime_service;
+use crate::app::api_support::stores::integration_stores::telegram_provider_runtime_service;
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::TelegramProviderWriteCommand;
-use crate::platform::events::NewEventEnvelope;
+use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
+
 use crate::platform::events::bus::telegram_event_types;
 
 pub(crate) async fn post_telegram_command_retry(

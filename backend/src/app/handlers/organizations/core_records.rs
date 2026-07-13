@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::app::{ApiError, AppState};
-use crate::application::OrganizationPersonaLinkApplicationService;
+use crate::application::organization_persona_links::OrganizationPersonaLinkApplicationService;
 use crate::domains::organizations::core::{
     OrgAliasStore, OrgDepartment, OrgDepartmentStore, OrgDomainStore, OrgIdentityStore,
     OrgPersonaLink, OrgPersonaLinkStore, OrganizationAlias, OrganizationDomain,
@@ -24,7 +24,7 @@ pub(crate) async fn get_org_identities(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgIdentitiesResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<OrgIdentityStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<OrgIdentityStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -67,7 +67,7 @@ pub(crate) async fn get_org_aliases(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgAliasesResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<OrgAliasStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<OrgAliasStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -105,7 +105,7 @@ pub(crate) async fn get_org_domains(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgDomainsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<OrgDomainStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<OrgDomainStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -122,10 +122,11 @@ pub(crate) async fn get_org_departments(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgDepartmentsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<OrgDepartmentStore>(pool)
-        .list(&org_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<OrgDepartmentStore>(pool)
+            .list(&org_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(OrgDepartmentsResponse { items }))
 }
 
@@ -164,10 +165,11 @@ pub(crate) async fn get_org_persona_links(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgPersonaLinksResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<OrgPersonaLinkStore>(pool)
-        .list_by_org(&org_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<OrgPersonaLinkStore>(pool)
+            .list_by_org(&org_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(OrgPersonaLinksResponse { items }))
 }
 
@@ -210,7 +212,7 @@ pub(crate) async fn get_org_related(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgRelatedResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<RelatedOrgStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<RelatedOrgStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;

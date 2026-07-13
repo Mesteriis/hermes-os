@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
@@ -6,19 +8,20 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationProviderAccountStore, CommunicationProviderKind,
-    CommunicationProviderSecretBindingStore, ProviderAccount, ProviderAccountSecretPurpose,
-    ProviderCredentialReader,
-};
+use crate::domains::communications::credentials::ProviderCredentialReader;
 use crate::domains::communications::messages::ProviderChannelMessageStore;
-use crate::integrations::zulip::{ZulipApiClient, ZulipClientConfig, ZulipClientError};
+use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
+
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use crate::workflows::zulip_attachment_storage::{
     ZulipAttachmentBytes, ZulipAttachmentMaterialization, ZulipAttachmentStorageError,
     persist_zulip_attachment_bytes,
 };
+use hermes_provider_zulip::client::{ZulipApiClient, ZulipClientConfig, ZulipClientError};
 
 const ZULIP_CHANNEL_KIND: &str = "zulip";
 const MAX_MESSAGE_SCAN_LIMIT: i64 = 500;

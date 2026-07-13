@@ -1,11 +1,20 @@
 use crate::app::api_support::{
-    TelegramCapabilitiesResponse, event_store, telegram_provider_runtime_service,
-    telegram_secret_reference_store,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::TelegramError;
+use crate::integrations::telegram::client::TelegramError;
 use crate::platform::config::AppConfig;
-use crate::platform::events::NewEventEnvelope;
+use hermes_events_api::NewEventEnvelope;
 
 pub(super) const AUDIT_ACTOR_ID: &str = "hermes-frontend";
 

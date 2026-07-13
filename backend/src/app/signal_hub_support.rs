@@ -2,19 +2,23 @@ use serde_json::{Map, Value, json};
 use sqlx::postgres::PgPool;
 
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::WhatsAppRuntimeStatus;
-use crate::domains::communications::core::{CommunicationProviderAccountStore, ProviderAccount};
-use crate::domains::signal_hub::{
-    SignalHealth, SignalHealthCheckRequest, SignalHealthSnapshotWrite, SignalHubConnectionService,
-    SignalHubHealthService, SignalHubStore,
+use crate::domains::signal_hub::connections::SignalHubConnectionService;
+use crate::domains::signal_hub::health::SignalHubHealthService;
+use crate::domains::signal_hub::store::{
+    SignalHealth, SignalHealthCheckRequest, SignalHealthSnapshotWrite, SignalHubStore,
 };
 use crate::integrations::ai_runtime::AiRuntimeClient;
-use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
-use crate::integrations::omniroute::client::{OmniRouteClient, OmniRouteClientConfig};
-use crate::platform::communications::CommunicationProviderKind;
+use crate::integrations::ollama::client::OllamaClient;
+use crate::integrations::ollama::client::config::OllamaClientConfig;
+use crate::integrations::omniroute::client::OmniRouteClient;
+use crate::integrations::omniroute::client::config::OmniRouteClientConfig;
+use crate::integrations::whatsapp::runtime::contracts::WhatsAppRuntimeStatus;
 use crate::platform::config::{AiRuntimeProvider, AppConfig};
-use crate::platform::events::EventStore;
 use crate::platform::settings::{AiRuntimeSettings, ApplicationSettingsStore};
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::accounts::ProviderAccount;
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+use hermes_events_postgres::store::EventStore;
 
 pub(crate) async fn provider_account_or_not_found(
     state: &AppState,
@@ -118,7 +122,7 @@ pub(crate) async fn sync_whatsapp_runtime_signal_connection_for_pool(
     account: &ProviderAccount,
     status: &WhatsAppRuntimeStatus,
     secret_ref: Option<String>,
-) -> Result<(), crate::domains::signal_hub::SignalHubError> {
+) -> Result<(), crate::domains::signal_hub::store::SignalHubError> {
     let signal_store = SignalHubStore::new(pool.clone());
     let connection_service =
         SignalHubConnectionService::new(signal_store.clone(), EventStore::new(pool.clone()));
@@ -150,7 +154,7 @@ pub(crate) async fn run_signal_hub_health_check(
     config: &AppConfig,
     pool: PgPool,
     request: &SignalHealthCheckRequest,
-) -> Result<SignalHealth, crate::domains::signal_hub::SignalHubError> {
+) -> Result<SignalHealth, crate::domains::signal_hub::store::SignalHubError> {
     let service = SignalHubHealthService::new(
         SignalHubStore::new(pool.clone()),
         EventStore::new(pool.clone()),
@@ -158,7 +162,8 @@ pub(crate) async fn run_signal_hub_health_check(
 
     if request.source_code == "ai" && request.connection_id.is_none() {
         let runtime_state =
-            crate::platform::events::source_runtime_state_from_policies(&pool, "ai").await?;
+            crate::platform::events::runtime::source_runtime_state_from_policies(&pool, "ai")
+                .await?;
         let snapshot = match runtime_state {
             "stopped" => SignalHealthSnapshotWrite {
                 level: "disabled".to_owned(),
@@ -218,7 +223,7 @@ fn provider_signal_source_code(provider_kind: CommunicationProviderKind) -> &'st
 async fn ai_runtime_health_snapshot(
     config: &AppConfig,
     pool: &PgPool,
-) -> Result<SignalHealthSnapshotWrite, crate::domains::signal_hub::SignalHubError> {
+) -> Result<SignalHealthSnapshotWrite, crate::domains::signal_hub::store::SignalHubError> {
     let settings = ApplicationSettingsStore::new(pool.clone())
         .ai_runtime_settings(config)
         .await?;

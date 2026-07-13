@@ -1,5 +1,5 @@
 use super::*;
-use crate::domains::communications::core::ProviderAccount;
+use hermes_communications_api::accounts::ProviderAccount;
 
 // ---------------------------------------------------------------------------
 

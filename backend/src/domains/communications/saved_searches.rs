@@ -1,3 +1,4 @@
+use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
@@ -14,8 +15,8 @@ use crate::domains::communications::messages::{LocalMessageState, WorkflowState}
 use crate::domains::communications::saved_search_counts::{
     count_messages_for_saved_search, load_message_counts_for_saved_searches,
 };
-use crate::platform::events::{EventStore, NewEventEnvelope};
-use crate::platform::observations::ObservationStoreError;
+use hermes_events_postgres::store::EventStore;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 const EVENT_TYPE_CREATED: &str = "mail.saved_search.created";
 const EVENT_TYPE_UPDATED: &str = "mail.saved_search.updated";
@@ -786,9 +787,9 @@ pub enum CommunicationSavedSearchError {
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
     #[error(transparent)]
-    EventStore(#[from] crate::platform::events::EventStoreError),
+    EventStore(#[from] hermes_events_postgres::errors::EventStoreError),
     #[error(transparent)]
-    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    EventEnvelope(#[from] hermes_events_api::EventEnvelopeError),
     #[error("invalid mail saved search cursor")]
     InvalidCursor,
     #[error("invalid mail saved search field: {0}")]

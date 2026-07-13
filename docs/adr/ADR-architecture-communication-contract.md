@@ -48,7 +48,9 @@ validated by `make architecture-check`.
 Backend rules:
 
 - `app/` owns route composition, HTTP handlers, app state and top-level errors.
-  It may call domain command/query ports and integration runtime/setup APIs.
+  It may call domain command/query ports, integration runtime/setup APIs and
+  explicit public workflow APIs. It must not import concrete domain stores or
+  provider runtime internals.
   It must not own business orchestration or durable stores.
 - `domains/*` own one bounded context. A domain may import its own modules,
   `platform/*`, and pure/domain-neutral engines. It must not import other

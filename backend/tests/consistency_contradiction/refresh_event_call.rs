@@ -1,17 +1,18 @@
 use chrono::{Duration, Utc};
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::calendar::events::{CalendarEventStore, NewCalendarEvent};
 use hermes_hub_backend::domains::calendar::meetings::MeetingNoteStore;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-};
 use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::engines::consistency::{
-    ContradictionObservationStore, ContradictionSeverity, ContradictionSourceKind,
+    models::{ContradictionSeverity, ContradictionSourceKind},
+    store::ContradictionObservationStore,
 };
 use hermes_hub_backend::platform::calls::{
     CallDirection, CallIntelligenceStore, CallState, NewCallTranscript, NewTelegramCall,
     TranscriptStatus,
 };
+
 use serde_json::json;
 
 use super::support::{live_consistency_pool, unique_suffix};
@@ -155,7 +156,7 @@ async fn contradiction_refresh_detects_call_transcript_claim_against_active_pers
     CommunicationIngestionStore::new(pool.clone())
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Polygraph Call Compatibility Account",
             format!("polygraph-call-{suffix}@example.com"),
         ))

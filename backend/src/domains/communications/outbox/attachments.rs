@@ -1,3 +1,4 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use sqlx::postgres::PgPool;
@@ -127,15 +128,14 @@ mod tests {
     use testkit::context::TestContext;
 
     use super::load_sendable_attachments;
-    use crate::domains::communications::core::{
-        CommunicationProviderAccountStore, EmailProviderKind, NewProviderAccount,
-    };
     use crate::domains::communications::outbox::OutboxDeliveryError;
     use crate::domains::communications::storage::{
         CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachmentImport,
         NewCommunicationBlob,
     };
     use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
+    use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+    use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 
     #[tokio::test]
     async fn loader_blocks_unscanned_attachments_and_verifies_clean_blob_bytes() {
@@ -145,7 +145,7 @@ mod tests {
         CommunicationProviderAccountStore::new(pool.clone())
             .upsert(&NewProviderAccount::new(
                 account_id,
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 "Attachment loader",
                 "loader@example.test",
             ))

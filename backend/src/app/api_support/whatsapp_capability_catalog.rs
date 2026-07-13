@@ -1,4 +1,4 @@
-use crate::application::provider_runtime_contracts::WhatsAppProviderRuntimeShape;
+use crate::integrations::whatsapp::runtime::contracts::WhatsAppProviderRuntimeShape;
 
 use super::whatsapp_capabilities::{
     WhatsAppActionClass, WhatsAppCapabilityState, WhatsappCapabilityStatus,

@@ -9,7 +9,6 @@ use uuid::Uuid;
 use super::ai_state::{
     CommunicationAiStateRecord, CommunicationAiStateStore, CommunicationAiStateTransitionRequest,
 };
-use super::core::ProviderAccount;
 use super::drafts::{
     CommunicationDraft, CommunicationDraftError, CommunicationDraftStore, DraftStatus,
     NewCommunicationDraft,
@@ -44,9 +43,10 @@ use super::storage::{
 };
 use crate::domains::communications::evidence::{link_mail_entity_in_transaction, merge_metadata};
 use crate::platform::communications::{DEFAULT_MAIL_SYNC_BLOB_ROOT, OutgoingEmail};
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
-};
+use hermes_communications_api::accounts::ProviderAccount;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 const MAX_ATTACHMENT_IMPORT_BYTES: usize = 50 * 1024 * 1024;
 const LOCAL_IMPORT_ACTOR_ID: &str = "hermes-frontend";
@@ -1572,7 +1572,8 @@ impl CommunicationCommandService {
         payload: Value,
         source_ref: String,
         provenance: Value,
-    ) -> Result<crate::platform::observations::Observation, CommunicationCommandServiceError> {
+    ) -> Result<hermes_observations_api::models::Observation, CommunicationCommandServiceError>
+    {
         ObservationStore::new(self.pool.clone())
             .capture(
                 &NewObservation::new(
@@ -1595,7 +1596,8 @@ impl CommunicationCommandService {
         message_id: &str,
         operation: &'static str,
         payload: Value,
-    ) -> Result<crate::platform::observations::Observation, CommunicationCommandServiceError> {
+    ) -> Result<hermes_observations_api::models::Observation, CommunicationCommandServiceError>
+    {
         self.capture_observation(
             "message flag action",
             "COMMUNICATION_MESSAGE",

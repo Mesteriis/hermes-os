@@ -2,6 +2,7 @@ use super::super::*;
 use super::calendar::upsert_google_workspace_calendar_account;
 use super::helpers::{gmail_pending_external_account_id, trimmed_optional};
 use super::models::GmailOAuthCallbackQuery;
+use crate::app::api_support::formatting::html_escape;
 use crate::app::signal_hub_support::{
     provider_account_or_not_found, sync_provider_account_signal_connection,
 };

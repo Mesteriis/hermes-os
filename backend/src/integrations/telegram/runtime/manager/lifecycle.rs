@@ -16,7 +16,7 @@ use super::account::load_active_account;
 use super::actor_states::running_actor_state;
 use super::realtime_events::spawn_telegram_runtime_event_bridge;
 use super::{TelegramRuntimeManager, TelegramRuntimeStartContext};
-use crate::platform::communications::ProviderAccountLookupPort;
+use hermes_communications_api::accounts::ProviderAccountLookupPort;
 
 impl TelegramRuntimeManager {
     pub async fn status_for_account(

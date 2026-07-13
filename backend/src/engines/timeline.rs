@@ -1,3 +1,4 @@
+use hermes_events_api::StoredEventEnvelope;
 mod analysis;
 mod cross_domain;
 mod errors;
@@ -10,7 +11,8 @@ mod validation;
 
 use chrono::{DateTime, Utc};
 
-use crate::platform::events::{EventStore, ProjectionCursorStore, StoredEventEnvelope};
+use hermes_events_postgres::cursors::ProjectionCursorStore;
+use hermes_events_postgres::store::EventStore;
 
 pub use errors::{TimelineEngineError, TimelineProjectionError};
 pub use models::{

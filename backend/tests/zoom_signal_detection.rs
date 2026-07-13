@@ -1,15 +1,18 @@
 use std::sync::Arc;
 
 use chrono::Utc;
-use hermes_hub_backend::domains::communications::core::{
+use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
-use hermes_hub_backend::domains::signal_hub::{SignalHubProfileService, SignalHubStore};
+use hermes_events_api::EventLogQuery;
+use hermes_events_postgres::store::EventStore;
+use hermes_hub_backend::domains::signal_hub::profiles::SignalHubProfileService;
+use hermes_hub_backend::domains::signal_hub::store::SignalHubStore;
 use hermes_hub_backend::integrations::zoom::client::{
     ZoomAccountSetupRequest, ZoomMeetingObservationRequest, ZoomStore,
 };
 use hermes_hub_backend::platform::calls::CallIntelligenceStore;
-use hermes_hub_backend::platform::events::{EventBus, EventLogQuery, EventStore};
+use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
 use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::zoom_signal_detection::project_zoom_signal_detection;
@@ -28,7 +31,7 @@ async fn zoom_meeting_events_flow_into_signal_hub_detection_events() {
         .await
         .expect("restore signal hub sources");
 
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     let zoom_store = ZoomStore::new(
         pool.clone(),
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
@@ -176,7 +179,7 @@ async fn zoom_meeting_signal_detection_respects_testing_profile_muting() {
     .await
     .expect("apply testing profile");
 
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     let zoom_store = ZoomStore::new(
         pool.clone(),
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),

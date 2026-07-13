@@ -1,16 +1,16 @@
+use hermes_events_api::{EventEnvelope, EventEnvelopeError, NewEventEnvelope, StoredEventEnvelope};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::signal_hub::{
-    SignalHubError, SignalHubPort, SignalHubSignalService,
-    signal_hub_raw_dispatcher_allows_processing,
-};
+use crate::domains::signal_hub::raw_signal_port::RawSignalProcessingPort;
+use crate::domains::signal_hub::store::SignalHubError;
 use crate::platform::events::bus::zoom_event_types;
-use crate::platform::events::{
-    EventEnvelope, EventEnvelopeError, EventLogPort, EventLogPortError, NewEventEnvelope,
-    StoredEventEnvelope,
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
+use hermes_signal_hub_api::raw_signals::{
+    RawSignalCommandPort, RawSignalInput, RawSignalPortError, RawSignalRuntimeQueryPort,
 };
 
 pub const ZOOM_SIGNAL_DETECTION_CONSUMER: &str = "zoom_signal_detection";
@@ -21,7 +21,10 @@ pub enum ZoomSignalDetectionWorkflowError {
     SignalHub(#[from] SignalHubError),
 
     #[error(transparent)]
-    EventLog(#[from] EventLogPortError),
+    SignalHubPort(#[from] RawSignalPortError),
+
+    #[error(transparent)]
+    EventStore(#[from] EventStoreError),
 
     #[error(transparent)]
     EventEnvelope(#[from] EventEnvelopeError),
@@ -33,10 +36,10 @@ pub enum ZoomSignalDetectionWorkflowError {
 pub async fn project_zoom_signal_detection_event(
     pool: PgPool,
     event: StoredEventEnvelope,
-) -> Result<(), EventLogPortError> {
+) -> Result<(), EventStoreError> {
     project_zoom_signal_detection(&pool, &event.event)
         .await
-        .map_err(|error| EventLogPortError::ConsumerHandlerFailed(error.to_string()))
+        .map_err(|error| EventStoreError::ConsumerHandlerFailed(error.to_string()))
 }
 
 pub async fn project_zoom_signal_detection(
@@ -47,7 +50,7 @@ pub async fn project_zoom_signal_detection(
         return Ok(());
     };
 
-    let event_store = EventLogPort::new(pool.clone());
+    let event_store = EventStore::new(pool.clone());
     let raw_signal_id = raw_signal.event_id.clone();
     event_store
         .append_for_dispatch_idempotent(&raw_signal)
@@ -57,13 +60,13 @@ pub async fn project_zoom_signal_detection(
         SignalHubError::InvalidRawSignalEventType(raw_signal.event_type.clone()),
     )?;
 
-    let signal_store = SignalHubPort::new(pool.clone());
-    if !signal_hub_raw_dispatcher_allows_processing(&signal_store).await? {
+    let signal_port = RawSignalProcessingPort::new(pool.clone());
+    if !RawSignalRuntimeQueryPort::allows_processing(&signal_port).await? {
         return Ok(());
     }
 
-    let service = SignalHubSignalService::new(signal_store, event_store);
-    let _ = service.process_raw_signal(&raw_event).await?;
+    let _ = RawSignalCommandPort::process_raw_signal(&signal_port, &RawSignalInput::new(raw_event))
+        .await?;
     Ok(())
 }
 

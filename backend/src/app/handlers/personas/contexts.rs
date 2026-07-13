@@ -15,7 +15,7 @@ pub(crate) async fn get_persona_roles(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<PersonaRoleStore>(pool);
+    let store = crate::app::api_support::stores::domain_stores::app_store::<PersonaRoleStore>(pool);
     let items = store
         .list_by_person(&persona_id)
         .await
@@ -39,7 +39,7 @@ pub(crate) async fn post_persona_role(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     Ok(Json(
-        crate::domains::personas::service::PersonaCommandService::new(pool)
+        crate::domains::personas::command_service::PersonaCommandService::new(pool)
             .assign_role_manual(&persona_id, &req.role)
             .await?,
     ))
@@ -54,7 +54,7 @@ pub(crate) async fn delete_persona_role(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let deleted = crate::domains::personas::service::PersonaCommandService::new(pool)
+    let deleted = crate::domains::personas::command_service::PersonaCommandService::new(pool)
         .remove_role_manual(&persona_id, &role)
         .await?;
     Ok(Json(json!({"deleted": deleted})))
@@ -76,7 +76,9 @@ pub(crate) async fn get_persona_interaction_contexts(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<PersonaInteractionContextStore>(pool);
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
+        PersonaInteractionContextStore,
+    >(pool);
     let items = store
         .list_by_person(&persona_id)
         .await
@@ -95,7 +97,7 @@ pub(crate) async fn post_persona_interaction_context(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     Ok(Json(
-        crate::domains::personas::service::PersonaCommandService::new(pool)
+        crate::domains::personas::command_service::PersonaCommandService::new(pool)
             .upsert_persona_interaction_context_manual(&NewPersonaInteractionContext {
                 source_persona_id: persona_id,
                 interaction_context_id: req.interaction_context_id,
@@ -129,7 +131,7 @@ pub(crate) async fn delete_persona_interaction_context(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let deleted = crate::domains::personas::service::PersonaCommandService::new(pool)
+    let deleted = crate::domains::personas::command_service::PersonaCommandService::new(pool)
         .delete_persona_interaction_context_manual(&source_persona_id, &target_persona_id)
         .await?;
     Ok(Json(json!({"deleted": deleted})))

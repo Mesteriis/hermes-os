@@ -1,14 +1,17 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
+};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-    NewProviderAccountSecretBinding, NewRawCommunicationRecord, ProviderAccountSecretPurpose,
-};
-use hermes_hub_backend::domains::signal_hub::SignalHubStore;
+use hermes_hub_backend::domains::signal_hub::store::SignalHubStore;
+
 use hermes_hub_backend::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
@@ -59,7 +62,7 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
         .upsert_provider_account(
             &NewProviderAccount::new(
                 "fastmail-primary",
-                EmailProviderKind::Imap,
+                CommunicationProviderKind::Imap,
                 "Fastmail",
                 "alex@example.com",
             )
@@ -324,7 +327,7 @@ async fn email_account_delete_purges_access_and_keeps_retained_raw_records() {
     store
         .upsert_provider_account(&NewProviderAccount::new(
             "imap-with-evidence",
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Evidence IMAP",
             "evidence@example.com",
         ))

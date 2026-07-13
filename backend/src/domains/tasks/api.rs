@@ -5,9 +5,9 @@ use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
+use super::command_service::{TaskCommandService, TaskCommandServiceError};
 use super::core::{TaskCoreError, materialize_task_observation_link_in_transaction};
-use super::service::TaskCommandService;
-use crate::platform::observations::ObservationStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Task {
@@ -45,8 +45,6 @@ pub struct Task {
     pub updated_at: DateTime<Utc>,
 }
 
-pub type TaskCommandPort = TaskStore;
-
 #[derive(Clone)]
 pub struct TaskStore {
     pool: PgPool,
@@ -62,16 +60,14 @@ impl TaskStore {
             .create_task_manual(req)
             .await
             .map_err(|error| match error {
-                super::service::TaskCommandServiceError::ObservationCapture { source, .. } => {
+                TaskCommandServiceError::ObservationCapture { source, .. } => {
                     TaskError::from(source)
                 }
-                super::service::TaskCommandServiceError::Task(inner) => inner,
-                super::service::TaskCommandServiceError::Core(inner) => TaskError::from(inner),
-                super::service::TaskCommandServiceError::Sqlx(inner) => TaskError::from(inner),
-                super::service::TaskCommandServiceError::ObservationStore(inner) => {
-                    TaskError::from(inner)
-                }
-                super::service::TaskCommandServiceError::MissingEvidenceSourceId => {
+                TaskCommandServiceError::Task(inner) => inner,
+                TaskCommandServiceError::Core(inner) => TaskError::from(inner),
+                TaskCommandServiceError::Sqlx(inner) => TaskError::from(inner),
+                TaskCommandServiceError::ObservationStore(inner) => TaskError::from(inner),
+                TaskCommandServiceError::MissingEvidenceSourceId => {
                     TaskError::MissingSourceIdentifier
                 }
             })

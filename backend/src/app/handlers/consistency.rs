@@ -4,11 +4,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::app::{ApiError, AppState};
-use crate::application::consistency_review::ContradictionReviewService;
 use crate::engines::consistency::{
-    ContradictionObservation, ContradictionObservationStore, ContradictionReviewState,
+    models::{ContradictionObservation, ContradictionReviewState},
+    store::ContradictionObservationStore,
 };
 use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
+use crate::workflows::consistency_review::ContradictionReviewService;
 
 const CONTRADICTION_API_ACTOR_ID: &str = "hermes-frontend";
 const DEFAULT_CONTRADICTION_LIMIT: i64 = 50;
@@ -77,7 +78,7 @@ fn contradiction_store(state: &AppState) -> Result<ContradictionObservationStore
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    Ok(crate::app::api_support::app_store::<
+    Ok(crate::app::api_support::stores::domain_stores::app_store::<
         ContradictionObservationStore,
     >(pool.clone()))
 }

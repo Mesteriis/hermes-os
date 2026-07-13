@@ -3,6 +3,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Html;
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -18,11 +19,12 @@ use crate::ai::control_center::{
     AiProviderPatchRequest, AiSettingsOverviewResponse, connect_pending_ai_provider_auth,
     start_local_provider_auth, store_api_key_in_host_vault,
 };
-use crate::app::api_support::html_escape;
+use crate::app::api_support::formatting::html_escape;
 use crate::app::{ApiError, AppState};
-use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
-use crate::platform::events::{EventStore, NewEventEnvelope};
+use crate::integrations::ollama::client::OllamaClient;
+use crate::integrations::ollama::client::config::OllamaClientConfig;
 use crate::vault::{HostVaultError, VaultMode};
+use hermes_events_postgres::store::EventStore;
 
 use super::helpers::{ai_control_center_store, request_actor_id};
 use super::models::{AiModelListResponse, AiPromptListResponse, AiProviderListResponse};

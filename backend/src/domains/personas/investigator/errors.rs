@@ -2,8 +2,8 @@ use thiserror::Error;
 
 use crate::domains::personas::enrichment::PersonaEnrichmentError;
 use crate::domains::personas::memory::PersonaMemoryError;
-use crate::platform::events::EventStoreError;
-use crate::platform::observations::ObservationStoreError;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, Error)]
 pub enum InvestigatorError {
@@ -12,11 +12,11 @@ pub enum InvestigatorError {
     #[error(transparent)]
     Json(#[from] serde_json::Error),
     #[error(transparent)]
-    Memory(#[from] crate::engines::memory::MemoryEngineError),
+    Memory(#[from] crate::engines::memory::errors::MemoryEngineError),
     #[error(transparent)]
     Timeline(#[from] crate::engines::timeline::TimelineEngineError),
     #[error(transparent)]
-    Trust(#[from] crate::engines::trust::TrustEngineError),
+    Trust(#[from] crate::engines::trust::errors::TrustEngineError),
     #[error(transparent)]
     Observation(#[from] ObservationStoreError),
     #[error(transparent)]

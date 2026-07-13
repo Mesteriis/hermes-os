@@ -1,6 +1,27 @@
 [workspace]
 resolver = "2"
-members = ["backend", "crates/testkit"]
+members = [
+    "backend",
+    "crates/kernel",
+    "crates/events-api",
+    "crates/events-postgres",
+    "crates/events-nats",
+    "crates/provider-api",
+    "crates/provider-zulip",
+    "crates/provider-orchestration",
+    "crates/vault-api",
+    "crates/blob-api",
+    "crates/communications-api",
+    "crates/communications-postgres",
+    "crates/signal-hub-api",
+    "crates/signal-hub-postgres",
+    "crates/observations-api",
+    "crates/observations-postgres",
+    "crates/connectrpc-contracts",
+    "crates/desktop-runtime",
+    "crates/test-session",
+    "crates/testkit",
+]
 exclude = ["frontend/src-tauri"]
 
 [profile.dev]

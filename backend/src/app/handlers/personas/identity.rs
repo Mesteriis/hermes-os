@@ -52,7 +52,8 @@ pub(crate) async fn get_persona_identities(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<PersonaIdentityStore>(pool);
+    let store =
+        crate::app::api_support::stores::domain_stores::app_store::<PersonaIdentityStore>(pool);
     let items = store
         .list_by_person(&persona_id)
         .await
@@ -83,7 +84,8 @@ pub(crate) async fn get_identity_traces(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<PersonaIdentityStore>(pool);
+    let store =
+        crate::app::api_support::stores::domain_stores::app_store::<PersonaIdentityStore>(pool);
     let items = store
         .list_unattached(query.limit.unwrap_or(50))
         .await
@@ -118,7 +120,7 @@ pub(crate) async fn post_identity_trace(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     Ok(Json(
-        crate::domains::personas::service::PersonaCommandService::new(pool)
+        crate::domains::personas::command_service::PersonaCommandService::new(pool)
             .create_identity_trace_manual(&req.identity_type, &req.identity_value, requested_source)
             .await?
             .into(),
@@ -142,7 +144,7 @@ pub(crate) async fn put_identity_trace_assignment(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     Ok(Json(
-        crate::domains::personas::service::PersonaCommandService::new(pool)
+        crate::domains::personas::command_service::PersonaCommandService::new(pool)
             .assign_identity_trace_manual(&identity_id, &req.persona_id)
             .await?
             .into(),
@@ -161,7 +163,7 @@ pub(crate) async fn post_persona_identity(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     Ok(Json(
-        crate::domains::personas::service::PersonaCommandService::new(pool)
+        crate::domains::personas::command_service::PersonaCommandService::new(pool)
             .upsert_persona_identity_manual(
                 &persona_id,
                 &req.identity_type,
@@ -182,7 +184,7 @@ pub(crate) async fn delete_persona_identity(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let deleted = crate::domains::personas::service::PersonaCommandService::new(pool)
+    let deleted = crate::domains::personas::command_service::PersonaCommandService::new(pool)
         .delete_persona_identity_manual(&persona_id, &identity_id)
         .await?;
     Ok(Json(json!({"deleted": deleted})))

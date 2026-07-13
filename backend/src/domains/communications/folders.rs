@@ -1,3 +1,4 @@
+use hermes_events_api::EventEnvelopeError;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
@@ -8,8 +9,8 @@ use thiserror::Error;
 
 use crate::domains::communications::evidence::{link_mail_entity_in_transaction, merge_metadata};
 use crate::domains::communications::messages::{LocalMessageState, WorkflowState};
-use crate::platform::events::EventStore;
-use crate::platform::observations::ObservationStoreError;
+use hermes_events_postgres::store::EventStore;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 mod cursors;
 mod events;
@@ -976,9 +977,9 @@ pub enum CommunicationFolderError {
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
     #[error(transparent)]
-    EventStore(#[from] crate::platform::events::EventStoreError),
+    EventStore(#[from] hermes_events_postgres::errors::EventStoreError),
     #[error(transparent)]
-    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    EventEnvelope(#[from] hermes_events_api::EventEnvelopeError),
     #[error("invalid mail folder field: {0}")]
     Invalid(&'static str),
     #[error("invalid mail folder cursor")]

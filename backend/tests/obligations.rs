@@ -7,11 +7,10 @@ use hermes_hub_backend::domains::obligations::{
     ObligationReviewState, ObligationRiskState, ObligationStatus, ObligationStore,
     ObligationStoreError,
 };
-use hermes_hub_backend::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore,
-};
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::graph_projection::GraphProjectionService;
+use hermes_hub_backend::workflows::graph_projection::service::GraphProjectionService;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgPoolOptions};

@@ -1,8 +1,7 @@
+use hermes_communications_api::accounts::ProviderAccountCommandPort;
+use hermes_communications_api::accounts::ProviderSecretBindingCommandPort;
 use std::sync::Arc;
 
-use crate::platform::communications::{
-    ProviderAccountCommandPort, ProviderSecretBindingCommandPort,
-};
 use crate::platform::secrets::{DatabaseEncryptedSecretVault, SecretReferenceStore};
 use crate::vault::HostVault;
 use sqlx::postgres::PgPool;

@@ -7,10 +7,10 @@ use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
 
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
+use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
+use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::communications::messages::ProviderChannelMessageStore;
 use hermes_hub_backend::integrations::telegram::client::{
     NewTelegramChat, TelegramChatKind, TelegramStore, TelegramSyncState,
@@ -178,7 +178,7 @@ fn telegram_store(pool: &sqlx::PgPool) -> TelegramStore {
         Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
         Arc::new(
-            hermes_hub_backend::domains::communications::core::CommunicationIngestionStore::new(
+            hermes_communications_postgres::store::CommunicationIngestionStore::new(
                 pool.clone(),
             ),
         ),

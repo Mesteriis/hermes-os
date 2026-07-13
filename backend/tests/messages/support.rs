@@ -1,5 +1,11 @@
 #![allow(dead_code)]
 
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+
+use hermes_communications_api::evidence::{
+    NewRawCommunicationRecord, StoredRawCommunicationRecord,
+};
+
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
@@ -7,11 +13,9 @@ use chrono::Utc;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
-    StoredRawCommunicationRecord,
-};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::messages::MessageProjectionStore;
+
 use hermes_hub_backend::platform::storage::Database;
 
 pub async fn live_projection_context(
@@ -47,7 +51,7 @@ pub async fn store_provider_account(
     store
         .upsert_provider_account(&NewProviderAccount::new(
             account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             display_name,
             external_account_id,
         ))

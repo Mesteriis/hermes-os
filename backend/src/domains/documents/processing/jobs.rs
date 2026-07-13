@@ -10,7 +10,8 @@ use super::ids::job_id;
 use super::models::{DocumentProcessingJob, DocumentProcessingStatus, DocumentProcessingStep};
 use super::rows::try_row_to_job;
 use super::store::DocumentProcessingStore;
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 
 async fn capture_job_observation(
     tx: &mut Transaction<'_, Postgres>,

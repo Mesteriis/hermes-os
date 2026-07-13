@@ -1,9 +1,10 @@
+use hermes_events_api::EventEnvelopeError;
 use thiserror::Error;
 
 use crate::ai::hub::AiHubError;
-use crate::application::review_inbox::ReviewInboxWorkflowError;
-use crate::platform::events::EventStoreError;
-use crate::platform::observations::ObservationStoreError;
+use crate::workflows::review_inbox::ReviewInboxWorkflowError;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 use super::service::AiPersonaAttributionError;
 
@@ -28,7 +29,7 @@ pub enum AiError {
     Runtime(#[from] AiHubError),
 
     #[error(transparent)]
-    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    EventEnvelope(#[from] hermes_events_api::EventEnvelopeError),
 
     #[error(transparent)]
     EventStore(#[from] EventStoreError),

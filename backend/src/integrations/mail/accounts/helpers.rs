@@ -8,8 +8,8 @@ use reqwest::Client;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use crate::platform::communications::EmailProviderKind;
 use crate::platform::secrets::{SecretKind, SecretReference, SecretStoreKind};
+use hermes_communications_api::accounts::CommunicationProviderKind;
 
 pub(super) fn http_client() -> Client {
     Client::builder()
@@ -36,20 +36,20 @@ pub(super) fn smtp_secret_ref(account_id: &str) -> String {
 }
 
 pub(super) fn email_provider_connected_services(
-    provider_kind: EmailProviderKind,
+    provider_kind: CommunicationProviderKind,
 ) -> Option<&'static [&'static str]> {
     match provider_kind {
-        EmailProviderKind::Gmail => Some(&["mail", "calendar", "contacts"]),
-        EmailProviderKind::Icloud => Some(&["mail", "calendar", "contacts"]),
-        EmailProviderKind::Imap
-        | EmailProviderKind::TelegramUser
-        | EmailProviderKind::TelegramBot
-        | EmailProviderKind::WhatsappWeb
-        | EmailProviderKind::WhatsappBusinessCloud
-        | EmailProviderKind::ZulipBot
-        | EmailProviderKind::ZoomUser
-        | EmailProviderKind::ZoomServerToServer
-        | EmailProviderKind::YandexTelemostUser => None,
+        CommunicationProviderKind::Gmail => Some(&["mail", "calendar", "contacts"]),
+        CommunicationProviderKind::Icloud => Some(&["mail", "calendar", "contacts"]),
+        CommunicationProviderKind::Imap
+        | CommunicationProviderKind::TelegramUser
+        | CommunicationProviderKind::TelegramBot
+        | CommunicationProviderKind::WhatsappWeb
+        | CommunicationProviderKind::WhatsappBusinessCloud
+        | CommunicationProviderKind::ZulipBot
+        | CommunicationProviderKind::ZoomUser
+        | CommunicationProviderKind::ZoomServerToServer
+        | CommunicationProviderKind::YandexTelemostUser => None,
     }
 }
 
@@ -89,11 +89,11 @@ mod tests {
     #[test]
     fn gmail_and_icloud_advertise_contacts() {
         assert_eq!(
-            email_provider_connected_services(EmailProviderKind::Gmail),
+            email_provider_connected_services(CommunicationProviderKind::Gmail),
             Some(["mail", "calendar", "contacts"].as_slice())
         );
         assert_eq!(
-            email_provider_connected_services(EmailProviderKind::Icloud),
+            email_provider_connected_services(CommunicationProviderKind::Icloud),
             Some(["mail", "calendar", "contacts"].as_slice())
         );
     }

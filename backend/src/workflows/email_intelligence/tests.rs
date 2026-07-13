@@ -1,4 +1,4 @@
-use super::*;
+use super::{categories::EmailCategory, models::EmailAnalysis, service::EmailIntelligenceService};
 use crate::domains::communications::messages::{
     LocalMessageState, ProjectedMessage, WorkflowState,
 };

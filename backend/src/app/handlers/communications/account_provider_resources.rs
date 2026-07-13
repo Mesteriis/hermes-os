@@ -18,9 +18,11 @@ pub(crate) async fn get_v1_email_account_provider_resources(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<MailProviderResourceStore>(pool)
-        .list_for_account(&account.account_id)
-        .await?;
+    let items = crate::app::api_support::stores::domain_stores::app_store::<
+        MailProviderResourceStore,
+    >(pool)
+    .list_for_account(&account.account_id)
+    .await?;
     Ok(Json(MailProviderResourceListResponse { items }))
 }
 
@@ -35,7 +37,9 @@ pub(crate) async fn put_v1_email_account_provider_resource_mapping(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<MailProviderResourceStore>(pool);
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
+        MailProviderResourceStore,
+    >(pool);
     let Some(current) = store.resource(&mapping_id).await? else {
         return Err(ApiError::NotFound);
     };

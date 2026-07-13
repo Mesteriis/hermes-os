@@ -4,6 +4,7 @@ use testkit::context::TestContext;
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
 use chrono::{TimeZone, Utc};
+use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::decisions::DecisionStore;
 use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
@@ -11,16 +12,17 @@ use hermes_hub_backend::domains::obligations::ObligationStore;
 use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::domains::personas::identity::PersonaIdentityReviewStore;
 use hermes_hub_backend::domains::projects::core::ProjectStore;
-use hermes_hub_backend::domains::relationships::RelationshipStore;
+use hermes_hub_backend::domains::relationships::{
+    models::{
+        NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
+    },
+    store::RelationshipStore,
+};
 use hermes_hub_backend::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxStore, ReviewItemKind, ReviewItemStatus,
     ReviewPromotionTarget,
 };
 use hermes_hub_backend::domains::tasks::api::TaskStore;
-use hermes_hub_backend::platform::events::EventStore;
-use hermes_hub_backend::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore,
-};
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::review_inbox::project_persona_identity_review_event;
 use hermes_hub_backend::workflows::review_inbox::sync_decisions_to_review_for_observations;
@@ -28,6 +30,8 @@ use hermes_hub_backend::workflows::review_inbox::sync_obligations_to_review_for_
 use hermes_hub_backend::workflows::review_inbox::sync_relationships_to_review_for_observations;
 use hermes_hub_backend::workflows::review_inbox::sync_task_candidates_to_review_for_observations;
 use hermes_hub_backend::workflows::review_promotion::ReviewPromotionService;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
@@ -1401,30 +1405,24 @@ async fn relationship_review_mirror_promotes_existing_relationship_against_postg
 
     let relationship = RelationshipStore::new(pool.clone())
         .upsert_with_evidence(
-            &hermes_hub_backend::domains::relationships::NewRelationship {
-                source_entity_kind:
-                    hermes_hub_backend::domains::relationships::RelationshipEntityKind::Persona,
+            &NewRelationship {
+                source_entity_kind: RelationshipEntityKind::Persona,
                 source_entity_id: format!("persona:source:{suffix}"),
-                target_entity_kind:
-                    hermes_hub_backend::domains::relationships::RelationshipEntityKind::Project,
+                target_entity_kind: RelationshipEntityKind::Project,
                 target_entity_id: format!("project:v1:target:{suffix}"),
                 relationship_type: "collaborates_with".to_owned(),
                 trust_score: 0.61,
                 strength_score: 0.59,
                 confidence: 0.88,
-                review_state:
-                    hermes_hub_backend::domains::relationships::RelationshipReviewState::Suggested,
+                review_state: RelationshipReviewState::Suggested,
                 valid_from: None,
                 valid_to: None,
                 metadata: json!({"source": "review_mirror_test"}),
             },
             &[
-                hermes_hub_backend::domains::relationships::NewRelationshipEvidence::observation(
-                    observation.observation_id.clone(),
-                )
-                .excerpt(format!(
-                    "Relationship: Ivan collaborates with NAS project {suffix}."
-                )),
+                NewRelationshipEvidence::observation(observation.observation_id.clone()).excerpt(
+                    format!("Relationship: Ivan collaborates with NAS project {suffix}."),
+                ),
             ],
         )
         .await
@@ -2084,10 +2082,7 @@ async fn assert_materialized_target(
         }
         "relationships" => {
             let relationships = RelationshipStore::new(pool.clone())
-                .list_by_review_state(
-                    hermes_hub_backend::domains::relationships::RelationshipReviewState::UserConfirmed,
-                    100,
-                )
+                .list_by_review_state(RelationshipReviewState::UserConfirmed, 100)
                 .await
                 .expect("list relationships");
             assert!(

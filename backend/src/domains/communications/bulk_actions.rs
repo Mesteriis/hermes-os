@@ -1,3 +1,4 @@
+use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -8,8 +9,9 @@ use sqlx::{PgPool, Postgres, Row, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::platform::events::{EventStore, NewEventEnvelope};
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use hermes_events_postgres::store::EventStore;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 
 use super::evidence::link_mail_entity_in_transaction;
 use super::provider_commands::{
@@ -740,11 +742,11 @@ pub enum BulkMessageActionError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]
-    ObservationStore(#[from] crate::platform::observations::ObservationStoreError),
+    ObservationStore(#[from] hermes_observations_postgres::errors::ObservationStoreError),
     #[error(transparent)]
-    EventStore(#[from] crate::platform::events::EventStoreError),
+    EventStore(#[from] hermes_events_postgres::errors::EventStoreError),
     #[error(transparent)]
-    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    EventEnvelope(#[from] hermes_events_api::EventEnvelopeError),
     #[error(transparent)]
     ProviderCommand(#[from] CommunicationProviderCommandError),
     #[error("invalid bulk message action request: {0}")]

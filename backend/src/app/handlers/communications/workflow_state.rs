@@ -1,9 +1,9 @@
 use super::*;
-use crate::application::review_inbox::refresh_message_knowledge_candidates_into_review;
 use crate::domains::communications::ai_state::{
     CommunicationAiState, CommunicationAiStateStore, CommunicationAiStateTransitionRequest,
 };
-use crate::domains::communications::service::CommunicationCommandService;
+use crate::domains::communications::command_service::CommunicationCommandService;
+use crate::workflows::review_inbox::refresh_message_knowledge_candidates_into_review;
 
 #[derive(Deserialize)]
 pub(crate) struct WorkflowStateTransitionApiRequest {
@@ -110,13 +110,14 @@ pub(crate) async fn post_v1_message_analyze(
     Path(message_id): Path<String>,
 ) -> Result<Json<MessageAnalyzeResponse>, ApiError> {
     let store = message_store(&state)?;
-    let ai_state_store = crate::app::api_support::app_store::<CommunicationAiStateStore>(
-        state
-            .database
-            .pool()
-            .ok_or(ApiError::DatabaseNotConfigured)?
-            .clone(),
-    );
+    let ai_state_store =
+        crate::app::api_support::stores::domain_stores::app_store::<CommunicationAiStateStore>(
+            state
+                .database
+                .pool()
+                .ok_or(ApiError::DatabaseNotConfigured)?
+                .clone(),
+        );
 
     let message = store
         .message(&message_id)

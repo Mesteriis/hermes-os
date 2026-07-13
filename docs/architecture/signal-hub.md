@@ -59,6 +59,13 @@ Signal Hub centralizes these answers.
 - Kafka.
 - RabbitMQ.
 - WebSocket hub.
-- Provider sidecar processes in the first implementation.
 - Multi-tenant source administration.
 - Provider-specific product domains.
+
+## Provider Runtime Topology
+
+ADR-0181 keeps Signal Hub as the control plane while allowing provider crates to
+run in-process, as a shared connector or as an account-scoped connector. The
+selected topology is explicit runtime policy, not a provider-owned business
+decision. Connectors publish evidence through the same event backbone and never
+own canonical domain state, PostgreSQL credentials or the host vault.

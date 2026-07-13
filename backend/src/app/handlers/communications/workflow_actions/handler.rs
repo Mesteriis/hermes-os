@@ -2,11 +2,12 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 
 use crate::app::{ApiError, AppState};
 use crate::domains::communications::messages::MessageProjectionStore;
-use crate::platform::events::{EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
 
 use super::actions::{
     archive_response, create_document_response, create_event_response, create_persona_response,
@@ -38,12 +39,15 @@ pub(crate) async fn execute_workflow_action(
 ) -> Result<WorkflowActionResponse, ApiError> {
     let command_id = normalize_non_empty("command_id", &request.command_id)?;
     let event_id = format!("workflow_action:{command_id}");
-    let event_store = crate::app::api_support::app_store::<EventStore>(pool.clone());
+    let event_store =
+        crate::app::api_support::stores::domain_stores::app_store::<EventStore>(pool.clone());
     if let Some(existing) = event_store.get_by_id(&event_id).await? {
         return response_from_event(existing);
     }
 
-    let message_store = crate::app::api_support::app_store::<MessageProjectionStore>(pool.clone());
+    let message_store = crate::app::api_support::stores::domain_stores::app_store::<
+        MessageProjectionStore,
+    >(pool.clone());
     let source_message = load_source_message(&message_store, request.source.as_ref()).await?;
     let mut transaction = pool
         .begin()

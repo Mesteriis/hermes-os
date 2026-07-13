@@ -5,10 +5,11 @@ mod whatsapp;
 mod yandex_telemost;
 mod zoom;
 
-use crate::application::provider_runtime_contracts::{
-    TelegramError, WhatsappWebError, YandexTelemostError, ZoomError,
-};
-use crate::engines::automation::AutomationError;
+use crate::engines::automation::errors::AutomationError;
+use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::whatsapp::client::WhatsappWebError;
+use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
+use crate::integrations::zoom::client::errors::ZoomError;
 use crate::platform::calls::CallError;
 
 use super::ErrorParts;

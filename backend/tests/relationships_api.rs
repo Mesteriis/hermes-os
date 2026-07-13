@@ -12,8 +12,11 @@ use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::graph::core::{GraphNodeKind, node_id};
 use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, Relationship, RelationshipEvidenceSourceKind,
-    RelationshipReviewState, RelationshipStore,
+    models::{
+        NewRelationship, NewRelationshipEvidence, Relationship, RelationshipEvidenceSourceKind,
+        RelationshipReviewState,
+    },
+    store::RelationshipStore,
 };
 use hermes_hub_backend::platform::storage::Database;
 

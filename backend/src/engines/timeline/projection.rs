@@ -4,8 +4,9 @@ use std::future;
 use super::errors::TimelineProjectionError;
 use super::models::TimelineProjectionRun;
 use super::replay::replay_event_log;
-use crate::platform::events::{EventStore, ProjectionCursorStore};
 use crate::platform::projections::{ProjectionHandlerError, run_projection_batch};
+use hermes_events_postgres::cursors::ProjectionCursorStore;
+use hermes_events_postgres::store::EventStore;
 
 pub(super) async fn run_event_log_projection(
     events: &EventStore,

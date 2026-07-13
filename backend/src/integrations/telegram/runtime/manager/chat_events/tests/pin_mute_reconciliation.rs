@@ -5,7 +5,7 @@ use crate::integrations::telegram::client::models::TelegramChat;
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatNotificationSettingsSnapshot, TelegramTdlibChatPositionSnapshot,
 };
-use crate::platform::events::EventBus;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
 
 use super::super::publish_chat_notification_settings_event;
@@ -49,7 +49,7 @@ async fn publish_chat_position_event_marks_pin_command_as_mismatch_when_provider
     .await
     .expect("seed pin command");
 
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     publish_chat_position_event(
         &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
@@ -152,7 +152,7 @@ async fn publish_chat_notification_settings_event_marks_unmute_command_as_mismat
     .await
     .expect("seed unmute command");
 
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     publish_chat_notification_settings_event(
         &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,

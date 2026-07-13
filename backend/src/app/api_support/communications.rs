@@ -1,4 +1,6 @@
 use super::*;
+use crate::app::api_support::stores::domain_stores::communication_blob_store;
+use crate::platform::formatting::text_preview;
 
 #[derive(Serialize)]
 pub(crate) struct CommunicationMessagesResponse {
@@ -180,7 +182,7 @@ pub(crate) async fn rich_body_html_for_message(
     pool: sqlx::postgres::PgPool,
     message: &ProjectedMessage,
 ) -> Result<Option<String>, ApiError> {
-    let Some(raw) = crate::domains::communications::core::CommunicationIngestionStore::new(pool)
+    let Some(raw) = hermes_communications_postgres::store::CommunicationIngestionStore::new(pool)
         .raw_record(&message.raw_record_id)
         .await?
     else {

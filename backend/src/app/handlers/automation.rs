@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
+use hermes_events_api::{EventEnvelope, EventEnvelopeError, NewEventEnvelope};
 use std::io;
 
 use axum::extract::{Path, Query, RawQuery, State};
@@ -17,17 +19,18 @@ use crate::ai::core::{
     AI_EMBEDDING_DIMENSION, AiAgentListResponse, AiAgentRun, AiAnswerRequest, AiError,
     AiMeetingPrepRequest, AiService, AiStatusResponse, AiTaskCandidateRefreshRequest, v3_agents,
 };
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
-};
 use crate::domains::personas::analytics::{AnalyticsError, PersonaAnalyticsService};
 use crate::domains::personas::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
 use crate::domains::personas::expertise::{PersonaExpertiseError, PersonaExpertiseStore};
 use crate::domains::personas::export::{ExportError, ExportFormat, PersonaExportService};
 use crate::domains::personas::investigator::{InvestigatorError, PersonaInvestigator};
 use crate::engines::automation::{
-    AutomationError, AutomationPolicy, AutomationStore, AutomationTemplate, NewAutomationPolicy,
-    NewAutomationTemplate, TelegramSendDryRunRequest, TelegramSendDryRunResponse,
+    errors::AutomationError,
+    models::{
+        AutomationPolicy, AutomationTemplate, NewAutomationPolicy, NewAutomationTemplate,
+        TelegramSendDryRunRequest, TelegramSendDryRunResponse,
+    },
+    store::AutomationStore,
 };
 use crate::platform::audit::{ApiAuditError, ApiAuditLog, ApiAuditRecord, NewApiAuditRecord};
 use crate::platform::calls::{
@@ -36,6 +39,9 @@ use crate::platform::calls::{
     TelegramCall, TranscriptStatus,
 };
 use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
+use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+
 use crate::platform::config::AppConfig;
 
 use crate::domains::personas::health::{PersonaHealthError, PersonaHealthStore};
@@ -56,7 +62,6 @@ use crate::domains::personas::identity::{
     PersonaIdentityReviewCommand, PersonaIdentityReviewState, PersonaIdentityReviewStore,
 };
 
-use crate::application::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
 use crate::domains::calendar::brain::{CalendarBrainError, CalendarBrainService};
 use crate::domains::calendar::core::{
     CalendarCoreError, ContextPackInput, EventAgendaStore, EventChecklistStore,
@@ -116,10 +121,8 @@ use crate::integrations::mail::accounts::{
     EmailAccountSetupError, EmailAccountSetupService, GmailOAuthPendingGrant,
     GmailOAuthSetupRequest, ImapAccountSetupRequest,
 };
-use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
-use crate::platform::events::{
-    EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
-};
+use crate::integrations::ollama::client::OllamaClient;
+use crate::integrations::ollama::client::config::OllamaClientConfig;
 use crate::platform::secrets::DatabaseEncryptedSecretVault;
 use crate::platform::secrets::{SecretKind, SecretReferenceStore};
 use crate::platform::settings::{
@@ -128,8 +131,24 @@ use crate::platform::settings::{
 use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
+use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
+use crate::workflows::email_intelligence::service::EmailIntelligenceService;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
-use crate::app::api_support::*;
+use crate::app::api_support::{
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
+};
 use crate::app::{ApiError, AppState};
 
 pub(crate) async fn post_policy_template(

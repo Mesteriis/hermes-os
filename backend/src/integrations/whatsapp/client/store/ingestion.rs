@@ -1,6 +1,6 @@
 use serde_json::{Map, Value, json};
 
-use crate::platform::communications::NewRawCommunicationRecord;
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 
 use super::WhatsappWebStore;
 use crate::integrations::whatsapp::client::constants::{

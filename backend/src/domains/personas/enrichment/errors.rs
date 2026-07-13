@@ -1,8 +1,8 @@
 use thiserror::Error;
 
-use crate::engines::trust::TrustEngineError;
-use crate::platform::events::EventStoreError;
-use crate::platform::observations::ObservationStoreError;
+use crate::engines::trust::errors::TrustEngineError;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, Error)]
 pub enum PersonaEnrichmentError {

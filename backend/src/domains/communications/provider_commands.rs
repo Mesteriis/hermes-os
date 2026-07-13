@@ -9,7 +9,7 @@ use self::events::{
     EVENT_COMPLETED, EVENT_EXECUTING, EVENT_FAILED, EVENT_REQUESTED, EVENT_RETRY_REQUESTED,
     append_provider_command_event, append_provider_command_events,
 };
-use crate::platform::events::EventStoreError;
+use hermes_events_postgres::errors::EventStoreError;
 
 mod diagnostics;
 mod events;

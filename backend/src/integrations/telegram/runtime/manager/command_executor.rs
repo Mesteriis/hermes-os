@@ -1,12 +1,14 @@
 use chrono::{Duration, Utc};
+use hermes_events_api::NewEventEnvelope;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
 use crate::integrations::telegram::client::lifecycle;
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
 use crate::integrations::telegram::client::{TelegramError, TelegramStore};
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
-use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
 
 use super::TelegramRuntimeManager;
 use super::command_executor_dispatch::{DispatchOutcome, dispatch_command};
@@ -27,7 +29,7 @@ const STALE_EXECUTION_LOCK_SECONDS: i64 = 120;
 pub async fn execute_queued_commands(
     telegram_store: &TelegramStore,
     runtime: &TelegramRuntimeManager,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     per_account_limit: i64,
 ) {
     let pool = telegram_store.pool();
@@ -75,7 +77,7 @@ pub async fn execute_queued_commands(
 async fn execute_account_commands(
     telegram_store: &TelegramStore,
     runtime: &TelegramRuntimeManager,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     limit: i64,
 ) {
@@ -142,7 +144,7 @@ async fn execute_account_commands(
 
 async fn handle_dispatch_result(
     telegram_store: &TelegramStore,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     command: &TelegramProviderWriteCommand,
     result: Result<DispatchOutcome, TelegramError>,
 ) {
@@ -355,7 +357,7 @@ async fn handle_dispatch_result(
 
 async fn handle_command_error(
     pool: &PgPool,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     command: &TelegramProviderWriteCommand,
     error: TelegramError,
     now: chrono::DateTime<Utc>,
@@ -450,7 +452,7 @@ fn is_dead_letter_error(error: &TelegramError) -> bool {
 }
 
 async fn emit_command_event(
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     pool: &PgPool,
     command: &TelegramProviderWriteCommand,
     status: &str,
@@ -468,7 +470,7 @@ async fn emit_command_event(
 }
 
 async fn emit_command_event_type(
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     pool: &PgPool,
     command: &TelegramProviderWriteCommand,
     event_type: &str,

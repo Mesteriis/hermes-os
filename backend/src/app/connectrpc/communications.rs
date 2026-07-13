@@ -23,8 +23,75 @@ use crate::app::handlers::communications::{
 use crate::application::communication_send::{
     CommunicationSendDependencies, CommunicationSendError, CommunicationSendRequest, send_email,
 };
-use crate::contracts::hermes::common::v1::PageResponse;
-use crate::contracts::hermes::communications::v1::{
+use crate::domains::communications::analytics::{
+    EmailAnalyticsError, EmailAnalyticsStore, MailboxHealth, SenderStats,
+};
+use crate::domains::communications::archive_inspection::{
+    ArchiveInspectionLimits, ArchiveInspectionReport, cached_archive_inspection_report,
+    inspect_zip_bytes,
+};
+use crate::domains::communications::attachment_search::{
+    AttachmentSearchError, AttachmentSearchPage, AttachmentSearchQuery, AttachmentSearchResult,
+    AttachmentSearchStore,
+};
+use crate::domains::communications::bulk_actions::{
+    BulkMessageAction, BulkMessageActionError, BulkMessageActionOutcome, BulkMessageActionStore,
+};
+use crate::domains::communications::command_service::{
+    CommunicationCommandService, CommunicationDraftUpsertCommand,
+};
+use crate::domains::communications::drafts::{
+    CommunicationDraft, CommunicationDraftError, CommunicationDraftStore, DraftStatus,
+};
+use crate::domains::communications::folders::{
+    CommunicationFolder, CommunicationFolderError, CommunicationFolderListQuery,
+    CommunicationFolderStore, FolderMessage, FolderMessageActionResponse, FolderMessageListQuery,
+    NewCommunicationFolder, UpdateCommunicationFolder,
+};
+use crate::domains::communications::messages::{
+    LocalMessageState, MessageProjectionError, MessageProjectionStore, MessageSearchMatchMode,
+    ProjectedMessage, ProjectedMessagePageQuery, ProjectedMessageSummary, WorkflowState,
+};
+use crate::domains::communications::outbox::{
+    CommunicationOutboxError, CommunicationOutboxItem, CommunicationOutboxStatus,
+    CommunicationOutboxStore,
+};
+use crate::domains::communications::personas::{
+    CommunicationPersona, CommunicationPersonaError, CommunicationPersonaStore,
+};
+use crate::domains::communications::provider_commands::CommunicationProviderCommandStore;
+use crate::domains::communications::saved_searches::{
+    CommunicationSavedSearch, CommunicationSavedSearchError, CommunicationSavedSearchListQuery,
+    CommunicationSavedSearchStore, NewCommunicationSavedSearch, UpdateCommunicationSavedSearch,
+};
+use crate::domains::communications::storage::{
+    CommunicationStorageError, CommunicationStorageStore, StoredCommunicationAttachmentWithBlob,
+};
+use crate::domains::communications::subscriptions::{
+    SubscriptionError, SubscriptionSource, SubscriptionStore,
+};
+use crate::domains::communications::templates::{
+    CommunicationMergePreview, CommunicationMergePreviewItem, CommunicationMergePreviewRow,
+    CommunicationTemplate, CommunicationTemplateError, CommunicationTemplateStore,
+    NewCommunicationTemplate, RenderedTemplate,
+};
+use crate::domains::communications::threads::{
+    CommunicationThread, CommunicationThreadError, CommunicationThreadStore, ThreadMessage,
+    ThreadMessageAttachment,
+};
+use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
+use crate::integrations::ollama::client::OllamaClient;
+use crate::integrations::ollama::client::config::OllamaClientConfig;
+use crate::integrations::omniroute::client::OmniRouteClient;
+use crate::integrations::omniroute::client::config::OmniRouteClientConfig;
+use crate::integrations::omniroute::client::error::OmniRouteError;
+use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
+use crate::platform::config::{AiRuntimeProvider, AppConfig};
+use crate::platform::settings::ApplicationSettingsStore;
+use crate::vault::HostVault;
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+use hermes_connectrpc_contracts::hermes::common::v1::PageResponse;
+use hermes_connectrpc_contracts::hermes::communications::v1::{
     AddMessageLabelResponse, AiReplyRequest as ProtoAiReplyRequest,
     AiReplyResponse as ProtoAiReplyResponse, AiReplyVariantsRequest as ProtoAiReplyVariantsRequest,
     AiReplyVariantsResponse as ProtoAiReplyVariantsResponse, AnalyzeMessageRequest,
@@ -99,72 +166,6 @@ use crate::contracts::hermes::communications::v1::{
     WorkflowActionTarget as ProtoWorkflowActionTarget,
     WorkflowStateCount as ProtoWorkflowStateCount,
 };
-use crate::domains::communications::analytics::{
-    EmailAnalyticsError, EmailAnalyticsStore, MailboxHealth, SenderStats,
-};
-use crate::domains::communications::archive_inspection::{
-    ArchiveInspectionLimits, ArchiveInspectionReport, cached_archive_inspection_report,
-    inspect_zip_bytes,
-};
-use crate::domains::communications::attachment_search::{
-    AttachmentSearchError, AttachmentSearchPage, AttachmentSearchQuery, AttachmentSearchResult,
-    AttachmentSearchStore,
-};
-use crate::domains::communications::bulk_actions::{
-    BulkMessageAction, BulkMessageActionError, BulkMessageActionOutcome, BulkMessageActionStore,
-};
-use crate::domains::communications::core::CommunicationProviderAccountStore;
-use crate::domains::communications::drafts::{
-    CommunicationDraft, CommunicationDraftError, CommunicationDraftStore, DraftStatus,
-};
-use crate::domains::communications::folders::{
-    CommunicationFolder, CommunicationFolderError, CommunicationFolderListQuery,
-    CommunicationFolderStore, FolderMessage, FolderMessageActionResponse, FolderMessageListQuery,
-    NewCommunicationFolder, UpdateCommunicationFolder,
-};
-use crate::domains::communications::messages::{
-    LocalMessageState, MessageProjectionError, MessageProjectionStore, MessageSearchMatchMode,
-    ProjectedMessage, ProjectedMessagePageQuery, ProjectedMessageSummary, WorkflowState,
-};
-use crate::domains::communications::outbox::{
-    CommunicationOutboxError, CommunicationOutboxItem, CommunicationOutboxStatus,
-    CommunicationOutboxStore,
-};
-use crate::domains::communications::personas::{
-    CommunicationPersona, CommunicationPersonaError, CommunicationPersonaStore,
-};
-use crate::domains::communications::provider_commands::CommunicationProviderCommandStore;
-use crate::domains::communications::saved_searches::{
-    CommunicationSavedSearch, CommunicationSavedSearchError, CommunicationSavedSearchListQuery,
-    CommunicationSavedSearchStore, NewCommunicationSavedSearch, UpdateCommunicationSavedSearch,
-};
-use crate::domains::communications::service::{
-    CommunicationCommandService, CommunicationDraftUpsertCommand,
-};
-use crate::domains::communications::storage::{
-    CommunicationStorageError, CommunicationStorageStore, StoredCommunicationAttachmentWithBlob,
-};
-use crate::domains::communications::subscriptions::{
-    SubscriptionError, SubscriptionSource, SubscriptionStore,
-};
-use crate::domains::communications::templates::{
-    CommunicationMergePreview, CommunicationMergePreviewItem, CommunicationMergePreviewRow,
-    CommunicationTemplate, CommunicationTemplateError, CommunicationTemplateStore,
-    NewCommunicationTemplate, RenderedTemplate,
-};
-use crate::domains::communications::threads::{
-    CommunicationThread, CommunicationThreadError, CommunicationThreadStore, ThreadMessage,
-    ThreadMessageAttachment,
-};
-use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
-use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
-use crate::integrations::omniroute::client::{
-    OmniRouteClient, OmniRouteClientConfig, OmniRouteError,
-};
-use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
-use crate::platform::config::{AiRuntimeProvider, AppConfig};
-use crate::platform::settings::ApplicationSettingsStore;
-use crate::vault::HostVault;
 
 const AI_REQUEST_RUNTIME: &str = "ai_request_runtime";
 const ATTACHMENT_TRANSLATION_SOURCE: &str = "durable_extracted_text";
@@ -324,10 +325,12 @@ impl CommunicationsService for CommunicationsConnectService {
             .attachments_for_message(&req.message_id)
             .await
             .map_err(storage_connect_error)?;
-        let body_html =
-            crate::app::api_support::rich_body_html_for_message(self.pool.clone(), &message)
-                .await
-                .map_err(api_error_connect_error)?;
+        let body_html = crate::app::api_support::communications::rich_body_html_for_message(
+            self.pool.clone(),
+            &message,
+        )
+        .await
+        .map_err(api_error_connect_error)?;
         let read_sync_status = self
             .provider_command_store
             .read_sync_statuses(std::slice::from_ref(&message.message_id))
@@ -662,15 +665,15 @@ impl CommunicationsService for CommunicationsConnectService {
             .map_err(ai_state_connect_error)?;
 
         let heuristic_score =
-            crate::workflows::email_intelligence::EmailIntelligenceService::heuristic_score(
+            crate::workflows::email_intelligence::service::EmailIntelligenceService::heuristic_score(
                 &message,
             );
         let heuristic_category =
-            crate::workflows::email_intelligence::EmailIntelligenceService::heuristic_category(
+            crate::workflows::email_intelligence::service::EmailIntelligenceService::heuristic_category(
                 &message,
             );
         let summary_contract =
-            crate::workflows::email_intelligence::EmailIntelligenceService::heuristic_structured_summary(&message);
+            crate::workflows::email_intelligence::service::EmailIntelligenceService::heuristic_structured_summary(&message);
 
         self.message_store
             .set_ai_analysis(
@@ -717,7 +720,7 @@ impl CommunicationsService for CommunicationsConnectService {
             .ok_or_else(|| {
                 ConnectError::new(ErrorCode::NotFound, "communication message was not found")
             })?;
-        let _ = crate::application::refresh_message_knowledge_candidates_into_review(
+        let _ = crate::workflows::review_inbox::refresh_message_knowledge_candidates_into_review(
             &self.pool,
             std::slice::from_ref(&updated),
         )
@@ -859,7 +862,7 @@ impl CommunicationsService for CommunicationsConnectService {
             .ok_or_else(|| {
                 ConnectError::new(ErrorCode::NotFound, "communication message was not found")
             })?;
-        let auth = match crate::domains::communications::core::CommunicationIngestionStore::new(
+        let auth = match hermes_communications_postgres::store::CommunicationIngestionStore::new(
             self.pool.clone(),
         )
         .raw_record(&message.raw_record_id)
@@ -938,7 +941,7 @@ impl CommunicationsService for CommunicationsConnectService {
             &self.pool,
             &self.config,
             &message.account_id,
-            crate::app::api_support::MailAiContentEgressKind::Body,
+            crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::Body,
         )
         .await?;
         let runtime = thread_ai_hub_optional(&self.pool, &self.config)
@@ -953,7 +956,7 @@ impl CommunicationsService for CommunicationsConnectService {
 
         match service.generate_reply(&message, &opts).await {
             Ok(Some(draft)) => {
-                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+                crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
                     self.pool.clone(),
                     "reply_drafting",
                     &req.message_id,
@@ -1026,7 +1029,7 @@ impl CommunicationsService for CommunicationsConnectService {
             &self.pool,
             &self.config,
             &message.account_id,
-            crate::app::api_support::MailAiContentEgressKind::Body,
+            crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::Body,
         )
         .await?;
         let runtime = thread_ai_hub_optional(&self.pool, &self.config)
@@ -1059,7 +1062,7 @@ impl CommunicationsService for CommunicationsConnectService {
         };
 
         if !variants.is_empty() {
-            crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+            crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
                 self.pool.clone(),
                 "reply_variant_generation",
                 &req.message_id,
@@ -1397,9 +1400,10 @@ impl CommunicationsService for CommunicationsConnectService {
             });
         };
 
-        let index =
-            crate::engines::search::SearchIndex::open_or_create(std::path::Path::new(&path))
-                .map_err(search_engine_connect_error)?;
+        let index = crate::engines::search::engine::SearchIndex::open_or_create(
+            std::path::Path::new(&path),
+        )
+        .map_err(search_engine_connect_error)?;
         let limit = normalize_limit(req.limit, 20, 100) as usize;
         let _ = crate::domains::communications::search::index_messages(
             &index,
@@ -1475,7 +1479,7 @@ impl CommunicationsService for CommunicationsConnectService {
             &self.pool,
             &self.config,
             &message.account_id,
-            crate::app::api_support::MailAiContentEgressKind::Body,
+            crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::Body,
         )
         .await?;
         let service = thread_multilingual_service(&self.pool, &self.config)
@@ -1488,7 +1492,7 @@ impl CommunicationsService for CommunicationsConnectService {
 
         match service.translate(&message.body_text, target_language).await {
             Ok(Some(translation)) => {
-                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+                crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
                     self.pool.clone(),
                     "message_translation",
                     message_id,
@@ -1567,7 +1571,7 @@ impl CommunicationsService for CommunicationsConnectService {
             &self.pool,
             &self.config,
             &message.account_id,
-            crate::app::api_support::MailAiContentEgressKind::Body,
+            crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::Body,
         )
         .await?;
         let service = crate::domains::communications::extract::EmailExtractService::new(
@@ -1584,7 +1588,7 @@ impl CommunicationsService for CommunicationsConnectService {
             .filter(|task| task.source == "ai_hub.external_llm")
             .count();
         if external_llm_task_count > 0 {
-            crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+            crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
                 self.pool.clone(),
                 "message_task_extraction",
                 &req.message_id,
@@ -1720,7 +1724,7 @@ impl CommunicationsService for CommunicationsConnectService {
             &self.pool,
             &self.config,
             account_id,
-            crate::app::api_support::MailAiContentEgressKind::Body,
+            crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::Body,
         )
         .await?;
         let service = thread_multilingual_service(&self.pool, &self.config)
@@ -1735,7 +1739,7 @@ impl CommunicationsService for CommunicationsConnectService {
                 );
             match service.translate(&message.body_text, target_language).await {
                 Ok(Some(translation)) => {
-                    crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+                    crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
                         self.pool.clone(),
                         "thread_message_translation",
                         &message.message_id,
@@ -2445,7 +2449,7 @@ impl CommunicationsService for CommunicationsConnectService {
         }
         if let Some(preview) = crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewService::new(
             self.pool.clone(),
-            crate::app::api_support::communication_blob_store(),
+            crate::app::api_support::stores::domain_stores::communication_blob_store(),
         )
         .completed_preview(&req.attachment_id)
         .await
@@ -2457,7 +2461,7 @@ impl CommunicationsService for CommunicationsConnectService {
         if is_derived_text_preview_attachment(&attachment) {
             let derived = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
                 self.pool.clone(),
-                crate::app::api_support::communication_blob_store(),
+                crate::app::api_support::stores::domain_stores::communication_blob_store(),
             )
             .completed_text(&req.attachment_id)
             .await
@@ -2478,7 +2482,7 @@ impl CommunicationsService for CommunicationsConnectService {
             )
         })?;
 
-        let bytes = crate::app::api_support::communication_blob_store()
+        let bytes = crate::app::api_support::stores::domain_stores::communication_blob_store()
             .read_blob(&attachment.storage_path)
             .await
             .map_err(storage_connect_error)?;
@@ -2511,7 +2515,7 @@ impl CommunicationsService for CommunicationsConnectService {
         }
         let service = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
             self.pool.clone(),
-            crate::app::api_support::communication_blob_store(),
+            crate::app::api_support::stores::domain_stores::communication_blob_store(),
         );
         let outcome = service
             .extract(&req.attachment_id)
@@ -2549,7 +2553,7 @@ impl CommunicationsService for CommunicationsConnectService {
         }
         let service = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
             self.pool.clone(),
-            crate::app::api_support::communication_blob_store(),
+            crate::app::api_support::stores::domain_stores::communication_blob_store(),
         );
         let content = service
             .completed_text(&req.attachment_id)
@@ -2605,10 +2609,11 @@ impl CommunicationsService for CommunicationsConnectService {
         ) {
             Some(report) => report,
             None => {
-                let bytes = crate::app::api_support::communication_blob_store()
-                    .read_blob(&attachment.storage_path)
-                    .await
-                    .map_err(storage_connect_error)?;
+                let bytes =
+                    crate::app::api_support::stores::domain_stores::communication_blob_store()
+                        .read_blob(&attachment.storage_path)
+                        .await
+                        .map_err(storage_connect_error)?;
                 let report = inspect_zip_bytes(&bytes, ArchiveInspectionLimits::default())
                     .map_err(|error| {
                         tracing::warn!(
@@ -2694,7 +2699,7 @@ impl CommunicationsService for CommunicationsConnectService {
             &self.pool,
             &self.config,
             &message.account_id,
-            crate::app::api_support::MailAiContentEgressKind::ExtractedText,
+            crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::ExtractedText,
         )
         .await?;
         let service = thread_multilingual_service(&self.pool, &self.config)
@@ -2707,7 +2712,7 @@ impl CommunicationsService for CommunicationsConnectService {
 
         match service.translate(&source_text.text, target_language).await {
             Ok(Some(translation)) => {
-                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+                crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
                     self.pool.clone(),
                     "attachment_translation",
                     &attachment.attachment.message_id,
@@ -3071,7 +3076,7 @@ fn proto_rich_template_mail_merge_preview_item(
 }
 
 fn proto_search_result(
-    item: crate::engines::search::SearchResult,
+    item: crate::engines::search::models::SearchResult,
 ) -> ProtoCommunicationSearchResult {
     ProtoCommunicationSearchResult {
         object_id: item.object_id,
@@ -3120,7 +3125,7 @@ fn proto_extracted_note(
 }
 
 fn proto_message_summary_contract(
-    item: crate::workflows::email_intelligence::EmailSummaryContract,
+    item: crate::workflows::email_intelligence::models::EmailSummaryContract,
 ) -> ProtoMessageSummaryContract {
     ProtoMessageSummaryContract {
         key_points: item.key_points,
@@ -3157,7 +3162,7 @@ fn proto_message_summary_contract(
 }
 
 fn proto_message_knowledge_candidate(
-    item: crate::workflows::email_intelligence::EmailKnowledgeCandidate,
+    item: crate::workflows::email_intelligence::models::EmailKnowledgeCandidate,
 ) -> ProtoMessageKnowledgeCandidate {
     ProtoMessageKnowledgeCandidate {
         title: item.title,
@@ -4034,13 +4039,13 @@ async fn thread_require_mail_ai_content_egress(
     pool: &PgPool,
     config: &AppConfig,
     account_id: &str,
-    kind: crate::app::api_support::MailAiContentEgressKind,
+    kind: crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind,
 ) -> Result<(), ConnectError> {
     let settings = ApplicationSettingsStore::new(pool.clone())
         .ai_runtime_settings(config)
         .await
         .map_err(|error| api_error_connect_error(ApiError::from(error)))?;
-    if crate::app::api_support::mail_ai_content_egress_allowed(
+    if crate::app::api_support::stores::ai_runtime::mail_ai_content_egress_allowed(
         pool,
         settings.provider,
         account_id,
@@ -4052,8 +4057,10 @@ async fn thread_require_mail_ai_content_egress(
     }
 
     let setting_name = match kind {
-        crate::app::api_support::MailAiContentEgressKind::Body => "body",
-        crate::app::api_support::MailAiContentEgressKind::ExtractedText => "extracted_text",
+        crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::Body => "body",
+        crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::ExtractedText => {
+            "extracted_text"
+        }
     };
     Err(ConnectError::new(
         ErrorCode::FailedPrecondition,
@@ -4085,10 +4092,10 @@ async fn thread_ai_hub_optional(
 }
 
 async fn thread_ai_requests_allowed(pool: &PgPool) -> Result<bool, ApiError> {
-    crate::domains::signal_hub::SignalHubStore::new(pool.clone())
+    crate::domains::signal_hub::store::SignalHubStore::new(pool.clone())
         .restore_system_sources()
         .await?;
-    crate::platform::events::runtime_allows_processing(
+    crate::platform::events::runtime::runtime_allows_processing(
         pool,
         "ai",
         AI_REQUEST_RUNTIME,
@@ -4098,7 +4105,7 @@ async fn thread_ai_requests_allowed(pool: &PgPool) -> Result<bool, ApiError> {
         }),
     )
     .await
-    .map_err(crate::domains::signal_hub::SignalHubError::from)
+    .map_err(crate::domains::signal_hub::store::SignalHubError::from)
     .map_err(ApiError::from)
 }
 
@@ -4288,7 +4295,7 @@ fn message_connect_error(error: MessageProjectionError) -> ConnectError {
 }
 
 fn raw_evidence_connect_error(
-    error: crate::domains::communications::core::CommunicationIngestionError,
+    error: hermes_communications_postgres::errors::CommunicationIngestionError,
 ) -> ConnectError {
     tracing::error!(error = %error, "communication raw evidence query failed");
     ConnectError::new(
@@ -4493,7 +4500,7 @@ fn search_connect_error(
     }
 }
 
-fn search_engine_connect_error(error: crate::engines::search::SearchError) -> ConnectError {
+fn search_engine_connect_error(error: crate::engines::search::errors::SearchError) -> ConnectError {
     ConnectError::new(ErrorCode::Internal, error.to_string())
 }
 
@@ -4545,7 +4552,9 @@ fn template_connect_error(error: CommunicationTemplateError) -> ConnectError {
     }
 }
 
-fn signal_hub_connect_error(error: crate::domains::signal_hub::SignalHubError) -> ConnectError {
+fn signal_hub_connect_error(
+    error: crate::domains::signal_hub::store::SignalHubError,
+) -> ConnectError {
     ConnectError::new(ErrorCode::Internal, error.to_string())
 }
 
@@ -4580,22 +4589,22 @@ fn send_connect_error(error: CommunicationSendError) -> ConnectError {
 }
 
 fn command_connect_error(
-    error: crate::domains::communications::service::CommunicationCommandServiceError,
+    error: crate::domains::communications::command_service::CommunicationCommandServiceError,
 ) -> ConnectError {
     match error {
-        crate::domains::communications::service::CommunicationCommandServiceError::Draft(
+        crate::domains::communications::command_service::CommunicationCommandServiceError::Draft(
             draft_error,
         ) => draft_connect_error(draft_error),
-        crate::domains::communications::service::CommunicationCommandServiceError::Outbox(
+        crate::domains::communications::command_service::CommunicationCommandServiceError::Outbox(
             outbox_error,
         ) => outbox_connect_error(outbox_error),
-        crate::domains::communications::service::CommunicationCommandServiceError::SavedSearch(
+        crate::domains::communications::command_service::CommunicationCommandServiceError::SavedSearch(
             saved_search_error,
         ) => saved_search_connect_error(saved_search_error),
-        crate::domains::communications::service::CommunicationCommandServiceError::Folder(
+        crate::domains::communications::command_service::CommunicationCommandServiceError::Folder(
             folder_error,
         ) => folder_connect_error(folder_error),
-        crate::domains::communications::service::CommunicationCommandServiceError::MessageProjection(
+        crate::domains::communications::command_service::CommunicationCommandServiceError::MessageProjection(
             message_error,
         ) => message_connect_error(message_error),
         other => ConnectError::new(ErrorCode::Internal, other.to_string()),

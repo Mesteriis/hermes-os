@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::workflows::email_sync_pipeline::EmailSyncPipelineReport;
+use crate::workflows::email_sync_pipeline::report::EmailSyncPipelineReport;
 
 #[derive(Default)]
 pub(in crate::workflows::mail_background_sync) struct ProviderSyncSummary {

@@ -1,9 +1,9 @@
+use hermes_hub_backend::application::review_transitions::TaskCandidateReviewApplicationService;
 use hermes_hub_backend::domains::tasks::candidates::{
     TaskCandidateReviewCommand, TaskCandidateReviewState,
 };
-use hermes_hub_backend::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore,
-};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 use serde_json::json;
 use sqlx::Row;
 
@@ -54,8 +54,7 @@ async fn task_candidate_review_confirm_creates_active_task_against_postgres() {
     .expect("candidate observation id");
 
     let result = context
-        .store
-        .set_review_state(&TaskCandidateReviewCommand {
+        .review(&TaskCandidateReviewCommand {
             command_id: format!("task-candidate-confirm-{suffix}"),
             task_candidate_id: task_candidate_id.clone(),
             review_state: TaskCandidateReviewState::UserConfirmed,
@@ -156,9 +155,8 @@ async fn task_candidate_store_review_with_observation_materializes_transition_li
         .await
         .expect("capture review observation");
 
-    let result = context
-        .store
-        .set_review_state_with_observation(
+    let result = TaskCandidateReviewApplicationService::new(context.pool.clone())
+        .review_with_observation(
             &TaskCandidateReviewCommand {
                 command_id: format!("task-candidate-confirm-link-{suffix}"),
                 task_candidate_id: task_candidate_id.clone(),
@@ -247,8 +245,7 @@ async fn task_candidate_review_confirm_materializes_obligation_candidate_against
     .expect("candidate observation id");
 
     let result = context
-        .store
-        .set_review_state(&TaskCandidateReviewCommand {
+        .review(&TaskCandidateReviewCommand {
             command_id: format!("task-candidate-obligation-confirm-{suffix}"),
             task_candidate_id: task_candidate_id.clone(),
             review_state: TaskCandidateReviewState::UserConfirmed,
@@ -351,8 +348,7 @@ async fn obligation_task_candidate_reset_demotes_obligation_review_state_against
     .expect("candidate id");
 
     context
-        .store
-        .set_review_state(&TaskCandidateReviewCommand {
+        .review(&TaskCandidateReviewCommand {
             command_id: format!("task-candidate-obligation-reset-confirm-{suffix}"),
             task_candidate_id: task_candidate_id.clone(),
             review_state: TaskCandidateReviewState::UserConfirmed,
@@ -362,8 +358,7 @@ async fn obligation_task_candidate_reset_demotes_obligation_review_state_against
         .expect("confirm");
 
     let reset = context
-        .store
-        .set_review_state(&TaskCandidateReviewCommand {
+        .review(&TaskCandidateReviewCommand {
             command_id: format!("task-candidate-obligation-reset-reset-{suffix}"),
             task_candidate_id: task_candidate_id.clone(),
             review_state: TaskCandidateReviewState::Suggested,
@@ -444,8 +439,7 @@ async fn task_candidate_review_reset_removes_active_task_against_postgres() {
     .expect("candidate id");
 
     let _ = context
-        .store
-        .set_review_state(&TaskCandidateReviewCommand {
+        .review(&TaskCandidateReviewCommand {
             command_id: format!("task-candidate-reset-confirm-{suffix}"),
             task_candidate_id: task_candidate_id.clone(),
             review_state: TaskCandidateReviewState::UserConfirmed,
@@ -455,8 +449,7 @@ async fn task_candidate_review_reset_removes_active_task_against_postgres() {
         .expect("confirm");
 
     let reset = context
-        .store
-        .set_review_state(&TaskCandidateReviewCommand {
+        .review(&TaskCandidateReviewCommand {
             command_id: format!("task-candidate-reset-reset-{suffix}"),
             task_candidate_id: task_candidate_id.clone(),
             review_state: TaskCandidateReviewState::Suggested,

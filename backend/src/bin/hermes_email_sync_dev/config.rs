@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use hermes_hub_backend::domains::communications::core::EmailProviderKind;
+use hermes_communications_api::accounts::CommunicationProviderKind;
 use hermes_hub_backend::platform::secrets::ResolvedSecret;
 
 use crate::env::{first_env, optional_env, parse_bool, parse_port, parse_usize};
@@ -15,7 +15,7 @@ pub(super) struct DevEmailSyncConfig {
     pub(super) account_id: String,
     pub(super) display_name: String,
     pub(super) external_account_id: String,
-    pub(super) provider_kind: EmailProviderKind,
+    pub(super) provider_kind: CommunicationProviderKind,
     pub(super) username: String,
     pub(super) password: ResolvedSecret,
     pub(super) host: String,

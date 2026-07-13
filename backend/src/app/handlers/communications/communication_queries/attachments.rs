@@ -35,7 +35,8 @@ pub(crate) async fn get_v1_attachment_search(
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let store = crate::app::api_support::app_store::<AttachmentSearchStore>(pool);
+    let store =
+        crate::app::api_support::stores::domain_stores::app_store::<AttachmentSearchStore>(pool);
     Ok(Json(
         store
             .search(AttachmentSearchQuery {
@@ -215,7 +216,7 @@ pub(crate) async fn get_v1_attachment_preview(
     if let Some(preview) =
         crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewService::new(
             pool.clone(),
-            crate::app::api_support::communication_blob_store(),
+            crate::app::api_support::stores::domain_stores::communication_blob_store(),
         )
         .completed_preview(&attachment_id)
         .await
@@ -227,7 +228,7 @@ pub(crate) async fn get_v1_attachment_preview(
     if is_derived_text_preview_attachment(&attachment) {
         let derived = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
             pool,
-            crate::app::api_support::communication_blob_store(),
+            crate::app::api_support::stores::domain_stores::communication_blob_store(),
         )
         .completed_text(&attachment_id)
         .await
@@ -244,7 +245,7 @@ pub(crate) async fn get_v1_attachment_preview(
             "attachment preview supports text, image, audio and video attachments only",
         ))?;
 
-    let bytes = crate::app::api_support::communication_blob_store()
+    let bytes = crate::app::api_support::stores::domain_stores::communication_blob_store()
         .read_blob(&attachment.storage_path)
         .await?;
     let byte_count = bytes.len();
@@ -268,7 +269,7 @@ pub(crate) async fn get_v1_attachment_content_disarm(
         .clone();
     let artifact = crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmService::new(
         pool,
-        crate::app::api_support::communication_blob_store(),
+        crate::app::api_support::stores::domain_stores::communication_blob_store(),
     )
     .completed_artifact(&attachment_id)
     .await
@@ -499,7 +500,7 @@ pub(crate) async fn get_v1_attachment_archive_inspection(
     ) {
         Some(report) => report,
         None => {
-            let bytes = crate::app::api_support::communication_blob_store()
+            let bytes = crate::app::api_support::stores::domain_stores::communication_blob_store()
                 .read_blob(&attachment.storage_path)
                 .await?;
             let report =

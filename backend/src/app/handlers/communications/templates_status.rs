@@ -1,5 +1,5 @@
 use super::*;
-use crate::app::vault_reconciliation::spawn_host_vault_manifest_reconciliation;
+use crate::app::vault_reconciliation::lifecycle::spawn_host_vault_manifest_reconciliation;
 use crate::domains::communications::templates::{
     CommunicationMergePreviewRow, CommunicationTemplateStore, NewCommunicationTemplate,
 };
@@ -41,9 +41,11 @@ pub(crate) async fn get_v1_rich_templates(
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let templates = crate::app::api_support::app_store::<CommunicationTemplateStore>(pool.clone())
-        .list()
-        .await?;
+    let templates = crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationTemplateStore,
+    >(pool.clone())
+    .list()
+    .await?;
     Ok(Json(serde_json::json!({ "templates": templates })))
 }
 
@@ -54,26 +56,28 @@ pub(crate) async fn post_v1_rich_template(
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let template = crate::app::api_support::app_store::<CommunicationTemplateStore>(pool.clone())
-        .upsert(&NewCommunicationTemplate {
-            template_id: req
-                .template_id
-                .map(|value| value.trim().to_owned())
-                .filter(|value| !value.is_empty())
-                .unwrap_or_else(|| {
-                    let timestamp = Utc::now().timestamp_nanos_opt().unwrap_or_default();
-                    format!("mail_template:{timestamp}")
-                }),
-            name: req.name,
-            subject_template: req
-                .subject_template
-                .or_else(|| req.content.clone())
-                .unwrap_or_else(|| "Untitled template".to_owned()),
-            body_template: req.body_template.or(req.content).unwrap_or_default(),
-            variables: req.variables.unwrap_or_default(),
-            language: req.language,
-        })
-        .await?;
+    let template = crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationTemplateStore,
+    >(pool.clone())
+    .upsert(&NewCommunicationTemplate {
+        template_id: req
+            .template_id
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| {
+                let timestamp = Utc::now().timestamp_nanos_opt().unwrap_or_default();
+                format!("mail_template:{timestamp}")
+            }),
+        name: req.name,
+        subject_template: req
+            .subject_template
+            .or_else(|| req.content.clone())
+            .unwrap_or_else(|| "Untitled template".to_owned()),
+        body_template: req.body_template.or(req.content).unwrap_or_default(),
+        variables: req.variables.unwrap_or_default(),
+        language: req.language,
+    })
+    .await?;
     Ok(Json(
         serde_json::json!({ "saved": true, "template": template }),
     ))
@@ -92,9 +96,11 @@ pub(crate) async fn delete_v1_rich_template(
             "template_id is required",
         ));
     }
-    let deleted = crate::app::api_support::app_store::<CommunicationTemplateStore>(pool.clone())
-        .delete(template_id)
-        .await?;
+    let deleted = crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationTemplateStore,
+    >(pool.clone())
+    .delete(template_id)
+    .await?;
     if !deleted {
         return Err(ApiError::NotFound);
     }
@@ -118,7 +124,9 @@ pub(crate) async fn post_v1_render_template(
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let store = crate::app::api_support::app_store::<CommunicationTemplateStore>(pool.clone());
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationTemplateStore,
+    >(pool.clone());
     let template_id = req.template_id.trim();
     let Some(template) = store.get(template_id).await? else {
         return Err(ApiError::NotFound);
@@ -169,7 +177,9 @@ pub(crate) async fn post_v1_rich_template_mail_merge_preview(
             })
         })
         .collect::<Result<Vec<_>, ApiError>>()?;
-    let store = crate::app::api_support::app_store::<CommunicationTemplateStore>(pool.clone());
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationTemplateStore,
+    >(pool.clone());
     let Some(template) = store.get(template_id).await? else {
         return Err(ApiError::NotFound);
     };

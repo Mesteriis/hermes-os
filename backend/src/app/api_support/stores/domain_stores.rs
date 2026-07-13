@@ -1,7 +1,7 @@
 use super::super::*;
 use super::database::database_pool;
-use crate::application::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use crate::domains::communications::storage::LocalCommunicationBlobStore;
+use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use sqlx::PgPool;
 
 pub(crate) trait AppStoreFactory: Sized {
@@ -46,8 +46,8 @@ impl_app_store_factory!(
     crate::domains::communications::attachment_dedup::AttachmentDedupStore,
     crate::domains::communications::attachment_search::AttachmentSearchStore,
     crate::domains::communications::bulk_actions::BulkMessageActionStore,
-    crate::domains::communications::core::CommunicationProviderAccountStore,
-    crate::domains::communications::core::CommunicationProviderSecretBindingStore,
+    hermes_communications_postgres::provider_store::CommunicationProviderAccountStore,
+    hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore,
     crate::domains::communications::delivery_notifications::CommunicationDeliveryNotificationStore,
     crate::domains::communications::drafts::CommunicationDraftStore,
     crate::domains::communications::finance::CommunicationFinanceStore,
@@ -101,7 +101,7 @@ impl_app_store_factory!(
     crate::domains::personas::memory::RelationshipEventStore,
     crate::domains::personas::trust::PersonaPromiseStore,
     crate::domains::personas::trust::PersonaRiskStore,
-    crate::domains::relationships::RelationshipStore,
+    crate::domains::relationships::store::RelationshipStore,
     crate::domains::review::ReviewInboxStore,
     crate::domains::tasks::api::TaskStore,
     crate::domains::tasks::core::ExternalTaskIdentityStore,
@@ -113,10 +113,10 @@ impl_app_store_factory!(
     crate::domains::tasks::core::TaskSubtaskStore,
     crate::domains::tasks::rules::TaskRuleStore,
     crate::domains::tasks::rules::TaskTemplateStore,
-    crate::engines::consistency::ContradictionObservationStore,
-    crate::platform::events::EventStore,
-    crate::platform::observations::ObservationStore,
-    crate::application::mail_background_sync::MailSyncStore,
+    crate::engines::consistency::store::ContradictionObservationStore,
+    hermes_events_postgres::store::EventStore,
+    hermes_observations_postgres::store::ObservationStore,
+    crate::workflows::mail_background_sync::MailSyncStore,
 );
 
 pub(crate) fn communication_blob_store() -> LocalCommunicationBlobStore {
@@ -141,8 +141,8 @@ pub(crate) fn message_store(state: &AppState) -> Result<MessageProjectionStore, 
 
 pub(crate) fn observation_store(
     state: &AppState,
-) -> Result<crate::platform::observations::ObservationStore, ApiError> {
-    Ok(crate::platform::observations::ObservationStore::new(
+) -> Result<hermes_observations_postgres::store::ObservationStore, ApiError> {
+    Ok(hermes_observations_postgres::store::ObservationStore::new(
         database_pool(state)?,
     ))
 }
@@ -161,9 +161,12 @@ pub(crate) fn communication_ingestion_store(
 
 pub(crate) fn communication_provider_account_store(
     state: &AppState,
-) -> Result<crate::domains::communications::core::CommunicationProviderAccountStore, ApiError> {
+) -> Result<
+    hermes_communications_postgres::provider_store::CommunicationProviderAccountStore,
+    ApiError,
+> {
     Ok(
-        crate::domains::communications::core::CommunicationProviderAccountStore::new(
+        hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
             database_pool(state)?,
         ),
     )
@@ -171,10 +174,12 @@ pub(crate) fn communication_provider_account_store(
 
 pub(crate) fn communication_provider_secret_binding_store(
     state: &AppState,
-) -> Result<crate::domains::communications::core::CommunicationProviderSecretBindingStore, ApiError>
-{
+) -> Result<
+    hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore,
+    ApiError,
+> {
     Ok(
-        crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+        hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
             database_pool(state)?,
         ),
     )

@@ -1,3 +1,4 @@
+use hermes_events_api::StoredEventEnvelope;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -9,14 +10,14 @@ use sqlx::postgres::PgPool;
 use thiserror::Error;
 use tokio::task::spawn_blocking;
 
-use crate::application::{
+use crate::application::realtime_conversation_transcript_execution::{
+    RealtimeConversationTranscriptBridgeError, RealtimeConversationTranscriptBridgeRequest,
     complete_realtime_conversation_transcript_bridge,
-    provider_runtime_contracts::{YandexTelemostError, YandexTelemostTranscriptBridgeRequest},
 };
-use crate::platform::events::{EventBus, EventStoreError, StoredEventEnvelope};
-use crate::platform::realtime_conversation::{
-    CallBundleManifest, REALTIME_CONVERSATION_TRANSCRIPT_REQUESTED,
-};
+use crate::platform::events::bus::InMemoryEventBus;
+use crate::platform::realtime_conversation::events::REALTIME_CONVERSATION_TRANSCRIPT_REQUESTED;
+use crate::platform::realtime_conversation::models::CallBundleManifest;
+use hermes_events_postgres::errors::EventStoreError;
 
 pub const REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_CONSUMER: &str =
     "realtime_conversation_transcript_execution";
@@ -38,7 +39,7 @@ pub enum RealtimeConversationTranscriptExecutionError {
     Join(#[from] tokio::task::JoinError),
 
     #[error(transparent)]
-    TranscriptBridge(#[from] YandexTelemostError),
+    TranscriptBridge(#[from] RealtimeConversationTranscriptBridgeError),
 
     #[error("event payload is missing required field {0}")]
     MissingPayloadField(&'static str),
@@ -67,7 +68,7 @@ pub enum RealtimeConversationTranscriptExecutionError {
 
 pub async fn execute_realtime_conversation_transcript_request_event(
     pool: PgPool,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
     event: StoredEventEnvelope,
 ) -> Result<(), EventStoreError> {
     execute_realtime_conversation_transcript_request_event_inner(&pool, &event_bus, event)
@@ -84,7 +85,7 @@ pub fn realtime_conversation_transcriber_is_configured() -> bool {
 
 async fn execute_realtime_conversation_transcript_request_event_inner(
     pool: &PgPool,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     event: StoredEventEnvelope,
 ) -> Result<(), RealtimeConversationTranscriptExecutionError> {
     if event.event.event_type != REALTIME_CONVERSATION_TRANSCRIPT_REQUESTED {
@@ -104,7 +105,7 @@ async fn execute_realtime_conversation_transcript_request_event_inner(
     let manifest: CallBundleManifest =
         serde_json::from_str(&fs::read_to_string(&payload.manifest_path)?)?;
     let output = run_transcriber_command(&payload, &manifest).await?;
-    let request = YandexTelemostTranscriptBridgeRequest {
+    let request = RealtimeConversationTranscriptBridgeRequest {
         account_id: payload.account_id,
         conference_id: payload.conference_id,
         bundle_id: payload.bundle_id,
@@ -117,7 +118,7 @@ async fn execute_realtime_conversation_transcript_request_event_inner(
         confidence: output.confidence,
         metadata: output.metadata,
     };
-    let event_store = crate::platform::events::EventStore::new(pool.clone());
+    let event_store = hermes_events_postgres::store::EventStore::new(pool.clone());
     let _ =
         complete_realtime_conversation_transcript_bridge(&event_store, Some(event_bus), &request)
             .await?;

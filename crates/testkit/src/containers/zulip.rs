@@ -11,7 +11,7 @@ use testcontainers::core::{ExecCommand, IntoContainerPort};
 use tokio::time::{Instant, MissedTickBehavior, sleep};
 use uuid::Uuid;
 
-use crate::containers::labels::{SESSION_ID_ENV, session_id_label_value};
+use hermes_test_session::containers::labels::{SESSION_ID_ENV, session_id_label_value};
 
 const ZULIP_ENABLE_ENV: &str = "HERMES_ZULIP_TESTCONTAINERS";
 const ZULIP_START_TIMEOUT_ENV: &str = "HERMES_ZULIP_START_TIMEOUT_SECS";

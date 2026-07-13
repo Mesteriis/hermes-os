@@ -2,7 +2,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use super::{
-    EmailProviderKind, EmailSyncAdapterConfig, EmailSyncPlan, ProviderAccount,
+    CommunicationProviderKind, EmailSyncAdapterConfig, EmailSyncPlan, ProviderAccount,
     ProviderAccountSecretPurpose,
 };
 
@@ -27,19 +27,23 @@ pub fn plan_email_sync(account: &ProviderAccount) -> Result<EmailSyncPlan, Email
     reject_secret_like_config_keys(&account.config)?;
 
     match account.provider_kind {
-        EmailProviderKind::Gmail => plan_gmail_sync(account, account_id),
-        EmailProviderKind::Icloud | EmailProviderKind::Imap => plan_imap_sync(account, account_id),
-        EmailProviderKind::TelegramUser
-        | EmailProviderKind::TelegramBot
-        | EmailProviderKind::WhatsappWeb
-        | EmailProviderKind::WhatsappBusinessCloud
-        | EmailProviderKind::ZulipBot
-        | EmailProviderKind::ZoomUser
-        | EmailProviderKind::ZoomServerToServer
-        | EmailProviderKind::YandexTelemostUser => Err(EmailSyncPlanError::InvalidProviderConfig {
-            field: "provider_kind",
-            message: "email sync supports only gmail, icloud or imap",
-        }),
+        CommunicationProviderKind::Gmail => plan_gmail_sync(account, account_id),
+        CommunicationProviderKind::Icloud | CommunicationProviderKind::Imap => {
+            plan_imap_sync(account, account_id)
+        }
+        CommunicationProviderKind::TelegramUser
+        | CommunicationProviderKind::TelegramBot
+        | CommunicationProviderKind::WhatsappWeb
+        | CommunicationProviderKind::WhatsappBusinessCloud
+        | CommunicationProviderKind::ZulipBot
+        | CommunicationProviderKind::ZoomUser
+        | CommunicationProviderKind::ZoomServerToServer
+        | CommunicationProviderKind::YandexTelemostUser => {
+            Err(EmailSyncPlanError::InvalidProviderConfig {
+                field: "provider_kind",
+                message: "email sync supports only gmail, icloud or imap",
+            })
+        }
     }
 }
 

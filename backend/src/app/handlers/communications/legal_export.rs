@@ -9,7 +9,7 @@ pub(crate) async fn get_v1_legal_docs(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::legal::LegalDocumentStore,
     >(pool);
     let dt = query
@@ -50,7 +50,7 @@ pub(crate) async fn post_v1_legal_doc(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::legal::LegalDocumentStore,
     >(pool);
     let doc = store

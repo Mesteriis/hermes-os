@@ -1,11 +1,12 @@
 use sqlx::postgres::PgPool;
 
+use crate::application::relationship_graph::RelationshipGraphCoordinator;
 use crate::domains::communications::messages::ProjectedMessage;
 use crate::domains::organizations::api::OrganizationCommandPort;
 use crate::domains::organizations::core::{OrgPersonaLink, OrganizationPersonaLinkPort};
-use crate::domains::relationships::{
+use crate::domains::relationships::models::{
     NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
-    RelationshipEvidenceSourceKind, RelationshipReviewPort, RelationshipReviewState,
+    RelationshipEvidenceSourceKind, RelationshipReviewState,
 };
 
 use super::errors::EmailSyncPipelineError;
@@ -152,7 +153,7 @@ async fn materialize_email_participant_member_relationship(
             "persona_id": link.persona_id,
         }),
     };
-    let _ = RelationshipReviewPort::new(pool.clone())
+    let _ = RelationshipGraphCoordinator::new(pool.clone())
         .upsert_with_evidence(&relationship, &[evidence])
         .await?;
     Ok(())

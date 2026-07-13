@@ -16,11 +16,12 @@ pub(crate) async fn get_task_providers(
     State(state): State<AppState>,
 ) -> Result<Json<TaskProvidersResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items =
-        crate::app::api_support::app_store::<crate::domains::tasks::core::TaskProviderStore>(pool)
-            .list()
-            .await
-            .map_err(ApiError::from)?;
+    let items = crate::app::api_support::stores::domain_stores::app_store::<
+        crate::domains::tasks::core::TaskProviderStore,
+    >(pool)
+    .list()
+    .await
+    .map_err(ApiError::from)?;
     Ok(Json(TaskProvidersResponse { items }))
 }
 
@@ -35,10 +36,11 @@ pub(crate) async fn post_task_provider(
     Json(req): Json<NewTaskProviderReq>,
 ) -> Result<Json<TaskProviderAccount>, ApiError> {
     let pool = database_pool(&state)?;
-    let provider =
-        crate::app::api_support::app_store::<crate::domains::tasks::core::TaskProviderStore>(pool)
-            .create(&req.provider, &req.account_name)
-            .await
-            .map_err(ApiError::from)?;
+    let provider = crate::app::api_support::stores::domain_stores::app_store::<
+        crate::domains::tasks::core::TaskProviderStore,
+    >(pool)
+    .create(&req.provider, &req.account_name)
+    .await
+    .map_err(ApiError::from)?;
     Ok(Json(provider))
 }

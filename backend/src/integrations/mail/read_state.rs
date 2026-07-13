@@ -1,3 +1,7 @@
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, ProviderAccount, ProviderSecretBindingLookupPort,
+};
 use std::sync::Arc;
 
 use serde_json::Value;
@@ -10,10 +14,7 @@ use crate::integrations::mail::gmail::client::{
     ImapNetworkClient,
 };
 use crate::integrations::mail::imap_write::{ImapWriteClient, ImapWriteConfig, ImapWriteError};
-use crate::platform::communications::{
-    EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose,
-    ProviderSecretBindingLookupPort,
-};
+
 use crate::platform::secrets::{ResolvedSecret, SecretReferenceStore};
 use crate::vault::HostVault;
 
@@ -93,8 +94,8 @@ impl LiveEmailReadStateService {
         mutation: EmailProviderMessageMutation<'_>,
     ) -> Result<(), EmailReadStateError> {
         match request.account.provider_kind {
-            EmailProviderKind::Gmail => self.mutate_gmail_message(request, mutation).await,
-            EmailProviderKind::Icloud | EmailProviderKind::Imap => {
+            CommunicationProviderKind::Gmail => self.mutate_gmail_message(request, mutation).await,
+            CommunicationProviderKind::Icloud | CommunicationProviderKind::Imap => {
                 self.mutate_imap_messages(
                     request.account,
                     std::slice::from_ref(request.message_metadata),
@@ -114,7 +115,7 @@ impl LiveEmailReadStateService {
         provider_record_ids: &[String],
         mutation: EmailProviderMessageMutation<'_>,
     ) -> Result<(), EmailReadStateError> {
-        if account.provider_kind != EmailProviderKind::Gmail {
+        if account.provider_kind != CommunicationProviderKind::Gmail {
             return Err(EmailReadStateError::UnsupportedProvider(
                 account.provider_kind.as_str(),
             ));
@@ -145,7 +146,7 @@ impl LiveEmailReadStateService {
     ) -> Result<(), EmailReadStateError> {
         if !matches!(
             account.provider_kind,
-            EmailProviderKind::Icloud | EmailProviderKind::Imap
+            CommunicationProviderKind::Icloud | CommunicationProviderKind::Imap
         ) {
             return Err(EmailReadStateError::UnsupportedProvider(
                 account.provider_kind.as_str(),
@@ -540,13 +541,13 @@ mod tests {
     };
     use crate::integrations::mail::gmail::client::EmailProviderNetworkError;
     use crate::integrations::mail::imap_write::ImapWriteError;
-    use crate::platform::communications::{EmailProviderKind, ProviderAccount};
+    use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 
     #[test]
     fn imap_write_uses_the_message_mailbox_and_uid() {
         let account = ProviderAccount {
             account_id: "account-1".to_owned(),
-            provider_kind: EmailProviderKind::Icloud,
+            provider_kind: CommunicationProviderKind::Icloud,
             display_name: "iCloud".to_owned(),
             external_account_id: "owner@example.test".to_owned(),
             config: json!({

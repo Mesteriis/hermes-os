@@ -1,13 +1,13 @@
-use crate::domains::communications::core::StoredRawCommunicationRecord;
 use crate::domains::communications::messages::ProjectedMessage;
+use crate::domains::communications::storage::port::{CommunicationAttachmentPort, LocalBlobPort};
 use crate::domains::communications::storage::{
     AttachmentSafetyScanRequest, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
-    CommunicationBlobMetadataPort, LocalCommunicationBlobPort, NewCommunicationAttachment,
-    NewCommunicationBlob, scan_attachment_with_configured_clamav,
+    NewCommunicationAttachment, NewCommunicationBlob, scan_attachment_with_configured_clamav,
 };
 use crate::platform::communications::rfc822::{
     ParsedEmailAttachment, ParsedEmailAttachmentDisposition,
 };
+use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 
 use super::errors::EmailSyncPipelineError;
 
@@ -19,8 +19,8 @@ pub(crate) struct AttachmentProjectionReport {
 }
 
 pub(crate) async fn project_attachments(
-    mail_store: &CommunicationBlobMetadataPort,
-    blob_store: &LocalCommunicationBlobPort,
+    mail_store: &CommunicationAttachmentPort,
+    blob_store: &LocalBlobPort,
     raw_record: &StoredRawCommunicationRecord,
     message: &ProjectedMessage,
     attachments: &[ParsedEmailAttachment],

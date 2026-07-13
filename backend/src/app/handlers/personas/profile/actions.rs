@@ -9,7 +9,7 @@ pub(crate) async fn post_persona_fingerprint(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let messages = crate::app::api_support::app_store::<
+    let messages = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::messages::MessageProjectionStore,
     >(pool.clone())
     .recent_messages(50)
@@ -33,7 +33,7 @@ pub(crate) async fn post_persona_fingerprint(
         )
         .collect::<Vec<_>>();
     Ok(Json(
-        crate::domains::personas::service::PersonaCommandService::new(pool)
+        crate::domains::personas::command_service::PersonaCommandService::new(pool)
             .fingerprint_persona_manual(&persona_id, &person_messages)
             .await?,
     ))
@@ -48,7 +48,7 @@ pub(crate) async fn post_persona_favorite(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let fav = crate::domains::personas::service::PersonaCommandService::new(pool)
+    let fav = crate::domains::personas::command_service::PersonaCommandService::new(pool)
         .toggle_favorite_manual(&persona_id)
         .await?;
     Ok(Json(json!({"is_favorite": fav})))
@@ -69,7 +69,7 @@ pub(crate) async fn put_persona_address_book_membership(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let person = crate::domains::personas::service::PersonaCommandService::new(pool)
+    let person = crate::domains::personas::command_service::PersonaCommandService::new(pool)
         .set_persona_address_book_membership_manual(&persona_id, req.is_address_book)
         .await?;
     Ok(Json(person))
@@ -90,7 +90,7 @@ pub(crate) async fn put_persona_notes(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    crate::domains::personas::service::PersonaCommandService::new(pool)
+    crate::domains::personas::command_service::PersonaCommandService::new(pool)
         .set_notes_manual(&persona_id, &req.notes)
         .await?;
     Ok(Json(json!({"saved": true})))

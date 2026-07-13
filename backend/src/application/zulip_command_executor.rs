@@ -1,13 +1,11 @@
 use chrono::{DateTime, Utc};
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationProviderAccountStore, CommunicationProviderKind,
-    CommunicationProviderSecretBindingStore, ProviderAccount, ProviderAccountSecretPurpose,
-    ProviderCredentialReader,
-};
+use crate::domains::communications::credentials::ProviderCredentialReader;
 use crate::domains::communications::provider_commands::{
     CommunicationProviderCommand, CommunicationProviderCommandError,
     CommunicationProviderCommandStore,
@@ -16,12 +14,17 @@ use crate::domains::communications::storage::{
     CommunicationStorageError, CommunicationStorageStore, ImportedCommunicationAttachment,
     LocalCommunicationBlobStore, StoredCommunicationBlob,
 };
-use crate::integrations::zulip::{
-    ZulipApiClient, ZulipClientConfig, ZulipCommandExecutionError, ZulipExecutableCommand,
-    ZulipPreparedUpload, execute_zulip_command,
+use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
+
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
+use hermes_provider_zulip::client::{ZulipApiClient, ZulipClientConfig};
+use hermes_provider_zulip::command_execution::{
+    ZulipCommandExecutionError, ZulipExecutableCommand, ZulipPreparedUpload, execute_zulip_command,
+};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ZulipCommandExecutionReport {

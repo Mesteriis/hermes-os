@@ -3,7 +3,7 @@ use thiserror::Error;
 use crate::domains::communications::provider_commands::CommunicationProviderCommandError;
 use crate::domains::communications::storage::CommunicationStorageError;
 use crate::platform::communications::rfc822::EmailRfc822ParseError;
-use crate::platform::observations::ObservationStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, Error)]
 pub enum MessageProjectionError {

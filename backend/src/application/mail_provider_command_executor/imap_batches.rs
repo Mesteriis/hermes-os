@@ -1,3 +1,8 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
+};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::collections::BTreeMap;
 
 use chrono::Utc;
@@ -9,7 +14,7 @@ use super::{
 };
 use crate::domains::communications::provider_commands::CommunicationProviderCommand;
 use crate::integrations::mail::read_state::{EmailProviderMessageMutation, imap_source_mailbox};
-use crate::platform::communications::ProviderAccount;
+use hermes_communications_api::accounts::ProviderAccount;
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct ImapBatchKey {
@@ -247,17 +252,22 @@ mod tests {
     use testkit::context::TestContext;
 
     use super::MailProviderCommandWorker;
-    use crate::domains::communications::core::{
-        CommunicationIngestionStore, CommunicationProviderAccountStore, CommunicationProviderKind,
-        CommunicationProviderSecretBindingStore, NewProviderAccount,
-        NewProviderAccountSecretBinding, NewRawCommunicationRecord, ProviderAccountSecretPurpose,
-    };
     use crate::domains::communications::messages::{
         MessageProjectionStore, project_raw_email_message,
     };
     use crate::domains::communications::provider_commands::{
         CommunicationProviderCommandStore, NewCommunicationProviderCommand,
     };
+    use hermes_communications_api::accounts::{
+        CommunicationProviderKind, NewProviderAccount, NewProviderAccountSecretBinding,
+        ProviderAccountSecretPurpose,
+    };
+    use hermes_communications_api::evidence::NewRawCommunicationRecord;
+    use hermes_communications_postgres::provider_store::{
+        CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+    };
+    use hermes_communications_postgres::store::CommunicationIngestionStore;
+
     use crate::platform::secrets::{
         NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
     };

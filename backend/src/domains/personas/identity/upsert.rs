@@ -1,4 +1,5 @@
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use sqlx::Row;
 use sqlx::Transaction;
@@ -9,7 +10,7 @@ use super::errors::PersonaIdentityError;
 use super::models::{
     PersonaIdentityCandidateKind, PersonaIdentityCandidatePayload, PersonaIdentityReviewState,
 };
-use crate::platform::events::{EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
 
 const PERSONA_IDENTITY_CANDIDATE_DETECTED_EVENT_TYPE: &str = "persona_identity.candidate.detected";
 const LEGACY_PERSON_IDENTITY_CANDIDATE_DETECTED_EVENT_TYPE: &str =

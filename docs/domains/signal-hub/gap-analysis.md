@@ -52,7 +52,8 @@ WhatsApp separate product domains.
 - Letting Signal Hub write Communications/Tasks/Documents tables directly.
 - Storing provider secrets or raw message bodies in Signal Hub state.
 - Encoding fixture row IDs or FK references that break on future migrations.
-- Introducing sidecar processes before the modular boundary is stable.
+- Introducing a connector before its crate boundary, durable acknowledgement
+  and lease-fencing contracts are stable.
 - Adding Redis as a second event system without a clear ownership problem.
 
 ## Closure Conditions

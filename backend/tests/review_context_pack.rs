@@ -7,11 +7,12 @@ use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxStore, ReviewItemKind,
 };
-use hermes_hub_backend::engines::context_packs::{ContextPackSourceKind, ContextPackStore};
-use hermes_hub_backend::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore,
+use hermes_hub_backend::engines::context_packs::{
+    models::ContextPackSourceKind, store::ContextPackStore,
 };
 use hermes_hub_backend::platform::storage::Database;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 use serde_json::{Value, json};
 use testkit::context::TestContext;
 use tower::ServiceExt;

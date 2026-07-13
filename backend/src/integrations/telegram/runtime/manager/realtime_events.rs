@@ -1,12 +1,14 @@
 use chrono::{DateTime, Utc};
+use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
 use serde_json::json;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::integrations::telegram::client::TelegramStore;
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
 use crate::integrations::telegram::tdjson::TelegramTdlibTypingSnapshot;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
-use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
 
 use super::super::state::TelegramRuntimeEvent;
 use super::chat_events::{
@@ -27,11 +29,11 @@ const TELEGRAM_RUNTIME_EVENT_BRIDGE_RUNTIME: &str = "telegram_runtime_event_brid
 #[derive(Clone)]
 pub struct TelegramRuntimeEventBridgeContext {
     pub(super) telegram_store: Option<TelegramStore>,
-    pub(super) event_bus: EventBus,
+    pub(super) event_bus: InMemoryEventBus,
 }
 
 impl TelegramRuntimeEventBridgeContext {
-    pub(crate) fn new(telegram_store: Option<TelegramStore>, event_bus: EventBus) -> Self {
+    pub(crate) fn new(telegram_store: Option<TelegramStore>, event_bus: InMemoryEventBus) -> Self {
         Self {
             telegram_store,
             event_bus,
@@ -41,7 +43,7 @@ impl TelegramRuntimeEventBridgeContext {
 
 pub(super) fn spawn_telegram_runtime_event_bridge(
     telegram_store: Option<TelegramStore>,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
     account_id: String,
     mut runtime_events: UnboundedReceiver<TelegramRuntimeEvent>,
 ) {
@@ -185,7 +187,7 @@ async fn telegram_runtime_event_bridge_allows_processing(
         return true;
     };
 
-    match crate::platform::events::runtime_allows_processing(
+    match crate::platform::events::runtime::runtime_allows_processing(
         store.pool(),
         "telegram",
         TELEGRAM_RUNTIME_EVENT_BRIDGE_RUNTIME,
@@ -326,7 +328,7 @@ mod typing_tests {
     use super::command_event_payload;
     use super::{TelegramRuntimeEventBridgeContext, publish_command_reconciled_events};
     use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
-    use crate::platform::events::EventBus;
+    use crate::platform::events::bus::InMemoryEventBus;
 
     fn sample_command() -> TelegramProviderWriteCommand {
         TelegramProviderWriteCommand {
@@ -396,7 +398,7 @@ mod typing_tests {
         let pool = ctx.pool().clone();
         let context = TelegramRuntimeEventBridgeContext::new(
             Some(crate::test_support::telegram_store(&pool)),
-            EventBus::new(),
+            InMemoryEventBus::new(),
         );
         let command = sample_command();
 
@@ -436,7 +438,7 @@ mod typing_tests {
 
 async fn publish_typing_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibTypingSnapshot,
 ) {
@@ -459,7 +461,7 @@ fn typing_changed_event(
     account_id: &str,
     snapshot: &TelegramTdlibTypingSnapshot,
     occurred_at: DateTime<Utc>,
-) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+) -> Result<NewEventEnvelope, hermes_events_api::EventEnvelopeError> {
     NewEventEnvelope::builder(
         format!(
             "evt_telegram_typing_{}_{}_{}",
@@ -556,7 +558,7 @@ mod tests {
         )
         .await;
 
-        let event_bus = EventBus::new();
+        let event_bus = InMemoryEventBus::new();
         let mut events = event_bus.subscribe();
         let (tx, rx) = unbounded_channel();
         let telegram_store = crate::test_support::telegram_store(&pool);

@@ -1,6 +1,8 @@
-use crate::platform::communications::{
-    NewProviderAccount, NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
+use hermes_communications_api::accounts::NewProviderAccount;
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
+
 use crate::platform::secrets::NewSecretReference;
 
 use super::super::errors::EmailAccountSetupError;

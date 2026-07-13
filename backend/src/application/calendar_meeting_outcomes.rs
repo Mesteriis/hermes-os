@@ -14,13 +14,13 @@ use crate::domains::obligations::{
     NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationEvidenceSourceKind,
     ObligationReviewState, ObligationStore, ObligationStoreError,
 };
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
-};
 use crate::workflows::review_mirror::{
     ReviewMirrorError, sync_decision_review_state_in_transaction,
     sync_obligation_review_state_in_transaction,
 };
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 #[derive(Clone)]
 pub struct CalendarMeetingOutcomeApplicationService {

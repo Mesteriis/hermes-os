@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domains::relationships::Relationship;
+use crate::domains::relationships::models::Relationship;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct RelationshipListQuery {

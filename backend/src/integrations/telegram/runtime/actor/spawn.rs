@@ -3,8 +3,8 @@ use std::thread;
 
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::tdjson;
-use crate::platform::communications::ProviderAccount;
 use crate::platform::config::AppConfig;
+use hermes_communications_api::accounts::ProviderAccount;
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::super::state::{TelegramRuntimeCommand, TelegramRuntimeEvent};

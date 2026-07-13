@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::ZoomError;
+use super::errors::ZoomError;
 
 pub(super) fn validate_non_empty(field: &'static str, value: &str) -> Result<String, ZoomError> {
     let trimmed = value.trim();

@@ -2,7 +2,7 @@ use super::*;
 use crate::domains::communications::ai_state::{
     CommunicationAiStateRecord, CommunicationAiStateStore, CommunicationAiStateTransitionRequest,
 };
-use crate::domains::communications::service::CommunicationCommandService;
+use crate::domains::communications::command_service::CommunicationCommandService;
 
 pub(crate) async fn get_v1_message_ai_state(
     State(state): State<AppState>,
@@ -34,7 +34,7 @@ fn ai_state_store(state: &AppState) -> Result<CommunicationAiStateStore, ApiErro
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(crate::app::api_support::app_store::<
+    Ok(crate::app::api_support::stores::domain_stores::app_store::<
         CommunicationAiStateStore,
     >(pool))
 }

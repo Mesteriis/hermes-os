@@ -1,8 +1,7 @@
 use crate::support::*;
 use chrono::Utc;
-use hermes_hub_backend::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore,
-};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 use sqlx::Row;
 use testkit::context::TestContext;
 

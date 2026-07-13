@@ -1,9 +1,9 @@
 use axum::body::to_bytes;
 use axum::http::StatusCode;
 use chrono::Utc;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
-};
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::drafts::{
     CommunicationDraftStore, DraftStatus, NewCommunicationDraft,
 };
@@ -18,6 +18,7 @@ use hermes_hub_backend::domains::communications::storage::{
     CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachment,
     NewCommunicationAttachmentImport, NewCommunicationBlob,
 };
+
 use hermes_hub_backend::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use serde_json::{Value, json};
 use testkit::app::{TestApp, post_json};
@@ -65,7 +66,7 @@ async fn communications_connect_api_exposes_provider_neutral_queries_and_send() 
     ingestion
         .upsert_provider_account(&NewProviderAccount::new(
             "acct-connectrpc-mail",
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "ConnectRPC Mail",
             "connectrpc@example.com",
         ))

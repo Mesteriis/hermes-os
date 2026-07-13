@@ -20,7 +20,8 @@ Canonical policy:
 
 ## Backend
 
-`app/` composes HTTP and calls ports. `domains/*` own business truth.
+`app/` composes HTTP and calls ports or explicit public workflow APIs. It does
+not import concrete domain stores or provider runtime internals. `domains/*` own business truth.
 `integrations/*` observe and operate providers. `workflows/*` coordinate domains
 through ports/events. `engines/*` compute neutral projections or candidates.
 `ai/*` suggests; it does not decide. `platform/*` is technical substrate.

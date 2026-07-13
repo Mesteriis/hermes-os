@@ -1,15 +1,15 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{HeaderValue, Method, Request, StatusCode, header};
 use chrono::Utc;
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::{build_router, build_router_with_database};
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
-};
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
@@ -17,6 +17,7 @@ use hermes_hub_backend::domains::communications::storage::{
     CommunicationAttachmentDisposition, CommunicationStorageStore, LocalCommunicationBlobStore,
     NewCommunicationAttachment, NewCommunicationBlob,
 };
+
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 
@@ -80,7 +81,7 @@ async fn v1_communications_message_detail_returns_attachment_metadata_against_po
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Icloud,
+            CommunicationProviderKind::Icloud,
             "V1 Communications API iCloud",
             format!("v1-communications-{suffix}@example.invalid"),
         ))

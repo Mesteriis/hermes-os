@@ -16,7 +16,6 @@ pub use errors::TaskCoreError;
 pub use evidence::{TaskEvidence, TaskEvidenceStore};
 pub use external_identities::{ExternalTaskIdentity, ExternalTaskIdentityStore};
 pub use obligation_links::ObligationTaskLinkStore;
-pub use obligation_links::ObligationTaskLinkStore as ObligationTaskLinkPort;
 pub(crate) use observation_links::{
     materialize_task_entity_link_in_transaction, materialize_task_observation_link_in_transaction,
 };

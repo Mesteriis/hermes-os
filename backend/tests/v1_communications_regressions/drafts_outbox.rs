@@ -1,8 +1,8 @@
 use axum::http::StatusCode;
 use chrono::{Duration, Utc};
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-};
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+
 use serde_json::json;
 use sqlx::Row;
 use testkit::context::TestContext;
@@ -19,7 +19,7 @@ async fn v1_post_draft_allows_empty_subject_for_autosave_against_postgres() {
     CommunicationIngestionStore::new(pool.clone())
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Draft Autosave IMAP",
             format!("draft-autosave-{suffix}@example.com"),
         ))
@@ -244,7 +244,7 @@ async fn v1_drafts_list_is_cursor_paginated_against_postgres() {
     CommunicationIngestionStore::new(pool.clone())
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Draft Pagination IMAP",
             format!("draft-page-{suffix}@example.com"),
         ))
@@ -306,7 +306,7 @@ async fn v1_send_schedules_outbox_message_and_allows_undo_against_postgres() {
     CommunicationIngestionStore::new(pool.clone())
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Outbox API IMAP",
             format!("outbox-api-{suffix}@example.com"),
         ))

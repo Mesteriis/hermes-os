@@ -1,10 +1,10 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::Utc;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
-};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
@@ -12,7 +12,8 @@ use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocum
 use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::domains::projects::core::{ProjectStore, project_graph_node_id};
 use hermes_hub_backend::domains::projects::link_reviews::ProjectLinkReviewStore;
-use hermes_hub_backend::workflows::graph_projection::GraphProjectionService;
+
+use hermes_hub_backend::workflows::graph_projection::service::GraphProjectionService;
 use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
@@ -118,7 +119,7 @@ pub(crate) async fn seed_message(
         .communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Graph Projection Gmail",
             format!("graph-projection-{suffix}@example.com"),
         ))

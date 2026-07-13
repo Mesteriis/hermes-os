@@ -1,9 +1,9 @@
-use hermes_hub_backend::domains::communications::core::CommunicationIngestionError;
+use hermes_communications_postgres::errors::CommunicationIngestionError;
 use hermes_hub_backend::integrations::mail::gmail::client::EmailProviderNetworkError;
 use hermes_hub_backend::platform::config::ConfigError;
 use hermes_hub_backend::platform::secrets::SecretResolutionError;
 use hermes_hub_backend::platform::storage::StorageError;
-use hermes_hub_backend::workflows::email_sync_pipeline::EmailSyncPipelineError;
+use hermes_hub_backend::workflows::email_sync_pipeline::errors::EmailSyncPipelineError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

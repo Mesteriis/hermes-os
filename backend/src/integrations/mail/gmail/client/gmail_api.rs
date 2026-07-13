@@ -1,3 +1,4 @@
+use hermes_communications_api::accounts::CommunicationProviderKind;
 use std::time::Duration;
 
 use base64::Engine as _;
@@ -8,8 +9,7 @@ use crate::integrations::mail::send::{OutgoingEmail, SendResult, build_rfc2822_m
 use crate::integrations::mail::sync::{EmailSyncBatch, FetchedCommunicationSourceMessage};
 use crate::platform::communications::{
     AddressBookProviderBatch, AddressBookProviderEntry, AddressBookProviderUpsertRequest,
-    DiscoveredMailProviderResource, EmailProviderKind, MailProviderResourceKind,
-    MailProviderSemanticRole,
+    DiscoveredMailProviderResource, MailProviderResourceKind, MailProviderSemanticRole,
 };
 use crate::platform::secrets::ResolvedSecret;
 
@@ -160,7 +160,7 @@ impl GmailApiClient {
             gmail_message_list_checkpoint(latest_history_id, list_response.next_page_token);
 
         Ok(EmailSyncBatch {
-            provider_kind: EmailProviderKind::Gmail,
+            provider_kind: CommunicationProviderKind::Gmail,
             stream_id: "gmail:history".to_owned(),
             checkpoint,
             messages,
@@ -240,7 +240,7 @@ impl GmailApiClient {
         );
 
         Ok(EmailSyncBatch {
-            provider_kind: EmailProviderKind::Gmail,
+            provider_kind: CommunicationProviderKind::Gmail,
             stream_id: "gmail:history".to_owned(),
             checkpoint,
             messages,
@@ -770,7 +770,7 @@ fn history_message_ids(history_items: Vec<GmailHistoryItem>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::communications::CommunicationProviderKind;
+    use hermes_communications_api::accounts::CommunicationProviderKind;
     use serde_json::json;
 
     #[test]

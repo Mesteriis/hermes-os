@@ -1,8 +1,7 @@
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use serde_json::Value;
 
-use crate::domains::communications::core::{
-    CommunicationProviderKind, ProviderAccountSecretPurpose,
-};
 use crate::platform::secrets::{SecretKind, SecretStoreKind};
 use crate::vault::HostVaultManifestEntry;
 

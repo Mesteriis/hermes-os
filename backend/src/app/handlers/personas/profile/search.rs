@@ -19,7 +19,7 @@ pub(crate) async fn get_persona_search(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::personas::enrichment::PersonaEnrichmentStore,
     >(pool);
     let items = store

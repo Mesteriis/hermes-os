@@ -1,7 +1,8 @@
 use chrono::Utc;
+use hermes_signal_hub_postgres::raw_signals::adapter::RawSignalStore;
 
-use super::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
 use super::store::{SignalCapability, SignalCapabilityUpsert, SignalHubError, SignalHubStore};
+use hermes_signal_hub_api::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
 
 #[derive(Clone)]
 pub struct SignalHubCapabilityService {
@@ -33,7 +34,9 @@ impl SignalHubCapabilityService {
 
     async fn refresh_source_capabilities(&self, source_code: &str) -> Result<(), SignalHubError> {
         let source = self.store.get_source(source_code).await?;
-        let policies = self.store.list_active_policies().await?;
+        let policies = RawSignalStore::new(self.store.pool().clone())
+            .list_active_policies()
+            .await?;
         let control_state = source_capability_control_state(&source.code, &policies);
         let mut capabilities = vec![SignalCapabilityUpsert {
             source_code: source.code.clone(),

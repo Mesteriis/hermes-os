@@ -1,16 +1,18 @@
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 use std::future::Future;
 use std::pin::Pin;
 
 use serde_json::Value;
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::core::{
+use crate::domains::communications::credentials::{
+    ProviderCredentialError, ProviderCredentialReader,
+};
+use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
-use crate::domains::communications::core::{
-    EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose, ProviderCredentialError,
-    ProviderCredentialReader,
-};
+
 use crate::platform::communications::{OutgoingEmail, SmtpConfig, SmtpTransport};
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 
@@ -127,8 +129,8 @@ pub fn smtp_config_for_provider_account(
     account: &ProviderAccount,
 ) -> Result<SmtpConfig, OutboxDeliveryError> {
     match account.provider_kind {
-        EmailProviderKind::Icloud | EmailProviderKind::Imap => {}
-        EmailProviderKind::Gmail => {
+        CommunicationProviderKind::Icloud | CommunicationProviderKind::Imap => {}
+        CommunicationProviderKind::Gmail => {
             return Err(OutboxDeliveryError::Transport(
                 "Gmail send is unavailable until OAuth send scopes are configured".to_owned(),
             ));
@@ -178,22 +180,22 @@ pub fn smtp_config_for_provider_account(
     Ok(SmtpConfig::new(host, port, tls, username).starttls(starttls))
 }
 
-fn default_smtp_host(provider_kind: EmailProviderKind) -> Option<&'static str> {
+fn default_smtp_host(provider_kind: CommunicationProviderKind) -> Option<&'static str> {
     match provider_kind {
-        EmailProviderKind::Icloud => Some(ICLOUD_SMTP_HOST),
+        CommunicationProviderKind::Icloud => Some(ICLOUD_SMTP_HOST),
         _ => None,
     }
 }
 
-fn default_smtp_port(provider_kind: EmailProviderKind) -> Option<u16> {
+fn default_smtp_port(provider_kind: CommunicationProviderKind) -> Option<u16> {
     match provider_kind {
-        EmailProviderKind::Icloud => Some(ICLOUD_SMTP_PORT),
+        CommunicationProviderKind::Icloud => Some(ICLOUD_SMTP_PORT),
         _ => None,
     }
 }
 
-fn default_smtp_starttls(provider_kind: EmailProviderKind) -> bool {
-    matches!(provider_kind, EmailProviderKind::Icloud)
+fn default_smtp_starttls(provider_kind: CommunicationProviderKind) -> bool {
+    matches!(provider_kind, CommunicationProviderKind::Icloud)
 }
 
 fn should_try_imap_credential_for_smtp(
@@ -202,7 +204,7 @@ fn should_try_imap_credential_for_smtp(
 ) -> bool {
     matches!(
         account.provider_kind,
-        EmailProviderKind::Icloud | EmailProviderKind::Imap
+        CommunicationProviderKind::Icloud | CommunicationProviderKind::Imap
     ) && matches!(
         error,
         ProviderCredentialError::MissingBinding { .. }

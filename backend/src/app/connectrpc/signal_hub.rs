@@ -9,8 +9,25 @@ use serde_json::Value;
 use sqlx::postgres::PgPool;
 
 use crate::app::signal_hub_support::run_signal_hub_health_check;
-use crate::application::SignalHubReplayService;
-use crate::contracts::hermes::signal_hub::v1::{
+use crate::application::signal_hub_replay::SignalHubReplayService;
+use crate::domains::signal_hub::capabilities::SignalHubCapabilityService;
+use crate::domains::signal_hub::connections::SignalHubConnectionService;
+use crate::domains::signal_hub::controls::{SignalHubControlRequest, SignalHubControlService};
+use crate::domains::signal_hub::fixture_source::{
+    SignalFixtureEmitRequest, SignalFixtureSource, SignalFixtureSourceService,
+};
+use crate::domains::signal_hub::health::SignalHubHealthService;
+use crate::domains::signal_hub::profiles::SignalHubProfileService;
+use crate::domains::signal_hub::store::{
+    SignalCapability, SignalConnection, SignalConnectionCreate, SignalConnectionUpdate,
+    SignalHealth, SignalHealthCheckRequest as DomainSignalHealthCheckRequest, SignalHubError,
+    SignalHubStore, SignalProfileCreate, SignalProfilePolicy, SignalProfileSummary,
+    SignalProfileUpdate, SignalReplayRequest, SignalReplayRequestCreate, SignalRuntimeState,
+    SignalRuntimeStateUpdate, SignalSource,
+};
+use crate::platform::config::AppConfig;
+use crate::platform::settings::ApplicationSettingsStore;
+use hermes_connectrpc_contracts::hermes::signal_hub::v1::{
     ApplyProfileRequest, ApplyProfileResponse, CreateConnectionRequest, CreateConnectionResponse,
     CreatePolicyRequest, CreatePolicyResponse, CreateProfileRequest, CreateProfileResponse,
     DisableSignalsRequest, DisableSignalsResponse, DisableSourceRequest, DisableSourceResponse,
@@ -35,18 +52,8 @@ use crate::contracts::hermes::signal_hub::v1::{
     UpdateConnectionRequest, UpdateConnectionResponse, UpdateProfileRequest, UpdateProfileResponse,
     UpdateRuntimeStateRequest, UpdateRuntimeStateResponse,
 };
-use crate::domains::signal_hub::{
-    SignalCapability, SignalConnection, SignalConnectionCreate, SignalConnectionUpdate,
-    SignalFixtureEmitRequest, SignalFixtureSource, SignalFixtureSourceService, SignalHealth,
-    SignalHealthCheckRequest as DomainSignalHealthCheckRequest, SignalHubCapabilityService,
-    SignalHubConnectionService, SignalHubControlRequest, SignalHubControlService, SignalHubError,
-    SignalHubHealthService, SignalHubProfileService, SignalHubStore, SignalPolicy,
-    SignalPolicyMode, SignalPolicyScope, SignalProfileCreate, SignalProfilePolicy,
-    SignalProfileSummary, SignalProfileUpdate, SignalReplayRequest, SignalReplayRequestCreate,
-    SignalRuntimeState, SignalRuntimeStateUpdate, SignalSource,
-};
-use crate::platform::config::AppConfig;
-use crate::platform::settings::ApplicationSettingsStore;
+use hermes_signal_hub_api::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
+use hermes_signal_hub_postgres::raw_signals::adapter::RawSignalStore;
 
 pub(crate) fn register(
     router: ConnectRouter,
@@ -79,24 +86,24 @@ impl SignalHubConnectService {
             capability_service: SignalHubCapabilityService::new(store.clone()),
             fixture_service: SignalFixtureSourceService::new(
                 store.clone(),
-                crate::platform::events::EventStore::new(pool.clone()),
+                hermes_events_postgres::store::EventStore::new(pool.clone()),
             ),
             connection_service: SignalHubConnectionService::new(
                 store.clone(),
-                crate::platform::events::EventStore::new(pool.clone()),
+                hermes_events_postgres::store::EventStore::new(pool.clone()),
             ),
             control_service: SignalHubControlService::new(
                 store.clone(),
-                crate::platform::events::EventStore::new(pool.clone()),
+                hermes_events_postgres::store::EventStore::new(pool.clone()),
             ),
             profile_service: SignalHubProfileService::new(
                 store.clone(),
                 ApplicationSettingsStore::new(pool.clone()),
-                crate::platform::events::EventStore::new(pool.clone()),
+                hermes_events_postgres::store::EventStore::new(pool.clone()),
             ),
             replay_service: SignalHubReplayService::new(
                 store.clone(),
-                crate::platform::events::EventStore::new(pool),
+                hermes_events_postgres::store::EventStore::new(pool),
             ),
             store,
         }
@@ -649,10 +656,10 @@ impl SignalHubService for SignalHubConnectService {
         _ctx: RequestContext,
         _req: ServiceRequest<'_, ListPoliciesRequest>,
     ) -> ServiceResult<ListPoliciesResponse> {
-        let items = self
-            .store
+        let items = RawSignalStore::new(self.store.pool().clone())
             .list_active_policies()
             .await
+            .map_err(SignalHubError::from)
             .map_err(signal_hub_connect_error)?;
         Response::ok(ListPoliciesResponse {
             items: items.into_iter().map(proto_policy).collect(),
@@ -1021,7 +1028,10 @@ fn signal_hub_connect_error(error: SignalHubError) -> ConnectError {
         | SignalHubError::Envelope(_)
         | SignalHubError::Json(_)
         | SignalHubError::Toml(_)
-        | SignalHubError::Settings(_) => ConnectError::new(ErrorCode::Internal, error.to_string()),
+        | SignalHubError::Settings(_)
+        | SignalHubError::RawSignalPersistence(_) => {
+            ConnectError::new(ErrorCode::Internal, error.to_string())
+        }
         SignalHubError::InvalidRawSignalEventType(_)
         | SignalHubError::MissingSourceCode
         | SignalHubError::InvalidPolicyScope(_)

@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::platform::communications::EmailProviderKind;
 use crate::platform::secrets::{SecretKind, SecretStoreKind};
+use hermes_communications_api::accounts::CommunicationProviderKind;
 
 use super::constants::{
     DEFAULT_GOOGLE_AUTHORIZATION_ENDPOINT, DEFAULT_GOOGLE_TOKEN_ENDPOINT,
@@ -114,7 +114,7 @@ pub struct GmailOAuthPendingGrant {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImapAccountSetupRequest {
     pub account_id: String,
-    pub provider_kind: EmailProviderKind,
+    pub provider_kind: CommunicationProviderKind,
     pub display_name: String,
     pub external_account_id: String,
     pub host: String,
@@ -135,7 +135,7 @@ impl ImapAccountSetupRequest {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         account_id: impl Into<String>,
-        provider_kind: EmailProviderKind,
+        provider_kind: CommunicationProviderKind,
         display_name: impl Into<String>,
         external_account_id: impl Into<String>,
         host: impl Into<String>,
@@ -197,7 +197,7 @@ impl ImapAccountSetupRequest {
 
     pub(super) fn smtp_config(&self) -> ImapAccountSmtpConfig {
         let default_host = match self.provider_kind {
-            EmailProviderKind::Icloud => "smtp.mail.me.com".to_owned(),
+            CommunicationProviderKind::Icloud => "smtp.mail.me.com".to_owned(),
             _ => self.host.clone(),
         };
         ImapAccountSmtpConfig {
@@ -220,7 +220,7 @@ impl ImapAccountSetupRequest {
         validate_non_empty("mailbox", &self.mailbox)?;
         validate_non_empty("username", &self.username)?;
         validate_non_empty("password", &self.password)?;
-        if self.provider_kind == EmailProviderKind::Gmail {
+        if self.provider_kind == CommunicationProviderKind::Gmail {
             return Err(EmailAccountSetupError::InvalidRequest {
                 field: "provider_kind",
                 message: "must be icloud or imap",

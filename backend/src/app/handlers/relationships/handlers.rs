@@ -6,9 +6,10 @@ use super::models::{
     RelationshipListQuery, RelationshipListResponse, RelationshipReviewApiRequest,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::RelationshipReviewApplicationService;
+use crate::application::review_transitions::RelationshipReviewApplicationService;
 use crate::domains::relationships::{
-    Relationship, RelationshipEntityKind, RelationshipReviewState, RelationshipStore,
+    models::{Relationship, RelationshipEntityKind, RelationshipReviewState},
+    store::RelationshipStore,
 };
 use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
 
@@ -85,9 +86,9 @@ fn relationship_store(state: &AppState) -> Result<RelationshipStore, ApiError> {
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    Ok(crate::app::api_support::app_store::<RelationshipStore>(
-        pool.clone(),
-    ))
+    Ok(crate::app::api_support::stores::domain_stores::app_store::<
+        RelationshipStore,
+    >(pool.clone()))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {

@@ -1,14 +1,16 @@
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use serde_json::{Value, json};
 
 use std::sync::Arc;
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore, EmailProviderKind,
-    ProviderAccountSecretPurpose,
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
 use hermes_hub_backend::integrations::mail::accounts::{
     EmailAccountSetupService, GmailOAuthSetupRequest,
 };
+
 use hermes_hub_backend::platform::secrets::{
     DatabaseEncryptedSecretVault, NewSecretReference, ResolvedSecret, SecretKind, SecretResolver,
     SecretStoreKind,
@@ -83,7 +85,7 @@ async fn gmail_oauth_setup_builds_pkce_url_and_persists_token_bundle_against_pos
         .await
         .expect("load provider account")
         .expect("provider account exists");
-    assert_eq!(account.provider_kind, EmailProviderKind::Gmail);
+    assert_eq!(account.provider_kind, CommunicationProviderKind::Gmail);
     assert_eq!(account.config["auth"], "oauth");
     assert_eq!(account.config["api"], "gmail");
     assert_eq!(account.config["oauth_client_id"], "desktop-client-id");

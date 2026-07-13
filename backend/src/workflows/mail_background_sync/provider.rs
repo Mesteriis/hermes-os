@@ -1,3 +1,4 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 mod gmail;
 mod imap;
 mod projection;
@@ -5,7 +6,7 @@ mod summary;
 mod types;
 
 use crate::platform::communications::{
-    EmailSyncAdapterConfig, GmailResourceDiscoveryRequest, ImapMailboxListRequest, ProviderAccount,
+    EmailSyncAdapterConfig, GmailResourceDiscoveryRequest, ImapMailboxListRequest,
 };
 
 use super::errors::ProviderSyncError;
@@ -111,9 +112,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::platform::communications::{
-        CommunicationProviderKind, EmailSyncAdapterConfig, ProviderAccount,
-    };
+    use crate::platform::communications::EmailSyncAdapterConfig;
 
     fn account(
         provider_kind: CommunicationProviderKind,

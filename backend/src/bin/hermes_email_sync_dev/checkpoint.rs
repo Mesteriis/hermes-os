@@ -1,4 +1,4 @@
-use hermes_hub_backend::domains::communications::core::CommunicationIngestionStore;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 
 use crate::errors::DevEmailSyncError;
 

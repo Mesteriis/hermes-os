@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -9,8 +10,9 @@ use crate::integrations::telegram::client::{TelegramError, TelegramStore};
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibTopicSnapshot, TelegramTdlibTopicUpdateSnapshot,
 };
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
-use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
 
 use super::realtime_events::{
     TelegramRuntimeEventBridgeContext, publish_command_reconciled_events,
@@ -19,7 +21,7 @@ use super::topics::telegram_topic_id;
 
 pub(super) async fn publish_topic_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibTopicUpdateSnapshot,
 ) {
@@ -185,7 +187,7 @@ fn topic_updated_event(
     account_id: &str,
     topic: &TelegramTopic,
     occurred_at: DateTime<Utc>,
-) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+) -> Result<NewEventEnvelope, hermes_events_api::EventEnvelopeError> {
     NewEventEnvelope::builder(
         format!(
             "evt_telegram_topic_{}_{}_{}",
@@ -274,7 +276,7 @@ mod tests {
         let pool = ctx.pool().clone();
         let account_id = "acct-1";
         let provider_chat_id = "chat-1";
-        let event_bus = EventBus::new();
+        let event_bus = InMemoryEventBus::new();
 
         crate::test_support::upsert_telegram_runtime_account(
             &pool,

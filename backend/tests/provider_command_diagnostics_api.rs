@@ -1,10 +1,10 @@
 use axum::body::to_bytes;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationProviderAccountStore, EmailProviderKind, NewProviderAccount,
-};
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 use hermes_hub_backend::domains::communications::provider_commands::{
     CommunicationProviderCommandStore, NewCommunicationProviderCommand,
 };
+
 use serde_json::{Value, json};
 use testkit::app::{TestApp, get, post_json};
 use tower::ServiceExt;
@@ -17,7 +17,7 @@ async fn mail_provider_command_diagnostics_are_filtered_and_payload_safe() {
     CommunicationProviderAccountStore::new(pool.clone())
         .upsert(&NewProviderAccount::new(
             account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Diagnostics account",
             "diagnostics@example.test",
         ))
@@ -107,7 +107,7 @@ async fn mail_provider_dead_letter_can_be_requeued_without_exposing_payloads() {
     CommunicationProviderAccountStore::new(pool.clone())
         .upsert(&NewProviderAccount::new(
             account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Retry account",
             "retry@example.test",
         ))

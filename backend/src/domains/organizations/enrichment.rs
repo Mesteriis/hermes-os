@@ -9,7 +9,7 @@ use sqlx::postgres::Postgres;
 use thiserror::Error;
 
 use crate::domains::organizations::core::{OrgCoreError, link_review_transition_in_transaction};
-use crate::platform::observations::ObservationStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OrgEnrichmentResult {

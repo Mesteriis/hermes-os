@@ -1,3 +1,4 @@
+use hermes_events_api::NewEventEnvelope;
 use std::collections::HashSet;
 
 use serde_json::{Value, json};
@@ -5,7 +6,7 @@ use sha2::{Digest, Sha256};
 use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
 
-use crate::platform::events::{EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
 
 use super::errors::ReviewInboxError;
 use super::evidence::materialize_review_transition_link_in_transaction;

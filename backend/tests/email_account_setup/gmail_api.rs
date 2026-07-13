@@ -1,15 +1,16 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use serde_json::{Value, json};
 use sqlx::Row;
 use tempfile::tempdir;
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, ProviderAccountSecretPurpose,
-};
+
 use hermes_hub_backend::platform::secrets::{
     SecretReferenceStore, SecretResolver, SecretStoreKind,
 };
@@ -311,7 +312,7 @@ async fn gmail_oauth_callback_completes_pending_grant_without_api_secret() {
         .await
         .expect("load provider account")
         .expect("provider account");
-    assert_eq!(account.provider_kind, EmailProviderKind::Gmail);
+    assert_eq!(account.provider_kind, CommunicationProviderKind::Gmail);
     assert_eq!(account.external_account_id, account_id);
     assert!(account.config.get("access_token").is_none());
     assert!(account.config.get("refresh_token").is_none());

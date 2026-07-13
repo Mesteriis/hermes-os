@@ -1,4 +1,5 @@
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -18,8 +19,9 @@ use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatNotificationSettingsSnapshot, TelegramTdlibChatPositionSnapshot,
     TelegramTdlibChatRemovedFromListSnapshot, TelegramTdlibChatUnreadSnapshot,
 };
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
-use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
 
 use super::chat_event_payloads::{
     chat_archived_updated_event, chat_folder_labels_updated_event,
@@ -33,7 +35,7 @@ use super::realtime_events::{
 
 pub(super) async fn publish_chat_unread_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibChatUnreadSnapshot,
 ) {
@@ -70,7 +72,7 @@ pub(super) async fn publish_chat_unread_event(
 
 pub(super) async fn publish_chat_marked_as_unread_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibChatMarkedAsUnreadSnapshot,
 ) {
@@ -110,7 +112,7 @@ pub(super) async fn publish_chat_marked_as_unread_event(
 
 pub(super) async fn publish_chat_notification_settings_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibChatNotificationSettingsSnapshot,
 ) {
@@ -162,7 +164,7 @@ pub(super) async fn publish_chat_notification_settings_event(
 
 pub(super) async fn publish_chat_position_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibChatPositionSnapshot,
 ) {
@@ -232,7 +234,7 @@ pub(super) async fn publish_chat_position_event(
 
 pub(super) async fn publish_chat_removed_from_list_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     snapshot: &TelegramTdlibChatRemovedFromListSnapshot,
 ) {
@@ -250,7 +252,7 @@ pub(super) async fn publish_chat_removed_from_list_event(
 
 pub(super) async fn publish_chat_folders_event(
     telegram_store: &Option<TelegramStore>,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     folders: &[TelegramTdlibChatFolderSnapshot],
 ) {
@@ -283,7 +285,7 @@ pub(super) async fn publish_chat_folders_event(
 
 async fn publish_chat_group_filters_event(
     pool: &PgPool,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     account_id: &str,
     items: &[TelegramChatGroupFilter],
 ) {

@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::platform::communications::NewRawCommunicationRecord;
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 
 use super::super::TELEGRAM_MESSAGE_RECORD_KIND;
 use super::super::errors::TelegramError;

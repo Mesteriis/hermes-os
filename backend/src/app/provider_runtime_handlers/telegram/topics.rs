@@ -1,21 +1,31 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::app::api_support::{
-    TelegramMessageListResponse, api_audit_log, telegram_provider_runtime_service,
-    telegram_runtime_use_case_context,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::{
-    TelegramTopic, TelegramTopicCloseRequest, TelegramTopicCreateRequest,
+use crate::application::telegram_runtime;
+use crate::integrations::telegram::client::{
+    TelegramError, TelegramTopic, TelegramTopicCloseRequest, TelegramTopicCreateRequest,
     TelegramTopicLifecycleResponse, TelegramTopicListResponse,
 };
-use crate::application::telegram_runtime;
 use crate::platform::audit::NewApiAuditRecord;
-use crate::platform::events::NewEventEnvelope;
+
 use crate::platform::events::bus::telegram_event_types;
 
 use super::helpers::{
@@ -96,11 +106,9 @@ pub(crate) async fn get_telegram_topics(
         .telegram_chat_by_id(&telegram_chat_id)
         .await?
         .ok_or_else(|| {
-            ApiError::Telegram(
-                crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
-                    format!("telegram chat `{telegram_chat_id}` was not found"),
-                ),
-            )
+            ApiError::Telegram(TelegramError::InvalidRequest(format!(
+                "telegram chat `{telegram_chat_id}` was not found"
+            )))
         })?;
     ensure_telegram_account_operation_allowed(&state, &chat.account_id, "topics.list").await?;
 
@@ -136,11 +144,9 @@ pub(crate) async fn post_telegram_topic_create(
         .telegram_chat_by_id(&telegram_chat_id)
         .await?
         .ok_or_else(|| {
-            ApiError::Telegram(
-                crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
-                    format!("telegram chat `{telegram_chat_id}` was not found"),
-                ),
-            )
+            ApiError::Telegram(TelegramError::InvalidRequest(format!(
+                "telegram chat `{telegram_chat_id}` was not found"
+            )))
         })?;
     let command_id = request.command_id.clone();
 
@@ -339,19 +345,15 @@ pub(crate) async fn search_telegram_topics(
     let telegram_chat_id = query.telegram_chat_id.trim().to_owned();
 
     if search_q.is_empty() {
-        return Err(ApiError::Telegram(
-            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
-                "search query `q` is required".to_owned(),
-            ),
-        ));
+        return Err(ApiError::Telegram(TelegramError::InvalidRequest(
+            "search query `q` is required".to_owned(),
+        )));
     }
 
     if telegram_chat_id.is_empty() {
-        return Err(ApiError::Telegram(
-            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
-                "search query `telegram_chat_id` is required".to_owned(),
-            ),
-        ));
+        return Err(ApiError::Telegram(TelegramError::InvalidRequest(
+            "search query `telegram_chat_id` is required".to_owned(),
+        )));
     }
 
     let items = store

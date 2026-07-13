@@ -1,7 +1,5 @@
 use super::*;
 
-pub(crate) use crate::platform::formatting::text_preview;
-
 pub(crate) fn default_schema_version() -> i32 {
     1
 }

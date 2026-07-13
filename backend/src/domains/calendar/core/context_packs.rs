@@ -5,8 +5,10 @@ use sqlx::postgres::PgPool;
 
 use super::errors::CalendarCoreError;
 use crate::engines::context_packs::{
-    ContextPack, ContextPackKind, ContextPackSourceKind, ContextPackStore, NewContextPack,
-    NewContextPackSource,
+    models::{
+        ContextPack, ContextPackKind, ContextPackSourceKind, NewContextPack, NewContextPackSource,
+    },
+    store::ContextPackStore,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

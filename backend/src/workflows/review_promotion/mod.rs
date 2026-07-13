@@ -4,6 +4,9 @@ use sha2::{Digest, Sha256};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use crate::application::relationship_graph::{
+    RelationshipGraphCoordinator, RelationshipGraphCoordinatorError,
+};
 use crate::domains::decisions::{
     DecisionReviewPort, DecisionReviewState, NewDecision, NewDecisionEvidence,
 };
@@ -22,20 +25,23 @@ use crate::domains::projects::core::{NewProject, ProjectCommandPortError};
 use crate::domains::projects::link_reviews::{
     ProjectLinkReviewCommand, ProjectLinkReviewPort, ProjectLinkReviewState, ProjectLinkTargetKind,
 };
-use crate::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewPort,
-    RelationshipReviewState,
+use crate::domains::relationships::models::{
+    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
 };
 use crate::domains::review::{
     ReviewInboxError, ReviewInboxPort, ReviewItem, ReviewItemEvidenceRecord, ReviewItemKind,
     ReviewPromotionTarget,
 };
-use crate::domains::tasks::api::{NewTask, TaskCommandPort, TaskError};
-use crate::domains::tasks::core::{ObligationTaskLinkPort, TaskCoreError};
-use crate::platform::observations::{
-    NewObservation, Observation, ObservationOriginKind, ObservationPort, ObservationPortError,
+use crate::domains::tasks::api::{NewTask, TaskError};
+use crate::domains::tasks::command_service::{TaskCommandService, TaskCommandServiceError};
+use crate::domains::tasks::core::TaskCoreError;
+use crate::domains::tasks::workflow_commands::TaskWorkflowCommands;
+use hermes_observations_api::models::{NewObservation, Observation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::review_links::{
     link_domain_entity, materialize_review_transition_link,
 };
+use hermes_observations_postgres::store::ObservationStore;
 
 #[derive(Debug, Error)]
 pub enum ReviewPromotionError {
@@ -43,6 +49,8 @@ pub enum ReviewPromotionError {
     ReviewInbox(#[from] ReviewInboxError),
     #[error(transparent)]
     Task(#[from] TaskError),
+    #[error(transparent)]
+    TaskCommand(#[from] TaskCommandServiceError),
     #[error(transparent)]
     TaskCore(#[from] TaskCoreError),
     #[error(transparent)]
@@ -52,7 +60,7 @@ pub enum ReviewPromotionError {
     #[error(transparent)]
     Obligation(#[from] crate::domains::obligations::ObligationReviewPortError),
     #[error(transparent)]
-    Relationship(#[from] crate::domains::relationships::RelationshipReviewPortError),
+    RelationshipGraph(#[from] RelationshipGraphCoordinatorError),
     #[error(transparent)]
     PersonaIdentity(#[from] crate::domains::personas::identity::PersonaIdentityError),
     #[error(transparent)]
@@ -64,7 +72,7 @@ pub enum ReviewPromotionError {
     #[error(transparent)]
     Organization(#[from] OrganizationError),
     #[error(transparent)]
-    Observation(#[from] ObservationPortError),
+    Observation(#[from] ObservationStoreError),
     #[error("{0}")]
     InvalidTarget(String),
     #[error(transparent)]
@@ -260,8 +268,8 @@ impl ReviewPromotionService {
                         format!("review-item://{}/task", item.review_item_id),
                     )
                     .await?;
-                let task = TaskCommandPort::new(self.pool.clone())
-                    .create(&NewTask {
+                let task = TaskCommandService::new(self.pool.clone())
+                    .create_task_manual(&NewTask {
                         title: item.title.clone(),
                         description: Some(item.summary.clone()),
                         provenance_kind: Some("review_item".to_owned()),
@@ -324,8 +332,8 @@ impl ReviewPromotionService {
                             &obligation_evidence(evidence),
                         )
                         .await?;
-                    ObligationTaskLinkPort::new(self.pool.clone())
-                        .link_fulfillment_task(&obligation.obligation_id, &task.task_id)
+                    TaskWorkflowCommands::new(self.pool.clone())
+                        .link_obligation_fulfillment(&obligation.obligation_id, &task.task_id)
                         .await?;
                 }
                 Ok(ReviewPromotionTarget::new("tasks", "task", task.task_id))
@@ -509,7 +517,7 @@ impl ReviewPromotionService {
                         "relationship evidence is required".to_owned(),
                     ));
                 }
-                let relationship_store = RelationshipReviewPort::new(self.pool.clone());
+                let relationship_coordinator = RelationshipGraphCoordinator::new(self.pool.clone());
                 let relationship = if metadata_string(&item.metadata, "mirrored_from").as_deref()
                     == Some("relationships")
                 {
@@ -526,8 +534,13 @@ impl ReviewPromotionService {
                             format!("review-item://{}/relationship", item.review_item_id),
                         )
                         .await?;
-                    let relationship = relationship_store
-                        .set_review_state(&relationship_id, RelationshipReviewState::UserConfirmed)
+                    let relationship = relationship_coordinator
+                        .set_review_state_with_observation(
+                            &relationship_id,
+                            RelationshipReviewState::UserConfirmed,
+                            None,
+                            None,
+                        )
                         .await?;
                     self.link_review_transition_observation(
                         &review_observation,
@@ -558,7 +571,7 @@ impl ReviewPromotionService {
                             format!("review-item://{}/relationship", item.review_item_id),
                         )
                         .await?;
-                    let relationship = relationship_store
+                    let relationship = relationship_coordinator
                         .upsert_with_evidence(
                             &NewRelationship {
                                 source_entity_kind: RelationshipEntityKind::Knowledge,
@@ -859,7 +872,7 @@ impl ReviewPromotionService {
         item: &ReviewItem,
         evidence: &[ReviewItemEvidenceRecord],
     ) -> Result<String, ReviewPromotionError> {
-        let observation_store = ObservationPort::new(self.pool.clone());
+        let observation_store = ObservationStore::new(self.pool.clone());
         let mut markdown = String::new();
         markdown.push_str("# ");
         markdown.push_str(item.title.trim());
@@ -903,7 +916,7 @@ impl ReviewPromotionService {
         payload: Value,
         source_ref: String,
     ) -> Result<Observation, ReviewPromotionError> {
-        Ok(ObservationPort::new(self.pool.clone())
+        Ok(ObservationStore::new(self.pool.clone())
             .capture(
                 &NewObservation::new(
                     "REVIEW_TRANSITION",

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::application::provider_runtime_contracts::{
+use crate::integrations::whatsapp::runtime::contracts::{
     WhatsAppProviderRuntimeShape, WhatsAppRuntimeStatus,
 };
 

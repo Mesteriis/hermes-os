@@ -1,5 +1,5 @@
 use super::super::types::ApiError;
-use crate::application::OrganizationPersonaLinkApplicationError;
+use crate::application::organization_persona_links::OrganizationPersonaLinkApplicationError;
 use crate::domains::organizations::api::OrganizationError;
 use crate::domains::organizations::service::OrganizationCommandServiceError;
 
@@ -92,7 +92,9 @@ impl From<OrganizationPersonaLinkApplicationError> for ApiError {
     fn from(error: OrganizationPersonaLinkApplicationError) -> Self {
         match error {
             OrganizationPersonaLinkApplicationError::Organization(source) => Self::from(source),
-            OrganizationPersonaLinkApplicationError::Relationship(source) => Self::from(source),
+            OrganizationPersonaLinkApplicationError::RelationshipGraph(source) => {
+                Self::from(source)
+            }
         }
     }
 }

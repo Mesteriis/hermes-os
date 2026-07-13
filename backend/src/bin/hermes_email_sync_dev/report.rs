@@ -1,4 +1,4 @@
-use hermes_hub_backend::workflows::email_sync_pipeline::EmailSyncPipelineReport;
+use hermes_hub_backend::workflows::email_sync_pipeline::report::EmailSyncPipelineReport;
 use serde::Serialize;
 
 use crate::config::DevEmailSyncConfig;

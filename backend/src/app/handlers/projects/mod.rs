@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
+use hermes_events_api::{EventEnvelope, EventEnvelopeError, NewEventEnvelope};
 use std::io;
 
 use axum::extract::{Path, Query, RawQuery, State};
@@ -13,12 +15,11 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 use url::form_urlencoded;
 
+use crate::platform::formatting::text_preview;
+
 use crate::ai::core::{
     AI_EMBEDDING_DIMENSION, AiAgentListResponse, AiAgentRun, AiAnswerRequest, AiError,
     AiMeetingPrepRequest, AiService, AiStatusResponse, AiTaskCandidateRefreshRequest, v3_agents,
-};
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
 };
 use crate::domains::personas::analytics::{AnalyticsError, PersonaAnalyticsService};
 use crate::domains::personas::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
@@ -27,8 +28,12 @@ use crate::domains::personas::export::{ExportError, ExportFormat, PersonaExportS
 use crate::domains::personas::health::{PersonaHealthError, PersonaHealthStore};
 use crate::domains::personas::investigator::{InvestigatorError, PersonaInvestigator};
 use crate::engines::automation::{
-    AutomationError, AutomationPolicy, AutomationStore, AutomationTemplate, NewAutomationPolicy,
-    NewAutomationTemplate, TelegramSendDryRunRequest, TelegramSendDryRunResponse,
+    errors::AutomationError,
+    models::{
+        AutomationPolicy, AutomationTemplate, NewAutomationPolicy, NewAutomationTemplate,
+        TelegramSendDryRunRequest, TelegramSendDryRunResponse,
+    },
+    store::AutomationStore,
 };
 use crate::platform::audit::{ApiAuditError, ApiAuditLog, ApiAuditRecord, NewApiAuditRecord};
 use crate::platform::calls::{
@@ -37,6 +42,9 @@ use crate::platform::calls::{
     TelegramCall, TranscriptStatus,
 };
 use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
+use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+
 use crate::platform::config::AppConfig;
 
 use crate::domains::personas::trust::{PersonaPromiseStore, PersonaRiskStore, PersonaTrustError};
@@ -55,7 +63,6 @@ use crate::domains::personas::identity::{
     PersonaIdentityReviewCommand, PersonaIdentityReviewState, PersonaIdentityReviewStore,
 };
 
-use crate::application::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
 use crate::domains::calendar::brain::{CalendarBrainError, CalendarBrainService};
 use crate::domains::calendar::core::{
     CalendarCoreError, ContextPackInput, EventAgendaStore, EventChecklistStore,
@@ -115,10 +122,8 @@ use crate::integrations::mail::accounts::{
     EmailAccountSetupError, EmailAccountSetupService, GmailOAuthPendingGrant,
     GmailOAuthSetupRequest, ImapAccountSetupRequest,
 };
-use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
-use crate::platform::events::{
-    EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
-};
+use crate::integrations::ollama::client::OllamaClient;
+use crate::integrations::ollama::client::config::OllamaClientConfig;
 use crate::platform::secrets::DatabaseEncryptedSecretVault;
 use crate::platform::secrets::{SecretKind, SecretReferenceStore};
 use crate::platform::settings::{
@@ -127,8 +132,24 @@ use crate::platform::settings::{
 use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
+use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
+use crate::workflows::email_intelligence::service::EmailIntelligenceService;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
-use crate::app::api_support::*;
+use crate::app::api_support::{
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
+};
 use crate::app::{ApiError, AppState};
 
 pub(crate) async fn get_projects(
@@ -173,7 +194,7 @@ pub(crate) async fn get_project_link_candidates(
         let graph_node_id = node_id(GraphNodeKind::Message, &message.message_id);
         let title = text_preview(&message.subject, 120);
         let sender_excerpt = text_preview(&message.sender, 140);
-        crate::application::ensure_project_link_candidate_review_item(
+        crate::application::project_link_review_mirror::ensure_project_link_candidate_review_item(
             &pool,
             &project_id,
             ProjectLinkTargetKind::Message,
@@ -217,7 +238,7 @@ pub(crate) async fn get_project_link_candidates(
     {
         let graph_node_id = node_id(GraphNodeKind::Document, &document.document_id);
         let title = text_preview(&document.title, 140);
-        crate::application::ensure_project_link_candidate_review_item(
+        crate::application::project_link_review_mirror::ensure_project_link_candidate_review_item(
             &pool,
             &project_id,
             ProjectLinkTargetKind::Document,
@@ -287,17 +308,17 @@ pub(crate) async fn put_project_link_review(
         crate::domains::projects::link_reviews::ProjectLinkReviewService::new(pool.clone())
             .review_manual(&command)
             .await?;
-    let stored_event = crate::platform::events::EventStore::new(pool.clone())
+    let stored_event = hermes_events_postgres::store::EventStore::new(pool.clone())
         .get_by_id(&result.event_id)
         .await?
         .ok_or_else(|| {
             ApiError::Store(
-                crate::platform::events::EventStoreError::ConsumerHandlerFailed(
+                hermes_events_postgres::errors::EventStoreError::ConsumerHandlerFailed(
                     "project link review event was not stored".to_owned(),
                 ),
             )
         })?;
-    crate::application::project_link_review_effect(&pool, &stored_event)
+    crate::workflows::project_link_review_effects::project_link_review_effect(&pool, &stored_event)
         .await
         .map_err(|error| ApiError::FailedPrecondition(error.to_string()))?;
     let observation_id = sqlx::query_scalar::<_, String>(
@@ -319,7 +340,7 @@ pub(crate) async fn put_project_link_review(
     .map_err(ApiError::Projects)?
     .ok_or_else(|| {
         ApiError::Store(
-            crate::platform::events::EventStoreError::ConsumerHandlerFailed(
+            hermes_events_postgres::errors::EventStoreError::ConsumerHandlerFailed(
                 "project link review observation link was not stored".to_owned(),
             ),
         )
@@ -340,7 +361,7 @@ pub(crate) async fn put_project_link_review(
                 .ok_or(ApiError::ProjectLinkTargetNotFound)?;
             let title = text_preview(&message.subject, 120);
             let summary = text_preview(&message.sender, 140);
-            crate::application::sync_project_link_review_state_in_transaction(
+            crate::application::project_link_review_mirror::sync_project_link_review_state_in_transaction(
                 &mut transaction,
                 &command.project_id,
                 command.target_kind,
@@ -362,7 +383,7 @@ pub(crate) async fn put_project_link_review(
                 .find(|item| item.document_id == command.target_id)
                 .ok_or(ApiError::ProjectLinkTargetNotFound)?;
             let title = text_preview(&document.title, 140);
-            crate::application::sync_project_link_review_state_in_transaction(
+            crate::application::project_link_review_mirror::sync_project_link_review_state_in_transaction(
                 &mut transaction,
                 &command.project_id,
                 command.target_kind,

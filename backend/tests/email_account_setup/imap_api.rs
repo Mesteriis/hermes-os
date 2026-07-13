@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use std::sync::Arc;
 
 use axum::http::StatusCode;
@@ -6,15 +8,16 @@ use sqlx::Row;
 use tempfile::tempdir;
 use tower::ServiceExt;
 
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, CommunicationProviderAccountStore,
-    CommunicationProviderSecretBindingStore, EmailProviderKind, ProviderAccountSecretPurpose,
-};
 use hermes_hub_backend::integrations::mail::accounts::{
     EmailAccountSetupService, ImapAccountSetupRequest,
 };
+
 use hermes_hub_backend::platform::secrets::{
     DatabaseEncryptedSecretVault, ResolvedSecret, SecretKind, SecretReferenceStore, SecretResolver,
     SecretStoreKind,
@@ -56,7 +59,7 @@ async fn imap_account_setup_stores_encrypted_secret_in_database_against_postgres
         .setup_imap_account(
             ImapAccountSetupRequest::new(
                 &account_id,
-                EmailProviderKind::Icloud,
+                CommunicationProviderKind::Icloud,
                 "iCloud setup",
                 format!("icloud-setup-{suffix}@icloud.com"),
                 "imap.mail.me.com",
@@ -76,7 +79,7 @@ async fn imap_account_setup_stores_encrypted_secret_in_database_against_postgres
         .await
         .expect("load provider account")
         .expect("provider account exists");
-    assert_eq!(account.provider_kind, EmailProviderKind::Icloud);
+    assert_eq!(account.provider_kind, CommunicationProviderKind::Icloud);
     assert_eq!(account.config["host"], "imap.mail.me.com");
     assert_eq!(account.config["port"], 993);
     assert_eq!(account.config["tls"], true);
@@ -171,7 +174,7 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
         .await
         .expect("load provider account")
         .expect("provider account");
-    assert_eq!(account.provider_kind, EmailProviderKind::Icloud);
+    assert_eq!(account.provider_kind, CommunicationProviderKind::Icloud);
     assert_eq!(
         account.config["connected_services"],
         json!(["mail", "calendar", "contacts"])

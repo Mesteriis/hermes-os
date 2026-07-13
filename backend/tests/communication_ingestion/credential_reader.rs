@@ -1,4 +1,8 @@
 use crate::support::*;
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, NewProviderAccount, NewProviderAccountSecretBinding,
+    ProviderAccountSecretPurpose,
+};
 
 #[tokio::test]
 async fn provider_credential_reader_resolves_bound_account_secret_against_postgres() {
@@ -10,7 +14,7 @@ async fn provider_credential_reader_resolves_bound_account_secret_against_postgr
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let secret_binding_store =
-        hermes_hub_backend::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+        hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
             pool.clone(),
         );
     let secret_store = SecretReferenceStore::new(pool);
@@ -22,7 +26,7 @@ async fn provider_credential_reader_resolves_bound_account_secret_against_postgr
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Gmail credential reader",
             format!("credential-reader-{suffix}@example.com"),
         ))
@@ -80,7 +84,7 @@ async fn provider_credential_reader_reports_missing_binding_against_postgres() {
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let secret_binding_store =
-        hermes_hub_backend::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+        hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
             pool.clone(),
         );
     let secret_store = SecretReferenceStore::new(pool);
@@ -91,7 +95,7 @@ async fn provider_credential_reader_reports_missing_binding_against_postgres() {
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Icloud,
+            CommunicationProviderKind::Icloud,
             "iCloud missing credential binding",
             format!("missing-credential-binding-{suffix}@icloud.com"),
         ))
@@ -127,7 +131,7 @@ async fn provider_credential_reader_propagates_resolver_failures_against_postgre
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let secret_binding_store =
-        hermes_hub_backend::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+        hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
             pool.clone(),
         );
     let secret_store = SecretReferenceStore::new(pool);
@@ -139,7 +143,7 @@ async fn provider_credential_reader_propagates_resolver_failures_against_postgre
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "IMAP resolver failure",
             format!("resolver-failure-{suffix}@example.net"),
         ))
@@ -191,7 +195,7 @@ async fn provider_credential_reader_rejects_incompatible_secret_kind_against_pos
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let secret_binding_store =
-        hermes_hub_backend::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+        hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
             pool.clone(),
         );
     let secret_store = SecretReferenceStore::new(pool);
@@ -203,7 +207,7 @@ async fn provider_credential_reader_rejects_incompatible_secret_kind_against_pos
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Gmail incompatible credential kind",
             format!("incompatible-kind-{suffix}@example.com"),
         ))

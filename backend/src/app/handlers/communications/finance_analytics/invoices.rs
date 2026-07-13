@@ -36,7 +36,7 @@ pub(crate) async fn get_v1_invoices(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::finance::CommunicationFinanceStore,
     >(pool);
     let status = query
@@ -56,7 +56,7 @@ pub(crate) async fn post_v1_invoice(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::finance::CommunicationFinanceStore,
     >(pool);
     let invoice = store

@@ -1,5 +1,5 @@
 use super::super::*;
-use crate::domains::communications::service::CommunicationCommandService;
+use crate::domains::communications::command_service::CommunicationCommandService;
 
 #[derive(Deserialize)]
 pub(crate) struct UpdateMessageReadStateRequest {

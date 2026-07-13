@@ -1,6 +1,5 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use serde_json::json;
-
-use crate::platform::communications::{CommunicationProviderKind, NewProviderAccount};
 
 use super::WhatsappWebStore;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;

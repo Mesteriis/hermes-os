@@ -1,3 +1,4 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
@@ -7,10 +8,9 @@ use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-};
+
 use hermes_hub_backend::platform::settings::{ApplicationSettingsStore, SettingValueKind};
 use hermes_hub_backend::platform::storage::Database;
 
@@ -539,7 +539,7 @@ async fn settings_accounts_api_lists_provider_accounts_against_postgres() {
     CommunicationIngestionStore::new(pool)
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Icloud,
+            CommunicationProviderKind::Icloud,
             "Settings iCloud account",
             format!("settings-{suffix}@icloud.com"),
         ))
@@ -582,7 +582,7 @@ async fn settings_accounts_api_updates_provider_account_label_against_postgres()
     CommunicationIngestionStore::new(pool.clone())
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Icloud,
+            CommunicationProviderKind::Icloud,
             "Original iCloud label",
             format!("label-{suffix}@icloud.com"),
         ))
@@ -661,7 +661,7 @@ async fn settings_accounts_api_updates_address_book_sync_against_postgres() {
         .upsert_provider_account(
             &NewProviderAccount::new(
                 &account_id,
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 "Gmail contacts account",
                 format!("contacts-{suffix}@gmail.com"),
             )
@@ -744,7 +744,7 @@ async fn settings_accounts_api_rejects_address_book_sync_without_contacts_capabi
         .upsert_provider_account(
             &NewProviderAccount::new(
                 &account_id,
-                EmailProviderKind::Imap,
+                CommunicationProviderKind::Imap,
                 "IMAP mail account",
                 format!("imap-{suffix}@example.com"),
             )
@@ -793,7 +793,7 @@ async fn settings_accounts_api_rejects_address_book_remote_write_without_scope()
         .upsert_provider_account(
             &NewProviderAccount::new(
                 &account_id,
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 "Gmail contacts readonly account",
                 format!("contacts-readonly-{suffix}@gmail.com"),
             )

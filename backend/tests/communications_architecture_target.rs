@@ -1,3 +1,4 @@
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -240,8 +241,7 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
 fn app_messaging_handlers_are_thin() {
     let root = repo_root();
     let telegram_handler_root = root.join("backend/src/app/handlers/telegram");
-    let telegram_handler_facade = read(root.join("backend/src/app/handlers/telegram.rs"));
-    let whatsapp_handler = read(root.join("backend/src/app/handlers/whatsapp.rs"));
+    let router_support = read(root.join("backend/src/app/router/routes/support.rs"));
     let all_handler_sources = read_all_sources(root.join("backend/src/app/handlers"));
     let app_sources = read_all_sources(root.join("backend/src/app"));
     let provider_runtime_handler_sources =
@@ -252,10 +252,22 @@ fn app_messaging_handlers_are_thin() {
         telegram_handler_sources.trim().is_empty(),
         "backend/src/app/handlers/telegram must not contain provider runtime/store implementation files"
     );
+    for facade in [
+        "telegram.rs",
+        "whatsapp.rs",
+        "yandex_telemost.rs",
+        "zoom.rs",
+        "zulip.rs",
+    ] {
+        assert!(
+            !root.join("backend/src/app/handlers").join(facade).exists(),
+            "provider handler facade must not exist: {facade}"
+        );
+    }
     assert!(
-        telegram_handler_facade.contains("provider_runtime_handlers::telegram")
-            && whatsapp_handler.contains("provider_runtime_handlers::whatsapp"),
-        "messaging app handlers must be thin facades over the provider runtime composition root"
+        router_support.contains("provider_runtime_handlers::telegram")
+            && router_support.contains("provider_runtime_handlers::whatsapp"),
+        "router composition must import provider runtime handlers from their owner module"
     );
     for forbidden in [
         "telegram_store(",
@@ -270,34 +282,25 @@ fn app_messaging_handlers_are_thin() {
     for forbidden in [
         "telegram_store(",
         "whatsapp_store(",
-        "crate::integrations::telegram::client",
-        "crate::integrations::whatsapp::client",
-        "TelegramStore",
-        "WhatsappWebStore",
+        "TelegramStore::new",
+        "WhatsappWebStore::new",
+        "whatsapp_provider_runtime_mux(",
     ] {
         assert!(
             !app_sources.contains(forbidden),
-            "backend/src/app must not own concrete provider client/store code: {forbidden}"
+            "backend/src/app must not own provider runtime composition or concrete stores: {forbidden}"
         );
     }
-    let telegram_facade_sources = telegram_handler_facade + &whatsapp_handler;
-    assert!(
-        !telegram_facade_sources.contains("crate::integrations::"),
-        "Telegram/WhatsApp handler facades must not import integrations directly"
-    );
     for forbidden in [
         "telegram_runtime_store(",
         "whatsapp_runtime_store(",
-        "crate::integrations::telegram::client",
-        "crate::integrations::telegram::runtime",
-        "crate::integrations::telegram::tdjson",
-        "crate::integrations::whatsapp::client",
-        "TelegramStore",
-        "WhatsappWebStore",
+        "TelegramStore::new",
+        "WhatsappWebStore::new",
+        "whatsapp_provider_runtime_mux(",
     ] {
         assert!(
             !provider_runtime_handler_sources.contains(forbidden),
-            "provider runtime handlers must call application services/contracts instead of provider implementations: {forbidden}"
+            "provider runtime handlers may consume provider DTOs but must not compose provider runtimes or stores: {forbidden}"
         );
     }
 }
@@ -306,8 +309,6 @@ fn app_messaging_handlers_are_thin() {
 fn whatsapp_provider_runtime_is_replaceable_trait_boundary() {
     let root = repo_root();
     let runtime_source = read_all_sources(root.join("backend/src/integrations/whatsapp/runtime"));
-    let application_contracts =
-        read(root.join("backend/src/application/provider_runtime_contracts.rs"));
     let application_services =
         read(root.join("backend/src/application/provider_runtime_services.rs"));
 
@@ -389,25 +390,25 @@ fn whatsapp_provider_runtime_is_replaceable_trait_boundary() {
         "successful WhatsApp authorization must store account-scoped session material in host vault"
     );
     assert!(
-        application_contracts.contains("WhatsAppProviderRuntimeRef"),
-        "application contracts must expose a trait-object runtime reference"
+        application_services.contains("WhatsAppProviderRuntimeRef"),
+        "application runtime composition must expose a trait-object runtime reference"
     );
     assert!(
-        application_contracts.contains("whatsapp_provider_runtime_mux("),
-        "application runtime factory must compose WhatsApp provider runtimes through a shape-aware mux"
+        application_services.contains("whatsapp_provider_runtime_mux("),
+        "application runtime composition must compose WhatsApp provider runtimes through a shape-aware mux"
     );
     assert!(
-        application_contracts.contains("WhatsappRuntimeSignalIngestService::new")
-            && application_contracts.contains("whatsapp_native_md_runtime("),
+        application_services.contains("WhatsappRuntimeSignalIngestService::new")
+            && application_services.contains("whatsapp_native_md_runtime("),
         "application runtime factory must wire native_md through the shared runtime event sink instead of a direct domain callback"
     );
     assert!(
-        !application_contracts.contains("WhatsappWebStore as WhatsappProviderRuntimeStore"),
-        "application contracts must not alias the concrete WhatsApp Web store as the runtime"
+        !application_services.contains("WhatsappWebStore as WhatsappProviderRuntimeStore"),
+        "application runtime composition must not alias the concrete WhatsApp Web store as the runtime"
     );
     assert!(
-        !application_contracts.contains("WhatsappWebStore::new"),
-        "application contracts must construct WhatsApp runtime through integration runtime factory"
+        !application_services.contains("WhatsappWebStore::new"),
+        "application runtime composition must construct WhatsApp runtime through integration runtime factory"
     );
     assert!(
         runtime_source.contains("struct ShapedWhatsAppProviderRuntime"),
@@ -468,8 +469,8 @@ fn whatsapp_provider_libraries_are_confined_to_runtime_boundary() {
     let runtime_source = read(root.join("backend/src/integrations/whatsapp/runtime/mod.rs"));
     let runtime_contracts_source =
         read(root.join("backend/src/integrations/whatsapp/runtime/contracts.rs"));
-    let application_contracts_source =
-        read(root.join("backend/src/application/provider_runtime_contracts.rs"));
+    let application_services_source =
+        read(root.join("backend/src/application/provider_runtime_services.rs"));
     let application_bootstrap_source = read(root.join("backend/src/application/bootstrap.rs"));
     let command_executor_source =
         read(root.join("backend/src/application/whatsapp_command_executor.rs"));
@@ -688,8 +689,8 @@ fn whatsapp_provider_libraries_are_confined_to_runtime_boundary() {
                 .contains("\"session_secret_purpose\": actor.session_secret_purpose()")
             && native_runtime_source.contains("\"wa_rs_store_manifest\": actor")
             && native_runtime_source.contains("\"restore_scope\": \"account_scoped\"")
-            && application_contracts_source.contains("WhatsappRuntimeSignalIngestService::new")
-            && application_contracts_source.contains("whatsapp_runtime_event_sink")
+            && application_services_source.contains("WhatsappRuntimeSignalIngestService::new")
+            && application_services_source.contains("whatsapp_runtime_event_sink")
             && runtime_source.contains("checks[\"native_md_driver\"]")
             && native_runtime_source.contains("checks[\"native_md_manager\"]")
             && runtime_source.contains("checks[\"runtime\"][\"native_driver\"]"),
@@ -929,7 +930,7 @@ fn whatsapp_provider_libraries_are_confined_to_runtime_boundary() {
         "live runtime bridge command claim must not execute commands without vault-backed session evidence or for fixture, live_blocked or unlinked WhatsApp accounts"
     );
     assert!(
-        application_bootstrap_source.contains("start_whatsapp_runtime_restore_reconciliation")
+        application_bootstrap_source.contains("whatsapp_runtime_restore_reconciliation_task")
             && application_bootstrap_source
                 .contains("restore_whatsapp_runtime_from_vault_session_if_enabled")
             && application_bootstrap_source

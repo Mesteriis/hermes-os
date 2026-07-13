@@ -1,6 +1,7 @@
 use super::super::types::ApiError;
-use crate::application::CalendarMeetingOutcomeApplicationError;
+use crate::application::calendar_meeting_outcomes::CalendarMeetingOutcomeApplicationError;
 use crate::domains::calendar::brain::CalendarBrainError;
+use crate::domains::calendar::command_service::CalendarCommandServiceError;
 use crate::domains::calendar::core::CalendarCoreError;
 use crate::domains::calendar::events::CalendarError;
 use crate::domains::calendar::health::CalendarHealthError;
@@ -8,7 +9,6 @@ use crate::domains::calendar::meetings::MeetingsError;
 use crate::domains::calendar::reminders::ReminderError;
 use crate::domains::calendar::rules::CalendarRuleError;
 use crate::domains::calendar::scheduling::SchedulingError;
-use crate::domains::calendar::service::CalendarCommandServiceError;
 
 impl From<CalendarCoreError> for ApiError {
     fn from(error: CalendarCoreError) -> Self {

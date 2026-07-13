@@ -1,3 +1,6 @@
+use hermes_communications_api::accounts::ProviderAccountMutationOrigin;
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
+use hermes_events_api::{EventEnvelope, EventEnvelopeError, NewEventEnvelope};
 use std::collections::HashMap;
 use std::io;
 
@@ -18,17 +21,18 @@ use crate::ai::core::{
     AI_EMBEDDING_DIMENSION, AiAgentListResponse, AiAgentRun, AiAnswerRequest, AiError,
     AiMeetingPrepRequest, AiService, AiStatusResponse, AiTaskCandidateRefreshRequest, v3_agents,
 };
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
-};
 use crate::domains::personas::analytics::{AnalyticsError, PersonaAnalyticsService};
 use crate::domains::personas::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
 use crate::domains::personas::expertise::{PersonaExpertiseError, PersonaExpertiseStore};
 use crate::domains::personas::export::{ExportError, ExportFormat, PersonaExportService};
 use crate::domains::personas::investigator::{InvestigatorError, PersonaInvestigator};
 use crate::engines::automation::{
-    AutomationError, AutomationPolicy, AutomationStore, AutomationTemplate, NewAutomationPolicy,
-    NewAutomationTemplate, TelegramSendDryRunRequest, TelegramSendDryRunResponse,
+    errors::AutomationError,
+    models::{
+        AutomationPolicy, AutomationTemplate, NewAutomationPolicy, NewAutomationTemplate,
+        TelegramSendDryRunRequest, TelegramSendDryRunResponse,
+    },
+    store::AutomationStore,
 };
 use crate::platform::audit::{ApiAuditError, ApiAuditLog, ApiAuditRecord, NewApiAuditRecord};
 use crate::platform::calls::{
@@ -37,8 +41,11 @@ use crate::platform::calls::{
     TelegramCall, TranscriptStatus,
 };
 use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
+use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+
 use crate::platform::config::AppConfig;
-use crate::platform::observations::ObservationOriginKind;
+use hermes_observations_api::models::ObservationOriginKind;
 
 use crate::domains::personas::health::{PersonaHealthError, PersonaHealthStore};
 
@@ -60,8 +67,6 @@ use crate::domains::personas::identity::{
 
 const GOOGLE_CONTACTS_WRITE_SCOPE: &str = "https://www.googleapis.com/auth/contacts";
 
-use crate::application::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
-use crate::application::mail_background_sync::MailSyncStore;
 use crate::domains::calendar::brain::{CalendarBrainError, CalendarBrainService};
 use crate::domains::calendar::core::{
     CalendarCoreError, ContextPackInput, EventAgendaStore, EventChecklistStore,
@@ -82,7 +87,6 @@ use crate::domains::calendar::scheduling::{
     DeadlineStore, FocusBlockStore, SchedulingError, SmartSchedulingService,
 };
 use crate::domains::calendar::sync::{export_event_ics, export_event_md};
-use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::domains::communications::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage, ProjectedMessageSummary,
     WorkflowState,
@@ -122,10 +126,8 @@ use crate::integrations::mail::accounts::{
     EmailAccountSetupError, EmailAccountSetupService, GmailOAuthPendingGrant,
     GmailOAuthSetupRequest, ImapAccountSetupRequest,
 };
-use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
-use crate::platform::events::{
-    EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
-};
+use crate::integrations::ollama::client::OllamaClient;
+use crate::integrations::ollama::client::config::OllamaClientConfig;
 use crate::platform::secrets::DatabaseEncryptedSecretVault;
 use crate::platform::secrets::{SecretKind, SecretReferenceStore};
 use crate::platform::settings::{
@@ -134,8 +136,26 @@ use crate::platform::settings::{
 use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
+use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
+use crate::workflows::email_intelligence::service::EmailIntelligenceService;
+use crate::workflows::mail_background_sync::MailSyncStore;
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
-use crate::app::api_support::*;
+use crate::app::api_support::{
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
+};
 use crate::app::{ApiError, AppState};
 
 pub(crate) async fn get_application_settings(
@@ -154,30 +174,32 @@ pub(crate) async fn get_application_settings_accounts(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let accounts =
-        crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool.clone())
-            .list()
-            .await?
+    let accounts = crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationProviderAccountStore,
+    >(pool.clone())
+    .list()
+    .await?
+    .into_iter()
+    .filter(|account| !account.is_deleted())
+    .collect::<Vec<_>>();
+    let mail_sync_error_codes = match crate::app::api_support::stores::domain_stores::app_store::<
+        MailSyncStore,
+    >(pool.clone())
+    .sync_statuses()
+    .await
+    {
+        Ok(statuses) => statuses
             .into_iter()
-            .filter(|account| !account.is_deleted())
-            .collect::<Vec<_>>();
-    let mail_sync_error_codes =
-        match crate::app::api_support::app_store::<MailSyncStore>(pool.clone())
-            .sync_statuses()
-            .await
-        {
-            Ok(statuses) => statuses
-                .into_iter()
-                .map(|status| (status.account_id, status.last_error_code))
-                .collect::<HashMap<_, _>>(),
-            Err(error) => {
-                tracing::warn!(
-                    error = %error,
-                    "failed to inspect mail sync statuses for provider account credential state"
-                );
-                HashMap::new()
-            }
-        };
+            .map(|status| (status.account_id, status.last_error_code))
+            .collect::<HashMap<_, _>>(),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "failed to inspect mail sync statuses for provider account credential state"
+            );
+            HashMap::new()
+        }
+    };
     let mut items = Vec::with_capacity(accounts.len());
     for account in accounts {
         let credential_state = application_account_credential_state_from_sync_failure(
@@ -196,10 +218,10 @@ pub(crate) async fn get_application_settings_accounts(
 }
 
 fn application_account_credential_state_from_sync_failure(
-    provider_kind: EmailProviderKind,
+    provider_kind: CommunicationProviderKind,
     last_error_code: Option<&str>,
 ) -> ApplicationAccountCredentialState {
-    if provider_kind != EmailProviderKind::Gmail {
+    if provider_kind != CommunicationProviderKind::Gmail {
         return ApplicationAccountCredentialState::not_applicable();
     }
 
@@ -220,7 +242,9 @@ pub(crate) async fn patch_application_settings_account(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool);
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationProviderAccountStore,
+    >(pool);
     let mut account = if let Some(display_name) = request
         .display_name
         .as_deref()
@@ -249,7 +273,7 @@ pub(crate) async fn patch_application_settings_account(
             .update_config_with_origin(
                 &account_id,
                 &config,
-                ObservationOriginKind::LocalRuntime,
+                ProviderAccountMutationOrigin::LocalRuntime,
                 "settings.provider_accounts.update_address_book_sync",
                 "update_address_book_sync",
             )
@@ -318,7 +342,7 @@ fn address_book_sync_config(
                     "address book remote write requires bidirectional sync",
                 ));
             }
-            if account.provider_kind != EmailProviderKind::Gmail {
+            if account.provider_kind != CommunicationProviderKind::Gmail {
                 return Err(ApiError::InvalidCommunicationQuery(
                     "address book remote write is only supported for Gmail accounts",
                 ));
@@ -393,7 +417,7 @@ mod account_credential_state_tests {
     #[test]
     fn gmail_oauth_credential_state_requests_reauth_after_refresh_failure() {
         let state = application_account_credential_state_from_sync_failure(
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             Some("oauth_refresh_failed"),
         );
 
@@ -403,7 +427,7 @@ mod account_credential_state_tests {
     #[test]
     fn gmail_oauth_credential_state_does_not_request_reauth_without_refresh_failure() {
         let state = application_account_credential_state_from_sync_failure(
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             Some("provider_network_error"),
         );
 
@@ -413,7 +437,7 @@ mod account_credential_state_tests {
     #[test]
     fn non_gmail_provider_credential_state_is_not_applicable() {
         let state = application_account_credential_state_from_sync_failure(
-            EmailProviderKind::Icloud,
+            CommunicationProviderKind::Icloud,
             Some("oauth_refresh_failed"),
         );
 

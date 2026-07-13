@@ -9,10 +9,11 @@ pub(crate) async fn get_event_agenda(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let agenda = crate::app::api_support::app_store::<EventAgendaStore>(pool)
-        .get(&event_id)
-        .await
-        .map_err(ApiError::from)?;
+    let agenda =
+        crate::app::api_support::stores::domain_stores::app_store::<EventAgendaStore>(pool)
+            .get(&event_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&agenda).unwrap_or_default()))
 }
 

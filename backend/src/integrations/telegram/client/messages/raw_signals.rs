@@ -1,10 +1,12 @@
 use crate::integrations::telegram::client::TelegramStore;
 use crate::integrations::telegram::client::models::TelegramObservedMessage;
 use crate::platform::communications::{
-    CommunicationRawRecordCommandPort, CommunicationRawSignalSource,
-    ProviderCommunicationMessagePortError, build_communication_raw_signal_event,
+    CommunicationRawSignalSource, ProviderCommunicationMessagePortError,
+    build_communication_raw_signal_event,
 };
-use crate::platform::events::{EventBus, EventStore};
+use crate::platform::events::bus::InMemoryEventBus;
+use hermes_communications_api::evidence::CommunicationRawEvidenceCommandPort;
+use hermes_events_postgres::store::EventStore;
 
 use super::super::errors::TelegramError;
 
@@ -12,7 +14,7 @@ impl TelegramStore {
     pub(in crate::integrations::telegram) async fn publish_observed_message_raw_signal(
         &self,
         observed: &TelegramObservedMessage,
-        event_bus: Option<&EventBus>,
+        event_bus: Option<&InMemoryEventBus>,
     ) -> Result<(), TelegramError> {
         let stored_raw = self
             .communication_raw_record_store()

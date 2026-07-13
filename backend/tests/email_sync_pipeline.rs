@@ -1,3 +1,4 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 use testkit::factories::persona::PersonaFactory;
@@ -7,15 +8,14 @@ use chrono::{TimeZone, Utc};
 use serde_json::json;
 use sqlx::Row;
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-};
-use hermes_hub_backend::domains::communications::storage::LocalCommunicationBlobStore;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_hub_backend::domains::communications::storage::port::LocalBlobPort;
 use hermes_hub_backend::integrations::mail::sync::{
     EmailSyncBatch, FetchedCommunicationSourceMessage,
 };
+
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::email_sync_pipeline::project_email_sync_batch_with_mail_blobs;
+use hermes_hub_backend::workflows::email_sync_pipeline::service::project_email_sync_batch_with_mail_blobs;
 
 #[tokio::test]
 async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_participants_against_postgres()
@@ -36,12 +36,12 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
     let sender_email = format!("sender-{suffix}@{sender_domain}");
     let recipient_email = format!("recipient-{suffix}@{recipient_domain}");
     let blob_root = tempfile::tempdir().expect("mail blob root");
-    let blob_store = LocalCommunicationBlobStore::new(blob_root.path());
+    let blob_store = LocalBlobPort::new(blob_root.path());
 
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Sync pipeline IMAP",
             format!("sync-pipeline-{suffix}@example.net"),
         ))
@@ -64,7 +64,7 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
     );
     let raw_rfc822_base64 = base64::engine::general_purpose::STANDARD.encode(raw_rfc822);
     let batch = EmailSyncBatch {
-        provider_kind: EmailProviderKind::Imap,
+        provider_kind: CommunicationProviderKind::Imap,
         stream_id: "imap:INBOX".to_owned(),
         checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 88})),
         messages: vec![FetchedCommunicationSourceMessage {
@@ -81,6 +81,7 @@ async fn email_sync_pipeline_records_raw_blob_and_links_confirmed_message_partic
 
     let report = project_email_sync_batch_with_mail_blobs(
         pool.clone(),
+        &communication_store,
         &blob_store,
         &account_id,
         format!("sync-pipeline-batch-{suffix}"),
@@ -381,12 +382,12 @@ async fn email_sync_pipeline_does_not_create_ai_candidates_directly_against_post
     let decision_rationale = "communication ingestion must build context";
     let obligation_statement = format!("send the candidate refresh summary {suffix}");
     let blob_root = tempfile::tempdir().expect("mail blob root");
-    let blob_store = LocalCommunicationBlobStore::new(blob_root.path());
+    let blob_store = LocalBlobPort::new(blob_root.path());
 
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Sync candidate IMAP",
             format!("sync-candidates-{suffix}@example.net"),
         ))
@@ -404,7 +405,7 @@ async fn email_sync_pipeline_does_not_create_ai_candidates_directly_against_post
     );
     let raw_rfc822_base64 = base64::engine::general_purpose::STANDARD.encode(raw_rfc822);
     let batch = EmailSyncBatch {
-        provider_kind: EmailProviderKind::Imap,
+        provider_kind: CommunicationProviderKind::Imap,
         stream_id: "imap:INBOX".to_owned(),
         checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 90})),
         messages: vec![FetchedCommunicationSourceMessage {
@@ -421,6 +422,7 @@ async fn email_sync_pipeline_does_not_create_ai_candidates_directly_against_post
 
     let report = project_email_sync_batch_with_mail_blobs(
         pool.clone(),
+        &communication_store,
         &blob_store,
         &account_id,
         format!("sync-candidates-batch-{suffix}"),
@@ -533,12 +535,12 @@ async fn email_sync_pipeline_extracts_attachment_metadata_with_initial_scan_stat
     let account_id = format!("acct_sync_attachment_{suffix}");
     let provider_record_id = format!("sync-attachment-message-{suffix}");
     let blob_root = tempfile::tempdir().expect("mail blob root");
-    let blob_store = LocalCommunicationBlobStore::new(blob_root.path());
+    let blob_store = LocalBlobPort::new(blob_root.path());
 
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Sync attachment IMAP",
             format!("sync-attachment-{suffix}@example.net"),
         ))
@@ -565,7 +567,7 @@ async fn email_sync_pipeline_extracts_attachment_metadata_with_initial_scan_stat
     );
     let raw_rfc822_base64 = base64::engine::general_purpose::STANDARD.encode(raw_rfc822);
     let batch = EmailSyncBatch {
-        provider_kind: EmailProviderKind::Imap,
+        provider_kind: CommunicationProviderKind::Imap,
         stream_id: "imap:INBOX".to_owned(),
         checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 89})),
         messages: vec![FetchedCommunicationSourceMessage {
@@ -582,6 +584,7 @@ async fn email_sync_pipeline_extracts_attachment_metadata_with_initial_scan_stat
 
     let report = project_email_sync_batch_with_mail_blobs(
         pool.clone(),
+        &communication_store,
         &blob_store,
         &account_id,
         format!("sync-attachment-batch-{suffix}"),
@@ -669,12 +672,12 @@ async fn email_sync_pipeline_marks_executable_attachment_payloads_malicious() {
     let account_id = format!("acct_sync_malicious_attachment_{suffix}");
     let provider_record_id = format!("sync-malicious-attachment-message-{suffix}");
     let blob_root = tempfile::tempdir().expect("mail blob root");
-    let blob_store = LocalCommunicationBlobStore::new(blob_root.path());
+    let blob_store = LocalBlobPort::new(blob_root.path());
 
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Sync malicious attachment IMAP",
             format!("sync-malicious-attachment-{suffix}@example.net"),
         ))
@@ -703,7 +706,7 @@ async fn email_sync_pipeline_marks_executable_attachment_payloads_malicious() {
     );
     let raw_rfc822_base64 = base64::engine::general_purpose::STANDARD.encode(raw_rfc822);
     let batch = EmailSyncBatch {
-        provider_kind: EmailProviderKind::Imap,
+        provider_kind: CommunicationProviderKind::Imap,
         stream_id: "imap:INBOX".to_owned(),
         checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 90})),
         messages: vec![FetchedCommunicationSourceMessage {
@@ -720,6 +723,7 @@ async fn email_sync_pipeline_marks_executable_attachment_payloads_malicious() {
 
     let report = project_email_sync_batch_with_mail_blobs(
         pool.clone(),
+        &communication_store,
         &blob_store,
         &account_id,
         format!("sync-malicious-attachment-batch-{suffix}"),

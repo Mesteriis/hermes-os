@@ -1,5 +1,5 @@
 use super::super::*;
-use crate::domains::communications::service::{
+use crate::domains::communications::command_service::{
     CommunicationAttachmentImportCommand, CommunicationCommandService,
 };
 use crate::domains::communications::storage::ImportedCommunicationAttachment;

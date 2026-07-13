@@ -1,4 +1,5 @@
 use chrono::{DateTime, TimeZone, Utc};
+use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
 use serde_json::json;
 
 use crate::integrations::telegram::client::models::TelegramChat;
@@ -6,7 +7,7 @@ use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatMarkedAsUnreadSnapshot, TelegramTdlibChatNotificationSettingsSnapshot,
     TelegramTdlibChatPositionSnapshot, TelegramTdlibChatUnreadSnapshot,
 };
-use crate::platform::events::NewEventEnvelope;
+
 use crate::platform::events::bus::telegram_event_types;
 
 pub(super) fn chat_unread_updated_event(
@@ -14,7 +15,7 @@ pub(super) fn chat_unread_updated_event(
     chat: &TelegramChat,
     snapshot: &TelegramTdlibChatUnreadSnapshot,
     occurred_at: DateTime<Utc>,
-) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+) -> Result<NewEventEnvelope, hermes_events_api::EventEnvelopeError> {
     NewEventEnvelope::builder(
         format!(
             "evt_telegram_chat_unread_{}_{}_{}",
@@ -59,7 +60,7 @@ pub(super) fn chat_marked_as_unread_updated_event(
     chat: &TelegramChat,
     snapshot: &TelegramTdlibChatMarkedAsUnreadSnapshot,
     occurred_at: DateTime<Utc>,
-) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+) -> Result<NewEventEnvelope, hermes_events_api::EventEnvelopeError> {
     NewEventEnvelope::builder(
         format!(
             "evt_telegram_chat_marked_unread_{}_{}_{}",
@@ -102,7 +103,7 @@ pub(super) fn chat_notification_settings_updated_event(
     chat: &TelegramChat,
     snapshot: &TelegramTdlibChatNotificationSettingsSnapshot,
     occurred_at: DateTime<Utc>,
-) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+) -> Result<NewEventEnvelope, hermes_events_api::EventEnvelopeError> {
     let is_muted = !snapshot.use_default_mute_for && snapshot.mute_for > 0;
     NewEventEnvelope::builder(
         format!(
@@ -147,7 +148,7 @@ pub(super) fn chat_notification_settings_chat_updated_event(
     chat: &TelegramChat,
     snapshot: &TelegramTdlibChatNotificationSettingsSnapshot,
     occurred_at: DateTime<Utc>,
-) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+) -> Result<NewEventEnvelope, hermes_events_api::EventEnvelopeError> {
     let is_muted = !snapshot.use_default_mute_for && snapshot.mute_for > 0;
     NewEventEnvelope::builder(
         format!(
@@ -193,7 +194,7 @@ pub(super) fn chat_archived_updated_event(
     chat: &TelegramChat,
     snapshot: &TelegramTdlibChatPositionSnapshot,
     occurred_at: DateTime<Utc>,
-) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+) -> Result<NewEventEnvelope, hermes_events_api::EventEnvelopeError> {
     let is_archived = chat
         .metadata
         .get("is_archived")
@@ -244,7 +245,7 @@ pub(super) fn chat_position_updated_event(
     chat: &TelegramChat,
     snapshot: &TelegramTdlibChatPositionSnapshot,
     occurred_at: DateTime<Utc>,
-) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+) -> Result<NewEventEnvelope, hermes_events_api::EventEnvelopeError> {
     let is_archived = chat
         .metadata
         .get("is_archived")
@@ -295,7 +296,7 @@ pub(super) fn chat_folder_labels_updated_event(
     account_id: &str,
     chat: &TelegramChat,
     occurred_at: DateTime<Utc>,
-) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+) -> Result<NewEventEnvelope, hermes_events_api::EventEnvelopeError> {
     let folder_labels = chat
         .metadata
         .get("folder_labels")
@@ -346,7 +347,7 @@ pub(super) fn chat_pinned_updated_event(
     chat: &TelegramChat,
     snapshot: &TelegramTdlibChatPositionSnapshot,
     occurred_at: DateTime<Utc>,
-) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+) -> Result<NewEventEnvelope, hermes_events_api::EventEnvelopeError> {
     NewEventEnvelope::builder(
         format!(
             "evt_telegram_chat_pinned_{}_{}_{}",

@@ -1,7 +1,7 @@
 use thiserror::Error;
 
-use crate::platform::events::EventStoreError;
 use crate::platform::settings::SettingsError;
+use hermes_events_postgres::errors::EventStoreError;
 
 #[derive(Debug, Error)]
 pub enum StorageError {

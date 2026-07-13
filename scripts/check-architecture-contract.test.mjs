@@ -16,6 +16,31 @@ async function exists(relativePath) {
 
 const contractPath = 'scripts/architecture-contract.json';
 const contract = JSON.parse(await readFile(path.join(repoRoot, contractPath), 'utf8'));
+const routerSource = await readFile(path.join(repoRoot, 'backend/src/app/router.rs'), 'utf8');
+const relationshipStoreSource = await readFile(
+	path.join(repoRoot, 'backend/src/domains/relationships/store.rs'),
+	'utf8'
+);
+const relationshipErrorsSource = await readFile(
+	path.join(repoRoot, 'backend/src/domains/relationships/errors.rs'),
+	'utf8'
+);
+const taskRelationsSource = await readFile(
+	path.join(repoRoot, 'backend/src/domains/tasks/core/relations.rs'),
+	'utf8'
+);
+const taskCoreErrorsSource = await readFile(
+	path.join(repoRoot, 'backend/src/domains/tasks/core/errors.rs'),
+	'utf8'
+);
+const taskCandidateReviewSource = await readFile(
+	path.join(repoRoot, 'backend/src/domains/tasks/candidates/store/review.rs'),
+	'utf8'
+);
+const taskCandidateErrorsSource = await readFile(
+	path.join(repoRoot, 'backend/src/domains/tasks/candidates/errors.rs'),
+	'utf8'
+);
 
 assert.equal(
 	await exists('scripts/architecture-boundary-baseline.json'),
@@ -45,6 +70,53 @@ assert.ok(contract.backend.layers.workflows.allow.includes('domain_query_ports')
 assert.ok(contract.backend.layers.app.deny.includes('stores'));
 assert.ok(contract.backend.layers.ai.deny.includes('domain_stores'));
 assert.ok(contract.backend.layers.platform.deny.includes('business_table_sql'));
+assert.doesNotMatch(
+	routerSource,
+	/(?:start_background_services|spawn_host_vault_manifest_reconciliation)\s*\(/,
+	'router construction must not launch background runtime tasks'
+);
+assert.doesNotMatch(
+	taskRelationsSource,
+	/\bdomains::relationships\b|\bRelationship(?:Store|EntityKind|ReviewState|Evidence)\b/,
+	'Tasks relation store must not import or materialize Relationships state'
+);
+assert.doesNotMatch(
+	taskCoreErrorsSource,
+	/\bRelationshipStoreError\b/,
+	'Tasks core errors must not expose cross-domain Relationships failures'
+);
+assert.doesNotMatch(
+	relationshipStoreSource,
+	/\bdomains::graph\b|\bGraph(?:Store|ProjectionPort|NodeKind|Edge|Evidence)\b/,
+	'Relationships store must not import or materialize Graph state'
+);
+assert.doesNotMatch(
+	relationshipErrorsSource,
+	/\bGraphStoreError\b/,
+	'Relationships errors must not expose cross-domain Graph failures'
+);
+assert.doesNotMatch(
+	taskCandidateReviewSource,
+	/\bdomains::obligations\b|\bObligation(?:Store|ReviewState|EntityKind|TaskLink)\b/,
+	'Task candidate review store must not import or materialize Obligations state'
+);
+assert.doesNotMatch(
+	taskCandidateErrorsSource,
+	/\bObligationStoreError\b/,
+	'Task candidate errors must not expose cross-domain Obligations failures'
+);
+
+assert.deepEqual(contract.workspace.roles.kernel.packages, ['hermes-kernel']);
+assert.ok(contract.workspace.roles.provider_api.forbidden_dependencies.includes('sqlx'));
+assert.deepEqual(contract.workspace.roles.contract_api, {
+	packages: ['hermes-connectrpc-contracts'],
+	forbidden_dependencies: ['hermes-hub-backend', 'reqwest', 'sqlx']
+});
+assert.ok(contract.workspace.roles.provider_impl.forbidden_dependencies.includes('hermes-hub-backend'));
+assert.deepEqual(contract.workspace.roles.test_session, {
+	packages: ['hermes-test-session'],
+	forbidden_dependencies: ['hermes-hub-backend', 'testkit']
+});
 
 assert.ok(contract.frontend?.layers?.domains?.deny.includes('other_frontend_domains'));
 assert.ok(contract.frontend.layers.domains.deny.includes('integrations'));

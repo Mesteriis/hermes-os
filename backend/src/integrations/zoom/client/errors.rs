@@ -1,12 +1,15 @@
+use hermes_communications_api::accounts::ProviderAccountPortError;
+use hermes_communications_api::accounts::ProviderSecretBindingPortError;
+use hermes_events_api::EventEnvelopeError;
 use thiserror::Error;
 
 use crate::platform::calls::CallError;
-use crate::platform::communications::{ProviderAccountPortError, ProviderSecretBindingPortError};
-use crate::platform::events::{EventEnvelopeError, EventStoreError};
+
 use crate::platform::secrets::{SecretReferenceError, SecretResolutionError};
 use crate::platform::settings::SettingsError;
 use crate::platform::storage::StorageError;
 use crate::vault::HostVaultError;
+use hermes_events_postgres::errors::EventStoreError;
 
 #[derive(Debug, Error)]
 pub enum ZoomError {

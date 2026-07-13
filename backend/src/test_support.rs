@@ -1,17 +1,20 @@
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, NewProviderAccount, ProviderAccount,
+};
 use std::sync::Arc;
 
 use serde_json::Value;
 use sqlx::PgPool;
 
-use crate::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
-};
 use crate::domains::communications::messages::ProviderChannelMessageStore;
-use crate::domains::signal_hub::{SignalHubStore, SignalRuntimeStateUpdate};
+use crate::domains::signal_hub::store::{SignalHubStore, SignalRuntimeStateUpdate};
 use crate::integrations::telegram::client::TelegramStore;
 use crate::integrations::whatsapp::client::WhatsappWebStore;
-use crate::platform::communications::StoredRawCommunicationRecord;
-use crate::platform::communications::{EmailProviderKind, NewProviderAccount, ProviderAccount};
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
+
+use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 
 pub fn communication_provider_account_store(pool: &PgPool) -> CommunicationProviderAccountStore {
     CommunicationProviderAccountStore::new(pool.clone())
@@ -30,7 +33,7 @@ pub fn telegram_store(pool: &PgPool) -> TelegramStore {
         Arc::new(communication_provider_secret_binding_store(pool)),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
         Arc::new(
-            crate::domains::communications::core::CommunicationIngestionStore::new(pool.clone()),
+            hermes_communications_postgres::store::CommunicationIngestionStore::new(pool.clone()),
         ),
         Arc::new(
             crate::platform::communications::EventStoreProviderMessageObservationEventPort::new(
@@ -58,7 +61,7 @@ pub async fn upsert_telegram_runtime_account(
     communication_provider_account_store(pool)
         .upsert(&NewProviderAccount::new(
             account_id,
-            EmailProviderKind::TelegramUser,
+            CommunicationProviderKind::TelegramUser,
             display_name,
             external_account_id,
         ))
@@ -95,7 +98,7 @@ pub async fn load_communication_raw_record(
     pool: &PgPool,
     raw_record_id: &str,
 ) -> StoredRawCommunicationRecord {
-    crate::domains::communications::core::CommunicationIngestionStore::new(pool.clone())
+    hermes_communications_postgres::store::CommunicationIngestionStore::new(pool.clone())
         .raw_record(raw_record_id)
         .await
         .expect("load communication raw record")

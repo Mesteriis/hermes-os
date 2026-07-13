@@ -19,16 +19,16 @@ impl From<AiControlCenterError> for ApiError {
     }
 }
 
-impl From<crate::integrations::ollama::client::OllamaError> for ApiError {
-    fn from(error: crate::integrations::ollama::client::OllamaError) -> Self {
+impl From<crate::integrations::ollama::client::error::OllamaError> for ApiError {
+    fn from(error: crate::integrations::ollama::client::error::OllamaError) -> Self {
         Self::Ai(AiError::Runtime(AiHubError::Runtime(
             AiRuntimePortError::provider("ollama", error.to_string()),
         )))
     }
 }
 
-impl From<crate::integrations::omniroute::client::OmniRouteError> for ApiError {
-    fn from(error: crate::integrations::omniroute::client::OmniRouteError) -> Self {
+impl From<crate::integrations::omniroute::client::error::OmniRouteError> for ApiError {
+    fn from(error: crate::integrations::omniroute::client::error::OmniRouteError) -> Self {
         Self::Ai(AiError::Runtime(AiHubError::Runtime(
             AiRuntimePortError::provider("omniroute", error.to_string()),
         )))

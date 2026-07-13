@@ -1,3 +1,4 @@
+use hermes_events_api::{EventEnvelope, NewEventEnvelope, StoredEventEnvelope};
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
@@ -8,12 +9,8 @@ use thiserror::Error;
 
 use super::rows::row_to_projected_message;
 use super::{
-    CommunicationMessageProjectionPort, MessageProjectionError, NewProjectedMessage,
-    ProjectedMessage, ProviderChannelMessageStore, project_raw_email_message,
-    project_raw_email_message_from_blob,
-};
-use crate::domains::communications::core::{
-    CommunicationIngestionPort, StoredRawCommunicationRecord,
+    MessageProjectionError, MessageProjectionStore, NewProjectedMessage, ProjectedMessage,
+    ProviderChannelMessageStore, project_raw_email_message, project_raw_email_message_from_blob,
 };
 use crate::domains::communications::delivery_notifications::consume_accepted_mail_delivery_signal;
 use crate::domains::communications::storage::LocalCommunicationBlobStore;
@@ -22,9 +19,10 @@ use crate::platform::communications::{
     ProviderAttachmentDownloadStateUpdate, ProviderChannelMessage,
     ProviderCommunicationMessagePortError, ProviderMessageProjectionObservationContext,
 };
-use crate::platform::events::{
-    EventEnvelope, EventStore, EventStoreError, NewEventEnvelope, StoredEventEnvelope,
-};
+use hermes_communications_api::evidence::StoredRawCommunicationRecord;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
 pub const COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER: &str =
     "communication_provider_observation_projection";
@@ -177,7 +175,7 @@ async fn project_accepted_signal_event(
 async fn accepted_signal_projection_runtime_allows(
     pool: &PgPool,
 ) -> Result<bool, CommunicationSignalProjectionError> {
-    Ok(crate::platform::events::runtime_allows_processing(
+    Ok(crate::platform::events::runtime::runtime_allows_processing(
         pool,
         "system",
         COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER,
@@ -198,7 +196,7 @@ async fn project_mail_signal_event(
     }
 
     let raw_record_id = required_subject_str(&event.subject, "raw_record_id")?;
-    let raw_record = CommunicationIngestionPort::new(pool.clone())
+    let raw_record = CommunicationIngestionStore::new(pool.clone())
         .raw_record(raw_record_id)
         .await?
         .ok_or_else(|| MessageProjectionError::RawRecordNotFound(raw_record_id.to_owned()))?;
@@ -208,7 +206,7 @@ async fn project_mail_signal_event(
         &raw_record.provider_record_id,
     )
     .await?;
-    let message_store = CommunicationMessageProjectionPort::new(pool);
+    let message_store = MessageProjectionStore::new(pool);
 
     let message = if raw_record.payload.get("raw_blob_storage_path").is_some() {
         let blob_store = LocalCommunicationBlobStore::new(mail_blob_root_from_event(event));
@@ -232,7 +230,7 @@ async fn project_whatsapp_signal_event(
     }
 
     let raw_record_id = required_subject_str(&event.subject, "raw_record_id")?;
-    let raw_record = CommunicationIngestionPort::new(pool.clone())
+    let raw_record = CommunicationIngestionStore::new(pool.clone())
         .raw_record(raw_record_id)
         .await?
         .ok_or_else(|| MessageProjectionError::RawRecordNotFound(raw_record_id.to_owned()))?;
@@ -256,7 +254,7 @@ async fn project_whatsapp_signal_event(
     )
     .await?;
 
-    let message = CommunicationMessageProjectionPort::new(pool)
+    let message = MessageProjectionStore::new(pool)
         .upsert_channel_message(&NewProjectedMessage {
             message_id: whatsapp_web_message_id(
                 &raw_record.account_id,
@@ -293,7 +291,7 @@ async fn project_telegram_signal_event(
     }
 
     let raw_record_id = required_subject_str(&event.subject, "raw_record_id")?;
-    let raw_record = CommunicationIngestionPort::new(pool.clone())
+    let raw_record = CommunicationIngestionStore::new(pool.clone())
         .raw_record(raw_record_id)
         .await?
         .ok_or_else(|| MessageProjectionError::RawRecordNotFound(raw_record_id.to_owned()))?;
@@ -342,11 +340,11 @@ async fn project_telegram_signal_event(
     };
 
     let projected = if allow_empty_body_text {
-        CommunicationMessageProjectionPort::new(pool)
+        MessageProjectionStore::new(pool)
             .upsert_channel_message_allowing_empty_body_text(&message)
             .await?
     } else {
-        CommunicationMessageProjectionPort::new(pool)
+        MessageProjectionStore::new(pool)
             .upsert_channel_message(&message)
             .await?
     };
@@ -366,7 +364,7 @@ async fn project_zulip_signal_event(
     }
 
     let raw_record_id = required_subject_str(&event.subject, "raw_record_id")?;
-    let raw_record = CommunicationIngestionPort::new(pool.clone())
+    let raw_record = CommunicationIngestionStore::new(pool.clone())
         .raw_record(raw_record_id)
         .await?
         .ok_or_else(|| MessageProjectionError::RawRecordNotFound(raw_record_id.to_owned()))?;
@@ -386,7 +384,7 @@ async fn project_zulip_signal_event(
     )
     .await?;
 
-    let message = CommunicationMessageProjectionPort::new(pool)
+    let message = MessageProjectionStore::new(pool)
         .upsert_channel_message(&NewProjectedMessage {
             message_id: zulip_message_id(&raw_record.account_id, &provider_message_id),
             raw_record_id: raw_record.raw_record_id.clone(),
@@ -985,7 +983,7 @@ async fn raw_record_for_accepted_signal(
     event: &EventEnvelope,
 ) -> Result<StoredRawCommunicationRecord, CommunicationSignalProjectionError> {
     let raw_record_id = required_subject_str(&event.subject, "raw_record_id")?;
-    CommunicationIngestionPort::new(pool)
+    CommunicationIngestionStore::new(pool)
         .raw_record(raw_record_id)
         .await?
         .ok_or_else(|| MessageProjectionError::RawRecordNotFound(raw_record_id.to_owned()).into())
@@ -1407,7 +1405,7 @@ pub enum CommunicationSignalProjectionError {
     Sqlx(#[from] sqlx::Error),
 
     #[error(transparent)]
-    Communication(#[from] crate::domains::communications::core::CommunicationIngestionError),
+    Communication(#[from] hermes_communications_postgres::errors::CommunicationIngestionError),
 
     #[error(transparent)]
     ProviderCommunication(#[from] ProviderCommunicationMessagePortError),

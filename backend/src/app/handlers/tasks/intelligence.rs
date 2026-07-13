@@ -7,8 +7,8 @@ use serde_json::{Value, json};
 use crate::app::{ApiError, AppState};
 use crate::domains::tasks::api::{TaskStore, TaskUpdate};
 use crate::domains::tasks::brain::TaskBrainService;
+use crate::domains::tasks::command_service::TaskCommandService;
 use crate::domains::tasks::core::{TaskContextPackStore, TaskRelationStore};
-use crate::domains::tasks::service::TaskCommandService;
 use crate::domains::tasks::sync::{export_task_json, export_task_md};
 
 use super::support::database_pool;
@@ -41,7 +41,7 @@ pub(crate) async fn get_task_export(
     Query(q): Query<TaskExportQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    let task = crate::app::api_support::app_store::<TaskStore>(pool)
+    let task = crate::app::api_support::stores::domain_stores::app_store::<TaskStore>(pool)
         .get(&task_id)
         .await?
         .ok_or(ApiError::NotFound)?;

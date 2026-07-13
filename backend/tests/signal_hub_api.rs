@@ -1,15 +1,16 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use chrono::Utc;
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionPort, CommunicationProviderAccountStore, CommunicationProviderKind,
-    NewProviderAccount, NewRawCommunicationRecord,
-};
 use hermes_hub_backend::domains::communications::messages::{
     COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, project_accepted_signal_if_runtime_allows,
 };
-use hermes_hub_backend::domains::signal_hub::dispatch_telegram_raw_signal;
+use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
+
 use serde_json::Value;
 use testkit::app::{TestApp, delete, get, patch_json, post_json};
 use testkit::context::TestContext;
@@ -1454,7 +1455,7 @@ async fn signal_hub_connect_runtime_switch_takes_effect_without_restart() {
         .await
         .expect("provider account");
 
-    let raw_record = CommunicationIngestionPort::new(pool.clone())
+    let raw_record = CommunicationIngestionStore::new(pool.clone())
         .record_raw_source(
             &NewRawCommunicationRecord::new(
                 "raw_signal_hub_connect_runtime_telegram",
@@ -1588,7 +1589,7 @@ async fn signal_hub_connect_raw_dispatcher_switch_takes_effect_without_restart()
         .expect("connect pause raw dispatcher request");
     assert_eq!(pause_response.status(), StatusCode::OK);
 
-    let paused_raw_record = CommunicationIngestionPort::new(pool.clone())
+    let paused_raw_record = CommunicationIngestionStore::new(pool.clone())
         .record_raw_source(
             &NewRawCommunicationRecord::new(
                 "raw_signal_hub_connect_paused_telegram",
@@ -1646,7 +1647,7 @@ async fn signal_hub_connect_raw_dispatcher_switch_takes_effect_without_restart()
         .expect("connect resume raw dispatcher request");
     assert_eq!(resume_response.status(), StatusCode::OK);
 
-    let resumed_raw_record = CommunicationIngestionPort::new(pool.clone())
+    let resumed_raw_record = CommunicationIngestionStore::new(pool.clone())
         .record_raw_source(
             &NewRawCommunicationRecord::new(
                 "raw_signal_hub_connect_resumed_telegram",

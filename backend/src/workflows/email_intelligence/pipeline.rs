@@ -1,21 +1,21 @@
+use crate::domains::communications::messages::port::MessageProjectionPort;
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
+use std::sync::Arc;
 
 use crate::ai::hub::{AiHub, LocalAiInspection, SensitivityLevel, SharedAiHub};
 use crate::domains::communications::ai_state::{
     CommunicationAiState, CommunicationAiStatePort, CommunicationAiStateTransitionRequest,
 };
-use crate::domains::communications::messages::{
-    CommunicationMessageProjectionPort, ProjectedMessage, WorkflowState,
-};
-use crate::domains::communications::ports::SensitiveForwardingCommandPort;
+use crate::domains::communications::messages::{ProjectedMessage, WorkflowState};
+use crate::domains::communications::sensitive_forwarding::SensitiveForwardingCommandPort;
 use crate::domains::communications::spam_reputation::{
     SenderReputationClassification, SenderReputationDecision, SenderReputationPort,
 };
 use crate::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxPort, ReviewItemKind,
 };
-use crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort;
+use crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort;
 use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
 use crate::workflows::email_intelligence::models::{EmailAnalysis, EmailKnowledgeCandidate};
 use crate::workflows::email_intelligence::service::EmailIntelligenceService;
@@ -30,15 +30,22 @@ pub struct MailAiPipelineService {
     hub: Option<SharedAiHub>,
     target_language: String,
     external_body_egress_required: bool,
+    sensitive_forwarding: Arc<dyn SensitiveForwardingCommandPort>,
 }
 
 impl MailAiPipelineService {
-    pub fn new(pool: PgPool, hub: Option<SharedAiHub>, target_language: impl Into<String>) -> Self {
+    pub fn new(
+        pool: PgPool,
+        hub: Option<SharedAiHub>,
+        target_language: impl Into<String>,
+        sensitive_forwarding: Arc<dyn SensitiveForwardingCommandPort>,
+    ) -> Self {
         Self {
             pool,
             hub,
             target_language: normalize_target_language(target_language.into()),
             external_body_egress_required: false,
+            sensitive_forwarding,
         }
     }
 
@@ -62,7 +69,7 @@ impl MailAiPipelineService {
             recovered,
             ..MailAiPipelineReport::default()
         };
-        let message_store = CommunicationMessageProjectionPort::new(self.pool.clone());
+        let message_store = MessageProjectionPort::new(self.pool.clone());
 
         for message_id in message_ids {
             let Some(message) = message_store.message(&message_id).await? else {
@@ -107,7 +114,7 @@ impl MailAiPipelineService {
         &self,
         message: &ProjectedMessage,
     ) -> Result<MailAiPipelineMessageOutcome, EmailIntelligenceError> {
-        let message_store = CommunicationMessageProjectionPort::new(self.pool.clone());
+        let message_store = MessageProjectionPort::new(self.pool.clone());
         let reputation_store = SenderReputationPort::new(self.pool.clone());
         let reputation = reputation_store.evaluate_message(message).await?;
         if reputation.suppressed {
@@ -154,7 +161,8 @@ impl MailAiPipelineService {
         {
             0
         } else {
-            match SensitiveForwardingCommandPort::new(self.pool.clone())
+            match self
+                .sensitive_forwarding
                 .enqueue_for_message(
                     &message.account_id,
                     &message.message_id,
@@ -195,7 +203,8 @@ impl MailAiPipelineService {
     }
 
     async fn external_body_egress_allowed(&self, account_id: &str) -> bool {
-        match SensitiveForwardingCommandPort::new(self.pool.clone())
+        match self
+            .sensitive_forwarding
             .content_egress_permissions(account_id)
             .await
         {
@@ -214,7 +223,7 @@ impl MailAiPipelineService {
     async fn process_egress_suppressed_message(
         &self,
         message: &ProjectedMessage,
-        message_store: &CommunicationMessageProjectionPort,
+        message_store: &MessageProjectionPort,
     ) -> Result<MailAiPipelineMessageOutcome, EmailIntelligenceError> {
         let mut metadata = message.message_metadata.clone();
         metadata["mail_ai_pipeline"] = json!({
@@ -249,7 +258,7 @@ impl MailAiPipelineService {
     async fn process_reputation_suppressed_message(
         &self,
         message: &ProjectedMessage,
-        message_store: &CommunicationMessageProjectionPort,
+        message_store: &MessageProjectionPort,
         reputation: &SenderReputationDecision,
     ) -> Result<MailAiPipelineMessageOutcome, EmailIntelligenceError> {
         SenderReputationPort::new(self.pool.clone())
@@ -312,7 +321,7 @@ impl MailAiPipelineService {
     async fn process_unstructured_model_response(
         &self,
         message: &ProjectedMessage,
-        message_store: &CommunicationMessageProjectionPort,
+        message_store: &MessageProjectionPort,
     ) -> Result<MailAiPipelineMessageOutcome, EmailIntelligenceError> {
         let category = EmailIntelligenceService::heuristic_category(message)
             .unwrap_or_else(|| "unclassified".to_owned());
@@ -441,7 +450,7 @@ async fn record_mail_ai_failure(
 }
 
 async fn persist_analysis(
-    message_store: &CommunicationMessageProjectionPort,
+    message_store: &MessageProjectionPort,
     message: &ProjectedMessage,
     analysis: &EmailAnalysis,
     inspection: &LocalAiInspection,

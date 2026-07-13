@@ -1,10 +1,10 @@
+use hermes_events_api::EventEnvelopeError;
 use thiserror::Error;
 
-use crate::domains::obligations::ObligationStoreError;
 use crate::domains::tasks::core::TaskCoreError;
-use crate::engines::obligation::ObligationEngineError;
-use crate::platform::events::{EventEnvelopeError, EventStoreError};
-use crate::platform::observations::ObservationStoreError;
+use crate::engines::obligation::errors::ObligationEngineError;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, Error)]
 pub enum TaskCandidateError {
@@ -52,9 +52,6 @@ pub enum TaskCandidateError {
 
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),
-
-    #[error(transparent)]
-    ObligationStore(#[from] ObligationStoreError),
 
     #[error(transparent)]
     TaskCore(#[from] TaskCoreError),

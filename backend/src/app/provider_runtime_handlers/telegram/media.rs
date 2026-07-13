@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::extract::State;
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -8,20 +9,31 @@ use std::path::Path;
 
 use super::helpers::{AUDIT_ACTOR_ID, publish_telegram_event};
 use crate::app::api_support::{
-    api_audit_log, communication_provider_account_store, communication_storage_store,
-    telegram_provider_runtime_service, telegram_runtime_use_case_context,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::{
-    TelegramAttachmentDownloadStateUpdate, TelegramCommandKind, TelegramError,
-    TelegramMediaDownloadRequest, TelegramMediaDownloadResponse, TelegramMediaSendType,
-    ensure_telegram_account_active, lifecycle,
-};
 use crate::application::telegram_runtime;
-use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::domains::communications::storage::AttachmentSafetyScanStatus;
+use crate::integrations::telegram::client::models::messages::TelegramCommandKind;
+use crate::integrations::telegram::client::{
+    TelegramAttachmentDownloadStateUpdate, TelegramError, ensure_telegram_account_active, lifecycle,
+};
+use crate::integrations::telegram::runtime::{
+    TelegramMediaDownloadRequest, TelegramMediaDownloadResponse, TelegramMediaSendType,
+};
 use crate::platform::audit::NewApiAuditRecord;
-use crate::platform::events::NewEventEnvelope;
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+
 use crate::platform::events::bus::telegram_event_types;
 use crate::workflows::telegram_media_storage::{
     TelegramAttachmentAnchor, TelegramDownloadedFileData, TelegramMediaDownloadData,
@@ -296,7 +308,7 @@ pub(crate) async fn post_telegram_media_upload(
 }
 
 fn media_upload_response(
-    command: &crate::application::provider_runtime_contracts::TelegramProviderWriteCommand,
+    command: &crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand,
 ) -> TelegramMediaUploadResponse {
     TelegramMediaUploadResponse {
         command_id: command.command_id.clone(),

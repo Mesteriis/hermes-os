@@ -4,10 +4,11 @@ use testkit::context::TestContext;
 use chrono::{DateTime, Utc};
 use serde_json::json;
 
-use hermes_hub_backend::platform::events::{
-    EventConsumerStore, EventEnvelope, EventStore, NewEventEnvelope, ProjectionCursorStore,
-    StoredEventEnvelope, TraceContext,
-};
+use hermes_events_api::{EventEnvelope, NewEventEnvelope, StoredEventEnvelope};
+use hermes_events_postgres::consumers::EventConsumerStore;
+use hermes_events_postgres::cursors::ProjectionCursorStore;
+use hermes_events_postgres::store::EventStore;
+use hermes_hub_backend::platform::events::trace_context::TraceContext;
 use hermes_hub_backend::platform::storage::Database;
 
 #[test]
@@ -326,11 +327,11 @@ async fn event_store_reconstructs_trace_edges_against_postgres() {
     assert_eq!(
         trace.edges,
         vec![
-            hermes_hub_backend::platform::events::EventTraceEdge {
+            hermes_events_postgres::trace::EventTraceEdge {
                 parent_event_id: root_id.clone(),
                 child_event_id: child_id.clone(),
             },
-            hermes_hub_backend::platform::events::EventTraceEdge {
+            hermes_events_postgres::trace::EventTraceEdge {
                 parent_event_id: child_id.clone(),
                 child_event_id: grandchild_id,
             },

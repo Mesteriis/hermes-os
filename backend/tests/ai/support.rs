@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::net::SocketAddr;
 use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -6,6 +8,7 @@ pub(crate) use axum::body::{Body, to_bytes};
 pub(crate) use axum::http::{Request, StatusCode, header};
 pub(crate) use axum::routing::{get, post};
 pub(crate) use axum::{Json, Router};
+pub(crate) use hermes_communications_postgres::store::CommunicationIngestionStore;
 pub(crate) use hermes_hub_backend::ai::control_center::{
     AiControlCenterStore, AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest,
 };
@@ -13,9 +16,6 @@ pub(crate) use hermes_hub_backend::ai::core::{
     AiRunStore, NewSemanticEmbedding, SemanticEmbeddingStore, SemanticSourceKind,
 };
 pub(crate) use hermes_hub_backend::app::{build_router, build_router_with_database};
-pub(crate) use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
-};
 pub(crate) use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
@@ -24,6 +24,7 @@ pub(crate) use hermes_hub_backend::domains::documents::core::{
 };
 pub(crate) use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 pub(crate) use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};
+
 pub(crate) use hermes_hub_backend::platform::config::AppConfig;
 pub(crate) use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
 pub(crate) use hermes_hub_backend::platform::storage::Database;
@@ -198,7 +199,7 @@ pub(crate) async fn seed_message(
         .upsert_provider_account(
             &NewProviderAccount::new(
                 account_id.clone(),
-                EmailProviderKind::Imap,
+                CommunicationProviderKind::Imap,
                 format!("AI Account {suffix}"),
                 format!("ai-external-{suffix}"),
             )

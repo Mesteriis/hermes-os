@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::models::{DecisionListQuery, DecisionListResponse, DecisionReviewApiRequest};
 use crate::app::{ApiError, AppState};
-use crate::application::DecisionReviewApplicationService;
+use crate::application::review_transitions::DecisionReviewApplicationService;
 use crate::domains::decisions::{Decision, DecisionEntityKind, DecisionReviewState, DecisionStore};
 use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
 
@@ -81,9 +81,9 @@ fn decision_store(state: &AppState) -> Result<DecisionStore, ApiError> {
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    Ok(crate::app::api_support::app_store::<DecisionStore>(
-        pool.clone(),
-    ))
+    Ok(crate::app::api_support::stores::domain_stores::app_store::<
+        DecisionStore,
+    >(pool.clone()))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {

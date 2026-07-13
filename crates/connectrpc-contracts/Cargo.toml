@@ -1,0 +1,16 @@
+[package]
+name = "hermes-connectrpc-contracts"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+license = "MIT"
+
+[dependencies]
+buffa = "0.7"
+connectrpc = "0.7"
+http-body = "1"
+serde = { version = "1", features = ["derive"] }
+
+[build-dependencies]
+connectrpc-build = "0.7"

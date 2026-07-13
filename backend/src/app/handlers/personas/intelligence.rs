@@ -15,10 +15,11 @@ pub(crate) async fn get_persona_enrichment(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<EnrichmentResultStore>(pool)
-        .list(&persona_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<EnrichmentResultStore>(pool)
+            .list(&persona_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(EnrichmentResultsResponse { items }))
 }
 
@@ -31,7 +32,7 @@ pub(crate) async fn post_persona_enrichment_apply(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    crate::domains::personas::service::PersonaCommandService::new(pool)
+    crate::domains::personas::command_service::PersonaCommandService::new(pool)
         .apply_enrichment_manual(&persona_id, &result_id)
         .await?;
     Ok(Json(json!({"applied": true})))
@@ -46,7 +47,7 @@ pub(crate) async fn post_persona_enrichment_reject(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    crate::domains::personas::service::PersonaCommandService::new(pool)
+    crate::domains::personas::command_service::PersonaCommandService::new(pool)
         .reject_enrichment_manual(&persona_id, &result_id)
         .await?;
     Ok(Json(json!({"rejected": true})))
@@ -68,10 +69,11 @@ pub(crate) async fn get_persona_expertise(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<PersonaExpertiseStore>(pool)
-        .list(&persona_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<PersonaExpertiseStore>(pool)
+            .list(&persona_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(PersonaExpertiseResponse { items }))
 }
 
@@ -90,10 +92,11 @@ pub(crate) async fn get_persona_expertise_search(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<PersonaExpertiseStore>(pool)
-        .search_by_skill(&query.skill, query.limit.unwrap_or(20))
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<PersonaExpertiseStore>(pool)
+            .search_by_skill(&query.skill, query.limit.unwrap_or(20))
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(PersonaExpertiseResponse { items }))
 }
 
@@ -113,10 +116,11 @@ pub(crate) async fn get_persona_promises(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<PersonaPromiseStore>(pool)
-        .list(&persona_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<PersonaPromiseStore>(pool)
+            .list(&persona_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(PersonaPromisesResponse { items }))
 }
 
@@ -136,7 +140,7 @@ pub(crate) async fn get_persona_risks(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<PersonaRiskStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<PersonaRiskStore>(pool)
         .list(&persona_id)
         .await
         .map_err(ApiError::from)?;

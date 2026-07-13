@@ -5,9 +5,9 @@ use crate::integrations::telegram::client::{
     TelegramError, TelegramStore, derive_tdlib_chosen_reaction_emojis,
     reconcile_reaction_commands_from_provider_reactions,
 };
-use crate::platform::communications::{
-    ProviderAccount, ProviderAccountLookupPort, ProviderSecretBindingLookupPort,
-};
+use hermes_communications_api::accounts::ProviderAccountLookupPort;
+use hermes_communications_api::accounts::{ProviderAccount, ProviderSecretBindingLookupPort};
+
 use crate::platform::config::AppConfig;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 

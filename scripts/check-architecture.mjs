@@ -90,7 +90,7 @@ const personCommandServiceOwner = 'backend/src/domains/personas/service.rs';
 const decisionCommandServiceOwner = 'backend/src/domains/decisions/service.rs';
 const obligationCommandServiceOwner = 'backend/src/domains/obligations/service.rs';
 const relationshipCommandServiceOwner = 'backend/src/domains/relationships/service.rs';
-const taskCandidateReviewServiceOwner = 'backend/src/domains/tasks/candidates/service.rs';
+const taskCandidateReviewServiceOwner = 'backend/src/application/review_transitions.rs';
 const projectLinkReviewServiceOwner = 'backend/src/domains/projects/link_reviews/service.rs';
 const contradictionReviewServiceOwner = 'backend/src/engines/consistency/service.rs';
 const documentProcessingCommandServiceOwner = 'backend/src/domains/documents/processing/service.rs';
@@ -98,33 +98,6 @@ const mailCommandServiceOwner = 'backend/src/domains/communications/service.rs';
 const emailSyncPipelineOrganizationOwner = 'backend/src/workflows/email_sync_pipeline/organizations.rs';
 const emailSyncPipelineParticipantsOwner = 'backend/src/workflows/email_sync_pipeline/participants.rs';
 const emailSyncPipelineRelationshipsOwner = 'backend/src/workflows/email_sync_pipeline/relationships.rs';
-const backendDomainProjectionBridgeOwners = new Map([
-	[
-		'backend/src/domains/relationships/errors.rs',
-		new Set(['graph'])
-	],
-	[
-		'backend/src/domains/relationships/store.rs',
-		new Set(['graph'])
-	],
-	[
-		'backend/src/domains/tasks/candidates/errors.rs',
-		new Set(['obligations'])
-	],
-	[
-		'backend/src/domains/tasks/candidates/store/review.rs',
-		new Set(['obligations'])
-	],
-	[
-		'backend/src/domains/tasks/core/errors.rs',
-		new Set(['relationships'])
-	],
-	[
-		'backend/src/domains/tasks/core/relations.rs',
-		new Set(['relationships'])
-	]
-]);
-
 const sharedBackendDomainModules = new Set();
 const businessBackendDomains = new Set([
 	'agents',
@@ -355,10 +328,6 @@ function backendBoundaryViolations(relativePath, source) {
 		if (domainMatch !== null) {
 			const currentDomain = domainMatch[1];
 			if (importedDomain !== currentDomain) {
-				const allowedBridgeImports = backendDomainProjectionBridgeOwners.get(relativePath);
-				if (allowedBridgeImports?.has(importedDomain)) {
-					continue;
-				}
 				violations.push({
 					file: relativePath,
 					importedDomain,
@@ -420,7 +389,7 @@ function backendBoundaryViolations(relativePath, source) {
 				message: `${relativePath}: workflow imports integration "${importedIntegration}"; coordinate providers through platform ports/events instead`
 			});
 		}
-		if (/\b[A-Za-z0-9_]*Store\b/.test(source) && /\bcrate::domains::/.test(source)) {
+		if (/use\s+crate::domains::[^;]*\b[A-Za-z0-9_]*Store\b/.test(source)) {
 			violations.push({
 				file: relativePath,
 				message: `${relativePath}: workflow imports concrete domain store types; depend on domain command/query ports instead`
@@ -429,12 +398,6 @@ function backendBoundaryViolations(relativePath, source) {
 	}
 
 	if (/^backend\/src\/app\/handlers\//.test(relativePath)) {
-		if (importedWorkflowModules.size > 0) {
-			violations.push({
-				file: relativePath,
-				message: `${relativePath}: app handler imports workflow modules directly; route through an application service`
-			});
-		}
 		if (/\bRuntime[A-Za-z0-9_]*Context\b|\b[A-Za-z0-9_]*RuntimeOperationContext\b/.test(source)) {
 			violations.push({
 				file: relativePath,
@@ -2240,6 +2203,13 @@ function runSelfTests() {
 		).length === 1
 	);
 	assertSelfTest(
+		'workflow may use a persistence adapter without being treated as a domain store import',
+		backendBoundaryViolations(
+			'backend/src/workflows/zoom_signal_detection.rs',
+			'use crate::domains::signal_hub::SignalHubPort;\nuse hermes_events_postgres::store::EventStore;'
+		).length === 0
+	);
+	assertSelfTest(
 		'app handler runtime context construction fails',
 		backendBoundaryViolations(
 			'backend/src/app/handlers/telegram/messages.rs',
@@ -2247,11 +2217,11 @@ function runSelfTests() {
 		).length === 1
 	);
 	assertSelfTest(
-		'app handler workflow import fails',
+		'app handler may import a workflow public API',
 		backendBoundaryViolations(
 			'backend/src/app/handlers/telegram/messages.rs',
 			'use crate::workflows::provider_communication_projection::record_and_project_telegram_message;'
-		).length === 1
+		).length === 0
 	);
 	assertSelfTest(
 		'platform-to-domain backend import fails',

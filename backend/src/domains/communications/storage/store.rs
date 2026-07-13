@@ -1,8 +1,9 @@
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 
-use crate::platform::events::{EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
 
 use crate::domains::communications::archive_inspection::{
     ArchiveInspectionReport, archive_inspection_cache_metadata,

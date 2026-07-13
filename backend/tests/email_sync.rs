@@ -1,15 +1,15 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::accounts::{ProviderAccount, ProviderAccountSecretPurpose};
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use serde_json::json;
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-    ProviderAccountSecretPurpose,
-};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::integrations::mail::sync::{
     EmailSyncAdapterConfig, EmailSyncPlanError, plan_email_sync,
 };
+
 use hermes_hub_backend::platform::communications::{
     IMAP_ALL_MAILBOXES, email_sync_plan_selects_all_imap_mailboxes, email_sync_plan_stream_ids,
 };
@@ -25,7 +25,7 @@ async fn email_sync_plan_selects_provider_specific_credentials_and_streams_again
         .upsert_provider_account(
             &NewProviderAccount::new(
                 format!("acct_sync_gmail_{suffix}"),
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 "Gmail sync",
                 format!("gmail-sync-{suffix}@example.com"),
             )
@@ -37,7 +37,7 @@ async fn email_sync_plan_selects_provider_specific_credentials_and_streams_again
         .upsert_provider_account(
             &NewProviderAccount::new(
                 format!("acct_sync_icloud_{suffix}"),
-                EmailProviderKind::Icloud,
+                CommunicationProviderKind::Icloud,
                 "iCloud sync",
                 format!("icloud-sync-{suffix}@icloud.com"),
             )
@@ -54,7 +54,7 @@ async fn email_sync_plan_selects_provider_specific_credentials_and_streams_again
         .upsert_provider_account(
             &NewProviderAccount::new(
                 format!("acct_sync_imap_{suffix}"),
-                EmailProviderKind::Imap,
+                CommunicationProviderKind::Imap,
                 "IMAP sync",
                 format!("imap-sync-{suffix}@example.net"),
             )
@@ -117,7 +117,7 @@ async fn email_sync_plan_selects_provider_specific_credentials_and_streams_again
 fn email_sync_plan_supports_multiple_imap_mailboxes() {
     let account = NewProviderAccount::new(
         "acct_multi_mailbox_imap",
-        EmailProviderKind::Icloud,
+        CommunicationProviderKind::Icloud,
         "Multi mailbox iCloud",
         "multi-mailbox@example.net",
     )
@@ -148,7 +148,7 @@ fn email_sync_plan_supports_multiple_imap_mailboxes() {
 fn email_sync_plan_can_select_all_imap_mailboxes() {
     let account = NewProviderAccount::new(
         "acct_all_mailboxes_imap",
-        EmailProviderKind::Icloud,
+        CommunicationProviderKind::Icloud,
         "All mailboxes iCloud",
         "all-mailboxes@example.net",
     )
@@ -187,7 +187,7 @@ async fn email_sync_plan_keeps_multiple_accounts_isolated_against_postgres() {
         .upsert_provider_account(
             &NewProviderAccount::new(
                 format!("acct_sync_multi_gmail_a_{suffix}"),
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 "Gmail work sync",
                 format!("gmail-work-sync-{suffix}@example.com"),
             )
@@ -199,7 +199,7 @@ async fn email_sync_plan_keeps_multiple_accounts_isolated_against_postgres() {
         .upsert_provider_account(
             &NewProviderAccount::new(
                 format!("acct_sync_multi_gmail_b_{suffix}"),
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 "Gmail personal sync",
                 format!("gmail-personal-sync-{suffix}@example.com"),
             )
@@ -223,7 +223,7 @@ fn email_sync_plan_rejects_invalid_imap_config() {
             "host",
             NewProviderAccount::new(
                 "acct_invalid_imap_host",
-                EmailProviderKind::Imap,
+                CommunicationProviderKind::Imap,
                 "Invalid IMAP host",
                 "invalid-imap@example.net",
             )
@@ -233,7 +233,7 @@ fn email_sync_plan_rejects_invalid_imap_config() {
             "port",
             NewProviderAccount::new(
                 "acct_invalid_imap_port",
-                EmailProviderKind::Imap,
+                CommunicationProviderKind::Imap,
                 "Invalid IMAP port",
                 "invalid-imap-port@example.net",
             )
@@ -243,7 +243,7 @@ fn email_sync_plan_rejects_invalid_imap_config() {
             "tls",
             NewProviderAccount::new(
                 "acct_invalid_imap_tls",
-                EmailProviderKind::Imap,
+                CommunicationProviderKind::Imap,
                 "Invalid IMAP TLS",
                 "invalid-imap-tls@example.net",
             )
@@ -253,7 +253,7 @@ fn email_sync_plan_rejects_invalid_imap_config() {
             "mailbox",
             NewProviderAccount::new(
                 "acct_invalid_imap_mailbox",
-                EmailProviderKind::Imap,
+                CommunicationProviderKind::Imap,
                 "Invalid IMAP mailbox",
                 "invalid-imap-mailbox@example.net",
             )
@@ -282,7 +282,7 @@ fn email_sync_plan_rejects_secret_like_account_config() {
             "oauth_token",
             NewProviderAccount::new(
                 "acct_secret_config",
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 "Gmail unsafe config",
                 "unsafe-config@example.com",
             )
@@ -295,7 +295,7 @@ fn email_sync_plan_rejects_secret_like_account_config() {
             "adapter.oauth_token",
             NewProviderAccount::new(
                 "acct_nested_secret_config",
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 "Gmail nested unsafe config",
                 "nested-unsafe-config@example.com",
             )
@@ -326,7 +326,7 @@ fn email_sync_plan_rejects_secret_like_account_config() {
 fn email_sync_plan_uses_delimiter_safe_imap_stream_id() {
     let account = NewProviderAccount::new(
         "acct_imap_delimiter_mailbox",
-        EmailProviderKind::Imap,
+        CommunicationProviderKind::Imap,
         "Delimiter mailbox",
         "delimiter-mailbox@example.net",
     )
@@ -365,18 +365,14 @@ async fn live_sync_context(_test_name: &str) -> Option<(CommunicationIngestionSt
 }
 
 trait IntoTestProviderAccount {
-    fn into_test_provider_account(
-        self,
-    ) -> hermes_hub_backend::domains::communications::core::ProviderAccount;
+    fn into_test_provider_account(self) -> hermes_communications_api::accounts::ProviderAccount;
 }
 
 impl IntoTestProviderAccount for NewProviderAccount {
-    fn into_test_provider_account(
-        self,
-    ) -> hermes_hub_backend::domains::communications::core::ProviderAccount {
+    fn into_test_provider_account(self) -> hermes_communications_api::accounts::ProviderAccount {
         let now = chrono::Utc::now();
 
-        hermes_hub_backend::domains::communications::core::ProviderAccount {
+        hermes_communications_api::accounts::ProviderAccount {
             account_id: self.account_id,
             provider_kind: self.provider_kind,
             display_name: self.display_name,

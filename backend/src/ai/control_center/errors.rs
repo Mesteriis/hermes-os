@@ -1,8 +1,8 @@
 use thiserror::Error;
 
-use crate::platform::observations::ObservationStoreError;
 use crate::platform::secrets::SecretReferenceError;
 use crate::vault::HostVaultError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, Error)]
 pub enum AiControlCenterError {

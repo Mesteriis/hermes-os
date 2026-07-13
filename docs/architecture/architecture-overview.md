@@ -7,7 +7,7 @@ combines append-only observations, canonical events, domain entities,
 relationships, document artifacts and rebuildable indexes. AI uses these stores
 as context and never becomes the durable memory layer itself.
 
-Target flow from ADR-0096 plus ADR-0099 is:
+Target flow from ADR-0096 plus ADR-0181 is:
 
 `External Systems -> Signal Hub -> Event Backbone -> Owning Domains -> Knowledge -> Review -> Actions`
 
@@ -122,6 +122,13 @@ UI calls application APIs. Application services coordinate domain workflows and
 engines. Domain logic must not depend on provider APIs, UI state or storage
 details. Infrastructure implements ports required by application, domains and
 engines.
+
+The backend evolves through compiler-enforced Cargo boundaries. Provider crates
+depend on stable provider/event/vault/blob contracts and external SDKs only;
+domain and application crates do not depend on provider implementations. A
+desktop composition runtime is the only layer that wires both sides. Provider
+runtimes are `in_process` by default and may become supervised shared or
+per-account connectors when their isolation policy requires it.
 
 ## Durable State Categories
 

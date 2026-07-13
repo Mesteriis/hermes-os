@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::domains::communications::core::CommunicationProviderKind;
+use hermes_communications_api::accounts::CommunicationProviderKind;
 
 pub(super) fn fallback_provider_account_config(
     provider_kind: CommunicationProviderKind,

@@ -1,6 +1,6 @@
 use sqlx::{Postgres, Transaction};
 
-use crate::engines::enrichment::EnrichmentEngine;
+use crate::engines::enrichment::engine::EnrichmentEngine;
 use crate::engines::memory::MemoryEngine;
 
 use super::errors::PersonaEnrichmentError;

@@ -1,3 +1,7 @@
+use hermes_communications_api::accounts::ProviderAccountCommandPort;
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, ProviderAccount, ProviderSecretBindingCommandPort,
+};
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -11,10 +15,7 @@ use super::{
     WhatsAppProviderRuntime, WhatsAppProviderRuntimeShape, WhatsAppRuntimeHealth, WhatsappWebError,
     WhatsappWebStore,
 };
-use crate::platform::communications::{
-    CommunicationProviderKind, ProviderAccount, ProviderAccountCommandPort,
-    ProviderChannelMessageLookupPort, ProviderSecretBindingCommandPort,
-};
+use crate::platform::communications::ProviderChannelMessageLookupPort;
 
 pub(super) const BUSINESS_CLOUD_SMOKE_RUNTIME_KIND: &str = "business_cloud_smoke";
 const BUSINESS_CLOUD_LIVE_SMOKE_OPT_IN_CONFIG_KEY: &str = "business_cloud_live_smoke_enabled";

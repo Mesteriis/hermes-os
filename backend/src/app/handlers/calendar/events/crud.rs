@@ -34,9 +34,10 @@ pub(crate) async fn get_calendar_events(
         event_type: query.event_type,
         limit: query.limit,
     };
-    let items = crate::app::api_support::app_store::<CalendarEventStore>(pool)
-        .list(&list_query)
-        .await?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(pool)
+            .list(&list_query)
+            .await?;
     Ok(Json(CalendarEventsResponse { items }))
 }
 
@@ -49,9 +50,10 @@ pub(crate) async fn post_calendar_event(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let event = crate::app::api_support::app_store::<CalendarEventStore>(pool)
-        .create_manual(&req)
-        .await?;
+    let event =
+        crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(pool)
+            .create_manual(&req)
+            .await?;
     Ok(Json(event))
 }
 
@@ -64,7 +66,7 @@ pub(crate) async fn get_calendar_event(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    crate::app::api_support::app_store::<CalendarEventStore>(pool)
+    crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(pool)
         .get(&event_id)
         .await?
         .map(Json)
@@ -81,9 +83,10 @@ pub(crate) async fn put_calendar_event(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let event = crate::app::api_support::app_store::<CalendarEventStore>(pool)
-        .update_manual(&event_id, &update)
-        .await?;
+    let event =
+        crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(pool)
+            .update_manual(&event_id, &update)
+            .await?;
     Ok(Json(event))
 }
 
@@ -96,7 +99,7 @@ pub(crate) async fn delete_calendar_event(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    crate::app::api_support::app_store::<CalendarEventStore>(pool)
+    crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(pool)
         .delete_manual(&event_id)
         .await?;
     Ok(Json(json!({"deleted": true})))

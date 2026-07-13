@@ -1,11 +1,11 @@
 use chrono::Utc;
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use serde_json::json;
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
-};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::integrations::telegram::client::lifecycle;
 use hermes_hub_backend::integrations::telegram::client::reconcile_reaction_commands_from_provider_reactions;
+
 use testkit::context::TestContext;
 
 #[tokio::test]

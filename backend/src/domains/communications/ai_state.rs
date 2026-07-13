@@ -1,3 +1,4 @@
+use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
@@ -7,8 +8,8 @@ use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
-use crate::platform::events::{EventStore, NewEventEnvelope};
-use crate::platform::observations::ObservationStoreError;
+use hermes_events_postgres::store::EventStore;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 const EVENT_TYPE_CHANGED: &str = "mail.ai_state.changed";
 pub const MAIL_AI_MAX_ATTEMPTS: i32 = 3;
@@ -630,9 +631,9 @@ pub enum CommunicationAiStateError {
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),
     #[error(transparent)]
-    EventStore(#[from] crate::platform::events::EventStoreError),
+    EventStore(#[from] hermes_events_postgres::errors::EventStoreError),
     #[error(transparent)]
-    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    EventEnvelope(#[from] hermes_events_api::EventEnvelopeError),
     #[error("invalid mail AI state field: {0}")]
     Invalid(&'static str),
 }

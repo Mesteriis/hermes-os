@@ -1,15 +1,18 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use serde_json::json;
+use std::sync::Arc;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::ai_state::{
     CommunicationAiState, CommunicationAiStateStore,
-};
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
-use hermes_hub_backend::workflows::email_intelligence::MailAiPipelineService;
+use hermes_hub_backend::domains::communications::sensitive_forwarding::SensitiveForwardingStore;
+
+use hermes_hub_backend::workflows::email_intelligence::pipeline::MailAiPipelineService;
 use testkit::context::TestContext;
 
 #[tokio::test]
@@ -24,7 +27,7 @@ async fn external_mail_ai_requires_explicit_body_egress_permission() {
         .upsert_provider_account(
             &NewProviderAccount::new(
                 account_id,
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 "External AI Egress Test",
                 "egress@example.test",
             )
@@ -53,11 +56,16 @@ async fn external_mail_ai_requires_explicit_body_egress_permission() {
         .await
         .expect("project message");
 
-    let report = MailAiPipelineService::new(pool.clone(), None, "ru")
-        .requiring_external_body_egress(true)
-        .process_next_batch(10)
-        .await
-        .expect("process mail AI batch");
+    let report = MailAiPipelineService::new(
+        pool.clone(),
+        None,
+        "ru",
+        Arc::new(SensitiveForwardingStore::new(pool.clone())),
+    )
+    .requiring_external_body_egress(true)
+    .process_next_batch(10)
+    .await
+    .expect("process mail AI batch");
 
     assert_eq!(report.claimed, 1);
     assert_eq!(report.processed, 1);

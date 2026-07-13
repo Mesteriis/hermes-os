@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
@@ -5,14 +7,12 @@ use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::ai::control_center::{
     AiControlCenterStore, AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest,
 };
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::communications::attachment_text_extraction::AttachmentTextExtractionService;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
-};
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
@@ -22,6 +22,7 @@ use hermes_hub_backend::domains::communications::storage::{
     NewCommunicationBlob,
 };
 use hermes_hub_backend::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
+
 use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
@@ -221,7 +222,7 @@ async fn seed_message_with_attachment_scan_status(
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Attachment Translation Gmail",
             format!("{account_id}@example.com"),
         ))

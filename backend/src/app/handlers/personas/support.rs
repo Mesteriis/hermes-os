@@ -5,7 +5,19 @@ pub(super) use chrono::{DateTime, Utc};
 pub(super) use serde::{Deserialize, Serialize};
 pub(super) use serde_json::{Value, json};
 
-pub(super) use crate::app::api_support::*;
+pub(super) use crate::app::api_support::{
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
+};
 pub(super) use crate::app::{ApiError, AppState};
 pub(super) use crate::domains::personas::analytics::{AnalyticsError, PersonaAnalyticsService};
 pub(super) use crate::domains::personas::api::{Persona, PersonaProjectionStore};

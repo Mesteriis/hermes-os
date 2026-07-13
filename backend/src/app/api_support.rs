@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
+use hermes_events_api::{EventEnvelope, EventEnvelopeError, NewEventEnvelope};
 // ADR-0073: shared API support is split into bounded helper modules while
 // route modules still import this facade during the backend decomposition phase.
 pub(crate) mod automation_calls;
@@ -16,18 +18,6 @@ pub(crate) mod telegram_capability_catalog_foundation;
 pub(crate) mod telegram_capability_catalog_messages;
 pub(crate) mod whatsapp_capabilities;
 pub(crate) mod whatsapp_capability_catalog;
-
-pub(crate) use automation_calls::*;
-pub(crate) use communications::*;
-pub(crate) use formatting::*;
-pub(crate) use messaging_integrations::*;
-pub(crate) use platform_dtos::*;
-pub(crate) use query_parsing::*;
-pub(crate) use review_commands::*;
-pub(crate) use review_lists::*;
-pub(crate) use stores::*;
-pub(crate) use telegram_capabilities::*;
-pub(crate) use whatsapp_capabilities::*;
 
 use std::io;
 
@@ -50,18 +40,18 @@ use crate::ai::core::{
     AiMeetingPrepRequest, AiModelRouting, AiService, AiStatusResponse,
     AiTaskCandidateRefreshRequest, v3_agents,
 };
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
-};
 use crate::domains::personas::analytics::{AnalyticsError, PersonaAnalyticsService};
 use crate::domains::personas::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
 use crate::domains::personas::expertise::{PersonaExpertiseError, PersonaExpertiseStore};
 use crate::domains::personas::export::{ExportError, ExportFormat, PersonaExportService};
 use crate::domains::personas::investigator::{InvestigatorError, PersonaInvestigator};
 use crate::engines::automation::{
-    AutomationError, AutomationPolicy, AutomationPolicyScope, AutomationStore, AutomationTemplate,
-    NewAutomationPolicy, NewAutomationTemplate, TelegramSendDryRunRequest,
-    TelegramSendDryRunResponse,
+    errors::AutomationError,
+    models::{
+        AutomationPolicy, AutomationPolicyScope, AutomationTemplate, NewAutomationPolicy,
+        NewAutomationTemplate, TelegramSendDryRunRequest, TelegramSendDryRunResponse,
+    },
+    store::AutomationStore,
 };
 use crate::platform::audit::{ApiAuditError, ApiAuditLog, ApiAuditRecord, NewApiAuditRecord};
 use crate::platform::calls::{
@@ -70,6 +60,9 @@ use crate::platform::calls::{
     SpeechToTextProvider, TranscriptStatus,
 };
 use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
+use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+
 use crate::platform::config::{AiRuntimeProvider, AppConfig};
 
 use crate::domains::personas::health::{PersonaHealthError, PersonaHealthStore};
@@ -90,13 +83,6 @@ use crate::domains::personas::identity::{
     PersonaIdentityReviewCommand, PersonaIdentityReviewState, PersonaIdentityReviewStore,
 };
 
-use crate::application::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
-use crate::application::provider_runtime_contracts::{
-    NewTelegramMessage, NewWhatsappWebMessage, ProviderCommunicationMessage,
-    TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramChat, TelegramError,
-    TelegramMessageIngestResult, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
-    WhatsappWebError, WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
-};
 use crate::domains::calendar::brain::{CalendarBrainError, CalendarBrainService};
 use crate::domains::calendar::core::{
     CalendarCoreError, ContextPackInput, EventAgendaStore, EventChecklistStore,
@@ -157,13 +143,19 @@ use crate::integrations::mail::accounts::{
     EmailAccountSetupError, EmailAccountSetupService, GmailOAuthPendingGrant,
     GmailOAuthSetupRequest, ImapAccountSetupRequest,
 };
-use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
-use crate::integrations::omniroute::client::{
-    OmniRouteClient, OmniRouteClientConfig, OmniRouteError,
+use crate::integrations::ollama::client::OllamaClient;
+use crate::integrations::ollama::client::config::OllamaClientConfig;
+use crate::integrations::omniroute::client::OmniRouteClient;
+use crate::integrations::omniroute::client::config::OmniRouteClientConfig;
+use crate::integrations::omniroute::client::error::OmniRouteError;
+use crate::integrations::telegram::client::{
+    NewTelegramMessage, ProviderCommunicationMessage, TelegramAccountSetupRequest,
+    TelegramAccountSetupResponse, TelegramChat, TelegramError, TelegramMessageIngestResult,
 };
 use crate::integrations::telegram::tdjson;
-use crate::platform::events::{
-    EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
+use crate::integrations::whatsapp::client::{
+    NewWhatsappWebMessage, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
+    WhatsappWebError, WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
 };
 use crate::platform::secrets::DatabaseEncryptedSecretVault;
 use crate::platform::secrets::{SecretKind, SecretReferenceStore};
@@ -174,6 +166,10 @@ use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
 use crate::vault::VaultStatus;
+use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
+use crate::workflows::email_intelligence::service::EmailIntelligenceService;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
 use crate::app::{ApiError, AppState};
 

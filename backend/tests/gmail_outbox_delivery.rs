@@ -1,3 +1,7 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
+};
 use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
@@ -10,17 +14,15 @@ use serde_json::{Value, json};
 use tempfile::tempdir;
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
-};
 use hermes_hub_backend::domains::communications::outbox::{
     CommunicationOutboxEmailSender, CommunicationOutboxStatus, CommunicationOutboxStore,
     EmailOutboxDeliveryWorker, NewCommunicationOutboxItem,
 };
 use hermes_hub_backend::integrations::mail::outbox::LiveGmailOutboxTransport;
 use hermes_hub_backend::integrations::mail::send::LiveSmtpTransport;
+
 use hermes_hub_backend::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
@@ -66,7 +68,7 @@ async fn outbox_delivery_worker_sends_gmail_items_through_gmail_api_against_post
         .upsert_provider_account(
             &NewProviderAccount::new(
                 account_id,
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 "Gmail Outbox Enabled",
                 "sender@gmail.com",
             )

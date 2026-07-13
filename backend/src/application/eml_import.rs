@@ -1,6 +1,3 @@
-use crate::domains::communications::core::{
-    CommunicationIngestionStore, CommunicationProviderAccountStore, NewRawCommunicationRecord,
-};
 use crate::domains::communications::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage,
     project_parsed_raw_email_message,
@@ -11,11 +8,14 @@ use crate::domains::communications::storage::{
     HeuristicAttachmentSafetyScanner, LocalCommunicationBlobStore, NewCommunicationAttachment,
     NewCommunicationBlob,
 };
-use crate::platform::communications::StoredRawCommunicationRecord;
 use crate::platform::communications::rfc822::{
     EmailRfc822ParseError, ParsedEmailAttachmentDisposition, parse_rfc822_message,
 };
 use crate::platform::communications::{MboxParseError, split_mbox_messages};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
+use hermes_communications_api::evidence::StoredRawCommunicationRecord;
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use serde_json::json;
 
 #[derive(Clone)]
@@ -231,7 +231,7 @@ pub(crate) enum EmlImportError {
     #[error(transparent)]
     Mbox(#[from] MboxParseError),
     #[error(transparent)]
-    Ingestion(#[from] crate::domains::communications::core::CommunicationIngestionError),
+    Ingestion(#[from] hermes_communications_postgres::errors::CommunicationIngestionError),
     #[error(transparent)]
     MessageProjection(#[from] MessageProjectionError),
     #[error(transparent)]

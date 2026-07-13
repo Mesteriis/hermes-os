@@ -2,8 +2,8 @@ use std::env;
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
+use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 use hermes_hub_backend::app::init_tracing;
-use hermes_hub_backend::domains::communications::core::StoredRawCommunicationRecord;
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, parse_raw_email_message_from_blob, project_parsed_raw_email_message,
 };

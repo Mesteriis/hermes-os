@@ -1,8 +1,9 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use super::OmniRouteClient;
+use super::error::OmniRouteError;
 use super::models::OmniRouteChatResult;
-use super::{OmniRouteClient, OmniRouteError};
 
 impl OmniRouteClient {
     pub async fn chat(&self, prompt: &str) -> Result<OmniRouteChatResult, OmniRouteError> {

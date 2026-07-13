@@ -1,13 +1,9 @@
+use hermes_events_api::EventEnvelopeError;
 use std::io;
 
 use crate::ai::control_center::AiControlCenterError;
 use crate::ai::core::AiError;
-use crate::application::provider_runtime_contracts::{
-    TelegramError, WhatsappWebError, YandexTelemostError, ZoomError,
-};
-use crate::application::review_promotion::ReviewPromotionError;
 use crate::domains::calendar::events::CalendarError;
-use crate::domains::communications::core::CommunicationIngestionError;
 use crate::domains::communications::messages::MessageProjectionError;
 use crate::domains::communications::storage::CommunicationStorageError;
 use crate::domains::decisions::DecisionStoreError;
@@ -18,19 +14,25 @@ use crate::domains::personas::api::PersonaProjectionError;
 use crate::domains::personas::identity::PersonaIdentityError;
 use crate::domains::projects::core::ProjectStoreError;
 use crate::domains::projects::link_reviews::ProjectLinkReviewError;
-use crate::domains::relationships::RelationshipStoreError;
+use crate::domains::relationships::errors::RelationshipStoreError;
 use crate::domains::review::ReviewInboxError;
-use crate::domains::signal_hub::SignalHubError;
+use crate::domains::signal_hub::store::SignalHubError;
 use crate::domains::tasks::candidates::TaskCandidateError;
-use crate::engines::automation::AutomationError;
-use crate::engines::consistency::ConsistencyError;
+use crate::engines::automation::errors::AutomationError;
+use crate::engines::consistency::errors::ConsistencyError;
 use crate::integrations::mail::accounts::EmailAccountSetupError;
+use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::whatsapp::client::WhatsappWebError;
+use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
+use crate::integrations::zoom::client::errors::ZoomError;
 use crate::platform::audit::ApiAuditError;
 use crate::platform::calls::CallError;
-use crate::platform::events::{EventEnvelopeError, EventStoreError};
 use crate::platform::settings::SettingsError;
 use crate::platform::storage::StorageError;
 use crate::vault::HostVaultError;
+use crate::workflows::review_promotion::ReviewPromotionError;
+use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_events_postgres::errors::EventStoreError;
 
 #[derive(Debug)]
 pub enum ApiError {

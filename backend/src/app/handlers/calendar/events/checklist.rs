@@ -9,10 +9,11 @@ pub(crate) async fn get_event_checklist(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let checklist = crate::app::api_support::app_store::<EventChecklistStore>(pool)
-        .get(&event_id)
-        .await
-        .map_err(ApiError::from)?;
+    let checklist =
+        crate::app::api_support::stores::domain_stores::app_store::<EventChecklistStore>(pool)
+            .get(&event_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&checklist).unwrap_or_default()))
 }
 

@@ -14,10 +14,11 @@ pub(crate) async fn get_event_participants(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<EventParticipantStore>(pool)
-        .list(&event_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<EventParticipantStore>(pool)
+            .list(&event_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(EventParticipantsResponse { items }))
 }
 

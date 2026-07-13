@@ -15,7 +15,7 @@ use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatFolderSnapshot, TelegramTdlibChatNotificationSettingsSnapshot,
     TelegramTdlibChatPositionSnapshot, TelegramTdlibChatUnreadSnapshot,
 };
-use crate::platform::events::EventBus;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
 
 #[cfg(test)]
@@ -60,7 +60,7 @@ async fn publish_chat_notification_settings_event_appends_chat_updated_before_ch
     let chat = seed_chat(&pool, account_id, provider_chat_id)
         .await
         .expect("seed chat");
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     let snapshot = TelegramTdlibChatNotificationSettingsSnapshot {
         provider_chat_id: provider_chat_id.to_owned(),
         use_default_mute_for: false,
@@ -110,7 +110,7 @@ async fn publish_chat_position_event_appends_chat_updated_before_flag_events() {
     let chat = seed_chat(&pool, account_id, provider_chat_id)
         .await
         .expect("seed chat");
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     let snapshot = TelegramTdlibChatPositionSnapshot {
         provider_chat_id: provider_chat_id.to_owned(),
         list_kind: "archive".to_owned(),
@@ -166,7 +166,7 @@ async fn publish_chat_position_event_emits_folder_filters_for_folder_membership_
     let _chat = seed_chat(&pool, account_id, provider_chat_id)
         .await
         .expect("seed chat");
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     let snapshot = TelegramTdlibChatPositionSnapshot {
         provider_chat_id: provider_chat_id.to_owned(),
         list_kind: "folder".to_owned(),
@@ -218,7 +218,7 @@ async fn publish_chat_folders_event_emits_chat_updated_for_folder_label_projecti
     let chat = seed_chat(&pool, account_id, provider_chat_id)
         .await
         .expect("seed chat");
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
 
     publish_chat_position_event(
         &Some(crate::test_support::telegram_store(&pool)),
@@ -285,7 +285,7 @@ async fn publish_chat_folders_event_refreshes_unknown_labels_when_folder_snapsho
     let chat = seed_chat(&pool, account_id, provider_chat_id)
         .await
         .expect("seed chat");
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
 
     publish_chat_position_event(
         &Some(crate::test_support::telegram_store(&pool)),
@@ -363,7 +363,7 @@ async fn publish_chat_position_event_reconciles_folder_add_and_remove_commands()
     let chat = seed_chat(&pool, account_id, provider_chat_id)
         .await
         .expect("seed chat");
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
 
     let add_command_id = "cmd-folder-add-1";
     let remove_command_id = "cmd-folder-remove-1";
@@ -557,7 +557,7 @@ async fn publish_chat_unread_event_reconciles_mark_read_command_and_emits_events
     .await
     .expect("seed mark_read command");
 
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     publish_chat_unread_event(
         &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,

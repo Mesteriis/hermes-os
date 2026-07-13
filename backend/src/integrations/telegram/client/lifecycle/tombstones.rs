@@ -8,7 +8,8 @@ use crate::integrations::telegram::client::evidence::link_telegram_entity_in_tra
 use crate::integrations::telegram::client::models::TelegramMessage;
 use crate::integrations::telegram::client::models::messages::TelegramMessageTombstone;
 use crate::integrations::telegram::client::rows::row_to_telegram_message_tombstone;
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 
 async fn capture_tombstone_observation_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,

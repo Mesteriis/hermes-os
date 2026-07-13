@@ -1,27 +1,37 @@
 use chrono::Utc;
+use hermes_events_api::EventEnvelope;
 use serde_json::json;
-use sqlx::postgres::PgPool;
+use sqlx::Transaction;
+use sqlx::postgres::{PgPool, Postgres};
 use thiserror::Error;
 
 use crate::domains::decisions::{Decision, DecisionReviewState, DecisionStore, DecisionStoreError};
 use crate::domains::obligations::{
-    Obligation, ObligationReviewState, ObligationStore, ObligationStoreError,
+    NewObligation, NewObligationEvidence, Obligation, ObligationEntityKind, ObligationReviewState,
+    ObligationStore, ObligationStoreError,
 };
-use crate::domains::relationships::{
-    Relationship, RelationshipReviewState, RelationshipStore, RelationshipStoreError,
+use crate::domains::relationships::models::{Relationship, RelationshipReviewState};
+use crate::domains::tasks::candidates::constants::{
+    OBLIGATION_CANDIDATE_METADATA_KEY, TASK_CANDIDATE_KIND_OBLIGATION_TASK,
 };
+use crate::domains::tasks::candidates::ids::task_id_from_candidate;
+use crate::domains::tasks::candidates::models::StoredCandidateRow;
 use crate::domains::tasks::candidates::{
-    StoredCandidateRow, TaskCandidateReviewCommand, TaskCandidateReviewCommandResult,
-    TaskCandidateReviewService, TaskCandidateReviewServiceError, TaskCandidateReviewState,
+    TaskCandidateError, TaskCandidateReviewCommand, TaskCandidateReviewCommandResult,
+    TaskCandidateReviewState, TaskCandidateStore,
 };
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
-};
+use crate::domains::tasks::core::{ObligationTaskLinkStore, TaskCoreError};
+use crate::engines::obligation::models::ObligationCandidate;
 use crate::workflows::review_mirror::{
     ReviewMirrorError, sync_decision_review_state_with_observation,
     sync_obligation_review_state_with_observation, sync_relationship_review_state_with_observation,
     sync_task_candidate_review_state_in_transaction,
 };
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
+
+use super::relationship_graph::{RelationshipGraphCoordinator, RelationshipGraphCoordinatorError};
 
 #[derive(Clone)]
 pub struct DecisionReviewApplicationService {
@@ -198,7 +208,7 @@ impl RelationshipReviewApplicationService {
             )
             .await?;
 
-        let relationship = RelationshipStore::new(self.pool.clone())
+        let relationship = RelationshipGraphCoordinator::new(self.pool.clone())
             .set_review_state_with_observation(
                 relationship_id,
                 review_state,
@@ -227,7 +237,7 @@ pub enum RelationshipReviewApplicationError {
     Observation(#[from] ObservationStoreError),
 
     #[error(transparent)]
-    Relationship(#[from] RelationshipStoreError),
+    RelationshipGraph(#[from] RelationshipGraphCoordinatorError),
 
     #[error(transparent)]
     ReviewMirror(#[from] ReviewMirrorError),
@@ -247,71 +257,276 @@ impl TaskCandidateReviewApplicationService {
         &self,
         command: &TaskCandidateReviewCommand,
     ) -> Result<TaskCandidateReviewCommandResult, TaskCandidateReviewApplicationError> {
-        let result = TaskCandidateReviewService::new(self.pool.clone())
-            .review_manual(command)
+        let observation = ObservationStore::new(self.pool.clone())
+            .capture(
+                &NewObservation::new(
+                    "REVIEW_TRANSITION",
+                    ObservationOriginKind::Manual,
+                    Utc::now(),
+                    json!({
+                        "task_candidate_id": command.task_candidate_id,
+                        "command_id": command.command_id,
+                        "review_state": command.review_state.as_str(),
+                        "actor_id": command.actor_id,
+                        "operation": "task_candidate_review",
+                    }),
+                    format!(
+                        "task-candidate://{}/review/{}",
+                        command.task_candidate_id, command.command_id
+                    ),
+                )
+                .provenance(json!({
+                    "captured_by": "task_candidate_review_application.review_manual",
+                    "operation": "review_manual",
+                })),
+            )
             .await?;
 
-        let mut transaction = self.pool.begin().await?;
-        let candidate_row = sqlx::query(
-            r#"
-            SELECT
-                source_kind,
-                source_id,
-                observation_id,
-                candidate_kind,
-                candidate_metadata,
-                project_id,
-                title,
-                due_text,
-                assignee_label,
-                confidence::float8 AS confidence,
-                evidence_excerpt
-            FROM task_candidates
-            WHERE task_candidate_id = $1
-            FOR UPDATE
-            "#,
+        self.review_with_observation(
+            command,
+            &observation.observation_id,
+            json!({
+                "captured_by": "task_candidate_review_application.review_manual",
+                "operation": "review_manual",
+            }),
         )
-        .bind(&command.task_candidate_id)
-        .fetch_optional(&mut *transaction)
-        .await?
-        .ok_or(TaskCandidateReviewApplicationError::TaskCandidateNotFound)?;
-        let candidate = StoredCandidateRow {
-            source_kind: sqlx::Row::try_get(&candidate_row, "source_kind")?,
-            source_id: sqlx::Row::try_get(&candidate_row, "source_id")?,
-            observation_id: sqlx::Row::try_get(&candidate_row, "observation_id")?,
-            candidate_kind: sqlx::Row::try_get(&candidate_row, "candidate_kind")?,
-            candidate_metadata: sqlx::Row::try_get(&candidate_row, "candidate_metadata")?,
-            project_id: sqlx::Row::try_get(&candidate_row, "project_id")?,
-            title: sqlx::Row::try_get(&candidate_row, "title")?,
-            due_text: sqlx::Row::try_get(&candidate_row, "due_text")?,
-            assignee_label: sqlx::Row::try_get(&candidate_row, "assignee_label")?,
-            confidence: sqlx::Row::try_get(&candidate_row, "confidence")?,
-            evidence_excerpt: sqlx::Row::try_get(&candidate_row, "evidence_excerpt")?,
-        };
+        .await
+    }
+
+    pub async fn review_with_observation(
+        &self,
+        command: &TaskCandidateReviewCommand,
+        observation_id: &str,
+        metadata: serde_json::Value,
+    ) -> Result<TaskCandidateReviewCommandResult, TaskCandidateReviewApplicationError> {
+        let mut transaction = self.pool.begin().await?;
+        let (result, candidate) = TaskCandidateStore::set_review_state_in_transaction(
+            &mut transaction,
+            command,
+            Some(observation_id),
+            Some(metadata),
+        )
+        .await?;
+        sync_obligation_candidate_in_transaction(
+            &mut transaction,
+            &result.task_candidate_id,
+            &candidate,
+            result.review_state,
+        )
+        .await?;
+        if result.review_state != TaskCandidateReviewState::UserConfirmed {
+            TaskCandidateStore::delete_task_for_candidate_in_transaction(
+                &mut transaction,
+                &result.task_candidate_id,
+            )
+            .await?;
+        }
         sync_task_candidate_review_state_in_transaction(
             &mut transaction,
-            &command.task_candidate_id,
+            &result.task_candidate_id,
             &candidate,
-            command.review_state,
+            result.review_state,
         )
         .await?;
         transaction.commit().await?;
 
         Ok(result)
     }
+
+    pub async fn apply_review_event(
+        &self,
+        event: &hermes_events_api::EventEnvelope,
+    ) -> Result<(), TaskCandidateReviewApplicationError> {
+        let mut transaction = self.pool.begin().await?;
+        let (task_candidate_id, review_state, candidate) =
+            TaskCandidateStore::apply_review_event_in_transaction(&mut transaction, event).await?;
+        sync_obligation_candidate_in_transaction(
+            &mut transaction,
+            &task_candidate_id,
+            &candidate,
+            review_state,
+        )
+        .await?;
+        if review_state != TaskCandidateReviewState::UserConfirmed {
+            TaskCandidateStore::delete_task_for_candidate_in_transaction(
+                &mut transaction,
+                &task_candidate_id,
+            )
+            .await?;
+        }
+        sync_task_candidate_review_state_in_transaction(
+            &mut transaction,
+            &task_candidate_id,
+            &candidate,
+            review_state,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Error)]
 pub enum TaskCandidateReviewApplicationError {
     #[error(transparent)]
-    TaskCandidate(#[from] TaskCandidateReviewServiceError),
+    Observation(#[from] ObservationStoreError),
+
+    #[error(transparent)]
+    TaskCandidate(#[from] TaskCandidateError),
+
+    #[error(transparent)]
+    Obligation(#[from] ObligationStoreError),
+
+    #[error(transparent)]
+    TaskCore(#[from] TaskCoreError),
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 
     #[error(transparent)]
     ReviewMirror(#[from] ReviewMirrorError),
+}
 
-    #[error("task candidate was not found")]
-    TaskCandidateNotFound,
+async fn sync_obligation_candidate_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    task_candidate_id: &str,
+    candidate: &StoredCandidateRow,
+    review_state: TaskCandidateReviewState,
+) -> Result<(), TaskCandidateReviewApplicationError> {
+    if candidate.candidate_kind != TASK_CANDIDATE_KIND_OBLIGATION_TASK {
+        return Ok(());
+    }
+
+    match review_state {
+        TaskCandidateReviewState::UserConfirmed => {
+            let observation_id = candidate.observation_id.as_deref().ok_or_else(|| {
+                TaskCandidateError::ObservationRequired(task_candidate_id.to_owned())
+            })?;
+            let obligation_candidate =
+                obligation_candidate_from_metadata(&candidate.candidate_metadata)?;
+            let mut obligation = NewObligation::new(
+                map_obligation_entity_kind(obligation_candidate.obligated_entity_kind),
+                obligation_candidate.obligated_entity_id.clone(),
+                obligation_candidate.statement.clone(),
+                obligation_candidate.confidence,
+                ObligationReviewState::UserConfirmed,
+            )
+            .metadata(json!({
+                "task_candidate_id": task_candidate_id,
+                "candidate_kind": TASK_CANDIDATE_KIND_OBLIGATION_TASK,
+            }));
+            if let (Some(kind), Some(entity_id)) = (
+                obligation_candidate.beneficiary_entity_kind,
+                obligation_candidate.beneficiary_entity_id.as_deref(),
+            ) {
+                obligation = obligation.beneficiary(map_obligation_entity_kind(kind), entity_id);
+            }
+            if let Some(condition) = obligation_candidate.condition.as_deref() {
+                obligation = obligation.condition(condition);
+            }
+
+            let evidence = [NewObligationEvidence::observation(observation_id)
+                .quote(obligation_candidate.quote.clone())
+                .confidence(obligation_candidate.confidence)
+                .metadata(json!({ "task_candidate_id": task_candidate_id }))];
+            let stored = ObligationStore::upsert_with_evidence_in_transaction(
+                transaction,
+                &obligation,
+                &evidence,
+            )
+            .await?;
+            ObligationTaskLinkStore::link_fulfillment_task_in_transaction(
+                transaction,
+                &stored.obligation_id,
+                &task_id_from_candidate(task_candidate_id),
+            )
+            .await?;
+        }
+        TaskCandidateReviewState::Suggested | TaskCandidateReviewState::UserRejected => {
+            let linked_obligation_ids = sqlx::query_scalar::<_, String>(
+                r#"
+                SELECT link.obligation_id
+                FROM obligation_task_links link
+                JOIN tasks task ON task.task_id = link.task_id
+                WHERE task.task_candidate_id = $1
+                  AND link.link_kind = 'fulfillment_task'
+                ORDER BY link.obligation_id
+                "#,
+            )
+            .bind(task_candidate_id)
+            .fetch_all(&mut **transaction)
+            .await?;
+            let obligation_review_state = match review_state {
+                TaskCandidateReviewState::Suggested => ObligationReviewState::Suggested,
+                TaskCandidateReviewState::UserRejected => ObligationReviewState::UserRejected,
+                TaskCandidateReviewState::UserConfirmed => unreachable!(),
+            };
+            for obligation_id in linked_obligation_ids {
+                ObligationStore::set_review_state_in_transaction(
+                    transaction,
+                    &obligation_id,
+                    obligation_review_state,
+                    candidate.observation_id.as_deref(),
+                    Some(json!({
+                        "task_candidate_id": task_candidate_id,
+                        "review_state": review_state.as_str(),
+                    })),
+                )
+                .await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn obligation_candidate_from_metadata(
+    metadata: &serde_json::Value,
+) -> Result<ObligationCandidate, TaskCandidateReviewApplicationError> {
+    let candidate = metadata
+        .get(OBLIGATION_CANDIDATE_METADATA_KEY)
+        .cloned()
+        .ok_or_else(|| {
+            TaskCandidateError::InvalidCandidateMetadata(
+                OBLIGATION_CANDIDATE_METADATA_KEY.to_owned(),
+            )
+        })?;
+    Ok(serde_json::from_value(candidate).map_err(TaskCandidateError::from)?)
+}
+
+fn map_obligation_entity_kind(
+    value: crate::engines::obligation::models::ObligationEntityKind,
+) -> ObligationEntityKind {
+    match value {
+        crate::engines::obligation::models::ObligationEntityKind::Persona => {
+            ObligationEntityKind::Persona
+        }
+        crate::engines::obligation::models::ObligationEntityKind::Organization => {
+            ObligationEntityKind::Organization
+        }
+        crate::engines::obligation::models::ObligationEntityKind::Project => {
+            ObligationEntityKind::Project
+        }
+        crate::engines::obligation::models::ObligationEntityKind::Communication => {
+            ObligationEntityKind::Communication
+        }
+        crate::engines::obligation::models::ObligationEntityKind::Document => {
+            ObligationEntityKind::Document
+        }
+        crate::engines::obligation::models::ObligationEntityKind::Task => {
+            ObligationEntityKind::Task
+        }
+        crate::engines::obligation::models::ObligationEntityKind::Event => {
+            ObligationEntityKind::Event
+        }
+        crate::engines::obligation::models::ObligationEntityKind::Decision => {
+            ObligationEntityKind::Decision
+        }
+        crate::engines::obligation::models::ObligationEntityKind::Obligation => {
+            ObligationEntityKind::Obligation
+        }
+        crate::engines::obligation::models::ObligationEntityKind::Knowledge => {
+            ObligationEntityKind::Knowledge
+        }
+    }
 }

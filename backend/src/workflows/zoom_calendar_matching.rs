@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use hermes_events_api::{EventEnvelope, StoredEventEnvelope};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
@@ -6,10 +7,10 @@ use thiserror::Error;
 use crate::domains::calendar::core::{CalendarCoreError, EventRelationPort};
 use crate::domains::calendar::events::{CalendarError, CalendarEventQueryPort};
 use crate::platform::events::bus::zoom_event_types;
-use crate::platform::events::{EventEnvelope, EventStoreError, StoredEventEnvelope};
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationPort, ObservationStoreError,
-};
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 pub const ZOOM_CALENDAR_MATCHING_CONSUMER: &str = "zoom_calendar_matching";
 pub const ZOOM_CALENDAR_MATCHING_PROJECTION: &str = "zoom_calendar_matching";
@@ -67,7 +68,7 @@ pub async fn project_zoom_calendar_matching(
         return Ok(());
     };
 
-    let observation = ObservationPort::new(pool.clone())
+    let observation = ObservationStore::new(pool.clone())
         .capture(
             &NewObservation::new(
                 "CALENDAR_EVENT",

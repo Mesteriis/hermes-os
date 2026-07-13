@@ -1,4 +1,5 @@
 use chrono::Utc;
+use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
 use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
@@ -13,7 +14,7 @@ use crate::platform::communications::{
     render_rich_attachment_safe_preview, rich_attachment_extraction_kind,
     rich_attachment_extractor_address,
 };
-use crate::platform::events::{EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
 
 const PDF_PREVIEW_RENDERER: &str = "hermes.attachment_extractor.pdf_preview.v1";
 const DOCX_PREVIEW_RENDERER: &str = "hermes.attachment_extractor.docx_preview.v1";
@@ -436,7 +437,7 @@ pub enum AttachmentSafePreviewServiceError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]
-    Event(#[from] crate::platform::events::EventStoreError),
+    Event(#[from] hermes_events_postgres::errors::EventStoreError),
     #[error(transparent)]
-    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    EventEnvelope(#[from] hermes_events_api::EventEnvelopeError),
 }

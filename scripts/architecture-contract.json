@@ -16,6 +16,7 @@
           "domain_command_ports",
           "domain_query_ports",
           "integration_runtime_integration_api",
+          "workflow_public_apis",
           "platform"
         ],
         "deny": [
@@ -130,6 +131,97 @@
           "business_truth"
         ]
       }
+    }
+  },
+  "workspace": {
+    "roles": {
+      "kernel": {
+        "packages": ["hermes-kernel"],
+        "forbidden_dependencies": ["hermes-hub-backend", "reqwest", "sqlx"]
+      },
+      "event_api": {
+        "packages": ["hermes-events-api"],
+        "forbidden_dependencies": ["hermes-hub-backend", "reqwest", "sqlx"]
+      },
+      "event_postgres": {
+        "packages": ["hermes-events-postgres"],
+        "forbidden_dependencies": ["hermes-hub-backend", "reqwest"]
+      },
+      "event_nats": {
+        "packages": ["hermes-events-nats"],
+        "forbidden_dependencies": ["hermes-hub-backend", "reqwest", "sqlx"]
+      },
+      "provider_api": {
+        "packages": ["hermes-provider-api"],
+        "forbidden_dependencies": ["hermes-hub-backend", "reqwest", "sqlx"]
+      },
+      "vault_api": {
+        "packages": ["hermes-vault-api"],
+        "forbidden_dependencies": ["hermes-hub-backend", "reqwest", "sqlx"]
+      },
+      "blob_api": {
+        "packages": ["hermes-blob-api"],
+        "forbidden_dependencies": ["hermes-hub-backend", "reqwest", "sqlx"]
+      },
+      "contract_api": {
+        "packages": ["hermes-connectrpc-contracts"],
+        "forbidden_dependencies": ["hermes-hub-backend", "reqwest", "sqlx"]
+      },
+      "provider_impl": {
+        "packages": ["hermes-provider-zulip"],
+        "forbidden_dependencies": ["hermes-hub-backend", "sqlx", "testkit"]
+      },
+      "test_session": {
+        "packages": ["hermes-test-session"],
+        "forbidden_dependencies": ["hermes-hub-backend", "testkit"]
+      },
+      "composition": {
+        "packages": ["hermes-hub-backend"],
+        "forbidden_dependencies": []
+      },
+      "test_support": {
+        "packages": ["testkit"],
+        "forbidden_dependencies": []
+      },
+      "domain_api": {
+        "packages": ["hermes-communications-api", "hermes-signal-hub-api"],
+        "forbidden_dependencies": ["sqlx", "reqwest"]
+      },
+      "observation_api": {
+        "packages": ["hermes-observations-api"],
+        "forbidden_dependencies": ["sqlx", "reqwest"]
+      },
+      "persistence_adapter": {
+        "packages": ["hermes-observations-postgres", "hermes-communications-postgres", "hermes-signal-hub-postgres"],
+        "forbidden_dependencies": []
+      },
+      "application": {
+        "packages": ["hermes-provider-orchestration"],
+        "forbidden_dependencies": []
+      },
+      "runtime": {
+        "packages": ["hermes-desktop-runtime"],
+        "forbidden_dependencies": []
+      }
+    },
+    "role_edges": {
+      "kernel": {"normal": [], "build": [], "dev": []},
+      "event_api": {"normal": [], "build": [], "dev": []},
+      "event_postgres": {"normal": ["event_api"], "build": ["event_api"], "dev": ["event_api"]},
+      "event_nats": {"normal": ["event_api"], "build": ["event_api"], "dev": ["event_api"]},
+      "provider_api": {"normal": ["kernel"], "build": ["kernel"], "dev": ["kernel", "blob_api"]},
+      "vault_api": {"normal": ["provider_api"], "build": ["provider_api"], "dev": ["provider_api"]},
+      "blob_api": {"normal": [], "build": [], "dev": []},
+      "contract_api": {"normal": [], "build": [], "dev": []},
+      "provider_impl": {"normal": ["kernel", "provider_api"], "build": ["kernel", "provider_api"], "dev": ["kernel", "provider_api"]},
+      "composition": {"normal": ["kernel", "event_api", "event_postgres", "event_nats", "provider_api", "provider_impl", "domain_api", "observation_api", "persistence_adapter", "application", "runtime", "contract_api"], "build": ["kernel"], "dev": ["test_support"]},
+      "test_support": {"normal": ["composition", "kernel", "provider_api", "provider_impl", "domain_api", "observation_api", "persistence_adapter", "test_session"], "build": ["kernel"], "dev": ["composition", "kernel", "provider_api", "provider_impl", "domain_api", "observation_api", "persistence_adapter", "test_session"]},
+      "test_session": {"normal": [], "build": [], "dev": []},
+      "domain_api": {"normal": ["kernel", "event_api"], "build": ["kernel", "event_api"], "dev": ["kernel", "event_api"]},
+      "observation_api": {"normal": ["kernel"], "build": ["kernel"], "dev": ["kernel"]},
+      "persistence_adapter": {"normal": ["kernel", "event_api", "event_postgres", "domain_api", "observation_api", "persistence_adapter"], "build": ["kernel", "event_api", "event_postgres", "domain_api", "observation_api", "persistence_adapter"], "dev": ["kernel", "event_api", "event_postgres", "domain_api", "observation_api", "persistence_adapter"]},
+      "application": {"normal": ["kernel", "domain_api", "provider_api"], "build": ["kernel"], "dev": ["test_support"]},
+      "runtime": {"normal": ["kernel", "provider_api", "domain_api", "application"], "build": ["kernel"], "dev": ["test_support"]}
     }
   },
   "frontend": {

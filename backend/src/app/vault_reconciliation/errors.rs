@@ -2,9 +2,9 @@ use thiserror::Error;
 
 use crate::ai::control_center::AiControlCenterError;
 use crate::domains::calendar::events::CalendarError;
-use crate::domains::communications::core::CommunicationIngestionError;
 use crate::platform::secrets::SecretReferenceError;
 use crate::vault::HostVaultError;
+use hermes_communications_postgres::errors::CommunicationIngestionError;
 
 #[derive(Debug, Error)]
 pub(super) enum HostVaultReconciliationError {

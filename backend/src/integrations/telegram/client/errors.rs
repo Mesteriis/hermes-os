@@ -1,7 +1,9 @@
+use hermes_communications_api::evidence::CommunicationEvidencePortError;
+
 use crate::platform::communications::ProviderCommunicationMessagePortError;
-use crate::platform::observations::ObservationStoreError;
 use crate::platform::secrets::{DatabaseEncryptedVaultError, SecretReferenceError};
 use crate::vault::HostVaultError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TelegramError {
@@ -37,6 +39,9 @@ pub enum TelegramError {
 
     #[error(transparent)]
     CommunicationMessagePort(#[from] ProviderCommunicationMessagePortError),
+
+    #[error(transparent)]
+    CommunicationEvidencePort(#[from] CommunicationEvidencePortError),
 
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),

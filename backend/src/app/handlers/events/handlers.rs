@@ -1,3 +1,4 @@
+use hermes_events_api::{EventEnvelope, NewEventEnvelope, StoredEventEnvelope};
 use std::collections::VecDeque;
 use std::convert::Infallible;
 use std::time::Duration;
@@ -14,13 +15,22 @@ use serde_json::json;
 use tokio::time::{Instant, sleep};
 
 use crate::app::api_support::{
-    AppendEventRequest, AppendEventResponse, AuditEventsQuery, AuditEventsResponse, api_audit_log,
-    event_store,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::{ApiError, AppState};
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::bus::sanitize_event_payload;
-use crate::platform::events::{EventEnvelope, EventTrace, StoredEventEnvelope};
+use hermes_events_postgres::trace::EventTrace;
 
 pub(crate) async fn post_event(
     State(state): State<AppState>,
@@ -260,7 +270,7 @@ pub(crate) async fn get_audit_events(
 }
 
 async fn stream_start_position(
-    store: &crate::platform::events::EventStore,
+    store: &hermes_events_postgres::store::EventStore,
     after_position: Option<i64>,
 ) -> Result<i64, ApiError> {
     match after_position {
@@ -273,7 +283,7 @@ async fn stream_start_position(
 }
 
 struct EventStreamState {
-    store: crate::platform::events::EventStore,
+    store: hermes_events_postgres::store::EventStore,
     after_position: i64,
     batch_size: u32,
     heartbeat: Duration,
@@ -402,15 +412,13 @@ fn stream_error_event() -> Event {
 // Realtime bus subscription endpoint (ADR-0091)
 // ---------------------------------------------------------------------------
 
-use crate::platform::events::NewEventEnvelope;
-
 #[derive(Deserialize)]
 pub(crate) struct RealtimeQuery {
     /// Optional event type prefix filter (e.g., "telegram" or "telegram.message")
     event_prefix: Option<String>,
 }
 
-/// WebSocket endpoint that subscribes to the in-memory EventBus for realtime events.
+/// WebSocket endpoint that subscribes to the in-memory InMemoryEventBus for realtime events.
 /// Filterable by event type prefix.
 pub(crate) async fn get_realtime_websocket(
     State(state): State<AppState>,

@@ -1,13 +1,15 @@
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 use std::future::Future;
 use std::pin::Pin;
 
 use serde_json::Value;
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore, EmailProviderKind,
-    ProviderAccount, ProviderAccountSecretPurpose,
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
+
 use crate::platform::communications::{
     GmailOutboxSendRequest, GmailOutboxTransport, SmtpTransport,
 };
@@ -69,7 +71,7 @@ where
                     OutboxDeliveryError::Transport("provider account was not found".to_owned())
                 })?;
 
-            if matches!(account.provider_kind, EmailProviderKind::Gmail)
+            if matches!(account.provider_kind, CommunicationProviderKind::Gmail)
                 && gmail_send_enabled(&account.config)
             {
                 return self.send_gmail(item, &account).await;

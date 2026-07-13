@@ -1,20 +1,23 @@
 use crate::support::*;
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, NewProviderAccount, ProviderAccountSecretPurpose,
+};
 
 #[test]
 fn email_provider_kind_supports_gmail_icloud_and_raw_imap() {
     assert_eq!(
-        EmailProviderKind::try_from("gmail").expect("gmail provider kind"),
-        EmailProviderKind::Gmail
+        CommunicationProviderKind::try_from("gmail").expect("gmail provider kind"),
+        CommunicationProviderKind::Gmail
     );
     assert_eq!(
-        EmailProviderKind::try_from("icloud").expect("icloud provider kind"),
-        EmailProviderKind::Icloud
+        CommunicationProviderKind::try_from("icloud").expect("icloud provider kind"),
+        CommunicationProviderKind::Icloud
     );
     assert_eq!(
-        EmailProviderKind::try_from("imap").expect("imap provider kind"),
-        EmailProviderKind::Imap
+        CommunicationProviderKind::try_from("imap").expect("imap provider kind"),
+        CommunicationProviderKind::Imap
     );
-    assert!(EmailProviderKind::try_from("exchange").is_err());
+    assert!(CommunicationProviderKind::try_from("exchange").is_err());
 }
 
 #[test]
@@ -53,21 +56,21 @@ async fn communication_ingestion_registers_email_provider_accounts_against_postg
     let accounts = [
         NewProviderAccount::new(
             format!("acct_gmail_{suffix}"),
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Gmail primary",
             format!("gmail-user-{suffix}@example.com"),
         )
         .config(json!({"auth": "oauth", "api": "gmail"})),
         NewProviderAccount::new(
             format!("acct_icloud_{suffix}"),
-            EmailProviderKind::Icloud,
+            CommunicationProviderKind::Icloud,
             "iCloud Mail",
             format!("icloud-user-{suffix}@icloud.com"),
         )
         .config(json!({"auth": "app_password", "transport": "imap"})),
         NewProviderAccount::new(
             format!("acct_imap_{suffix}"),
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Generic IMAP",
             format!("imap-user-{suffix}@example.net"),
         )
@@ -101,7 +104,7 @@ async fn communication_ingestion_tracks_checkpoints_against_postgres() {
     store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Icloud,
+            CommunicationProviderKind::Icloud,
             "iCloud checkpoint test",
             format!("checkpoint-{suffix}@icloud.com"),
         ))

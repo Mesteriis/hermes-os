@@ -1,5 +1,8 @@
 use crate::domains::communications::messages::{MessageProjectionStore, ProjectedMessage};
-use crate::engines::search::{SearchDocument, SearchIndex, SearchResult};
+use crate::engines::search::{
+    engine::SearchIndex,
+    models::{SearchDocument, SearchResult},
+};
 
 pub fn project_message_to_search_document(message: &ProjectedMessage) -> SearchDocument {
     SearchDocument {
@@ -39,7 +42,7 @@ pub fn search_emails(
 #[derive(Debug, thiserror::Error)]
 pub enum IndexEmailError {
     #[error(transparent)]
-    Search(#[from] crate::engines::search::SearchError),
+    Search(#[from] crate::engines::search::errors::SearchError),
     #[error(transparent)]
     Messages(#[from] crate::domains::communications::messages::MessageProjectionError),
 }

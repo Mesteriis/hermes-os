@@ -1,15 +1,15 @@
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use serde_json::json;
 use sqlx::Row;
 use tempfile::tempdir;
 use tokio::time::{Duration, sleep};
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, CommunicationProviderKind, EmailProviderKind,
-    ProviderAccountSecretPurpose,
-};
+
 use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretResolver};
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::vault::{EntropyEvent, HostVault, HostVaultConfig, SecretEntryContext};
@@ -161,7 +161,7 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
     let secret_store = SecretReferenceStore::new(restarted_pool.clone());
 
     let account = wait_for_provider_account(&communication_store, account_id).await;
-    assert_eq!(account.provider_kind, EmailProviderKind::Icloud);
+    assert_eq!(account.provider_kind, CommunicationProviderKind::Icloud);
     assert_eq!(account.display_name, "Recovered iCloud");
     assert_eq!(account.external_account_id, "recover@icloud.com");
     assert_eq!(
@@ -478,7 +478,7 @@ async fn startup_reconciles_legacy_gmail_manifest_without_provider_metadata() {
     let secret_store = SecretReferenceStore::new(pool);
 
     let account = wait_for_provider_account(&communication_store, account_id).await;
-    assert_eq!(account.provider_kind, EmailProviderKind::Gmail);
+    assert_eq!(account.provider_kind, CommunicationProviderKind::Gmail);
     assert_eq!(account.display_name, "Google Workspace");
     assert_eq!(account.external_account_id, "karelon@gmail.com");
     assert_eq!(account.config["auth"], json!("oauth"));

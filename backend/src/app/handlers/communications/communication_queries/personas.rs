@@ -26,7 +26,7 @@ pub(crate) async fn get_v1_personas(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::personas::CommunicationPersonaStore,
     >(pool);
     let items = store.list().await?;
@@ -42,7 +42,7 @@ pub(crate) async fn post_v1_persona(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::personas::CommunicationPersonaStore,
     >(pool);
     let persona = store

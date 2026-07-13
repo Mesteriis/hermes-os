@@ -172,7 +172,8 @@ Important current examples:
 - ADR-0085 - Communication spine and Consistency / Contradiction Engine.
 - ADR-0091 - Telegram production client capability model.
 - ADR-0095 - event-driven domain communication and DLQ.
-- ADR-0099 - Signal Hub event platform.
+- ADR-0181 - backend workspace modularity, Signal Hub event platform and
+  provider runtime topology.
 - ADR-0102 - accepted Zoom provider runtime boundary.
 - ADR-0104 - proposed Yandex Telemost provider runtime boundary.
 

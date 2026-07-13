@@ -1,9 +1,10 @@
+use hermes_communications_api::accounts::{ProviderAccount, ProviderSecretBindingLookupPort};
 use std::sync::mpsc::Sender;
 
 use chrono::Utc;
 
 use crate::integrations::telegram::client::TelegramError;
-use crate::platform::communications::{ProviderAccount, ProviderSecretBindingLookupPort};
+
 use crate::platform::config::AppConfig;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 

@@ -1,5 +1,5 @@
 use super::super::*;
-use crate::domains::communications::service::CommunicationCommandService;
+use crate::domains::communications::command_service::CommunicationCommandService;
 
 #[derive(Deserialize)]
 pub(crate) struct OutboxListQuery {
@@ -63,7 +63,7 @@ pub(crate) async fn post_v1_outbox_undo(
 pub(super) fn outbox_store(
     state: &AppState,
 ) -> Result<crate::domains::communications::outbox::CommunicationOutboxStore, ApiError> {
-    Ok(crate::app::api_support::app_store::<
+    Ok(crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::outbox::CommunicationOutboxStore,
     >(
         state

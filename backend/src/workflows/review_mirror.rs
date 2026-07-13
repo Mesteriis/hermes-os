@@ -8,17 +8,17 @@ use crate::domains::personas::identity::{
     PersonaIdentityCandidateKind, PersonaIdentityCandidatePayload, PersonaIdentityReviewState,
 };
 use crate::domains::projects::link_reviews::{ProjectLinkReviewState, ProjectLinkTargetKind};
-use crate::domains::relationships::{Relationship, RelationshipReviewState};
+use crate::domains::relationships::models::{Relationship, RelationshipReviewState};
 use crate::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxPort, ReviewItem,
     ReviewItemKind, ReviewItemStatus, ReviewPromotionTarget,
 };
-use crate::domains::tasks::candidates::{
-    StoredCandidateRow, TaskCandidateReviewState, task_id_from_candidate,
-};
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationPort, ObservationPortError,
-};
+use crate::domains::tasks::candidates::TaskCandidateReviewState;
+use crate::domains::tasks::candidates::ids::task_id_from_candidate;
+use crate::domains::tasks::candidates::models::StoredCandidateRow;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 #[derive(Debug, Error)]
 pub enum ReviewMirrorError {
@@ -29,7 +29,7 @@ pub enum ReviewMirrorError {
     ReviewInbox(#[from] ReviewInboxError),
 
     #[error(transparent)]
-    Observation(#[from] ObservationPortError),
+    Observation(#[from] ObservationStoreError),
 
     #[error("review-backed observation is required: {0}")]
     ObservationRequired(String),
@@ -364,7 +364,7 @@ pub(crate) async fn sync_identity_candidate_to_review(
     pool: &sqlx::postgres::PgPool,
     payload: &PersonaIdentityCandidatePayload,
 ) -> Result<(), ReviewMirrorError> {
-    let observation = ObservationPort::new(pool.clone())
+    let observation = ObservationStore::new(pool.clone())
         .capture(&identity_candidate_observation(payload))
         .await?;
     let _ =
@@ -376,7 +376,7 @@ pub(crate) async fn sync_identity_candidate_to_review_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     payload: &PersonaIdentityCandidatePayload,
 ) -> Result<(), ReviewMirrorError> {
-    let observation = ObservationPort::capture_in_transaction(
+    let observation = ObservationStore::capture_in_transaction(
         transaction,
         &identity_candidate_observation(payload),
     )
@@ -396,7 +396,7 @@ pub(crate) async fn sync_identity_candidate_review_state_in_transaction(
     review_state: PersonaIdentityReviewState,
     payload: &PersonaIdentityCandidatePayload,
 ) -> Result<(), ReviewMirrorError> {
-    let observation = ObservationPort::capture_in_transaction(
+    let observation = ObservationStore::capture_in_transaction(
         transaction,
         &identity_candidate_observation(payload),
     )

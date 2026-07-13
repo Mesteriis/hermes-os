@@ -2,14 +2,14 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeDelta, Utc};
 use getrandom::getrandom;
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use url::form_urlencoded;
 
 use crate::platform::calls::{CallDirection, CallState, NewProviderCall};
-use crate::platform::communications::{CommunicationProviderKind, ProviderAccount};
 
-use super::ZoomError;
+use super::errors::ZoomError;
 use super::validation::{validate_array, validate_non_empty, validate_object};
 
 pub const ZOOM_PROVIDER_KIND: CommunicationProviderKind = CommunicationProviderKind::ZoomUser;

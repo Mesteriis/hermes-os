@@ -16,9 +16,10 @@ pub(crate) async fn post_calendar_event_reschedule(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let event = crate::app::api_support::app_store::<CalendarEventStore>(pool)
-        .reschedule_manual(&event_id, req.start_at, req.end_at)
-        .await?;
+    let event =
+        crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(pool)
+            .reschedule_manual(&event_id, req.start_at, req.end_at)
+            .await?;
     Ok(Json(event))
 }
 
@@ -31,7 +32,7 @@ pub(crate) async fn post_calendar_event_cancel(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    crate::app::api_support::app_store::<CalendarEventStore>(pool)
+    crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(pool)
         .set_status_manual(
             &event_id,
             "cancelled",

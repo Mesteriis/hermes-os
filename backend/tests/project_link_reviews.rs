@@ -1,12 +1,16 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::Utc;
 use serde_json::json;
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
-};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_events_api::NewEventEnvelope;
+use hermes_events_postgres::consumers::EventConsumerConfig;
+use hermes_events_postgres::consumers::EventConsumerRunner;
+use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
@@ -19,11 +23,10 @@ use hermes_hub_backend::domains::projects::link_reviews::{
     ProjectLinkReviewStore, ProjectLinkTargetKind,
 };
 use hermes_hub_backend::domains::relationships::{
-    RelationshipEntityKind, RelationshipReviewState, RelationshipStore,
+    models::{RelationshipEntityKind, RelationshipReviewState},
+    store::RelationshipStore,
 };
-use hermes_hub_backend::platform::events::{
-    EventConsumerConfig, EventConsumerRunner, EventStore, NewEventEnvelope,
-};
+
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::project_link_review_effects::{
     PROJECT_LINK_REVIEW_EFFECTS_CONSUMER, project_link_review_effect_event,
@@ -609,7 +612,7 @@ async fn seed_message(
         .communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Link Review Gmail",
             format!("link-review-{suffix}@example.com"),
         ))

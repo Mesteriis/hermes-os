@@ -1,6 +1,7 @@
 use sqlx::{Postgres, Row, Transaction};
 
-use crate::engines::risk::{RiskEngine, RiskSeverity, RiskSignal};
+use crate::engines::risk::engine::RiskEngine;
+use crate::engines::risk::models::{RiskSeverity, RiskSignal};
 
 use super::errors::PersonaTrustError;
 

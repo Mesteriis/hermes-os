@@ -1,6 +1,7 @@
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use serde_json::{Value, json};
 
-use crate::platform::communications::{CommunicationProviderKind, ProviderAccountSecretPurpose};
 use crate::platform::secrets::{SecretKind, SecretReferenceStore};
 
 use super::super::errors::TelegramError;

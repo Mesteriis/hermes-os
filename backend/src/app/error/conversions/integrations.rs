@@ -1,12 +1,13 @@
 use super::super::types::ApiError;
 use crate::application::communication_fixture_ingest::CommunicationFixtureIngestError;
 use crate::application::communication_provider_writes::TelegramMessageWriteError;
-use crate::application::provider_runtime_contracts::{
-    TelegramError, WhatsappWebError, YandexTelemostError, ZoomError,
-};
-use crate::application::review_inbox::ReviewInboxWorkflowError;
-use crate::engines::automation::AutomationError;
+use crate::engines::automation::errors::AutomationError;
+use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::whatsapp::client::WhatsappWebError;
+use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
+use crate::integrations::zoom::client::errors::ZoomError;
 use crate::platform::calls::CallError;
+use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 
 impl From<TelegramError> for ApiError {
     fn from(error: TelegramError) -> Self {

@@ -1,3 +1,7 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
+};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
@@ -18,16 +22,17 @@ use tokio::net::TcpListener;
 use tower::ServiceExt;
 use url::form_urlencoded;
 
+use hermes_communications_api::evidence::NewIngestionCheckpoint;
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_events_api::{EventEnvelope, StoredEventEnvelope};
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::application::zulip_attachment_download::ZulipAttachmentDownloadWorker;
 use hermes_hub_backend::application::zulip_command_executor::ZulipCommandWorker;
 use hermes_hub_backend::application::zulip_event_ingest::ZulipEventIngestWorker;
 use hermes_hub_backend::application::zulip_provider_observation_reconciliation::reconcile_zulip_provider_observation_event;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionPort, CommunicationProviderAccountStore, CommunicationProviderKind,
-    CommunicationProviderSecretBindingStore, NewIngestionCheckpoint, NewProviderAccount,
-    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
-};
 use hermes_hub_backend::domains::communications::messages::{
     ProjectedMessage, ProviderChannelMessageStore, consume_accepted_signal_event,
 };
@@ -38,15 +43,11 @@ use hermes_hub_backend::domains::communications::storage::{
     CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachmentImport,
     NewCommunicationBlob,
 };
-use hermes_hub_backend::domains::signal_hub::{SignalHubStore, dispatch_zulip_raw_signal};
-use hermes_hub_backend::integrations::zulip::client::{
-    ZulipApiClient, ZulipClientConfig, ZulipReactionRequest, ZulipUpdateMessageRequest,
-};
-use hermes_hub_backend::integrations::zulip::event_mapper::{
-    ZulipEventMappingContext, map_zulip_event_to_raw_record, zulip_raw_signal_event_type,
-};
-use hermes_hub_backend::integrations::zulip::models::ZulipEvent;
-use hermes_hub_backend::platform::events::{EventBus, EventEnvelope, StoredEventEnvelope};
+use hermes_hub_backend::domains::signal_hub::store::SignalHubStore;
+use hermes_hub_backend::domains::signal_hub::zulip::dispatch_zulip_raw_signal;
+use hermes_provider_orchestration::observation_to_raw_communication_record;
+
+use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
 use hermes_hub_backend::platform::secrets::{
     InMemorySecretResolver, NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
@@ -56,6 +57,13 @@ use hermes_hub_backend::workflows::review_inbox::refresh_message_task_candidates
 use hermes_hub_backend::workflows::zulip_attachment_storage::{
     ZulipAttachmentBytes, persist_zulip_attachment_bytes,
 };
+use hermes_provider_zulip::client::{
+    ZulipApiClient, ZulipClientConfig, ZulipReactionRequest, ZulipUpdateMessageRequest,
+};
+use hermes_provider_zulip::event_mapper::{
+    ZulipEventMappingContext, map_zulip_event_to_observation, zulip_raw_signal_event_type,
+};
+use hermes_provider_zulip::models::ZulipEvent;
 
 const LOCAL_API_TOKEN: &str = "zulip-api-test-secret";
 
@@ -478,7 +486,7 @@ async fn zulip_api_client_supports_message_lifecycle_reactions_and_uploads() {
         .expect_err("cross-realm user upload URL must be rejected");
     assert!(matches!(
         rejected,
-        hermes_hub_backend::integrations::zulip::client::ZulipClientError::InvalidRequest(_)
+        hermes_provider_zulip::client::ZulipClientError::InvalidRequest(_)
     ));
 
     let deleted = client.delete_message(7001).await.expect("delete message");
@@ -1005,7 +1013,7 @@ async fn zulip_event_ingest_worker_polls_queue_records_raw_signal_and_checkpoint
     assert_eq!(report.raw_records_recorded, 1);
     assert_eq!(report.accepted_signals, 1);
 
-    let checkpoint = CommunicationIngestionPort::new(pool.clone())
+    let checkpoint = CommunicationIngestionStore::new(pool.clone())
         .checkpoint("zulip-ingest-account", "zulip:event_queue")
         .await
         .expect("Zulip event checkpoint")
@@ -1078,7 +1086,7 @@ async fn zulip_event_ingest_worker_reregisters_expired_queue_checkpoint() {
         )
         .await
         .expect("provider account");
-    let ingestion = CommunicationIngestionPort::new(pool.clone());
+    let ingestion = CommunicationIngestionStore::new(pool.clone());
     ingestion
         .save_checkpoint(&NewIngestionCheckpoint::new(
             "zulip-expired-queue-account",
@@ -1256,16 +1264,18 @@ async fn zulip_provider_observation_reconciles_completed_send_command() {
         }
     }))
     .expect("valid Zulip observed message");
-    let new_raw_record = map_zulip_event_to_raw_record(
-        &event,
-        &ZulipEventMappingContext::new(
-            "zulip-reconcile-account",
-            "http://localhost:8080",
-            Utc::now(),
-        ),
-    )
-    .expect("map observed Zulip message");
-    let raw_record = CommunicationIngestionPort::new(pool.clone())
+    let new_raw_record = observation_to_raw_communication_record(
+        map_zulip_event_to_observation(
+            &event,
+            &ZulipEventMappingContext::new(
+                "zulip-reconcile-account",
+                "http://localhost:8080",
+                Utc::now(),
+            ),
+        )
+        .expect("map observed Zulip message"),
+    );
+    let raw_record = CommunicationIngestionStore::new(pool.clone())
         .record_raw_source(&new_raw_record)
         .await
         .expect("record raw Zulip observation");
@@ -1276,7 +1286,7 @@ async fn zulip_provider_observation_reconciles_completed_send_command() {
 
     reconcile_zulip_provider_observation_event(
         pool.clone(),
-        EventBus::new(),
+        InMemoryEventBus::new(),
         StoredEventEnvelope {
             position: 0,
             event: accepted_event.clone(),
@@ -1321,7 +1331,7 @@ async fn zulip_provider_observation_reconciles_completed_send_command() {
 
     reconcile_zulip_provider_observation_event(
         pool.clone(),
-        EventBus::new(),
+        InMemoryEventBus::new(),
         StoredEventEnvelope {
             position: 0,
             event: accepted_event.clone(),
@@ -1382,14 +1392,16 @@ async fn zulip_raw_signal_projects_message_and_is_idempotent() {
         ZulipEventMappingContext::new("zulip-trace-account", "http://localhost:8080", Utc::now())
             .with_import_batch_id("zulip-trace-batch")
             .with_scenario_id("zulip-trace-scenario");
-    let new_raw_record = map_zulip_event_to_raw_record(&event, &mapping_context)
-        .expect("map Zulip event to raw record");
+    let new_raw_record = observation_to_raw_communication_record(
+        map_zulip_event_to_observation(&event, &mapping_context)
+            .expect("map Zulip event to raw record"),
+    );
     assert_eq!(
         zulip_raw_signal_event_type("message"),
         "signal.raw.zulip.message.observed"
     );
 
-    let ingestion = CommunicationIngestionPort::new(pool.clone());
+    let ingestion = CommunicationIngestionStore::new(pool.clone());
     let raw_record = ingestion
         .record_raw_source(&new_raw_record)
         .await
@@ -1485,7 +1497,7 @@ async fn zulip_raw_signal_projects_direct_message_without_stream_topic_shape() {
         .await
         .expect("provider account");
 
-    let ingestion = CommunicationIngestionPort::new(pool.clone());
+    let ingestion = CommunicationIngestionStore::new(pool.clone());
     let mapping_context = ZulipEventMappingContext::new(
         "zulip-direct-trace-account",
         "http://localhost:8080",
@@ -1569,7 +1581,7 @@ async fn zulip_attachment_metadata_remains_evidence_only_until_bytes_are_transfe
         .await
         .expect("provider account");
 
-    let ingestion = CommunicationIngestionPort::new(pool.clone());
+    let ingestion = CommunicationIngestionStore::new(pool.clone());
     let mapping_context = ZulipEventMappingContext::new(
         "zulip-attachment-account",
         "http://localhost:8080",
@@ -1689,7 +1701,7 @@ async fn zulip_attachment_bytes_materialize_after_safe_transfer() {
         .await
         .expect("provider account");
 
-    let ingestion = CommunicationIngestionPort::new(pool.clone());
+    let ingestion = CommunicationIngestionStore::new(pool.clone());
     let mapping_context = ZulipEventMappingContext::new(
         "zulip-materialize-account",
         "http://localhost:8080",
@@ -1855,7 +1867,7 @@ async fn zulip_attachment_download_worker_materializes_pending_user_upload() {
     )
     .await;
 
-    let ingestion = CommunicationIngestionPort::new(pool.clone());
+    let ingestion = CommunicationIngestionStore::new(pool.clone());
     let mapping_context = ZulipEventMappingContext::new(
         "zulip-download-account",
         "http://localhost:8080",
@@ -2010,7 +2022,7 @@ async fn zulip_message_can_feed_review_task_candidate_without_auto_creating_task
         .await
         .expect("provider account");
 
-    let ingestion = CommunicationIngestionPort::new(pool.clone());
+    let ingestion = CommunicationIngestionStore::new(pool.clone());
     let mapping_context =
         ZulipEventMappingContext::new("zulip-review-account", "http://localhost:8080", Utc::now())
             .with_import_batch_id("zulip-review-batch")
@@ -2163,7 +2175,7 @@ async fn zulip_message_drives_review_attention_card_and_context_pack_trace_chain
         .await
         .expect("provider account");
 
-    let ingestion = CommunicationIngestionPort::new(pool.clone());
+    let ingestion = CommunicationIngestionStore::new(pool.clone());
     let mapping_context = ZulipEventMappingContext::new(
         "zulip-review-scene-account",
         "http://localhost:8080",
@@ -2355,7 +2367,7 @@ async fn zulip_reaction_edit_delete_signals_materialize_canonical_state() {
         .await
         .expect("provider account");
 
-    let ingestion = CommunicationIngestionPort::new(pool.clone());
+    let ingestion = CommunicationIngestionStore::new(pool.clone());
     let mapping_context = ZulipEventMappingContext::new(
         "zulip-lifecycle-account",
         "http://localhost:8080",
@@ -2640,13 +2652,15 @@ async fn zulip_reaction_edit_delete_signals_materialize_canonical_state() {
 
 async fn record_dispatch_consume_zulip_event(
     pool: &PgPool,
-    ingestion: &CommunicationIngestionPort,
+    ingestion: &CommunicationIngestionStore,
     mapping_context: &ZulipEventMappingContext,
     event_value: Value,
 ) -> (String, EventEnvelope, ProjectedMessage) {
     let event: ZulipEvent = serde_json::from_value(event_value).expect("valid Zulip event");
-    let new_raw_record = map_zulip_event_to_raw_record(&event, mapping_context)
-        .expect("map Zulip event to raw record");
+    let new_raw_record = observation_to_raw_communication_record(
+        map_zulip_event_to_observation(&event, mapping_context)
+            .expect("map Zulip event to raw record"),
+    );
     let raw_record = ingestion
         .record_raw_source(&new_raw_record)
         .await

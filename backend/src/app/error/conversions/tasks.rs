@@ -1,10 +1,11 @@
 use super::super::types::ApiError;
+use crate::application::task_relationship::TaskRelationshipApplicationError;
 use crate::domains::tasks::api::TaskError;
 use crate::domains::tasks::brain::TaskBrainError;
+use crate::domains::tasks::command_service::TaskCommandServiceError;
 use crate::domains::tasks::core::TaskCoreError;
 use crate::domains::tasks::health::TaskHealthError;
 use crate::domains::tasks::rules::TaskRuleError;
-use crate::domains::tasks::service::TaskCommandServiceError;
 
 impl From<TaskError> for ApiError {
     fn from(error: TaskError) -> Self {
@@ -128,6 +129,23 @@ impl From<TaskCommandServiceError> for ApiError {
                 tracing::error!(error = %source, "task command sql operation failed");
                 ApiError::InvalidTaskQuery("task command operation failed")
             }
+        }
+    }
+}
+
+impl From<TaskRelationshipApplicationError> for ApiError {
+    fn from(error: TaskRelationshipApplicationError) -> Self {
+        match error {
+            TaskRelationshipApplicationError::Sqlx(source) => {
+                tracing::error!(error = %source, "task relationship sql operation failed");
+                ApiError::InvalidTaskQuery("task relationship operation failed")
+            }
+            TaskRelationshipApplicationError::Task(source) => ApiError::from(source),
+            TaskRelationshipApplicationError::Observation(source) => {
+                tracing::error!(error = %source, "task relationship observation capture failed");
+                ApiError::InvalidTaskQuery("task relationship observation capture failed")
+            }
+            TaskRelationshipApplicationError::RelationshipGraph(source) => ApiError::from(source),
         }
     }
 }

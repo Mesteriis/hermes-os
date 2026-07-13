@@ -3,7 +3,7 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::{TimeZone, Utc};
 use serde_json::json;
 
-use hermes_hub_backend::domains::communications::core::EmailProviderKind;
+use hermes_communications_api::accounts::CommunicationProviderKind;
 use hermes_hub_backend::domains::communications::fixtures::export::{
     EmailFixtureExportOptions, export_fixture_messages_from_sync_batch,
 };
@@ -79,7 +79,7 @@ fn imap_multipart_quoted_printable_message_exports_redacted_fixture() {
 
 fn sync_batch_with_raw_message(raw: &str) -> EmailSyncBatch {
     EmailSyncBatch {
-        provider_kind: EmailProviderKind::Icloud,
+        provider_kind: CommunicationProviderKind::Icloud,
         stream_id: "imap:INBOX".to_owned(),
         checkpoint: Some(json!({
             "provider": "imap",

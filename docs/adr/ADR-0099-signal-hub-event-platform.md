@@ -1,7 +1,11 @@
 # ADR-0099 Signal Hub Event Platform
 
-Status: Accepted
+Status: Superseded by ADR-0181
 Date: 2026-06-22
+
+Superseded by: ADR-0181 Backend Workspace Modularity and Provider Runtime
+Topology. ADR-0181 retains the Signal Hub and event-platform decisions from
+this record, while replacing its initial same-process runtime restriction.
 
 Clarifies:
 

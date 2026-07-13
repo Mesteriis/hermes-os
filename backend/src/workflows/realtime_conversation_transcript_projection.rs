@@ -1,3 +1,4 @@
+use hermes_events_api::StoredEventEnvelope;
 use std::fs;
 use std::path::Path;
 
@@ -7,11 +8,11 @@ use thiserror::Error;
 
 use crate::domains::calendar::meetings::{EventRecordingPort, EventTranscriptPort};
 use crate::domains::documents::core::{DocumentImportPort, NewDocumentImport};
-use crate::platform::events::{EventStoreError, StoredEventEnvelope};
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationPort};
-use crate::platform::realtime_conversation::{
-    CallBundleManifest, REALTIME_CONVERSATION_TRANSCRIPT_COMPLETED,
-};
+use crate::platform::realtime_conversation::events::REALTIME_CONVERSATION_TRANSCRIPT_COMPLETED;
+use crate::platform::realtime_conversation::models::CallBundleManifest;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 
 pub const REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER: &str =
     "realtime_conversation_transcript_projection";
@@ -31,7 +32,7 @@ pub enum RealtimeConversationTranscriptProjectionError {
     DocumentImport(#[from] crate::domains::documents::core::DocumentImportError),
 
     #[error(transparent)]
-    Observation(#[from] crate::platform::observations::ObservationStoreError),
+    Observation(#[from] hermes_observations_postgres::errors::ObservationStoreError),
 
     #[error(transparent)]
     Meetings(#[from] crate::domains::calendar::meetings::MeetingsError),
@@ -68,7 +69,7 @@ async fn project_realtime_conversation_transcript_event_inner(
         serde_json::from_str(&fs::read_to_string(&projection.manifest_path)?)?;
 
     let mut transaction = pool.begin().await?;
-    let observation = ObservationPort::capture_in_transaction(
+    let observation = ObservationStore::capture_in_transaction(
         &mut transaction,
         &NewObservation::new(
             "MEETING_TRANSCRIPT",

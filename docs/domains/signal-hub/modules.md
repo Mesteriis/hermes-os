@@ -2,8 +2,9 @@
 
 Status: target module layout.
 
-Signal Hub is implemented as a modular-monolith bounded context first. It must
-not require sidecar provider processes in the initial implementation.
+Signal Hub remains a modular bounded context. ADR-0181 permits optional provider
+connectors only behind the same event, policy and runtime-state contracts; it
+does not make sidecars a Signal Hub ownership concern.
 
 ## Backend Target Layout
 

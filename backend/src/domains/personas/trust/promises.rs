@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use sqlx::Postgres;
 use sqlx::postgres::PgPool;
 
-use crate::platform::events::{EventStore, EventStoreError, NewEventEnvelope};
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
 use super::errors::PersonaTrustError;
 use super::models::PersonaPromise;

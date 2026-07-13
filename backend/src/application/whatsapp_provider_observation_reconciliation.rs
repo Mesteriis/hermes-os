@@ -1,25 +1,28 @@
 use chrono::{DateTime, Utc};
+use hermes_events_api::{NewEventEnvelope, StoredEventEnvelope};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
-use crate::application::provider_runtime_contracts::{
+use crate::integrations::whatsapp::client::WhatsappWebDeliveryState;
+use crate::integrations::whatsapp::client::{
     NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage, NewWhatsappWebMessageDelete,
     NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant, NewWhatsappWebReaction,
-    NewWhatsappWebReceipt, NewWhatsappWebStatus, WhatsAppProviderCommand,
+    NewWhatsappWebReceipt, NewWhatsappWebStatus,
 };
-use crate::domains::communications::core::CommunicationProviderAccountStore;
-use crate::integrations::whatsapp::client::WhatsappWebDeliveryState;
-use crate::platform::communications::StoredRawCommunicationRecord;
+use crate::integrations::whatsapp::runtime::contracts::WhatsAppProviderCommand;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::whatsapp_event_types;
-use crate::platform::events::{EventBus, EventStore, NewEventEnvelope, StoredEventEnvelope};
+use hermes_communications_api::evidence::StoredRawCommunicationRecord;
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+use hermes_events_postgres::store::EventStore;
 
 pub(crate) const WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_CONSUMER: &str =
     "whatsapp_provider_observation_reconciliation";
 
 pub(crate) async fn reconcile_whatsapp_provider_observation_event(
     pool: PgPool,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
     event: StoredEventEnvelope,
 ) -> Result<(), String> {
     if !supports_whatsapp_provider_reconciliation_event(&event.event.event_type) {
@@ -29,7 +32,7 @@ pub(crate) async fn reconcile_whatsapp_provider_observation_event(
     let account_store = CommunicationProviderAccountStore::new(pool.clone());
     let raw_record_id = required_subject_str(&event.event.subject, "raw_record_id")?;
     let raw_record =
-        crate::domains::communications::core::CommunicationIngestionStore::new(pool.clone())
+        hermes_communications_postgres::store::CommunicationIngestionStore::new(pool.clone())
             .raw_record(raw_record_id)
             .await
             .map_err(|error| error.to_string())?
@@ -46,7 +49,8 @@ pub(crate) async fn reconcile_whatsapp_provider_observation_event(
         return Ok(());
     }
 
-    let runtime = crate::application::whatsapp_provider_runtime(pool.clone());
+    let runtime =
+        crate::application::provider_runtime_services::whatsapp_provider_runtime(pool.clone());
     let commands = match event.event.event_type.as_str() {
         "signal.accepted.whatsapp.message" => {
             runtime
@@ -133,7 +137,7 @@ fn supports_whatsapp_provider_reconciliation_event(event_type: &str) -> bool {
 
 async fn publish_whatsapp_command_events(
     event_store: &EventStore,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     command: &WhatsAppProviderCommand,
     source: &str,
 ) -> Result<(), String> {
@@ -185,7 +189,7 @@ async fn publish_whatsapp_command_events(
 
 async fn publish_whatsapp_command_event(
     event_store: &EventStore,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     event_type: &str,
     command: &WhatsAppProviderCommand,
     payload: Value,

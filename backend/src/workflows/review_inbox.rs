@@ -1,3 +1,4 @@
+use hermes_events_api::{EventEnvelope, StoredEventEnvelope};
 use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
@@ -15,16 +16,15 @@ use crate::domains::personas::identity::{
 use crate::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxPort, ReviewItemKind,
 };
-use crate::domains::tasks::candidates::TaskCandidatePort;
-use crate::platform::events::{EventStoreError, StoredEventEnvelope};
-use crate::workflows::email_intelligence::{
-    EmailIntelligenceService, EmailKnowledgeCandidate, EmailSummaryContract,
-};
+use crate::domains::tasks::candidates::commands::TaskCandidateCommands;
+use crate::workflows::email_intelligence::models::{EmailKnowledgeCandidate, EmailSummaryContract};
+use crate::workflows::email_intelligence::service::EmailIntelligenceService;
 use crate::workflows::review_mirror::{
     ReviewMirrorError, ensure_decision_review_item, ensure_obligation_review_item,
     ensure_relationship_review_item, ensure_task_candidate_review_item,
     sync_identity_candidate_review_state_in_transaction, sync_identity_candidate_to_review,
 };
+use hermes_events_postgres::errors::EventStoreError;
 
 #[derive(Debug, Error)]
 pub enum ReviewInboxWorkflowError {
@@ -38,7 +38,7 @@ pub enum ReviewInboxWorkflowError {
     Obligation(#[from] crate::domains::obligations::ObligationReviewPortError),
 
     #[error(transparent)]
-    Relationship(#[from] crate::domains::relationships::RelationshipReviewPortError),
+    Relationship(#[from] crate::domains::relationships::errors::RelationshipStoreError),
 
     #[error(transparent)]
     TaskCandidate(#[from] crate::domains::tasks::candidates::TaskCandidateError),
@@ -61,8 +61,8 @@ pub async fn refresh_message_task_candidates_into_review(
         return Ok(0);
     }
 
-    let refreshed = TaskCandidatePort::new(pool.clone())
-        .refresh_message_candidates_for_ids(message_ids)
+    let refreshed = TaskCandidateCommands::new(pool.clone())
+        .refresh_message_candidates(message_ids)
         .await?;
     let observation_ids = load_message_observation_ids(pool, message_ids).await?;
     let _ = sync_task_candidates_to_review_for_observations(pool, &observation_ids).await?;
@@ -344,7 +344,7 @@ pub async fn sync_task_candidates_to_review_for_observations(
     for row in rows {
         let task_candidate_id: String = row.try_get("task_candidate_id")?;
         let observation_id: String = row.try_get("observation_id")?;
-        let candidate = crate::domains::tasks::candidates::StoredCandidateRow {
+        let candidate = crate::domains::tasks::candidates::models::StoredCandidateRow {
             source_kind: row.try_get("source_kind")?,
             source_id: row.try_get("source_id")?,
             observation_id: Some(observation_id.clone()),
@@ -609,7 +609,7 @@ mod tests {
     use serde_json::{Map, Value, json};
 
     use super::identity_candidate_payload_from_event;
-    use crate::platform::events::{EventEnvelope, StoredEventEnvelope};
+    use hermes_events_api::{EventEnvelope, StoredEventEnvelope};
 
     #[test]
     fn identity_candidate_replay_accepts_legacy_person_identifiers() {

@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use crate::domains::communications::core::CommunicationProviderAccountPort;
 use crate::platform::communications::{
     EmailSyncAdapterConfig, ImapIdleWaitOutcome, ImapIdleWaitRequest, plan_email_sync,
 };
@@ -25,7 +24,8 @@ impl MailBackgroundSyncService {
         account_id: &str,
         timeout: Duration,
     ) -> Result<MailImapIdleOutcome, MailSyncError> {
-        let account = CommunicationProviderAccountPort::new(self.pool.clone())
+        let account = self
+            .provider_accounts
             .get(account_id)
             .await?
             .ok_or(MailSyncError::AccountNotFound)?;

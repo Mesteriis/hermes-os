@@ -1,27 +1,37 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use chrono::Utc;
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use url::Url;
 use uuid::Uuid;
 
 use crate::app::api_support::{
-    communication_provider_account_store, communication_provider_secret_binding_store,
-    zulip_secret_reference_store,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::signal_hub_support::{
     provider_account_or_not_found, sync_provider_account_signal_connection,
 };
 use crate::app::{ApiError, AppState};
-use crate::domains::communications::core::{
-    CommunicationProviderKind, NewProviderAccount, NewProviderAccountSecretBinding,
-    ProviderAccountSecretPurpose,
-};
 use crate::domains::communications::provider_commands::{
     CommunicationProviderCommand, CommunicationProviderCommandStore,
     NewCommunicationProviderCommand,
 };
+
 use crate::platform::secrets::{NewSecretReference, SecretKind, SecretStoreKind};
 use crate::vault::{HostVaultError, SecretEntryContext, VaultMode};
 

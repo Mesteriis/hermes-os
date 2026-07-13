@@ -1,11 +1,13 @@
 use chrono::{DateTime, Utc};
+use hermes_events_api::NewEventEnvelope;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
-use crate::platform::events::{EventStore, EventStoreError, NewEventEnvelope};
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
 use super::errors::PersonaCoreError;
 use super::link_persona_entity_in_transaction;

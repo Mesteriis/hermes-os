@@ -1,3 +1,4 @@
+use hermes_events_api::NewEventEnvelope;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
@@ -7,7 +8,6 @@ use super::{
     CommunicationFolder, CommunicationFolderError, FolderMessageActionResponse,
     FolderMessageOperation,
 };
-use crate::platform::events::NewEventEnvelope;
 
 pub(super) const EVENT_TYPE_FOLDER_CREATED: &str = "mail.folder.created";
 pub(super) const EVENT_TYPE_FOLDER_UPDATED: &str = "mail.folder.updated";

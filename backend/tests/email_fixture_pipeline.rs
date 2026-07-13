@@ -4,7 +4,8 @@ use testkit::context::TestContext;
 use serde_json::json;
 use sqlx::Row;
 
-use hermes_hub_backend::domains::communications::core::EmailProviderKind;
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::email_fixture_pipeline::{
     EmailFixturePipelineRequest, project_fixture_email_messages,
@@ -34,13 +35,20 @@ async fn fixture_email_pipeline_imports_projects_persons_and_graph_against_postg
     ])
     .to_string();
 
+    let provider_accounts =
+        hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
+            pool.clone(),
+        );
+    let communication_evidence = CommunicationIngestionStore::new(pool.clone());
     let report = project_fixture_email_messages(
         pool,
+        &provider_accounts,
+        &communication_evidence,
         &EmailFixturePipelineRequest::new(
             &account_id,
             "iCloud fixture pipeline",
             "redacted@example.invalid",
-            EmailProviderKind::Icloud,
+            CommunicationProviderKind::Icloud,
             format!("batch_pipeline_{suffix}"),
             fixture_json,
         ),

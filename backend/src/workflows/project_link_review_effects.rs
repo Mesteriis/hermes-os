@@ -1,7 +1,11 @@
+use hermes_events_api::{EventEnvelope, StoredEventEnvelope};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use crate::application::relationship_graph::{
+    RelationshipGraphCoordinator, RelationshipGraphCoordinatorError,
+};
 use crate::domains::decisions::{
     DecisionEntityKind, DecisionReviewPortError, DecisionReviewState, NewDecision,
     NewDecisionEvidence, NewDecisionImpactedEntity,
@@ -9,18 +13,17 @@ use crate::domains::decisions::{
 use crate::domains::projects::link_reviews::{
     ProjectLinkReviewError, ProjectLinkReviewState, ProjectLinkTargetKind,
 };
-use crate::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewPort,
-    RelationshipReviewPortError, RelationshipReviewState,
-};
-use crate::platform::events::{EventEnvelope, EventStoreError, StoredEventEnvelope};
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationPort, ObservationPortError,
+use crate::domains::relationships::models::{
+    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
 };
 use crate::workflows::review_mirror::{
     ReviewMirrorError, ensure_relationship_review_item,
     sync_relationship_review_state_in_transaction,
 };
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 pub const PROJECT_LINK_REVIEW_EFFECTS_CONSUMER: &str = "project_link_review_effects";
 pub const PROJECT_LINK_REVIEW_EVENT_TYPE: &str = "project.link_review_state_changed";
@@ -34,13 +37,13 @@ pub enum ProjectLinkReviewEffectsWorkflowError {
     Sqlx(#[from] sqlx::Error),
 
     #[error(transparent)]
-    Observation(#[from] ObservationPortError),
+    Observation(#[from] ObservationStoreError),
 
     #[error(transparent)]
     Decision(#[from] DecisionReviewPortError),
 
     #[error(transparent)]
-    Relationship(#[from] RelationshipReviewPortError),
+    RelationshipGraph(#[from] RelationshipGraphCoordinatorError),
 
     #[error(transparent)]
     ReviewMirror(#[from] ReviewMirrorError),
@@ -96,8 +99,8 @@ async fn capture_review_observation(
     pool: &PgPool,
     event: &EventEnvelope,
     review: &ProjectLinkReviewEffect,
-) -> Result<crate::platform::observations::Observation, ProjectLinkReviewEffectsWorkflowError> {
-    Ok(ObservationPort::new(pool.clone())
+) -> Result<hermes_observations_api::models::Observation, ProjectLinkReviewEffectsWorkflowError> {
+    Ok(ObservationStore::new(pool.clone())
         .capture(
             &NewObservation::new(
                 "PROJECT_LINK_REVIEW",
@@ -130,7 +133,10 @@ async fn materialize_relationship(
     event: &EventEnvelope,
     review: &ProjectLinkReviewEffect,
     observation_id: &str,
-) -> Result<crate::domains::relationships::Relationship, ProjectLinkReviewEffectsWorkflowError> {
+) -> Result<
+    crate::domains::relationships::models::Relationship,
+    ProjectLinkReviewEffectsWorkflowError,
+> {
     let relationship = NewRelationship {
         source_entity_kind: RelationshipEntityKind::Project,
         source_entity_id: review.project_id.clone(),
@@ -158,14 +164,14 @@ async fn materialize_relationship(
             "event_id": event.event_id,
         }));
 
-    Ok(RelationshipReviewPort::new(pool.clone())
+    Ok(RelationshipGraphCoordinator::new(pool.clone())
         .upsert_with_evidence(&relationship, &[evidence])
         .await?)
 }
 
 async fn sync_relationship_review_item(
     pool: &PgPool,
-    relationship: &crate::domains::relationships::Relationship,
+    relationship: &crate::domains::relationships::models::Relationship,
     observation_id: &str,
 ) -> Result<(), ProjectLinkReviewEffectsWorkflowError> {
     let _ = ensure_relationship_review_item(

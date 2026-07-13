@@ -2,8 +2,10 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::engines::call_intelligence::{CallIntelligenceEngine, CallIntelligencePipelinePlan};
-use crate::platform::realtime_conversation::CallBundleManifest;
+use crate::engines::call_intelligence::{
+    engine::CallIntelligenceEngine, models::CallIntelligencePipelinePlan,
+};
+use crate::platform::realtime_conversation::models::CallBundleManifest;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RealtimeConversationMemoryPipelinePlan {

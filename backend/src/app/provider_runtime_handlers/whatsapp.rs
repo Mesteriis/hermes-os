@@ -3,6 +3,12 @@ use axum::body::Bytes;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use chrono::{DateTime, Utc};
+use hermes_communications_api::accounts::ProviderAccount;
+use hermes_communications_api::accounts::ProviderAccountMutationOrigin;
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
+};
+use hermes_events_api::NewEventEnvelope;
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -11,11 +17,17 @@ use sqlx::Row;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::app::api_support::{
-    WhatsappCapabilitiesResponse, WhatsappWebListQuery, WhatsappWebMessageListResponse,
-    WhatsappWebSessionListResponse, communication_provider_account_store,
-    communication_provider_secret_binding_store, communication_storage_store,
-    ensure_fixture_routes_enabled, event_store, message_store, whatsapp_fixture_ingest_service,
-    whatsapp_provider_runtime_service, whatsapp_secret_reference_store,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::signal_hub_support::{
     provider_account_or_not_found, remove_provider_account_signal_connection,
@@ -23,43 +35,45 @@ use crate::app::signal_hub_support::{
 };
 use crate::app::{ApiError, AppState};
 use crate::application::communication_fixture_ingest::WhatsappFixtureIngestApplicationService;
-use crate::application::provider_runtime_contracts::{
+use crate::domains::communications::messages::ProviderChannelMessageStore;
+use crate::domains::communications::storage::AttachmentSafetyScanStatus;
+use crate::integrations::whatsapp::client::{
     NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
     NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
     NewWhatsappWebPresence, NewWhatsappWebReaction, NewWhatsappWebReceipt,
     NewWhatsappWebRuntimeEvent, NewWhatsappWebStatus, NewWhatsappWebStatusDelete,
-    NewWhatsappWebStatusView, WhatsAppAuthorizedSessionCredentialWrite,
-    WhatsAppCommandDeadLetterRequest, WhatsAppConversationCommandRequest,
-    WhatsAppCredentialBinding, WhatsAppDeleteRequest, WhatsAppEditRequest, WhatsAppForwardRequest,
-    WhatsAppMediaDownloadRequest, WhatsAppMediaUploadRequest, WhatsAppPairCodeSession,
-    WhatsAppPairCodeStartRequest, WhatsAppProviderCommand, WhatsAppProviderCommandListResponse,
-    WhatsAppProviderCommandResponse, WhatsAppProviderRuntimeShape, WhatsAppQrLinkSession,
-    WhatsAppQrLinkStartRequest, WhatsAppReactionRequest, WhatsAppReplyRequest,
-    WhatsAppRuntimeHealth, WhatsAppRuntimeRelinkRequest, WhatsAppRuntimeRemoveRequest,
-    WhatsAppRuntimeRemoveResponse, WhatsAppRuntimeRevokeRequest, WhatsAppRuntimeStartRequest,
-    WhatsAppRuntimeStatus, WhatsAppRuntimeStopRequest, WhatsAppStatusPublishRequest,
-    WhatsAppTextSendRequest, WhatsAppVoiceNoteSendRequest, WhatsappLiveAccountSetupRequest,
-    WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse, WhatsappWebCallIngestResult,
-    WhatsappWebDeliveryState, WhatsappWebDialogIngestResult, WhatsappWebError,
-    WhatsappWebMediaIngestResult, WhatsappWebMessageDeleteIngestResult,
-    WhatsappWebMessageIngestResult, WhatsappWebMessageUpdateIngestResult,
-    WhatsappWebParticipantIngestResult, WhatsappWebPresenceIngestResult,
-    WhatsappWebReactionIngestResult, WhatsappWebReceiptIngestResult,
-    WhatsappWebRuntimeEventIngestResult, WhatsappWebStatusDeleteIngestResult,
-    WhatsappWebStatusIngestResult, WhatsappWebStatusViewIngestResult,
+    NewWhatsappWebStatusView, WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupRequest,
+    WhatsappWebAccountSetupResponse, WhatsappWebCallIngestResult, WhatsappWebDeliveryState,
+    WhatsappWebDialogIngestResult, WhatsappWebError, WhatsappWebMediaIngestResult,
+    WhatsappWebMessageDeleteIngestResult, WhatsappWebMessageIngestResult,
+    WhatsappWebMessageUpdateIngestResult, WhatsappWebParticipantIngestResult,
+    WhatsappWebPresenceIngestResult, WhatsappWebReactionIngestResult,
+    WhatsappWebReceiptIngestResult, WhatsappWebRuntimeEventIngestResult,
+    WhatsappWebStatusDeleteIngestResult, WhatsappWebStatusIngestResult,
+    WhatsappWebStatusViewIngestResult,
+};
+use crate::integrations::whatsapp::runtime::contracts::{
+    WhatsAppAuthorizedSessionCredentialWrite, WhatsAppCommandDeadLetterRequest,
+    WhatsAppConversationCommandRequest, WhatsAppCredentialBinding, WhatsAppDeleteRequest,
+    WhatsAppEditRequest, WhatsAppForwardRequest, WhatsAppMediaDownloadRequest,
+    WhatsAppMediaUploadRequest, WhatsAppPairCodeSession, WhatsAppPairCodeStartRequest,
+    WhatsAppProviderCommand, WhatsAppProviderCommandListResponse, WhatsAppProviderCommandResponse,
+    WhatsAppProviderRuntimeShape, WhatsAppQrLinkSession, WhatsAppQrLinkStartRequest,
+    WhatsAppReactionRequest, WhatsAppReplyRequest, WhatsAppRuntimeHealth,
+    WhatsAppRuntimeRelinkRequest, WhatsAppRuntimeRemoveRequest, WhatsAppRuntimeRemoveResponse,
+    WhatsAppRuntimeRevokeRequest, WhatsAppRuntimeStartRequest, WhatsAppRuntimeStatus,
+    WhatsAppRuntimeStopRequest, WhatsAppStatusPublishRequest, WhatsAppTextSendRequest,
+    WhatsAppVoiceNoteSendRequest,
+};
+use crate::integrations::whatsapp::runtime::{
     whatsapp_business_cloud_access_token_secret_ref, whatsapp_business_cloud_app_secret_ref,
     whatsapp_business_cloud_webhook_verify_token_ref,
 };
-use crate::domains::communications::messages::ProviderChannelMessageStore;
-use crate::domains::communications::storage::AttachmentSafetyScanStatus;
-use crate::platform::communications::{
-    NewProviderAccountSecretBinding, ProviderAccount, ProviderAccountSecretPurpose,
-};
-use crate::platform::events::NewEventEnvelope;
+
 use crate::platform::events::bus::{sanitize_event_payload, whatsapp_event_types};
-use crate::platform::observations::ObservationOriginKind;
 use crate::platform::secrets::{NewSecretReference, SecretKind, SecretStoreKind};
 use crate::vault::SecretEntryContext;
+use hermes_observations_api::models::ObservationOriginKind;
 
 const AUDIT_ACTOR_ID: &str = "hermes-frontend";
 const BUSINESS_CLOUD_SIGNATURE_HEADER: &str = "x-hub-signature-256";
@@ -158,7 +172,7 @@ pub(crate) struct WhatsAppHistorySyncResponse {
     pub(crate) status: String,
     pub(crate) synced_count: usize,
     pub(crate) has_more: bool,
-    pub(crate) items: Vec<crate::application::provider_runtime_contracts::WhatsappWebMessage>,
+    pub(crate) items: Vec<crate::integrations::whatsapp::client::WhatsappWebMessage>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -211,7 +225,7 @@ pub(crate) struct WhatsAppStatusSyncResponse {
     pub(crate) status: String,
     pub(crate) synced_count: usize,
     pub(crate) has_more: bool,
-    pub(crate) items: Vec<crate::application::provider_runtime_contracts::WhatsappWebMessage>,
+    pub(crate) items: Vec<crate::integrations::whatsapp::client::WhatsappWebMessage>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -2853,7 +2867,7 @@ async fn mark_whatsapp_business_cloud_credentials_linked(
         .update_config_with_origin(
             &account.account_id,
             &config,
-            ObservationOriginKind::LocalRuntime,
+            ProviderAccountMutationOrigin::LocalRuntime,
             "whatsapp.business_cloud.credentials",
             "whatsapp.business_cloud.access_token.store",
         )

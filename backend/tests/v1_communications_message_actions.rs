@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
@@ -6,13 +8,12 @@ use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
-};
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
+
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
@@ -1120,7 +1121,7 @@ async fn seed_projected_message_with_body(
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Seed Gmail",
             format!("{account_id}@example.com"),
         ))

@@ -25,7 +25,8 @@ pub(crate) async fn get_personas(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<PersonaProjectionStore>(pool);
+    let store =
+        crate::app::api_support::stores::domain_stores::app_store::<PersonaProjectionStore>(pool);
     let items = store
         .list_personas(query.limit.unwrap_or(50))
         .await?
@@ -44,7 +45,8 @@ pub(crate) async fn get_persona(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<PersonaProjectionStore>(pool);
+    let store =
+        crate::app::api_support::stores::domain_stores::app_store::<PersonaProjectionStore>(pool);
     match store.get_persona(&persona_id).await? {
         Some(persona) => Ok(Json(persona_read_model(persona))),
         None => Err(ApiError::PersonaIdentityNotFound),
@@ -71,7 +73,7 @@ pub(crate) async fn put_persona(
         .identity
         .as_ref()
         .and_then(|identity| identity.display_name.as_deref());
-    let persona = crate::domains::personas::service::PersonaCommandService::new(pool)
+    let persona = crate::domains::personas::command_service::PersonaCommandService::new(pool)
         .update_persona_manual(&persona_id, display_name, req.is_self == Some(true))
         .await?;
     Ok(Json(persona_read_model(persona)))

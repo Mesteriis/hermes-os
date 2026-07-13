@@ -1,0 +1,17 @@
+[package]
+name = "hermes-observations-postgres"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+license = "MIT"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+hermes-events-api = { path = "../events-api" }
+hermes-events-postgres = { path = "../events-postgres" }
+hermes-observations-api = { path = "../observations-api" }
+serde_json = "1"
+sha2 = "0.10"
+sqlx = { version = "0.8", default-features = false, features = ["chrono", "json", "postgres", "runtime-tokio-rustls"] }
+thiserror = "2"

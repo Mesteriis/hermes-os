@@ -1,10 +1,10 @@
 use chrono::{DateTime, Utc};
+use hermes_events_api::StoredEventEnvelope;
 
 use super::errors::TimelineEngineError;
 use super::models::{TimelineEntry, TimelineReplay};
 use super::policy::bounded_entity_limit;
 use super::validation::{event_log_source_ref, optional_json_string, required_json_string};
-use crate::platform::events::StoredEventEnvelope;
 
 pub(super) fn replay_event_log(
     stored_events: &[StoredEventEnvelope],

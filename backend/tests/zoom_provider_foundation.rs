@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -14,17 +16,18 @@ use tokio::net::TcpListener;
 use tokio::time::{Duration, timeout};
 use tower::ServiceExt;
 
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderKind,
-    CommunicationProviderSecretBindingStore, ProviderAccountSecretPurpose,
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
+use hermes_events_postgres::store::EventStore;
+use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::integrations::zoom::client::{
     ZoomAccountSetupRequest, ZoomMeetingObservationRequest, ZoomStore,
 };
 use hermes_hub_backend::platform::calls::CallIntelligenceStore;
+
+use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
 use hermes_hub_backend::platform::events::bus::zoom_event_types;
-use hermes_hub_backend::platform::events::{EventBus, EventStore};
 use hermes_hub_backend::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
@@ -3284,7 +3287,7 @@ async fn zoom_store_broadcasts_meeting_events_on_runtime_bus() {
         .await
         .expect("database connection");
     let pool = database.pool().expect("pool").clone();
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     let store = ZoomStore::new(
         pool.clone(),
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),

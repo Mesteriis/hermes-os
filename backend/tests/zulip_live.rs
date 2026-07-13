@@ -1,4 +1,8 @@
 use chrono::Utc;
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
+};
 use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::PgPool;
@@ -12,15 +16,18 @@ use tokio::time::{Duration, Instant, sleep};
 
 const LIVE_WAIT_LOG_INTERVAL: Duration = Duration::from_secs(5);
 
+use hermes_communications_api::evidence::NewIngestionCheckpoint;
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_events_api::EventLogQuery;
+use hermes_events_api::StoredEventEnvelope;
+use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::application::zulip_attachment_download::ZulipAttachmentDownloadWorker;
 use hermes_hub_backend::application::zulip_command_executor::ZulipCommandWorker;
 use hermes_hub_backend::application::zulip_event_ingest::ZulipEventIngestWorker;
 use hermes_hub_backend::application::zulip_provider_observation_reconciliation::reconcile_zulip_provider_observation_event;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionPort, CommunicationProviderAccountStore, CommunicationProviderKind,
-    CommunicationProviderSecretBindingStore, NewIngestionCheckpoint, NewProviderAccount,
-    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
-};
 use hermes_hub_backend::domains::communications::messages::{
     ProjectedMessage, consume_accepted_signal_event,
 };
@@ -32,22 +39,23 @@ use hermes_hub_backend::domains::communications::storage::{
     CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachmentImport,
     NewCommunicationBlob,
 };
-use hermes_hub_backend::domains::signal_hub::{SignalHubStore, dispatch_zulip_raw_signal};
-use hermes_hub_backend::integrations::zulip::client::{
-    ZulipApiClient, ZulipClientConfig, ZulipReactionRequest, ZulipUpdateMessageRequest,
-};
-use hermes_hub_backend::integrations::zulip::event_mapper::{
-    ZulipEventMappingContext, map_zulip_event_to_raw_record,
-};
-use hermes_hub_backend::integrations::zulip::models::ZulipEvent;
-use hermes_hub_backend::platform::events::{
-    EventBus, EventLogQuery, EventStore, StoredEventEnvelope,
-};
+use hermes_hub_backend::domains::signal_hub::store::SignalHubStore;
+use hermes_hub_backend::domains::signal_hub::zulip::dispatch_zulip_raw_signal;
+use hermes_provider_orchestration::observation_to_raw_communication_record;
+
+use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
 use hermes_hub_backend::platform::secrets::{
     InMemorySecretResolver, NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
 use hermes_hub_backend::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use hermes_hub_backend::workflows::review_inbox::refresh_message_task_candidates_into_review;
+use hermes_provider_zulip::client::{
+    ZulipApiClient, ZulipClientConfig, ZulipReactionRequest, ZulipUpdateMessageRequest,
+};
+use hermes_provider_zulip::event_mapper::{
+    ZulipEventMappingContext, map_zulip_event_to_observation,
+};
+use hermes_provider_zulip::models::ZulipEvent;
 
 #[tokio::test]
 #[ignore = "starts the real Zulip Docker compose stack; set HERMES_ZULIP_TESTCONTAINERS=1"]
@@ -307,9 +315,10 @@ impl LiveHermesTrace {
             ZulipEventMappingContext::new(&self.account_id, &self.base_url, Utc::now())
                 .with_import_batch_id("zulip-live-testcontainers")
                 .with_scenario_id("zulip-live-provider-surface");
-        let new_raw_record =
-            map_zulip_event_to_raw_record(&event, &mapping_context).expect("map real Zulip event");
-        let ingestion = CommunicationIngestionPort::new(self.pool.clone());
+        let new_raw_record = observation_to_raw_communication_record(
+            map_zulip_event_to_observation(&event, &mapping_context).expect("map real Zulip event"),
+        );
+        let ingestion = CommunicationIngestionStore::new(self.pool.clone());
         let raw_record = ingestion
             .record_raw_source(&new_raw_record)
             .await
@@ -548,7 +557,7 @@ impl LiveHermesTrace {
 
         reconcile_zulip_provider_observation_event(
             self.pool.clone(),
-            EventBus::new(),
+            InMemoryEventBus::new(),
             accepted_event.clone(),
         )
         .await
@@ -600,7 +609,7 @@ impl LiveHermesTrace {
 
     async fn assert_event_ingest_reregisters_bad_live_queue(&self, realm: &ProvisionedZulipRealm) {
         eprintln!("[zulip-live] exercising live Zulip event queue re-registration");
-        let ingestion = CommunicationIngestionPort::new(self.pool.clone());
+        let ingestion = CommunicationIngestionStore::new(self.pool.clone());
         ingestion
             .save_checkpoint(&NewIngestionCheckpoint::new(
                 &self.account_id,
@@ -769,7 +778,7 @@ impl LiveHermesTrace {
             else {
                 continue;
             };
-            let Some(raw_record) = CommunicationIngestionPort::new(self.pool.clone())
+            let Some(raw_record) = CommunicationIngestionStore::new(self.pool.clone())
                 .raw_record(raw_record_id)
                 .await
                 .expect("accepted Zulip raw record lookup")

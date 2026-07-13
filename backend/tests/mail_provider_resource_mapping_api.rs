@@ -1,16 +1,16 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderKind, NewProviderAccount,
-};
 use hermes_hub_backend::domains::communications::provider_resources::{
     MailProviderResourceKind, MailProviderResourceStore, MailProviderSemanticRole,
     NewMailProviderResource,
 };
+
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 

@@ -1,3 +1,7 @@
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, ProviderSecretBindingLookupPort,
+};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -11,7 +15,6 @@ use crate::integrations::mail::sync_provider::read_provider_secret;
 use crate::platform::communications::{
     AddressBookProviderBatch, AddressBookProviderEntry, AddressBookProviderFetchRequest,
     AddressBookProviderSyncError, AddressBookProviderSyncPort, AddressBookProviderUpsertRequest,
-    CommunicationProviderKind, ProviderAccountSecretPurpose, ProviderSecretBindingLookupPort,
 };
 use crate::platform::secrets::SecretReferenceStore;
 use crate::vault::HostVault;

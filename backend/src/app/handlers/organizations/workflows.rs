@@ -26,7 +26,7 @@ pub(crate) async fn get_org_timeline(
     Query(query): Query<OrgTimelineQuery>,
 ) -> Result<Json<OrgTimelineResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<OrgTimelineStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<OrgTimelineStore>(pool)
         .list(&org_id, query.limit.unwrap_or(50))
         .await
         .map_err(ApiError::from)?;
@@ -43,7 +43,7 @@ pub(crate) async fn get_org_portals(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgPortalsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<OrgPortalStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<OrgPortalStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -60,10 +60,11 @@ pub(crate) async fn get_org_procedures(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgProceduresResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<OrgProcedureStore>(pool)
-        .list(&org_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<OrgProcedureStore>(pool)
+            .list(&org_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(OrgProceduresResponse { items }))
 }
 
@@ -77,7 +78,7 @@ pub(crate) async fn get_org_playbooks(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgPlaybooksResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<OrgPlaybookStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<OrgPlaybookStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -94,7 +95,7 @@ pub(crate) async fn get_org_templates(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgTemplatesResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::app_store::<OrgTemplateStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<OrgTemplateStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;

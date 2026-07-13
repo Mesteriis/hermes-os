@@ -17,10 +17,10 @@ pub(crate) async fn post_v1_ai_reply(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    crate::app::api_support::require_mail_ai_content_egress(
+    crate::app::api_support::stores::ai_runtime::require_mail_ai_content_egress(
         &state,
         &msg.account_id,
-        crate::app::api_support::MailAiContentEgressKind::Body,
+        crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::Body,
     )
     .await?;
     let service = email_ai_reply_service(&state).await?;
@@ -32,7 +32,7 @@ pub(crate) async fn post_v1_ai_reply(
     match service.generate_reply(&msg, &opts).await? {
         Some(draft) => {
             if let Some(pool) = state.database.pool() {
-                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+                crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
                     pool.clone(),
                     "reply_drafting",
                     &message_id,
@@ -81,10 +81,10 @@ pub(crate) async fn post_v1_ai_reply_variants(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    crate::app::api_support::require_mail_ai_content_egress(
+    crate::app::api_support::stores::ai_runtime::require_mail_ai_content_egress(
         &state,
         &msg.account_id,
-        crate::app::api_support::MailAiContentEgressKind::Body,
+        crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::Body,
     )
     .await?;
     let service = email_ai_reply_service(&state).await?;
@@ -100,7 +100,7 @@ pub(crate) async fn post_v1_ai_reply_variants(
     if !variants.is_empty()
         && let Some(pool) = state.database.pool()
     {
-        crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+        crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
             pool.clone(),
             "reply_variant_generation",
             &message_id,

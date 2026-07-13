@@ -1,14 +1,15 @@
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::Value;
 use serde_json::json;
 use uuid::Uuid;
 
-use super::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
 use super::store::{
     SignalConnection, SignalConnectionCreate, SignalConnectionUpdate, SignalHubError,
     SignalHubStore,
 };
-use crate::platform::events::{EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
+use hermes_signal_hub_api::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
 
 #[derive(Clone)]
 pub struct SignalHubConnectionService {

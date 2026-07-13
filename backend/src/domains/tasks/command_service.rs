@@ -5,14 +5,14 @@ use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Transaction};
 use thiserror::Error;
 
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
-};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 use super::api::{NewTask, Task, TaskError, TaskStore, TaskUpdate};
 use super::core::{
     TaskChecklist, TaskChecklistStore, TaskCoreError, TaskEvidence, TaskEvidenceStore,
-    TaskRelation, TaskRelationStore, TaskSubtask, TaskSubtaskStore,
+    TaskRelationStore, TaskSubtask, TaskSubtaskStore,
 };
 use super::intelligence::TaskIntelligenceService;
 
@@ -318,42 +318,6 @@ impl TaskCommandService {
             .await?)
     }
 
-    pub async fn add_relation_manual(
-        &self,
-        task_id: &str,
-        entity_type: &str,
-        entity_id: &str,
-        relation_type: &str,
-    ) -> Result<TaskRelation, TaskCommandServiceError> {
-        let observation = self
-            .capture_observation(
-                "task relation",
-                ObservationOriginKind::Manual,
-                json!({
-                    "task_id": task_id,
-                    "entity_type": entity_type,
-                    "entity_id": entity_id,
-                    "relation_type": relation_type,
-                }),
-                format!("task://{task_id}/relation"),
-                json!({
-                    "captured_by": "tasks_service.add_relation_manual",
-                    "operation": "add_relation_manual",
-                }),
-            )
-            .await?;
-
-        Ok(TaskRelationStore::new(self.pool.clone())
-            .link(
-                task_id,
-                entity_type,
-                entity_id,
-                relation_type,
-                &format!("observation:{}", observation.observation_id),
-            )
-            .await?)
-    }
-
     pub async fn set_checklist_manual(
         &self,
         task_id: &str,
@@ -438,7 +402,7 @@ impl TaskCommandService {
         payload: Value,
         source_ref: String,
         provenance: Value,
-    ) -> Result<crate::platform::observations::Observation, TaskCommandServiceError> {
+    ) -> Result<hermes_observations_api::models::Observation, TaskCommandServiceError> {
         ObservationStore::new(self.pool.clone())
             .capture(
                 &NewObservation::new(
@@ -684,7 +648,7 @@ impl TaskCommandService {
     async fn seed_observation_from_task(
         &self,
         req: &NewTask,
-    ) -> Result<crate::platform::observations::Observation, TaskCommandServiceError> {
+    ) -> Result<hermes_observations_api::models::Observation, TaskCommandServiceError> {
         let title_words = req
             .title
             .chars()

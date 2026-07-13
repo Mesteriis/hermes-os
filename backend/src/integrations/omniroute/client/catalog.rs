@@ -1,6 +1,7 @@
 use serde::Deserialize;
 
-use super::{OmniRouteClient, OmniRouteError};
+use super::OmniRouteClient;
+use super::error::OmniRouteError;
 
 impl OmniRouteClient {
     pub async fn models(&self) -> Result<Vec<String>, OmniRouteError> {

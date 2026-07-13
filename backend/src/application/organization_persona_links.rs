@@ -6,11 +6,12 @@ use crate::domains::organizations::core::OrgPersonaLink;
 use crate::domains::organizations::service::{
     OrganizationCommandService, OrganizationCommandServiceError,
 };
-use crate::domains::relationships::{
+use crate::domains::relationships::models::{
     NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
-    RelationshipEvidenceSourceKind, RelationshipReviewPort, RelationshipReviewPortError,
-    RelationshipReviewState,
+    RelationshipEvidenceSourceKind, RelationshipReviewState,
 };
+
+use super::relationship_graph::{RelationshipGraphCoordinator, RelationshipGraphCoordinatorError};
 
 #[derive(Clone)]
 pub struct OrganizationPersonaLinkApplicationService {
@@ -72,7 +73,7 @@ async fn materialize_member_of_relationship(
     link: &OrgPersonaLink,
     review_state: RelationshipReviewState,
     evidence: NewRelationshipEvidence,
-) -> Result<(), RelationshipReviewPortError> {
+) -> Result<(), RelationshipGraphCoordinatorError> {
     let relationship = NewRelationship {
         source_entity_kind: RelationshipEntityKind::Persona,
         source_entity_id: link.persona_id.clone(),
@@ -95,7 +96,7 @@ async fn materialize_member_of_relationship(
             "source": link.source,
         }),
     };
-    let _ = RelationshipReviewPort::new(pool.clone())
+    let _ = RelationshipGraphCoordinator::new(pool.clone())
         .upsert_with_evidence(&relationship, &[evidence])
         .await?;
     Ok(())
@@ -120,5 +121,5 @@ pub enum OrganizationPersonaLinkApplicationError {
     Organization(#[from] OrganizationCommandServiceError),
 
     #[error(transparent)]
-    Relationship(#[from] RelationshipReviewPortError),
+    RelationshipGraph(#[from] RelationshipGraphCoordinatorError),
 }

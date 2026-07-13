@@ -7,9 +7,21 @@ use super::chat_actions::{
     record_chat_lifecycle_command_with_payload,
 };
 use super::helpers::{AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed};
-use crate::app::api_support::{api_audit_log, telegram_provider_runtime_service};
+use crate::app::api_support::{
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
+};
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::TelegramError;
+use crate::integrations::telegram::client::TelegramError;
 use crate::platform::audit::NewApiAuditRecord;
 
 #[derive(serde::Deserialize)]

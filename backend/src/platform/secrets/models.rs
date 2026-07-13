@@ -31,6 +31,12 @@ impl SecretKind {
     }
 }
 
+impl hermes_communications_api::accounts::SecretKindTag for SecretKind {
+    fn secret_kind_tag(self) -> &'static str {
+        self.as_str()
+    }
+}
+
 impl TryFrom<&str> for SecretKind {
     type Error = SecretReferenceError;
 

@@ -11,14 +11,18 @@ pub(crate) async fn post_event_classify(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let event = crate::app::api_support::app_store::<CalendarEventStore>(pool.clone())
-        .get(&event_id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    let participants = crate::app::api_support::app_store::<EventParticipantStore>(pool.clone())
-        .list(&event_id)
-        .await
-        .unwrap_or_default();
+    let event = crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(
+        pool.clone(),
+    )
+    .get(&event_id)
+    .await?
+    .ok_or(ApiError::NotFound)?;
+    let participants = crate::app::api_support::stores::domain_stores::app_store::<
+        EventParticipantStore,
+    >(pool.clone())
+    .list(&event_id)
+    .await
+    .unwrap_or_default();
     let event_type = CalendarIntelligenceService::classify_event(
         &event.title,
         participants.len(),
@@ -28,7 +32,7 @@ pub(crate) async fn post_event_classify(
         event_type: Some(event_type.clone()),
         ..Default::default()
     };
-    crate::app::api_support::app_store::<CalendarEventStore>(pool)
+    crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(pool)
         .update_runtime(
             &event_id,
             &update,
@@ -48,29 +52,38 @@ pub(crate) async fn post_event_analyze(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let event = crate::app::api_support::app_store::<CalendarEventStore>(pool.clone())
-        .get(&event_id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    let parts = crate::app::api_support::app_store::<EventParticipantStore>(pool.clone())
-        .list(&event_id)
-        .await
-        .unwrap_or_default();
-    let has_agenda = crate::app::api_support::app_store::<EventAgendaStore>(pool.clone())
-        .get(&event_id)
-        .await
-        .map(|a| a.is_some())
-        .unwrap_or(false);
-    let has_checklist = crate::app::api_support::app_store::<EventChecklistStore>(pool.clone())
-        .get(&event_id)
-        .await
-        .map(|c| c.is_some())
-        .unwrap_or(false);
-    let has_relations = crate::app::api_support::app_store::<EventRelationStore>(pool.clone())
-        .list(&event_id)
-        .await
-        .map(|r| !r.is_empty())
-        .unwrap_or(false);
+    let event = crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(
+        pool.clone(),
+    )
+    .get(&event_id)
+    .await?
+    .ok_or(ApiError::NotFound)?;
+    let parts = crate::app::api_support::stores::domain_stores::app_store::<EventParticipantStore>(
+        pool.clone(),
+    )
+    .list(&event_id)
+    .await
+    .unwrap_or_default();
+    let has_agenda =
+        crate::app::api_support::stores::domain_stores::app_store::<EventAgendaStore>(pool.clone())
+            .get(&event_id)
+            .await
+            .map(|a| a.is_some())
+            .unwrap_or(false);
+    let has_checklist = crate::app::api_support::stores::domain_stores::app_store::<
+        EventChecklistStore,
+    >(pool.clone())
+    .get(&event_id)
+    .await
+    .map(|c| c.is_some())
+    .unwrap_or(false);
+    let has_relations = crate::app::api_support::stores::domain_stores::app_store::<
+        EventRelationStore,
+    >(pool.clone())
+    .list(&event_id)
+    .await
+    .map(|r| !r.is_empty())
+    .unwrap_or(false);
 
     let importance = CalendarIntelligenceService::calculate_importance(
         &event.title,
@@ -98,7 +111,7 @@ pub(crate) async fn post_event_analyze(
         readiness_score: Some(readiness),
         ..Default::default()
     };
-    crate::app::api_support::app_store::<CalendarEventStore>(pool.clone())
+    crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(pool.clone())
         .update_runtime(
             &event_id,
             &update,
@@ -121,24 +134,31 @@ pub(crate) async fn get_event_risks(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let event = crate::app::api_support::app_store::<CalendarEventStore>(pool.clone())
-        .get(&event_id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    let parts = crate::app::api_support::app_store::<EventParticipantStore>(pool.clone())
-        .list(&event_id)
-        .await
-        .unwrap_or_default();
-    let has_agenda = crate::app::api_support::app_store::<EventAgendaStore>(pool.clone())
-        .get(&event_id)
-        .await
-        .map(|a| a.is_some())
-        .unwrap_or(false);
-    let has_relations = crate::app::api_support::app_store::<EventRelationStore>(pool.clone())
-        .list(&event_id)
-        .await
-        .map(|r| !r.is_empty())
-        .unwrap_or(false);
+    let event = crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(
+        pool.clone(),
+    )
+    .get(&event_id)
+    .await?
+    .ok_or(ApiError::NotFound)?;
+    let parts = crate::app::api_support::stores::domain_stores::app_store::<EventParticipantStore>(
+        pool.clone(),
+    )
+    .list(&event_id)
+    .await
+    .unwrap_or_default();
+    let has_agenda =
+        crate::app::api_support::stores::domain_stores::app_store::<EventAgendaStore>(pool.clone())
+            .get(&event_id)
+            .await
+            .map(|a| a.is_some())
+            .unwrap_or(false);
+    let has_relations = crate::app::api_support::stores::domain_stores::app_store::<
+        EventRelationStore,
+    >(pool.clone())
+    .list(&event_id)
+    .await
+    .map(|r| !r.is_empty())
+    .unwrap_or(false);
     let is_soon = event.start_at < Utc::now() + chrono::Duration::hours(24);
     let risks = CalendarIntelligenceService::detect_risks(
         has_agenda,

@@ -1,5 +1,8 @@
 use chrono::{DateTime, Utc};
+use hermes_events_api::{NewEventEnvelope, StoredEventEnvelope};
+use hermes_signal_hub_postgres::raw_signals::adapter::RawSignalStore;
 use serde_json::json;
+use std::sync::Arc;
 
 use crate::domains::communications::messages::{
     COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, replay_accepted_signal_event,
@@ -10,24 +13,30 @@ use crate::domains::personas::core::{
 };
 use crate::domains::personas::enrichment::PERSONA_TRUST_SCORE_CHANGED_EVENT_TYPE;
 use crate::domains::personas::trust::PERSONA_PROMISE_CREATED_EVENT_TYPE;
-use crate::domains::signal_hub::{
-    SignalHubError, SignalHubSignalService, SignalHubStore, SignalReplayRequest,
-    SignalReplayRequestCreate,
+use crate::domains::signal_hub::service::SignalHubSignalService;
+use crate::domains::signal_hub::store::{
+    SignalHubError, SignalHubStore, SignalReplayRequest, SignalReplayRequestCreate,
 };
 use crate::engines::timeline::TimelineEngine;
-use crate::platform::events::{
-    EventConsumerStore, EventLogQuery, EventStore, NewEventEnvelope, ProjectionCursorStore,
-    StoredEventEnvelope,
+use crate::workflows::persona_derived_evidence::{
+    PERSONA_DERIVED_EVIDENCE_CONSUMER, project_persona_derived_evidence_event,
 };
 use crate::workflows::project_link_review_effects::PROJECT_LINK_REVIEW_EVENT_TYPE;
-use crate::workflows::realtime_conversation_transcript_projection::REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER;
-
-use super::{
-    PERSONA_DERIVED_EVIDENCE_CONSUMER, PROJECT_LINK_REVIEW_EFFECTS_CONSUMER,
-    ZOOM_CALENDAR_MATCHING_CONSUMER, project_link_review_effect_event,
-    project_persona_derived_evidence_event, project_realtime_conversation_transcript_event,
-    project_yandex_telemost_calendar_matching_event, project_zoom_calendar_matching_event,
+use crate::workflows::project_link_review_effects::{
+    PROJECT_LINK_REVIEW_EFFECTS_CONSUMER, project_link_review_effect_event,
 };
+use crate::workflows::realtime_conversation_transcript_projection::REALTIME_CONVERSATION_TRANSCRIPT_PROJECTION_CONSUMER;
+use crate::workflows::realtime_conversation_transcript_projection::project_realtime_conversation_transcript_event;
+use crate::workflows::yandex_telemost_calendar_matching::{
+    YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER, project_yandex_telemost_calendar_matching_event,
+};
+use crate::workflows::zoom_calendar_matching::{
+    ZOOM_CALENDAR_MATCHING_CONSUMER, project_zoom_calendar_matching_event,
+};
+use hermes_events_api::EventLogQuery;
+use hermes_events_postgres::consumers::EventConsumerStore;
+use hermes_events_postgres::cursors::ProjectionCursorStore;
+use hermes_events_postgres::store::EventStore;
 
 const DEFAULT_REPLAY_BATCH_SIZE: u32 = 500;
 const COMMUNICATION_MESSAGES_PROJECTION: &str = "communication_messages";
@@ -43,15 +52,19 @@ const TIMELINE_EVENT_LOG_CURSOR: &str = "signal_hub.timeline_event_log";
 #[derive(Clone)]
 pub struct SignalHubReplayService {
     signal_store: SignalHubStore,
+    raw_signal_store: RawSignalStore,
     signal_service: SignalHubSignalService,
     event_store: EventStore,
 }
 
 impl SignalHubReplayService {
     pub fn new(signal_store: SignalHubStore, event_store: EventStore) -> Self {
-        let signal_service = SignalHubSignalService::new(signal_store.clone(), event_store.clone());
+        let raw_signal_store = RawSignalStore::new(signal_store.pool().clone());
+        let signal_service =
+            SignalHubSignalService::new(Arc::new(raw_signal_store.clone()), event_store.clone());
         Self {
             signal_store,
+            raw_signal_store,
             signal_service,
             event_store,
         }
@@ -60,7 +73,7 @@ impl SignalHubReplayService {
     pub async fn request_replay(
         &self,
         request: &SignalReplayRequestCreate,
-    ) -> Result<crate::domains::signal_hub::SignalReplayRequest, SignalHubError> {
+    ) -> Result<crate::domains::signal_hub::store::SignalReplayRequest, SignalHubError> {
         let replay_request = self.signal_store.create_replay_request(request).await?;
         self.append_replay_lifecycle_event(
             "signal.replay.requested",
@@ -293,7 +306,7 @@ impl SignalHubReplayService {
         for event in events.into_iter().filter(|event| {
             event.event.event_type.starts_with("signal.")
                 && request.event_pattern.as_deref().is_none_or(|pattern| {
-                    crate::domains::signal_hub::event_type_pattern_matches(
+                    crate::domains::signal_hub::store::event_type_pattern_matches(
                         pattern,
                         &event.event.event_type,
                     )
@@ -304,8 +317,8 @@ impl SignalHubReplayService {
                     continue;
                 };
                 let event_connection_id = self
-                    .signal_store
-                    .resolve_connection_id_for_event(source_code, &event.event)
+                    .raw_signal_store
+                    .resolve_connection_id(source_code, &event.event)
                     .await?;
                 if event_connection_id.as_deref() != Some(connection_id) {
                     continue;
@@ -348,7 +361,7 @@ impl SignalHubReplayService {
             .into_iter()
             .filter(|event| {
                 request.event_pattern.as_deref().is_none_or(|pattern| {
-                    crate::domains::signal_hub::event_type_pattern_matches(
+                    crate::domains::signal_hub::store::event_type_pattern_matches(
                         pattern,
                         &event.event.event_type,
                     )
@@ -772,19 +785,19 @@ impl SignalHubReplayService {
         let consumer_store = EventConsumerStore::new(self.event_store.pool().clone());
         let cleared_processed = consumer_store
             .clear_processed_for_positions(
-                crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                crate::workflows::yandex_telemost_calendar_matching::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
                 &positions,
             )
             .await?;
         consumer_store
             .clear_failures_for_positions(
-                crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                crate::workflows::yandex_telemost_calendar_matching::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
                 &positions,
             )
             .await?;
         consumer_store
             .rewind_position(
-                crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                crate::workflows::yandex_telemost_calendar_matching::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
                 first_position.saturating_sub(1),
             )
             .await?;
@@ -802,25 +815,25 @@ impl SignalHubReplayService {
             })?;
             consumer_store
                 .record_processed(
-                    crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                    crate::workflows::yandex_telemost_calendar_matching::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
                     replay_event,
                 )
                 .await?;
             consumer_store
                 .mark_dead_letter_replayed_for_event(
-                    crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                    crate::workflows::yandex_telemost_calendar_matching::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
                     replay_event.position,
                 )
                 .await?;
             consumer_store
                 .clear_failure(
-                    crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                    crate::workflows::yandex_telemost_calendar_matching::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
                     replay_event.position,
                 )
                 .await?;
             consumer_store
                 .save_position(
-                    crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                    crate::workflows::yandex_telemost_calendar_matching::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
                     replay_event.position,
                 )
                 .await?;
@@ -831,7 +844,7 @@ impl SignalHubReplayService {
             request,
             json!({
                 "target_projection": YANDEX_TELEMOST_CALENDAR_MATCHING_PROJECTION,
-                "consumer_name": crate::application::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
+                "consumer_name": crate::workflows::yandex_telemost_calendar_matching::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
                 "from_position": first_position,
                 "to_position": last_position,
                 "replayed_count": replay_events.len(),
@@ -999,7 +1012,7 @@ fn supports_project_link_review_effects_projection_event(event_type: &str) -> bo
 }
 
 fn supports_realtime_conversation_transcript_projection_event(event_type: &str) -> bool {
-    event_type == crate::platform::realtime_conversation::REALTIME_CONVERSATION_TRANSCRIPT_COMPLETED
+    event_type == crate::platform::realtime_conversation::events::REALTIME_CONVERSATION_TRANSCRIPT_COMPLETED
 }
 
 fn supports_yandex_telemost_calendar_matching_projection_event(event_type: &str) -> bool {

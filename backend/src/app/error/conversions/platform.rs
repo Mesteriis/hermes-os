@@ -1,9 +1,10 @@
 use super::super::types::ApiError;
-use crate::domains::signal_hub::SignalHubError;
+use crate::domains::signal_hub::store::SignalHubError;
 use crate::platform::audit::ApiAuditError;
-use crate::platform::events::{EventEnvelopeError, EventStoreError};
 use crate::platform::settings::SettingsError;
 use crate::vault::HostVaultError;
+use hermes_events_api::EventEnvelopeError;
+use hermes_events_postgres::errors::EventStoreError;
 
 impl From<EventEnvelopeError> for ApiError {
     fn from(error: EventEnvelopeError) -> Self {

@@ -1,5 +1,6 @@
 use super::super::*;
 use super::helpers::trimmed_optional;
+use hermes_communications_api::accounts::CommunicationProviderKind;
 
 #[derive(Deserialize)]
 pub(crate) struct GmailOAuthStartApiRequest {
@@ -127,8 +128,8 @@ impl ImapAccountSetupApiRequest {
             smtp_username,
         } = self;
         let provider_kind = match provider_kind.trim() {
-            "icloud" => EmailProviderKind::Icloud,
-            "imap" => EmailProviderKind::Imap,
+            "icloud" => CommunicationProviderKind::Icloud,
+            "imap" => CommunicationProviderKind::Imap,
             _ => {
                 return Err(EmailAccountSetupError::InvalidRequest {
                     field: "provider_kind",

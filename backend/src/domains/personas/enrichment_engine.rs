@@ -6,11 +6,10 @@ use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
 use crate::engines::enrichment::{
-    EnrichmentEngine, EnrichmentEngineError as SharedEnrichmentEngineError,
+    engine::EnrichmentEngine, errors::EnrichmentEngineError as SharedEnrichmentEngineError,
 };
-use crate::platform::observations::{
-    ObservationStoreError, materialize_review_transition_link as materialize_review_link,
-};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::review_links::materialize_review_transition_link as materialize_review_link;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichmentResult {

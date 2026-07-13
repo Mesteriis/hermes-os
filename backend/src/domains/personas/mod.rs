@@ -1,6 +1,6 @@
 pub mod analytics;
 pub mod api;
-mod command_service;
+pub mod command_service;
 pub mod core;
 pub mod enrichment;
 pub mod enrichment_engine;
@@ -12,5 +12,4 @@ pub mod intelligence;
 pub mod investigator;
 pub mod memory;
 pub mod ports;
-pub mod service;
 pub mod trust;

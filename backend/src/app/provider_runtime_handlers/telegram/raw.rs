@@ -3,11 +3,11 @@ use axum::extract::{Path, State};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::app::api_support::communication_ingestion_store;
+use crate::app::api_support::stores::domain_stores::communication_ingestion_store;
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::TelegramError;
-use crate::domains::communications::core::StoredRawCommunicationRecord;
 use crate::domains::communications::messages::ProviderChannelMessageStore;
+use crate::integrations::telegram::client::TelegramError;
+use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 
 const COMMUNICATION_RAW_EVIDENCE_CHANNEL_KINDS: &[&str] = &[
     "telegram_user",

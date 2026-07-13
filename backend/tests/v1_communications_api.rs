@@ -1,3 +1,4 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
@@ -6,10 +7,9 @@ use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::{build_router, build_router_with_database};
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-};
+
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::mail_background_sync::MailSyncStore;
@@ -148,7 +148,7 @@ async fn sync_status_degrades_only_after_consecutive_provider_network_failures()
     CommunicationIngestionStore::new(pool.clone())
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Threshold IMAP",
             format!("threshold-{}@example.com", uid()),
         ))
@@ -272,7 +272,7 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
     CommunicationIngestionStore::new(pool.clone())
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Sync API IMAP",
             format!("sync-api-{suffix}@example.com"),
         ))
@@ -486,7 +486,7 @@ async fn v1_content_egress_settings_default_deny_and_partial_update() {
     CommunicationIngestionStore::new(pool)
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Egress API",
             format!("{account_id}@example.test"),
         ))

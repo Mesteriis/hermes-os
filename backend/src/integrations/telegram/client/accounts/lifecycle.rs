@@ -1,7 +1,8 @@
 use chrono::Utc;
+use hermes_communications_api::accounts::ProviderAccountMutationOrigin;
 use serde_json::json;
 
-use crate::platform::observations::ObservationOriginKind;
+use hermes_observations_api::models::ObservationOriginKind;
 
 use super::super::errors::TelegramError;
 use super::super::identifiers::{
@@ -83,7 +84,7 @@ impl TelegramStore {
             .update_config_with_origin(
                 &account.account_id,
                 &config,
-                ObservationOriginKind::LocalRuntime,
+                ProviderAccountMutationOrigin::LocalRuntime,
                 "telegram.accounts.lifecycle.update",
                 lifecycle_state,
             )

@@ -1,7 +1,8 @@
-use crate::platform::communications::{
-    EmailProviderKind, NewProviderAccount, NewProviderAccountSecretBinding,
-    ProviderAccountSecretPurpose,
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
+
 use crate::platform::secrets::{NewSecretReference, SecretKind};
 
 use super::super::errors::EmailAccountSetupError;
@@ -43,7 +44,7 @@ impl EmailAccountSetupService {
             .map_err(|error| EmailAccountSetupError::ProviderAccountStore(error.to_string()))?
             .into_iter()
             .find(|account| {
-                account.provider_kind == EmailProviderKind::Gmail
+                account.provider_kind == CommunicationProviderKind::Gmail
                     && account
                         .external_account_id
                         .trim()
@@ -99,7 +100,7 @@ impl EmailAccountSetupService {
             .upsert(
                 &NewProviderAccount::new(
                     &account_id,
-                    EmailProviderKind::Gmail,
+                    CommunicationProviderKind::Gmail,
                     &pending.request.display_name,
                     &external_account_id,
                 )

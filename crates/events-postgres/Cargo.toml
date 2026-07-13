@@ -1,0 +1,15 @@
+[package]
+name = "hermes-events-postgres"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+license = "MIT"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+hermes-events-api = { path = "../events-api" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", default-features = false, features = ["chrono", "derive", "json", "migrate", "postgres", "runtime-tokio-rustls"] }
+thiserror = "2"

@@ -6,7 +6,8 @@ use super::errors::TelegramError;
 use super::evidence::link_telegram_entity_in_transaction;
 use super::models::topics::{NewTelegramTopic, TelegramTopic};
 use super::store::TelegramStore;
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 

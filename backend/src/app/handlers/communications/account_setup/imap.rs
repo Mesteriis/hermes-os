@@ -4,6 +4,7 @@ use super::models::{EmailAccountSetupApiResponse, ImapAccountSetupApiRequest};
 use crate::app::signal_hub_support::{
     provider_account_or_not_found, sync_provider_account_signal_connection,
 };
+use hermes_communications_api::accounts::CommunicationProviderKind;
 
 pub(crate) async fn post_imap_account_setup(
     State(state): State<AppState>,
@@ -13,7 +14,7 @@ pub(crate) async fn post_imap_account_setup(
     let service = account_setup_service(&state)?;
     require_unlocked_host_vault(&state)?;
     let icloud_calendar_account =
-        (setup_request.provider_kind == EmailProviderKind::Icloud).then(|| {
+        (setup_request.provider_kind == CommunicationProviderKind::Icloud).then(|| {
             (
                 setup_request.account_id.clone(),
                 setup_request.display_name.clone(),

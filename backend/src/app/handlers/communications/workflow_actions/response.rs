@@ -1,6 +1,6 @@
 use crate::app::ApiError;
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::platform::events::EventEnvelope;
+use hermes_events_api::EventEnvelope;
 
 use super::models::{
     WorkflowActionKind, WorkflowActionProvenance, WorkflowActionResponse, WorkflowActionStatus,

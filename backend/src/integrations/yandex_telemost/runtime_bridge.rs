@@ -1,3 +1,4 @@
+use hermes_events_api::NewEventEnvelope;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -5,14 +6,15 @@ use chrono::Utc;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::integrations::yandex_telemost::client::{
-    YandexTelemostError, YandexTelemostTranscriptBridgeRequest,
-    YandexTelemostTranscriptBridgeResponse,
+use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
+use crate::integrations::yandex_telemost::client::models::{
+    YandexTelemostTranscriptBridgeRequest, YandexTelemostTranscriptBridgeResponse,
 };
-use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
-use crate::platform::realtime_conversation::{
-    CallBundleArtifact, CallBundleManifest, REALTIME_CONVERSATION_TRANSCRIPT_COMPLETED,
-};
+use crate::integrations::yandex_telemost::client::validation::validate_required;
+use crate::platform::events::bus::InMemoryEventBus;
+use crate::platform::realtime_conversation::events::REALTIME_CONVERSATION_TRANSCRIPT_COMPLETED;
+use crate::platform::realtime_conversation::models::{CallBundleArtifact, CallBundleManifest};
+use hermes_events_postgres::store::EventStore;
 
 pub(crate) struct MaterializedTelemostTranscriptBundle {
     pub(crate) bundle_root: PathBuf,
@@ -25,7 +27,7 @@ pub(crate) struct MaterializedTelemostTranscriptBundle {
 
 pub(crate) async fn complete_yandex_telemost_transcript_bridge(
     event_store: &EventStore,
-    event_bus: Option<&EventBus>,
+    event_bus: Option<&InMemoryEventBus>,
     request: &YandexTelemostTranscriptBridgeRequest,
 ) -> Result<YandexTelemostTranscriptBridgeResponse, YandexTelemostError> {
     let materialized = materialize_yandex_telemost_transcript_artifacts(request)?;
@@ -173,7 +175,7 @@ pub(crate) fn materialize_yandex_telemost_transcript_artifacts(
 
 async fn publish_realtime_conversation_transcript_completed_event(
     event_store: &EventStore,
-    event_bus: Option<&EventBus>,
+    event_bus: Option<&InMemoryEventBus>,
     request: &YandexTelemostTranscriptBridgeRequest,
     materialized: &MaterializedTelemostTranscriptBundle,
 ) -> Result<(), YandexTelemostError> {
@@ -226,22 +228,10 @@ async fn publish_realtime_conversation_transcript_completed_event(
 fn validate_yandex_telemost_transcript_bridge_request(
     request: &YandexTelemostTranscriptBridgeRequest,
 ) -> Result<(), YandexTelemostError> {
-    crate::integrations::yandex_telemost::client::validate_required(
-        "account_id",
-        &request.account_id,
-    )?;
-    crate::integrations::yandex_telemost::client::validate_required(
-        "bundle_id",
-        &request.bundle_id,
-    )?;
-    crate::integrations::yandex_telemost::client::validate_required(
-        "transcript_text",
-        &request.transcript_text,
-    )?;
-    crate::integrations::yandex_telemost::client::validate_required(
-        "stt_provider",
-        &request.stt_provider,
-    )?;
+    validate_required("account_id", &request.account_id)?;
+    validate_required("bundle_id", &request.bundle_id)?;
+    validate_required("transcript_text", &request.transcript_text)?;
+    validate_required("stt_provider", &request.stt_provider)?;
     if !request.segments.is_array() {
         return Err(YandexTelemostError::InvalidRequest(
             "segments must be a JSON array".to_owned(),

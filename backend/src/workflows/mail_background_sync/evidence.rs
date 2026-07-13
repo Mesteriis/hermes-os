@@ -2,7 +2,8 @@ use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
 
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationPort};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 
 use super::errors::MailSyncError;
 use super::models::MailSyncRun;
@@ -16,7 +17,7 @@ pub(super) async fn capture_mail_sync_run_observation(
     observed_at: DateTime<Utc>,
     actor: &str,
 ) -> Result<(), MailSyncError> {
-    let observation = ObservationPort::capture_in_transaction(
+    let observation = ObservationStore::capture_in_transaction(
         transaction,
         &NewObservation::new(
             kind_code,

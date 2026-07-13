@@ -1,4 +1,5 @@
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
@@ -6,13 +7,7 @@ use sqlx::postgres::PgPool;
 use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
 
-use crate::application::provider_runtime_contracts::WhatsAppProviderRuntimeRef;
-use crate::application::review_inbox::{
-    ReviewInboxWorkflowError, refresh_message_decisions_into_review,
-    refresh_message_knowledge_candidates_into_review,
-    refresh_message_people_candidates_into_review, refresh_message_task_candidates_into_review,
-};
-use crate::domains::communications::core::CommunicationIngestionPort;
+use crate::application::provider_runtime_services::WhatsAppProviderRuntimeRef;
 use crate::domains::communications::messages::{
     CommunicationSignalProjectionError, MessageProjectionError, MessageProjectionStore,
     NewProjectedMessage, ProviderChannelMessageStore, ProviderCommunicationMessagePortError,
@@ -24,9 +19,9 @@ use crate::domains::communications::storage::{
     NewCommunicationBlob,
 };
 use crate::domains::personas::core::{PersonaCoreError, PersonaIdentityStore};
-use crate::domains::signal_hub::{
-    SignalHubError, dispatch_telegram_raw_signal, dispatch_whatsapp_raw_signal,
-};
+use crate::domains::signal_hub::store::SignalHubError;
+use crate::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
+use crate::domains::signal_hub::whatsapp::dispatch_whatsapp_raw_signal;
 use crate::integrations::telegram::client::{
     NewTelegramMessage, TelegramError, TelegramMessageIngestResult, TelegramStore, telegram_chat_id,
 };
@@ -45,9 +40,17 @@ use crate::integrations::whatsapp::client::{
 };
 use crate::platform::calls::CallError;
 use crate::platform::calls::{CallDirection, CallIntelligenceStore, CallState, NewTelegramCall};
-use crate::platform::communications::NewRawCommunicationRecord;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::{telegram_event_types, whatsapp_event_types};
-use crate::platform::events::{EventBus, EventStore, EventStoreError, NewEventEnvelope};
+use crate::workflows::review_inbox::{
+    ReviewInboxWorkflowError, refresh_message_decisions_into_review,
+    refresh_message_knowledge_candidates_into_review,
+    refresh_message_people_candidates_into_review, refresh_message_task_candidates_into_review,
+};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
 const AUDIT_ACTOR_ID: &str = "hermes-frontend";
 const WHATSAPP_CHANNEL_KINDS: &[&str] = &["whatsapp_web", "whatsapp_business_cloud"];
@@ -58,7 +61,7 @@ pub(crate) struct TelegramFixtureIngestApplicationService {
     pool: PgPool,
     store: TelegramStore,
     event_store: EventStore,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
 }
 
 impl TelegramFixtureIngestApplicationService {
@@ -66,7 +69,7 @@ impl TelegramFixtureIngestApplicationService {
         pool: PgPool,
         store: TelegramStore,
         event_store: EventStore,
-        event_bus: EventBus,
+        event_bus: InMemoryEventBus,
     ) -> Self {
         Self {
             pool,
@@ -81,7 +84,7 @@ impl TelegramFixtureIngestApplicationService {
         request: &NewTelegramMessage,
     ) -> Result<TelegramMessageIngestResult, CommunicationFixtureIngestError> {
         let observed = self.store.ingest_fixture_message(request).await?;
-        let stored_raw = CommunicationIngestionPort::new(self.pool.clone())
+        let stored_raw = CommunicationIngestionStore::new(self.pool.clone())
             .record_raw_source(&observed.raw)
             .await?;
         let Some(accepted_event) =
@@ -149,7 +152,7 @@ pub(crate) struct WhatsappFixtureIngestApplicationService {
     pool: PgPool,
     runtime: WhatsAppProviderRuntimeRef,
     event_store: EventStore,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
 }
 
 impl WhatsappFixtureIngestApplicationService {
@@ -157,7 +160,7 @@ impl WhatsappFixtureIngestApplicationService {
         pool: PgPool,
         runtime: WhatsAppProviderRuntimeRef,
         event_store: EventStore,
-        event_bus: EventBus,
+        event_bus: InMemoryEventBus,
     ) -> Self {
         Self {
             pool,
@@ -175,7 +178,7 @@ impl WhatsappFixtureIngestApplicationService {
         &self.event_store
     }
 
-    pub(crate) fn event_bus(&self) -> &EventBus {
+    pub(crate) fn event_bus(&self) -> &InMemoryEventBus {
         &self.event_bus
     }
 
@@ -206,7 +209,7 @@ impl WhatsappFixtureIngestApplicationService {
         let observed = self.runtime.ingest_fixture_message(request).await?;
         let observed_raw =
             annotate_whatsapp_raw_observed_source(&observed.raw, reconciliation_source)?;
-        let stored_raw = CommunicationIngestionPort::new(self.pool.clone())
+        let stored_raw = CommunicationIngestionStore::new(self.pool.clone())
             .record_raw_source(&observed_raw)
             .await?;
         let Some(accepted_event) =
@@ -1769,7 +1772,7 @@ impl WhatsappFixtureIngestApplicationService {
 
     async fn publish_whatsapp_command_reconciled_events(
         &self,
-        commands: Vec<crate::application::provider_runtime_contracts::WhatsAppProviderCommand>,
+        commands: Vec<crate::integrations::whatsapp::runtime::contracts::WhatsAppProviderCommand>,
         source: &str,
     ) -> Result<(), CommunicationFixtureIngestError> {
         for command in commands {
@@ -1820,7 +1823,7 @@ impl WhatsappFixtureIngestApplicationService {
 
     async fn publish_whatsapp_status_runtime_events(
         &self,
-        commands: &[crate::application::provider_runtime_contracts::WhatsAppProviderCommand],
+        commands: &[crate::integrations::whatsapp::runtime::contracts::WhatsAppProviderCommand],
         source: &str,
     ) -> Result<(), CommunicationFixtureIngestError> {
         for command in commands {
@@ -1869,7 +1872,7 @@ impl WhatsappFixtureIngestApplicationService {
 
     async fn publish_whatsapp_conversation_runtime_events(
         &self,
-        commands: &[crate::application::provider_runtime_contracts::WhatsAppProviderCommand],
+        commands: &[crate::integrations::whatsapp::runtime::contracts::WhatsAppProviderCommand],
         source: &str,
     ) -> Result<(), CommunicationFixtureIngestError> {
         for command in commands {
@@ -1919,7 +1922,7 @@ impl WhatsappFixtureIngestApplicationService {
 
     async fn publish_whatsapp_group_runtime_events(
         &self,
-        commands: &[crate::application::provider_runtime_contracts::WhatsAppProviderCommand],
+        commands: &[crate::integrations::whatsapp::runtime::contracts::WhatsAppProviderCommand],
         source: &str,
     ) -> Result<(), CommunicationFixtureIngestError> {
         for command in commands {
@@ -2016,9 +2019,9 @@ impl WhatsappFixtureIngestApplicationService {
 
     async fn record_and_accept_whatsapp_raw(
         &self,
-        raw: &crate::platform::communications::NewRawCommunicationRecord,
+        raw: &hermes_communications_api::evidence::NewRawCommunicationRecord,
     ) -> Result<AcceptedWhatsappRawRecord, CommunicationFixtureIngestError> {
-        let stored_raw = CommunicationIngestionPort::new(self.pool.clone())
+        let stored_raw = CommunicationIngestionStore::new(self.pool.clone())
             .record_raw_source(raw)
             .await?;
         self.ensure_canonical_communication_account(&stored_raw.account_id)
@@ -2768,7 +2771,7 @@ pub(crate) enum CommunicationFixtureIngestError {
     Whatsapp(#[from] WhatsappWebError),
 
     #[error(transparent)]
-    Communication(#[from] crate::domains::communications::core::CommunicationIngestionError),
+    Communication(#[from] hermes_communications_postgres::errors::CommunicationIngestionError),
 
     #[error(transparent)]
     ProviderMessage(#[from] ProviderCommunicationMessagePortError),
@@ -2840,10 +2843,10 @@ fn whatsapp_status_feed_conversation_id(account_id: &str) -> String {
 }
 
 fn annotate_whatsapp_raw_observed_source(
-    raw: &crate::platform::communications::NewRawCommunicationRecord,
+    raw: &hermes_communications_api::evidence::NewRawCommunicationRecord,
     observed_source: &str,
 ) -> Result<
-    crate::platform::communications::NewRawCommunicationRecord,
+    hermes_communications_api::evidence::NewRawCommunicationRecord,
     CommunicationFixtureIngestError,
 > {
     let mut observed_raw = raw.clone();

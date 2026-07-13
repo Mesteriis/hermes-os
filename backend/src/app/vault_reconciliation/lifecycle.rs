@@ -1,7 +1,55 @@
+use std::sync::Arc;
+
 use crate::app::AppState;
 use crate::vault::VaultMode;
+use hermes_desktop_runtime::{
+    RuntimeExitPolicy, RuntimeTaskClass, RuntimeTaskError, RuntimeTaskFactory, RuntimeTaskFuture,
+    RuntimeTaskSpec,
+};
+use tokio_util::sync::CancellationToken;
 
 use super::service::reconcile_host_vault_manifest;
+
+pub(crate) const HOST_VAULT_MANIFEST_RECONCILIATION_RUNTIME: &str =
+    "host_vault_manifest_reconciliation";
+
+pub(crate) fn host_vault_manifest_reconciliation_task(state: &AppState) -> Option<RuntimeTaskSpec> {
+    if state.config.database_url().is_none() {
+        return None;
+    }
+    let Ok(status) = state.vault.status() else {
+        tracing::warn!("host vault reconciliation skipped: vault status unavailable");
+        return None;
+    };
+    if status.state != VaultMode::Unlocked {
+        return None;
+    }
+    let Some(pool) = state.database.pool().cloned() else {
+        return None;
+    };
+    let vault = state.vault.clone();
+
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let vault = vault.clone();
+        Box::pin(async move {
+            tokio::select! {
+                _ = cancellation.cancelled() => Ok(()),
+                result = reconcile_host_vault_manifest(pool, vault) => {
+                    report_reconciliation_result(result);
+                    Ok(())
+                }
+            }
+        }) as RuntimeTaskFuture
+    });
+
+    Some(RuntimeTaskSpec::new(
+        HOST_VAULT_MANIFEST_RECONCILIATION_RUNTIME,
+        RuntimeTaskClass::Startup,
+        RuntimeExitPolicy::ExpectedCompletion,
+        task,
+    ))
+}
 
 pub(crate) fn spawn_host_vault_manifest_reconciliation(state: &AppState) {
     if state.config.database_url().is_none() {
@@ -24,27 +72,36 @@ pub(crate) fn spawn_host_vault_manifest_reconciliation(state: &AppState) {
     };
 
     handle.spawn(async move {
-        match reconcile_host_vault_manifest(pool, vault).await {
-            Ok(summary)
-                if summary.restored_accounts > 0
-                    || summary.restored_calendar_accounts > 0
-                    || summary.restored_ai_providers > 0
-                    || summary.skipped_duplicate_provider_secrets > 0
-                    || summary.purged_duplicate_provider_secrets > 0 =>
-            {
-                tracing::info!(
-                    restored_accounts = summary.restored_accounts,
-                    restored_calendar_accounts = summary.restored_calendar_accounts,
-                    restored_ai_providers = summary.restored_ai_providers,
-                    skipped_duplicate_provider_secrets = summary.skipped_duplicate_provider_secrets,
-                    purged_duplicate_provider_secrets = summary.purged_duplicate_provider_secrets,
-                    "host vault manifest reconciliation completed"
-                );
-            }
-            Ok(_) => {}
-            Err(error) => {
-                tracing::warn!(error = %error, "host vault manifest reconciliation failed");
-            }
-        }
+        report_reconciliation_result(reconcile_host_vault_manifest(pool, vault).await);
     });
+}
+
+fn report_reconciliation_result(
+    result: Result<
+        super::summary::HostVaultReconciliationSummary,
+        super::errors::HostVaultReconciliationError,
+    >,
+) {
+    match result {
+        Ok(summary)
+            if summary.restored_accounts > 0
+                || summary.restored_calendar_accounts > 0
+                || summary.restored_ai_providers > 0
+                || summary.skipped_duplicate_provider_secrets > 0
+                || summary.purged_duplicate_provider_secrets > 0 =>
+        {
+            tracing::info!(
+                restored_accounts = summary.restored_accounts,
+                restored_calendar_accounts = summary.restored_calendar_accounts,
+                restored_ai_providers = summary.restored_ai_providers,
+                skipped_duplicate_provider_secrets = summary.skipped_duplicate_provider_secrets,
+                purged_duplicate_provider_secrets = summary.purged_duplicate_provider_secrets,
+                "host vault manifest reconciliation completed"
+            );
+        }
+        Ok(_) => {}
+        Err(error) => {
+            tracing::warn!(error = %error, "host vault manifest reconciliation failed");
+        }
+    }
 }

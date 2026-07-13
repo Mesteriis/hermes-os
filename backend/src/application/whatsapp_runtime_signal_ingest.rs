@@ -1,17 +1,18 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationIngestionPort,
-};
-use crate::domains::signal_hub::{SignalHubError, dispatch_whatsapp_raw_signal};
-use crate::integrations::whatsapp::runtime::{
+use crate::domains::signal_hub::store::SignalHubError;
+use crate::domains::signal_hub::whatsapp::dispatch_whatsapp_raw_signal;
+use crate::integrations::whatsapp::runtime::contracts::{
     WhatsAppRuntimeEventSink, WhatsAppRuntimeEventSinkError, WhatsAppRuntimeEventSinkFuture,
     WhatsAppSanitizedRuntimeEventDto,
 };
-use crate::platform::communications::NewRawCommunicationRecord;
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
+use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 
 #[derive(Clone)]
 pub(crate) struct WhatsappRuntimeSignalIngestService {
@@ -29,7 +30,7 @@ impl WhatsappRuntimeSignalIngestService {
     ) -> Result<WhatsappRuntimeSignalIngestResult, WhatsappRuntimeSignalIngestError> {
         dto.assert_event_spine_contract();
         let raw = native_runtime_raw_record(&dto);
-        let stored_raw = CommunicationIngestionPort::new(self.pool.clone())
+        let stored_raw = CommunicationIngestionStore::new(self.pool.clone())
             .record_raw_source(&raw)
             .await?;
         let Some(accepted_event) =
@@ -307,10 +308,9 @@ mod tests {
     use testkit::context::TestContext;
 
     use super::*;
-    use crate::domains::communications::core::{
-        CommunicationProviderAccountStore, CommunicationProviderKind, NewProviderAccount,
-    };
-    use crate::integrations::whatsapp::runtime::WhatsAppRuntimeBridgeDispatch;
+    use crate::integrations::whatsapp::runtime::contracts::WhatsAppRuntimeBridgeDispatch;
+    use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+
     use crate::platform::storage::Database;
 
     #[tokio::test]

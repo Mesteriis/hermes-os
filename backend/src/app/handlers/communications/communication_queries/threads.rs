@@ -9,7 +9,7 @@ pub(crate) async fn get_v1_threads(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::threads::CommunicationThreadStore,
     >(pool);
     let page = store
@@ -46,7 +46,7 @@ pub(crate) async fn get_v1_thread_messages(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::threads::CommunicationThreadStore,
     >(pool);
     let items = store

@@ -1,3 +1,4 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
@@ -7,14 +8,13 @@ use serde_json::{Value, json};
 use sqlx::{PgPool, Row};
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
-};
 use hermes_hub_backend::integrations::telegram::client::participants::{
     reconcile_join_commands_from_provider_roster, reconcile_leave_commands_from_provider_roster,
     telegram_self_provider_member_id,
 };
+
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 

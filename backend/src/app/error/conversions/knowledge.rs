@@ -1,7 +1,6 @@
 use super::super::types::ApiError;
-use crate::application::consistency_review::ContradictionReviewServiceError;
-use crate::application::review_promotion::ReviewPromotionError;
-use crate::application::{
+use crate::application::relationship_graph::RelationshipGraphCoordinatorError;
+use crate::application::review_transitions::{
     DecisionReviewApplicationError, ObligationReviewApplicationError,
     RelationshipReviewApplicationError, TaskCandidateReviewApplicationError,
 };
@@ -11,14 +10,28 @@ use crate::domains::projects::core::ProjectStoreError;
 use crate::domains::projects::link_reviews::{
     ProjectLinkReviewError, ProjectLinkReviewServiceError,
 };
-use crate::domains::relationships::{RelationshipCommandServiceError, RelationshipStoreError};
+use crate::domains::relationships::errors::RelationshipStoreError;
 use crate::domains::review::{ReviewInboxError, ReviewInboxServiceError};
-use crate::domains::tasks::candidates::{TaskCandidateError, TaskCandidateReviewServiceError};
-use crate::engines::consistency::ConsistencyError;
+use crate::domains::tasks::candidates::TaskCandidateError;
+use crate::engines::consistency::errors::ConsistencyError;
+use crate::workflows::consistency_review::ContradictionReviewServiceError;
+use crate::workflows::review_promotion::ReviewPromotionError;
 
 impl From<crate::domains::graph::core::GraphStoreError> for ApiError {
     fn from(error: crate::domains::graph::core::GraphStoreError) -> Self {
         Self::Graph(error)
+    }
+}
+
+impl From<RelationshipGraphCoordinatorError> for ApiError {
+    fn from(error: RelationshipGraphCoordinatorError) -> Self {
+        match error {
+            RelationshipGraphCoordinatorError::Sqlx(inner) => {
+                Self::from(RelationshipStoreError::Sqlx(inner))
+            }
+            RelationshipGraphCoordinatorError::Relationship(inner) => Self::from(inner),
+            RelationshipGraphCoordinatorError::Graph(inner) => Self::from(inner),
+        }
     }
 }
 
@@ -60,25 +73,16 @@ impl From<TaskCandidateError> for ApiError {
     }
 }
 
-impl From<TaskCandidateReviewServiceError> for ApiError {
-    fn from(error: TaskCandidateReviewServiceError) -> Self {
-        match error {
-            TaskCandidateReviewServiceError::TaskCandidate(error) => Self::from(error),
-            TaskCandidateReviewServiceError::Observation(error) => {
-                tracing::error!(error = %error, "task candidate review observation capture failed");
-                Self::InvalidTaskCandidateQuery("task candidate review observation capture failed")
-            }
-        }
-    }
-}
-
 impl From<TaskCandidateReviewApplicationError> for ApiError {
     fn from(error: TaskCandidateReviewApplicationError) -> Self {
         match error {
             TaskCandidateReviewApplicationError::TaskCandidate(error) => Self::from(error),
-            TaskCandidateReviewApplicationError::TaskCandidateNotFound => {
-                Self::TaskCandidateNotFound
+            TaskCandidateReviewApplicationError::Observation(error) => {
+                tracing::error!(error = %error, "task candidate review observation capture failed");
+                Self::InvalidTaskCandidateQuery("task candidate review observation capture failed")
             }
+            TaskCandidateReviewApplicationError::Obligation(error) => Self::from(error),
+            TaskCandidateReviewApplicationError::TaskCore(error) => Self::from(error),
             TaskCandidateReviewApplicationError::Sqlx(error) => {
                 Self::TaskCandidate(TaskCandidateError::Sqlx(error))
             }
@@ -229,22 +233,10 @@ impl From<ObligationReviewApplicationError> for ApiError {
     }
 }
 
-impl From<RelationshipCommandServiceError> for ApiError {
-    fn from(error: RelationshipCommandServiceError) -> Self {
-        match error {
-            RelationshipCommandServiceError::Relationship(error) => Self::from(error),
-            RelationshipCommandServiceError::Observation(error) => {
-                tracing::error!(error = %error, "relationship review observation capture failed");
-                Self::InvalidRelationshipReview("relationship review observation capture failed")
-            }
-        }
-    }
-}
-
 impl From<RelationshipReviewApplicationError> for ApiError {
     fn from(error: RelationshipReviewApplicationError) -> Self {
         match error {
-            RelationshipReviewApplicationError::Relationship(error) => Self::from(error),
+            RelationshipReviewApplicationError::RelationshipGraph(error) => Self::from(error),
             RelationshipReviewApplicationError::Observation(error) => {
                 tracing::error!(error = %error, "relationship review observation capture failed");
                 Self::InvalidRelationshipReview("relationship review observation capture failed")
@@ -310,6 +302,9 @@ impl From<ReviewPromotionError> for ApiError {
             ReviewPromotionError::Task(inner) => {
                 Self::ReviewPromotion(ReviewPromotionError::Task(inner))
             }
+            ReviewPromotionError::TaskCommand(inner) => {
+                Self::ReviewPromotion(ReviewPromotionError::TaskCommand(inner))
+            }
             ReviewPromotionError::TaskCore(inner) => {
                 Self::ReviewPromotion(ReviewPromotionError::TaskCore(inner))
             }
@@ -318,7 +313,7 @@ impl From<ReviewPromotionError> for ApiError {
             }
             ReviewPromotionError::Decision(inner) => Self::from(inner),
             ReviewPromotionError::Obligation(inner) => Self::from(inner),
-            ReviewPromotionError::Relationship(inner) => Self::from(inner),
+            ReviewPromotionError::RelationshipGraph(inner) => Self::from(inner),
             ReviewPromotionError::PersonaIdentity(inner) => Self::from(inner),
             ReviewPromotionError::PersonaProjection(_) => {
                 Self::InvalidReviewQuery("review promotion person target is invalid")
@@ -370,8 +365,8 @@ impl From<ReviewInboxServiceError> for ApiError {
     }
 }
 
-impl From<crate::engines::search::SearchError> for ApiError {
-    fn from(error: crate::engines::search::SearchError) -> Self {
+impl From<crate::engines::search::errors::SearchError> for ApiError {
+    fn from(error: crate::engines::search::errors::SearchError) -> Self {
         tracing::error!(error = %error, "search operation failed");
         ApiError::InvalidCommunicationQuery("search operation failed")
     }

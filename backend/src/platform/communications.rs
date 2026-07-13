@@ -1,3 +1,11 @@
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, DeletedProviderAccount, NewProviderAccount,
+    NewProviderAccountSecretBinding, ProviderAccount, ProviderAccountPortError,
+    ProviderAccountSecretBinding, ProviderAccountSecretPurpose, ProviderAccountUsage,
+    ProviderSecretBindingPortError,
+};
+use hermes_communications_api::evidence::StoredRawCommunicationRecord;
+use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -8,8 +16,9 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::platform::observations::{ObservationOriginKind, ObservationStoreError};
 use crate::platform::secrets::{ResolvedSecret, SecretKind, SecretReference};
+use hermes_observations_api::models::ObservationOriginKind;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 mod attachment_text;
 mod email_sync;
@@ -48,123 +57,6 @@ pub enum CommunicationContractError {
 
     #[error("{0} must be a JSON object")]
     NonObjectJson(&'static str),
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CommunicationProviderKind {
-    Gmail,
-    Icloud,
-    Imap,
-    TelegramUser,
-    TelegramBot,
-    WhatsappWeb,
-    WhatsappBusinessCloud,
-    ZulipBot,
-    ZoomUser,
-    ZoomServerToServer,
-    YandexTelemostUser,
-}
-
-pub type EmailProviderKind = CommunicationProviderKind;
-
-impl CommunicationProviderKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Gmail => "gmail",
-            Self::Icloud => "icloud",
-            Self::Imap => "imap",
-            Self::TelegramUser => "telegram_user",
-            Self::TelegramBot => "telegram_bot",
-            Self::WhatsappWeb => "whatsapp_web",
-            Self::WhatsappBusinessCloud => "whatsapp_business_cloud",
-            Self::ZulipBot => "zulip_bot",
-            Self::ZoomUser => "zoom_user",
-            Self::ZoomServerToServer => "zoom_server_to_server",
-            Self::YandexTelemostUser => "yandex_telemost_user",
-        }
-    }
-
-    pub fn is_email(self) -> bool {
-        matches!(self, Self::Gmail | Self::Icloud | Self::Imap)
-    }
-
-    pub fn is_telegram(self) -> bool {
-        matches!(self, Self::TelegramUser | Self::TelegramBot)
-    }
-
-    pub fn is_whatsapp(self) -> bool {
-        matches!(self, Self::WhatsappWeb | Self::WhatsappBusinessCloud)
-    }
-
-    pub fn is_zulip(self) -> bool {
-        matches!(self, Self::ZulipBot)
-    }
-
-    pub fn is_zoom(self) -> bool {
-        matches!(self, Self::ZoomUser | Self::ZoomServerToServer)
-    }
-
-    pub fn is_yandex_telemost(self) -> bool {
-        matches!(self, Self::YandexTelemostUser)
-    }
-}
-
-impl TryFrom<&str> for CommunicationProviderKind {
-    type Error = CommunicationContractError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value.trim() {
-            "gmail" => Ok(Self::Gmail),
-            "icloud" => Ok(Self::Icloud),
-            "imap" => Ok(Self::Imap),
-            "telegram_user" => Ok(Self::TelegramUser),
-            "telegram_bot" => Ok(Self::TelegramBot),
-            "whatsapp_web" => Ok(Self::WhatsappWeb),
-            "whatsapp_business_cloud" => Ok(Self::WhatsappBusinessCloud),
-            "zulip_bot" => Ok(Self::ZulipBot),
-            "zoom_user" => Ok(Self::ZoomUser),
-            "zoom_server_to_server" => Ok(Self::ZoomServerToServer),
-            "yandex_telemost_user" => Ok(Self::YandexTelemostUser),
-            other => Err(CommunicationContractError::UnsupportedProviderKind(
-                other.to_owned(),
-            )),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct ProviderAccount {
-    pub account_id: String,
-    pub provider_kind: CommunicationProviderKind,
-    pub display_name: String,
-    pub external_account_id: String,
-    pub config: Value,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-impl ProviderAccount {
-    pub fn is_deleted(&self) -> bool {
-        self.config
-            .get("auth_state")
-            .and_then(Value::as_str)
-            .is_some_and(|state| state == "deleted")
-            || self.config.get("deleted_at").is_some()
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct ProviderAccountUsage {
-    pub raw_record_count: i64,
-    pub message_count: i64,
-    pub checkpoint_count: i64,
-}
-
-impl ProviderAccountUsage {
-    pub fn has_retained_evidence(&self) -> bool {
-        self.raw_record_count > 0 || self.message_count > 0
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -255,16 +147,6 @@ pub type ProviderMessageObservationEventFuture<'a> = Pin<
     >,
 >;
 
-pub type CommunicationRawRecordPortFuture<'a, T> =
-    Pin<Box<dyn Future<Output = Result<T, ProviderCommunicationMessagePortError>> + Send + 'a>>;
-
-pub trait CommunicationRawRecordCommandPort: Send + Sync {
-    fn record_raw_source<'a>(
-        &'a self,
-        record: &'a NewRawCommunicationRecord,
-    ) -> CommunicationRawRecordPortFuture<'a, StoredRawCommunicationRecord>;
-}
-
 pub trait ProviderMessageObservationEventPort: Send + Sync {
     fn append_provider_message_observation<'a>(
         &'a self,
@@ -274,13 +156,13 @@ pub trait ProviderMessageObservationEventPort: Send + Sync {
 
 #[derive(Clone)]
 pub struct EventStoreProviderMessageObservationEventPort {
-    event_store: crate::platform::events::EventStore,
+    event_store: hermes_events_postgres::store::EventStore,
 }
 
 impl EventStoreProviderMessageObservationEventPort {
     pub fn new(pool: sqlx::postgres::PgPool) -> Self {
         Self {
-            event_store: crate::platform::events::EventStore::new(pool),
+            event_store: hermes_events_postgres::store::EventStore::new(pool),
         }
     }
 }
@@ -305,7 +187,7 @@ impl ProviderMessageObservationEventPort for EventStoreProviderMessageObservatio
             );
             let event_type =
                 provider_observation_event_type(observation.provider, observation.event_kind);
-            let builder = crate::platform::events::NewEventEnvelope::builder(
+            let builder = hermes_events_api::NewEventEnvelope::builder(
                 format!(
                     "evt_provider_observation_{}",
                     stable_event_id_fragment(&idempotency_key)
@@ -371,136 +253,19 @@ pub enum ProviderCommunicationMessagePortError {
     Sqlx(#[from] sqlx::Error),
 
     #[error(transparent)]
-    EventStore(#[from] crate::platform::events::EventStoreError),
+    EventStore(#[from] hermes_events_postgres::errors::EventStoreError),
 
     #[error(transparent)]
-    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    EventEnvelope(#[from] hermes_events_api::EventEnvelopeError),
 
     #[error(transparent)]
     Json(#[from] serde_json::Error),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct DeletedProviderAccount {
-    pub account: Option<ProviderAccount>,
-    pub unbound_secret_refs: Vec<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NewProviderAccount {
-    pub account_id: String,
-    pub provider_kind: CommunicationProviderKind,
-    pub display_name: String,
-    pub external_account_id: String,
-    pub config: Value,
-}
-
-impl NewProviderAccount {
-    pub fn new(
-        account_id: impl Into<String>,
-        provider_kind: CommunicationProviderKind,
-        display_name: impl Into<String>,
-        external_account_id: impl Into<String>,
-    ) -> Self {
-        Self {
-            account_id: account_id.into(),
-            provider_kind,
-            display_name: display_name.into(),
-            external_account_id: external_account_id.into(),
-            config: json!({}),
-        }
-    }
-
-    pub fn config(mut self, config: Value) -> Self {
-        self.config = config;
-        self
-    }
-
-    pub(crate) fn validate(&self) -> Result<(), CommunicationContractError> {
-        validate_non_empty("account_id", &self.account_id)?;
-        validate_non_empty("display_name", &self.display_name)?;
-        validate_non_empty("external_account_id", &self.external_account_id)?;
-        validate_object("config", &self.config)
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct StoredRawCommunicationRecord {
-    pub raw_record_id: String,
-    pub observation_id: String,
-    pub account_id: String,
-    pub record_kind: String,
-    pub provider_record_id: String,
-    pub source_fingerprint: String,
-    pub import_batch_id: String,
-    pub occurred_at: Option<DateTime<Utc>>,
-    pub captured_at: DateTime<Utc>,
-    pub payload: Value,
-    pub provenance: Value,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NewRawCommunicationRecord {
-    pub raw_record_id: String,
-    pub account_id: String,
-    pub record_kind: String,
-    pub provider_record_id: String,
-    pub source_fingerprint: String,
-    pub import_batch_id: String,
-    pub occurred_at: Option<DateTime<Utc>>,
-    pub payload: Value,
-    pub provenance: Value,
-}
-
-impl NewRawCommunicationRecord {
-    pub fn new(
-        raw_record_id: impl Into<String>,
-        account_id: impl Into<String>,
-        record_kind: impl Into<String>,
-        provider_record_id: impl Into<String>,
-        source_fingerprint: impl Into<String>,
-        import_batch_id: impl Into<String>,
-        payload: Value,
-    ) -> Self {
-        Self {
-            raw_record_id: raw_record_id.into(),
-            account_id: account_id.into(),
-            record_kind: record_kind.into(),
-            provider_record_id: provider_record_id.into(),
-            source_fingerprint: source_fingerprint.into(),
-            import_batch_id: import_batch_id.into(),
-            occurred_at: None,
-            payload,
-            provenance: json!({}),
-        }
-    }
-
-    pub fn occurred_at(mut self, occurred_at: DateTime<Utc>) -> Self {
-        self.occurred_at = Some(occurred_at);
-        self
-    }
-
-    pub fn provenance(mut self, provenance: Value) -> Self {
-        self.provenance = provenance;
-        self
-    }
-
-    pub(crate) fn validate(&self) -> Result<(), CommunicationContractError> {
-        validate_non_empty("raw_record_id", &self.raw_record_id)?;
-        validate_non_empty("account_id", &self.account_id)?;
-        validate_non_empty("record_kind", &self.record_kind)?;
-        validate_non_empty("provider_record_id", &self.provider_record_id)?;
-        validate_non_empty("source_fingerprint", &self.source_fingerprint)?;
-        validate_non_empty("import_batch_id", &self.import_batch_id)?;
-        validate_object("payload", &self.payload)?;
-        validate_object("provenance", &self.provenance)
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EmailSyncPlan {
     pub account_id: String,
-    pub provider_kind: EmailProviderKind,
+    pub provider_kind: CommunicationProviderKind,
     pub credential_purpose: ProviderAccountSecretPurpose,
     pub stream_id: String,
     pub adapter_config: EmailSyncAdapterConfig,
@@ -529,7 +294,7 @@ pub struct FetchedCommunicationSourceMessage {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EmailSyncBatch {
-    pub provider_kind: EmailProviderKind,
+    pub provider_kind: CommunicationProviderKind,
     pub stream_id: String,
     pub checkpoint: Option<Value>,
     pub messages: Vec<FetchedCommunicationSourceMessage>,
@@ -615,136 +380,6 @@ pub struct EmailSyncBlobImportReport {
     pub checkpoint_saved: bool,
     pub blobs_upserted: usize,
     pub raw_records: Vec<StoredRawCommunicationRecord>,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProviderAccountSecretPurpose {
-    OauthToken,
-    ImapPassword,
-    SmtpPassword,
-    TelegramApiHash,
-    TelegramSessionKey,
-    TelegramBotToken,
-    WhatsappWebSessionKey,
-    WhatsappBusinessCloudAccessToken,
-    WhatsappBusinessCloudAppSecret,
-    WhatsappBusinessCloudWebhookVerifyToken,
-    ZulipApiKey,
-    ZoomOauthToken,
-    ZoomClientSecret,
-    ZoomWebhookSecret,
-    YandexTelemostOauthToken,
-}
-
-impl ProviderAccountSecretPurpose {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::OauthToken => "oauth_token",
-            Self::ImapPassword => "imap_password",
-            Self::SmtpPassword => "smtp_password",
-            Self::TelegramApiHash => "telegram_api_hash",
-            Self::TelegramSessionKey => "telegram_session_key",
-            Self::TelegramBotToken => "telegram_bot_token",
-            Self::WhatsappWebSessionKey => "whatsapp_web_session_key",
-            Self::WhatsappBusinessCloudAccessToken => "whatsapp_business_cloud_access_token",
-            Self::WhatsappBusinessCloudAppSecret => "whatsapp_business_cloud_app_secret",
-            Self::WhatsappBusinessCloudWebhookVerifyToken => {
-                "whatsapp_business_cloud_webhook_verify_token"
-            }
-            Self::ZulipApiKey => "zulip_api_key",
-            Self::ZoomOauthToken => "zoom_oauth_token",
-            Self::ZoomClientSecret => "zoom_client_secret",
-            Self::ZoomWebhookSecret => "zoom_webhook_secret",
-            Self::YandexTelemostOauthToken => "yandex_telemost_oauth_token",
-        }
-    }
-
-    pub fn accepts_secret_kind(self, secret_kind: SecretKind) -> bool {
-        match self {
-            Self::OauthToken => secret_kind == SecretKind::OauthToken,
-            Self::ImapPassword | Self::SmtpPassword => {
-                matches!(secret_kind, SecretKind::AppPassword | SecretKind::Password)
-            }
-            Self::TelegramApiHash | Self::TelegramBotToken => secret_kind == SecretKind::ApiToken,
-            Self::TelegramSessionKey | Self::WhatsappWebSessionKey => {
-                matches!(secret_kind, SecretKind::PrivateKey | SecretKind::Other)
-            }
-            Self::WhatsappBusinessCloudAccessToken
-            | Self::WhatsappBusinessCloudAppSecret
-            | Self::WhatsappBusinessCloudWebhookVerifyToken
-            | Self::ZulipApiKey
-            | Self::ZoomClientSecret
-            | Self::ZoomWebhookSecret => secret_kind == SecretKind::ApiToken,
-            Self::ZoomOauthToken | Self::YandexTelemostOauthToken => {
-                secret_kind == SecretKind::OauthToken
-            }
-        }
-    }
-}
-
-impl TryFrom<&str> for ProviderAccountSecretPurpose {
-    type Error = CommunicationContractError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value.trim() {
-            "oauth_token" => Ok(Self::OauthToken),
-            "imap_password" => Ok(Self::ImapPassword),
-            "smtp_password" => Ok(Self::SmtpPassword),
-            "telegram_api_hash" => Ok(Self::TelegramApiHash),
-            "telegram_session_key" => Ok(Self::TelegramSessionKey),
-            "telegram_bot_token" => Ok(Self::TelegramBotToken),
-            "whatsapp_web_session_key" => Ok(Self::WhatsappWebSessionKey),
-            "whatsapp_business_cloud_access_token" => Ok(Self::WhatsappBusinessCloudAccessToken),
-            "whatsapp_business_cloud_app_secret" => Ok(Self::WhatsappBusinessCloudAppSecret),
-            "whatsapp_business_cloud_webhook_verify_token" => {
-                Ok(Self::WhatsappBusinessCloudWebhookVerifyToken)
-            }
-            "zulip_api_key" => Ok(Self::ZulipApiKey),
-            "zoom_oauth_token" => Ok(Self::ZoomOauthToken),
-            "zoom_client_secret" => Ok(Self::ZoomClientSecret),
-            "zoom_webhook_secret" => Ok(Self::ZoomWebhookSecret),
-            "yandex_telemost_oauth_token" => Ok(Self::YandexTelemostOauthToken),
-            other => Err(CommunicationContractError::UnsupportedSecretPurpose(
-                other.to_owned(),
-            )),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct ProviderAccountSecretBinding {
-    pub account_id: String,
-    pub secret_purpose: ProviderAccountSecretPurpose,
-    pub secret_ref: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NewProviderAccountSecretBinding {
-    pub account_id: String,
-    pub secret_purpose: ProviderAccountSecretPurpose,
-    pub secret_ref: String,
-}
-
-impl NewProviderAccountSecretBinding {
-    pub fn new(
-        account_id: impl Into<String>,
-        secret_purpose: ProviderAccountSecretPurpose,
-        secret_ref: impl Into<String>,
-    ) -> Self {
-        Self {
-            account_id: account_id.into(),
-            secret_purpose,
-            secret_ref: secret_ref.into(),
-        }
-    }
-
-    pub(crate) fn validate(&self) -> Result<(), CommunicationContractError> {
-        validate_non_empty("account_id", &self.account_id)?;
-        validate_non_empty("secret_ref", &self.secret_ref)
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -866,7 +501,7 @@ pub struct GmailHistoryFetchRequest {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImapMessageFetchRequest {
     pub account_id: String,
-    pub provider_kind: EmailProviderKind,
+    pub provider_kind: CommunicationProviderKind,
     pub host: String,
     pub port: u16,
     pub tls: bool,
@@ -1087,175 +722,6 @@ pub trait EmailProviderSyncPort: Send + Sync {
         request: ImapIdleWaitRequest,
     ) -> Pin<
         Box<dyn Future<Output = Result<ImapIdleWaitOutcome, EmailProviderSyncError>> + Send + 'a>,
-    >;
-}
-
-#[derive(Debug, Error)]
-#[error("communication provider account port error: {0}")]
-pub struct ProviderAccountPortError(pub String);
-
-impl ProviderAccountPortError {
-    pub fn new(error: impl std::fmt::Display) -> Self {
-        Self(error.to_string())
-    }
-}
-
-#[derive(Debug, Error)]
-#[error("communication provider secret binding port error: {0}")]
-pub struct ProviderSecretBindingPortError(pub String);
-
-impl ProviderSecretBindingPortError {
-    pub fn new(error: impl std::fmt::Display) -> Self {
-        Self(error.to_string())
-    }
-}
-
-pub trait ProviderAccountLookupPort: Send + Sync {
-    fn get<'a>(
-        &'a self,
-        account_id: &'a str,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<Option<ProviderAccount>, ProviderAccountPortError>>
-                + Send
-                + 'a,
-        >,
-    >;
-
-    fn list<'a>(
-        &'a self,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<Vec<ProviderAccount>, ProviderAccountPortError>> + Send + 'a,
-        >,
-    >;
-}
-
-pub trait ProviderAccountCommandPort: ProviderAccountLookupPort {
-    fn upsert<'a>(
-        &'a self,
-        account: &'a NewProviderAccount,
-    ) -> Pin<Box<dyn Future<Output = Result<ProviderAccount, ProviderAccountPortError>> + Send + 'a>>;
-
-    fn upsert_runtime_account<'a>(
-        &'a self,
-        account_id: String,
-        provider_kind: String,
-        display_name: String,
-        external_account_id: String,
-        config: Value,
-    ) -> Pin<Box<dyn Future<Output = Result<ProviderAccount, ProviderAccountPortError>> + Send + 'a>>;
-
-    fn update_config<'a>(
-        &'a self,
-        account_id: &'a str,
-        config: &'a Value,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<Option<ProviderAccount>, ProviderAccountPortError>>
-                + Send
-                + 'a,
-        >,
-    >;
-
-    fn update_config_with_origin<'a>(
-        &'a self,
-        account_id: &'a str,
-        config: &'a Value,
-        origin_kind: ObservationOriginKind,
-        actor: &'a str,
-        action: &'a str,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<Option<ProviderAccount>, ProviderAccountPortError>>
-                + Send
-                + 'a,
-        >,
-    >;
-
-    fn mark_logged_out<'a>(
-        &'a self,
-        account_id: &'a str,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<Option<ProviderAccount>, ProviderAccountPortError>>
-                + Send
-                + 'a,
-        >,
-    >;
-
-    fn delete_metadata<'a>(
-        &'a self,
-        account_id: &'a str,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<DeletedProviderAccount, ProviderAccountPortError>>
-                + Send
-                + 'a,
-        >,
-    >;
-}
-
-pub trait ProviderSecretBindingLookupPort: Send + Sync {
-    fn list_for_account<'a>(
-        &'a self,
-        account_id: &'a str,
-    ) -> Pin<
-        Box<
-            dyn Future<
-                    Output = Result<
-                        Vec<ProviderAccountSecretBinding>,
-                        ProviderSecretBindingPortError,
-                    >,
-                > + Send
-                + 'a,
-        >,
-    >;
-
-    fn get_for_account<'a>(
-        &'a self,
-        account_id: &'a str,
-        secret_purpose: ProviderAccountSecretPurpose,
-    ) -> Pin<
-        Box<
-            dyn Future<
-                    Output = Result<
-                        Option<ProviderAccountSecretBinding>,
-                        ProviderSecretBindingPortError,
-                    >,
-                > + Send
-                + 'a,
-        >,
-    >;
-}
-
-pub trait ProviderSecretBindingCommandPort: ProviderSecretBindingLookupPort {
-    fn bind<'a>(
-        &'a self,
-        binding: &'a NewProviderAccountSecretBinding,
-    ) -> Pin<
-        Box<
-            dyn Future<
-                    Output = Result<ProviderAccountSecretBinding, ProviderSecretBindingPortError>,
-                > + Send
-                + 'a,
-        >,
-    >;
-
-    fn unbind_for_account<'a>(
-        &'a self,
-        account_id: &'a str,
-        secret_purpose: ProviderAccountSecretPurpose,
-    ) -> Pin<
-        Box<
-            dyn Future<
-                    Output = Result<
-                        Option<ProviderAccountSecretBinding>,
-                        ProviderSecretBindingPortError,
-                    >,
-                > + Send
-                + 'a,
-        >,
     >;
 }
 

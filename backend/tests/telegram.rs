@@ -1,6 +1,6 @@
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationProviderKind, ProviderAccountSecretPurpose,
-};
+use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+
 use hermes_hub_backend::platform::secrets::SecretKind;
 
 #[test]

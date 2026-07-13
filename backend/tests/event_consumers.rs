@@ -1,3 +1,4 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -5,27 +6,29 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::Utc;
 use serde_json::json;
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionPort, CommunicationProviderAccountStore, CommunicationProviderKind,
-    NewProviderAccount,
-};
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_events_api::{NewEventEnvelope, StoredEventEnvelope};
+use hermes_events_postgres::consumers::EventConsumerConfig;
+use hermes_events_postgres::consumers::EventConsumerRunner;
+use hermes_events_postgres::consumers::EventDeadLetterReviewState;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::domains::communications::messages::{
     COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, ProviderChannelMessageStore,
     consume_accepted_signal_event, project_provider_observation_event,
 };
-use hermes_hub_backend::domains::signal_hub::{
-    SIGNAL_HUB_RAW_SIGNAL_CONSUMER, dispatch_telegram_raw_signal, process_signal_hub_raw_event,
+use hermes_hub_backend::domains::signal_hub::service::{
+    SIGNAL_HUB_RAW_SIGNAL_CONSUMER, process_signal_hub_raw_event,
 };
+use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
 use hermes_hub_backend::integrations::telegram::client::{
     NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramStore,
 };
+
 use hermes_hub_backend::platform::communications::{
     EventStoreProviderMessageObservationEventPort, ProviderMessageObservationEvent,
     ProviderMessageObservationEventPort,
-};
-use hermes_hub_backend::platform::events::{
-    EventConsumerConfig, EventConsumerRunner, EventDeadLetterReviewState, EventStore,
-    EventStoreError, NewEventEnvelope, StoredEventEnvelope,
 };
 use testkit::context::TestContext;
 
@@ -647,13 +650,13 @@ async fn communication_provider_observation_projection_consumes_accepted_telegra
         pool.clone(),
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
         Arc::new(
-            hermes_hub_backend::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
                 pool.clone(),
             ),
         ),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
         Arc::new(
-            hermes_hub_backend::domains::communications::core::CommunicationIngestionStore::new(
+            hermes_communications_postgres::store::CommunicationIngestionStore::new(
                 pool.clone(),
             ),
         ),
@@ -677,7 +680,7 @@ async fn communication_provider_observation_projection_consumes_accepted_telegra
         })
         .await
         .expect("ingest fixture");
-    let stored_raw = CommunicationIngestionPort::new(pool.clone())
+    let stored_raw = CommunicationIngestionStore::new(pool.clone())
         .record_raw_source(&observed.raw)
         .await
         .expect("store raw record");
@@ -854,13 +857,13 @@ async fn create_projected_telegram_message(
         pool.clone(),
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
         Arc::new(
-            hermes_hub_backend::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
                 pool.clone(),
             ),
         ),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
         Arc::new(
-            hermes_hub_backend::domains::communications::core::CommunicationIngestionStore::new(
+            hermes_communications_postgres::store::CommunicationIngestionStore::new(
                 pool.clone(),
             ),
         ),
@@ -884,7 +887,7 @@ async fn create_projected_telegram_message(
         })
         .await
         .expect("ingest fixture");
-    let stored_raw = CommunicationIngestionPort::new(pool.clone())
+    let stored_raw = CommunicationIngestionStore::new(pool.clone())
         .record_raw_source(&observed.raw)
         .await
         .expect("stored raw fixture");

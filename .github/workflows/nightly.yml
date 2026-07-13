@@ -5,6 +5,9 @@ on:
     - cron: '0 3 * * *'
   workflow_dispatch:
 
+env:
+  CARGO_INCREMENTAL: "0"
+
 jobs:
   backend-e2e:
     name: Backend e2e

@@ -1,12 +1,14 @@
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
-use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
+use crate::platform::events::bus::InMemoryEventBus;
+use hermes_events_postgres::store::EventStore;
 
 pub(super) async fn emit_media_upload_event(
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     pool: &PgPool,
     command: &TelegramProviderWriteCommand,
     event_type: &str,

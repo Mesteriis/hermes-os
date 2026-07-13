@@ -1,7 +1,7 @@
 use chrono::Utc;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
-};
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
@@ -50,7 +50,7 @@ impl<'a> EmailFactory<'a> {
         self,
     ) -> Result<
         (NewProviderAccount, NewRawCommunicationRecord),
-        hermes_hub_backend::domains::communications::core::CommunicationIngestionError,
+        hermes_communications_postgres::errors::CommunicationIngestionError,
     > {
         let store = CommunicationIngestionStore::new(self.pool.clone());
 
@@ -59,7 +59,7 @@ impl<'a> EmailFactory<'a> {
             .unwrap_or_else(|| format!("acct:{}", Uuid::new_v4()));
         let account = NewProviderAccount {
             account_id: account_id.clone(),
-            provider_kind: EmailProviderKind::Gmail,
+            provider_kind: CommunicationProviderKind::Gmail,
             display_name: "Test Gmail Account".into(),
             external_account_id: format!("gm-{}", Uuid::new_v4()),
             config: serde_json::json!({"email": self.from_address}),

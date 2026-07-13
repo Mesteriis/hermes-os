@@ -2,12 +2,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
+use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::domains::personas::identity::{
     PersonaIdentityError, PersonaIdentityReviewCommand, PersonaIdentityReviewState,
     PersonaIdentityReviewStore,
 };
-use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::json;
 use sqlx::postgres::PgPool;

@@ -2,7 +2,8 @@ use reqwest::Url;
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::{OmniRouteClient, OmniRouteError};
+use super::OmniRouteClient;
+use super::error::OmniRouteError;
 
 impl OmniRouteClient {
     fn endpoint(&self, path: &str) -> Result<Url, OmniRouteError> {

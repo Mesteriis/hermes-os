@@ -1,11 +1,10 @@
 use chrono::Utc;
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use serde_json::json;
 
 use hermes_hub_backend::domains::communications::bulk_actions::{
     BulkMessageAction, BulkMessageActionStore,
-};
-use hermes_hub_backend::domains::communications::core::{
-    EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
 use hermes_hub_backend::domains::communications::folders::{
     CommunicationFolderStore, NewCommunicationFolder,
@@ -515,7 +514,7 @@ async fn message_projection_projects_imap_mailbox_folder_membership_against_post
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Projection IMAP folder mapping",
             format!("projection-imap-folder-mapping-{suffix}@example.com"),
         ))
@@ -605,7 +604,7 @@ async fn message_projection_scopes_imap_uid_to_uid_validity_against_postgres() {
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Projection IMAP UIDVALIDITY",
             format!("projection-imap-uid-validity-{suffix}@example.com"),
         ))
@@ -687,7 +686,7 @@ async fn provider_folder_mapping_reconciles_existing_imap_messages_against_postg
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Projection IMAP late folder mapping",
             format!("projection-imap-late-folder-mapping-{suffix}@example.com"),
         ))
@@ -799,7 +798,7 @@ async fn manual_folder_copy_keeps_membership_after_provider_mapping_is_removed_a
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Projection IMAP manual folder ownership",
             format!("projection-imap-manual-folder-ownership-{suffix}@example.com"),
         ))
@@ -908,7 +907,7 @@ async fn message_projection_marks_imap_sent_only_from_semantic_folder_mapping_ag
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Projection IMAP sent mapping",
             format!("projection-imap-sent-mapping-{suffix}@example.com"),
         ))
@@ -986,7 +985,7 @@ async fn message_projection_links_imap_sent_record_to_outbox_by_rfc822_message_i
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Projection IMAP sent outbox correlation",
             format!("projection-imap-sent-correlation-{suffix}@example.com"),
         ))

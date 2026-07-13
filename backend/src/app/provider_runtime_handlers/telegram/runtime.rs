@@ -3,13 +3,25 @@ use axum::extract::{Query, State};
 use serde::Deserialize;
 
 use super::helpers::AUDIT_ACTOR_ID;
-use crate::app::api_support::{api_audit_log, telegram_runtime_use_case_context};
+use crate::app::api_support::{
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
+};
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::{
+use crate::application::telegram_runtime;
+use crate::integrations::telegram::runtime::{
     TelegramRuntimeRestartRequest, TelegramRuntimeStartRequest, TelegramRuntimeStatus,
     TelegramRuntimeStopRequest,
 };
-use crate::application::telegram_runtime;
 use crate::platform::audit::NewApiAuditRecord;
 
 #[derive(Deserialize)]

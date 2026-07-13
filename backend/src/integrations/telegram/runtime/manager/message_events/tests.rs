@@ -25,7 +25,7 @@ async fn publish_message_content_updated_event_skips_without_projected_message()
     let provider_chat_id = "-100content-runtime";
     let provider_message_id = "42";
     let provider_message_ref = format!("{provider_chat_id}:{provider_message_id}");
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     let mut events = event_bus.subscribe();
 
     seed_runtime_account(&pool, account_id, "telegram-ext-content").await;
@@ -77,7 +77,7 @@ async fn publish_message_created_event_publishes_signal_hub_raw_signal_instead_o
     let pool = ctx.pool().clone();
     let account_id = "acct-created-runtime";
     let provider_chat_id = "-100created-runtime";
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     let mut events = event_bus.subscribe();
 
     seed_runtime_account(&pool, account_id, "telegram-ext-created").await;
@@ -150,7 +150,7 @@ async fn publish_message_edited_event_skips_without_projected_message() {
     let provider_chat_id = "-100edited-runtime";
     let provider_message_id = "42";
     let provider_message_ref = format!("{provider_chat_id}:{provider_message_id}");
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     let mut events = event_bus.subscribe();
     let edit_timestamp = Utc::now();
 
@@ -205,7 +205,7 @@ async fn publish_reaction_changed_event_skips_without_projected_message() {
     let provider_chat_id = "-100reaction-runtime";
     let provider_message_id = "42";
     let provider_message_ref = format!("{provider_chat_id}:{provider_message_id}");
-    let event_bus = EventBus::new();
+    let event_bus = InMemoryEventBus::new();
     let mut events = event_bus.subscribe();
 
     seed_runtime_account(&pool, account_id, "telegram-ext-reaction").await;

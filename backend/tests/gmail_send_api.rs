@@ -1,3 +1,7 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
+};
 use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
@@ -10,11 +14,9 @@ use sqlx::Row;
 use tempfile::tempdir;
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
-};
+
 use hermes_hub_backend::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
@@ -60,7 +62,7 @@ async fn gmail_send_api_queues_outbox_when_send_scope_enabled_against_postgres()
         .upsert_provider_account(
             &NewProviderAccount::new(
                 account_id,
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 "Gmail Send Enabled",
                 "sender@gmail.com",
             )

@@ -8,7 +8,9 @@ use crate::domains::communications::delivery_notifications::{
 use crate::domains::communications::read_receipts::{
     CommunicationReadReceipt, CommunicationReadReceiptStore, NewCommunicationReadReceipt,
 };
-use crate::domains::signal_hub::{MailDeliverySignalRequest, dispatch_mail_delivery_event_signal};
+use crate::domains::signal_hub::mail::{
+    MailDeliverySignalRequest, dispatch_mail_delivery_event_signal,
+};
 
 pub(crate) async fn post_v1_read_receipt(
     State(state): State<AppState>,
@@ -54,7 +56,7 @@ fn read_receipt_store(state: &AppState) -> Result<CommunicationReadReceiptStore,
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(crate::app::api_support::app_store::<
+    Ok(crate::app::api_support::stores::domain_stores::app_store::<
         CommunicationReadReceiptStore,
     >(pool))
 }

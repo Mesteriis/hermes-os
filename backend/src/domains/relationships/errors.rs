@@ -1,7 +1,6 @@
 use thiserror::Error;
 
-use crate::domains::graph::core::GraphStoreError;
-use crate::platform::observations::ObservationStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, Error)]
 pub enum RelationshipStoreError {
@@ -10,9 +9,6 @@ pub enum RelationshipStoreError {
 
     #[error(transparent)]
     Observation(#[from] ObservationStoreError),
-
-    #[error(transparent)]
-    Graph(#[from] GraphStoreError),
 
     #[error("{0} must not be empty")]
     EmptyField(&'static str),

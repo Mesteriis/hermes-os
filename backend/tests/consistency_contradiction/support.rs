@@ -1,24 +1,27 @@
 #![allow(dead_code)]
 
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::Utc;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, CommunicationProviderKind, EmailProviderKind, NewProviderAccount,
-    NewRawCommunicationRecord,
-};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, consume_accepted_signal_event, project_raw_email_message,
 };
-use hermes_hub_backend::domains::signal_hub::{
-    dispatch_telegram_raw_signal, dispatch_whatsapp_raw_signal, dispatch_zulip_raw_signal,
-};
-use hermes_hub_backend::integrations::zulip::event_mapper::{
-    ZulipEventMappingContext, map_zulip_event_to_raw_record,
-};
-use hermes_hub_backend::integrations::zulip::models::ZulipEvent;
+use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
+use hermes_hub_backend::domains::signal_hub::whatsapp::dispatch_whatsapp_raw_signal;
+use hermes_hub_backend::domains::signal_hub::zulip::dispatch_zulip_raw_signal;
+
 use hermes_hub_backend::platform::storage::Database;
+use hermes_provider_orchestration::observation_to_raw_communication_record;
+use hermes_provider_zulip::event_mapper::{
+    ZulipEventMappingContext, map_zulip_event_to_observation,
+};
+use hermes_provider_zulip::models::ZulipEvent;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 
@@ -53,7 +56,7 @@ pub async fn seed_message(
     ingestion_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Polygraph Gmail",
             format!("polygraph-{suffix}@example.com"),
         ))
@@ -250,8 +253,9 @@ pub async fn seed_zulip_message(
         ZulipEventMappingContext::new(&account_id, "http://localhost:8080", Utc::now())
             .with_import_batch_id(format!("batch-polygraph-zulip-{suffix}"))
             .with_scenario_id(format!("polygraph-zulip-{suffix}"));
-    let new_raw_record =
-        map_zulip_event_to_raw_record(&event, &mapping_context).expect("map Zulip event");
+    let new_raw_record = observation_to_raw_communication_record(
+        map_zulip_event_to_observation(&event, &mapping_context).expect("map Zulip event"),
+    );
     let raw = ingestion_store
         .record_raw_source(&new_raw_record)
         .await

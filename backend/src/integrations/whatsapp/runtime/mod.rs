@@ -1,5 +1,13 @@
+use hermes_communications_api::accounts::ProviderAccountMutationOrigin;
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, ProviderAccount, ProviderSecretBindingCommandPort,
+};
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountCommandPort, ProviderAccountSecretBinding,
+    ProviderAccountSecretPurpose,
+};
 mod business_cloud;
-mod contracts;
+pub(crate) mod contracts;
 mod native_md;
 mod web_companion;
 
@@ -27,16 +35,12 @@ use crate::integrations::whatsapp::client::{
     WhatsappWebObservedStatusDelete, WhatsappWebObservedStatusView, WhatsappWebSession,
     WhatsappWebStore,
 };
-use crate::platform::communications::{
-    CommunicationProviderKind, NewProviderAccountSecretBinding, ProviderAccount,
-    ProviderAccountCommandPort, ProviderAccountSecretPurpose, ProviderChannelMessageLookupPort,
-    ProviderSecretBindingCommandPort,
-};
+use crate::platform::communications::ProviderChannelMessageLookupPort;
 use crate::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretResolver, SecretStoreKind,
 };
 use crate::vault::{HostVault, SecretEntryContext};
-pub use contracts::*;
+use contracts::*;
 
 pub const WHATSAPP_OUTBOX_WORKER_ID: &str = "whatsapp-outbox-worker";
 const RETRY_BASE_DELAY_SECONDS: i64 = 30;
@@ -2971,7 +2975,7 @@ impl WhatsappWebStore {
             .update_config_with_origin(
                 &account.account_id,
                 &config,
-                crate::platform::observations::ObservationOriginKind::LocalRuntime,
+                ProviderAccountMutationOrigin::LocalRuntime,
                 actor,
                 "runtime_kind_update",
             )
@@ -3021,7 +3025,7 @@ impl WhatsappWebStore {
             .update_config_with_origin(
                 &account.account_id,
                 &config,
-                crate::platform::observations::ObservationOriginKind::LocalRuntime,
+                ProviderAccountMutationOrigin::LocalRuntime,
                 actor,
                 lifecycle_state,
             )
@@ -4411,7 +4415,7 @@ impl WhatsappWebStore {
         &self,
         secret_store: &SecretReferenceStore,
         vault: &HostVault,
-        bindings: Vec<Option<crate::platform::communications::ProviderAccountSecretBinding>>,
+        bindings: Vec<Option<hermes_communications_api::accounts::ProviderAccountSecretBinding>>,
         single_purpose: Option<ProviderAccountSecretPurpose>,
         account_id: &str,
     ) -> Result<Vec<String>, WhatsappWebError> {

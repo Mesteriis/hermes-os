@@ -1,6 +1,7 @@
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
@@ -13,10 +14,13 @@ use crate::integrations::whatsapp::client::{
     NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage, NewWhatsappWebMessageDelete,
     NewWhatsappWebMessageUpdate, NewWhatsappWebReaction, NewWhatsappWebStatus,
 };
-use crate::integrations::whatsapp::runtime::{
+use crate::integrations::whatsapp::runtime::WhatsAppProviderWriteCommand;
+use crate::integrations::whatsapp::runtime::contracts::{
     WhatsAppProviderApiAccessToken, WhatsAppProviderCommandExecutionError,
     WhatsAppProviderExecutableCommand, WhatsAppProviderInMemoryMediaBytes,
-    WhatsAppProviderMediaDownloadRef, WhatsAppProviderWriteCommand,
+    WhatsAppProviderMediaDownloadRef,
+};
+use crate::integrations::whatsapp::runtime::{
     claim_due_business_cloud_commands_for_execution, claim_due_commands_for_execution,
     claim_due_native_md_commands_for_execution, dead_letter_failed_command,
     import_canonical_provider_commands, record_live_provider_command_submitted,
@@ -25,13 +29,14 @@ use crate::integrations::whatsapp::runtime::{
     whatsapp_native_md_media_download_secret_ref,
 };
 use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::whatsapp_event_types;
-use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
 use crate::vault::{HostVault, HostVaultError};
+use hermes_events_postgres::store::EventStore;
 
 use super::communication_fixture_ingest::CommunicationFixtureIngestError;
 use super::communication_fixture_ingest::WhatsappFixtureIngestApplicationService;
-use super::provider_runtime_contracts::WhatsAppProviderRuntimeRef;
+use super::provider_runtime_services::WhatsAppProviderRuntimeRef;
 
 const WHATSAPP_COMMAND_EXECUTOR_RUNTIME: &str = "whatsapp_command_executor";
 static WHATSAPP_COMMAND_EXECUTOR_EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -40,7 +45,7 @@ pub(crate) async fn execute_due_fixture_commands(
     pool: PgPool,
     runtime: WhatsAppProviderRuntimeRef,
     event_store: EventStore,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
     limit: i64,
 ) {
     let now = Utc::now();
@@ -170,7 +175,7 @@ pub(crate) async fn execute_due_live_native_md_commands(
     runtime: WhatsAppProviderRuntimeRef,
     vault: HostVault,
     event_store: EventStore,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
     limit: i64,
 ) {
     let now = Utc::now();
@@ -355,7 +360,7 @@ pub(crate) async fn execute_due_live_business_cloud_commands(
     runtime: WhatsAppProviderRuntimeRef,
     vault: HostVault,
     event_store: EventStore,
-    event_bus: EventBus,
+    event_bus: InMemoryEventBus,
     limit: i64,
 ) {
     let now = Utc::now();
@@ -690,7 +695,7 @@ async fn prepare_live_native_md_media_download(
 async fn persist_live_native_md_media_download(
     fixture_ingest: &WhatsappFixtureIngestApplicationService,
     command: &WhatsAppProviderWriteCommand,
-    outcome: &crate::integrations::whatsapp::runtime::WhatsAppProviderCommandExecutionOutcome,
+    outcome: &crate::integrations::whatsapp::runtime::contracts::WhatsAppProviderCommandExecutionOutcome,
 ) -> Result<(), WhatsAppProviderCommandExecutionError> {
     let Some(media_bytes) = outcome.downloaded_media_bytes.as_ref() else {
         return Err(WhatsAppProviderCommandExecutionError::new(
@@ -978,7 +983,7 @@ fn media_download_provider_attachment_id(command: &WhatsAppProviderWriteCommand)
 
 fn media_download_content_type(
     command: &WhatsAppProviderWriteCommand,
-    outcome: &crate::integrations::whatsapp::runtime::WhatsAppProviderCommandExecutionOutcome,
+    outcome: &crate::integrations::whatsapp::runtime::contracts::WhatsAppProviderCommandExecutionOutcome,
 ) -> String {
     command_value_string(command, "content_type")
         .or_else(|| {
@@ -996,7 +1001,7 @@ fn media_download_content_type(
 async fn record_live_native_md_command_failure(
     pool: &PgPool,
     event_store: &EventStore,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     media_event_ingest: &WhatsappFixtureIngestApplicationService,
     command: &WhatsAppProviderWriteCommand,
     error: &WhatsAppProviderCommandExecutionError,
@@ -1074,7 +1079,7 @@ async fn record_live_native_md_command_failure(
 async fn record_live_business_cloud_command_failure(
     pool: &PgPool,
     event_store: &EventStore,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     media_event_ingest: &WhatsappFixtureIngestApplicationService,
     command: &WhatsAppProviderWriteCommand,
     error: &WhatsAppProviderCommandExecutionError,
@@ -1582,11 +1587,11 @@ async fn execute_claimed_command(
 
 async fn publish_command_event(
     event_store: &EventStore,
-    event_bus: &EventBus,
+    event_bus: &InMemoryEventBus,
     event_type: &str,
     command: &WhatsAppProviderWriteCommand,
     extra_payload: Value,
-) -> Result<(), crate::platform::events::EventStoreError> {
+) -> Result<(), hermes_events_postgres::errors::EventStoreError> {
     let now = Utc::now();
     let source = extra_payload
         .get("source")
@@ -1653,7 +1658,7 @@ fn fixture_error(error: CommunicationFixtureIngestError) -> String {
 async fn publish_media_execution_started_event(
     fixture_ingest: &WhatsappFixtureIngestApplicationService,
     command: &WhatsAppProviderWriteCommand,
-) -> Result<(), crate::platform::events::EventStoreError> {
+) -> Result<(), hermes_events_postgres::errors::EventStoreError> {
     match command.command_kind.as_str() {
         "send_media" | "send_voice_note" => {
             publish_media_event(
@@ -1694,7 +1699,7 @@ async fn publish_media_execution_failed_event(
     fixture_ingest: &WhatsappFixtureIngestApplicationService,
     command: &WhatsAppProviderWriteCommand,
     error: &str,
-) -> Result<(), crate::platform::events::EventStoreError> {
+) -> Result<(), hermes_events_postgres::errors::EventStoreError> {
     match command.command_kind.as_str() {
         "send_media" | "send_voice_note" => {
             publish_media_event(
@@ -1792,7 +1797,7 @@ async fn publish_media_event(
     event_type: &str,
     command: &WhatsAppProviderWriteCommand,
     extra_payload: Value,
-) -> Result<(), crate::platform::events::EventStoreError> {
+) -> Result<(), hermes_events_postgres::errors::EventStoreError> {
     let now = Utc::now();
     let source_id = format!(
         "{}:{}:{}",
@@ -1819,7 +1824,7 @@ async fn publish_media_event(
         )
         .await
     {
-        return Err(crate::platform::events::EventStoreError::Sqlx(
+        return Err(hermes_events_postgres::errors::EventStoreError::Sqlx(
             sqlx::Error::Protocol(format!(
                 "failed to capture whatsapp media runtime event: {error}"
             )),

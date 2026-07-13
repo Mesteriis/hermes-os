@@ -16,7 +16,7 @@ pub(crate) async fn get_meeting_notes(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<MeetingNoteStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<MeetingNoteStore>(pool)
         .list(&event_id)
         .await
         .map_err(ApiError::from)?;
@@ -69,10 +69,11 @@ pub(crate) async fn get_meeting_outcomes(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<MeetingOutcomeStore>(pool)
-        .list(&event_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<MeetingOutcomeStore>(pool)
+            .list(&event_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(MeetingOutcomesResponse { items }))
 }
 
@@ -118,7 +119,7 @@ pub(crate) async fn post_event_follow_up(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    crate::app::api_support::app_store::<CalendarEventStore>(pool.clone())
+    crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(pool.clone())
         .set_status_manual(
             &event_id,
             "needs_follow_up",
@@ -137,10 +138,11 @@ pub(crate) async fn get_event_follow_up_status(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let status = crate::app::api_support::app_store::<MeetingOutcomeStore>(pool)
-        .follow_up_status(&event_id)
-        .await
-        .map_err(ApiError::from)?;
+    let status =
+        crate::app::api_support::stores::domain_stores::app_store::<MeetingOutcomeStore>(pool)
+            .follow_up_status(&event_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(status))
 }
 
@@ -160,10 +162,11 @@ pub(crate) async fn get_event_recordings(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<EventRecordingStore>(pool)
-        .list(&event_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items =
+        crate::app::api_support::stores::domain_stores::app_store::<EventRecordingStore>(pool)
+            .list(&event_id)
+            .await
+            .map_err(ApiError::from)?;
     Ok(Json(EventRecordingsResponse { items }))
 }
 
@@ -206,7 +209,7 @@ pub(crate) async fn get_event_transcript(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let t = crate::app::api_support::app_store::<EventTranscriptStore>(pool)
+    let t = crate::app::api_support::stores::domain_stores::app_store::<EventTranscriptStore>(pool)
         .get(&event_id)
         .await
         .map_err(ApiError::from)?;

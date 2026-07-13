@@ -22,7 +22,7 @@ pub(crate) async fn get_deadlines(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<DeadlineStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<DeadlineStore>(pool)
         .list(query.status.as_deref(), query.limit.unwrap_or(50))
         .await
         .map_err(ApiError::from)?;
@@ -83,7 +83,7 @@ pub(crate) async fn get_focus_blocks(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::app::api_support::app_store::<FocusBlockStore>(pool)
+    let items = crate::app::api_support::stores::domain_stores::app_store::<FocusBlockStore>(pool)
         .list(query.from, query.to, query.limit.unwrap_or(50))
         .await
         .map_err(ApiError::from)?;
@@ -140,12 +140,13 @@ pub(crate) async fn post_smart_schedule(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let events = crate::app::api_support::app_store::<CalendarEventStore>(pool)
-        .list(&CalendarEventListQuery {
-            limit: Some(200),
-            ..Default::default()
-        })
-        .await?;
+    let events =
+        crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(pool)
+            .list(&CalendarEventListQuery {
+                limit: Some(200),
+                ..Default::default()
+            })
+            .await?;
     let pairs: Vec<(DateTime<Utc>, DateTime<Utc>)> =
         events.iter().map(|e| (e.start_at, e.end_at)).collect();
     let slots = SmartSchedulingService::find_slots(

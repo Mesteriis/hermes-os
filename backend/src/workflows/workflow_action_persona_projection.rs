@@ -2,7 +2,8 @@ use sqlx::{Postgres, Transaction};
 
 use crate::domains::communications::messages::ProjectedMessage;
 use crate::domains::personas::api::{PersonaProjectionError, PersonaProjectionPort};
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationPort};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 
 pub(crate) async fn create_persona_projection_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
@@ -15,7 +16,7 @@ pub(crate) async fn create_persona_projection_in_transaction(
     let projection_observation_id = if let Some(message) = message {
         message.observation_id.clone()
     } else {
-        ObservationPort::capture_in_transaction(
+        ObservationStore::capture_in_transaction(
             transaction,
             &NewObservation::new(
                 "PERSONA_MUTATION",

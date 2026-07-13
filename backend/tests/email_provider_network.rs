@@ -9,9 +9,11 @@ use chrono::{TimeZone, Utc};
 use serde_json::json;
 use sqlx::Row;
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, CommunicationProviderKind as PlatformEmailProviderKind,
+    NewProviderAccount,
 };
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::storage::{
     CommunicationStorageStore, LocalCommunicationBlobStore,
 };
@@ -22,12 +24,10 @@ use hermes_hub_backend::integrations::mail::gmail::client::{
 use hermes_hub_backend::integrations::mail::sync::{
     EmailSyncBatch, FetchedCommunicationSourceMessage,
 };
-use hermes_hub_backend::platform::communications::{
-    AddressBookProviderUpsertRequest, EmailProviderKind as PlatformEmailProviderKind,
-};
+use hermes_hub_backend::platform::communications::AddressBookProviderUpsertRequest;
 use hermes_hub_backend::platform::secrets::ResolvedSecret;
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::email_sync_pipeline::{
+use hermes_hub_backend::workflows::email_sync_pipeline::recording::{
     record_email_sync_batch, record_email_sync_batch_with_mail_blobs,
 };
 
@@ -42,7 +42,7 @@ async fn gmail_api_client_fetches_raw_messages_with_bearer_token() {
         .await
         .expect("fetch gmail messages");
 
-    assert_eq!(batch.provider_kind, EmailProviderKind::Gmail);
+    assert_eq!(batch.provider_kind, CommunicationProviderKind::Gmail);
     assert_eq!(batch.stream_id, "gmail:history");
     assert_eq!(
         batch.checkpoint,
@@ -159,7 +159,7 @@ async fn imap_network_client_fetches_raw_messages_by_uid_without_mutating_mailbo
         .await
         .expect("fetch IMAP messages");
 
-    assert_eq!(batch.provider_kind, EmailProviderKind::Imap);
+    assert_eq!(batch.provider_kind, CommunicationProviderKind::Imap);
     assert_eq!(batch.stream_id, "imap:Archive");
     assert_eq!(
         batch.checkpoint,
@@ -398,7 +398,7 @@ async fn email_sync_records_provider_network_batch_against_postgres() {
     store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Network Gmail",
             format!("network-batch-{suffix}@example.com"),
         ))
@@ -406,7 +406,7 @@ async fn email_sync_records_provider_network_batch_against_postgres() {
         .expect("store provider account");
 
     let batch = EmailSyncBatch {
-        provider_kind: EmailProviderKind::Gmail,
+        provider_kind: CommunicationProviderKind::Gmail,
         stream_id: "gmail:history".to_owned(),
         checkpoint: Some(json!({"provider": "gmail", "history_id": "12345"})),
         messages: vec![FetchedCommunicationSourceMessage {
@@ -474,7 +474,7 @@ async fn email_sync_records_provider_batches_with_mail_blobs_against_postgres() 
     store
         .upsert_provider_account(&NewProviderAccount::new(
             &gmail_account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Blob Gmail",
             format!("blob-gmail-{suffix}@example.com"),
         ))
@@ -483,7 +483,7 @@ async fn email_sync_records_provider_batches_with_mail_blobs_against_postgres() 
     store
         .upsert_provider_account(&NewProviderAccount::new(
             &imap_account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "Blob IMAP",
             format!("blob-imap-{suffix}@example.net"),
         ))
@@ -491,7 +491,7 @@ async fn email_sync_records_provider_batches_with_mail_blobs_against_postgres() 
         .expect("store imap provider account");
 
     let gmail_batch = EmailSyncBatch {
-        provider_kind: EmailProviderKind::Gmail,
+        provider_kind: CommunicationProviderKind::Gmail,
         stream_id: "gmail:history".to_owned(),
         checkpoint: Some(json!({"provider": "gmail", "history_id": "blob-123"})),
         messages: vec![FetchedCommunicationSourceMessage {
@@ -506,7 +506,7 @@ async fn email_sync_records_provider_batches_with_mail_blobs_against_postgres() 
         }],
     };
     let imap_batch = EmailSyncBatch {
-        provider_kind: EmailProviderKind::Imap,
+        provider_kind: CommunicationProviderKind::Imap,
         stream_id: "imap:INBOX".to_owned(),
         checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 77})),
         messages: vec![FetchedCommunicationSourceMessage {

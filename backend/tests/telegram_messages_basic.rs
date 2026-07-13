@@ -5,12 +5,11 @@ use chrono::Utc;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, NewRawCommunicationRecord,
-};
 use hermes_hub_backend::domains::communications::messages::consume_accepted_signal_event;
-use hermes_hub_backend::domains::signal_hub::dispatch_telegram_raw_signal;
+use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
 use hermes_hub_backend::platform::storage::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, get_request_with_token, json_body, json_post_request_with_actor,
@@ -565,6 +564,7 @@ async fn telegram_group_history_policy_is_local_and_persisted() {
     );
 
     let persisted_response = app
+        .clone()
         .oneshot(get_request_with_token(
             &format!(
                 "/api/v1/communications/conversations?account_id={account_id}&channel_kind=telegram"
@@ -605,6 +605,7 @@ async fn telegram_group_history_policy_is_local_and_persisted() {
     );
 
     let read_response = app
+        .clone()
         .oneshot(json_post_request_with_actor(
             &format!(
                 "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/read"

@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 
-use crate::engines::automation::AutomationError;
+use crate::engines::automation::errors::AutomationError;
 
 use super::super::ErrorParts;
 

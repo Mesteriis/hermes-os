@@ -4,14 +4,24 @@ use serde::Deserialize;
 
 use super::helpers::{AUDIT_ACTOR_ID, telegram_api_hash_from_config, telegram_secret_store};
 use crate::app::api_support::{
-    api_audit_log, ensure_fixture_routes_enabled, telegram_provider_runtime_service,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::signal_hub_support::{
     provider_account_or_not_found, remove_provider_account_signal_connection,
     sync_provider_account_signal_connection, sync_provider_account_signal_connection_with_status,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::{
+use crate::integrations::telegram::client::{
     TelegramAccountLifecycleResponse, TelegramAccountListResponse, TelegramAccountSetupRequest,
     TelegramAccountSetupResponse, TelegramLiveAccountSetupRequest, TelegramSecretVault,
 };

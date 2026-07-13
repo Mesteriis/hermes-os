@@ -1,19 +1,28 @@
 use chrono::{DateTime, Utc};
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationIngestionStore, CommunicationProviderAccountStore,
-    CommunicationProviderKind, CommunicationProviderSecretBindingStore, NewIngestionCheckpoint,
-    ProviderAccount, ProviderAccountSecretPurpose, ProviderCredentialReader,
+use crate::domains::communications::credentials::ProviderCredentialReader;
+use crate::domains::signal_hub::store::SignalHubError;
+use crate::domains::signal_hub::zulip::dispatch_zulip_raw_signal;
+use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_communications_postgres::provider_store::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
-use crate::domains::signal_hub::{SignalHubError, dispatch_zulip_raw_signal};
-use crate::integrations::zulip::{
-    ZulipApiClient, ZulipClientConfig, ZulipClientError, ZulipEventMappingContext,
-    map_zulip_event_to_raw_record,
-};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
+use hermes_communications_api::evidence::NewIngestionCheckpoint;
+use hermes_provider_orchestration::{
+    ProviderObservationOrchestrationError, record_provider_observation,
+};
+use hermes_provider_zulip::client::{ZulipApiClient, ZulipClientConfig, ZulipClientError};
+use hermes_provider_zulip::event_mapper::{
+    ZulipEventMappingContext, ZulipEventMappingError, map_zulip_event_to_observation,
+};
 
 const ZULIP_EVENT_QUEUE_STREAM_ID: &str = "zulip:event_queue";
 const ZULIP_EVENT_TYPES: &[&str] = &["message", "reaction", "update_message", "delete_message"];
@@ -149,11 +158,11 @@ where
 
             let mapping_context = ZulipEventMappingContext::new(&account.account_id, base_url, now)
                 .with_import_batch_id(format!("zulip-event-queue:{}", queue_state.queue_id));
-            let new_raw_record = map_zulip_event_to_raw_record(&event, &mapping_context)?;
-            let raw_record = self
-                .ingestion_store
-                .record_raw_source(&new_raw_record)
-                .await?;
+            let raw_record = record_provider_observation(
+                &self.ingestion_store,
+                map_zulip_event_to_observation(&event, &mapping_context)?,
+            )
+            .await?;
             report.raw_records_recorded += 1;
 
             if dispatch_zulip_raw_signal(self.pool.clone(), &raw_record)
@@ -380,7 +389,9 @@ pub enum ZulipEventIngestWorkerError {
     #[error(transparent)]
     Communication(#[from] CommunicationIngestionError),
     #[error(transparent)]
-    Mapping(#[from] crate::integrations::zulip::ZulipEventMappingError),
+    ProviderObservation(#[from] ProviderObservationOrchestrationError),
+    #[error(transparent)]
+    Mapping(#[from] ZulipEventMappingError),
     #[error(transparent)]
     SignalHub(#[from] SignalHubError),
 }

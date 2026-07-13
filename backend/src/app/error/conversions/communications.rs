@@ -1,10 +1,10 @@
 use super::super::types::ApiError;
-use crate::application::email_intelligence::EmailIntelligenceError;
-use crate::domains::communications::core::CommunicationIngestionError;
+use crate::domains::communications::command_service::CommunicationCommandServiceError;
 use crate::domains::communications::messages::MessageProjectionError;
-use crate::domains::communications::service::CommunicationCommandServiceError;
 use crate::domains::communications::storage::CommunicationStorageError;
 use crate::integrations::mail::accounts::EmailAccountSetupError;
+use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
+use hermes_communications_postgres::errors::CommunicationIngestionError;
 
 impl From<CommunicationIngestionError> for ApiError {
     fn from(error: CommunicationIngestionError) -> Self {

@@ -1,10 +1,9 @@
 use chrono::Utc;
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use serde_json::json;
 use testkit::context::TestContext;
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationProviderAccountStore, EmailProviderKind, NewProviderAccount,
-};
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 use hermes_hub_backend::domains::communications::drafts::{
     CommunicationDraftStore, DraftStatus, NewCommunicationDraft,
 };
@@ -48,7 +47,7 @@ async fn draft_attachments_are_ordered_and_snapshotted_into_outbox() {
     CommunicationProviderAccountStore::new(pool.clone())
         .upsert(&NewProviderAccount::new(
             account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Draft attachment account",
             "draft-attachments@example.test",
         ))
@@ -190,7 +189,7 @@ async fn draft_rejects_attachment_from_another_account_atomically() {
         CommunicationProviderAccountStore::new(pool.clone())
             .upsert(&NewProviderAccount::new(
                 account_id,
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 account_id,
                 format!("{account_id}@example.test"),
             ))
@@ -261,7 +260,7 @@ async fn permanent_attachment_failure_does_not_schedule_transport_retry() {
     CommunicationProviderAccountStore::new(pool.clone())
         .upsert(&NewProviderAccount::new(
             account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Permanent attachment failure",
             "blocked@example.test",
         ))

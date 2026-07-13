@@ -1,13 +1,13 @@
 use axum::http::StatusCode;
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use serde_json::json;
 use sqlx::Row;
 use tempfile::tempdir;
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-};
+
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
@@ -194,7 +194,7 @@ async fn gmail_send_api_queues_outbox_without_direct_gmail_client_against_postgr
         .upsert_provider_account(
             &NewProviderAccount::new(
                 account_id,
-                EmailProviderKind::Gmail,
+                CommunicationProviderKind::Gmail,
                 "Gmail Send Disabled",
                 "sender@gmail.com",
             )

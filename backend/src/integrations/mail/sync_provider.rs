@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+use hermes_communications_api::accounts::ProviderSecretBindingLookupPort;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -14,8 +16,7 @@ use crate::platform::communications::{
     DiscoveredMailProviderResource, EmailProviderSyncError, EmailProviderSyncPort, EmailSyncBatch,
     GmailHistoryFetchRequest, GmailMessageListFetchRequest, GmailResourceDiscoveryRequest,
     ImapIdleWaitOutcome, ImapIdleWaitRequest, ImapMailboxListRequest, ImapMessageFetchRequest,
-    MailProviderResourceKind, MailProviderSemanticRole, ProviderAccountSecretPurpose,
-    ProviderSecretBindingLookupPort,
+    MailProviderResourceKind, MailProviderSemanticRole,
 };
 use crate::platform::secrets::{ResolvedSecret, SecretReferenceStore, SecretResolver};
 use crate::vault::HostVault;

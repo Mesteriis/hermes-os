@@ -1,7 +1,8 @@
+use hermes_events_api::EventEnvelopeError;
 use std::path::PathBuf;
 
-use crate::platform::events::{EventEnvelopeError, EventStoreError};
-use crate::platform::observations::ObservationStoreError;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_observations_postgres::errors::ObservationStoreError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

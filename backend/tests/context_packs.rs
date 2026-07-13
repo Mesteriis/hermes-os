@@ -3,13 +3,13 @@ use testkit::context::TestContext;
 
 use chrono::{TimeZone, Utc};
 use hermes_hub_backend::engines::context_packs::{
-    ContextPackKind, ContextPackSourceKind, ContextPackStore, ContextPackStoreError,
-    NewContextPack, NewContextPackSource,
-};
-use hermes_hub_backend::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore,
+    errors::ContextPackStoreError,
+    models::{ContextPackKind, ContextPackSourceKind, NewContextPack, NewContextPackSource},
+    store::ContextPackStore,
 };
 use hermes_hub_backend::platform::storage::Database;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::store::ObservationStore;
 use serde_json::json;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 

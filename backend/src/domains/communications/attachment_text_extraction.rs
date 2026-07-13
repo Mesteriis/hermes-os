@@ -1,4 +1,5 @@
 use chrono::Utc;
+use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
 use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
@@ -13,7 +14,7 @@ use crate::platform::communications::{
     is_locally_extractable_text_type, rich_attachment_extraction_kind,
     rich_attachment_extractor_address,
 };
-use crate::platform::events::{EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
 
 const LOCAL_EXTRACTOR_NAME: &str = "hermes.local_utf8.v1";
 const RICH_EXTRACTOR_NAME: &str = "hermes.attachment_extractor.v1";
@@ -477,9 +478,9 @@ pub enum AttachmentTextExtractionServiceError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]
-    Event(#[from] crate::platform::events::EventStoreError),
+    Event(#[from] hermes_events_postgres::errors::EventStoreError),
     #[error(transparent)]
-    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    EventEnvelope(#[from] hermes_events_api::EventEnvelopeError),
     #[error("derived attachment text is not valid UTF-8")]
     InvalidDerivedText,
 }

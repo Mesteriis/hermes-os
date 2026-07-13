@@ -1,0 +1,16 @@
+[package]
+name = "hermes-provider-orchestration"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+license = "MIT"
+
+[dependencies]
+hermes-communications-api = { path = "../communications-api" }
+hermes-provider-api = { path = "../provider-api" }
+thiserror = "2"
+
+[dev-dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+serde_json = "1"

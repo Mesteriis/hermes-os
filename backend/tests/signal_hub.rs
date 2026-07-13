@@ -1,3 +1,5 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -5,31 +7,50 @@ use chrono::{Duration, Utc};
 use serde_json::json;
 use testkit::context::TestContext;
 
-use hermes_hub_backend::application::SignalHubReplayService;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionPort, CommunicationProviderAccountStore, CommunicationProviderKind,
-    NewProviderAccount, NewRawCommunicationRecord,
-};
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_events_api::EventLogQuery;
+use hermes_events_api::NewEventEnvelope;
+use hermes_events_postgres::consumers::EventConsumerConfig;
+use hermes_events_postgres::consumers::EventConsumerRunner;
+use hermes_events_postgres::consumers::EventConsumerStore;
+use hermes_events_postgres::consumers::EventDeadLetterReviewState;
+use hermes_events_postgres::cursors::ProjectionCursorStore;
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
+use hermes_hub_backend::application::signal_hub_replay::SignalHubReplayService;
 use hermes_hub_backend::domains::communications::messages::{
     COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, consume_accepted_signal_event,
     project_accepted_signal_if_runtime_allows,
 };
 use hermes_hub_backend::domains::personas::core::PERSONA_ROLE_ASSIGNED_EVENT_TYPE;
-use hermes_hub_backend::domains::signal_hub::dispatch_telegram_raw_signal;
-use hermes_hub_backend::domains::signal_hub::{
-    SIGNAL_HUB_RAW_SIGNAL_CONSUMER, SignalConnectionCreate, SignalFixtureEmitRequest,
-    SignalFixtureSourceService, SignalHealthCheckRequest, SignalHubConnectionService,
-    SignalHubControlRequest, SignalHubControlService, SignalHubHealthService,
-    SignalHubProfileService, SignalHubSignalService, SignalHubStore, SignalPolicy,
-    SignalPolicyDecision, SignalPolicyEvaluator, SignalPolicyMode, SignalPolicyScope,
-    SignalProcessingOutcome, SignalReplayRequestCreate, SignalRuntimeStateUpdate,
+use hermes_hub_backend::domains::signal_hub::connections::SignalHubConnectionService;
+use hermes_hub_backend::domains::signal_hub::controls::{
+    SignalHubControlRequest, SignalHubControlService,
+};
+use hermes_hub_backend::domains::signal_hub::fixture_source::{
+    SignalFixtureEmitRequest, SignalFixtureSourceService,
+};
+use hermes_hub_backend::domains::signal_hub::health::SignalHubHealthService;
+use hermes_hub_backend::domains::signal_hub::policies::{
+    SignalPolicyDecision, SignalPolicyEvaluator,
+};
+use hermes_hub_backend::domains::signal_hub::profiles::SignalHubProfileService;
+use hermes_hub_backend::domains::signal_hub::service::{
+    SIGNAL_HUB_RAW_SIGNAL_CONSUMER, SignalHubSignalService, SignalProcessingOutcome,
     process_signal_hub_raw_event,
 };
-use hermes_hub_backend::platform::events::{
-    EventConsumerConfig, EventConsumerRunner, EventConsumerStore, EventDeadLetterReviewState,
-    EventLogQuery, EventStore, EventStoreError, NewEventEnvelope, ProjectionCursorStore,
-    runtime_allows_processing,
+use hermes_hub_backend::domains::signal_hub::store::{
+    SignalConnectionCreate, SignalHealthCheckRequest, SignalHubStore, SignalReplayRequestCreate,
+    SignalRuntimeStateUpdate,
 };
+use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
+use hermes_signal_hub_api::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
+use hermes_signal_hub_api::runtime_lifecycle::{RuntimeLifecyclePort, RuntimeLifecycleUpdate};
+use hermes_signal_hub_postgres::raw_signals::adapter::RawSignalStore;
+use hermes_signal_hub_postgres::runtime_lifecycle::RuntimeLifecycleStore;
+
+use hermes_hub_backend::platform::events::runtime::runtime_allows_processing;
 use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
 use hermes_hub_backend::workflows::persona_derived_evidence::{
     PERSONA_DERIVED_EVIDENCE_CONSUMER, project_persona_derived_evidence_event,
@@ -104,6 +125,64 @@ async fn signal_hub_restores_canonical_sources_idempotently() {
     assert_eq!(
         profile_codes,
         vec!["development", "maintenance", "production", "testing"]
+    );
+}
+
+#[tokio::test]
+async fn supervised_runtime_failure_updates_signal_hub_state_and_health() {
+    let ctx = TestContext::new().await;
+    let store = SignalHubStore::new(ctx.pool().clone());
+    store
+        .restore_system_sources()
+        .await
+        .expect("restore system sources");
+    let lifecycle = RuntimeLifecycleStore::new(ctx.pool().clone());
+
+    lifecycle
+        .record_runtime_lifecycle(&RuntimeLifecycleUpdate::running(
+            "zulip",
+            "zulip_event_ingest",
+            "zulip_event_ingest",
+            json!({"class": "background"}),
+        ))
+        .await
+        .expect("record runtime start");
+    lifecycle
+        .record_runtime_lifecycle(&RuntimeLifecycleUpdate::degraded(
+            "zulip",
+            "zulip_event_ingest",
+            "zulip_event_ingest",
+            "provider_unavailable",
+            json!({"state": "error"}),
+        ))
+        .await
+        .expect("record runtime failure");
+
+    let runtime = store
+        .runtime_state("zulip", "zulip_event_ingest")
+        .await
+        .expect("load runtime state")
+        .expect("runtime state");
+    assert_eq!(runtime.state, "error");
+    assert_eq!(
+        runtime.last_error_code.as_deref(),
+        Some("provider_unavailable")
+    );
+
+    let health = store
+        .list_health()
+        .await
+        .expect("list health")
+        .into_iter()
+        .find(|health| health.source_code == "zulip" && health.connection_id.is_none())
+        .expect("zulip health");
+    assert_eq!(health.level, "degraded");
+    assert_eq!(
+        health
+            .evidence
+            .get("error_code")
+            .and_then(serde_json::Value::as_str),
+        Some("provider_unavailable")
     );
 }
 
@@ -317,7 +396,10 @@ async fn signal_hub_accepts_raw_signal_when_no_policy_blocks_it() {
         .await
         .expect("restore system sources");
     let event_store = EventStore::new(ctx.pool().clone());
-    let service = SignalHubSignalService::new(signal_store, event_store.clone());
+    let service = SignalHubSignalService::new(
+        Arc::new(RawSignalStore::new(ctx.pool().clone())),
+        event_store.clone(),
+    );
     let occurred_at = Utc::now();
     let raw = NewEventEnvelope::builder(
         format!(
@@ -400,7 +482,10 @@ async fn signal_hub_pause_policy_buffers_raw_signal_without_accepted_publication
         .expect("create pause policy");
 
     let event_store = EventStore::new(ctx.pool().clone());
-    let service = SignalHubSignalService::new(signal_store.clone(), event_store.clone());
+    let service = SignalHubSignalService::new(
+        Arc::new(RawSignalStore::new(ctx.pool().clone())),
+        event_store.clone(),
+    );
     let occurred_at = Utc::now();
     let raw = NewEventEnvelope::builder(
         format!(
@@ -504,7 +589,10 @@ async fn signal_hub_connection_scoped_pause_policy_matches_raw_event_account_bin
         .expect("create connection pause policy");
 
     let event_store = EventStore::new(ctx.pool().clone());
-    let service = SignalHubSignalService::new(signal_store.clone(), event_store.clone());
+    let service = SignalHubSignalService::new(
+        Arc::new(RawSignalStore::new(ctx.pool().clone())),
+        event_store.clone(),
+    );
     let occurred_at = Utc::now();
     let paused_raw = NewEventEnvelope::builder(
         format!(
@@ -663,7 +751,10 @@ async fn signal_hub_connection_status_orchestrates_operator_policy_for_signal_fl
     let event_store = EventStore::new(pool.clone());
     let connection_service =
         SignalHubConnectionService::new(signal_store.clone(), event_store.clone());
-    let signal_service = SignalHubSignalService::new(signal_store.clone(), event_store.clone());
+    let signal_service = SignalHubSignalService::new(
+        Arc::new(RawSignalStore::new(pool.clone())),
+        event_store.clone(),
+    );
 
     let connection = connection_service
         .create_connection(&SignalConnectionCreate {
@@ -678,7 +769,7 @@ async fn signal_hub_connection_status_orchestrates_operator_policy_for_signal_fl
         .expect("create paused connection");
     assert_eq!(connection.status, "paused");
 
-    let policies = signal_store
+    let policies = RawSignalStore::new(pool.clone())
         .list_active_policies()
         .await
         .expect("list active policies after create");
@@ -729,7 +820,7 @@ async fn signal_hub_connection_status_orchestrates_operator_policy_for_signal_fl
 
     let muted_connection = connection_service
         .update_connection(
-            &hermes_hub_backend::domains::signal_hub::SignalConnectionUpdate {
+            &hermes_hub_backend::domains::signal_hub::store::SignalConnectionUpdate {
                 id: connection.id.clone(),
                 display_name: None,
                 status: Some("muted".to_owned()),
@@ -783,7 +874,7 @@ async fn signal_hub_connection_status_orchestrates_operator_policy_for_signal_fl
 
     let disabled_connection = connection_service
         .update_connection(
-            &hermes_hub_backend::domains::signal_hub::SignalConnectionUpdate {
+            &hermes_hub_backend::domains::signal_hub::store::SignalConnectionUpdate {
                 id: connection.id.clone(),
                 display_name: None,
                 status: Some("disabled".to_owned()),
@@ -837,7 +928,7 @@ async fn signal_hub_connection_status_orchestrates_operator_policy_for_signal_fl
 
     let connected_connection = connection_service
         .update_connection(
-            &hermes_hub_backend::domains::signal_hub::SignalConnectionUpdate {
+            &hermes_hub_backend::domains::signal_hub::store::SignalConnectionUpdate {
                 id: connection.id.clone(),
                 display_name: None,
                 status: Some("connected".to_owned()),
@@ -850,7 +941,7 @@ async fn signal_hub_connection_status_orchestrates_operator_policy_for_signal_fl
         .expect("update connection to connected");
     assert_eq!(connected_connection.status, "connected");
 
-    let policies_after_connect = signal_store
+    let policies_after_connect = RawSignalStore::new(pool.clone())
         .list_active_policies()
         .await
         .expect("list active policies after connect");
@@ -925,7 +1016,10 @@ async fn signal_hub_replay_request_releases_paused_signal_into_accepted_flow() {
         .expect("create pause policy");
 
     let event_store = EventStore::new(ctx.pool().clone());
-    let signal_service = SignalHubSignalService::new(signal_store.clone(), event_store.clone());
+    let signal_service = SignalHubSignalService::new(
+        Arc::new(RawSignalStore::new(ctx.pool().clone())),
+        event_store.clone(),
+    );
     let replay_service = SignalHubReplayService::new(signal_store.clone(), event_store.clone());
     let occurred_at = Utc::now();
     let raw = NewEventEnvelope::builder(
@@ -1681,7 +1775,7 @@ async fn signal_hub_communication_messages_projection_replay_clears_processed_ma
         .await
         .expect("provider account");
 
-    let raw_record = CommunicationIngestionPort::new(pool.clone())
+    let raw_record = CommunicationIngestionStore::new(pool.clone())
         .record_raw_source(
             &NewRawCommunicationRecord::new(
                 "raw_signal_hub_projection_replay_telegram",
@@ -2268,7 +2362,7 @@ async fn signal_hub_profile_application_sets_active_profile_and_managed_policies
             .is_some_and(|profile| profile.is_active)
     );
 
-    let active_policies = signal_store
+    let active_policies = RawSignalStore::new(ctx.pool().clone())
         .list_active_policies()
         .await
         .expect("list active policies");
@@ -2278,7 +2372,10 @@ async fn signal_hub_profile_application_sets_active_profile_and_managed_policies
     }));
 
     let event_store = EventStore::new(ctx.pool().clone());
-    let signal_service = SignalHubSignalService::new(signal_store.clone(), event_store.clone());
+    let signal_service = SignalHubSignalService::new(
+        Arc::new(RawSignalStore::new(ctx.pool().clone())),
+        event_store.clone(),
+    );
     let raw = NewEventEnvelope::builder(
         format!(
             "evt_profile_testing_{}",
@@ -2488,7 +2585,7 @@ async fn paused_signal_hub_raw_dispatcher_blocks_sync_raw_signal_acceptance() {
         .await
         .expect("pause signal hub raw dispatcher");
 
-    let raw_record = CommunicationIngestionPort::new(pool.clone())
+    let raw_record = CommunicationIngestionStore::new(pool.clone())
         .record_raw_source(
             &NewRawCommunicationRecord::new(
                 "raw_signal_hub_runtime_paused_telegram",
@@ -2566,7 +2663,7 @@ async fn paused_accepted_signal_consumer_blocks_sync_projection_of_accepted_sign
         .await
         .expect("provider account");
 
-    let raw_record = CommunicationIngestionPort::new(pool.clone())
+    let raw_record = CommunicationIngestionStore::new(pool.clone())
         .record_raw_source(
             &NewRawCommunicationRecord::new(
                 "raw_signal_hub_accepted_paused_telegram",
@@ -2840,7 +2937,7 @@ async fn event_pattern_disable_controls_can_be_cleared_without_source_specific_a
         .expect("disable event pattern");
     assert!(disabled.policy_id.is_some());
 
-    let policies = store
+    let policies = RawSignalStore::new(ctx.pool().clone())
         .list_active_policies()
         .await
         .expect("list disabled policies");
@@ -2856,7 +2953,7 @@ async fn event_pattern_disable_controls_can_be_cleared_without_source_specific_a
         .expect("enable event pattern");
     assert_eq!(enabled.cleared_count, 1);
 
-    let remaining = store
+    let remaining = RawSignalStore::new(ctx.pool().clone())
         .list_active_policies()
         .await
         .expect("list remaining policies");

@@ -1,8 +1,13 @@
 use chrono::{DateTime, NaiveTime, Utc};
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
+use hermes_events_api::NewEventEnvelope;
 use serde::Serialize;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Row, Transaction};
+use std::future::Future;
+use std::pin::Pin;
 use thiserror::Error;
 
 use crate::domains::communications::messages::MessageProjectionError;
@@ -11,7 +16,8 @@ use crate::domains::communications::outbox::{
     CommunicationOutboxError, CommunicationOutboxItem, CommunicationOutboxStatus,
     NewCommunicationOutboxItem, enqueue_in_transaction,
 };
-use crate::platform::events::{EventStore, EventStoreError, NewEventEnvelope};
+use hermes_events_postgres::errors::EventStoreError;
+use hermes_events_postgres::store::EventStore;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NewSensitiveForwardingPolicy {
@@ -217,6 +223,24 @@ struct QuietHours {
 #[derive(Clone)]
 pub struct SensitiveForwardingStore {
     pool: PgPool,
+}
+
+pub type SensitiveForwardingPortFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, SensitiveForwardingError>> + Send + 'a>>;
+
+pub trait SensitiveForwardingCommandPort: Send + Sync {
+    fn content_egress_permissions<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> SensitiveForwardingPortFuture<'a, AccountContentEgressPermissions>;
+
+    fn enqueue_for_message<'a>(
+        &'a self,
+        source_account_id: &'a str,
+        message_id: &'a str,
+        severity: &'a str,
+        now: DateTime<Utc>,
+    ) -> SensitiveForwardingPortFuture<'a, SensitiveForwardingDispatchReport>;
 }
 
 impl SensitiveForwardingStore {
@@ -569,6 +593,28 @@ impl SensitiveForwardingStore {
             }
         }
         Ok(report)
+    }
+}
+
+impl SensitiveForwardingCommandPort for SensitiveForwardingStore {
+    fn content_egress_permissions<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> SensitiveForwardingPortFuture<'a, AccountContentEgressPermissions> {
+        Box::pin(async move { self.content_egress_permissions(account_id).await })
+    }
+
+    fn enqueue_for_message<'a>(
+        &'a self,
+        source_account_id: &'a str,
+        message_id: &'a str,
+        severity: &'a str,
+        now: DateTime<Utc>,
+    ) -> SensitiveForwardingPortFuture<'a, SensitiveForwardingDispatchReport> {
+        Box::pin(async move {
+            self.enqueue_for_message(source_account_id, message_id, severity, now)
+                .await
+        })
     }
 }
 
@@ -1079,11 +1125,11 @@ mod tests {
         SensitiveForwardingStore, SensitiveForwardingSuppression, parse_quiet_hours,
         policy_suppression,
     };
-    use crate::domains::communications::core::{
-        CommunicationIngestionStore, CommunicationProviderAccountStore, EmailProviderKind,
-        NewProviderAccount, NewRawCommunicationRecord,
-    };
     use crate::domains::communications::messages::{MessageProjectionStore, NewProjectedMessage};
+    use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+    use hermes_communications_api::evidence::NewRawCommunicationRecord;
+    use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+    use hermes_communications_postgres::store::CommunicationIngestionStore;
 
     fn policy() -> NewSensitiveForwardingPolicy {
         NewSensitiveForwardingPolicy {
@@ -1192,7 +1238,7 @@ mod tests {
             accounts
                 .upsert(&NewProviderAccount::new(
                     account_id,
-                    EmailProviderKind::Gmail,
+                    CommunicationProviderKind::Gmail,
                     account_id,
                     external_account_id,
                 ))
@@ -1496,7 +1542,7 @@ mod tests {
             accounts
                 .upsert(&NewProviderAccount::new(
                     account_id,
-                    EmailProviderKind::Gmail,
+                    CommunicationProviderKind::Gmail,
                     account_id,
                     external_account_id,
                 ))

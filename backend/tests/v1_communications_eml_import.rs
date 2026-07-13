@@ -2,14 +2,14 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-};
 use hermes_hub_backend::domains::communications::storage::CommunicationStorageStore;
+
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
@@ -22,7 +22,7 @@ async fn v1_eml_import_preserves_evidence_attachments_and_idempotency() {
     CommunicationIngestionStore::new(context.pool().clone())
         .upsert_provider_account(&NewProviderAccount::new(
             account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "EML Import",
             "eml-import@example.com",
         ))
@@ -99,7 +99,7 @@ async fn v1_mbox_import_projects_each_message_and_is_idempotent() {
     CommunicationIngestionStore::new(context.pool().clone())
         .upsert_provider_account(&NewProviderAccount::new(
             account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "MBOX Import",
             "mbox-import@example.com",
         ))
@@ -158,7 +158,7 @@ async fn v1_mbox_import_reports_invalid_messages_without_rolling_back_valid_ones
     CommunicationIngestionStore::new(context.pool().clone())
         .upsert_provider_account(&NewProviderAccount::new(
             account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "MBOX Recovery Import",
             "mbox-recovery@example.com",
         ))

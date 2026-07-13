@@ -9,34 +9,43 @@ use serde_json::{Value, json};
 use sha2::Sha256;
 
 use crate::app::api_support::{
-    ensure_fixture_routes_enabled, settings_store, zoom_provider_runtime_service,
-    zoom_secret_reference_store,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::signal_hub_support::{
     provider_account_or_not_found, sync_provider_account_signal_connection,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::{
+use crate::integrations::zoom::client::errors::ZoomError;
+use crate::integrations::zoom::client::models::{
     ZoomAccountListResponse, ZoomAccountSetupRequest, ZoomAccountSetupResponse,
     ZoomAuditEventResponse, ZoomAuthorizationResult, ZoomLiveAccountSetupRequest,
     ZoomMeetingIngestResult, ZoomMeetingObservationRequest, ZoomOAuthCompleteRequest,
     ZoomOAuthStartRequest, ZoomOAuthStartResponse, ZoomRecordingImportAuditResponse,
     ZoomRecordingImportRemoveRequest, ZoomRecordingImportRemoveResponse, ZoomRecordingIngestResult,
-    ZoomRecordingMediaDownloadRequest, ZoomRecordingObservationRequest, ZoomRecordingSyncRequest,
-    ZoomRecordingSyncResult, ZoomRetentionCleanupRequest, ZoomRetentionCleanupResponse,
-    ZoomRuntimeRemoveRequest, ZoomRuntimeRemoveResponse, ZoomRuntimeStartRequest,
-    ZoomRuntimeStatus, ZoomRuntimeStopRequest, ZoomServerToServerAuthorizeRequest,
-    ZoomTokenMaintenanceRequest, ZoomTokenMaintenanceResult, ZoomTokenRefreshRequest,
-    ZoomTokenRefreshResult, ZoomTranscriptFileImportRequest, ZoomTranscriptFileImportResult,
-    ZoomTranscriptIngestResult, ZoomTranscriptObservationRequest,
+    ZoomRecordingMediaDownloadRequest, ZoomRecordingObservationRequest, ZoomRecordingRef,
+    ZoomRecordingSyncRequest, ZoomRecordingSyncResult, ZoomRetentionCleanupRequest,
+    ZoomRetentionCleanupResponse, ZoomRuntimeRemoveRequest, ZoomRuntimeRemoveResponse,
+    ZoomRuntimeStartRequest, ZoomRuntimeStatus, ZoomRuntimeStopRequest,
+    ZoomServerToServerAuthorizeRequest, ZoomTokenMaintenanceRequest, ZoomTokenMaintenanceResult,
+    ZoomTokenRefreshRequest, ZoomTokenRefreshResult, ZoomTranscriptFileImportRequest,
+    ZoomTranscriptFileImportResult, ZoomTranscriptIngestResult, ZoomTranscriptObservationRequest,
     ZoomWebhookSubscriptionReconcileRequest, ZoomWebhookSubscriptionReconcileResult,
     ZoomWebhookSubscriptionRemoveRequest, ZoomWebhookSubscriptionRemoveResult,
     ZoomWebhookSubscriptionStatusRequest, ZoomWebhookSubscriptionStatusResult,
 };
-use crate::domains::communications::core::CommunicationProviderSecretBindingStore;
-use crate::integrations::zoom::client::{ZoomError, ZoomRecordingRef};
-use crate::platform::communications::ProviderAccountSecretPurpose;
 use crate::vault::{HostVaultError, VaultMode};
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+use hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore;
 
 const ZOOM_SIGNATURE_HEADER: &str = "x-zm-signature";
 const ZOOM_TIMESTAMP_HEADER: &str = "x-zm-request-timestamp";

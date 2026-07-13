@@ -1,10 +1,11 @@
 use chrono::Utc;
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use uuid::Uuid;
 
-use super::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
 use super::store::{SignalConnection, SignalHubError, SignalHubStore, SignalSource};
-use crate::platform::events::{EventStore, NewEventEnvelope};
+use hermes_events_postgres::store::EventStore;
+use hermes_signal_hub_api::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SignalHubControlRequest {
@@ -230,7 +231,7 @@ impl SignalHubControlService {
         &self,
         source_code: &str,
     ) -> Result<(), SignalHubError> {
-        let state = crate::platform::events::source_runtime_state_from_policies(
+        let state = crate::platform::events::runtime::source_runtime_state_from_policies(
             self.signal_store.pool(),
             source_code,
         )

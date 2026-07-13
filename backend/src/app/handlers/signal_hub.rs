@@ -5,18 +5,28 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::signal_hub_support::run_signal_hub_health_check;
 use crate::app::{ApiError, AppState};
-use crate::application::SignalHubReplayService;
-use crate::domains::signal_hub::{
+use crate::application::signal_hub_replay::SignalHubReplayService;
+use crate::domains::signal_hub::capabilities::SignalHubCapabilityService;
+use crate::domains::signal_hub::connections::SignalHubConnectionService;
+use crate::domains::signal_hub::controls::{
+    SignalHubControlRequest, SignalHubControlResult, SignalHubControlService,
+};
+use crate::domains::signal_hub::fixture_source::{
+    SignalFixtureEmission, SignalFixtureEmitRequest, SignalFixtureSource,
+    SignalFixtureSourceService,
+};
+use crate::domains::signal_hub::health::SignalHubHealthService;
+use crate::domains::signal_hub::profiles::SignalHubProfileService;
+use crate::domains::signal_hub::store::{
     FixtureRestoreReport, SignalCapability, SignalConnection, SignalConnectionCreate,
-    SignalConnectionUpdate, SignalFixtureEmission, SignalFixtureEmitRequest, SignalFixtureSource,
-    SignalFixtureSourceService, SignalHealth, SignalHealthCheckRequest, SignalHubCapabilityService,
-    SignalHubConnectionService, SignalHubControlRequest, SignalHubControlResult,
-    SignalHubControlService, SignalHubError, SignalHubHealthService, SignalHubProfileService,
-    SignalHubStore, SignalPolicy, SignalPolicyMode, SignalPolicyScope, SignalProfileCreate,
-    SignalProfilePolicy, SignalProfileSummary, SignalProfileUpdate, SignalReplayRequest,
-    SignalReplayRequestCreate, SignalRuntimeState, SignalRuntimeStateUpdate, SignalSource,
+    SignalConnectionUpdate, SignalHealth, SignalHealthCheckRequest, SignalHubError, SignalHubStore,
+    SignalProfileCreate, SignalProfilePolicy, SignalProfileSummary, SignalProfileUpdate,
+    SignalReplayRequest, SignalReplayRequestCreate, SignalRuntimeState, SignalRuntimeStateUpdate,
+    SignalSource,
 };
 use crate::platform::settings::ApplicationSettingsStore;
+use hermes_signal_hub_api::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
+use hermes_signal_hub_postgres::raw_signals::adapter::RawSignalStore;
 
 #[derive(Serialize)]
 pub(crate) struct SignalHubSourcesResponse {
@@ -257,7 +267,7 @@ pub(crate) async fn get_signal_hub_fixture_sources(
         .clone();
     let items = SignalFixtureSourceService::new(
         SignalHubStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .list_fixture_sources()?;
 
@@ -275,7 +285,7 @@ pub(crate) async fn get_signal_hub_profiles(
     let items = SignalHubProfileService::new(
         SignalHubStore::new(pool.clone()),
         ApplicationSettingsStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .list_profiles()
     .await?;
@@ -295,7 +305,7 @@ pub(crate) async fn post_signal_hub_profile(
     let item = SignalHubProfileService::new(
         SignalHubStore::new(pool.clone()),
         ApplicationSettingsStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .create_profile(&SignalProfileCreate {
         code: body.code,
@@ -320,7 +330,7 @@ pub(crate) async fn post_signal_hub_apply_profile(
     let item = SignalHubProfileService::new(
         SignalHubStore::new(pool.clone()),
         ApplicationSettingsStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .apply_profile(&profile_code)
     .await?;
@@ -341,7 +351,7 @@ pub(crate) async fn patch_signal_hub_profile(
     let item = SignalHubProfileService::new(
         SignalHubStore::new(pool.clone()),
         ApplicationSettingsStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .update_profile(&SignalProfileUpdate {
         code: profile_code,
@@ -366,7 +376,7 @@ pub(crate) async fn delete_signal_hub_profile(
     let item = SignalHubProfileService::new(
         SignalHubStore::new(pool.clone()),
         ApplicationSettingsStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .remove_profile(&profile_code)
     .await?;
@@ -385,7 +395,7 @@ pub(crate) async fn post_signal_hub_enable_source(
         .clone();
     let item = SignalHubControlService::new(
         SignalHubStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .enable_source(&source_code, None)
     .await?;
@@ -404,7 +414,7 @@ pub(crate) async fn post_signal_hub_disable_source(
         .clone();
     let item = SignalHubControlService::new(
         SignalHubStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .disable_source(&source_code, None)
     .await?;
@@ -436,7 +446,7 @@ pub(crate) async fn post_signal_hub_connection(
         .clone();
     let item = SignalHubConnectionService::new(
         SignalHubStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .create_connection(&SignalConnectionCreate {
         source_code: request.source_code,
@@ -463,7 +473,7 @@ pub(crate) async fn patch_signal_hub_connection(
         .clone();
     let item = SignalHubConnectionService::new(
         SignalHubStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .update_connection(&SignalConnectionUpdate {
         id: connection_id,
@@ -489,7 +499,7 @@ pub(crate) async fn delete_signal_hub_connection(
         .clone();
     let item = SignalHubConnectionService::new(
         SignalHubStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .remove_connection(&connection_id)
     .await?;
@@ -591,7 +601,7 @@ pub(crate) async fn post_signal_hub_replay_request(
         .clone();
     let replay_request = SignalHubReplayService::new(
         SignalHubStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .request_replay(&SignalReplayRequestCreate {
         source_code: request.source_code.and_then(non_empty_string),
@@ -622,7 +632,7 @@ pub(crate) async fn post_signal_hub_emit_fixture_signal(
         .clone();
     let item = SignalFixtureSourceService::new(
         SignalHubStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .emit_fixture(&SignalFixtureEmitRequest { fixture_id })
     .await?;
@@ -638,9 +648,10 @@ pub(crate) async fn get_signal_hub_policies(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = SignalHubStore::new(pool)
+    let items = RawSignalStore::new(pool)
         .list_active_policies()
-        .await?
+        .await
+        .map_err(SignalHubError::from)?
         .into_iter()
         .map(policy_to_dto)
         .collect();
@@ -674,7 +685,7 @@ pub(crate) async fn post_signal_hub_mute_signals(
         .clone();
     let item = SignalHubControlService::new(
         SignalHubStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .mute_signals(&control_request_from_body(request)?)
     .await?;
@@ -693,7 +704,7 @@ pub(crate) async fn post_signal_hub_unmute_signals(
         .clone();
     let item = SignalHubControlService::new(
         SignalHubStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .unmute_signals(&control_request_from_body(request)?)
     .await?;
@@ -712,7 +723,7 @@ pub(crate) async fn post_signal_hub_pause_signals(
         .clone();
     let item = SignalHubControlService::new(
         SignalHubStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .pause_signals(&control_request_from_body(request)?)
     .await?;
@@ -731,7 +742,7 @@ pub(crate) async fn post_signal_hub_resume_signals(
         .clone();
     let item = SignalHubControlService::new(
         SignalHubStore::new(pool.clone()),
-        crate::platform::events::EventStore::new(pool),
+        hermes_events_postgres::store::EventStore::new(pool),
     )
     .resume_signals(&control_request_from_body(request)?)
     .await?;

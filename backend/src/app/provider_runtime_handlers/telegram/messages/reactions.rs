@@ -3,14 +3,29 @@ use axum::extract::{Path, Query, State};
 use chrono::Utc;
 use serde::Deserialize;
 
-use crate::app::api_support::{TelegramReactionDeleteQuery, communication_provider_account_store};
+use crate::app::api_support::{
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
+};
 use crate::app::provider_runtime_handlers::whatsapp::{
     delete_whatsapp_command_react, post_whatsapp_command_react,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::provider_runtime_contracts::{
+use crate::integrations::telegram::client::models::messages::{
     TelegramReactionListResponse, TelegramReactionRequest, TelegramReactionResponse,
-    WhatsAppProviderCommandResponse, WhatsAppReactionRequest, telegram_self_provider_member_id,
+};
+use crate::integrations::telegram::client::telegram_self_provider_member_id;
+use crate::integrations::whatsapp::runtime::contracts::{
+    WhatsAppProviderCommandResponse, WhatsAppReactionRequest,
 };
 
 use super::super::helpers::ensure_telegram_account_operation_allowed;

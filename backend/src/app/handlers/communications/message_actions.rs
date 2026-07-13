@@ -1,5 +1,5 @@
 use super::*;
-use crate::domains::communications::service::CommunicationCommandService;
+use crate::domains::communications::command_service::CommunicationCommandService;
 
 #[derive(Deserialize)]
 pub(crate) struct BulkMessageActionRequest {
@@ -15,7 +15,7 @@ pub(crate) async fn post_v1_messages_bulk_action(
 ) -> Result<Json<crate::domains::communications::bulk_actions::BulkMessageActionOutcome>, ApiError>
 {
     let action = parse_bulk_message_action(&request)?;
-    let store = crate::app::api_support::app_store::<
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::bulk_actions::BulkMessageActionStore,
     >(
         state
@@ -225,7 +225,7 @@ pub(crate) async fn get_v1_subscriptions(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::subscriptions::SubscriptionStore,
     >(pool);
     let page = store
@@ -256,7 +256,7 @@ pub(crate) async fn get_v1_attachment_duplicates(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::app::api_support::app_store::<
+    let store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::attachment_dedup::AttachmentDedupStore,
     >(pool);
     let dups = store.find_duplicates(query.limit.unwrap_or(20)).await?;

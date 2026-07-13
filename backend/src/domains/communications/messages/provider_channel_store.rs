@@ -10,10 +10,10 @@ use crate::platform::communications::{
     ProviderMessageAttachmentAnchor, ProviderMessageProjectionObservationContext,
     ProviderMessageReferenceSummary,
 };
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
-    link_domain_entity_in_transaction,
-};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::review_links::link_domain_entity_in_transaction;
+use hermes_observations_postgres::store::ObservationStore;
 
 #[derive(Clone)]
 pub struct ProviderChannelMessageStore {

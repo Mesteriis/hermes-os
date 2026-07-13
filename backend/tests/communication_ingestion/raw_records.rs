@@ -1,4 +1,6 @@
 use crate::support::*;
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use sqlx::Row;
 
 #[tokio::test]
@@ -17,7 +19,7 @@ async fn communication_ingestion_records_raw_sources_idempotently_against_postgr
     store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Gmail raw source test",
             format!("raw-{suffix}@example.com"),
         ))

@@ -2,15 +2,14 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationProviderAccountStore,
-};
-use crate::domains::communications::service::{
+use crate::domains::communications::command_service::{
     CommunicationCommandService, CommunicationCommandServiceError, CommunicationOutboxSendCommand,
 };
 use crate::platform::audit::ApiAuditError;
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::communications::OutgoingEmail;
+use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 
 #[derive(Clone)]
 pub(crate) struct CommunicationSendDependencies {

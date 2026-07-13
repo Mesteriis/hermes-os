@@ -1,10 +1,10 @@
 use super::super::*;
+use crate::domains::communications::command_service::CommunicationCommandService;
 use crate::domains::communications::folders::{
     CommunicationFolder, CommunicationFolderListPage, CommunicationFolderListQuery,
     CommunicationFolderStore, FolderMessageActionResponse, FolderMessageListQuery,
     FolderMessagePage, NewCommunicationFolder, UpdateCommunicationFolder,
 };
-use crate::domains::communications::service::CommunicationCommandService;
 
 #[derive(Deserialize)]
 pub(crate) struct FoldersQuery {
@@ -142,5 +142,7 @@ fn folder_store(state: &AppState) -> Result<CommunicationFolderStore, ApiError> 
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(crate::app::api_support::app_store::<CommunicationFolderStore>(pool))
+    Ok(crate::app::api_support::stores::domain_stores::app_store::<
+        CommunicationFolderStore,
+    >(pool))
 }

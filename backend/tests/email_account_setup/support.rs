@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use hermes_communications_api::accounts::{ProviderAccount, ProviderAccountSecretBinding};
+
 use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
@@ -13,10 +15,9 @@ use serde_json::{Value, json};
 use tokio::time::{Duration, sleep};
 use tower::ServiceExt;
 
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, ProviderAccountSecretPurpose,
-};
 use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretStoreKind};
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::vault::HostVault;
@@ -350,7 +351,7 @@ where
 pub async fn wait_for_provider_account(
     communication_store: &CommunicationIngestionStore,
     account_id: &str,
-) -> hermes_hub_backend::domains::communications::core::ProviderAccount {
+) -> hermes_communications_api::accounts::ProviderAccount {
     for _ in 0..50 {
         if let Some(account) = communication_store
             .provider_account(account_id)
@@ -387,7 +388,7 @@ pub async fn wait_for_provider_account_secret_binding(
     communication_store: &CommunicationIngestionStore,
     account_id: &str,
     secret_purpose: ProviderAccountSecretPurpose,
-) -> hermes_hub_backend::domains::communications::core::ProviderAccountSecretBinding {
+) -> hermes_communications_api::accounts::ProviderAccountSecretBinding {
     for _ in 0..50 {
         if let Some(binding) = communication_store
             .provider_account_secret_binding(account_id, secret_purpose)

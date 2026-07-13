@@ -2,10 +2,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::{TimeZone, Utc};
+use hermes_events_api::{EventEnvelope, NewEventEnvelope, StoredEventEnvelope};
+use hermes_events_postgres::cursors::ProjectionCursorStore;
+use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::engines::timeline::{TimelineEngine, TimelineEventDraft};
-use hermes_hub_backend::platform::events::{
-    EventEnvelope, EventStore, NewEventEnvelope, ProjectionCursorStore, StoredEventEnvelope,
-};
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::json;
 

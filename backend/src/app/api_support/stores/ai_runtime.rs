@@ -2,7 +2,7 @@ use super::super::*;
 use super::ai_routing::ai_model_routing;
 use super::database::database_pool;
 use crate::ai::control_center::AiControlCenterStore;
-use crate::domains::signal_hub::{SignalHubError, SignalHubStore};
+use crate::domains::signal_hub::store::{SignalHubError, SignalHubStore};
 use crate::platform::config::AiRuntimeProvider;
 use sqlx::postgres::PgPool;
 use std::future::Future;
@@ -166,7 +166,7 @@ pub(crate) async fn ai_requests_allowed(state: &AppState) -> Result<bool, ApiErr
     SignalHubStore::new(pool.clone())
         .restore_system_sources()
         .await?;
-    crate::platform::events::runtime_allows_processing(
+    crate::platform::events::runtime::runtime_allows_processing(
         pool,
         "ai",
         AI_REQUEST_RUNTIME,

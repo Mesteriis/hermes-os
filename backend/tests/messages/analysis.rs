@@ -1,5 +1,5 @@
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::analytics::EmailAnalyticsStore;
-use hermes_hub_backend::domains::communications::core::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };

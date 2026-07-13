@@ -1,4 +1,8 @@
 use crate::support::*;
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, NewProviderAccount, NewProviderAccountSecretBinding,
+    ProviderAccountSecretPurpose,
+};
 
 #[tokio::test]
 async fn communication_ingestion_binds_provider_accounts_to_secret_refs_against_postgres() {
@@ -19,7 +23,7 @@ async fn communication_ingestion_binds_provider_accounts_to_secret_refs_against_
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &gmail_account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Gmail secret binding",
             format!("gmail-secret-{suffix}@example.com"),
         ))
@@ -28,7 +32,7 @@ async fn communication_ingestion_binds_provider_accounts_to_secret_refs_against_
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &icloud_account_id,
-            EmailProviderKind::Icloud,
+            CommunicationProviderKind::Icloud,
             "iCloud secret binding",
             format!("icloud-secret-{suffix}@icloud.com"),
         ))
@@ -37,7 +41,7 @@ async fn communication_ingestion_binds_provider_accounts_to_secret_refs_against_
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &imap_account_id,
-            EmailProviderKind::Imap,
+            CommunicationProviderKind::Imap,
             "IMAP secret binding",
             format!("imap-secret-{suffix}@example.net"),
         ))
@@ -127,7 +131,7 @@ async fn communication_ingestion_scopes_secret_refs_by_provider_account_against_
     let accounts = [
         (
             format!("acct_multi_gmail_a_{suffix}"),
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Gmail work",
             format!("gmail-work-{suffix}@example.com"),
             ProviderAccountSecretPurpose::OauthToken,
@@ -137,7 +141,7 @@ async fn communication_ingestion_scopes_secret_refs_by_provider_account_against_
         ),
         (
             format!("acct_multi_gmail_b_{suffix}"),
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Gmail personal",
             format!("gmail-personal-{suffix}@example.com"),
             ProviderAccountSecretPurpose::OauthToken,
@@ -147,7 +151,7 @@ async fn communication_ingestion_scopes_secret_refs_by_provider_account_against_
         ),
         (
             format!("acct_multi_icloud_a_{suffix}"),
-            EmailProviderKind::Icloud,
+            CommunicationProviderKind::Icloud,
             "iCloud work",
             format!("icloud-work-{suffix}@icloud.com"),
             ProviderAccountSecretPurpose::ImapPassword,
@@ -157,7 +161,7 @@ async fn communication_ingestion_scopes_secret_refs_by_provider_account_against_
         ),
         (
             format!("acct_multi_icloud_b_{suffix}"),
-            EmailProviderKind::Icloud,
+            CommunicationProviderKind::Icloud,
             "iCloud personal",
             format!("icloud-personal-{suffix}@icloud.com"),
             ProviderAccountSecretPurpose::ImapPassword,

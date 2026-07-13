@@ -1,6 +1,7 @@
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
+use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -11,10 +12,10 @@ use thiserror::Error;
 
 use crate::domains::communications::evidence::{link_mail_entity_in_transaction, merge_metadata};
 pub use crate::platform::communications::SmtpTransport;
-use crate::platform::events::{EventStore, NewEventEnvelope};
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
-};
+use hermes_events_postgres::store::EventStore;
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::errors::ObservationStoreError;
+use hermes_observations_postgres::store::ObservationStore;
 
 mod attachments;
 mod delivery;
@@ -1009,10 +1010,10 @@ pub enum CommunicationOutboxError {
     Serde(#[from] serde_json::Error),
 
     #[error(transparent)]
-    EventStore(#[from] crate::platform::events::EventStoreError),
+    EventStore(#[from] hermes_events_postgres::errors::EventStoreError),
 
     #[error(transparent)]
-    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    EventEnvelope(#[from] hermes_events_api::EventEnvelopeError),
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),
 

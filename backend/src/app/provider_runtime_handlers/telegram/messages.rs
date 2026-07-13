@@ -6,9 +6,17 @@ use serde_json::Value;
 
 use super::helpers::ensure_telegram_account_operation_allowed;
 use crate::app::api_support::{
-    communication_provider_account_store, ensure_fixture_routes_enabled,
-    telegram_fixture_ingest_service, telegram_message_write_service,
-    telegram_runtime_use_case_context,
+    automation_calls::*,
+    communications::*,
+    ensure_fixture_routes_enabled,
+    messaging_integrations::*,
+    platform_dtos::*,
+    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
+    review_commands::*,
+    review_lists::*,
+    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    telegram_capabilities::*,
+    whatsapp_capabilities::*,
 };
 use crate::app::provider_runtime_handlers::telegram::chats::canonical_communication_conversation;
 use crate::app::provider_runtime_handlers::whatsapp::{
@@ -23,15 +31,18 @@ use crate::app::{ApiError, AppState};
 use crate::application::communication_provider_writes::{
     CommunicationConversationMessageRequest, CommunicationProviderMessageCommandResponse,
 };
-use crate::application::provider_runtime_contracts::NewTelegramMessage;
-use crate::application::provider_runtime_contracts::{
-    TelegramDeleteRequest, TelegramEditRequest, TelegramForwardRequest, TelegramLifecycleResponse,
-    TelegramManualSendRequest, TelegramManualSendResponse, TelegramMessageIngestResult,
-    TelegramMessageTombstoneListResponse, TelegramMessageVersionListResponse, TelegramPinRequest,
-    TelegramReplyRequest, TelegramRestoreVisibilityRequest, WhatsAppDeleteRequest,
-    WhatsAppEditRequest, WhatsAppProviderCommandResponse, WhatsAppTextSendRequest,
-};
 use crate::application::telegram_runtime;
+use crate::integrations::telegram::client::models::messages::{
+    TelegramDeleteRequest, TelegramEditRequest, TelegramForwardRequest, TelegramLifecycleResponse,
+    TelegramManualSendRequest, TelegramManualSendResponse, TelegramMessageTombstoneListResponse,
+    TelegramMessageVersionListResponse, TelegramPinRequest, TelegramReplyRequest,
+    TelegramRestoreVisibilityRequest,
+};
+use crate::integrations::telegram::client::{NewTelegramMessage, TelegramMessageIngestResult};
+use crate::integrations::whatsapp::runtime::contracts::{
+    WhatsAppDeleteRequest, WhatsAppEditRequest, WhatsAppProviderCommandResponse,
+    WhatsAppTextSendRequest,
+};
 
 mod mark_read;
 mod reactions;
@@ -718,7 +729,7 @@ pub(crate) async fn get_telegram_message_tombstones(
     Ok(Json(response))
 }
 
-use crate::application::provider_runtime_contracts::{
+use crate::integrations::telegram::client::models::messages::{
     TelegramForwardChainResponse, TelegramReplyChainResponse,
 };
 

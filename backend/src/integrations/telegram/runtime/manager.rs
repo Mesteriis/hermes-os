@@ -1,12 +1,12 @@
+use hermes_communications_api::accounts::ProviderAccountLookupPort;
+use hermes_communications_api::accounts::ProviderSecretBindingLookupPort;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use crate::integrations::telegram::client::TelegramStore;
-use crate::platform::communications::{
-    DEFAULT_MAIL_SYNC_BLOB_ROOT, ProviderAccountLookupPort, ProviderSecretBindingLookupPort,
-};
+use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use crate::platform::config::AppConfig;
-use crate::platform::events::EventBus;
+use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 use sqlx::PgPool;
 
@@ -98,7 +98,7 @@ pub(crate) struct TelegramRuntimeStartContext<'a, S: SecretResolver + Sync + ?Si
     pub(crate) secret_store: &'a SecretReferenceStore,
     pub(crate) secret_resolver: &'a S,
     pub(crate) config: &'a AppConfig,
-    pub(crate) event_bus: &'a EventBus,
+    pub(crate) event_bus: &'a InMemoryEventBus,
 }
 
 fn telegram_media_blob_root() -> &'static std::path::Path {

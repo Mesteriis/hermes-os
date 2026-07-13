@@ -2,9 +2,9 @@ use chrono::Utc;
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
 
-use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore, link_domain_entity_in_transaction,
-};
+use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
+use hermes_observations_postgres::review_links::link_domain_entity_in_transaction;
+use hermes_observations_postgres::store::ObservationStore;
 
 use super::errors::AiControlCenterError;
 use super::models::{
@@ -382,7 +382,7 @@ async fn link_ai_entity_in_transaction(
     entity_id: impl Into<String>,
     relationship_kind: &str,
     metadata: serde_json::Value,
-) -> Result<(), crate::platform::observations::ObservationStoreError> {
+) -> Result<(), hermes_observations_postgres::errors::ObservationStoreError> {
     link_domain_entity_in_transaction(
         transaction,
         observation_id,

@@ -61,7 +61,7 @@ pub(crate) async fn put_persona_dossier_review(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let snapshot = crate::domains::personas::service::PersonaCommandService::new(pool)
+    let snapshot = crate::domains::personas::command_service::PersonaCommandService::new(pool)
         .review_dossier_manual(&persona_id, review_state)
         .await?;
     Ok(Json(dossier_snapshot_only_response(&snapshot)))

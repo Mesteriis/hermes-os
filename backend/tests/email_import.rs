@@ -1,12 +1,11 @@
+use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::{TimeZone, Utc};
 use serde_json::json;
 
-use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-};
+use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::import::{
     FixtureEmailImportRequest, import_fixture_email_messages,
     import_fixture_email_messages_with_records,
@@ -14,6 +13,7 @@ use hermes_hub_backend::domains::communications::import::{
 use hermes_hub_backend::domains::communications::sources::{
     FixtureCommunicationSourceMessage, parse_fixture_email_messages,
 };
+
 use hermes_hub_backend::platform::storage::Database;
 
 #[test]
@@ -66,7 +66,7 @@ async fn fixture_email_import_records_raw_messages_idempotently_against_postgres
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Fixture Gmail",
             format!("fixture-{suffix}@example.com"),
         ))
@@ -120,7 +120,7 @@ async fn fixture_email_import_records_delimiter_bearing_identities_distinctly_ag
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &same_account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Fixture identity same account",
             format!("fixture-identity-same-{suffix}@example.com"),
         ))
@@ -169,7 +169,7 @@ async fn fixture_email_import_records_delimiter_bearing_identities_distinctly_ag
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &ambiguous_account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Fixture identity base account",
             format!("fixture-identity-base-{suffix}@example.com"),
         ))
@@ -178,7 +178,7 @@ async fn fixture_email_import_records_delimiter_bearing_identities_distinctly_ag
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &ambiguous_left_account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Fixture identity left account",
             format!("fixture-identity-left-{suffix}@example.com"),
         ))
@@ -250,7 +250,7 @@ async fn fixture_email_import_preserves_missing_sent_at_as_null_against_postgres
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Fixture missing sent_at",
             format!("fixture-missing-sent-at-{suffix}@example.com"),
         ))
@@ -304,7 +304,7 @@ async fn fixture_email_import_returns_raw_records_for_projection_against_postgre
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
-            EmailProviderKind::Gmail,
+            CommunicationProviderKind::Gmail,
             "Fixture records",
             format!("fixture-records-{suffix}@example.com"),
         ))

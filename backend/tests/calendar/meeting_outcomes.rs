@@ -1,5 +1,5 @@
 use chrono::{Duration, Utc};
-use hermes_hub_backend::application::CalendarMeetingOutcomeApplicationService;
+use hermes_hub_backend::application::calendar_meeting_outcomes::CalendarMeetingOutcomeApplicationService;
 use hermes_hub_backend::domains::calendar::events::{
     CalendarAccountStore, CalendarEventStore, NewCalendarEvent,
 };

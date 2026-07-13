@@ -3,16 +3,16 @@ use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE, URL
 use serde_json::{Value, json};
 
 use crate::domains::communications::storage::StoredCommunicationBlob;
-use crate::platform::communications::EmailProviderKind;
+use hermes_communications_api::accounts::CommunicationProviderKind;
 
 use super::errors::EmailSyncRecordError;
 
 pub(super) fn raw_message_bytes(
-    provider_kind: EmailProviderKind,
+    provider_kind: CommunicationProviderKind,
     payload: &Value,
 ) -> Result<Vec<u8>, EmailSyncRecordError> {
     match provider_kind {
-        EmailProviderKind::Gmail => {
+        CommunicationProviderKind::Gmail => {
             let raw = required_payload_string(payload, "raw_base64url")?;
             URL_SAFE_NO_PAD
                 .decode(raw)
@@ -22,7 +22,7 @@ pub(super) fn raw_message_bytes(
                     source,
                 })
         }
-        EmailProviderKind::Icloud | EmailProviderKind::Imap => {
+        CommunicationProviderKind::Icloud | CommunicationProviderKind::Imap => {
             let raw = required_payload_string(payload, "raw_rfc822_base64")?;
             BASE64_STANDARD.decode(raw).map_err(|source| {
                 EmailSyncRecordError::InvalidRawPayloadBase64 {
@@ -31,14 +31,14 @@ pub(super) fn raw_message_bytes(
                 }
             })
         }
-        EmailProviderKind::TelegramUser
-        | EmailProviderKind::TelegramBot
-        | EmailProviderKind::WhatsappWeb
-        | EmailProviderKind::WhatsappBusinessCloud
-        | EmailProviderKind::ZulipBot
-        | EmailProviderKind::ZoomUser
-        | EmailProviderKind::ZoomServerToServer
-        | EmailProviderKind::YandexTelemostUser => Err(
+        CommunicationProviderKind::TelegramUser
+        | CommunicationProviderKind::TelegramBot
+        | CommunicationProviderKind::WhatsappWeb
+        | CommunicationProviderKind::WhatsappBusinessCloud
+        | CommunicationProviderKind::ZulipBot
+        | CommunicationProviderKind::ZoomUser
+        | CommunicationProviderKind::ZoomServerToServer
+        | CommunicationProviderKind::YandexTelemostUser => Err(
             EmailSyncRecordError::UnsupportedProviderKind(provider_kind.as_str().to_owned()),
         ),
     }

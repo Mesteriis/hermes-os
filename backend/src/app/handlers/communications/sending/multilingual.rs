@@ -80,10 +80,10 @@ pub(crate) async fn post_v1_translate(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    crate::app::api_support::require_mail_ai_content_egress(
+    crate::app::api_support::stores::ai_runtime::require_mail_ai_content_egress(
         &state,
         &msg.account_id,
-        crate::app::api_support::MailAiContentEgressKind::Body,
+        crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::Body,
     )
     .await?;
     let service = email_multilingual_service(&state).await?;
@@ -97,7 +97,7 @@ pub(crate) async fn post_v1_translate(
     {
         Some(t) => {
             if let Some(pool) = state.database.pool() {
-                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+                crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
                     pool.clone(),
                     "message_translation",
                     &message_id,
@@ -175,10 +175,10 @@ pub(crate) async fn post_v1_translate_attachment(
     .ok_or(ApiError::FailedPrecondition(
         "extract attachment text before translation".to_owned(),
     ))?;
-    crate::app::api_support::require_mail_ai_content_egress(
+    crate::app::api_support::stores::ai_runtime::require_mail_ai_content_egress(
         &state,
         &message.account_id,
-        crate::app::api_support::MailAiContentEgressKind::ExtractedText,
+        crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::ExtractedText,
     )
     .await?;
     let detection =
@@ -190,7 +190,7 @@ pub(crate) async fn post_v1_translate_attachment(
     match service.translate(&source_text.text, target_language).await {
         Ok(Some(translation)) => {
             if let Some(pool) = state.database.pool() {
-                crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+                crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
                     pool.clone(),
                     "attachment_translation",
                     &attachment.attachment.attachment_id,
@@ -294,16 +294,16 @@ pub(crate) async fn post_v1_translate_thread(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let thread_store = crate::app::api_support::app_store::<
+    let thread_store = crate::app::api_support::stores::domain_stores::app_store::<
         crate::domains::communications::threads::CommunicationThreadStore,
     >(pool);
     let messages = thread_store
         .thread_messages(account_id, subject, query.limit.unwrap_or(50))
         .await?;
-    crate::app::api_support::require_mail_ai_content_egress(
+    crate::app::api_support::stores::ai_runtime::require_mail_ai_content_egress(
         &state,
         account_id,
-        crate::app::api_support::MailAiContentEgressKind::Body,
+        crate::app::api_support::stores::ai_runtime::MailAiContentEgressKind::Body,
     )
     .await?;
     let service = email_multilingual_service(&state).await?;
@@ -317,7 +317,7 @@ pub(crate) async fn post_v1_translate_thread(
         match service.translate(&message.body_text, target_language).await {
             Ok(Some(translation)) => {
                 if let Some(pool) = state.database.pool() {
-                    crate::domains::signal_hub::dispatch_ai_helper_signal_best_effort(
+                    crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort(
                         pool.clone(),
                         "thread_message_translation",
                         &message.message_id,

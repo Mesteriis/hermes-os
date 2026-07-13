@@ -1,3 +1,7 @@
+use hermes_communications_api::accounts::{
+    NewProviderAccountSecretBinding, ProviderAccountCommandPort, ProviderAccountSecretPurpose,
+};
+use hermes_communications_api::accounts::{ProviderAccount, ProviderSecretBindingCommandPort};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,11 +28,7 @@ use super::{
     WhatsAppRuntimeStartRequest, WhatsAppRuntimeStatus, WhatsAppSanitizedRuntimeEventDto,
     WhatsappWebError, WhatsappWebStore,
 };
-use crate::platform::communications::{
-    NewProviderAccountSecretBinding, ProviderAccount, ProviderAccountCommandPort,
-    ProviderAccountSecretPurpose, ProviderChannelMessageLookupPort,
-    ProviderSecretBindingCommandPort,
-};
+use crate::platform::communications::ProviderChannelMessageLookupPort;
 use crate::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };

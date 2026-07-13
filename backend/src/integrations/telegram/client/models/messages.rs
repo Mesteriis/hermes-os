@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use super::super::errors::TelegramError;
 use super::super::validation::validate_non_empty;
 use super::chats::TelegramChatKind;
-use crate::platform::communications::NewRawCommunicationRecord;
+use hermes_communications_api::evidence::NewRawCommunicationRecord;
 
 pub use super::message_references::{
     TelegramForwardChainResponse, TelegramForwardRef, TelegramMessageReferenceSummary,
