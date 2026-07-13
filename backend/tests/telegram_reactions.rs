@@ -6,7 +6,7 @@ use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::integrations::telegram::client::lifecycle;
 use hermes_hub_backend::integrations::telegram::client::reconcile_reaction_commands_from_provider_reactions;
 
-use testkit::context::TestContext;
+use hermes_backend_testkit::context::TestContext;
 
 #[tokio::test]
 async fn telegram_provider_reactions_reconcile_react_and_unreact_commands() {

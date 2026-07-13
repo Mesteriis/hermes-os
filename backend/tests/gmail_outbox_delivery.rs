@@ -23,12 +23,12 @@ use hermes_hub_backend::domains::communications::outbox::{
 use hermes_hub_backend::integrations::mail::outbox::LiveGmailOutboxTransport;
 use hermes_hub_backend::integrations::mail::send::LiveSmtpTransport;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::vault::{HostVault, HostVaultConfig, SecretEntryContext};
-use testkit::context::TestContext;
 
 const LOCAL_API_TOKEN: &str = "gmail-outbox-delivery-test-token";
 
@@ -43,20 +43,22 @@ async fn outbox_delivery_worker_sends_gmail_items_through_gmail_api_against_post
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_pairs([
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let app = build_router_with_database(config, database);
     unlock_test_vault(app).await;
 

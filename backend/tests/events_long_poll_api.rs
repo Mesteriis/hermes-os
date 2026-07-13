@@ -7,10 +7,10 @@ use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 
 const LOCAL_API_TOKEN: &str = "events-long-poll-test-token";
 
@@ -92,7 +92,7 @@ async fn app_and_pool_with_database(database_url: &str) -> (axum::Router, sqlx::
 }
 
 fn config_with_api_token() -> AppConfig {
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn json_request_with_token(uri: &str, value: Value, token: &str) -> Request<Body> {

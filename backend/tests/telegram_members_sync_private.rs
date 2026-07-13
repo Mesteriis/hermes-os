@@ -7,8 +7,8 @@ use tower::ServiceExt;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 
 const LOCAL_API_TOKEN: &str = "telegram-members-private-sync-secret";
 
@@ -24,8 +24,11 @@ async fn telegram_private_members_sync_uses_tdlib_chat_metadata_and_records_audi
     let account_id = format!("telegram-private-members-{suffix}");
     let provider_chat_id = format!("private-chat-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 

@@ -371,9 +371,9 @@ pub enum MailProviderCommandWorkerError {
 #[cfg(test)]
 mod tests {
     use chrono::{Duration, Utc};
+    use hermes_backend_testkit::context::TestContext;
     use serde_json::json;
     use tempfile::tempdir;
-    use testkit::context::TestContext;
 
     use super::{
         MailProviderCommandWorker, mutation_for_command, resolve_provider_command_payload,

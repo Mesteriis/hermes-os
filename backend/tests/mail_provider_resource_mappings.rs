@@ -8,11 +8,11 @@ use hermes_hub_backend::domains::communications::provider_resources::{
     MailProviderSemanticRole, NewMailProviderResource,
 };
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::communications::{
     DiscoveredMailProviderResource, MailProviderResourceCommandPort,
 };
 use serde_json::json;
-use testkit::context::TestContext;
 
 #[tokio::test]
 async fn manual_provider_resource_mapping_wins_over_later_discovery() {

@@ -15,7 +15,7 @@ use hermes_hub_backend::platform::storage::Database;
 pub const LOCAL_API_TOKEN: &str = "cal-api-test-token";
 
 pub fn config_with_api_token() -> AppConfig {
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 pub fn get_request(uri: &str) -> Request<Body> {
@@ -85,7 +85,10 @@ pub async fn build_cal_app(database_url: &str) -> axum::Router {
         .await
         .expect("database connection");
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url,
+        ),
         database,
     )
 }

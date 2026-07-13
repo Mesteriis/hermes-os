@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
+use hermes_backend_testkit::context::TestContext;
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::context::TestContext;
 
 use hermes_events_postgres::consumers::EventConsumerConfig;
 use hermes_events_postgres::consumers::EventConsumerRunner;

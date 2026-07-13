@@ -6,6 +6,7 @@ use sqlx::Row;
 use tempfile::tempdir;
 use tower::ServiceExt;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretStoreKind};
 use hermes_hub_backend::platform::storage::Database;
@@ -13,7 +14,6 @@ use telegram_support::{
     LOCAL_API_TOKEN, assert_capability_status, assert_ok, get_request_with_token, json_body,
     json_post_request_with_actor, unique_suffix, vault_entropy_events,
 };
-use testkit::context::TestContext;
 #[tokio::test]
 async fn telegram_live_account_setup_stores_bot_token_in_host_vault() {
     let ctx = TestContext::new().await;
@@ -26,24 +26,27 @@ async fn telegram_live_account_setup_stores_bot_token_in_host_vault() {
     let suffix = unique_suffix();
     let account_id = format!("telegram-bot-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_dir.path().join("vault").to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    vault_dir
-                        .path()
-                        .join("dev")
-                        .join("master.key")
-                        .to_str()
-                        .expect("dev key path"),
-                ),
-            ])
-            .expect("config"),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_dir.path().join("vault").to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                vault_dir
+                    .path()
+                    .join("dev")
+                    .join("master.key")
+                    .to_str()
+                    .expect("dev key path"),
+            ),
+        ])
+        .expect("config"),
         database,
     );
 
@@ -154,26 +157,29 @@ async fn telegram_qr_authorized_account_setup_persists_metadata_without_host_vau
     let account_id = format!("telegram-user-{suffix}");
     let tdlib_data_path = format!("docker/data/telegram/{account_id}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_dir.path().join("vault").to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    vault_dir
-                        .path()
-                        .join("dev")
-                        .join("master.key")
-                        .to_str()
-                        .expect("dev key path"),
-                ),
-                ("HERMES_TELEGRAM_API_ID", "12345"),
-                ("HERMES_TELEGRAM_API_HASH", "telegram-api-hash"),
-            ])
-            .expect("config"),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_dir.path().join("vault").to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                vault_dir
+                    .path()
+                    .join("dev")
+                    .join("master.key")
+                    .to_str()
+                    .expect("dev key path"),
+            ),
+            ("HERMES_TELEGRAM_API_ID", "12345"),
+            ("HERMES_TELEGRAM_API_HASH", "telegram-api-hash"),
+        ])
+        .expect("config"),
         database,
     );
 
@@ -246,26 +252,29 @@ async fn telegram_finalized_qr_account_setup_infers_qr_authorized_runtime() {
     let account_id = format!("telegram-user-inferred-{suffix}");
     let tdlib_data_path = format!("docker/data/telegram/{account_id}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_dir.path().join("vault").to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    vault_dir
-                        .path()
-                        .join("dev")
-                        .join("master.key")
-                        .to_str()
-                        .expect("dev key path"),
-                ),
-                ("HERMES_TELEGRAM_API_ID", "12345"),
-                ("HERMES_TELEGRAM_API_HASH", "telegram-api-hash"),
-            ])
-            .expect("config"),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_dir.path().join("vault").to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                vault_dir
+                    .path()
+                    .join("dev")
+                    .join("master.key")
+                    .to_str()
+                    .expect("dev key path"),
+            ),
+            ("HERMES_TELEGRAM_API_ID", "12345"),
+            ("HERMES_TELEGRAM_API_HASH", "telegram-api-hash"),
+        ])
+        .expect("config"),
         database,
     );
 
@@ -314,7 +323,7 @@ async fn telegram_finalized_qr_account_setup_infers_qr_authorized_runtime() {
 #[tokio::test]
 async fn telegram_live_account_setup_api_requires_configured_database() {
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN),
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN),
         Database::disabled(),
     );
 
@@ -341,7 +350,7 @@ async fn telegram_live_account_setup_api_requires_configured_database() {
 #[tokio::test]
 async fn telegram_capabilities_report_qr_login_readiness_inputs() {
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN)
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
             .with_test_pairs([
                 ("HERMES_DEV_MODE", "true"),
                 (
@@ -382,8 +391,11 @@ async fn telegram_account_capabilities_report_account_scope_and_bot_overrides() 
     let user_account_id = format!("telegram-cap-user-{suffix}");
     let bot_account_id = format!("telegram-cap-bot-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 

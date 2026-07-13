@@ -1,4 +1,4 @@
-use testkit::{app, context::TestContext};
+use hermes_backend_testkit::{app, context::TestContext};
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};

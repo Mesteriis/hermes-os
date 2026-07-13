@@ -10,8 +10,8 @@ use tower::ServiceExt;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 
 const LOCAL_API_TOKEN: &str = "telegram-media-upload-test-secret";
 
@@ -353,7 +353,10 @@ async fn create_tdlib_account(pool: &sqlx::PgPool, account_id: &str, suffix: &st
 
 fn router(database: Database, database_url: &str) -> axum::Router {
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url,
+        ),
         database,
     )
 }

@@ -3,12 +3,12 @@ use tempfile::tempdir;
 use tokio::time::{Duration, sleep};
 use tower::ServiceExt;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::ai::control_center::{AiControlCenterStore, AiProviderAccount};
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretResolver};
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::vault::{HostVault, HostVaultConfig};
-use testkit::context::TestContext;
 
 use super::support::{
     LOCAL_API_TOKEN, json_body, json_request_with_token_and_actor, unlock_test_vault,
@@ -25,20 +25,22 @@ async fn startup_reconciles_ai_api_provider_from_host_vault_after_postgres_metad
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_pairs([
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let app = build_router_with_database(config.clone(), database.clone());
     unlock_test_vault(app.clone()).await;
 

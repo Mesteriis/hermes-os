@@ -4,8 +4,10 @@ use hermes_communications_api::commands::NewCommunicationProviderCommand;
 use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 
+use hermes_backend_testkit::app::TestApp;
+use hermes_backend_testkit::composition::router_for_context;
+use hermes_backend_testkit::context::TestContext;
 use serde_json::{Value, json};
-use testkit::app::TestApp;
 
 const PRIVATE_TARGET: &str = "private-target-message";
 const PRIVATE_PROVIDER_ID: &str = "private-provider-id";
@@ -13,9 +15,15 @@ const PRIVATE_PAYLOAD: &str = "private-command-payload";
 const PRIVATE_ERROR: &str = "private-provider-error";
 const PRIVATE_RESULT: &str = "private-provider-result";
 
+async fn test_app() -> TestApp {
+    let context = TestContext::new().await;
+    let router = router_for_context(&context);
+    TestApp::new(context, router)
+}
+
 #[tokio::test]
 async fn provider_command_lifecycle_events_are_idempotent_and_payload_safe() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let pool = app.context().pool().clone();
     let account_id = "mail-command-lifecycle-events";
     CommunicationProviderAccountStore::new(pool.clone())

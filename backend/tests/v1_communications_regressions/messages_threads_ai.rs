@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use axum::http::StatusCode;
 use axum::routing::{get as axum_get, post as axum_post};
 use axum::{Json, Router};
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::ai::control_center::{
     AiControlCenterStore, AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest,
 };
@@ -12,7 +13,6 @@ use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_signal_hub_api::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
 use serde_json::json;
-use testkit::context::TestContext;
 use tokio::net::TcpListener;
 use tower::ServiceExt;
 
@@ -389,7 +389,7 @@ async fn router_with_ollama(database_url: &str, ollama_base_url: &str) -> axum::
         .await
         .expect("database connection");
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(T, database_url)
+        hermes_backend_testkit::app::config_with_secret_and_database_url(T, database_url)
             .with_test_pairs([
                 ("HERMES_OLLAMA_BASE_URL", ollama_base_url),
                 ("HERMES_OLLAMA_CHAT_MODEL", "qwen3:4b"),

@@ -5,10 +5,10 @@ use serde_json::{Value, json};
 use sqlx::{Row, query};
 use tower::ServiceExt;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::integrations::telegram::client::participants::reconcile_leave_commands_from_exhaustive_absence;
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 
 const LOCAL_API_TOKEN: &str = "telegram-participant-absence-test-secret";
 
@@ -20,8 +20,11 @@ async fn telegram_exhaustive_roster_absence_reconciles_self_leave_command() {
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database.clone(),
     );
     let pool = database.pool().expect("configured pool").clone();

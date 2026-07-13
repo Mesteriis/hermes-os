@@ -2,12 +2,12 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::containers::nats::NatsContainer;
-use crate::containers::postgres::PostgresContainer;
 use crate::vault::{TestVault, new_test_vault};
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
+use hermes_test_session::containers::nats::NatsContainer;
 use hermes_test_session::containers::pgbouncer::PgbouncerContainer;
+use hermes_test_session::containers::postgres::PostgresContainer;
 use std::path::Path;
 
 static DATABASE_SETUP_LOCK: Mutex<()> = Mutex::const_new(());

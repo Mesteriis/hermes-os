@@ -1,11 +1,11 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{HeaderValue, Method, Request, StatusCode, header};
 use chrono::Utc;
+use hermes_backend_testkit::context::TestContext;
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::context::TestContext;
 use tower::ServiceExt;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
@@ -32,7 +32,10 @@ async fn v1_status_returns_enabled_surfaces_against_postgres() {
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -140,7 +143,10 @@ async fn v1_communications_message_detail_returns_attachment_metadata_against_po
         .expect("attachment metadata");
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -394,7 +400,7 @@ async fn v1_status_returns_service_unavailable_after_auth_when_database_is_not_c
 }
 
 fn config_with_api_token() -> AppConfig {
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn get_request(uri: &str) -> Request<Body> {

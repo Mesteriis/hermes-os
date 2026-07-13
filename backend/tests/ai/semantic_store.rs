@@ -1,9 +1,9 @@
 use crate::support::*;
 use chrono::Utc;
+use hermes_backend_testkit::context::TestContext;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;
 use sqlx::Row;
-use testkit::context::TestContext;
 
 #[tokio::test]
 async fn pgvector_semantic_store_indexes_and_searches_sources_against_postgres() {

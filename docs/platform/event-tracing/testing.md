@@ -29,7 +29,7 @@ Required PostgreSQL-backed coverage:
 
 Use existing repository conventions:
 
-- `testcontainers-rs` lifecycle through `crates/test-session`, with domain fixtures in `crates/testkit`;
+- `testcontainers-rs` lifecycle through `crates/test-session`, with backend fixtures in `crates/testkit` (`hermes-backend-testkit`);
 - `cargo nextest` through Makefile targets for full backend validation;
 - deterministic fixtures instead of live Telegram, WhatsApp, Mail or external
   providers;

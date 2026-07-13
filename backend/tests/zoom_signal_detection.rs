@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use chrono::Utc;
+use hermes_backend_testkit::context::TestContext;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
@@ -18,7 +19,6 @@ use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::zoom_signal_detection::project_zoom_signal_detection;
 use serde_json::json;
-use testkit::context::TestContext;
 
 #[tokio::test]
 async fn zoom_meeting_events_flow_into_signal_hub_detection_events() {

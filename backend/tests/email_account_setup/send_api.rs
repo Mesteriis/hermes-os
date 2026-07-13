@@ -8,8 +8,8 @@ use tower::ServiceExt;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 
 use super::support::{
     LOCAL_API_TOKEN, MockSmtpServer, json_body, json_request_with_token_and_actor,
@@ -27,20 +27,22 @@ async fn imap_send_api_queues_outbox_without_direct_smtp_against_postgres() {
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_pairs([
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let app = build_router_with_database(config, database);
     unlock_test_vault(app.clone()).await;
 
@@ -172,20 +174,22 @@ async fn gmail_send_api_queues_outbox_without_direct_gmail_client_against_postgr
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_pairs([
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let app = build_router_with_database(config, database);
     unlock_test_vault(app.clone()).await;
 
@@ -239,20 +243,22 @@ async fn imap_send_api_queues_without_smtp_password_binding_against_postgres() {
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_pairs([
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let app = build_router_with_database(config, database);
     unlock_test_vault(app.clone()).await;
 
@@ -334,20 +340,22 @@ async fn imap_send_api_does_not_send_when_audit_record_fails_against_postgres() 
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_pairs([
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let app = build_router_with_database(config, database);
     unlock_test_vault(app.clone()).await;
 

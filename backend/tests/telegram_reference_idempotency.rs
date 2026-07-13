@@ -5,13 +5,13 @@ use chrono::Utc;
 use serde_json::json;
 use tower::ServiceExt;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::integrations::telegram::client::lifecycle;
 use hermes_hub_backend::platform::storage::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, json_body, json_post_request_with_actor, unique_suffix,
 };
-use testkit::context::TestContext;
 
 #[tokio::test]
 async fn telegram_reference_inserts_return_existing_rows_on_conflict() {
@@ -24,8 +24,11 @@ async fn telegram_reference_inserts_return_existing_rows_on_conflict() {
     let account_id = format!("telegram-reference-idempotent-{suffix}");
     let chat_id = format!("reference-idempotent-chat-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 

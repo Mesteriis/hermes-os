@@ -12,8 +12,8 @@ use hermes_hub_backend::domains::communications::messages::{
 };
 use hermes_hub_backend::domains::communications::sensitive_forwarding::SensitiveForwardingStore;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::workflows::email_intelligence::pipeline::MailAiPipelineService;
-use testkit::context::TestContext;
 
 #[tokio::test]
 async fn external_mail_ai_requires_explicit_body_egress_permission() {

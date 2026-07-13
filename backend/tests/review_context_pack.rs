@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode};
 use chrono::{TimeZone, Utc};
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxStore, ReviewItemKind,
@@ -14,7 +15,6 @@ use hermes_hub_backend::platform::storage::Database;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;
 use serde_json::{Value, json};
-use testkit::context::TestContext;
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -158,7 +158,10 @@ async fn build_review_api_app(database_url: &str) -> axum::Router {
         .await
         .expect("database connection");
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(REVIEW_API_TOKEN, database_url),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            REVIEW_API_TOKEN,
+            database_url,
+        ),
         database,
     )
 }

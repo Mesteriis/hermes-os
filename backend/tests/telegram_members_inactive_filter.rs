@@ -4,9 +4,9 @@ use serde_json::{Value, json};
 use sqlx::query;
 use tower::ServiceExt;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 
 const LOCAL_API_TOKEN: &str = "telegram-members-inactive-test-secret";
 
@@ -18,8 +18,11 @@ async fn members_route_excludes_inactive_provider_roster_rows() {
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database.clone(),
     );
     let pool = database.pool().expect("configured pool").clone();

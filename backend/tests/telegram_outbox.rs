@@ -5,7 +5,7 @@ use serde_json::json;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::integrations::telegram::client::lifecycle;
 
-use testkit::context::TestContext;
+use hermes_backend_testkit::context::TestContext;
 
 #[tokio::test]
 async fn telegram_outbox_claims_due_command_and_unlocks_while_awaiting_provider() {

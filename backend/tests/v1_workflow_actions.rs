@@ -1,7 +1,7 @@
+use hermes_backend_testkit::context::TestContext;
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
@@ -21,7 +21,7 @@ use hermes_hub_backend::platform::storage::Database;
 const T: &str = "v1-workflow-action-test-token";
 
 fn cfg() -> AppConfig {
-    testkit::app::config_with_secret(T)
+    hermes_backend_testkit::app::config_with_secret(T)
 }
 
 fn post_with_actor(uri: &str, body: Value) -> Request<Body> {
@@ -57,7 +57,7 @@ async fn router(database_url: &str) -> axum::Router {
         .await
         .expect("database connection");
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(T, database_url),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(T, database_url),
         database,
     )
 }

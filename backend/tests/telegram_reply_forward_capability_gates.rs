@@ -4,13 +4,13 @@ use axum::http::StatusCode;
 use serde_json::json;
 use tower::ServiceExt;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::platform::storage::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, get_request_with_token, ingest_fixture_telegram_message, json_body,
     json_post_request_with_actor, unique_suffix,
 };
-use testkit::context::TestContext;
 
 #[tokio::test]
 async fn fixture_account_blocks_reply_and_forward_before_side_effects() {
@@ -26,8 +26,11 @@ async fn fixture_account_blocks_reply_and_forward_before_side_effects() {
     let reply_target_provider_message_id = format!("{provider_chat_id}:root");
     let forward_source_provider_message_id = format!("{provider_chat_id}:forward-source");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 

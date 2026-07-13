@@ -75,7 +75,7 @@ pub(crate) async fn router(database_url: &str) -> axum::Router {
         .await
         .expect("database connection");
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(T, database_url),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(T, database_url),
         database,
     )
 }

@@ -1,6 +1,6 @@
 mod telegram_support;
 
-use testkit::context::TestContext;
+use hermes_backend_testkit::context::TestContext;
 
 use axum::http::StatusCode;
 use serde_json::{Value, json};
@@ -29,8 +29,11 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let decision_rationale = "channel context must feed the same domain model";
     let obligation_statement = format!("send the Telegram alignment note {suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -236,8 +239,11 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let template_id = format!("template-telegram-{suffix}");
     let call_id = format!("call-telegram-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 

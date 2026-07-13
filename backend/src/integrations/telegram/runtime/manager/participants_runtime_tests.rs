@@ -13,9 +13,9 @@ use crate::platform::config::AppConfig;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
 use crate::platform::secrets::{InMemorySecretResolver, SecretReferenceStore};
+use hermes_backend_testkit::context::TestContext;
 use serde_json::json;
 use sqlx::{PgPool, Row};
-use testkit::context::TestContext;
 
 async fn seed_chat(
     pool: &PgPool,

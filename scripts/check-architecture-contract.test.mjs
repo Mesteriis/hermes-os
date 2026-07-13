@@ -115,7 +115,7 @@ assert.deepEqual(contract.workspace.roles.contract_api, {
 assert.ok(contract.workspace.roles.provider_impl.forbidden_dependencies.includes('hermes-hub-backend'));
 assert.deepEqual(contract.workspace.roles.test_session, {
 	packages: ['hermes-test-session'],
-	forbidden_dependencies: ['hermes-hub-backend', 'testkit']
+	forbidden_dependencies: ['hermes-hub-backend', 'hermes-backend-testkit']
 });
 
 assert.ok(contract.frontend?.layers?.domains?.deny.includes('other_frontend_domains'));

@@ -5,7 +5,7 @@ Status: documentation package aligned to the current repository structure.
 Hermes uses a split test stack:
 
 - Rust backend execution runs through `cargo-nextest`.
-- Backend integration and coverage runs go through the `crates/test-session` session harness so PostgreSQL and NATS testcontainers are reused and cleaned correctly. Domain fixtures and migrations remain in `crates/testkit`.
+- Backend integration and coverage runs go through the `crates/test-session` session harness so PostgreSQL and NATS testcontainers are reused and cleaned correctly. Backend-specific fixtures and explicit test composition remain in `crates/testkit` (`hermes-backend-testkit`).
 - Local wrapper scripts and Makefile nextest targets force a visible progress mode via `--show-progress`.
 - Post-run JUnit analysis prints a compact completed/passed/failed/flaky summary with an ASCII progress bar, so non-interactive Codex/CI output is not silent after a test set finishes.
 - Frontend unit tests stay on Vitest.
@@ -90,7 +90,7 @@ elapsed time.
 
 Hermes does not yet physically relocate every backend test into `tests/unit`, `tests/integration`, `tests/e2e`, `tests/architecture`, `tests/snapshots`. The repository now uses a stable logical classification generated from the current target naming and a dedicated snapshot target:
 
-- `unit` - Rust library tests under `backend/src`, `crates/test-session/src` and `crates/testkit/src`
+- `unit` - Rust library tests under `backend/src`, `crates/test-session/src` and `crates/testkit/src` (`hermes-backend-testkit`)
 - `integration` - backend integration targets that are not architecture/e2e/snapshot targets
 - `e2e` - high-surface API/runtime targets such as `*_api`, stream/websocket API targets, `communications_connectrpc`, `omniroute`, `hard_v1_routes`
 - `architecture` - `*_architecture.rs` targets plus JS architecture guards

@@ -48,7 +48,7 @@ This is not a marketing summary. It is the current evidence-based state from the
 8. `cargo-audit` is integrated  
    Status: `complete`  
    Evidence: `Makefile`, CI security lane, docs, real `make security` / `cargo audit` execution.  
-   Note: `make audit` is green with a documented `RUSTSEC-2023-0071` ignore for the inactive optional `sqlx-mysql -> rsa` lockfile path. `cargo tree -i sqlx-mysql` prints no active backend/testkit path; SQLx is configured for PostgreSQL only.
+   Note: `make audit` is green with a documented `RUSTSEC-2023-0071` ignore for the inactive optional `sqlx-mysql -> rsa` lockfile path. `cargo tree -i sqlx-mysql` prints no active backend/`hermes-backend-testkit` path; SQLx is configured for PostgreSQL only.
 
 9. `cargo-deny` is integrated  
    Status: `complete`  

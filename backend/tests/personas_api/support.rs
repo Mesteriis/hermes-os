@@ -1,5 +1,5 @@
+use hermes_backend_testkit::context::TestContext;
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, header};
@@ -25,7 +25,7 @@ pub fn app_config_with_pairs(mut extra_pairs: Vec<(&'static str, String)>) -> Ap
     let suffix = unique_suffix();
     let vault_home = format!("/tmp/hermes-persons-api-vault-{suffix}");
     let dev_key_path = format!("{vault_home}/dev.key");
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
         .with_test_dev_vault_paths(vault_home, dev_key_path)
         .with_test_pairs(extra_pairs.drain(..))
         .expect("valid local API config")

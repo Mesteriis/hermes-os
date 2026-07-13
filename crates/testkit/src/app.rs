@@ -1,9 +1,7 @@
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, header};
-use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::storage::Database;
 use serde_json::Value;
 
 use crate::context::TestContext;
@@ -17,9 +15,7 @@ pub struct TestApp {
 }
 
 impl TestApp {
-    pub async fn new() -> Self {
-        let context = TestContext::new().await;
-        let router = router_for_context(&context);
+    pub fn new(context: TestContext, router: Router) -> Self {
         Self { context, router }
     }
 
@@ -63,17 +59,6 @@ pub fn config_with_secret_and_database_url(
         api_secret,
         database_url,
     ))
-}
-
-pub fn database_for_context(context: &TestContext) -> Database {
-    context.database()
-}
-
-pub fn router_for_context(context: &TestContext) -> Router {
-    build_router_with_database(
-        context.app_config(TEST_API_SECRET),
-        database_for_context(context),
-    )
 }
 
 pub fn empty_request(method: Method, uri: &str) -> Request<Body> {

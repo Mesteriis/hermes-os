@@ -124,8 +124,8 @@ fn loader_error(
 
 #[cfg(test)]
 mod tests {
+    use hermes_backend_testkit::context::TestContext;
     use serde_json::json;
-    use testkit::context::TestContext;
 
     use super::load_sendable_attachments;
     use crate::domains::communications::outbox::OutboxDeliveryError;

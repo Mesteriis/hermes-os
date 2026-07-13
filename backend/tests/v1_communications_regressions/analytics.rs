@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use testkit::context::TestContext;
+use hermes_backend_testkit::context::TestContext;
 use tower::ServiceExt;
 
 use super::support::{get, response_json, router, seed_projected_message_from_sender, uid};

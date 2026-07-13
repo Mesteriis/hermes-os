@@ -1,5 +1,5 @@
+use hermes_backend_testkit::context::TestContext;
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::context::TestContext;
 
 pub(crate) use axum::Router;
 pub(crate) use axum::body::{Body, to_bytes};
@@ -90,7 +90,7 @@ pub(crate) async fn live_graph_api_context(_test_name: &str) -> Option<LiveGraph
     let pool = database.pool().expect("configured pool").clone();
     let store = GraphStore::new(pool.clone());
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
             LOCAL_API_TOKEN,
             test_database_url.as_str(),
         ),
@@ -107,7 +107,7 @@ pub(crate) async fn live_graph_api_context(_test_name: &str) -> Option<LiveGraph
 }
 
 pub(crate) fn config_with_api_token() -> AppConfig {
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 pub(crate) fn get_request(uri: &str) -> Request<Body> {

@@ -1,5 +1,5 @@
+use hermes_backend_testkit::context::TestContext;
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
@@ -2283,7 +2283,10 @@ async fn build_review_api_app(database_url: &str) -> axum::Router {
         .await
         .expect("database connection");
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(REVIEW_API_TOKEN, database_url),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            REVIEW_API_TOKEN,
+            database_url,
+        ),
         database,
     )
 }

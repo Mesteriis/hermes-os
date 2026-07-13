@@ -1,5 +1,5 @@
+use hermes_backend_testkit::{self, context::TestContext};
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::{self, context::TestContext};
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -17,7 +17,7 @@ const LOCAL_API_TOKEN: &str = "events-api-test-token";
 #[tokio::test]
 async fn post_event_rejects_when_local_api_secret_is_not_configured() {
     let app = build_router(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN)
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
             .with_test_pairs([("HERMES_DEV_MODE", "true")])
             .expect("app config"),
     );
@@ -536,7 +536,7 @@ async fn app_and_pool_with_database(database_url: &str) -> (axum::Router, PgPool
 }
 
 fn config_with_api_token() -> AppConfig {
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn json_request(uri: &str, value: serde_json::Value) -> Request<Body> {

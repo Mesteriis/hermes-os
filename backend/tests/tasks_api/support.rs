@@ -1,5 +1,5 @@
+use hermes_backend_testkit::context::TestContext;
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::context::TestContext;
 
 pub(crate) use axum::Router;
 pub(crate) use axum::body::{Body, to_bytes};
@@ -13,7 +13,7 @@ pub(crate) use tower::ServiceExt;
 pub(crate) const LOCAL_API_TOKEN: &str = "tasks-api-test-token";
 
 pub(crate) fn config_with_api_token() -> AppConfig {
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 pub(crate) async fn test_database_url(test_name: &str) -> Option<String> {
@@ -90,7 +90,10 @@ pub(crate) async fn build_tasks_app(database_url: &str) -> Router {
         .await
         .expect("database connection");
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url,
+        ),
         database,
     )
 }

@@ -11,12 +11,12 @@ use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::secrets::{
     SecretReferenceStore, SecretResolver, SecretStoreKind,
 };
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::vault::{HostVault, HostVaultConfig};
-use testkit::context::TestContext;
 
 use super::support::{
     LOCAL_API_TOKEN, MockTokenServer, get_request, json_body, json_request_with_token_and_actor,
@@ -35,7 +35,7 @@ async fn gmail_oauth_start_api_uses_configured_google_desktop_client_against_pos
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN)
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
             .with_test_pairs([
                 ("HERMES_DEV_MODE", "true"),
                 (
@@ -102,20 +102,23 @@ async fn gmail_oauth_start_api_requires_initialized_host_vault_against_postgres(
     let dev_key_path = vault_dir.path().join("dev").join("master.key");
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-                (
-                    "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON",
-                    r#"{
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_home.to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                dev_key_path.to_str().expect("dev key path"),
+            ),
+            (
+                "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON",
+                r#"{
                     "installed": {
                         "client_id": "desktop-client-id.apps.googleusercontent.com",
                         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -124,9 +127,9 @@ async fn gmail_oauth_start_api_requires_initialized_host_vault_against_postgres(
                         "redirect_uris": ["http://localhost"]
                     }
                 }"#,
-                ),
-            ])
-            .expect("config"),
+            ),
+        ])
+        .expect("config"),
         Database::connect(Some(&database_url))
             .await
             .expect("database connection"),
@@ -161,19 +164,22 @@ async fn gmail_oauth_start_api_reopens_initialized_host_vault_after_restart_agai
     let dev_key_path = vault_dir.path().join("dev").join("master.key");
 
     let initialized_app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config"),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_home.to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                dev_key_path.to_str().expect("dev key path"),
+            ),
+        ])
+        .expect("config"),
         Database::connect(Some(&database_url))
             .await
             .expect("database connection"),
@@ -181,20 +187,23 @@ async fn gmail_oauth_start_api_reopens_initialized_host_vault_after_restart_agai
     unlock_test_vault(initialized_app).await;
 
     let restarted_app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-                (
-                    "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON",
-                    r#"{
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_home.to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                dev_key_path.to_str().expect("dev key path"),
+            ),
+            (
+                "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON",
+                r#"{
                     "installed": {
                         "client_id": "desktop-client-id.apps.googleusercontent.com",
                         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -203,9 +212,9 @@ async fn gmail_oauth_start_api_reopens_initialized_host_vault_after_restart_agai
                         "redirect_uris": ["http://localhost"]
                     }
                 }"#,
-                ),
-            ])
-            .expect("config"),
+            ),
+        ])
+        .expect("config"),
         Database::connect(Some(&database_url))
             .await
             .expect("database connection"),
@@ -246,19 +255,22 @@ async fn gmail_oauth_callback_completes_pending_grant_without_api_secret() {
     let vault_home = vault_dir.path().join("vault");
     let dev_key_path = vault_dir.path().join("dev").join("master.key");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config"),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_home.to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                dev_key_path.to_str().expect("dev key path"),
+            ),
+        ])
+        .expect("config"),
         database,
     );
     unlock_test_vault(app.clone()).await;
@@ -522,7 +534,7 @@ async fn gmail_oauth_callback_completes_pending_grant_without_api_secret() {
 #[tokio::test]
 async fn gmail_oauth_callback_rejects_unknown_state_without_api_secret() {
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN),
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN),
         Database::disabled(),
     );
 
@@ -549,7 +561,7 @@ async fn gmail_oauth_callback_rejects_unknown_state_without_api_secret() {
 #[tokio::test]
 async fn gmail_oauth_callback_rejects_missing_code_without_leaking_secrets() {
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN),
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN),
         Database::disabled(),
     );
 
@@ -571,7 +583,7 @@ async fn gmail_oauth_callback_rejects_missing_code_without_leaking_secrets() {
 #[tokio::test]
 async fn gmail_oauth_start_and_complete_still_require_api_secret() {
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN),
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN),
         Database::disabled(),
     );
 

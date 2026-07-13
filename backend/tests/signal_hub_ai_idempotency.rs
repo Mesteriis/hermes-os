@@ -1,13 +1,21 @@
 use chrono::Utc;
+use hermes_backend_testkit::app::TestApp;
+use hermes_backend_testkit::composition::router_for_context;
+use hermes_backend_testkit::context::TestContext;
 use hermes_events_api::NewEventEnvelope;
 use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::domains::signal_hub::ai::dispatch_ai_helper_signal;
 use serde_json::json;
-use testkit::app::TestApp;
+
+async fn test_app() -> TestApp {
+    let context = TestContext::new().await;
+    let router = router_for_context(&context);
+    TestApp::new(context, router)
+}
 
 #[tokio::test]
 async fn repeated_ai_signal_resolves_legacy_source_idempotency_event() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let pool = app.context().pool().clone();
     let event_store = EventStore::new(pool.clone());
     let source_id = "mail-ai-idempotency-message";
@@ -65,7 +73,7 @@ async fn repeated_ai_signal_resolves_legacy_source_idempotency_event() {
 
 #[tokio::test]
 async fn repeated_new_ai_signal_reuses_deterministic_event_identity() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let pool = app.context().pool().clone();
     let source_id = "mail-ai-deterministic-message";
 

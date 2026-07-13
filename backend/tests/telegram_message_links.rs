@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
@@ -16,7 +17,6 @@ use hermes_hub_backend::integrations::telegram::client::{
     NewTelegramChat, TelegramChatKind, TelegramStore, TelegramSyncState,
 };
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 
 const LOCAL_API_TOKEN: &str = "telegram-message-link-test-secret";
 
@@ -32,8 +32,11 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
     let account_id = format!("telegram-link-{suffix}");
     let chat_id = format!("100{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 

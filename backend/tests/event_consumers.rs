@@ -26,11 +26,11 @@ use hermes_hub_backend::integrations::telegram::client::{
     NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramStore,
 };
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::communications::{
     EventStoreProviderMessageObservationEventPort, ProviderMessageObservationEvent,
     ProviderMessageObservationEventPort,
 };
-use testkit::context::TestContext;
 
 async fn live_context(_test_name: &str) -> Option<(TestContext, EventStore)> {
     let test_context = TestContext::new().await;

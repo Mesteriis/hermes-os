@@ -8,10 +8,10 @@ use serde_json::json;
 use tokio::time::timeout;
 use tower::ServiceExt;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 
 const LOCAL_API_TOKEN: &str = "events-stream-test-token";
 
@@ -242,7 +242,7 @@ async fn app_with_database(database_url: &str) -> axum::Router {
 }
 
 fn config_with_api_token() -> AppConfig {
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn json_request_with_token(uri: &str, value: serde_json::Value, token: &str) -> Request<Body> {

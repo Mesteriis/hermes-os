@@ -11,8 +11,8 @@ use hermes_hub_backend::domains::communications::provider_resources::{
     NewMailProviderResource,
 };
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 
 const TOKEN: &str = "mail-provider-resource-api-test-token";
 
@@ -21,7 +21,10 @@ async fn app(context: &TestContext) -> axum::Router {
         .await
         .expect("database");
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(TOKEN, context.connection_string()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            TOKEN,
+            context.connection_string(),
+        ),
         database,
     )
 }

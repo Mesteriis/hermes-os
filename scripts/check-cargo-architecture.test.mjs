@@ -7,13 +7,13 @@ const roles = {
 	provider_api: { packages: ['hermes-provider-api'], forbidden_dependencies: ['sqlx'] },
 	provider_impl: {
 		packages: ['hermes-provider-zulip'],
-		forbidden_dependencies: ['hermes-hub-backend', 'sqlx', 'testkit']
+		forbidden_dependencies: ['hermes-hub-backend', 'sqlx', 'hermes-backend-testkit']
 	},
 	composition: { packages: ['hermes-hub-backend'], forbidden_dependencies: [] },
-	test_support: { packages: ['testkit'], forbidden_dependencies: [] },
+	test_support: { packages: ['hermes-backend-testkit'], forbidden_dependencies: [] },
 	test_session: {
 		packages: ['hermes-test-session'],
-		forbidden_dependencies: ['hermes-hub-backend', 'testkit']
+		forbidden_dependencies: ['hermes-hub-backend', 'hermes-backend-testkit']
 	},
 	domain_api: { packages: [], forbidden_dependencies: [] },
 	persistence_adapter: { packages: [], forbidden_dependencies: [] },
@@ -39,7 +39,7 @@ const packages = new Map([
 	['provider-api-id', { id: 'provider-api-id', name: 'hermes-provider-api', workspace: true }],
 	['provider-id', { id: 'provider-id', name: 'hermes-provider-zulip', workspace: true }],
 	['backend-id', { id: 'backend-id', name: 'hermes-hub-backend', workspace: true }],
-	['testkit-id', { id: 'testkit-id', name: 'testkit', workspace: true }],
+	['testkit-id', { id: 'testkit-id', name: 'hermes-backend-testkit', workspace: true }],
 	['session-id', { id: 'session-id', name: 'hermes-test-session', workspace: true }],
 	['sqlx-id', { id: 'sqlx-id', name: 'sqlx', workspace: false }]
 ]);
@@ -103,7 +103,7 @@ assert.deepEqual(
 	[
 		'hermes-provider-zulip: role provider_impl cannot depend on role test_support via dev dependency',
 		'hermes-provider-zulip: forbidden dependency "hermes-hub-backend" for role provider_impl',
-		'hermes-provider-zulip: forbidden dependency "testkit" for role provider_impl'
+		'hermes-provider-zulip: forbidden dependency "hermes-backend-testkit" for role provider_impl'
 	]
 );
 

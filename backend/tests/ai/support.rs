@@ -256,7 +256,7 @@ pub(crate) async fn seed_document(
 }
 
 pub(crate) fn config_with_api_token() -> AppConfig {
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 pub(crate) async fn wait_for_run_status(

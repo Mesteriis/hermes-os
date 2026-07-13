@@ -26,11 +26,11 @@ use hermes_hub_backend::integrations::telegram::client::{
     NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramMessage, TelegramStore,
 };
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::communications::{
     EventStoreProviderMessageObservationEventPort, ProviderMessageObservationEvent,
     ProviderMessageObservationEventPort,
 };
-use testkit::context::TestContext;
 
 #[tokio::test]
 async fn telegram_provider_delete_observation_is_idempotent_and_reconciles_delete_command() {

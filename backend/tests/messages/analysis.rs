@@ -1,9 +1,9 @@
+use hermes_backend_testkit::context::TestContext;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::analytics::EmailAnalyticsStore;
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
-use testkit::context::TestContext;
 
 use super::support::{
     live_projection_context, record_raw_email_message, store_provider_account, unique_suffix,

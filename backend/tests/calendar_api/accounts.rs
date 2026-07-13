@@ -1,4 +1,4 @@
-use testkit::context::TestContext;
+use hermes_backend_testkit::context::TestContext;
 
 use serde_json::json;
 use sqlx::Row;

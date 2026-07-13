@@ -3,8 +3,8 @@ mod telegram_support;
 use std::env;
 
 use axum::http::StatusCode;
+use hermes_backend_testkit::context::TestContext;
 use serde_json::json;
-use testkit::context::TestContext;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
@@ -17,7 +17,7 @@ use telegram_support::{
 #[tokio::test]
 async fn telegram_qr_login_start_reports_tdlib_runtime_unavailable() {
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN)
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
             .with_test_tdjson_path("/tmp/hermes-hub-test-missing-libtdjson.dylib"),
         Database::disabled(),
     );
@@ -48,7 +48,7 @@ async fn telegram_qr_login_start_reports_tdlib_runtime_unavailable() {
 #[tokio::test]
 async fn telegram_qr_login_start_uses_configured_app_credentials_when_payload_omits_them() {
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN)
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
             .with_test_tdjson_path("/tmp/hermes-hub-test-missing-libtdjson.dylib")
             .with_test_telegram_app_credentials(12345, "telegram-api-hash"),
         Database::disabled(),
@@ -97,9 +97,12 @@ async fn telegram_live_smoke_syncs_configured_account_when_explicitly_enabled() 
     let database_url = test_context.connection_string();
     let database = test_context.database();
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url)
-            .with_test_tdjson_path(tdjson_path)
-            .with_test_telegram_app_credentials(telegram_api_id, telegram_api_hash),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url,
+        )
+        .with_test_tdjson_path(tdjson_path)
+        .with_test_telegram_app_credentials(telegram_api_id, telegram_api_hash),
         database,
     );
 
@@ -142,7 +145,7 @@ async fn telegram_live_smoke_syncs_configured_account_when_explicitly_enabled() 
 #[tokio::test]
 async fn telegram_qr_login_status_unknown_setup_returns_json_not_found() {
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN),
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN),
         Database::disabled(),
     );
 
@@ -162,7 +165,7 @@ async fn telegram_qr_login_status_unknown_setup_returns_json_not_found() {
 #[tokio::test]
 async fn telegram_qr_login_password_unknown_setup_returns_json_not_found() {
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN),
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN),
         Database::disabled(),
     );
 
@@ -183,7 +186,7 @@ async fn telegram_qr_login_password_unknown_setup_returns_json_not_found() {
 #[tokio::test]
 async fn telegram_qr_login_cancel_unknown_setup_returns_json_not_found() {
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN),
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN),
         Database::disabled(),
     );
 

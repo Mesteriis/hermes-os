@@ -1,4 +1,4 @@
-use testkit::context::TestContext;
+use hermes_backend_testkit::context::TestContext;
 
 use chrono::{DateTime, Utc};
 use hermes_hub_backend::platform::storage::{Database, ReadinessStatus};

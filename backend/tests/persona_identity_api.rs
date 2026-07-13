@@ -1,5 +1,5 @@
+use hermes_backend_testkit::context::TestContext;
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
@@ -83,7 +83,10 @@ async fn identity_candidates_returns_safe_candidate_payload() {
     run_persona_identity_review_inbox_consumer(pool.clone()).await;
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -190,7 +193,10 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
     let command_id = format!("identity-api-split-confirm-{suffix}");
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -276,7 +282,10 @@ async fn put_identity_candidate_review_confirms_candidate() {
     let command_id = format!("identity-api-confirm-{suffix}");
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -376,7 +385,10 @@ async fn persona_identity_returns_confirmed_links_for_person() {
         identity_candidate_id_from_personas(&left.persona_id, &right.persona_id);
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -435,7 +447,10 @@ async fn persona_identity_manual_create_paths_capture_observations_against_postg
     let encoded_person_id = urlencoding_percent_encode(&person.persona_id);
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -533,7 +548,7 @@ struct PersonaIdentityApiContext {
 }
 
 fn config_with_api_token() -> AppConfig {
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn get_request(uri: &str) -> Request<Body> {

@@ -13,11 +13,11 @@ use axum::response::IntoResponse;
 use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use chrono::Utc;
+use hermes_backend_testkit::context::TestContext;
 use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 use tempfile::tempdir;
-use testkit::context::TestContext;
 use tokio::net::TcpListener;
 use tower::ServiceExt;
 use url::form_urlencoded;
@@ -112,24 +112,27 @@ async fn zulip_account_setup_stores_api_key_in_host_vault() {
         Utc::now().timestamp_nanos_opt().unwrap_or_default()
     );
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_dir.path().join("vault").to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    vault_dir
-                        .path()
-                        .join("dev")
-                        .join("master.key")
-                        .to_str()
-                        .expect("dev key path"),
-                ),
-            ])
-            .expect("config"),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_dir.path().join("vault").to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                vault_dir
+                    .path()
+                    .join("dev")
+                    .join("master.key")
+                    .to_str()
+                    .expect("dev key path"),
+            ),
+        ])
+        .expect("config"),
         database,
     );
 
@@ -279,7 +282,10 @@ async fn zulip_upload_command_endpoints_enqueue_reference_only_commands() {
         .await
         .expect("provider account");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -2236,7 +2242,7 @@ async fn zulip_message_drives_review_attention_card_and_context_pack_trace_chain
             .await
             .expect("database connection");
         build_router_with_database(
-            testkit::app::config_with_secret_and_database_url(
+            hermes_backend_testkit::app::config_with_secret_and_database_url(
                 LOCAL_API_TOKEN,
                 database_url.as_str(),
             ),

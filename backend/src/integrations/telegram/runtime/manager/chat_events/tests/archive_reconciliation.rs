@@ -11,7 +11,7 @@ use super::seed_chat;
 
 #[tokio::test]
 async fn publish_chat_position_event_reconciles_archive_command_when_provider_chat_is_archived() {
-    let ctx = testkit::context::TestContext::new().await;
+    let ctx = hermes_backend_testkit::context::TestContext::new().await;
     let pool = ctx.pool().clone();
     let account_id = "acct-archive-reconcile-1";
     let provider_chat_id = "chat-archive-reconcile-1";
@@ -98,7 +98,7 @@ async fn publish_chat_position_event_reconciles_archive_command_when_provider_ch
 #[tokio::test]
 async fn publish_chat_position_event_reconciles_unarchive_command_when_provider_chat_is_unarchived()
 {
-    let ctx = testkit::context::TestContext::new().await;
+    let ctx = hermes_backend_testkit::context::TestContext::new().await;
     let pool = ctx.pool().clone();
     let account_id = "acct-unarchive-reconcile-1";
     let provider_chat_id = "chat-unarchive-reconcile-1";
@@ -184,7 +184,7 @@ async fn publish_chat_position_event_reconciles_unarchive_command_when_provider_
 
 #[tokio::test]
 async fn publish_chat_position_event_marks_archive_command_as_mismatch_when_provider_disagrees() {
-    let ctx = testkit::context::TestContext::new().await;
+    let ctx = hermes_backend_testkit::context::TestContext::new().await;
     let pool = ctx.pool().clone();
     let account_id = "acct-archive-mismatch-1";
     let provider_chat_id = "chat-archive-mismatch-1";
@@ -284,7 +284,7 @@ async fn publish_chat_position_event_marks_archive_command_as_mismatch_when_prov
 
 #[tokio::test]
 async fn publish_chat_position_event_marks_unarchive_command_as_mismatch_when_provider_disagrees() {
-    let ctx = testkit::context::TestContext::new().await;
+    let ctx = hermes_backend_testkit::context::TestContext::new().await;
     let pool = ctx.pool().clone();
     let account_id = "acct-unarchive-mismatch-1";
     let provider_chat_id = "chat-unarchive-mismatch-1";

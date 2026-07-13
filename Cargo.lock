@@ -1698,6 +1698,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "hermes-backend-testkit"
+version = "0.1.0"
+dependencies = [
+ "async-nats",
+ "axum",
+ "chrono",
+ "hermes-communications-api",
+ "hermes-communications-postgres",
+ "hermes-hub-backend",
+ "hermes-test-session",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tempfile",
+ "testcontainers",
+ "tokio",
+ "tower",
+ "uuid",
+]
+
+[[package]]
 name = "hermes-blob-api"
 version = "0.1.0"
 dependencies = [
@@ -1803,6 +1826,7 @@ dependencies = [
  "encoding_rs",
  "futures",
  "getrandom 0.2.17",
+ "hermes-backend-testkit",
  "hermes-communications-api",
  "hermes-communications-postgres",
  "hermes-connectrpc-contracts",
@@ -1838,7 +1862,6 @@ dependencies = [
  "sqlx",
  "tantivy",
  "tempfile",
- "testkit",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
@@ -4464,29 +4487,6 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "url",
- "uuid",
-]
-
-[[package]]
-name = "testkit"
-version = "0.1.0"
-dependencies = [
- "async-nats",
- "axum",
- "chrono",
- "hermes-communications-api",
- "hermes-communications-postgres",
- "hermes-hub-backend",
- "hermes-test-session",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "tempfile",
- "testcontainers",
- "tokio",
- "tower",
  "uuid",
 ]
 

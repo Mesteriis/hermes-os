@@ -12,8 +12,8 @@ use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, WorkflowState, project_raw_email_message,
 };
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 
 const T: &str = "v1comms-saved-search-test-token";
 
@@ -22,7 +22,7 @@ async fn router(database_url: &str) -> axum::Router {
         .await
         .expect("database connection");
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(T, database_url),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(T, database_url),
         database,
     )
 }

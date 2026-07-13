@@ -1,4 +1,6 @@
 use chrono::Utc;
+use hermes_backend_testkit::containers::zulip::{ProvisionedZulipRealm, ZulipServer};
+use hermes_backend_testkit::context::TestContext;
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use hermes_communications_api::accounts::{
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
@@ -10,8 +12,6 @@ use std::env;
 use std::fs;
 use std::path::Path;
 use tempfile::tempdir;
-use testkit::containers::zulip::{ProvisionedZulipRealm, ZulipServer};
-use testkit::context::TestContext;
 use tokio::time::{Duration, Instant, sleep};
 
 const LIVE_WAIT_LOG_INTERVAL: Duration = Duration::from_secs(5);

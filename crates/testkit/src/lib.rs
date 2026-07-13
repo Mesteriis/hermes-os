@@ -1,4 +1,4 @@
-//! Test infrastructure for Hermes Hub.
+//! Backend-specific test infrastructure for Hermes Hub.
 //!
 //! Provides programmatic container management, isolated test databases,
 //! and entity factories for integration testing.
@@ -6,8 +6,8 @@
 //! # Usage
 //!
 //! ```ignore
-//! use testkit::context::TestContext;
-//! use testkit::factories::task::TaskFactory;
+//! use hermes_backend_testkit::context::TestContext;
+//! use hermes_backend_testkit::factories::task::TaskFactory;
 //!
 //! #[tokio::test]
 //! async fn my_integration_test() {
@@ -22,6 +22,7 @@
 //! ```
 
 pub mod app;
+pub mod composition;
 pub mod containers;
 pub mod context;
 pub mod factories;

@@ -3,9 +3,9 @@ use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 
 const LOCAL_API_TOKEN: &str = "telegram-participant-capability-gates-secret";
 
@@ -18,8 +18,11 @@ async fn fixture_account_blocks_members_sync_before_audit_or_events() {
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -97,8 +100,11 @@ async fn fixture_account_blocks_join_and_leave_before_command_enqueue() {
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 

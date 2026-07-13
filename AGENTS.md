@@ -209,7 +209,7 @@ Docker-ресурсы других проектов, host-wide caches, vault/pro
 | Secrets / vault | `docs/adr/ADR-0042-secret-references-for-provider-credentials.md`, `docs/adr/ADR-0076-host-vault-on-macos.md`, `docs/vault/README.md` |
 | AI / embeddings / agents | `docs/adr/ADR-0009-local-ai-through-ollama.md`, `docs/adr/ADR-0022-no-fine-tuning-on-private-data.md`, `docs/ai/README.md` |
 | Frontend | `docs/adr/ADR-0093-frontend-platform-migration-to-vue-3.md`, `docs/adr/ADR-0077-i18n-russian-english.md`, `docs/adr/ADR-0078-frontend-component-decomposition.md`, `docs/adr/ADR-0079-script-logic-decomposition.md`, `frontend/package.json` |
-| Testing | `Makefile`, `.config/nextest.toml`, `crates/testkit/`, relevant `scripts/test/*` |
+| Testing | `Makefile`, `.config/nextest.toml`, `crates/testkit/` (`hermes-backend-testkit`), relevant `scripts/test/*` |
 | UI design system | `docs/ui/design-system-vision.md`, `docs/architecture/ui.md`, existing `frontend/src/shared/ui` |
 
 Если появляется или меняется долгосрочное архитектурное решение, создай ADR до
@@ -516,7 +516,7 @@ Backend - Rust.
 4. Запусти targeted validation.
 5. Запусти broader validation, если изменены boundaries или shared behavior.
 
-Используй repository-supported tools: nextest, `crates/testkit` /
+Используй repository-supported tools: nextest, `crates/testkit` (`hermes-backend-testkit`) /
 `hermes_test_session`, testcontainers-backed infrastructure, `insta` snapshots
 там, где они уже используются, existing test doubles/mocks и Vitest для
 frontend tests.

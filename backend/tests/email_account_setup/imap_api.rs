@@ -17,13 +17,13 @@ use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
 use hermes_hub_backend::integrations::mail::accounts::models::ImapAccountSetupRequest;
 use hermes_hub_backend::integrations::mail::accounts::service::EmailAccountSetupService;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::secrets::{
     DatabaseEncryptedSecretVault, ResolvedSecret, SecretKind, SecretReferenceStore, SecretResolver,
     SecretStoreKind,
 };
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::vault::{HostVault, HostVaultConfig};
-use testkit::context::TestContext;
 
 use super::support::{
     LOCAL_API_TOKEN, json_body, json_request_with_token_and_actor, live_setup_context,
@@ -123,19 +123,22 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config"),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_home.to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                dev_key_path.to_str().expect("dev key path"),
+            ),
+        ])
+        .expect("config"),
         database.clone(),
     );
     unlock_test_vault(app.clone()).await;
@@ -406,7 +409,7 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
 #[tokio::test]
 async fn imap_account_setup_api_requires_configured_database() {
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN),
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN),
         Database::disabled(),
     );
 
@@ -448,7 +451,7 @@ async fn imap_account_setup_api_requires_initialized_host_vault_against_postgres
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        testkit::app::config_with_secret(LOCAL_API_TOKEN)
+        hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
             .with_test_pairs([
                 ("HERMES_DEV_MODE", "true"),
                 (

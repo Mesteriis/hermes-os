@@ -1,7 +1,7 @@
+use hermes_backend_testkit::context::TestContext;
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -69,7 +69,10 @@ async fn project_detail_returns_live_project_payload() {
         .expect("upsert API project");
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -167,7 +170,10 @@ async fn project_link_candidates_return_safe_message_and_document_candidates() {
     .await;
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -280,7 +286,10 @@ async fn put_project_link_review_updates_review_state() {
     .await;
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -386,7 +395,10 @@ async fn put_project_link_review_rejects_missing_target() {
         .expect("upsert missing-target project");
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -434,7 +446,7 @@ fn live_projects_api_context(pool: &PgPool) -> ProjectsApiContext {
 }
 
 fn config_with_api_token() -> AppConfig {
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn get_request(uri: &str) -> Request<Body> {

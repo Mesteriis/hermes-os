@@ -7,6 +7,7 @@ use sqlx::Row;
 use std::net::SocketAddr;
 use tower::ServiceExt;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::ai::control_center::{
     AiControlCenterError, AiControlCenterStore, AiModelAvailabilityUpdateRequest,
     AiModelRouteUpdateRequest, AiPromptCreateRequest, AiProviderConsentRequest,
@@ -18,13 +19,12 @@ use hermes_hub_backend::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 use tokio::net::TcpListener;
 
 const LOCAL_API_TOKEN: &str = "ai-control-center-test-token";
 
 fn cfg() -> AppConfig {
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn json_request(method: Method, uri: &str, body: Value) -> Request<Body> {
@@ -583,7 +583,10 @@ async fn ollama_model_download_marks_model_available_without_creating_route() {
         .await
         .expect("patch provider base url");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
     let response = app
@@ -643,7 +646,10 @@ async fn ollama_model_download_failure_appends_failed_event() {
         .await
         .expect("patch provider base url");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
     let response = app
@@ -878,10 +884,12 @@ async fn api_provider_create_with_locked_host_vault_does_not_leave_provider_row(
         .await
         .expect("database");
     let vault_home = vault_home.path().to_string_lossy().to_string();
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([("HERMES_VAULT_HOME", vault_home.as_str())])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_pairs([("HERMES_VAULT_HOME", vault_home.as_str())])
+    .expect("config");
     let app = build_router_with_database(config, database);
     let provider_id = "provider:api:locked-vault-create";
 
@@ -925,10 +933,12 @@ async fn api_provider_create_with_api_key_marks_ready_and_binds_host_vault_secre
         .await
         .expect("database");
     let vault_home = vault_home.path().to_string_lossy().to_string();
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([("HERMES_VAULT_HOME", vault_home.as_str())])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_pairs([("HERMES_VAULT_HOME", vault_home.as_str())])
+    .expect("config");
     let app = build_router_with_database(config, database);
     let provider_id = "provider:api:omniroute-ready";
 

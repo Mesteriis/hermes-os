@@ -10,10 +10,10 @@ use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretResolver};
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::vault::{EntropyEvent, HostVault, HostVaultConfig, SecretEntryContext};
-use testkit::context::TestContext;
 
 use super::support::{
     LOCAL_API_TOKEN, json_body, json_request_with_token_and_actor, unlock_test_vault,
@@ -31,20 +31,22 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_pairs([
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let app = build_router_with_database(config.clone(), database.clone());
     unlock_test_vault(app.clone()).await;
 
@@ -329,20 +331,22 @@ async fn startup_reconciles_non_mail_provider_account_from_host_vault_manifest()
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_pairs([
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let app = build_router_with_database(config.clone(), database.clone());
     unlock_test_vault(app).await;
 
@@ -423,20 +427,22 @@ async fn startup_reconciles_legacy_gmail_manifest_without_provider_metadata() {
     let database_url = ctx.connection_string();
     let vault_home = vault_dir.path().join("vault");
     let dev_key_path = vault_dir.path().join("dev").join("master.key");
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_pairs([
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let vault = HostVault::new(HostVaultConfig {
         home: vault_home.clone(),
         dev_mode: true,
@@ -511,20 +517,22 @@ async fn startup_reconciles_one_account_for_duplicate_provider_external_identity
     let database_url = ctx.connection_string();
     let vault_home = vault_dir.path().join("vault");
     let dev_key_path = vault_dir.path().join("dev").join("master.key");
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_DEV_MODE", "true"),
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_pairs([
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let vault = HostVault::new(HostVaultConfig {
         home: vault_home,
         dev_mode: true,

@@ -15,8 +15,8 @@ use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, NewProjectedMessage,
 };
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::storage::Database;
-use testkit::context::TestContext;
 
 const TOKEN: &str = "message-flags-api-test-token";
 
@@ -25,7 +25,10 @@ async fn app(ctx: &TestContext) -> axum::Router {
         .await
         .expect("database");
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(TOKEN, ctx.connection_string().as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            TOKEN,
+            ctx.connection_string().as_str(),
+        ),
         database,
     )
 }

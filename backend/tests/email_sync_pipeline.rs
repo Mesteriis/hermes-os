@@ -1,7 +1,7 @@
+use hermes_backend_testkit::context::TestContext;
+use hermes_backend_testkit::factories::persona::PersonaFactory;
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::context::TestContext;
-use testkit::factories::persona::PersonaFactory;
 
 use base64::Engine as _;
 use chrono::{TimeZone, Utc};

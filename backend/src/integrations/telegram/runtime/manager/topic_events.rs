@@ -230,8 +230,8 @@ fn topic_updated_event(
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;
+    use hermes_backend_testkit::context::TestContext;
     use sqlx::Row;
-    use testkit::context::TestContext;
 
     use super::*;
     use crate::integrations::telegram::client::lifecycle::insert_command;

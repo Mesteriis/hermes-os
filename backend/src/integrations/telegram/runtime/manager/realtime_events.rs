@@ -322,8 +322,8 @@ async fn publish_command_event(
 #[cfg(test)]
 mod typing_tests {
     use chrono::Utc;
+    use hermes_backend_testkit::context::TestContext;
     use serde_json::json;
-    use testkit::context::TestContext;
 
     use super::command_event_payload;
     use super::{TelegramRuntimeEventBridgeContext, publish_command_reconciled_events};
@@ -503,8 +503,8 @@ mod tests {
     use std::time::Duration;
 
     use chrono::TimeZone;
+    use hermes_backend_testkit::context::TestContext;
     use serde_json::json;
-    use testkit::context::TestContext;
     use tokio::sync::mpsc::unbounded_channel;
     use tokio::time::timeout;
 

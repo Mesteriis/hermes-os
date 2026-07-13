@@ -1,7 +1,7 @@
+use hermes_backend_testkit::context::TestContext;
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -92,7 +92,10 @@ async fn task_candidates_returns_safe_candidate_payload() {
         .expect("refresh candidates");
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -176,7 +179,10 @@ async fn put_task_candidate_review_confirms_task_with_observation_trail() {
     .expect("candidate id");
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -272,7 +278,10 @@ async fn put_task_candidate_review_rejects_missing_candidate() {
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        ),
         database,
     );
 
@@ -306,7 +315,7 @@ struct TaskCandidatesApiContext {
 }
 
 fn config_with_api_token() -> AppConfig {
-    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+    hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn get_request(uri: &str) -> Request<Body> {

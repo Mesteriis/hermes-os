@@ -6,7 +6,7 @@
 //! These live tests use the shared testcontainers pgvector fixture with
 //! per-test migrated databases.
 
-use testkit::context::TestContext;
+use hermes_backend_testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
@@ -25,7 +25,7 @@ struct PersonaNativeTestApp {
 }
 
 fn cfg(db: &str) -> AppConfig {
-    testkit::app::config_with_secret_and_database_url(TOKEN, db)
+    hermes_backend_testkit::app::config_with_secret_and_database_url(TOKEN, db)
 }
 
 fn get(uri: &str) -> Request<Body> {

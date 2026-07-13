@@ -19,14 +19,22 @@ use hermes_hub_backend::domains::communications::storage::{
     NewCommunicationAttachmentImport, NewCommunicationBlob,
 };
 
+use hermes_backend_testkit::app::{TestApp, post_json};
+use hermes_backend_testkit::composition::router_for_context;
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use serde_json::{Value, json};
-use testkit::app::{TestApp, post_json};
 use tower::ServiceExt;
+
+async fn test_app() -> TestApp {
+    let context = TestContext::new().await;
+    let router = router_for_context(&context);
+    TestApp::new(context, router)
+}
 
 #[tokio::test]
 async fn communications_connect_api_requires_local_api_secret() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let router = app.clone_router();
 
     let forbidden_response = router
@@ -55,7 +63,7 @@ async fn communications_connect_api_requires_local_api_secret() {
 
 #[tokio::test]
 async fn communications_connect_api_exposes_provider_neutral_queries_and_send() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let pool = app.context().pool().clone();
     let router = app.clone_router();
     let ingestion = CommunicationIngestionStore::new(pool.clone());

@@ -20,9 +20,9 @@ use hermes_hub_backend::domains::communications::storage::{
     NewCommunicationBlob,
 };
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
-use testkit::context::TestContext;
 
 const T: &str = "v1comms-archive-inspection-test-token";
 
@@ -190,7 +190,7 @@ async fn router(database_url: &str) -> axum::Router {
         .await
         .expect("database connection");
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(T, database_url),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(T, database_url),
         database,
     )
 }

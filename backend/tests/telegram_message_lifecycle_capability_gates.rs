@@ -4,13 +4,13 @@ use axum::http::StatusCode;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::platform::storage::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, delete_request_with_token, get_request_with_token,
     ingest_fixture_telegram_message, json_body, json_post_request_with_actor, unique_suffix,
 };
-use testkit::context::TestContext;
 
 #[tokio::test]
 async fn removed_account_blocks_message_lifecycle_and_reaction_routes_before_side_effects() {
@@ -25,8 +25,11 @@ async fn removed_account_blocks_message_lifecycle_and_reaction_routes_before_sid
     let provider_chat_id = format!("message-gates-chat-{suffix}");
     let provider_message_id = format!("{provider_chat_id}:42");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -269,8 +272,11 @@ async fn message_lifecycle_status_events_include_command_identity_for_realtime_c
     let provider_chat_id = format!("message-status-chat-{suffix}");
     let provider_message_id = format!("{provider_chat_id}:42");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 

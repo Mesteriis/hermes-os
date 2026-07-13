@@ -169,18 +169,18 @@
       },
       "provider_impl": {
         "packages": ["hermes-provider-zulip", "hermes-provider-zoom", "hermes-provider-telemost", "hermes-provider-mail", "hermes-provider-telegram", "hermes-provider-whatsapp"],
-        "forbidden_dependencies": ["hermes-hub-backend", "sqlx", "testkit"]
+        "forbidden_dependencies": ["hermes-hub-backend", "sqlx", "hermes-backend-testkit"]
       },
       "test_session": {
         "packages": ["hermes-test-session"],
-        "forbidden_dependencies": ["hermes-hub-backend", "testkit"]
+        "forbidden_dependencies": ["hermes-hub-backend", "hermes-backend-testkit"]
       },
       "composition": {
         "packages": ["hermes-hub-backend"],
         "forbidden_dependencies": []
       },
       "test_support": {
-        "packages": ["testkit"],
+        "packages": ["hermes-backend-testkit"],
         "forbidden_dependencies": []
       },
       "domain_api": {

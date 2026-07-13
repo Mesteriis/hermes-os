@@ -1,5 +1,5 @@
+use hermes_backend_testkit::context::TestContext;
 use serde_json::json;
-use testkit::context::TestContext;
 
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::models::TelegramChat;

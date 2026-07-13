@@ -10,15 +10,15 @@ use tower::ServiceExt;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::{build_router, build_router_with_database};
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::mail_background_sync::MailSyncStore;
-use testkit::context::TestContext;
 
 const T: &str = "v1comms-test-token";
 
 fn cfg() -> AppConfig {
-    testkit::app::config_with_secret(T)
+    hermes_backend_testkit::app::config_with_secret(T)
 }
 
 fn get(uri: &str) -> Request<Body> {
@@ -80,7 +80,7 @@ fn uid() -> u128 {
 async fn router(db: &str) -> axum::Router {
     let database = Database::connect(Some(db)).await.expect("db");
     build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(T, db),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(T, db),
         database,
     )
 }

@@ -10,16 +10,24 @@ use hermes_hub_backend::domains::communications::messages::{
     COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, project_accepted_signal_if_runtime_allows,
 };
 use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
+use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
 
+use hermes_backend_testkit::app::{TestApp, delete, get, patch_json, post_json};
+use hermes_backend_testkit::composition::router_for_context;
+use hermes_backend_testkit::context::TestContext;
 use serde_json::Value;
-use testkit::app::{TestApp, delete, get, patch_json, post_json};
-use testkit::context::TestContext;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+async fn test_app() -> TestApp {
+    let context = TestContext::new().await;
+    let router = router_for_context(&context);
+    TestApp::new(context, router)
+}
+
 #[tokio::test]
 async fn signal_hub_api_restores_fixture_and_lists_sources() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let router = app.clone_router();
 
     let restore_response = router
@@ -293,7 +301,7 @@ async fn signal_hub_api_restores_fixture_and_lists_sources() {
 
 #[tokio::test]
 async fn signal_hub_connect_api_requires_local_api_secret() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let router = app.clone_router();
 
     let forbidden_response = router
@@ -330,6 +338,14 @@ async fn signal_hub_connect_api_requires_local_api_secret() {
 #[tokio::test]
 async fn signal_hub_api_runs_ai_health_check_against_runtime_status() {
     let ctx = TestContext::new().await;
+    ApplicationSettingsStore::new(ctx.pool().clone())
+        .update_setting_value(
+            "ai.ollama_base_url",
+            &serde_json::json!("http://127.0.0.1:9"),
+            "hermes-test",
+        )
+        .await
+        .expect("unreachable Ollama setting");
     let config = ctx
         .app_config("hermes-test-api-secret")
         .with_test_pairs([("HERMES_OLLAMA_BASE_URL", "http://127.0.0.1:9")])
@@ -373,7 +389,7 @@ async fn signal_hub_api_runs_ai_health_check_against_runtime_status() {
 
 #[tokio::test]
 async fn signal_hub_policy_api_can_pause_all_raw_signals() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let router = app.clone_router();
 
     let create_response = router
@@ -415,7 +431,7 @@ async fn signal_hub_policy_api_can_pause_all_raw_signals() {
 
 #[tokio::test]
 async fn signal_hub_api_can_toggle_source_and_scoped_signal_controls() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let router = app.clone_router();
     let pool = app.context().pool();
 
@@ -649,7 +665,7 @@ async fn signal_hub_api_can_toggle_source_and_scoped_signal_controls() {
 
 #[tokio::test]
 async fn signal_hub_api_lists_connections_and_health() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let pool = app.context().pool();
     let connection_id = Uuid::now_v7();
     let health_id = Uuid::now_v7();
@@ -878,7 +894,7 @@ async fn signal_hub_api_lists_connections_and_health() {
 
 #[tokio::test]
 async fn signal_hub_api_can_create_update_and_remove_connections() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let router = app.clone_router();
 
     let restore_response = router
@@ -991,7 +1007,7 @@ async fn signal_hub_api_can_create_update_and_remove_connections() {
 
 #[tokio::test]
 async fn signal_hub_connect_api_lists_sources_and_updates_runtime_state() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let router = app.clone_router();
     let pool = app.context().pool();
 
@@ -1431,7 +1447,7 @@ async fn signal_hub_connect_api_lists_sources_and_updates_runtime_state() {
 
 #[tokio::test]
 async fn signal_hub_connect_runtime_switch_takes_effect_without_restart() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let router = app.clone_router();
     let pool = app.context().pool().clone();
 
@@ -1550,7 +1566,7 @@ async fn signal_hub_connect_runtime_switch_takes_effect_without_restart() {
 
 #[tokio::test]
 async fn signal_hub_connect_raw_dispatcher_switch_takes_effect_without_restart() {
-    let app = TestApp::new().await;
+    let app = test_app().await;
     let router = app.clone_router();
     let pool = app.context().pool().clone();
 

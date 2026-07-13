@@ -12,11 +12,11 @@ use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::communications::messages::consume_accepted_signal_event;
 use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
 
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::storage::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, json_body, json_post_request_with_actor, unique_suffix,
 };
-use testkit::context::TestContext;
 #[tokio::test]
 async fn telegram_tdlib_projection_accepts_media_message_without_text() {
     let ctx = TestContext::new().await;
@@ -111,8 +111,11 @@ async fn telegram_fixture_media_download_fails_closed_without_live_runtime() {
     let chat_id = format!("media-chat-{suffix}");
     let provider_message_id = format!("media-message-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 

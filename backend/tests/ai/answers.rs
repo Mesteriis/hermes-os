@@ -1,7 +1,7 @@
 use crate::support::*;
+use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::domains::signal_hub::store::SignalHubStore;
 use hermes_signal_hub_api::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
-use testkit::context::TestContext;
 
 #[tokio::test]
 async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
@@ -37,13 +37,16 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
     .await;
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str()),
-                ("HERMES_OLLAMA_CHAT_MODEL", "qwen3:4b"),
-                ("HERMES_OLLAMA_EMBED_MODEL", "qwen3-embedding:4b"),
-            ])
-            .expect("config"),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([
+            ("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str()),
+            ("HERMES_OLLAMA_CHAT_MODEL", "qwen3:4b"),
+            ("HERMES_OLLAMA_EMBED_MODEL", "qwen3-embedding:4b"),
+        ])
+        .expect("config"),
         database,
     );
 
@@ -189,13 +192,16 @@ async fn ai_answer_api_is_blocked_when_ai_source_is_muted_by_signal_hub() {
         .expect("create ai mute policy");
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([
-                ("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str()),
-                ("HERMES_OLLAMA_CHAT_MODEL", "qwen3:4b"),
-                ("HERMES_OLLAMA_EMBED_MODEL", "qwen3-embedding:4b"),
-            ])
-            .expect("config"),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([
+            ("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str()),
+            ("HERMES_OLLAMA_CHAT_MODEL", "qwen3:4b"),
+            ("HERMES_OLLAMA_EMBED_MODEL", "qwen3-embedding:4b"),
+        ])
+        .expect("config"),
         database,
     );
 
@@ -251,9 +257,12 @@ async fn ai_answer_missing_route_becomes_failed_run_instead_of_sync_api_error() 
 
     let suffix = unique_suffix();
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str())])
-            .expect("config"),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str())])
+        .expect("config"),
         database,
     );
 
@@ -316,9 +325,12 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
     .await;
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_pairs([("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str())])
-            .expect("config"),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_pairs([("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str())])
+        .expect("config"),
         database,
     );
 

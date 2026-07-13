@@ -1,9 +1,9 @@
+use hermes_backend_testkit::context::TestContext;
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use hermes_communications_api::accounts::{
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
-use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -61,8 +61,11 @@ async fn whatsapp_provider_neutral_communications_routes_dispatch_to_whatsapp_co
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
     let suffix = unique_suffix();
@@ -250,8 +253,11 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let decision_rationale = "chat context must feed the same domain model";
     let obligation_statement = format!("send the WhatsApp alignment note {suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -575,20 +581,22 @@ async fn whatsapp_authorized_session_material_is_stored_in_host_vault_against_po
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode()
-            .with_test_pairs([
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_dev_mode()
+    .with_test_pairs([
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let suffix = unique_suffix();
     let account_id = format!("whatsapp-vault-{suffix}");
     let session_material = format!("whatsapp-session-material-{suffix}");
@@ -942,20 +950,22 @@ async fn whatsapp_runtime_bridge_authorized_session_material_is_stored_in_host_v
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode()
-            .with_test_pairs([
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_dev_mode()
+    .with_test_pairs([
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let suffix = unique_suffix();
     let account_id = format!("whatsapp-runtime-bridge-vault-{suffix}");
     let session_material = format!("whatsapp-runtime-bridge-session-{suffix}");
@@ -1031,20 +1041,22 @@ async fn whatsapp_reauthorizing_session_rotates_vault_material_and_emits_rotated
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode()
-            .with_test_pairs([
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_dev_mode()
+    .with_test_pairs([
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let suffix = unique_suffix();
     let account_id = format!("whatsapp-session-rotation-{suffix}");
     let first_session_material = format!("whatsapp-session-rotation-first-{suffix}");
@@ -1188,20 +1200,22 @@ async fn whatsapp_runtime_bridge_live_webview_status_exposes_live_capabilities()
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode()
-            .with_test_pairs([
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_dev_mode()
+    .with_test_pairs([
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let suffix = unique_suffix();
     let account_id = format!("whatsapp-runtime-bridge-live-{suffix}");
     let app = build_router_with_database(config, database);
@@ -1488,20 +1502,22 @@ async fn whatsapp_router_build_does_not_restore_vault_session_without_operator_a
         )
         .expect("store WhatsApp session material");
 
-    let config =
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode()
-            .with_test_pairs([
-                (
-                    "HERMES_VAULT_HOME",
-                    vault_home.to_str().expect("vault path"),
-                ),
-                (
-                    "HERMES_DEV_KEY_PATH",
-                    dev_key_path.to_str().expect("dev key path"),
-                ),
-            ])
-            .expect("config");
+    let config = hermes_backend_testkit::app::config_with_secret_and_database_url(
+        LOCAL_API_TOKEN,
+        database_url.as_str(),
+    )
+    .with_test_dev_mode()
+    .with_test_pairs([
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+    ])
+    .expect("config");
     let _app = build_router_with_database(config, database);
 
     let runtime_event_count: i64 = sqlx::query_scalar(
@@ -1540,8 +1556,11 @@ async fn whatsapp_runtime_bridge_message_ingests_into_signal_spine() {
     let account_id = format!("whatsapp-runtime-bridge-message-{suffix}");
     let provider_message_id = format!("wa-runtime-bridge-message-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -1626,8 +1645,11 @@ async fn whatsapp_runtime_bridge_media_lifecycle_emits_media_and_runtime_events(
     let account_id = format!("whatsapp-runtime-bridge-media-{suffix}");
     let command_id = format!("wa-runtime-bridge-media-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -1719,8 +1741,11 @@ async fn whatsapp_runtime_bridge_receipt_records_live_observed_source_in_raw_pro
     let provider_chat_id = format!("wa-runtime-bridge-receipt-chat-{suffix}");
     let provider_message_id = format!("wa-runtime-bridge-receipt-message-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -1811,8 +1836,11 @@ async fn whatsapp_runtime_bridge_status_view_and_delete_record_live_observed_sou
     let account_id = format!("whatsapp-runtime-bridge-status-source-{suffix}");
     let provider_status_id = format!("wa-runtime-bridge-status-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -1937,8 +1965,11 @@ async fn whatsapp_runtime_bridge_presence_and_call_record_live_observed_source_i
     let provider_call_id = format!("wa-runtime-bridge-call-{suffix}");
     let provider_chat_id = format!("wa-runtime-bridge-presence-call-chat-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -2054,8 +2085,11 @@ async fn whatsapp_runtime_bridge_message_family_records_live_observed_source_in_
     let provider_message_id = format!("wa-runtime-bridge-message-family-message-{suffix}");
     let provider_status_id = format!("wa-runtime-bridge-message-family-status-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -2312,8 +2346,11 @@ async fn whatsapp_runtime_bridge_runtime_event_records_live_observed_source_in_r
     let account_id = format!("whatsapp-runtime-bridge-runtime-event-source-{suffix}");
     let provider_event_id = format!("wa-runtime-bridge-runtime-event-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -2384,8 +2421,11 @@ async fn whatsapp_runtime_bridge_sync_lifecycle_emits_sync_and_runtime_events() 
     let account_id = format!("whatsapp-runtime-bridge-sync-{suffix}");
     let subject_id = format!("wa-runtime-bridge-sync-subject-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -2476,8 +2516,11 @@ async fn whatsapp_runtime_bridge_members_sync_lifecycle_emits_sync_and_runtime_e
     let subject_id = format!("wa-runtime-bridge-members-subject-{suffix}");
     let provider_chat_id = format!("wa-runtime-bridge-members-chat-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -2569,8 +2612,11 @@ async fn whatsapp_runtime_bridge_statuses_sync_lifecycle_emits_sync_and_runtime_
     let subject_id = format!("wa-runtime-bridge-statuses-subject-{suffix}");
     let provider_chat_id = "status-feed";
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -2658,8 +2704,11 @@ async fn whatsapp_runtime_bridge_presence_sync_lifecycle_emits_sync_and_runtime_
     let subject_id = format!("wa-runtime-bridge-presence-subject-{suffix}");
     let provider_chat_id = format!("wa-runtime-bridge-presence-chat-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -2747,8 +2796,11 @@ async fn whatsapp_runtime_bridge_calls_sync_lifecycle_emits_sync_and_runtime_eve
     let subject_id = format!("wa-runtime-bridge-calls-subject-{suffix}");
     let provider_chat_id = format!("wa-runtime-bridge-calls-chat-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -2835,8 +2887,11 @@ async fn whatsapp_runtime_bridge_contacts_sync_lifecycle_emits_sync_and_runtime_
     let account_id = format!("whatsapp-runtime-bridge-contacts-sync-{suffix}");
     let subject_id = format!("wa-runtime-bridge-contacts-subject-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -2922,8 +2977,11 @@ async fn whatsapp_runtime_bridge_media_sync_lifecycle_emits_sync_and_runtime_eve
     let subject_id = format!("wa-runtime-bridge-media-subject-{suffix}");
     let provider_chat_id = format!("wa-runtime-bridge-media-chat-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -3016,8 +3074,11 @@ async fn whatsapp_runtime_bridge_lifecycle_events_record_live_observed_source_in
     let media_command_id = format!("wa-runtime-bridge-media-source-{suffix}");
     let sync_subject_id = format!("wa-runtime-bridge-sync-subject-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -3143,8 +3204,11 @@ async fn whatsapp_runtime_bridge_claim_commands_claims_live_due_command() {
     let session_secret_ref =
         format!("secret:provider-account:{account_id}:whatsapp_web_session_key");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
     unlock_test_vault(app.clone()).await;
@@ -3507,8 +3571,11 @@ async fn whatsapp_runtime_bridge_command_failed_reschedules_live_command() {
     .expect("insert executing command");
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         Database::connect(Some(&database_url))
             .await
             .expect("database reconnect"),
@@ -3672,8 +3739,11 @@ async fn whatsapp_runtime_bridge_claim_recovers_only_live_stale_commands_for_req
     }
 
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         Database::connect(Some(&database_url))
             .await
             .expect("database reconnect"),
@@ -3748,8 +3818,11 @@ async fn whatsapp_runtime_bridge_status_reconciles_live_publish_status_and_proje
     let command_id = format!("wa-runtime-bridge-status-command-{suffix}");
     let published_text = format!("Runtime bridge status publish {suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -4007,8 +4080,11 @@ async fn whatsapp_manual_retry_reactivates_join_group_for_live_runtime_claim() {
     let account_id = format!("whatsapp-retry-join-live-{suffix}");
     let provider_chat_id = format!("wa-retry-join-live-chat-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -4106,8 +4182,11 @@ async fn whatsapp_account_list_hides_removed_accounts_unless_requested() {
     let active_account_id = format!("whatsapp-active-{suffix}");
     let removed_account_id = format!("whatsapp-removed-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -4220,8 +4299,11 @@ async fn whatsapp_runtime_lifecycle_and_login_surfaces_are_blocked_safe() {
     let suffix = unique_suffix();
     let account_id = format!("whatsapp-runtime-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -5278,8 +5360,11 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let account_id = format!("whatsapp-web-api-{suffix}");
     let chat_id = format!("wa-chat-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -8001,8 +8086,11 @@ async fn whatsapp_fixture_sync_surfaces_return_projected_chats_and_history() {
     let selected_chat_id = format!("wa-sync-chat-{suffix}");
     let other_chat_id = format!("wa-sync-other-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -8448,8 +8536,11 @@ async fn whatsapp_fixture_reaction_reconciles_provider_command_via_observed_even
     let provider_message_id = format!("wa-react-message-{suffix}");
     let command_id = format!("wa-react-command-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -8581,8 +8672,11 @@ async fn whatsapp_fixture_unreact_reconciles_provider_command_via_observed_event
     let provider_message_id = format!("wa-unreact-message-{suffix}");
     let command_id = format!("wa-unreact-command-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -8715,8 +8809,11 @@ async fn whatsapp_fixture_message_delete_reconciles_provider_command_via_observe
     let provider_message_id = format!("wa-delete-message-{suffix}");
     let command_id = format!("wa-delete-command-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -8848,8 +8945,11 @@ async fn whatsapp_fixture_message_update_reconciles_provider_command_via_observe
     let command_id = format!("wa-edit-command-{suffix}");
     let edited_text = "Edited by observed WhatsApp update";
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -8980,8 +9080,11 @@ async fn whatsapp_canonical_confirmed_command_is_normalized_to_queued_on_import(
     let command_id = format!("wa-canonical-confirmed-command-{suffix}");
     let idempotency_key = format!("wa-canonical-confirmed-send:{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -9094,8 +9197,11 @@ async fn whatsapp_importer_syncs_confirmed_canonical_update_into_existing_pendin
     let idempotency_key = format!("wa-canonical-sync-send:{suffix}");
     let message_text = format!("Canonical sync WhatsApp send {suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -9267,8 +9373,11 @@ async fn whatsapp_importer_syncs_canonical_target_ids_into_existing_pending_outb
     let replacement_text = format!("Replacement WhatsApp text {suffix}");
     let edited_text = format!("Edited through canonical target sync {suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -9537,8 +9646,11 @@ async fn whatsapp_fixture_receipt_projects_source_record_and_emits_realtime_even
     let provider_chat_id = format!("wa-receipt-chat-{suffix}");
     let provider_message_id = format!("wa-receipt-message-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -9672,8 +9784,11 @@ async fn whatsapp_fixture_presence_projects_source_record_and_emits_realtime_eve
     let provider_chat_id = format!("wa-presence-chat-{suffix}");
     let provider_identity_id = format!("wa:+3412345{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -9842,8 +9957,11 @@ async fn whatsapp_fixture_call_projects_source_record_and_emits_realtime_event()
     let provider_chat_id = format!("wa-call-chat-{suffix}");
     let provider_call_id = format!("wa-call-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -9968,8 +10086,11 @@ async fn whatsapp_fixture_runtime_event_is_captured_as_signal_and_sanitized_real
     let account_id = format!("whatsapp-runtime-event-{suffix}");
     let provider_event_id = format!("wa-runtime-event-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -10122,8 +10243,11 @@ async fn whatsapp_unknown_runtime_event_defaults_to_degraded_warning_markers() {
     let account_id = format!("whatsapp-runtime-unknown-{suffix}");
     let provider_event_id = format!("wa-runtime-unknown-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -10211,8 +10335,11 @@ async fn whatsapp_fixture_status_view_and_delete_project_source_records_and_emit
     let provider_status_id = format!("wa-status-{suffix}");
     let viewer_id = format!("viewer-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -10434,8 +10561,11 @@ async fn whatsapp_fixture_status_reconciles_publish_status_command_via_observed_
     let command_id = format!("wa-status-command-{suffix}");
     let published_text = format!("Status by observed reconciliation {suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -10598,8 +10728,11 @@ async fn whatsapp_fixture_media_reconciles_send_media_command_via_observed_event
     let provider_message_id = format!("provider-message:{command_id}");
     let provider_attachment_id = format!("provider-attachment:{command_id}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -10810,8 +10943,11 @@ async fn whatsapp_fixture_media_reconciles_download_media_command_via_observed_e
     let provider_message_id = format!("wa-source-message-{suffix}");
     let provider_attachment_id = format!("wa-download-attachment-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -11025,8 +11161,11 @@ async fn whatsapp_fixture_media_reconciles_send_voice_note_command_via_observed_
     let provider_message_id = format!("provider-message:{command_id}");
     let provider_attachment_id = format!("provider-attachment:{command_id}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -11238,8 +11377,11 @@ async fn whatsapp_fixture_message_reconciles_send_text_command_via_observed_even
     let provider_message_id = format!("provider-message:{command_id}");
     let text = format!("Observed send_text reconciliation {suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -11473,8 +11615,11 @@ async fn whatsapp_runtime_bridge_message_reconciles_send_text_command_with_live_
     let provider_message_id = format!("provider-message:{command_id}");
     let text = format!("Observed runtime bridge send_text reconciliation {suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -11610,8 +11755,11 @@ async fn whatsapp_runtime_bridge_dialog_reconciles_archive_command_with_live_pro
     let provider_chat_id = format!("wa-runtime-bridge-dialog-chat-{suffix}");
     let command_id = format!("wa-runtime-bridge-dialog-command-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -11755,8 +11903,11 @@ async fn whatsapp_runtime_bridge_participant_reconciles_join_group_command_with_
     let self_provider_identity_id = format!("wa-runtime-bridge-self-{suffix}");
     let command_id = format!("wa-runtime-bridge-join-group-command-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -11901,8 +12052,11 @@ async fn whatsapp_fixture_dialog_reconciles_archive_command_via_observed_event()
     let provider_chat_id = format!("wa-dialog-chat-{suffix}");
     let command_id = format!("wa-dialog-command-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -12033,8 +12187,11 @@ async fn whatsapp_fixture_dialog_reconciles_mute_and_mark_unread_commands_via_ob
     let mute_command_id = format!("wa-dialog-mute-command-{suffix}");
     let unread_command_id = format!("wa-dialog-unread-command-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -12166,8 +12323,11 @@ async fn whatsapp_fixture_dialog_reconciles_unarchive_unpin_unmute_and_mark_read
     let unmute_command_id = format!("wa-dialog-unmute-command-{suffix}");
     let mark_read_command_id = format!("wa-dialog-read-command-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
@@ -12328,8 +12488,11 @@ async fn whatsapp_fixture_participant_reconciles_join_and_leave_group_commands_v
     let join_command_id = format!("wa-reconcile-join-{suffix}");
     let leave_command_id = format!("wa-reconcile-leave-{suffix}");
     let app = build_router_with_database(
-        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
-            .with_test_dev_mode(),
+        hermes_backend_testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            database_url.as_str(),
+        )
+        .with_test_dev_mode(),
         database,
     );
 
