@@ -3,6 +3,11 @@ use hermes_communications_api::accounts::{
 };
 use hermes_communications_api::accounts::{ProviderAccount, ProviderSecretBindingCommandPort};
 use hermes_events_api::NewEventEnvelope;
+use hermes_provider_telemost::protocol::{
+    YANDEX_TELEMOST_API_BASE_URL, YANDEX_TELEMOST_PROVIDER_KIND_STR,
+    sanitize_yandex_telemost_payload, validate_api_base_url, validate_json_object,
+    validate_required, yandex_telemost_oauth_token_secret_ref,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -25,19 +30,14 @@ use hermes_events_postgres::store::EventStore;
 
 use super::errors::YandexTelemostError;
 use super::models::{
-    TelemostCohost, YANDEX_TELEMOST_API_BASE_URL, YANDEX_TELEMOST_LIVE_RUNTIME_KIND,
-    YANDEX_TELEMOST_PROVIDER_KIND_STR, YANDEX_TELEMOST_RUNTIME_KIND, YandexTelemostAccount,
-    YandexTelemostAccountListResponse, YandexTelemostAccountSetupRequest,
+    TelemostCohost, YANDEX_TELEMOST_LIVE_RUNTIME_KIND, YANDEX_TELEMOST_RUNTIME_KIND,
+    YandexTelemostAccount, YandexTelemostAccountListResponse, YandexTelemostAccountSetupRequest,
     YandexTelemostAccountSetupResponse, YandexTelemostCapabilityState, YandexTelemostCohostPage,
     YandexTelemostConference, YandexTelemostConferencePatchRequest,
     YandexTelemostConferenceRequest, YandexTelemostRetentionCleanupItem,
     YandexTelemostRetentionCleanupRequest, YandexTelemostRetentionCleanupResponse,
     YandexTelemostRuntimeStatus, telemost_provider_kind, yandex_telemost_capabilities,
     yandex_telemost_default_config,
-};
-use super::validation::{
-    sanitize_yandex_telemost_payload, validate_api_base_url, validate_json_object,
-    validate_required, yandex_telemost_oauth_token_secret_ref,
 };
 
 const YANDEX_TELEMOST_RECORDING_RETENTION_DAYS_SETTING_KEY: &str =

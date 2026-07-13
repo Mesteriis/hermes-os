@@ -1,14 +1,15 @@
 use chrono::{DateTime, Utc};
 use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
+use hermes_provider_telemost::protocol::{
+    YANDEX_TELEMOST_API_BASE_URL, YANDEX_TELEMOST_PROVIDER_KIND_STR,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
 
-pub const YANDEX_TELEMOST_PROVIDER_KIND_STR: &str = "yandex_telemost_user";
 pub const YANDEX_TELEMOST_RUNTIME_KIND: &str = "yandex_telemost_webview_runtime";
 pub const YANDEX_TELEMOST_LIVE_RUNTIME_KIND: &str = "yandex_telemost_live_authorized_runtime";
-pub const YANDEX_TELEMOST_API_BASE_URL: &str = "https://cloud-api.yandex.net/v1/telemost-api";
 pub const YANDEX_TELEMOST_WEB_ORIGIN: &str = "https://telemost.yandex.ru";
 
 pub const YANDEX_TELEMOST_CAP_CONFERENCE_CREATE: &str = "telemost.conferences.create";

@@ -14,9 +14,8 @@ use hermes_communications_postgres::provider_store::{
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
-use hermes_hub_backend::integrations::mail::accounts::{
-    EmailAccountSetupService, ImapAccountSetupRequest,
-};
+use hermes_hub_backend::integrations::mail::accounts::models::ImapAccountSetupRequest;
+use hermes_hub_backend::integrations::mail::accounts::service::EmailAccountSetupService;
 
 use hermes_hub_backend::platform::secrets::{
     DatabaseEncryptedSecretVault, ResolvedSecret, SecretKind, SecretReferenceStore, SecretResolver,

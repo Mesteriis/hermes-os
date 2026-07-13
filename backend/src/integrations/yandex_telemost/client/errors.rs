@@ -1,6 +1,7 @@
 use hermes_communications_api::accounts::ProviderAccountPortError;
 use hermes_communications_api::accounts::ProviderSecretBindingPortError;
 use hermes_events_api::EventEnvelopeError;
+use hermes_provider_telemost::protocol::YandexTelemostProtocolError;
 use thiserror::Error;
 
 use std::io;
@@ -12,12 +13,6 @@ use crate::platform::settings::SettingsError;
 use crate::vault::HostVaultError;
 use hermes_events_postgres::errors::EventStoreError;
 use hermes_observations_postgres::errors::ObservationStoreError;
-
-#[derive(Debug, Error)]
-pub enum YandexTelemostProtocolError {
-    #[error("invalid Yandex Telemost request: {0}")]
-    InvalidRequest(String),
-}
 
 #[derive(Debug, Error)]
 pub enum YandexTelemostError {

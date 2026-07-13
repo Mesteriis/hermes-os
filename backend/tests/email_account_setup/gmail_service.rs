@@ -7,9 +7,8 @@ use std::sync::Arc;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
-use hermes_hub_backend::integrations::mail::accounts::{
-    EmailAccountSetupService, GmailOAuthSetupRequest,
-};
+use hermes_hub_backend::integrations::mail::accounts::models::GmailOAuthSetupRequest;
+use hermes_hub_backend::integrations::mail::accounts::service::EmailAccountSetupService;
 
 use hermes_hub_backend::platform::secrets::{
     DatabaseEncryptedSecretVault, NewSecretReference, ResolvedSecret, SecretKind, SecretResolver,

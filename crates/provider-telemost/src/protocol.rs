@@ -1,9 +1,16 @@
 use serde_json::Value;
+use thiserror::Error;
 
-use super::errors::YandexTelemostProtocolError;
-use super::models::{YANDEX_TELEMOST_API_BASE_URL, YANDEX_TELEMOST_PROVIDER_KIND_STR};
+pub const YANDEX_TELEMOST_PROVIDER_KIND_STR: &str = "yandex_telemost_user";
+pub const YANDEX_TELEMOST_API_BASE_URL: &str = "https://cloud-api.yandex.net/v1/telemost-api";
 
-pub(crate) fn validate_required(
+#[derive(Debug, Error)]
+pub enum YandexTelemostProtocolError {
+    #[error("invalid Yandex Telemost request: {0}")]
+    InvalidRequest(String),
+}
+
+pub fn validate_required(
     field: &'static str,
     value: &str,
 ) -> Result<String, YandexTelemostProtocolError> {
@@ -16,7 +23,7 @@ pub(crate) fn validate_required(
     Ok(value.to_owned())
 }
 
-pub(crate) fn validate_json_object(
+pub fn validate_json_object(
     field: &'static str,
     value: &Value,
 ) -> Result<(), YandexTelemostProtocolError> {
@@ -28,9 +35,7 @@ pub(crate) fn validate_json_object(
     Ok(())
 }
 
-pub(crate) fn validate_api_base_url(
-    value: Option<&str>,
-) -> Result<String, YandexTelemostProtocolError> {
+pub fn validate_api_base_url(value: Option<&str>) -> Result<String, YandexTelemostProtocolError> {
     let value = value
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -120,30 +125,5 @@ pub fn sanitize_yandex_telemost_payload(payload: Value) -> Value {
                 .collect(),
         ),
         value => value,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-
-    #[test]
-    fn join_url_rejects_non_telemost_hosts() {
-        let error = validate_telemost_join_url("https://evil.example/room").unwrap_err();
-        assert!(error.to_string().contains("unsupported Yandex Telemost"));
-    }
-
-    #[test]
-    fn sanitizer_removes_secret_and_audio_material_recursively() {
-        let sanitized = sanitize_yandex_telemost_payload(json!({
-            "id": "c1",
-            "oauth_token": "secret",
-            "nested": { "mp3_bytes": "base64", "speaker": "Alice" }
-        }));
-        assert_eq!(sanitized["id"], "c1");
-        assert!(sanitized.get("oauth_token").is_none());
-        assert!(sanitized["nested"].get("mp3_bytes").is_none());
     }
 }

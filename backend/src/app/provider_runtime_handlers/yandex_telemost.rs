@@ -2,6 +2,10 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use chrono::Utc;
 use hermes_events_api::NewEventEnvelope;
+use hermes_provider_telemost::protocol::{
+    YANDEX_TELEMOST_API_BASE_URL, YANDEX_TELEMOST_PROVIDER_KIND_STR,
+    sanitize_yandex_telemost_payload, validate_required, validate_telemost_join_url,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fs;
@@ -28,8 +32,7 @@ use crate::domains::review::{
 };
 use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
 use crate::integrations::yandex_telemost::client::models::{
-    TelemostCohost, YANDEX_TELEMOST_API_BASE_URL, YANDEX_TELEMOST_PROVIDER_KIND_STR,
-    YANDEX_TELEMOST_WEB_ORIGIN, YandexTelemostAccountListResponse,
+    TelemostCohost, YANDEX_TELEMOST_WEB_ORIGIN, YandexTelemostAccountListResponse,
     YandexTelemostAccountSetupRequest, YandexTelemostAccountSetupResponse,
     YandexTelemostCapabilityState, YandexTelemostCohostPage, YandexTelemostConference,
     YandexTelemostConferenceOpenRequest, YandexTelemostConferencePatchRequest,
@@ -41,9 +44,6 @@ use crate::integrations::yandex_telemost::client::models::{
     YandexTelemostSpeakerTimelinePolicy, YandexTelemostTranscriptBridgeRequest,
     YandexTelemostTranscriptBridgeResponse, webview_manifest_for_request,
     yandex_telemost_capabilities,
-};
-use crate::integrations::yandex_telemost::client::validation::{
-    sanitize_yandex_telemost_payload, validate_required, validate_telemost_join_url,
 };
 use crate::integrations::yandex_telemost::runtime_bridge::complete_yandex_telemost_transcript_bridge;
 

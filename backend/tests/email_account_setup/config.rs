@@ -1,4 +1,4 @@
-use hermes_hub_backend::integrations::mail::accounts::GmailOAuthSetupRequest;
+use hermes_hub_backend::integrations::mail::accounts::models::GmailOAuthSetupRequest;
 use hermes_hub_backend::platform::config::{AppConfig, GoogleOAuthClientType};
 
 #[test]

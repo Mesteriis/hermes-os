@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
+use hermes_provider_telemost::protocol::validate_required;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -10,7 +11,6 @@ use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
 use crate::integrations::yandex_telemost::client::models::{
     YandexTelemostTranscriptBridgeRequest, YandexTelemostTranscriptBridgeResponse,
 };
-use crate::integrations::yandex_telemost::client::validation::validate_required;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::realtime_conversation::events::REALTIME_CONVERSATION_TRANSCRIPT_COMPLETED;
 use crate::platform::realtime_conversation::models::{CallBundleArtifact, CallBundleManifest};
