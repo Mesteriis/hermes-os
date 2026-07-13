@@ -19,15 +19,15 @@ use crate::app::api_support::{
     whatsapp_capabilities::*,
 };
 use crate::app::provider_runtime_handlers::telegram::chats::canonical_communication_conversation;
-use crate::app::provider_runtime_handlers::whatsapp::messages::{
-    post_whatsapp_command_delete, post_whatsapp_command_edit, post_whatsapp_command_send_text,
-};
-use crate::app::provider_runtime_handlers::whatsapp::{
+use crate::app::provider_runtime_handlers::whatsapp::conversations::{
     WhatsAppConversationCommandApiRequest, post_whatsapp_conversation_archive,
     post_whatsapp_conversation_mark_read, post_whatsapp_conversation_mark_unread,
     post_whatsapp_conversation_mute, post_whatsapp_conversation_pin,
     post_whatsapp_conversation_unarchive, post_whatsapp_conversation_unmute,
     post_whatsapp_conversation_unpin,
+};
+use crate::app::provider_runtime_handlers::whatsapp::messages::{
+    post_whatsapp_command_delete, post_whatsapp_command_edit, post_whatsapp_command_send_text,
 };
 use crate::app::{ApiError, AppState};
 use crate::application::communication_provider_writes::{

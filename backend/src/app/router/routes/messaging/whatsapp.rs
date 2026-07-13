@@ -207,47 +207,47 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/statuses/publish",
-            post(whatsapp::post_whatsapp_status_publish),
+            post(whatsapp::statuses::post_whatsapp_status_publish),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/conversations/join",
-            post(whatsapp::post_whatsapp_conversation_join_group),
+            post(whatsapp::conversations::post_whatsapp_conversation_join_group),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/read",
-            post(whatsapp::post_whatsapp_conversation_mark_read),
+            post(whatsapp::conversations::post_whatsapp_conversation_mark_read),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/unread",
-            post(whatsapp::post_whatsapp_conversation_mark_unread),
+            post(whatsapp::conversations::post_whatsapp_conversation_mark_unread),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/archive",
-            post(whatsapp::post_whatsapp_conversation_archive),
+            post(whatsapp::conversations::post_whatsapp_conversation_archive),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/unarchive",
-            post(whatsapp::post_whatsapp_conversation_unarchive),
+            post(whatsapp::conversations::post_whatsapp_conversation_unarchive),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/mute",
-            post(whatsapp::post_whatsapp_conversation_mute),
+            post(whatsapp::conversations::post_whatsapp_conversation_mute),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/unmute",
-            post(whatsapp::post_whatsapp_conversation_unmute),
+            post(whatsapp::conversations::post_whatsapp_conversation_unmute),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/pin",
-            post(whatsapp::post_whatsapp_conversation_pin),
+            post(whatsapp::conversations::post_whatsapp_conversation_pin),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/unpin",
-            post(whatsapp::post_whatsapp_conversation_unpin),
+            post(whatsapp::conversations::post_whatsapp_conversation_unpin),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/conversations/{conversation_id}/leave",
-            post(whatsapp::post_whatsapp_conversation_leave_group),
+            post(whatsapp::conversations::post_whatsapp_conversation_leave_group),
         )
         .route(
             "/api/v1/integrations/whatsapp/commands",
