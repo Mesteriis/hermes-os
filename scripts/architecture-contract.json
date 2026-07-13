@@ -168,7 +168,7 @@
         "forbidden_dependencies": ["hermes-hub-backend", "reqwest", "sqlx"]
       },
       "provider_impl": {
-        "packages": ["hermes-provider-zulip", "hermes-provider-zoom", "hermes-provider-telemost", "hermes-provider-mail", "hermes-provider-telegram"],
+        "packages": ["hermes-provider-zulip", "hermes-provider-zoom", "hermes-provider-telemost", "hermes-provider-mail", "hermes-provider-telegram", "hermes-provider-whatsapp"],
         "forbidden_dependencies": ["hermes-hub-backend", "sqlx", "testkit"]
       },
       "test_session": {

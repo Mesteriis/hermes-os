@@ -3,11 +3,11 @@ use serde_json::json;
 
 use super::WhatsappWebStore;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
-use crate::integrations::whatsapp::client::ids::whatsapp_web_session_id;
 use crate::integrations::whatsapp::client::models::{
     NewWhatsappWebSession, WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupRequest,
     WhatsappWebAccountSetupResponse, WhatsappWebCompanionRuntime, WhatsappWebLinkState,
 };
+use hermes_provider_whatsapp::ids::whatsapp_web_session_id;
 
 impl WhatsappWebStore {
     pub async fn setup_fixture_account(

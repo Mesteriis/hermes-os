@@ -76,6 +76,7 @@ hermes-provider-zoom = { path = "../crates/provider-zoom" }
 hermes-provider-telemost = { path = "../crates/provider-telemost" }
 hermes-provider-mail = { path = "../crates/provider-mail" }
 hermes-provider-telegram = { path = "../crates/provider-telegram" }
+hermes-provider-whatsapp = { path = "../crates/provider-whatsapp" }
 hermes-provider-api = { path = "../crates/provider-api" }
 hermes-provider-orchestration = { path = "../crates/provider-orchestration" }
 hermes-events-api = { path = "../crates/events-api" }

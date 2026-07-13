@@ -13,7 +13,6 @@ use crate::integrations::whatsapp::client::constants::{
     WHATSAPP_WEB_STATUS_VIEW_RECORD_KIND,
 };
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
-use crate::integrations::whatsapp::client::ids::whatsapp_web_raw_record_id;
 use crate::integrations::whatsapp::client::models::{
     NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
     NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
@@ -25,6 +24,7 @@ use crate::integrations::whatsapp::client::models::{
     WhatsappWebObservedReaction, WhatsappWebObservedReceipt, WhatsappWebObservedRuntimeEvent,
     WhatsappWebObservedStatus, WhatsappWebObservedStatusDelete, WhatsappWebObservedStatusView,
 };
+use hermes_provider_whatsapp::ids::whatsapp_web_raw_record_id;
 
 impl WhatsappWebStore {
     pub async fn ingest_fixture_message(

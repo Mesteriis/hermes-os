@@ -12,6 +12,7 @@ members = [
     "crates/provider-telemost",
     "crates/provider-mail",
     "crates/provider-telegram",
+    "crates/provider-whatsapp",
     "crates/provider-orchestration",
     "crates/vault-api",
     "crates/blob-api",
