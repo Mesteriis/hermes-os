@@ -37,7 +37,6 @@ pub(super) use crate::app::handlers::settings::*;
 pub(super) use crate::app::handlers::signal_hub::*;
 pub(super) use crate::app::handlers::tasks::*;
 pub(super) use crate::app::provider_runtime_handlers::telegram::*;
-pub(super) use crate::app::provider_runtime_handlers::whatsapp::*;
 pub(super) use crate::app::provider_runtime_handlers::yandex_telemost::*;
 pub(super) use crate::app::provider_runtime_handlers::zoom::*;
 pub(super) use crate::app::provider_runtime_handlers::zulip::*;
