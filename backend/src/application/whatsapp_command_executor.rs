@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::domains::communications::storage::{
     AttachmentSafetyScanStatus, CommunicationStorageStore, LocalCommunicationBlobStore,
 };
-use crate::integrations::whatsapp::client::{
+use crate::integrations::whatsapp::client::models::{
     NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage, NewWhatsappWebMessageDelete,
     NewWhatsappWebMessageUpdate, NewWhatsappWebReaction, NewWhatsappWebStatus,
 };
@@ -1196,7 +1196,7 @@ async fn execute_claimed_command(
                     import_batch_id,
                     occurred_at: Utc::now(),
                     delivery_state:
-                        crate::integrations::whatsapp::client::WhatsappWebDeliveryState::Sent,
+                        crate::integrations::whatsapp::client::models::WhatsappWebDeliveryState::Sent,
                 })
                 .await
                 .map_err(fixture_error)?;
@@ -1230,7 +1230,7 @@ async fn execute_claimed_command(
                     import_batch_id,
                     occurred_at: Utc::now(),
                     delivery_state:
-                        crate::integrations::whatsapp::client::WhatsappWebDeliveryState::Sent,
+                        crate::integrations::whatsapp::client::models::WhatsappWebDeliveryState::Sent,
                 })
                 .await
                 .map_err(fixture_error)?;
@@ -1263,7 +1263,7 @@ async fn execute_claimed_command(
                     import_batch_id,
                     occurred_at: Utc::now(),
                     delivery_state:
-                        crate::integrations::whatsapp::client::WhatsappWebDeliveryState::Sent,
+                        crate::integrations::whatsapp::client::models::WhatsappWebDeliveryState::Sent,
                 })
                 .await
                 .map_err(fixture_error)?;
@@ -1309,7 +1309,7 @@ async fn execute_claimed_command(
                     import_batch_id: import_batch_id.clone(),
                     occurred_at: Utc::now(),
                     delivery_state:
-                        crate::integrations::whatsapp::client::WhatsappWebDeliveryState::Sent,
+                        crate::integrations::whatsapp::client::models::WhatsappWebDeliveryState::Sent,
                 })
                 .await
                 .map_err(fixture_error)?;
@@ -1509,7 +1509,7 @@ async fn execute_claimed_command(
         "join_group" | "leave_group" => {
             fixture_ingest
                 .ingest_participant(
-                    &crate::integrations::whatsapp::client::NewWhatsappWebParticipant {
+                    &crate::integrations::whatsapp::client::models::NewWhatsappWebParticipant {
                         account_id: command.account_id.clone(),
                         provider_chat_id: command.provider_chat_id.clone(),
                         chat_title: command

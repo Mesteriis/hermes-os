@@ -22,8 +22,7 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
-use crate::integrations::whatsapp::client::store::WhatsappWebStore;
-use crate::integrations::whatsapp::client::{
+use crate::integrations::whatsapp::client::models::{
     NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
     NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
     NewWhatsappWebPresence, NewWhatsappWebReaction, NewWhatsappWebReceipt,
@@ -36,6 +35,7 @@ use crate::integrations::whatsapp::client::{
     WhatsappWebObservedReceipt, WhatsappWebObservedRuntimeEvent, WhatsappWebObservedStatus,
     WhatsappWebObservedStatusDelete, WhatsappWebObservedStatusView, WhatsappWebSession,
 };
+use crate::integrations::whatsapp::client::store::WhatsappWebStore;
 use crate::platform::communications::ProviderChannelMessageLookupPort;
 use crate::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretResolver, SecretStoreKind,
@@ -6086,7 +6086,7 @@ mod tests {
             provider_chat_id: "chat".to_owned(),
             provider_message_id: "wamid.business.1".to_owned(),
             delivery_state:
-                crate::integrations::whatsapp::client::WhatsappWebDeliveryState::Delivered,
+                crate::integrations::whatsapp::client::models::WhatsappWebDeliveryState::Delivered,
             import_batch_id: "batch".to_owned(),
             observed_at: now,
         };

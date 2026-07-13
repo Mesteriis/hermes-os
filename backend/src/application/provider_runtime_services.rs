@@ -27,7 +27,7 @@ use crate::integrations::telegram::runtime::{
     TelegramMediaSendType, TelegramRuntimeStatus,
 };
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
-use crate::integrations::whatsapp::client::{
+use crate::integrations::whatsapp::client::models::{
     WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupRequest,
     WhatsappWebAccountSetupResponse, WhatsappWebMessage, WhatsappWebSession,
 };
@@ -1274,7 +1274,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::integrations::whatsapp::client::{
+    use crate::integrations::whatsapp::client::models::{
         NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
         NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
         NewWhatsappWebPresence, NewWhatsappWebReaction, NewWhatsappWebReceipt,

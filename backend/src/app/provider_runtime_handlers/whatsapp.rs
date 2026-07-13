@@ -38,7 +38,7 @@ use crate::application::communication_fixture_ingest::WhatsappFixtureIngestAppli
 use crate::domains::communications::messages::ProviderChannelMessageStore;
 use crate::domains::communications::storage::AttachmentSafetyScanStatus;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
-use crate::integrations::whatsapp::client::{
+use crate::integrations::whatsapp::client::models::{
     NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
     NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
     NewWhatsappWebPresence, NewWhatsappWebReaction, NewWhatsappWebReceipt,
@@ -173,7 +173,7 @@ pub(crate) struct WhatsAppHistorySyncResponse {
     pub(crate) status: String,
     pub(crate) synced_count: usize,
     pub(crate) has_more: bool,
-    pub(crate) items: Vec<crate::integrations::whatsapp::client::WhatsappWebMessage>,
+    pub(crate) items: Vec<crate::integrations::whatsapp::client::models::WhatsappWebMessage>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -226,7 +226,7 @@ pub(crate) struct WhatsAppStatusSyncResponse {
     pub(crate) status: String,
     pub(crate) synced_count: usize,
     pub(crate) has_more: bool,
-    pub(crate) items: Vec<crate::integrations::whatsapp::client::WhatsappWebMessage>,
+    pub(crate) items: Vec<crate::integrations::whatsapp::client::models::WhatsappWebMessage>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

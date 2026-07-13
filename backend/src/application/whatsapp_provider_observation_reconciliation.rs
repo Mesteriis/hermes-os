@@ -4,8 +4,8 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
-use crate::integrations::whatsapp::client::WhatsappWebDeliveryState;
-use crate::integrations::whatsapp::client::{
+use crate::integrations::whatsapp::client::models::WhatsappWebDeliveryState;
+use crate::integrations::whatsapp::client::models::{
     NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage, NewWhatsappWebMessageDelete,
     NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant, NewWhatsappWebReaction,
     NewWhatsappWebReceipt, NewWhatsappWebStatus,

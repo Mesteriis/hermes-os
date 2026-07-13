@@ -155,7 +155,7 @@ use crate::integrations::telegram::client::{
 };
 use crate::integrations::telegram::tdjson;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
-use crate::integrations::whatsapp::client::{
+use crate::integrations::whatsapp::client::models::{
     NewWhatsappWebMessage, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
     WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
 };
