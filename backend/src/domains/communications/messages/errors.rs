@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::domains::communications::storage::CommunicationStorageError;
-use crate::platform::communications::rfc822::EmailRfc822ParseError;
+use crate::platform::communications::rfc822::errors::EmailRfc822ParseError;
 use hermes_communications_postgres::provider_commands::CommunicationProviderCommandError;
 use hermes_observations_postgres::errors::ObservationStoreError;
 

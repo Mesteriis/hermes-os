@@ -8,8 +8,9 @@ use crate::domains::communications::storage::{
     HeuristicAttachmentSafetyScanner, LocalCommunicationBlobStore, NewCommunicationAttachment,
     NewCommunicationBlob,
 };
+use crate::platform::communications::rfc822::errors::EmailRfc822ParseError;
 use crate::platform::communications::rfc822::{
-    EmailRfc822ParseError, ParsedEmailAttachmentDisposition, parse_rfc822_message,
+    ParsedEmailAttachmentDisposition, parse_rfc822_message,
 };
 use crate::platform::communications::{MboxParseError, split_mbox_messages};
 use hermes_communications_api::evidence::NewRawCommunicationRecord;
