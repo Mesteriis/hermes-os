@@ -29,7 +29,6 @@ pub mod messages;
 pub mod multilingual;
 pub mod outbox;
 pub mod personas;
-pub mod provider_commands;
 pub mod provider_resources;
 pub mod read_receipts;
 pub mod rich_template;

@@ -30,7 +30,7 @@ use crate::app::signal_hub_support::{
     provider_account_or_not_found, sync_provider_account_signal_connection,
 };
 use crate::app::{ApiError, AppState};
-use crate::domains::communications::provider_commands::CommunicationProviderCommandStore;
+use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 
 use crate::platform::secrets::{NewSecretReference, SecretKind, SecretStoreKind};
 use crate::vault::{HostVaultError, SecretEntryContext, VaultMode};

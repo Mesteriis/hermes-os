@@ -15,7 +15,7 @@ use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;
 
 use super::evidence::link_mail_entity_in_transaction;
-use super::provider_commands::{
+use hermes_communications_postgres::provider_commands::{
     CommunicationProviderCommandError, CommunicationProviderCommandStore,
 };
 

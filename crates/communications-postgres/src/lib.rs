@@ -1,6 +1,7 @@
 pub mod accounts;
 pub mod checkpoints;
 pub mod errors;
+pub mod provider_commands;
 pub mod provider_store;
 pub mod raw_records;
 pub mod rows;

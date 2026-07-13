@@ -10,9 +10,6 @@ use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use crate::domains::communications::messages::{MessageProjectionError, MessageProjectionStore};
-use crate::domains::communications::provider_commands::{
-    CommunicationProviderCommandError, CommunicationProviderCommandStore,
-};
 use crate::domains::communications::provider_resources::{
     MailProviderResourceError, MailProviderResourceKind, MailProviderResourceStore,
     MailProviderSemanticRole,
@@ -22,6 +19,9 @@ use crate::integrations::mail::read_state::{
 };
 use crate::vault::HostVault;
 use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_communications_postgres::provider_commands::{
+    CommunicationProviderCommandError, CommunicationProviderCommandStore,
+};
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
@@ -357,9 +357,6 @@ mod tests {
     use super::{
         MailProviderCommandWorker, mutation_for_command, resolve_provider_command_payload,
     };
-    use crate::domains::communications::provider_commands::{
-        CommunicationProviderCommandStore, NewCommunicationProviderCommand,
-    };
     use crate::domains::communications::provider_resources::{
         MailProviderResourceKind, MailProviderResourceStore, MailProviderSemanticRole,
         NewMailProviderResource,
@@ -370,6 +367,8 @@ mod tests {
     use hermes_communications_api::accounts::{
         CommunicationProviderKind, NewProviderAccount, ProviderAccount,
     };
+    use hermes_communications_api::commands::NewCommunicationProviderCommand;
+    use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
     use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 
     use crate::vault::{HostVault, HostVaultConfig};

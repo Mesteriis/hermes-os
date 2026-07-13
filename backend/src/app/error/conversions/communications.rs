@@ -354,11 +354,11 @@ impl From<CommunicationCommandServiceError> for ApiError {
     }
 }
 
-impl From<crate::domains::communications::provider_commands::CommunicationProviderCommandError>
+impl From<hermes_communications_postgres::provider_commands::CommunicationProviderCommandError>
     for ApiError
 {
     fn from(
-        error: crate::domains::communications::provider_commands::CommunicationProviderCommandError,
+        error: hermes_communications_postgres::provider_commands::CommunicationProviderCommandError,
     ) -> Self {
         tracing::error!(error = %error, "mail provider command diagnostics failed");
         ApiError::InvalidCommunicationQuery("mail provider command diagnostics failed")

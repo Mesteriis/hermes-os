@@ -1863,6 +1863,8 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "hermes-communications-api",
+ "hermes-events-api",
+ "hermes-events-postgres",
  "hermes-observations-api",
  "hermes-observations-postgres",
  "serde_json",

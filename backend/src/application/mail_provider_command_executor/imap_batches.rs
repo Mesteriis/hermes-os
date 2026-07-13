@@ -255,14 +255,13 @@ mod tests {
     use crate::domains::communications::messages::{
         MessageProjectionStore, project_raw_email_message,
     };
-    use crate::domains::communications::provider_commands::{
-        CommunicationProviderCommandStore, NewCommunicationProviderCommand,
-    };
     use hermes_communications_api::accounts::{
         CommunicationProviderKind, NewProviderAccount, NewProviderAccountSecretBinding,
         ProviderAccountSecretPurpose,
     };
+    use hermes_communications_api::commands::NewCommunicationProviderCommand;
     use hermes_communications_api::evidence::NewRawCommunicationRecord;
+    use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
     use hermes_communications_postgres::provider_store::{
         CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
     };

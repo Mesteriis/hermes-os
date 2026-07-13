@@ -6,10 +6,10 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
-use crate::domains::communications::provider_commands::CommunicationProviderCommandStore;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::zulip_event_types;
 use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_events_postgres::store::EventStore;

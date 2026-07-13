@@ -24,6 +24,7 @@ use url::form_urlencoded;
 
 use hermes_communications_api::commands::NewCommunicationProviderCommand;
 use hermes_communications_api::evidence::NewIngestionCheckpoint;
+use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
@@ -37,7 +38,6 @@ use hermes_hub_backend::application::zulip_provider_observation_reconciliation::
 use hermes_hub_backend::domains::communications::messages::{
     ProjectedMessage, ProviderChannelMessageStore, consume_accepted_signal_event,
 };
-use hermes_hub_backend::domains::communications::provider_commands::CommunicationProviderCommandStore;
 use hermes_hub_backend::domains::communications::storage::{
     CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachmentImport,
     NewCommunicationBlob,

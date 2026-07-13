@@ -6,7 +6,7 @@ use crate::domains::communications::messages::errors::MessageProjectionError;
 use crate::domains::communications::messages::ids::message_id;
 use crate::domains::communications::messages::models::{NewProjectedMessage, ProjectedMessage};
 use crate::domains::communications::messages::rows::row_to_projected_message;
-use crate::domains::communications::provider_commands::CommunicationProviderCommandStore;
+use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 
 impl MessageProjectionStore {
     pub async fn upsert_message(

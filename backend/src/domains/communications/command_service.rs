@@ -27,9 +27,6 @@ use super::outbox::{
     CommunicationOutboxStore, NewCommunicationOutboxItem, ProviderSendStore,
     ProviderSendStoreError,
 };
-use super::provider_commands::{
-    CommunicationProviderCommandError, CommunicationProviderCommandStore,
-};
 use super::saved_searches::{
     CommunicationSavedSearch, CommunicationSavedSearchError, CommunicationSavedSearchStore,
     NewCommunicationSavedSearch, UpdateCommunicationSavedSearch,
@@ -44,6 +41,9 @@ use super::storage::{
 use crate::domains::communications::evidence::{link_mail_entity_in_transaction, merge_metadata};
 use crate::platform::communications::{DEFAULT_MAIL_SYNC_BLOB_ROOT, OutgoingEmail};
 use hermes_communications_api::accounts::ProviderAccount;
+use hermes_communications_postgres::provider_commands::{
+    CommunicationProviderCommandError, CommunicationProviderCommandStore,
+};
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::errors::ObservationStoreError;
 use hermes_observations_postgres::store::ObservationStore;

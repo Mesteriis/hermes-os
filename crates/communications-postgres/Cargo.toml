@@ -9,6 +9,8 @@ license = "MIT"
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 hermes-communications-api = { path = "../communications-api" }
+hermes-events-api = { path = "../events-api" }
+hermes-events-postgres = { path = "../events-postgres" }
 hermes-observations-api = { path = "../observations-api" }
 hermes-observations-postgres = { path = "../observations-postgres" }
 serde_json = "1"

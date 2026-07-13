@@ -7,14 +7,14 @@ use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use crate::domains::communications::credentials::ProviderCredentialReader;
-use crate::domains::communications::provider_commands::{
-    CommunicationProviderCommandError, CommunicationProviderCommandStore,
-};
 use crate::domains::communications::storage::{
     CommunicationStorageError, CommunicationStorageStore, ImportedCommunicationAttachment,
     LocalCommunicationBlobStore, StoredCommunicationBlob,
 };
 use hermes_communications_postgres::errors::CommunicationIngestionError;
+use hermes_communications_postgres::provider_commands::{
+    CommunicationProviderCommandError, CommunicationProviderCommandStore,
+};
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };

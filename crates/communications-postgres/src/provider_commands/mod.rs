@@ -38,7 +38,7 @@ impl CommunicationProviderCommandStore {
         Ok(stored)
     }
 
-    pub(crate) async fn enqueue_in_transaction(
+    pub async fn enqueue_in_transaction(
         transaction: &mut Transaction<'_, Postgres>,
         command: &NewCommunicationProviderCommand,
     ) -> Result<CommunicationProviderCommand, CommunicationProviderCommandError> {

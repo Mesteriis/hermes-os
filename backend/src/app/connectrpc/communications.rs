@@ -59,7 +59,6 @@ use crate::domains::communications::outbox::{
 use crate::domains::communications::personas::{
     CommunicationPersona, CommunicationPersonaError, CommunicationPersonaStore,
 };
-use crate::domains::communications::provider_commands::CommunicationProviderCommandStore;
 use crate::domains::communications::saved_searches::{
     CommunicationSavedSearch, CommunicationSavedSearchError, CommunicationSavedSearchListQuery,
     CommunicationSavedSearchStore, NewCommunicationSavedSearch, UpdateCommunicationSavedSearch,
@@ -89,6 +88,7 @@ use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
 use crate::platform::config::{AiRuntimeProvider, AppConfig};
 use crate::platform::settings::ApplicationSettingsStore;
 use crate::vault::HostVault;
+use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 use hermes_connectrpc_contracts::hermes::common::v1::PageResponse;
 use hermes_connectrpc_contracts::hermes::communications::v1::{
