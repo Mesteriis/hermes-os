@@ -14,10 +14,11 @@ use super::bootstrap::{
     ApplicationBootstrapContext, host_vault_is_unlocked, runtime_allows_processing,
 };
 use crate::integrations::mail::sync_provider::LiveEmailProviderSyncPort;
+use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use crate::vault::HostVault;
 use crate::workflows::mail_background_sync::{
-    DEFAULT_GMAIL_API_BASE_URL, DEFAULT_MAIL_SYNC_BLOB_ROOT, MailBackgroundSyncService,
-    MailImapIdleOutcome, MailSyncStore, MailSyncTrigger,
+    DEFAULT_GMAIL_API_BASE_URL, MailBackgroundSyncService, MailImapIdleOutcome, MailSyncStore,
+    MailSyncTrigger,
 };
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 use hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore;

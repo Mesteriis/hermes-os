@@ -168,6 +168,7 @@ use crate::integrations::mail::accounts::{
 };
 use crate::integrations::ollama::client::OllamaClient;
 use crate::integrations::ollama::client::config::OllamaClientConfig;
+use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use crate::platform::secrets::DatabaseEncryptedSecretVault;
 use crate::platform::secrets::{SecretKind, SecretReferenceStore, SecretStoreKind};
 use crate::platform::settings::{
@@ -185,8 +186,8 @@ use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
 use crate::workflows::email_intelligence::models::EmailSummaryContract;
 use crate::workflows::email_intelligence::service::EmailIntelligenceService;
 use crate::workflows::mail_background_sync::{
-    DEFAULT_MAIL_SYNC_BLOB_ROOT, MailBackgroundSyncService, MailSyncError, MailSyncRunResponse,
-    MailSyncSettings, MailSyncSettingsUpdate, MailSyncStatus, MailSyncStore, MailSyncTrigger,
+    MailBackgroundSyncService, MailSyncError, MailSyncRunResponse, MailSyncSettings,
+    MailSyncSettingsUpdate, MailSyncStatus, MailSyncStore, MailSyncTrigger,
 };
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 use hermes_events_postgres::errors::EventStoreError;

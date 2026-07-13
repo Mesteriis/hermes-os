@@ -15,8 +15,8 @@ use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
 
+use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
-use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use crate::workflows::zulip_attachment_storage::{
     ZulipAttachmentBytes, ZulipAttachmentMaterialization, ZulipAttachmentStorageError,
     persist_zulip_attachment_bytes,

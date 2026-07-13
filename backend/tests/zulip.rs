@@ -46,12 +46,12 @@ use hermes_hub_backend::domains::signal_hub::store::SignalHubStore;
 use hermes_hub_backend::domains::signal_hub::zulip::dispatch_zulip_raw_signal;
 use hermes_provider_orchestration::observation_to_raw_communication_record;
 
+use hermes_hub_backend::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
 use hermes_hub_backend::platform::secrets::{
     InMemorySecretResolver, NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use hermes_hub_backend::workflows::review_inbox::refresh_message_task_candidates_into_review;
 use hermes_hub_backend::workflows::zulip_attachment_storage::{
     ZulipAttachmentBytes, persist_zulip_attachment_bytes,

@@ -9,7 +9,7 @@ use crate::domains::communications::storage::{
     AttachmentSafetyScanRequest, AttachmentSafetyScanner, CommunicationAttachmentDisposition,
     HeuristicAttachmentSafetyScanner, NewCommunicationAttachment, NewCommunicationBlob,
 };
-use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
+use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TelegramMediaDownloadData {

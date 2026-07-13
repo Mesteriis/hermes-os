@@ -8,9 +8,9 @@ use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, parse_raw_email_message_from_blob, project_parsed_raw_email_message,
 };
 use hermes_hub_backend::domains::communications::storage::LocalCommunicationBlobStore;
+use hermes_hub_backend::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::Row;

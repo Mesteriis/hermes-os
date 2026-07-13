@@ -19,8 +19,8 @@ use hermes_hub_backend::domains::communications::storage::{
 };
 
 use hermes_backend_testkit::context::TestContext;
+use hermes_hub_backend::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 
 const T: &str = "v1comms-attachment-preview-test-token";
 

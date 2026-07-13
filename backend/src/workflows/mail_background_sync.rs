@@ -1,6 +1,5 @@
 pub const DEFAULT_MAIL_SYNC_BATCH_SIZE: i32 = 100;
 pub const DEFAULT_MAIL_SYNC_POLL_INTERVAL_SECONDS: i32 = 300;
-pub use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 
 const MAX_BATCH_SIZE: i32 = 500;
 const MIN_POLL_INTERVAL_SECONDS: i32 = 60;

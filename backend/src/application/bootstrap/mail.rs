@@ -63,7 +63,7 @@ fn mail_background_sync_task(context: ApplicationBootstrapContext) -> Option<Run
             let service = crate::workflows::mail_background_sync::MailBackgroundSyncService::new(
             pool.clone(),
             vault.clone(),
-            crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT,
+            crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT,
             Arc::new(
                 crate::integrations::mail::sync_provider::LiveEmailProviderSyncPort::new(
                     pool.clone(),

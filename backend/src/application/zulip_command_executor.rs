@@ -19,8 +19,8 @@ use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
 
+use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
-use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use hermes_provider_zulip::client::{ZulipApiClient, ZulipClientConfig};
 use hermes_provider_zulip::command_execution::{
     ZulipCommandExecutionError, ZulipExecutableCommand, ZulipPreparedUpload, execute_zulip_command,

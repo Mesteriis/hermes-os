@@ -27,6 +27,7 @@ use hermes_hub_backend::integrations::zoom::client::{
 };
 use hermes_hub_backend::platform::calls::CallIntelligenceStore;
 
+use hermes_hub_backend::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
 use hermes_hub_backend::platform::events::bus::zoom_event_types;
 use hermes_hub_backend::platform::secrets::{
@@ -37,7 +38,6 @@ use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::vault::{
     EntropyEvent, HostVault, HostVaultConfig, SecretEntryContext, VaultMode,
 };
-use hermes_hub_backend::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 
 const LOCAL_API_TOKEN: &str = "zoom-provider-test-secret";
 const ZOOM_REMOTE_TRANSCRIPT_DOWNLOAD_ENABLED_SETTING_KEY: &str =

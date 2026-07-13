@@ -1,7 +1,7 @@
 use super::super::*;
 use super::database::database_pool;
 use crate::domains::communications::storage::LocalCommunicationBlobStore;
-use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
+use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use sqlx::PgPool;
 
 pub(crate) trait AppStoreFactory: Sized {
