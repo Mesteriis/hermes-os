@@ -1,4 +1,7 @@
 use chrono::Utc;
+use hermes_provider_zoom::protocol::{
+    ZOOM_PROVIDER_SYNC_DEFAULT_MAX_MEETINGS, ZOOM_PROVIDER_SYNC_DEFAULT_PAGE_SIZE,
+};
 use sqlx::postgres::PgPool;
 
 use super::{
@@ -115,12 +118,8 @@ pub(super) async fn run_zoom_recording_sync_once(
             user_id: None,
             from: from.clone(),
             to: to.clone(),
-            page_size: Some(
-                crate::integrations::zoom::client::models::ZOOM_PROVIDER_SYNC_DEFAULT_PAGE_SIZE,
-            ),
-            max_meetings: Some(
-                crate::integrations::zoom::client::models::ZOOM_PROVIDER_SYNC_DEFAULT_MAX_MEETINGS,
-            ),
+            page_size: Some(ZOOM_PROVIDER_SYNC_DEFAULT_PAGE_SIZE),
+            max_meetings: Some(ZOOM_PROVIDER_SYNC_DEFAULT_MAX_MEETINGS),
             api_base_url: None,
         };
         match service

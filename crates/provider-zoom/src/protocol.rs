@@ -2,6 +2,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeDelta, Utc};
 use getrandom::getrandom;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -14,6 +15,47 @@ pub enum ZoomProtocolError {
 pub const DEFAULT_ZOOM_AUTHORIZATION_ENDPOINT: &str = "https://zoom.us/oauth/authorize";
 pub const DEFAULT_ZOOM_TOKEN_ENDPOINT: &str = "https://zoom.us/oauth/token";
 pub const ZOOM_TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS: i64 = 60;
+pub const ZOOM_PROVIDER_KIND_STR: &str = "zoom_user";
+pub const ZOOM_RUNTIME_KIND: &str = "zoom_fixture_runtime";
+pub const ZOOM_LIVE_AUTHORIZED_RUNTIME_KIND: &str = "zoom_live_authorized_runtime";
+pub const DEFAULT_ZOOM_API_BASE_URL: &str = "https://api.zoom.us/v2";
+pub const ZOOM_EXPLICIT_TOKEN_REFRESH_THRESHOLD_SECONDS: i64 = 60;
+pub const ZOOM_TOKEN_MAINTENANCE_REFRESH_THRESHOLD_SECONDS: i64 = 300;
+pub const ZOOM_MAX_TOKEN_REFRESH_THRESHOLD_SECONDS: i64 = 86_400;
+pub const ZOOM_TOKEN_ROTATION_REQUIRED_BLOCKER: &str = "zoom_token_rotation_required";
+pub const ZOOM_PROVIDER_SYNC_DEFAULT_PAGE_SIZE: usize = 30;
+pub const ZOOM_PROVIDER_SYNC_MAX_PAGE_SIZE: usize = 100;
+pub const ZOOM_PROVIDER_SYNC_DEFAULT_MAX_MEETINGS: usize = 100;
+pub const ZOOM_PROVIDER_SYNC_MAX_MEETINGS: usize = 500;
+pub const ZOOM_MAX_RECORDING_MEDIA_DOWNLOAD_BYTES: usize = 268_435_456;
+pub const ZOOM_DEFAULT_WEBHOOK_SUBSCRIPTION_NAME: &str = "Hermes Zoom Runtime";
+pub const ZOOM_DEFAULT_WEBHOOK_EVENT_TYPES: &[&str] = &[
+    "meeting.started",
+    "meeting.ended",
+    "meeting.participant_joined",
+    "meeting.participant_left",
+    "recording.completed",
+];
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ZoomAuthShape {
+    Fixture,
+    #[serde(rename = "oauth_user")]
+    #[default]
+    OAuthUser,
+    ServerToServer,
+}
+
+impl ZoomAuthShape {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Fixture => "fixture",
+            Self::OAuthUser => "oauth_user",
+            Self::ServerToServer => "server_to_server",
+        }
+    }
+}
 
 pub fn validate_non_empty(field: &'static str, value: &str) -> Result<String, ZoomProtocolError> {
     let trimmed = value.trim();

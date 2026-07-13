@@ -1,6 +1,7 @@
 use hermes_provider_zoom::protocol::{
-    sanitize_zoom_payload, validate_array, validate_non_empty, validate_object,
-    zoom_authorization_url,
+    ZOOM_DEFAULT_WEBHOOK_EVENT_TYPES, ZOOM_DEFAULT_WEBHOOK_SUBSCRIPTION_NAME,
+    ZOOM_LIVE_AUTHORIZED_RUNTIME_KIND, ZOOM_RUNTIME_KIND, ZoomAuthShape, sanitize_zoom_payload,
+    validate_array, validate_non_empty, validate_object, zoom_authorization_url,
 };
 use serde_json::json;
 
@@ -42,4 +43,21 @@ fn sanitizer_removes_secret_like_fields_recursively() {
     assert!(sanitized.get("access_token").is_none());
     assert!(sanitized["nested"].get("api_key").is_none());
     assert_eq!(sanitized["nested"]["safe"], true);
+}
+
+#[test]
+fn auth_shape_and_runtime_defaults_are_owned_by_the_provider_protocol() {
+    assert_eq!(ZoomAuthShape::default(), ZoomAuthShape::OAuthUser);
+    assert_eq!(ZoomAuthShape::Fixture.as_str(), "fixture");
+    assert_eq!(ZoomAuthShape::ServerToServer.as_str(), "server_to_server");
+    assert_eq!(ZOOM_RUNTIME_KIND, "zoom_fixture_runtime");
+    assert_eq!(
+        ZOOM_LIVE_AUTHORIZED_RUNTIME_KIND,
+        "zoom_live_authorized_runtime"
+    );
+    assert_eq!(
+        ZOOM_DEFAULT_WEBHOOK_SUBSCRIPTION_NAME,
+        "Hermes Zoom Runtime"
+    );
+    assert!(ZOOM_DEFAULT_WEBHOOK_EVENT_TYPES.contains(&"recording.completed"));
 }
