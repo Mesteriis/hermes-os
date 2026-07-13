@@ -2,7 +2,8 @@ use chrono::{DateTime, Utc};
 use hermes_communications_api::commands::{
     CommunicationProviderCommand, CommunicationProviderCommandDiagnostic,
     CommunicationProviderCommandDiagnostics, CommunicationProviderCommandStatusCount,
-    NewCommunicationProviderCommand,
+    NewCommunicationProviderCommand, ProviderCommandQueuePort, ProviderCommandQueuePortError,
+    ProviderCommandQueuePortFuture,
 };
 use serde_json::Value;
 use sqlx::postgres::{PgPool, PgRow};
@@ -537,6 +538,74 @@ impl CommunicationProviderCommandStore {
         .await?;
 
         rows.into_iter().map(row_to_provider_command).collect()
+    }
+}
+
+impl ProviderCommandQueuePort for CommunicationProviderCommandStore {
+    fn claim_due<'a>(
+        &'a self,
+        account_id: &'a str,
+        channel_kind: &'a str,
+        now: DateTime<Utc>,
+        limit: i64,
+    ) -> ProviderCommandQueuePortFuture<'a, Vec<CommunicationProviderCommand>> {
+        Box::pin(async move {
+            self.claim_due(account_id, channel_kind, now, limit)
+                .await
+                .map_err(ProviderCommandQueuePortError::new)
+        })
+    }
+
+    fn mark_completed<'a>(
+        &'a self,
+        command_id: &'a str,
+        channel_kind: &'a str,
+        now: DateTime<Utc>,
+        result_payload: Value,
+    ) -> ProviderCommandQueuePortFuture<'a, Option<CommunicationProviderCommand>> {
+        Box::pin(async move {
+            self.mark_completed(command_id, channel_kind, now, result_payload)
+                .await
+                .map_err(ProviderCommandQueuePortError::new)
+        })
+    }
+
+    fn mark_failed<'a>(
+        &'a self,
+        command_id: &'a str,
+        channel_kind: &'a str,
+        now: DateTime<Utc>,
+        error: &'a str,
+        result_payload: Value,
+    ) -> ProviderCommandQueuePortFuture<'a, Option<CommunicationProviderCommand>> {
+        Box::pin(async move {
+            self.mark_failed(command_id, channel_kind, now, error, result_payload)
+                .await
+                .map_err(ProviderCommandQueuePortError::new)
+        })
+    }
+
+    fn mark_observed_by_provider_message<'a>(
+        &'a self,
+        account_id: &'a str,
+        channel_kind: &'a str,
+        provider_message_id: &'a str,
+        command_kinds: &'a [&'a str],
+        observed_at: DateTime<Utc>,
+        provider_state: Value,
+    ) -> ProviderCommandQueuePortFuture<'a, Vec<CommunicationProviderCommand>> {
+        Box::pin(async move {
+            self.mark_observed_by_provider_message(
+                account_id,
+                channel_kind,
+                provider_message_id,
+                command_kinds,
+                observed_at,
+                provider_state,
+            )
+            .await
+            .map_err(ProviderCommandQueuePortError::new)
+        })
     }
 }
 

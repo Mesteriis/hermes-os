@@ -52,17 +52,18 @@ pub async fn reconcile_zulip_provider_observation_event(
     }
     let observed_at = raw_record.occurred_at.unwrap_or(event.event.occurred_at);
     let provider_state = provider_state_for_observation(&event, &raw_record, observed_at);
-    let commands = CommunicationProviderCommandStore::new(pool.clone())
-        .mark_observed_by_provider_message(
-            &raw_record.account_id,
-            "zulip",
-            provider_message_id,
-            &command_kinds,
-            observed_at,
-            provider_state,
-        )
-        .await
-        .map_err(|error| error.to_string())?;
+    let command_store = CommunicationProviderCommandStore::new(pool.clone());
+    let commands = hermes_provider_orchestration::reconcile_provider_command_observation(
+        &command_store,
+        &raw_record.account_id,
+        "zulip",
+        provider_message_id,
+        &command_kinds,
+        observed_at,
+        provider_state,
+    )
+    .await
+    .map_err(|error| error.to_string())?;
 
     let event_store = EventStore::new(pool);
     for command in commands {

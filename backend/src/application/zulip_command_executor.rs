@@ -1,7 +1,9 @@
 use chrono::{DateTime, Utc};
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
-use hermes_communications_api::commands::CommunicationProviderCommand;
+use hermes_communications_api::commands::{
+    CommunicationProviderCommand, ProviderCommandQueuePort, ProviderCommandQueuePortError,
+};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
@@ -12,9 +14,7 @@ use crate::domains::communications::storage::{
     LocalCommunicationBlobStore, StoredCommunicationBlob,
 };
 use hermes_communications_postgres::errors::CommunicationIngestionError;
-use hermes_communications_postgres::provider_commands::{
-    CommunicationProviderCommandError, CommunicationProviderCommandStore,
-};
+use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
@@ -36,20 +36,33 @@ pub struct ZulipCommandExecutionReport {
     pub dead_lettered: usize,
 }
 
-pub struct ZulipCommandWorker<R> {
+pub struct ZulipCommandWorker<R, Q = CommunicationProviderCommandStore> {
     pool: PgPool,
     provider_account_store: CommunicationProviderAccountStore,
     provider_secret_binding_store: CommunicationProviderSecretBindingStore,
     secret_store: SecretReferenceStore,
-    command_store: CommunicationProviderCommandStore,
+    command_queue: Q,
     resolver: R,
 }
 
-impl<R> ZulipCommandWorker<R>
+impl<R> ZulipCommandWorker<R, CommunicationProviderCommandStore>
 where
     R: SecretResolver,
 {
     pub fn new(pool: PgPool, resolver: R) -> Self {
+        Self::with_command_queue(
+            pool.clone(),
+            resolver,
+            CommunicationProviderCommandStore::new(pool),
+        )
+    }
+}
+
+impl<R, Q> ZulipCommandWorker<R, Q>
+where
+    R: SecretResolver,
+{
+    pub fn with_command_queue(pool: PgPool, resolver: R, command_queue: Q) -> Self {
         Self {
             pool: pool.clone(),
             provider_account_store: CommunicationProviderAccountStore::new(pool.clone()),
@@ -57,15 +70,16 @@ where
                 pool.clone(),
             ),
             secret_store: SecretReferenceStore::new(pool.clone()),
-            command_store: CommunicationProviderCommandStore::new(pool),
+            command_queue,
             resolver,
         }
     }
 }
 
-impl<R> ZulipCommandWorker<R>
+impl<R, Q> ZulipCommandWorker<R, Q>
 where
     R: SecretResolver + Send + Sync,
+    Q: ProviderCommandQueuePort,
 {
     pub async fn execute_due(
         &self,
@@ -133,7 +147,7 @@ where
             })?,
         );
         let claimed = self
-            .command_store
+            .command_queue
             .claim_due(&account.account_id, "zulip", now, limit)
             .await?;
         let mut report = ZulipCommandExecutionReport {
@@ -146,7 +160,7 @@ where
                 Ok(executable) => executable,
                 Err(error) => {
                     let updated = self
-                        .command_store
+                        .command_queue
                         .mark_failed(
                             &command.command_id,
                             "zulip",
@@ -166,7 +180,7 @@ where
             };
             match execute_zulip_command(&client, &executable).await {
                 Ok(outcome) => {
-                    self.command_store
+                    self.command_queue
                         .mark_completed(
                             &command.command_id,
                             "zulip",
@@ -178,7 +192,7 @@ where
                 }
                 Err(error) => {
                     let updated = self
-                        .command_store
+                        .command_queue
                         .mark_failed(
                             &command.command_id,
                             "zulip",
@@ -472,5 +486,5 @@ pub enum ZulipCommandWorkerError {
     #[error(transparent)]
     Communication(#[from] CommunicationIngestionError),
     #[error(transparent)]
-    ProviderCommand(#[from] CommunicationProviderCommandError),
+    ProviderCommand(#[from] ProviderCommandQueuePortError),
 }

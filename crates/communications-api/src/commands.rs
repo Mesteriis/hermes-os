@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
+use std::future::Future;
+use std::pin::Pin;
 use thiserror::Error;
 
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -164,6 +166,56 @@ pub struct CommunicationProviderCommandStatusCount {
 pub struct CommunicationProviderCommandDiagnostics {
     pub items: Vec<CommunicationProviderCommandDiagnostic>,
     pub counts: Vec<CommunicationProviderCommandStatusCount>,
+}
+
+#[derive(Debug, Error)]
+#[error("provider command queue port error: {0}")]
+pub struct ProviderCommandQueuePortError(pub String);
+
+impl ProviderCommandQueuePortError {
+    pub fn new(error: impl std::fmt::Display) -> Self {
+        Self(error.to_string())
+    }
+}
+
+pub type ProviderCommandQueuePortFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, ProviderCommandQueuePortError>> + Send + 'a>>;
+
+pub trait ProviderCommandQueuePort: Send + Sync {
+    fn claim_due<'a>(
+        &'a self,
+        account_id: &'a str,
+        channel_kind: &'a str,
+        now: DateTime<Utc>,
+        limit: i64,
+    ) -> ProviderCommandQueuePortFuture<'a, Vec<CommunicationProviderCommand>>;
+
+    fn mark_completed<'a>(
+        &'a self,
+        command_id: &'a str,
+        channel_kind: &'a str,
+        now: DateTime<Utc>,
+        result_payload: Value,
+    ) -> ProviderCommandQueuePortFuture<'a, Option<CommunicationProviderCommand>>;
+
+    fn mark_failed<'a>(
+        &'a self,
+        command_id: &'a str,
+        channel_kind: &'a str,
+        now: DateTime<Utc>,
+        error: &'a str,
+        result_payload: Value,
+    ) -> ProviderCommandQueuePortFuture<'a, Option<CommunicationProviderCommand>>;
+
+    fn mark_observed_by_provider_message<'a>(
+        &'a self,
+        account_id: &'a str,
+        channel_kind: &'a str,
+        provider_message_id: &'a str,
+        command_kinds: &'a [&'a str],
+        observed_at: DateTime<Utc>,
+        provider_state: Value,
+    ) -> ProviderCommandQueuePortFuture<'a, Vec<CommunicationProviderCommand>>;
 }
 
 fn required_non_empty(
