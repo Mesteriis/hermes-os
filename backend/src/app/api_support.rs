@@ -54,10 +54,10 @@ use crate::engines::automation::{
     store::AutomationStore,
 };
 use crate::platform::audit::{ApiAuditError, ApiAuditLog, ApiAuditRecord, NewApiAuditRecord};
+use crate::platform::calls::errors::CallError;
 use crate::platform::calls::{
-    CallDirection, CallError, CallIntelligenceStore, CallState, CallTranscript,
-    FixtureSpeechToTextProvider, NewCallTranscript, NewProviderCall, ProviderCall,
-    SpeechToTextProvider, TranscriptStatus,
+    CallDirection, CallIntelligenceStore, CallState, CallTranscript, FixtureSpeechToTextProvider,
+    NewCallTranscript, NewProviderCall, ProviderCall, SpeechToTextProvider, TranscriptStatus,
 };
 use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
 use hermes_communications_postgres::errors::CommunicationIngestionError;

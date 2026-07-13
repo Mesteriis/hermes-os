@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use super::CallError;
+use super::errors::CallError;
 use super::validation::validate_non_empty;
 
 pub trait SpeechToTextProvider {

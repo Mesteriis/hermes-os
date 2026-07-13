@@ -6,7 +6,7 @@ use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
 use crate::integrations::zoom::client::errors::ZoomError;
-use crate::platform::calls::CallError;
+use crate::platform::calls::errors::CallError;
 use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 
 impl From<TelegramError> for ApiError {

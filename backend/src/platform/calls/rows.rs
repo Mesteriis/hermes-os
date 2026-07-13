@@ -1,7 +1,8 @@
 use sqlx::Row;
 use sqlx::postgres::PgRow;
 
-use super::{CallError, CallTranscript, TelegramCall};
+use super::errors::CallError;
+use super::{CallTranscript, TelegramCall};
 
 pub(super) fn row_to_call(row: PgRow) -> Result<TelegramCall, CallError> {
     Ok(TelegramCall {

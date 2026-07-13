@@ -4,7 +4,7 @@ use hermes_events_api::EventEnvelopeError;
 use hermes_provider_zoom::protocol::ZoomProtocolError;
 use thiserror::Error;
 
-use crate::platform::calls::CallError;
+use crate::platform::calls::errors::CallError;
 
 use crate::platform::secrets::{SecretReferenceError, SecretResolutionError};
 use crate::platform::settings::SettingsError;

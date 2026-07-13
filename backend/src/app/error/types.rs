@@ -26,7 +26,7 @@ use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
 use crate::integrations::zoom::client::errors::ZoomError;
 use crate::platform::audit::ApiAuditError;
-use crate::platform::calls::CallError;
+use crate::platform::calls::errors::CallError;
 use crate::platform::settings::SettingsError;
 use crate::platform::storage::StorageError;
 use crate::vault::HostVaultError;

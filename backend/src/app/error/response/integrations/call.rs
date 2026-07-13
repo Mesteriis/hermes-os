@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 
-use crate::platform::calls::CallError;
+use crate::platform::calls::errors::CallError;
 
 use super::super::ErrorParts;
 

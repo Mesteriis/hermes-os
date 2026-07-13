@@ -39,7 +39,7 @@ use crate::integrations::whatsapp::client::models::{
     WhatsappWebRuntimeEventIngestResult, WhatsappWebStatusDeleteIngestResult,
     WhatsappWebStatusIngestResult, WhatsappWebStatusViewIngestResult,
 };
-use crate::platform::calls::CallError;
+use crate::platform::calls::errors::CallError;
 use crate::platform::calls::{CallDirection, CallIntelligenceStore, CallState, NewTelegramCall};
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::{telegram_event_types, whatsapp_event_types};

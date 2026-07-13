@@ -1,11 +1,10 @@
-mod errors;
+pub mod errors;
 mod models;
 mod rows;
 mod store;
 mod stt;
 mod validation;
 
-pub use errors::CallError;
 pub use models::{
     CallDirection, CallState, CallTranscript, NewCallTranscript, NewProviderCall, NewTelegramCall,
     ProviderCall, TelegramCall, TranscriptStatus,

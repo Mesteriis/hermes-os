@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::CallError;
+use super::errors::CallError;
 use super::validation::{validate_array, validate_non_empty, validate_object};
 
 #[derive(Clone, Debug, PartialEq)]

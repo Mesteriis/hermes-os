@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::CallError;
+use super::errors::CallError;
 
 pub(super) fn validate_limit(limit: i64) -> Result<i64, CallError> {
     if !(1..=100).contains(&limit) {
