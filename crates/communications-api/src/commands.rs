@@ -207,6 +207,23 @@ pub trait ProviderCommandQueuePort: Send + Sync {
         result_payload: Value,
     ) -> ProviderCommandQueuePortFuture<'a, Option<CommunicationProviderCommand>>;
 
+    fn mark_terminal_failed<'a>(
+        &'a self,
+        command_id: &'a str,
+        channel_kind: &'a str,
+        now: DateTime<Utc>,
+        error: &'a str,
+        result_payload: Value,
+    ) -> ProviderCommandQueuePortFuture<'a, Option<CommunicationProviderCommand>>;
+
+    fn recover_stale_executing<'a>(
+        &'a self,
+        account_id: &'a str,
+        channel_kind: &'a str,
+        now: DateTime<Utc>,
+        execution_lease: chrono::Duration,
+    ) -> ProviderCommandQueuePortFuture<'a, Vec<CommunicationProviderCommand>>;
+
     fn mark_observed_by_provider_message<'a>(
         &'a self,
         account_id: &'a str,
