@@ -146,11 +146,11 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-sync/presence",
-            post(whatsapp::post_whatsapp_sync_presence),
+            post(whatsapp::sync_presence::post_whatsapp_sync_presence),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-sync/calls",
-            post(whatsapp::post_whatsapp_sync_calls),
+            post(whatsapp::sync_calls::post_whatsapp_sync_calls),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-sync/contacts",
