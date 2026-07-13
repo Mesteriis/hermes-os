@@ -1,6 +1,5 @@
-use hermes_hub_backend::platform::communications::rfc822::{
-    ParsedEmailAttachmentDisposition, parse_rfc822_message,
-};
+use hermes_hub_backend::platform::communications::rfc822::models::ParsedEmailAttachmentDisposition;
+use hermes_hub_backend::platform::communications::rfc822::parser::parse_rfc822_message;
 
 #[test]
 fn rfc822_parser_extracts_nested_multipart_attachments_for_current_basic_slice() {
