@@ -5,11 +5,8 @@ use crate::integrations::whatsapp::runtime::contracts::{
 };
 
 use super::whatsapp_capability_catalog::{
-    is_whatsapp_business_cloud_personal_capability,
-    is_whatsapp_business_cloud_personal_observe_capability,
-    is_whatsapp_business_platform_capability, is_whatsapp_provider_write_capability,
-    is_whatsapp_runtime_observe_capability, provider_shape_summary_reason,
-    provider_shape_summary_status, whatsapp_capability_rows,
+    is_whatsapp_provider_write_capability, is_whatsapp_runtime_observe_capability,
+    provider_shape_summary_reason, provider_shape_summary_status, whatsapp_capability_rows,
 };
 
 // ---------------------------------------------------------------------------
@@ -127,12 +124,7 @@ impl WhatsappCapabilitiesResponse {
     }
 
     pub(crate) fn current_for_account(status: &WhatsAppRuntimeStatus) -> Self {
-        let runtime_shape = match status.provider_shape.as_str() {
-            "whatsapp_native_md" => WhatsAppProviderRuntimeShape::NativeMultiDevice,
-            "whatsapp_business_cloud" => WhatsAppProviderRuntimeShape::BusinessCloud,
-            _ => WhatsAppProviderRuntimeShape::WebCompanion,
-        };
-        Self::build(runtime_shape, Some(status))
+        Self::build(WhatsAppProviderRuntimeShape::WebCompanion, Some(status))
     }
 
     fn build(
@@ -146,47 +138,21 @@ impl WhatsappCapabilitiesResponse {
         let mut response = Self {
             version: "2.0",
             runtime_mode,
-            provider_shapes: vec![
-                WhatsappProviderShapeStatus::new(
+            provider_shapes: vec![WhatsappProviderShapeStatus::new(
+                WhatsAppProviderRuntimeShape::WebCompanion,
+                provider_shape_summary_status(
+                    runtime_shape,
                     WhatsAppProviderRuntimeShape::WebCompanion,
-                    provider_shape_summary_status(
-                        runtime_shape,
-                        WhatsAppProviderRuntimeShape::WebCompanion,
-                    ),
-                    provider_shape_summary_reason(
-                        runtime_shape,
-                        WhatsAppProviderRuntimeShape::WebCompanion,
-                    ),
                 ),
-                WhatsappProviderShapeStatus::new(
-                    WhatsAppProviderRuntimeShape::NativeMultiDevice,
-                    provider_shape_summary_status(
-                        runtime_shape,
-                        WhatsAppProviderRuntimeShape::NativeMultiDevice,
-                    ),
-                    provider_shape_summary_reason(
-                        runtime_shape,
-                        WhatsAppProviderRuntimeShape::NativeMultiDevice,
-                    ),
+                provider_shape_summary_reason(
+                    runtime_shape,
+                    WhatsAppProviderRuntimeShape::WebCompanion,
                 ),
-                WhatsappProviderShapeStatus::new(
-                    WhatsAppProviderRuntimeShape::BusinessCloud,
-                    provider_shape_summary_status(
-                        runtime_shape,
-                        WhatsAppProviderRuntimeShape::BusinessCloud,
-                    ),
-                    provider_shape_summary_reason(
-                        runtime_shape,
-                        WhatsAppProviderRuntimeShape::BusinessCloud,
-                    ),
-                ),
-            ],
+            )],
             account_scope,
             capabilities: whatsapp_capability_rows(),
             planned_features: vec![
                 "live_runtime_execution",
-                "native_md_runtime",
-                "business_cloud_runtime",
                 "live_media_transfer_progress",
                 "live_presence_feed",
                 "live_call_feed",
@@ -199,7 +165,7 @@ impl WhatsappCapabilitiesResponse {
                 "auto_messaging",
                 "auto_dialing",
                 "whatsapp_data_fine_tuning",
-                "whatsapp_business_cloud_as_personal_provider",
+                "external_headless_browser_automation",
             ],
         };
         response.apply_account_scope_overrides();
@@ -220,54 +186,6 @@ impl WhatsappCapabilitiesResponse {
                     capability.status = WhatsAppCapabilityState::Unsupported.as_str().to_owned();
                     capability.reason =
                         "This account does not use the fixture-only WhatsApp runtime.".to_owned();
-                }
-                "auth.qr_link_start" if provider_shape == "whatsapp_business_cloud" => {
-                    capability.status = WhatsAppCapabilityState::Unsupported.as_str().to_owned();
-                    capability.reason =
-                        "Business Cloud accounts do not use owner QR pairing.".to_owned();
-                }
-                "auth.pair_code_link_start" if provider_shape == "whatsapp_business_cloud" => {
-                    capability.status = WhatsAppCapabilityState::Unsupported.as_str().to_owned();
-                    capability.reason =
-                        "Business Cloud accounts do not use pair-code linking.".to_owned();
-                }
-                capability_name
-                    if provider_shape == "whatsapp_business_cloud"
-                        && is_whatsapp_business_cloud_personal_capability(capability_name) =>
-                {
-                    capability.status = WhatsAppCapabilityState::Unsupported.as_str().to_owned();
-                    capability.reason = "Business Cloud accounts do not expose personal WhatsApp chat/runtime operations."
-                        .to_owned();
-                }
-                capability_name
-                    if provider_shape == "whatsapp_business_cloud"
-                        && is_whatsapp_business_cloud_personal_observe_capability(
-                            capability_name,
-                        ) =>
-                {
-                    capability.status = WhatsAppCapabilityState::Unsupported.as_str().to_owned();
-                    capability.reason = "Business Cloud accounts do not expose companion/native WhatsApp observation and projection surfaces."
-                        .to_owned();
-                }
-                capability_name if is_whatsapp_business_platform_capability(capability_name) => {
-                    if provider_shape == "whatsapp_business_cloud" {
-                        capability.status = WhatsAppCapabilityState::Blocked.as_str().to_owned();
-                        capability.reason = "Business Cloud account shape is configured, but Hermes does not execute official Business Platform operations yet."
-                            .to_owned();
-                    } else {
-                        capability.status =
-                            WhatsAppCapabilityState::Unsupported.as_str().to_owned();
-                        capability.reason =
-                            "This capability is only valid for whatsapp_business_cloud.".to_owned();
-                    }
-                }
-                "sessions.manual_state" | "sessions.restore"
-                    if provider_shape == "whatsapp_business_cloud" =>
-                {
-                    capability.status = WhatsAppCapabilityState::Unsupported.as_str().to_owned();
-                    capability.reason =
-                        "Business Cloud accounts do not use companion session restore material."
-                            .to_owned();
                 }
                 "sessions.restore" if matches!(lifecycle_state, "created" | "link_required") => {
                     capability.status = WhatsAppCapabilityState::Blocked.as_str().to_owned();

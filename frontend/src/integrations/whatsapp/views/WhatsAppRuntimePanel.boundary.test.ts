@@ -47,7 +47,7 @@ describe('WhatsAppRuntimePanel boundary', () => {
     expect(presentationSource).not.toContain('.vue')
   })
 
-  it('exposes rotate as an owner-visible runtime lifecycle control', () => {
+  it('exposes rotate as a hidden-runtime lifecycle control', () => {
     const surfaceSource = readSource('../queries/useWhatsappRuntimePanelSurface.ts')
 
     expect(surfaceSource).toContain('useRotateWhatsappRuntimeMutation')
@@ -55,16 +55,16 @@ describe('WhatsAppRuntimePanel boundary', () => {
     expect(surfaceSource).toContain("} else if (action === 'rotate') {")
   })
 
-  it('exposes the owner-visible WebView companion action through the typed mutation surface only', () => {
+  it('exposes the hidden WebView runtime action through the typed mutation surface only', () => {
     const surfaceSource = readSource('../queries/useWhatsappRuntimePanelSurface.ts')
 
-    expect(surfaceSource).toContain('useOpenWhatsappWebCompanionMutation')
-    expect(surfaceSource).toContain('async function openVisibleWebCompanion()')
+    expect(surfaceSource).toContain('useStartHiddenWhatsappWebviewMutation')
+    expect(surfaceSource).toContain('async function startHiddenWebview()')
     expect(surfaceSource).toContain("selectedRuntimeProviderShape.value === 'whatsapp_web_companion'")
-    expect(surfaceSource).toContain('openCompanionMutation.mutateAsync')
-    expect(surfaceSource).toContain('openCompanionMutation.isPending.value')
+    expect(surfaceSource).toContain('hiddenWebviewMutation.mutateAsync')
+    expect(surfaceSource).toContain('hiddenWebviewMutation.isPending.value')
     expect(surfaceSource).toContain('companionOpenManifest.value = manifest')
-    expect(surfaceSource).toContain('Visible WhatsApp companion')
+    expect(surfaceSource).toContain('Hidden WebView runtime is available only')
     expect(surfaceSource).not.toContain('window.fetch')
     expect(surfaceSource).not.toContain('globalThis.fetch')
     expect(surfaceSource).not.toContain('/api/v1/integrations/whatsapp/runtime-bridge')

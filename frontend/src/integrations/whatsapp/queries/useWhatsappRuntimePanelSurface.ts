@@ -15,7 +15,7 @@ import {
   useDeadLetterWhatsappProviderCommandMutation,
   usePublishWhatsappStatusMutation,
   useRetryWhatsappProviderCommandMutation,
-  useOpenWhatsappWebCompanionMutation,
+  useStartHiddenWhatsappWebviewMutation,
   useStartWhatsappRuntimeMutation,
   useStopWhatsappRuntimeMutation,
   useWhatsappAccountsQuery,
@@ -91,7 +91,7 @@ export function useWhatsappRuntimePanelSurface() {
   const retryCommandMutation = useRetryWhatsappProviderCommandMutation()
   const deadLetterCommandMutation = useDeadLetterWhatsappProviderCommandMutation()
   const publishStatusMutation = usePublishWhatsappStatusMutation()
-  const openCompanionMutation = useOpenWhatsappWebCompanionMutation()
+  const hiddenWebviewMutation = useStartHiddenWhatsappWebviewMutation()
 
   const runtimeCapabilities = computed(() => accountCapabilitiesQuery.data.value ?? capabilities.value)
   const runtimeStatus = computed(() => runtimeStatusQuery.data.value ?? null)
@@ -126,7 +126,7 @@ export function useWhatsappRuntimePanelSurface() {
     retryCommandMutation.isPending.value ||
     deadLetterCommandMutation.isPending.value ||
     publishStatusMutation.isPending.value ||
-    openCompanionMutation.isPending.value
+    hiddenWebviewMutation.isPending.value
   )
 
   watch(accounts, (nextAccounts) => {
@@ -248,23 +248,23 @@ export function useWhatsappRuntimePanelSurface() {
     }
   }
 
-  async function openVisibleWebCompanion() {
+  async function startHiddenWebview() {
     const accountId = requireAccountId()
     if (!accountId || isRuntimeBusy.value) return
     if (!canOpenWebCompanion.value) {
-      store.setWhatsappError('Visible WebView companion is available only for whatsapp_web_companion accounts')
+      store.setWhatsappError('Hidden WebView runtime is available only for whatsapp_web_companion accounts')
       return
     }
     isCompanionOpening.value = true
     store.setWhatsappActionMessage('')
     store.setWhatsappError('')
     try {
-      const manifest = await openCompanionMutation.mutateAsync({ account_id: accountId })
+      const manifest = await hiddenWebviewMutation.mutateAsync({ account_id: accountId })
       companionOpenManifest.value = manifest
       store.setWhatsappActionMessage(
         manifest.opened_window
-          ? `Visible WhatsApp companion opened for ${manifest.account_id}`
-          : `Visible WhatsApp companion focused for ${manifest.account_id}`
+          ? `Hidden WhatsApp WebView started for ${manifest.account_id}`
+          : `Hidden WhatsApp WebView already running for ${manifest.account_id}`
       )
       await refreshRuntime()
     } catch (error) {
@@ -343,7 +343,7 @@ export function useWhatsappRuntimePanelSurface() {
     isRuntimeBusy,
     mediaItems,
     memberItems,
-    openVisibleWebCompanion,
+    startHiddenWebview,
     presenceItems,
     providerCommands,
     publishStatus,

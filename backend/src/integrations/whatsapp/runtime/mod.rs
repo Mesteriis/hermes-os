@@ -6,9 +6,7 @@ use hermes_communications_api::accounts::{
     NewProviderAccountSecretBinding, ProviderAccountCommandPort, ProviderAccountSecretBinding,
     ProviderAccountSecretPurpose,
 };
-mod business_cloud;
 pub(crate) mod contracts;
-mod native_md;
 mod web_companion;
 
 use std::sync::Arc;
@@ -108,1157 +106,6 @@ pub fn whatsapp_web_companion_runtime(
     )
 }
 
-struct ShapedWhatsAppProviderRuntime {
-    provider_shape: WhatsAppProviderRuntimeShape,
-    inner: Arc<dyn WhatsAppProviderRuntime>,
-    native_md_manager: Option<native_md::NativeMdRuntimeManager>,
-    business_cloud_manager: Option<business_cloud::BusinessCloudRuntimeManager>,
-}
-
-impl ShapedWhatsAppProviderRuntime {
-    fn new(
-        provider_shape: WhatsAppProviderRuntimeShape,
-        inner: Arc<dyn WhatsAppProviderRuntime>,
-    ) -> Self {
-        Self {
-            provider_shape,
-            inner,
-            native_md_manager: None,
-            business_cloud_manager: None,
-        }
-    }
-
-    fn with_native_md_manager(mut self, manager: native_md::NativeMdRuntimeManager) -> Self {
-        self.native_md_manager = Some(manager);
-        self
-    }
-
-    fn with_business_cloud_manager(
-        mut self,
-        manager: business_cloud::BusinessCloudRuntimeManager,
-    ) -> Self {
-        self.business_cloud_manager = Some(manager);
-        self
-    }
-}
-
-macro_rules! delegate_inner_secret_method {
-    ($method:ident, $request_ty:ty, $result_ty:ty) => {
-        fn $method<'a>(
-            &'a self,
-            secret_store: &'a SecretReferenceStore,
-            vault: &'a HostVault,
-            request: &'a $request_ty,
-        ) -> WhatsAppProviderRuntimeFuture<'a, $result_ty> {
-            self.inner.$method(secret_store, vault, request)
-        }
-    };
-}
-
-macro_rules! delegate_inner_accountless_secret_method {
-    ($method:ident, $result_ty:ty) => {
-        fn $method<'a>(
-            &'a self,
-            secret_store: &'a SecretReferenceStore,
-            vault: &'a HostVault,
-            account_id: &'a str,
-        ) -> WhatsAppProviderRuntimeFuture<'a, $result_ty> {
-            self.inner.$method(secret_store, vault, account_id)
-        }
-    };
-}
-
-macro_rules! delegate_inner_request_method {
-    ($method:ident, $request_ty:ty, $result_ty:ty) => {
-        fn $method<'a>(
-            &'a self,
-            request: &'a $request_ty,
-        ) -> WhatsAppProviderRuntimeFuture<'a, $result_ty> {
-            self.inner.$method(request)
-        }
-    };
-}
-
-macro_rules! delegate_inner_fixture_method {
-    ($method:ident, $request_ty:ty, $result_ty:ty) => {
-        fn $method<'a>(
-            &'a self,
-            request: &'a $request_ty,
-        ) -> WhatsAppProviderRuntimeFuture<'a, $result_ty> {
-            self.inner.$method(request)
-        }
-    };
-}
-
-impl WhatsAppProviderRuntime for ShapedWhatsAppProviderRuntime {
-    fn provider_shape(&self) -> WhatsAppProviderRuntimeShape {
-        self.provider_shape
-    }
-
-    delegate_inner_accountless_secret_method!(runtime_status, WhatsAppRuntimeStatus);
-
-    fn start_runtime<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppRuntimeStartRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeStatus> {
-        if let Some(manager) = self.native_md_manager.as_ref() {
-            return Box::pin(async move {
-                manager
-                    .start_runtime(self.inner.as_ref(), secret_store, vault, request)
-                    .await
-            });
-        }
-        self.inner.start_runtime(secret_store, vault, request)
-    }
-
-    fn stop_runtime<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppRuntimeStopRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeStatus> {
-        if let Some(manager) = self.native_md_manager.as_ref() {
-            return Box::pin(async move {
-                let _ = manager.stop_account(&request.account_id).await;
-                self.inner.stop_runtime(secret_store, vault, request).await
-            });
-        }
-        self.inner.stop_runtime(secret_store, vault, request)
-    }
-
-    fn revoke_runtime<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppRuntimeRevokeRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeStatus> {
-        if let Some(manager) = self.native_md_manager.as_ref() {
-            return Box::pin(async move {
-                let _ = manager.stop_account(&request.account_id).await;
-                self.inner
-                    .revoke_runtime(secret_store, vault, request)
-                    .await
-            });
-        }
-        self.inner.revoke_runtime(secret_store, vault, request)
-    }
-
-    fn relink_runtime<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppRuntimeRelinkRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeStatus> {
-        if let Some(manager) = self.native_md_manager.as_ref() {
-            return Box::pin(async move {
-                let _ = manager.stop_account(&request.account_id).await;
-                self.inner
-                    .relink_runtime(secret_store, vault, request)
-                    .await
-            });
-        }
-        self.inner.relink_runtime(secret_store, vault, request)
-    }
-
-    fn remove_runtime<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppRuntimeRemoveRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeRemoveResponse> {
-        if let Some(manager) = self.native_md_manager.as_ref() {
-            return Box::pin(async move {
-                let _ = manager.stop_account(&request.account_id).await;
-                self.inner
-                    .remove_runtime(secret_store, vault, request)
-                    .await
-            });
-        }
-        self.inner.remove_runtime(secret_store, vault, request)
-    }
-
-    fn runtime_health<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        account_id: &'a str,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeHealth> {
-        if let Some(manager) = self.native_md_manager.as_ref() {
-            return Box::pin(async move {
-                let mut health = self
-                    .inner
-                    .runtime_health(secret_store, vault, account_id)
-                    .await?;
-                manager
-                    .decorate_runtime_health(&mut health, account_id)
-                    .await;
-                Ok(health)
-            });
-        }
-        if let Some(manager) = self.business_cloud_manager.as_ref() {
-            return Box::pin(async move {
-                let mut health = self
-                    .inner
-                    .runtime_health(secret_store, vault, account_id)
-                    .await?;
-                manager
-                    .decorate_runtime_health(&mut health, account_id)
-                    .await;
-                Ok(health)
-            });
-        }
-        self.inner.runtime_health(secret_store, vault, account_id)
-    }
-    fn start_qr_link<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppQrLinkStartRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppQrLinkSession> {
-        if let Some(manager) = self.native_md_manager.as_ref() {
-            return Box::pin(async move {
-                manager
-                    .start_qr_link(self.inner.as_ref(), secret_store, vault, request)
-                    .await
-            });
-        }
-        self.inner.start_qr_link(secret_store, vault, request)
-    }
-
-    fn start_pair_code_link<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppPairCodeStartRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppPairCodeSession> {
-        if let Some(manager) = self.native_md_manager.as_ref() {
-            return Box::pin(async move {
-                manager
-                    .start_pair_code_link(self.inner.as_ref(), secret_store, vault, request)
-                    .await
-            });
-        }
-        self.inner
-            .start_pair_code_link(secret_store, vault, request)
-    }
-    delegate_inner_secret_method!(
-        request_send_text,
-        WhatsAppTextSendRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_reply,
-        WhatsAppReplyRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_forward,
-        WhatsAppForwardRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_edit,
-        WhatsAppEditRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_delete,
-        WhatsAppDeleteRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_react,
-        WhatsAppReactionRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_unreact,
-        WhatsAppReactionRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_media_upload,
-        WhatsAppMediaUploadRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_media_download,
-        WhatsAppMediaDownloadRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_mark_read,
-        WhatsAppConversationCommandRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_mark_unread,
-        WhatsAppConversationCommandRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_archive,
-        WhatsAppConversationCommandRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_unarchive,
-        WhatsAppConversationCommandRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_mute,
-        WhatsAppConversationCommandRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_unmute,
-        WhatsAppConversationCommandRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_pin,
-        WhatsAppConversationCommandRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_unpin,
-        WhatsAppConversationCommandRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_join_group,
-        WhatsAppConversationCommandRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_leave_group,
-        WhatsAppConversationCommandRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_publish_status,
-        WhatsAppStatusPublishRequest,
-        WhatsAppProviderCommandResponse
-    );
-    delegate_inner_secret_method!(
-        request_send_voice_note,
-        WhatsAppVoiceNoteSendRequest,
-        WhatsAppProviderCommandResponse
-    );
-
-    fn execute_live_provider_command<'a>(
-        &'a self,
-        command: &'a WhatsAppProviderExecutableCommand,
-    ) -> WhatsAppProviderCommandExecutionFuture<'a> {
-        if let Some(manager) = self.native_md_manager.as_ref() {
-            return Box::pin(async move { manager.execute_live_provider_command(command).await });
-        }
-        if let Some(manager) = self.business_cloud_manager.as_ref() {
-            return Box::pin(async move { manager.execute_live_provider_command(command).await });
-        }
-        self.inner.execute_live_provider_command(command)
-    }
-
-    fn list_provider_commands<'a>(
-        &'a self,
-        account_id: &'a str,
-        provider_chat_id: Option<&'a str>,
-        provider_message_id: Option<&'a str>,
-        command_kinds: &'a [String],
-        limit: i64,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppProviderCommandListResponse> {
-        self.inner.list_provider_commands(
-            account_id,
-            provider_chat_id,
-            provider_message_id,
-            command_kinds,
-            limit,
-        )
-    }
-
-    fn manual_retry_provider_command<'a>(
-        &'a self,
-        command_id: &'a str,
-    ) -> WhatsAppProviderRuntimeFuture<'a, Option<WhatsAppProviderCommand>> {
-        self.inner.manual_retry_provider_command(command_id)
-    }
-
-    fn dead_letter_provider_command<'a>(
-        &'a self,
-        command_id: &'a str,
-        reason: &'a str,
-    ) -> WhatsAppProviderRuntimeFuture<'a, Option<WhatsAppProviderCommand>> {
-        self.inner.dead_letter_provider_command(command_id, reason)
-    }
-
-    fn store_authorized_session_credential<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        credential: &'a WhatsAppAuthorizedSessionCredentialWrite,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppCredentialBinding> {
-        self.inner
-            .store_authorized_session_credential(secret_store, vault, credential)
-    }
-
-    delegate_inner_request_method!(
-        setup_fixture_account,
-        WhatsappWebAccountSetupRequest,
-        WhatsappWebAccountSetupResponse
-    );
-    delegate_inner_request_method!(
-        setup_live_blocked_account,
-        WhatsappLiveAccountSetupRequest,
-        WhatsappWebAccountSetupResponse
-    );
-
-    fn list_sessions<'a>(
-        &'a self,
-        account_id: Option<&'a str>,
-        limit: i64,
-    ) -> WhatsAppProviderRuntimeFuture<'a, Vec<WhatsappWebSession>> {
-        self.inner.list_sessions(account_id, limit)
-    }
-
-    fn recent_messages<'a>(
-        &'a self,
-        account_id: Option<&'a str>,
-        provider_chat_id: Option<&'a str>,
-        limit: i64,
-    ) -> WhatsAppProviderRuntimeFuture<'a, Vec<WhatsappWebMessage>> {
-        self.inner
-            .recent_messages(account_id, provider_chat_id, limit)
-    }
-
-    delegate_inner_fixture_method!(
-        ingest_fixture_message,
-        NewWhatsappWebMessage,
-        WhatsappWebObservedMessage
-    );
-    delegate_inner_fixture_method!(
-        reconcile_fixture_message_commands,
-        NewWhatsappWebMessage,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_reaction,
-        NewWhatsappWebReaction,
-        WhatsappWebObservedReaction
-    );
-    delegate_inner_fixture_method!(
-        reconcile_fixture_reaction_commands,
-        NewWhatsappWebReaction,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_media,
-        NewWhatsappWebMedia,
-        WhatsappWebObservedMedia
-    );
-    delegate_inner_fixture_method!(
-        reconcile_fixture_media_commands,
-        NewWhatsappWebMedia,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_status,
-        NewWhatsappWebStatus,
-        WhatsappWebObservedStatus
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_status_view,
-        NewWhatsappWebStatusView,
-        WhatsappWebObservedStatusView
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_status_delete,
-        NewWhatsappWebStatusDelete,
-        WhatsappWebObservedStatusDelete
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_presence,
-        NewWhatsappWebPresence,
-        WhatsappWebObservedPresence
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_call,
-        NewWhatsappWebCall,
-        WhatsappWebObservedCall
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_runtime_event,
-        NewWhatsappWebRuntimeEvent,
-        WhatsappWebObservedRuntimeEvent
-    );
-    delegate_inner_fixture_method!(
-        reconcile_fixture_status_commands,
-        NewWhatsappWebStatus,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_dialog,
-        NewWhatsappWebDialog,
-        WhatsappWebObservedDialog
-    );
-    delegate_inner_fixture_method!(
-        reconcile_fixture_dialog_commands,
-        NewWhatsappWebDialog,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_participant,
-        NewWhatsappWebParticipant,
-        WhatsappWebObservedParticipant
-    );
-    delegate_inner_fixture_method!(
-        reconcile_fixture_participant_commands,
-        NewWhatsappWebParticipant,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_message_update,
-        NewWhatsappWebMessageUpdate,
-        WhatsappWebObservedMessageUpdate
-    );
-    delegate_inner_fixture_method!(
-        reconcile_fixture_message_update_commands,
-        NewWhatsappWebMessageUpdate,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_message_delete,
-        NewWhatsappWebMessageDelete,
-        WhatsappWebObservedMessageDelete
-    );
-    delegate_inner_fixture_method!(
-        reconcile_fixture_message_delete_commands,
-        NewWhatsappWebMessageDelete,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_inner_fixture_method!(
-        ingest_fixture_receipt,
-        NewWhatsappWebReceipt,
-        WhatsappWebObservedReceipt
-    );
-    delegate_inner_fixture_method!(
-        reconcile_fixture_receipt_commands,
-        NewWhatsappWebReceipt,
-        Vec<WhatsAppProviderCommand>
-    );
-}
-
-pub fn whatsapp_native_md_runtime(
-    pool: PgPool,
-    provider_account_store: Arc<dyn ProviderAccountCommandPort>,
-    provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
-    provider_channel_message_store: Arc<dyn ProviderChannelMessageLookupPort>,
-    event_sink: Arc<dyn WhatsAppRuntimeEventSink>,
-) -> Arc<dyn WhatsAppProviderRuntime> {
-    native_md::build_runtime(
-        pool,
-        provider_account_store,
-        provider_secret_binding_store,
-        provider_channel_message_store,
-        event_sink,
-    )
-}
-
-pub fn whatsapp_business_cloud_runtime(
-    pool: PgPool,
-    provider_account_store: Arc<dyn ProviderAccountCommandPort>,
-    provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
-    provider_channel_message_store: Arc<dyn ProviderChannelMessageLookupPort>,
-) -> Arc<dyn WhatsAppProviderRuntime> {
-    business_cloud::build_runtime(
-        pool,
-        provider_account_store,
-        provider_secret_binding_store,
-        provider_channel_message_store,
-    )
-}
-
-pub fn whatsapp_native_md_runtime_feature_enabled() -> bool {
-    native_md::native_md_live_runtime_enabled()
-}
-
-pub fn whatsapp_business_cloud_runtime_feature_enabled() -> bool {
-    business_cloud::business_cloud_live_runtime_enabled()
-}
-
-pub fn whatsapp_provider_runtime_mux(
-    provider_account_store: Arc<dyn ProviderAccountCommandPort>,
-    web_companion_runtime: Arc<dyn WhatsAppProviderRuntime>,
-    native_md_runtime: Arc<dyn WhatsAppProviderRuntime>,
-    business_cloud_runtime: Arc<dyn WhatsAppProviderRuntime>,
-) -> Arc<dyn WhatsAppProviderRuntime> {
-    Arc::new(WhatsAppProviderRuntimeMux {
-        provider_account_store,
-        web_companion_runtime,
-        native_md_runtime,
-        business_cloud_runtime,
-    })
-}
-
-struct WhatsAppProviderRuntimeMux {
-    provider_account_store: Arc<dyn ProviderAccountCommandPort>,
-    web_companion_runtime: Arc<dyn WhatsAppProviderRuntime>,
-    native_md_runtime: Arc<dyn WhatsAppProviderRuntime>,
-    business_cloud_runtime: Arc<dyn WhatsAppProviderRuntime>,
-}
-
-impl WhatsAppProviderRuntimeMux {
-    fn runtime_for_shape(
-        &self,
-        provider_shape: WhatsAppProviderRuntimeShape,
-    ) -> Arc<dyn WhatsAppProviderRuntime> {
-        match provider_shape {
-            WhatsAppProviderRuntimeShape::WebCompanion => self.web_companion_runtime.clone(),
-            WhatsAppProviderRuntimeShape::NativeMultiDevice => self.native_md_runtime.clone(),
-            WhatsAppProviderRuntimeShape::BusinessCloud => self.business_cloud_runtime.clone(),
-        }
-    }
-
-    fn all_runtimes(&self) -> [Arc<dyn WhatsAppProviderRuntime>; 3] {
-        [
-            self.web_companion_runtime.clone(),
-            self.native_md_runtime.clone(),
-            self.business_cloud_runtime.clone(),
-        ]
-    }
-
-    async fn runtime_for_account_id(
-        &self,
-        account_id: &str,
-    ) -> Result<Arc<dyn WhatsAppProviderRuntime>, WhatsappWebError> {
-        let account = self
-            .provider_account_store
-            .get(account_id)
-            .await
-            .map_err(|error| WhatsappWebError::ProviderAccountStore(error.to_string()))?
-            .ok_or_else(|| {
-                WhatsappWebError::InvalidRequest(format!(
-                    "WhatsApp account `{account_id}` is not configured"
-                ))
-            })?;
-        if !account.provider_kind.is_whatsapp() {
-            return Err(WhatsappWebError::InvalidRequest(format!(
-                "account `{}` is not a WhatsApp provider account",
-                account.account_id
-            )));
-        }
-        Ok(self.runtime_for_shape(account_provider_shape(
-            &account,
-            WhatsAppProviderRuntimeShape::WebCompanion,
-        )))
-    }
-
-    fn runtime_for_live_setup(
-        &self,
-        request: &WhatsappLiveAccountSetupRequest,
-    ) -> Result<Arc<dyn WhatsAppProviderRuntime>, WhatsappWebError> {
-        let provider_shape = match request.provider_shape.trim() {
-            "whatsapp_native_md" => WhatsAppProviderRuntimeShape::NativeMultiDevice,
-            "whatsapp_business_cloud" => WhatsAppProviderRuntimeShape::BusinessCloud,
-            "whatsapp_web_companion" => WhatsAppProviderRuntimeShape::WebCompanion,
-            other => {
-                return Err(WhatsappWebError::InvalidRequest(format!(
-                    "unsupported WhatsApp provider_shape `{other}`"
-                )));
-            }
-        };
-        Ok(self.runtime_for_shape(provider_shape))
-    }
-    async fn aggregate_sessions(
-        &self,
-        account_id: Option<&str>,
-        limit: i64,
-    ) -> Result<Vec<WhatsappWebSession>, WhatsappWebError> {
-        let mut sessions = Vec::new();
-        for runtime in self.all_runtimes() {
-            sessions.extend(runtime.list_sessions(account_id, limit).await?);
-        }
-        sessions.sort_by(|left, right| {
-            right
-                .updated_at
-                .cmp(&left.updated_at)
-                .then_with(|| left.session_id.cmp(&right.session_id))
-        });
-        sessions.dedup_by(|left, right| left.session_id == right.session_id);
-        sessions.truncate(limit.max(0) as usize);
-        Ok(sessions)
-    }
-
-    async fn aggregate_recent_messages(
-        &self,
-        account_id: Option<&str>,
-        provider_chat_id: Option<&str>,
-        limit: i64,
-    ) -> Result<Vec<WhatsappWebMessage>, WhatsappWebError> {
-        let mut messages = Vec::new();
-        for runtime in self.all_runtimes() {
-            messages.extend(
-                runtime
-                    .recent_messages(account_id, provider_chat_id, limit)
-                    .await?,
-            );
-        }
-        messages.sort_by(|left, right| {
-            right
-                .occurred_at
-                .cmp(&left.occurred_at)
-                .then_with(|| right.projected_at.cmp(&left.projected_at))
-                .then_with(|| left.message_id.cmp(&right.message_id))
-        });
-        messages.dedup_by(|left, right| left.message_id == right.message_id);
-        messages.truncate(limit.max(0) as usize);
-        Ok(messages)
-    }
-
-    async fn manual_retry_across_runtimes(
-        &self,
-        command_id: &str,
-    ) -> Result<Option<WhatsAppProviderCommand>, WhatsappWebError> {
-        for runtime in self.all_runtimes() {
-            if let Some(command) = runtime.manual_retry_provider_command(command_id).await? {
-                return Ok(Some(command));
-            }
-        }
-        Ok(None)
-    }
-
-    async fn dead_letter_across_runtimes(
-        &self,
-        command_id: &str,
-        reason: &str,
-    ) -> Result<Option<WhatsAppProviderCommand>, WhatsappWebError> {
-        for runtime in self.all_runtimes() {
-            if let Some(command) = runtime
-                .dead_letter_provider_command(command_id, reason)
-                .await?
-            {
-                return Ok(Some(command));
-            }
-        }
-        Ok(None)
-    }
-}
-
-macro_rules! delegate_account_request_with_secret {
-    ($method:ident, $request_ty:ty) => {
-        fn $method<'a>(
-            &'a self,
-            secret_store: &'a SecretReferenceStore,
-            vault: &'a HostVault,
-            request: &'a $request_ty,
-        ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppProviderCommandResponse> {
-            Box::pin(async move {
-                let runtime = self.runtime_for_account_id(&request.account_id).await?;
-                runtime.$method(secret_store, vault, request).await
-            })
-        }
-    };
-}
-
-macro_rules! delegate_account_fixture_method {
-    ($method:ident, $request_ty:ty, $result_ty:ty) => {
-        fn $method<'a>(
-            &'a self,
-            request: &'a $request_ty,
-        ) -> WhatsAppProviderRuntimeFuture<'a, $result_ty> {
-            Box::pin(async move {
-                let runtime = self.runtime_for_account_id(&request.account_id).await?;
-                runtime.$method(request).await
-            })
-        }
-    };
-}
-
-impl WhatsAppProviderRuntime for WhatsAppProviderRuntimeMux {
-    fn provider_shape(&self) -> WhatsAppProviderRuntimeShape {
-        WhatsAppProviderRuntimeShape::WebCompanion
-    }
-
-    fn runtime_status<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        account_id: &'a str,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeStatus> {
-        Box::pin(async move {
-            let runtime = self.runtime_for_account_id(account_id).await?;
-            runtime
-                .runtime_status(secret_store, vault, account_id)
-                .await
-        })
-    }
-
-    fn start_runtime<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppRuntimeStartRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeStatus> {
-        Box::pin(async move {
-            let runtime = self.runtime_for_account_id(&request.account_id).await?;
-            runtime.start_runtime(secret_store, vault, request).await
-        })
-    }
-
-    fn stop_runtime<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppRuntimeStopRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeStatus> {
-        Box::pin(async move {
-            let runtime = self.runtime_for_account_id(&request.account_id).await?;
-            runtime.stop_runtime(secret_store, vault, request).await
-        })
-    }
-
-    fn revoke_runtime<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppRuntimeRevokeRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeStatus> {
-        Box::pin(async move {
-            let runtime = self.runtime_for_account_id(&request.account_id).await?;
-            runtime.revoke_runtime(secret_store, vault, request).await
-        })
-    }
-
-    fn relink_runtime<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppRuntimeRelinkRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeStatus> {
-        Box::pin(async move {
-            let runtime = self.runtime_for_account_id(&request.account_id).await?;
-            runtime.relink_runtime(secret_store, vault, request).await
-        })
-    }
-
-    fn remove_runtime<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppRuntimeRemoveRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeRemoveResponse> {
-        Box::pin(async move {
-            let runtime = self.runtime_for_account_id(&request.account_id).await?;
-            runtime.remove_runtime(secret_store, vault, request).await
-        })
-    }
-
-    fn runtime_health<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        account_id: &'a str,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppRuntimeHealth> {
-        Box::pin(async move {
-            let runtime = self.runtime_for_account_id(account_id).await?;
-            runtime
-                .runtime_health(secret_store, vault, account_id)
-                .await
-        })
-    }
-
-    fn start_qr_link<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppQrLinkStartRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppQrLinkSession> {
-        Box::pin(async move {
-            let runtime = self.runtime_for_account_id(&request.account_id).await?;
-            runtime.start_qr_link(secret_store, vault, request).await
-        })
-    }
-
-    fn start_pair_code_link<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        request: &'a WhatsAppPairCodeStartRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppPairCodeSession> {
-        Box::pin(async move {
-            let runtime = self.runtime_for_account_id(&request.account_id).await?;
-            runtime
-                .start_pair_code_link(secret_store, vault, request)
-                .await
-        })
-    }
-
-    delegate_account_request_with_secret!(request_send_text, WhatsAppTextSendRequest);
-    delegate_account_request_with_secret!(request_reply, WhatsAppReplyRequest);
-    delegate_account_request_with_secret!(request_forward, WhatsAppForwardRequest);
-    delegate_account_request_with_secret!(request_edit, WhatsAppEditRequest);
-    delegate_account_request_with_secret!(request_delete, WhatsAppDeleteRequest);
-    delegate_account_request_with_secret!(request_react, WhatsAppReactionRequest);
-    delegate_account_request_with_secret!(request_unreact, WhatsAppReactionRequest);
-    delegate_account_request_with_secret!(request_media_upload, WhatsAppMediaUploadRequest);
-    delegate_account_request_with_secret!(request_media_download, WhatsAppMediaDownloadRequest);
-    delegate_account_request_with_secret!(request_mark_read, WhatsAppConversationCommandRequest);
-    delegate_account_request_with_secret!(request_mark_unread, WhatsAppConversationCommandRequest);
-    delegate_account_request_with_secret!(request_archive, WhatsAppConversationCommandRequest);
-    delegate_account_request_with_secret!(request_unarchive, WhatsAppConversationCommandRequest);
-    delegate_account_request_with_secret!(request_mute, WhatsAppConversationCommandRequest);
-    delegate_account_request_with_secret!(request_unmute, WhatsAppConversationCommandRequest);
-    delegate_account_request_with_secret!(request_pin, WhatsAppConversationCommandRequest);
-    delegate_account_request_with_secret!(request_unpin, WhatsAppConversationCommandRequest);
-    delegate_account_request_with_secret!(request_join_group, WhatsAppConversationCommandRequest);
-    delegate_account_request_with_secret!(request_leave_group, WhatsAppConversationCommandRequest);
-    delegate_account_request_with_secret!(request_publish_status, WhatsAppStatusPublishRequest);
-    delegate_account_request_with_secret!(request_send_voice_note, WhatsAppVoiceNoteSendRequest);
-
-    fn execute_live_provider_command<'a>(
-        &'a self,
-        command: &'a WhatsAppProviderExecutableCommand,
-    ) -> WhatsAppProviderCommandExecutionFuture<'a> {
-        Box::pin(async move {
-            let runtime = self
-                .runtime_for_account_id(&command.account_id)
-                .await
-                .map_err(|error| {
-                    WhatsAppProviderCommandExecutionError::new(
-                        "whatsapp_runtime_account_lookup_failed",
-                        error.to_string(),
-                        Some(30),
-                    )
-                })?;
-            runtime.execute_live_provider_command(command).await
-        })
-    }
-
-    fn list_provider_commands<'a>(
-        &'a self,
-        account_id: &'a str,
-        provider_chat_id: Option<&'a str>,
-        provider_message_id: Option<&'a str>,
-        command_kinds: &'a [String],
-        limit: i64,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppProviderCommandListResponse> {
-        Box::pin(async move {
-            let runtime = self.runtime_for_account_id(account_id).await?;
-            runtime
-                .list_provider_commands(
-                    account_id,
-                    provider_chat_id,
-                    provider_message_id,
-                    command_kinds,
-                    limit,
-                )
-                .await
-        })
-    }
-
-    fn manual_retry_provider_command<'a>(
-        &'a self,
-        command_id: &'a str,
-    ) -> WhatsAppProviderRuntimeFuture<'a, Option<WhatsAppProviderCommand>> {
-        Box::pin(async move { self.manual_retry_across_runtimes(command_id).await })
-    }
-
-    fn dead_letter_provider_command<'a>(
-        &'a self,
-        command_id: &'a str,
-        reason: &'a str,
-    ) -> WhatsAppProviderRuntimeFuture<'a, Option<WhatsAppProviderCommand>> {
-        Box::pin(async move { self.dead_letter_across_runtimes(command_id, reason).await })
-    }
-
-    fn store_authorized_session_credential<'a>(
-        &'a self,
-        secret_store: &'a SecretReferenceStore,
-        vault: &'a HostVault,
-        credential: &'a WhatsAppAuthorizedSessionCredentialWrite,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsAppCredentialBinding> {
-        Box::pin(async move {
-            let runtime = self.runtime_for_account_id(&credential.account_id).await?;
-            runtime
-                .store_authorized_session_credential(secret_store, vault, credential)
-                .await
-        })
-    }
-
-    fn setup_fixture_account<'a>(
-        &'a self,
-        request: &'a WhatsappWebAccountSetupRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsappWebAccountSetupResponse> {
-        self.web_companion_runtime.setup_fixture_account(request)
-    }
-
-    fn setup_live_blocked_account<'a>(
-        &'a self,
-        request: &'a WhatsappLiveAccountSetupRequest,
-    ) -> WhatsAppProviderRuntimeFuture<'a, WhatsappWebAccountSetupResponse> {
-        Box::pin(async move {
-            let runtime = self.runtime_for_live_setup(request)?;
-            runtime.setup_live_blocked_account(request).await
-        })
-    }
-
-    fn list_sessions<'a>(
-        &'a self,
-        account_id: Option<&'a str>,
-        limit: i64,
-    ) -> WhatsAppProviderRuntimeFuture<'a, Vec<WhatsappWebSession>> {
-        Box::pin(async move {
-            match account_id {
-                Some(account_id) => {
-                    let runtime = self.runtime_for_account_id(account_id).await?;
-                    runtime.list_sessions(Some(account_id), limit).await
-                }
-                None => self.aggregate_sessions(None, limit).await,
-            }
-        })
-    }
-
-    fn recent_messages<'a>(
-        &'a self,
-        account_id: Option<&'a str>,
-        provider_chat_id: Option<&'a str>,
-        limit: i64,
-    ) -> WhatsAppProviderRuntimeFuture<'a, Vec<WhatsappWebMessage>> {
-        Box::pin(async move {
-            match account_id {
-                Some(account_id) => {
-                    let runtime = self.runtime_for_account_id(account_id).await?;
-                    runtime
-                        .recent_messages(Some(account_id), provider_chat_id, limit)
-                        .await
-                }
-                None => {
-                    self.aggregate_recent_messages(None, provider_chat_id, limit)
-                        .await
-                }
-            }
-        })
-    }
-
-    delegate_account_fixture_method!(
-        ingest_fixture_message,
-        NewWhatsappWebMessage,
-        WhatsappWebObservedMessage
-    );
-    delegate_account_fixture_method!(
-        reconcile_fixture_message_commands,
-        NewWhatsappWebMessage,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_reaction,
-        NewWhatsappWebReaction,
-        WhatsappWebObservedReaction
-    );
-    delegate_account_fixture_method!(
-        reconcile_fixture_reaction_commands,
-        NewWhatsappWebReaction,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_media,
-        NewWhatsappWebMedia,
-        WhatsappWebObservedMedia
-    );
-    delegate_account_fixture_method!(
-        reconcile_fixture_media_commands,
-        NewWhatsappWebMedia,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_status,
-        NewWhatsappWebStatus,
-        WhatsappWebObservedStatus
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_status_view,
-        NewWhatsappWebStatusView,
-        WhatsappWebObservedStatusView
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_status_delete,
-        NewWhatsappWebStatusDelete,
-        WhatsappWebObservedStatusDelete
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_presence,
-        NewWhatsappWebPresence,
-        WhatsappWebObservedPresence
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_call,
-        NewWhatsappWebCall,
-        WhatsappWebObservedCall
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_runtime_event,
-        NewWhatsappWebRuntimeEvent,
-        WhatsappWebObservedRuntimeEvent
-    );
-    delegate_account_fixture_method!(
-        reconcile_fixture_status_commands,
-        NewWhatsappWebStatus,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_dialog,
-        NewWhatsappWebDialog,
-        WhatsappWebObservedDialog
-    );
-    delegate_account_fixture_method!(
-        reconcile_fixture_dialog_commands,
-        NewWhatsappWebDialog,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_participant,
-        NewWhatsappWebParticipant,
-        WhatsappWebObservedParticipant
-    );
-    delegate_account_fixture_method!(
-        reconcile_fixture_participant_commands,
-        NewWhatsappWebParticipant,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_message_update,
-        NewWhatsappWebMessageUpdate,
-        WhatsappWebObservedMessageUpdate
-    );
-    delegate_account_fixture_method!(
-        reconcile_fixture_message_update_commands,
-        NewWhatsappWebMessageUpdate,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_message_delete,
-        NewWhatsappWebMessageDelete,
-        WhatsappWebObservedMessageDelete
-    );
-    delegate_account_fixture_method!(
-        reconcile_fixture_message_delete_commands,
-        NewWhatsappWebMessageDelete,
-        Vec<WhatsAppProviderCommand>
-    );
-    delegate_account_fixture_method!(
-        ingest_fixture_receipt,
-        NewWhatsappWebReceipt,
-        WhatsappWebObservedReceipt
-    );
-    delegate_account_fixture_method!(
-        reconcile_fixture_receipt_commands,
-        NewWhatsappWebReceipt,
-        Vec<WhatsAppProviderCommand>
-    );
-}
-
 impl WhatsAppProviderRuntime for WhatsappWebStore {
     fn provider_shape(&self) -> WhatsAppProviderRuntimeShape {
         WhatsAppProviderRuntimeShape::WebCompanion
@@ -1299,19 +146,8 @@ impl WhatsAppProviderRuntime for WhatsappWebStore {
             } else {
                 "stopped"
             };
-            let last_error = (runtime_kind == "live_blocked").then(|| match provider_shape {
-                WhatsAppProviderRuntimeShape::NativeMultiDevice => format!(
-                    "native WhatsApp multi-device runtime is blocked: {}",
-                    provider_shape_runtime_feature_blocker(provider_shape)
-                ),
-                WhatsAppProviderRuntimeShape::BusinessCloud => format!(
-                    "WhatsApp Business Cloud runtime is blocked: {}",
-                    provider_shape_runtime_feature_blocker(provider_shape)
-                ),
-                WhatsAppProviderRuntimeShape::WebCompanion => {
-                    "live WhatsApp runtime is blocked until an explicit provider runtime is accepted"
-                        .to_owned()
-                }
+            let last_error = (runtime_kind == "live_blocked").then(|| {
+                "hidden WhatsApp WebView runtime requires an explicit desktop start".to_owned()
             });
             Ok(self.status_from_account(&account, status, restored_session, last_error))
         })
@@ -1419,7 +255,7 @@ impl WhatsAppProviderRuntime for WhatsappWebStore {
             let status = self.status_from_account(&account, "stopped", restored_session, None);
             let health_status = runtime_health_status(&status);
             let healthy = health_status == "available";
-            let requires_visible_webview = status.provider_shape == "whatsapp_web_companion"
+            let requires_hidden_webview = status.provider_shape == "whatsapp_web_companion"
                 && status.runtime_kind != "fixture";
             let provider_shape = status.provider_shape.clone();
             let runtime_kind = status.runtime_kind.clone();
@@ -1455,10 +291,10 @@ impl WhatsAppProviderRuntime for WhatsappWebStore {
                     "media_upload_available": status.media_upload_available,
                 },
                 "webview": {
-                    "required": requires_visible_webview,
-                    "visible_runtime_available": status.runtime_kind == "webview_companion"
+                    "required": requires_hidden_webview,
+                    "hidden_runtime_available": status.runtime_kind == "webview_companion"
                         && status.live_runtime_available,
-                    "visible_runtime_required": status.runtime_blockers.iter().any(|blocker| blocker == "whatsapp_visible_runtime_required"),
+                    "hidden_runtime_required": status.runtime_blockers.iter().any(|blocker| blocker == "whatsapp_hidden_webview_runtime_required"),
                     "companion_runtime": status.runtime_kind == "webview_companion",
                 },
                 "validation": {
@@ -1468,11 +304,6 @@ impl WhatsAppProviderRuntime for WhatsappWebStore {
                     "has_last_error": status.last_error.is_some(),
                 },
             });
-            if provider_shape == WhatsAppProviderRuntimeShape::NativeMultiDevice.as_str() {
-                let native_md_driver = native_md::native_md_runtime_driver_health_check();
-                checks["native_md_driver"] = native_md_driver.clone();
-                checks["runtime"]["native_driver"] = native_md_driver;
-            }
             if provider_shape == WhatsAppProviderRuntimeShape::WebCompanion.as_str() {
                 let web_companion_bridge =
                     web_companion::web_companion_bridge_contract_health_check();
@@ -2013,10 +844,6 @@ impl WhatsAppProviderRuntime for WhatsappWebStore {
             let restored_session = self
                 .optional_restored_session_secret_ref(secret_store, vault, &account.account_id)
                 .await?;
-            let media_download_secret_ref =
-                request.provider_media_id.as_deref().map(|fingerprint| {
-                    whatsapp_native_md_media_download_secret_ref(&account.account_id, fingerprint)
-                });
             let command = self
                 .insert_blocked_provider_command(ProviderCommandInsert {
                     command_id,
@@ -2030,7 +857,6 @@ impl WhatsAppProviderRuntime for WhatsappWebStore {
                     payload: json!({
                         "provider_attachment_id": request.provider_attachment_id,
                         "provider_media_id": request.provider_media_id,
-                        "media_download_secret_ref": media_download_secret_ref.clone(),
                         "filename": request.filename,
                         "content_type": request.content_type,
                     }),
@@ -2039,7 +865,6 @@ impl WhatsAppProviderRuntime for WhatsappWebStore {
                         "provider_message_id": provider_message_id,
                         "provider_attachment_id": request.provider_attachment_id,
                         "provider_media_id": request.provider_media_id,
-                        "media_download_secret_ref": media_download_secret_ref,
                     }),
                     rendered_preview_hash: None,
                     restored_session_secret_ref: restored_session,
@@ -3149,10 +1974,6 @@ impl WhatsappWebStore {
               AND created_at <= $4
               AND (
                   provider_message_id = $3
-                  OR provider_state #>> '{business_cloud,provider_request_id}' = $3
-                  OR provider_state #>> '{business_cloud,provider_observed_completion_target,provider_message_id}' = $3
-                  OR provider_state #>> '{native_md,provider_request_id}' = $3
-                  OR provider_state #>> '{native_md,provider_observed_completion_target,provider_message_id}' = $3
                   OR result_payload #>> '{provider_submission,provider_request_id}' = $3
                   OR result_payload #>> '{provider_submission,provider_observed_completion_target,provider_message_id}' = $3
               )
@@ -4455,41 +3276,16 @@ fn account_runtime_kind(account: &ProviderAccount) -> String {
 }
 
 fn account_provider_shape(
-    account: &ProviderAccount,
-    fallback: WhatsAppProviderRuntimeShape,
+    _account: &ProviderAccount,
+    _fallback: WhatsAppProviderRuntimeShape,
 ) -> WhatsAppProviderRuntimeShape {
-    match account
-        .config
-        .get("provider_shape")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        Some("whatsapp_native_md") => WhatsAppProviderRuntimeShape::NativeMultiDevice,
-        Some("whatsapp_business_cloud") => WhatsAppProviderRuntimeShape::BusinessCloud,
-        Some("whatsapp_web_companion") => WhatsAppProviderRuntimeShape::WebCompanion,
-        _ => match account.provider_kind {
-            CommunicationProviderKind::WhatsappBusinessCloud => {
-                WhatsAppProviderRuntimeShape::BusinessCloud
-            }
-            CommunicationProviderKind::WhatsappWeb => fallback,
-            _ => fallback,
-        },
-    }
+    WhatsAppProviderRuntimeShape::WebCompanion
 }
 
 fn provider_shape_restorable_secret_purpose(
-    provider_shape: WhatsAppProviderRuntimeShape,
+    _provider_shape: WhatsAppProviderRuntimeShape,
 ) -> ProviderAccountSecretPurpose {
-    match provider_shape {
-        WhatsAppProviderRuntimeShape::BusinessCloud => {
-            ProviderAccountSecretPurpose::WhatsappBusinessCloudAccessToken
-        }
-        WhatsAppProviderRuntimeShape::WebCompanion
-        | WhatsAppProviderRuntimeShape::NativeMultiDevice => {
-            ProviderAccountSecretPurpose::WhatsappWebSessionKey
-        }
-    }
+    ProviderAccountSecretPurpose::WhatsappWebSessionKey
 }
 
 fn row_to_whatsapp_provider_write_command(
@@ -4559,7 +3355,7 @@ pub(crate) async fn claim_due_commands_for_execution(
               AND (command.next_attempt_at IS NULL OR command.next_attempt_at <= $1)
               AND command.confirmation_decision IN ('confirmed', 'not_required')
               AND command.capability_state IN ('available', 'degraded')
-              AND account.provider_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
+              AND account.provider_kind = 'whatsapp_web'
               AND COALESCE(account.config->>'runtime', '') = 'fixture'
               AND command.command_kind IN (
                   'send_text', 'reply', 'forward',
@@ -4630,7 +3426,7 @@ pub(crate) async fn claim_due_live_commands_for_execution(
                     COALESCE(command.audit_metadata->>'session_restore_available', 'false') = 'true'
                  OR command.result_payload ? 'manual_retry_at'
               )
-              AND account.provider_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
+              AND account.provider_kind = 'whatsapp_web'
               AND COALESCE(account.config->>'runtime', '') NOT IN ('', 'fixture')
               AND (
                     COALESCE(account.config->>'lifecycle_state', '') IN (
@@ -4674,139 +3470,6 @@ pub(crate) async fn claim_due_live_commands_for_execution(
     .bind(limit)
     .bind("whatsapp-runtime-bridge-worker")
     .bind(account_id)
-    .fetch_all(pool)
-    .await?;
-
-    let commands = rows
-        .into_iter()
-        .map(row_to_whatsapp_provider_write_command)
-        .collect::<Result<Vec<_>, _>>()?;
-    for command in &commands {
-        mirror_canonical_provider_command_for_pool(pool, command).await?;
-    }
-    Ok(commands)
-}
-
-pub(crate) async fn claim_due_native_md_commands_for_execution(
-    pool: &PgPool,
-    now: DateTime<Utc>,
-    limit: i64,
-) -> Result<Vec<WhatsAppProviderWriteCommand>, WhatsappWebError> {
-    let rows = sqlx::query(
-        r#"
-        WITH due AS (
-            SELECT command.command_id
-            FROM whatsapp_provider_write_commands command
-            JOIN communication_provider_accounts account
-              ON account.account_id = command.account_id
-            WHERE command.status IN ('queued', 'retrying')
-              AND command.retry_count < command.max_retries
-              AND (command.next_attempt_at IS NULL OR command.next_attempt_at <= $1)
-              AND command.confirmation_decision IN ('confirmed', 'not_required')
-              AND command.capability_state IN ('available', 'degraded')
-              AND COALESCE(command.audit_metadata->>'session_restore_available', 'false') = 'true'
-              AND account.provider_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
-              AND COALESCE(account.config->>'provider_shape', '') = 'whatsapp_native_md'
-              AND COALESCE(account.config->>'runtime', '') NOT IN ('', 'fixture', 'live_blocked')
-              AND COALESCE(account.config->>'lifecycle_state', '') IN (
-                  'linked', 'available', 'syncing', 'degraded'
-              )
-              AND command.command_kind IN (
-                  'send_text', 'reply', 'forward',
-                  'send_media', 'download_media', 'send_voice_note',
-                  'edit', 'delete', 'react', 'unreact',
-                  'mark_read', 'mark_unread',
-                  'archive', 'unarchive',
-                  'mute', 'unmute',
-                  'pin', 'unpin',
-                  'join_group', 'leave_group',
-                  'publish_status'
-              )
-            ORDER BY COALESCE(command.next_attempt_at, command.created_at) ASC,
-                     command.created_at ASC,
-                     command.command_id ASC
-            LIMIT $2
-            FOR UPDATE SKIP LOCKED
-        )
-        UPDATE whatsapp_provider_write_commands command
-        SET status = 'executing',
-            retry_count = command.retry_count + 1,
-            last_attempt_at = $1,
-            locked_at = $1,
-            locked_by = $3,
-            last_error = NULL,
-            reconciliation_status = 'awaiting_provider',
-            updated_at = $1
-        FROM due
-        WHERE command.command_id = due.command_id
-        RETURNING command.*
-        "#,
-    )
-    .bind(now)
-    .bind(limit)
-    .bind("whatsapp-native-md-command-worker")
-    .fetch_all(pool)
-    .await?;
-
-    let commands = rows
-        .into_iter()
-        .map(row_to_whatsapp_provider_write_command)
-        .collect::<Result<Vec<_>, _>>()?;
-    for command in &commands {
-        mirror_canonical_provider_command_for_pool(pool, command).await?;
-    }
-    Ok(commands)
-}
-
-pub(crate) async fn claim_due_business_cloud_commands_for_execution(
-    pool: &PgPool,
-    now: DateTime<Utc>,
-    limit: i64,
-) -> Result<Vec<WhatsAppProviderWriteCommand>, WhatsappWebError> {
-    let rows = sqlx::query(
-        r#"
-        WITH due AS (
-            SELECT command.command_id
-            FROM whatsapp_provider_write_commands command
-            JOIN communication_provider_accounts account
-              ON account.account_id = command.account_id
-            WHERE command.status IN ('queued', 'retrying')
-              AND command.retry_count < command.max_retries
-              AND (command.next_attempt_at IS NULL OR command.next_attempt_at <= $1)
-              AND command.confirmation_decision IN ('confirmed', 'not_required')
-              AND command.capability_state IN ('available', 'degraded')
-              AND COALESCE(command.audit_metadata->>'session_restore_available', 'false') = 'true'
-              AND account.provider_kind = 'whatsapp_business_cloud'
-              AND COALESCE(account.config->>'provider_shape', '') = 'whatsapp_business_cloud'
-              AND COALESCE(account.config->>'runtime', '') = 'business_cloud_smoke'
-              AND COALESCE(account.config->>'business_cloud_live_smoke_enabled', 'false') = 'true'
-              AND COALESCE(account.config->>'lifecycle_state', '') IN (
-                  'linked', 'available', 'syncing', 'degraded'
-              )
-              AND command.command_kind IN ('send_text', 'send_template', 'send_media', 'send_voice_note')
-            ORDER BY COALESCE(command.next_attempt_at, command.created_at) ASC,
-                     command.created_at ASC,
-                     command.command_id ASC
-            LIMIT $2
-            FOR UPDATE SKIP LOCKED
-        )
-        UPDATE whatsapp_provider_write_commands command
-        SET status = 'executing',
-            retry_count = command.retry_count + 1,
-            last_attempt_at = $1,
-            locked_at = $1,
-            locked_by = $3,
-            last_error = NULL,
-            reconciliation_status = 'awaiting_provider',
-            updated_at = $1
-        FROM due
-        WHERE command.command_id = due.command_id
-        RETURNING command.*
-        "#,
-    )
-    .bind(now)
-    .bind(limit)
-    .bind("whatsapp-business-cloud-command-worker")
     .fetch_all(pool)
     .await?;
 
@@ -4864,7 +3527,7 @@ pub(crate) async fn import_canonical_provider_commands(
             JOIN whatsapp_provider_write_commands existing
               ON existing.command_id = command.command_id
             WHERE command.channel_kind = 'whatsapp'
-              AND account.provider_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
+              AND account.provider_kind = 'whatsapp_web'
               AND command.status IN ('queued', 'retrying', 'confirmed')
               AND command.command_kind IN (
                   'send_text', 'reply', 'forward',
@@ -4990,7 +3653,7 @@ pub(crate) async fn import_canonical_provider_commands(
               ON existing.command_id = command.command_id
             WHERE existing.command_id IS NULL
               AND command.channel_kind = 'whatsapp'
-              AND account.provider_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
+              AND account.provider_kind = 'whatsapp_web'
               AND command.status IN ('queued', 'retrying', 'confirmed')
               AND command.command_kind IN (
                   'send_text', 'reply', 'forward',
@@ -5417,9 +4080,6 @@ impl From<&WhatsAppProviderWriteCommand> for WhatsAppProviderExecutableCommand {
             target_ref: command.target_ref.clone(),
             audit_metadata: command.audit_metadata.clone(),
             provider_state: command.provider_state.clone(),
-            media_bytes: None,
-            media_download_ref: None,
-            api_access_token: None,
         }
     }
 }
@@ -5528,13 +4188,7 @@ fn runtime_status_blockers(
 ) -> Vec<String> {
     let mut blockers = Vec::new();
     match status {
-        "link_required" | "created" => {
-            if provider_shape == WhatsAppProviderRuntimeShape::BusinessCloud {
-                blockers.push("whatsapp_business_cloud_setup_required".to_owned());
-            } else {
-                blockers.push("whatsapp_session_link_required".to_owned());
-            }
-        }
+        "link_required" | "created" => blockers.push("whatsapp_session_link_required".to_owned()),
         "qr_pending" | "pair_code_pending" => {
             blockers.extend(qr_pair_code_blockers(runtime_kind, provider_shape));
         }
@@ -5549,11 +4203,8 @@ fn runtime_status_blockers(
         }
         _ => {}
     }
-    if status == "link_required"
-        && runtime_kind != "fixture"
-        && provider_shape != WhatsAppProviderRuntimeShape::BusinessCloud
-    {
-        blockers.push("whatsapp_visible_runtime_required".to_owned());
+    if status == "link_required" && runtime_kind != "fixture" {
+        blockers.push("whatsapp_hidden_webview_runtime_required".to_owned());
     }
     if runtime_kind != "fixture" && !provider_shape_runtime_feature_enabled(provider_shape) {
         blockers.push(provider_shape_runtime_feature_blocker(provider_shape).to_owned());
@@ -5575,15 +4226,7 @@ fn runtime_status_blockers(
 }
 
 fn provider_shape_runtime_feature_enabled(provider_shape: WhatsAppProviderRuntimeShape) -> bool {
-    match provider_shape {
-        WhatsAppProviderRuntimeShape::WebCompanion => true,
-        WhatsAppProviderRuntimeShape::NativeMultiDevice => {
-            whatsapp_native_md_runtime_feature_enabled()
-        }
-        WhatsAppProviderRuntimeShape::BusinessCloud => {
-            whatsapp_business_cloud_runtime_feature_enabled()
-        }
-    }
+    provider_shape == WhatsAppProviderRuntimeShape::WebCompanion
 }
 
 fn authorized_session_runtime_kind(account: &ProviderAccount, extra: &Value) -> String {
@@ -5596,71 +4239,10 @@ fn authorized_session_runtime_kind(account: &ProviderAccount, extra: &Value) -> 
         .unwrap_or_else(|| account_runtime_kind(account))
 }
 
-#[cfg(test)]
-mod runtime_feature_tests {
-    use super::*;
-
-    #[test]
-    fn whatsapp_runtime_feature_gates_default_to_expected_shapes() {
-        assert!(provider_shape_runtime_feature_enabled(
-            WhatsAppProviderRuntimeShape::WebCompanion
-        ));
-        assert_eq!(
-            provider_shape_runtime_feature_enabled(WhatsAppProviderRuntimeShape::NativeMultiDevice),
-            whatsapp_native_md_runtime_feature_enabled()
-        );
-        assert_eq!(
-            provider_shape_runtime_feature_enabled(WhatsAppProviderRuntimeShape::BusinessCloud),
-            whatsapp_business_cloud_runtime_feature_enabled()
-        );
-    }
-
-    #[test]
-    fn whatsapp_runtime_feature_blockers_match_provider_shapes() {
-        assert_eq!(
-            provider_shape_runtime_feature_blocker(WhatsAppProviderRuntimeShape::WebCompanion),
-            "whatsapp_web_runtime_feature_unavailable"
-        );
-        assert_eq!(
-            provider_shape_runtime_feature_blocker(WhatsAppProviderRuntimeShape::NativeMultiDevice),
-            native_md::native_md_runtime_feature_blocker()
-        );
-        assert_eq!(
-            provider_shape_runtime_feature_blocker(WhatsAppProviderRuntimeShape::BusinessCloud),
-            business_cloud::business_cloud_runtime_feature_blocker()
-        );
-    }
-
-    #[test]
-    fn whatsapp_retry_delay_defaults_to_exponential_backoff_and_caps() {
-        assert_eq!(retry_delay_seconds(0, None), 30);
-        assert_eq!(retry_delay_seconds(1, None), 30);
-        assert_eq!(retry_delay_seconds(2, None), 60);
-        assert_eq!(retry_delay_seconds(3, None), 120);
-        assert_eq!(retry_delay_seconds(6, None), 900);
-        assert_eq!(retry_delay_seconds(20, None), 900);
-    }
-
-    #[test]
-    fn whatsapp_retry_delay_honors_runtime_hint_with_clamp() {
-        assert_eq!(retry_delay_seconds(4, Some(5)), 5);
-        assert_eq!(retry_delay_seconds(4, Some(5_000)), 900);
-        assert_eq!(retry_delay_seconds(4, Some(-10)), 1);
-    }
-}
-
 fn provider_shape_runtime_feature_blocker(
-    provider_shape: WhatsAppProviderRuntimeShape,
+    _provider_shape: WhatsAppProviderRuntimeShape,
 ) -> &'static str {
-    match provider_shape {
-        WhatsAppProviderRuntimeShape::WebCompanion => "whatsapp_web_runtime_feature_unavailable",
-        WhatsAppProviderRuntimeShape::NativeMultiDevice => {
-            native_md::native_md_runtime_feature_blocker()
-        }
-        WhatsAppProviderRuntimeShape::BusinessCloud => {
-            business_cloud::business_cloud_runtime_feature_blocker()
-        }
-    }
+    "whatsapp_web_runtime_feature_unavailable"
 }
 
 fn next_attempt_at(
@@ -5759,48 +4341,6 @@ fn whatsapp_session_secret_ref(account_id: &str) -> String {
     )
 }
 
-pub(crate) fn whatsapp_business_cloud_access_token_secret_ref(account_id: &str) -> String {
-    format!(
-        "secret:provider-account:{}:{}",
-        account_id.trim(),
-        ProviderAccountSecretPurpose::WhatsappBusinessCloudAccessToken.as_str()
-    )
-}
-
-pub(crate) fn whatsapp_business_cloud_app_secret_ref(account_id: &str) -> String {
-    format!(
-        "secret:provider-account:{}:{}",
-        account_id.trim(),
-        ProviderAccountSecretPurpose::WhatsappBusinessCloudAppSecret.as_str()
-    )
-}
-
-pub(crate) fn whatsapp_business_cloud_webhook_verify_token_ref(account_id: &str) -> String {
-    format!(
-        "secret:provider-account:{}:{}",
-        account_id.trim(),
-        ProviderAccountSecretPurpose::WhatsappBusinessCloudWebhookVerifyToken.as_str()
-    )
-}
-
-pub(crate) fn whatsapp_native_md_media_download_secret_ref(
-    account_id: &str,
-    fingerprint: &str,
-) -> String {
-    let suffix = fingerprint
-        .trim()
-        .strip_prefix("sha256:")
-        .unwrap_or(fingerprint.trim())
-        .chars()
-        .take(32)
-        .collect::<String>();
-    format!(
-        "secret:provider-account:{}:whatsapp_media_download_ref:{}",
-        account_id.trim(),
-        suffix
-    )
-}
-
 fn session_secret_metadata(account: &ProviderAccount, extra: &Value) -> Value {
     let mut metadata = json!({
         "provider": account.provider_kind.as_str(),
@@ -5820,41 +4360,23 @@ fn session_secret_metadata(account: &ProviderAccount, extra: &Value) -> Value {
 }
 
 fn ensure_qr_pairing_supported(
-    provider_shape: WhatsAppProviderRuntimeShape,
-    operation: &'static str,
+    _provider_shape: WhatsAppProviderRuntimeShape,
+    _operation: &'static str,
 ) -> Result<(), WhatsappWebError> {
-    if provider_shape == WhatsAppProviderRuntimeShape::BusinessCloud {
-        return Err(WhatsappWebError::InvalidRequest(format!(
-            "WhatsApp provider shape `{}` does not support `{operation}`",
-            provider_shape.as_str()
-        )));
-    }
     Ok(())
 }
 
 fn ensure_session_secret_supported(
-    provider_shape: WhatsAppProviderRuntimeShape,
-    operation: &'static str,
+    _provider_shape: WhatsAppProviderRuntimeShape,
+    _operation: &'static str,
 ) -> Result<(), WhatsappWebError> {
-    if provider_shape == WhatsAppProviderRuntimeShape::BusinessCloud {
-        return Err(WhatsappWebError::InvalidRequest(format!(
-            "WhatsApp provider shape `{}` does not support `{operation}`",
-            provider_shape.as_str()
-        )));
-    }
     Ok(())
 }
 
 fn ensure_provider_command_supported(
-    provider_shape: WhatsAppProviderRuntimeShape,
-    command_kind: &str,
+    _provider_shape: WhatsAppProviderRuntimeShape,
+    _command_kind: &str,
 ) -> Result<(), WhatsappWebError> {
-    if provider_shape == WhatsAppProviderRuntimeShape::BusinessCloud {
-        return Err(WhatsappWebError::InvalidRequest(format!(
-            "WhatsApp provider shape `{}` does not support personal command `{command_kind}`",
-            provider_shape.as_str()
-        )));
-    }
     Ok(())
 }
 
@@ -5869,30 +4391,6 @@ fn provider_request_id_matches_observed_receipt(
 
     command.provider_message_id.as_deref() == Some(observed_provider_message_id)
         || [
-            json_string_at(
-                &command.provider_state,
-                &["business_cloud", "provider_request_id"],
-            ),
-            json_string_at(
-                &command.provider_state,
-                &[
-                    "business_cloud",
-                    "provider_observed_completion_target",
-                    "provider_message_id",
-                ],
-            ),
-            json_string_at(
-                &command.provider_state,
-                &["native_md", "provider_request_id"],
-            ),
-            json_string_at(
-                &command.provider_state,
-                &[
-                    "native_md",
-                    "provider_observed_completion_target",
-                    "provider_message_id",
-                ],
-            ),
             json_string_at(
                 &command.result_payload,
                 &["provider_submission", "provider_request_id"],
@@ -5921,18 +4419,6 @@ fn provider_request_id_matches_observed_media(
     }
 
     [
-        json_string_at(
-            &command.provider_state,
-            &["native_md", "provider_request_id"],
-        ),
-        json_string_at(
-            &command.provider_state,
-            &[
-                "native_md",
-                "provider_observed_completion_target",
-                "provider_message_id",
-            ],
-        ),
         json_string_at(
             &command.result_payload,
             &["provider_submission", "provider_request_id"],
@@ -5970,129 +4456,4 @@ fn validate_non_empty(field: &'static str, value: &str) -> Result<String, Whatsa
         )));
     }
     Ok(trimmed.to_owned())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn media_reconciliation_matches_native_provider_request_id() {
-        let now = Utc::now();
-        let command = WhatsAppProviderWriteCommand {
-            command_id: "cmd-media".to_owned(),
-            account_id: "acct".to_owned(),
-            command_kind: "send_media".to_owned(),
-            idempotency_key: "media-key".to_owned(),
-            provider_chat_id: "chat".to_owned(),
-            provider_message_id: None,
-            capability_state: "available".to_owned(),
-            action_class: "provider_write".to_owned(),
-            confirmation_decision: "not_required".to_owned(),
-            status: "executing".to_owned(),
-            retry_count: 1,
-            max_retries: 3,
-            last_error: None,
-            payload: json!({"blob_id": "different-blob"}),
-            target_ref: json!({}),
-            result_payload: json!({
-                "provider_submission": {
-                    "provider_request_id": "wamid.native.1"
-                }
-            }),
-            audit_metadata: json!({}),
-            provider_state: json!({
-                "native_md": {
-                    "provider_request_id": "wamid.native.1"
-                }
-            }),
-            reconciliation_status: "awaiting_provider".to_owned(),
-            next_attempt_at: None,
-            last_attempt_at: Some(now),
-            provider_observed_at: None,
-            reconciled_at: None,
-            dead_lettered_at: None,
-            completed_at: None,
-            created_at: now,
-            updated_at: now,
-        };
-        let media = NewWhatsappWebMedia {
-            account_id: "acct".to_owned(),
-            provider_chat_id: "chat".to_owned(),
-            provider_message_id: "wamid.native.1".to_owned(),
-            provider_attachment_id: "attachment".to_owned(),
-            filename: None,
-            content_type: "image/png".to_owned(),
-            size_bytes: 42,
-            sha256: "sha256:input".to_owned(),
-            storage_kind: "local_fs".to_owned(),
-            storage_path: "observed-blob".to_owned(),
-            import_batch_id: "batch".to_owned(),
-            observed_at: now,
-        };
-
-        assert!(provider_request_id_matches_observed_media(&command, &media));
-    }
-
-    #[test]
-    fn receipt_reconciliation_matches_business_cloud_provider_request_id() {
-        let now = Utc::now();
-        let command = WhatsAppProviderWriteCommand {
-            command_id: "cmd-business-cloud".to_owned(),
-            account_id: "acct".to_owned(),
-            command_kind: "send_template".to_owned(),
-            idempotency_key: "template-key".to_owned(),
-            provider_chat_id: "chat".to_owned(),
-            provider_message_id: None,
-            capability_state: "available".to_owned(),
-            action_class: "provider_write".to_owned(),
-            confirmation_decision: "not_required".to_owned(),
-            status: "executing".to_owned(),
-            retry_count: 1,
-            max_retries: 3,
-            last_error: None,
-            payload: json!({}),
-            target_ref: json!({}),
-            result_payload: json!({
-                "provider_submission": {
-                    "provider_request_id": "wamid.business.1",
-                    "provider_observed_completion_target": {
-                        "provider_message_id": "wamid.business.1",
-                        "match_policy": "provider_request_id_equals_observed_receipt_provider_message_id"
-                    }
-                }
-            }),
-            audit_metadata: json!({}),
-            provider_state: json!({
-                "business_cloud": {
-                    "provider_request_id": "wamid.business.1",
-                    "provider_observed_completion_target": {
-                        "provider_message_id": "wamid.business.1"
-                    }
-                }
-            }),
-            reconciliation_status: "awaiting_provider".to_owned(),
-            next_attempt_at: None,
-            last_attempt_at: Some(now),
-            provider_observed_at: None,
-            reconciled_at: None,
-            dead_lettered_at: None,
-            completed_at: None,
-            created_at: now,
-            updated_at: now,
-        };
-        let receipt = NewWhatsappWebReceipt {
-            account_id: "acct".to_owned(),
-            provider_chat_id: "chat".to_owned(),
-            provider_message_id: "wamid.business.1".to_owned(),
-            delivery_state:
-                crate::integrations::whatsapp::client::models::WhatsappWebDeliveryState::Delivered,
-            import_batch_id: "batch".to_owned(),
-            observed_at: now,
-        };
-
-        assert!(provider_request_id_matches_observed_receipt(
-            &command, &receipt
-        ));
-    }
 }

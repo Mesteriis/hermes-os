@@ -26,8 +26,8 @@ export const FLOW_CATALOG: Array<Omit<ConnectionFlowCard, 'providers'>> = [
     id: 'qr_companion',
     label: 'QR companion',
     icon: 'tabler:qrcode',
-    summary: 'Open a visible pairing runtime, scan the QR code from your phone and finish the link outside the settings surface.',
-    promise: 'Visible device pairing',
+    summary: 'Start a hidden provider runtime; pairing artifacts stay outside the settings surface.',
+    promise: 'Managed hidden runtime',
     recovery: 'Phone and session material never render here.',
   },
   {

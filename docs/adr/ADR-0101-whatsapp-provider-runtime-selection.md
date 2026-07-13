@@ -1,6 +1,6 @@
 # ADR-0101 WhatsApp Provider Runtime Selection
 
-Status: Accepted
+Status: Superseded by ADR-0182
 Date: 2026-06-24
 
 Accepted: 2026-06-26

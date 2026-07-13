@@ -4,7 +4,7 @@ import {
   useSetupImapEmailAccountMutation,
   useStartGmailOAuthSetupMutation,
 } from '../../../integrations/mail/queries/accountSetupQueries'
-import { useOpenWhatsappWebCompanionMutation } from '../../../integrations/whatsapp/queries/useWhatsappRuntimeQuery'
+import { useStartHiddenWhatsappWebviewMutation } from '../../../integrations/whatsapp/queries/useWhatsappRuntimeQuery'
 import { useI18n } from '../../../platform/i18n'
 import {
   fetchTelegramQrLoginStatus,
@@ -72,7 +72,7 @@ export function useIntegrationConnectionWizardSurface(options: {
     mutationFn: ({ setupId, password }: { setupId: string; password: string }) =>
       submitTelegramQrLoginPassword(setupId, { password }),
   })
-  const openCompanionMutation = useOpenWhatsappWebCompanionMutation()
+  const hiddenWebviewMutation = useStartHiddenWhatsappWebviewMutation()
 
   const activeFlowId = ref<ConnectionFlowPattern>('browser_callback')
   const gmailAccountLabel = ref('Personal Google')
@@ -164,8 +164,8 @@ export function useIntegrationConnectionWizardSurface(options: {
       case 'qr_companion':
         return [
           {
-            title: 'Open visible companion',
-            detail: 'The runtime opens in a dedicated window instead of embedding pairing secrets here.',
+            title: 'Start hidden companion',
+            detail: 'The runtime remains hidden and never embeds pairing secrets here.',
           },
           {
             title: 'Scan the QR code',
@@ -436,12 +436,12 @@ export function useIntegrationConnectionWizardSurface(options: {
     }
 
     try {
-      const manifest = await openCompanionMutation.mutateAsync({ account_id: selectedAccountId.value })
+      const manifest = await hiddenWebviewMutation.mutateAsync({ account_id: selectedAccountId.value })
       wizard.setSuccess({
-        title: t('Окно WhatsApp открыто'),
-        message: manifest.focused_existing_window
-          ? t('Продолжите вход в открытом окне.')
-          : t('Продолжите вход в новом окне.'),
+        title: t('Скрытый WhatsApp WebView запущен'),
+        message: manifest.reused_existing_window
+          ? t('Скрытый runtime уже работал.')
+          : t('Скрытый runtime запущен.'),
       })
     } catch (error) {
       wizard.setError(

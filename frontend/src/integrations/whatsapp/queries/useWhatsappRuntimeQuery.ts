@@ -22,7 +22,7 @@ import {
   startWhatsappRuntime,
   stopWhatsappRuntime,
 } from '../api/whatsapp'
-import { openWhatsappWebCompanion } from '../api/whatsappCompanion'
+import { startHiddenWhatsappWebview } from '../api/whatsappCompanion'
 import type {
   WhatsAppCallSyncItem,
   WhatsAppChatSyncItem,
@@ -396,11 +396,11 @@ export function usePublishWhatsappStatusMutation() {
   })
 }
 
-export function useOpenWhatsappWebCompanionMutation() {
+export function useStartHiddenWhatsappWebviewMutation() {
   const queryClient = useQueryClient()
 
   return useMutation<WhatsAppWebCompanionManifest, Error, { account_id: string }>({
-    mutationFn: ({ account_id }) => openWhatsappWebCompanion(account_id),
+    mutationFn: ({ account_id }) => startHiddenWhatsappWebview(account_id),
     onSuccess: () => invalidateWhatsappRuntime(queryClient),
   })
 }

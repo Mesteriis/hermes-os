@@ -115,7 +115,7 @@ export function useIntegrationsSettingsSurface() {
     if (isExceptionOnlyProvider(providerKind)) {
       return t('Handle only through explicit exception recovery')
     }
-    if (isWhatsappProvider(providerKind)) return t('Resume in visible QR companion')
+    if (isWhatsappProvider(providerKind)) return t('Resume hidden WhatsApp runtime')
     if (isExceptionRouteProvider(providerKind)) {
       return t('Continue in dedicated runtime')
     }

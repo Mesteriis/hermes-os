@@ -231,15 +231,6 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_whatsapp_runtime_bridge_receipt),
         )
         .route(
-            "/api/v1/integrations/whatsapp/runtime-bridge/business-cloud/webhooks",
-            get(get_whatsapp_runtime_bridge_business_cloud_webhook)
-                .post(post_whatsapp_runtime_bridge_business_cloud_webhook),
-        )
-        .route(
-            "/api/v1/integrations/whatsapp/runtime-bridge/business-cloud/proxy-manifest",
-            get(get_whatsapp_runtime_bridge_business_cloud_proxy_manifest),
-        )
-        .route(
             "/api/v1/integrations/whatsapp/runtime-bridge/dialogs",
             post(post_whatsapp_runtime_bridge_dialog),
         )

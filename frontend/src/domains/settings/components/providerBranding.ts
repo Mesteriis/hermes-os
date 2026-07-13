@@ -32,7 +32,6 @@ const COMMUNICATION_PROVIDER_BRANDS: Record<string, ProviderBrand> = {
   telegram_user: { icon: 'simple-icons:telegram', tone: 'telegram' },
   telegram_bot: { icon: 'simple-icons:telegram', tone: 'telegram' },
   whatsapp_web: { icon: 'simple-icons:whatsapp', tone: 'whatsapp' },
-  whatsapp_business_cloud: { icon: 'simple-icons:whatsapp', tone: 'whatsapp' },
   zoom_user: { icon: 'simple-icons:zoom', tone: 'zoom' },
   zoom_server_to_server: { icon: 'simple-icons:zoom', tone: 'zoom' },
   yandex_telemost_user: { icon: 'simple-icons:yandexcloud', tone: 'yandex' },

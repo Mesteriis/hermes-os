@@ -78,12 +78,12 @@ const providerCatalog: ConnectionProviderOption[] = [
     id: 'whatsapp',
     label: 'WhatsApp',
     icon: 'tabler:brand-whatsapp',
-    summary: 'Visible companion runtime handles QR pairing and keeps pairing artifacts off the settings surface.',
+    summary: 'Hidden companion runtime owns the WhatsApp session and keeps pairing artifacts off the settings surface.',
     flowLabel: 'QR companion',
     entryLabel: 'Managed runtime',
     status: 'Resume from selected account',
-    guidance: 'Open the managed companion window to continue QR pairing. Phone and session material stay off this surface.',
-    ctaLabel: 'Open companion',
+    guidance: 'Start the hidden companion runtime. Phone and session material stay off this surface.',
+    ctaLabel: 'Start hidden runtime',
     flowPattern: 'qr_companion',
   },
   {
@@ -146,7 +146,6 @@ export function connectionProviderIdFromAccountKind(
     case 'telegram_bot':
       return 'telegram'
     case 'whatsapp_web':
-    case 'whatsapp_business_cloud':
       return 'whatsapp'
     case 'zoom_user':
     case 'zoom_server_to_server':

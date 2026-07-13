@@ -10,8 +10,6 @@ default-run = "hermes-hub-backend"
 [features]
 default = []
 test-support = []
-whatsapp-native-md-runtime = ["dep:wa-rs", "dep:wa-rs-core"]
-whatsapp-business-cloud-runtime = []
 
 [lib]
 name = "hermes_hub_backend"
@@ -44,10 +42,6 @@ path = "src/bin/hermes_email_reproject_dev.rs"
 [[bin]]
 name = "hermes-document-process"
 path = "src/bin/hermes_document_process.rs"
-
-[[bin]]
-name = "hermes-whatsapp-business-cloud-edge-proxy"
-path = "src/bin/hermes_whatsapp_business_cloud_edge_proxy.rs"
 
 [[bin]]
 name = "hermes-zoom-edge-proxy"
@@ -111,8 +105,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 url = "2"
 uuid = { version = "1", features = ["serde", "v7"] }
-wa-rs = { version = "0.2.0", default-features = false, features = ["tokio-native", "tokio-transport", "ureq-client"], optional = true }
-wa-rs-core = { version = "0.2.0", optional = true }
 zeroize = { version = "1.8", features = ["derive"] }
 zip = { version = "6.0.0", default-features = false, features = ["deflate"] }
 

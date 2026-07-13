@@ -31,9 +31,6 @@ pub struct WhatsappLiveAccountSetupRequest {
     pub external_account_id: String,
     pub device_name: Option<String>,
     pub local_state_path: Option<String>,
-    pub api_access_token: Option<String>,
-    pub app_secret: Option<String>,
-    pub webhook_verify_token: Option<String>,
 }
 
 impl WhatsappLiveAccountSetupRequest {
@@ -42,25 +39,10 @@ impl WhatsappLiveAccountSetupRequest {
         validate_non_empty("display_name", &self.display_name)?;
         validate_non_empty("external_account_id", &self.external_account_id)?;
         let provider_shape = validate_non_empty("provider_shape", &self.provider_shape)?;
-        if provider_shape == "whatsapp_business_cloud" && self.device_name.is_some() {
-            return Err(WhatsappWebError::InvalidRequest(
-                "device_name is not supported for whatsapp_business_cloud".to_owned(),
-            ));
-        }
-        if provider_shape == "whatsapp_business_cloud" {
-            validate_non_empty(
-                "api_access_token",
-                self.api_access_token.as_deref().unwrap_or_default(),
-            )?;
-        } else if self.api_access_token.is_some() {
-            return Err(WhatsappWebError::InvalidRequest(
-                "api_access_token is only supported for whatsapp_business_cloud".to_owned(),
-            ));
-        } else if self.app_secret.is_some() || self.webhook_verify_token.is_some() {
-            return Err(WhatsappWebError::InvalidRequest(
-                "app_secret and webhook_verify_token are only supported for whatsapp_business_cloud"
-                    .to_owned(),
-            ));
+        if provider_shape != "whatsapp_web_companion" {
+            return Err(WhatsappWebError::InvalidRequest(format!(
+                "unsupported WhatsApp provider_shape `{provider_shape}`; only whatsapp_web_companion is available"
+            )));
         }
         Ok(())
     }
@@ -77,18 +59,6 @@ impl fmt::Debug for WhatsappLiveAccountSetupRequest {
             .field("external_account_id", &self.external_account_id)
             .field("device_name", &self.device_name)
             .field("local_state_path", &self.local_state_path)
-            .field(
-                "api_access_token",
-                &self.api_access_token.as_ref().map(|_| "<redacted>"),
-            )
-            .field(
-                "app_secret",
-                &self.app_secret.as_ref().map(|_| "<redacted>"),
-            )
-            .field(
-                "webhook_verify_token",
-                &self.webhook_verify_token.as_ref().map(|_| "<redacted>"),
-            )
             .finish()
     }
 }
@@ -157,7 +127,6 @@ pub enum WhatsappWebCompanionRuntime {
     Fixture,
     ManualWebview,
     Blocked,
-    ApiCredentials,
 }
 
 impl WhatsappWebCompanionRuntime {
@@ -166,7 +135,6 @@ impl WhatsappWebCompanionRuntime {
             Self::Fixture => "fixture",
             Self::ManualWebview => "manual_webview",
             Self::Blocked => "blocked",
-            Self::ApiCredentials => "api_credentials",
         }
     }
 }

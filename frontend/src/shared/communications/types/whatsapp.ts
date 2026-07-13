@@ -1,9 +1,6 @@
 // --- Provider ---
-export type WhatsappWebProviderKind = 'whatsapp_web' | 'whatsapp_business_cloud'
-export type WhatsappProviderShape =
-  | 'whatsapp_web_companion'
-  | 'whatsapp_native_md'
-  | 'whatsapp_business_cloud'
+export type WhatsappWebProviderKind = 'whatsapp_web'
+export type WhatsappProviderShape = 'whatsapp_web_companion'
 
 // --- Capabilities ---
 export type WhatsappCapabilityStatus = {
@@ -138,7 +135,7 @@ export type WhatsAppWebCompanionManifest = {
   window_label: string
   target_url: string
   opened_window: boolean
-  focused_existing_window: boolean
+  reused_existing_window: boolean
   owner_visible: boolean
   hidden_headless_mode: string
   tauri_ipc_available_to_companion_window: boolean

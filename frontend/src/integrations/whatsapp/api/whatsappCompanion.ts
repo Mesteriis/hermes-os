@@ -18,11 +18,11 @@ export async function getWhatsappWebCompanionManifest(
   )
 }
 
-export async function openWhatsappWebCompanion(
+export async function startHiddenWhatsappWebview(
   accountId: string
 ): Promise<WhatsAppWebCompanionManifest> {
   return invoke<WhatsAppWebCompanionManifest>(
-    'open_whatsapp_web_companion',
+    'start_hidden_whatsapp_webview',
     companionRequest(accountId)
   )
 }

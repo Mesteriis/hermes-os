@@ -46,7 +46,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
-            whatsapp_companion::open_whatsapp_web_companion,
+            whatsapp_companion::start_hidden_whatsapp_webview,
             whatsapp_companion::whatsapp_web_companion_manifest,
             whatsapp_companion::whatsapp_web_companion_relay_observation,
             yandex_telemost_companion::open_yandex_telemost_companion,

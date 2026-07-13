@@ -15,7 +15,7 @@ impl WhatsappWebStore {
         request: &WhatsappWebAccountSetupRequest,
     ) -> Result<WhatsappWebAccountSetupResponse, WhatsappWebError> {
         request.validate()?;
-        if !request.provider_kind.is_whatsapp() {
+        if request.provider_kind != CommunicationProviderKind::WhatsappWeb {
             return Err(WhatsappWebError::InvalidRequest(
                 "provider_kind must be a WhatsApp provider".to_owned(),
             ));
@@ -134,15 +134,14 @@ impl WhatsappWebStore {
     }
 }
 
-fn normalize_provider_shape(input: &str) -> Result<&str, WhatsappWebError> {
+fn normalize_provider_shape(input: &str) -> Result<&'static str, WhatsappWebError> {
     let normalized = input.trim();
-    match normalized {
-        "whatsapp_web_companion" | "whatsapp_native_md" | "whatsapp_business_cloud" => {
-            Ok(normalized)
-        }
-        _ => Err(WhatsappWebError::InvalidRequest(format!(
-            "unsupported WhatsApp provider_shape `{input}`"
-        ))),
+    if normalized == "whatsapp_web_companion" {
+        Ok("whatsapp_web_companion")
+    } else {
+        Err(WhatsappWebError::InvalidRequest(format!(
+            "unsupported WhatsApp provider_shape `{input}`; only whatsapp_web_companion is available"
+        )))
     }
 }
 
@@ -154,12 +153,7 @@ fn normalize_fixture_provider_shape(
         Some(input) => {
             let normalized = normalize_provider_shape(input)?;
             validate_live_provider_kind(provider_kind, normalized)?;
-            Ok(match normalized {
-                "whatsapp_web_companion" => "whatsapp_web_companion",
-                "whatsapp_native_md" => "whatsapp_native_md",
-                "whatsapp_business_cloud" => "whatsapp_business_cloud",
-                _ => unreachable!("normalize_provider_shape returned unsupported value"),
-            })
+            Ok(normalized)
         }
         None => Ok(fixture_provider_shape(provider_kind)),
     }
@@ -169,10 +163,7 @@ fn validate_live_provider_kind(
     provider_kind: CommunicationProviderKind,
     provider_shape: &str,
 ) -> Result<(), WhatsappWebError> {
-    let expected_kind = match provider_shape {
-        "whatsapp_business_cloud" => CommunicationProviderKind::WhatsappBusinessCloud,
-        _ => CommunicationProviderKind::WhatsappWeb,
-    };
+    let expected_kind = CommunicationProviderKind::WhatsappWeb;
     if provider_kind != expected_kind {
         return Err(WhatsappWebError::InvalidRequest(format!(
             "provider_kind `{}` is invalid for provider_shape `{provider_shape}`; expected `{}`",
@@ -184,10 +175,7 @@ fn validate_live_provider_kind(
 }
 
 fn default_live_device_name(provider_shape: &str, request_value: Option<String>) -> String {
-    match provider_shape {
-        "whatsapp_business_cloud" => "WhatsApp Business Cloud API".to_owned(),
-        _ => request_value.unwrap_or_else(|| format!("{provider_shape} blocked runtime")),
-    }
+    request_value.unwrap_or_else(|| format!("{provider_shape} hidden WebView runtime"))
 }
 
 fn default_live_local_state_path(
@@ -195,67 +183,35 @@ fn default_live_local_state_path(
     account_id: &str,
     request_value: Option<String>,
 ) -> String {
-    request_value.unwrap_or_else(|| match provider_shape {
-        "whatsapp_business_cloud" => {
-            format!("docker/data/whatsapp/business-cloud/{account_id}")
-        }
-        _ => format!("docker/data/whatsapp/blocked/{account_id}"),
-    })
+    request_value.unwrap_or_else(|| format!("docker/data/whatsapp/webview/{account_id}"))
 }
 
-fn live_setup_semantics(provider_shape: &str) -> &'static str {
-    match provider_shape {
-        "whatsapp_business_cloud" => "business_cloud",
-        _ => "personal_runtime",
-    }
+fn live_setup_semantics(_provider_shape: &str) -> &'static str {
+    "hidden_webview_runtime"
 }
 
-fn live_session_mode(provider_shape: &str) -> &'static str {
-    match provider_shape {
-        "whatsapp_business_cloud" => "api_credentials",
-        _ => "device_session",
-    }
+fn live_session_mode(_provider_shape: &str) -> &'static str {
+    "device_session"
 }
 
-fn live_companion_runtime(provider_shape: &str) -> WhatsappWebCompanionRuntime {
-    match provider_shape {
-        "whatsapp_business_cloud" => WhatsappWebCompanionRuntime::ApiCredentials,
-        _ => WhatsappWebCompanionRuntime::Blocked,
-    }
+fn live_companion_runtime(_provider_shape: &str) -> WhatsappWebCompanionRuntime {
+    WhatsappWebCompanionRuntime::Blocked
 }
 
-fn fixture_provider_shape(provider_kind: CommunicationProviderKind) -> &'static str {
-    match provider_kind {
-        CommunicationProviderKind::WhatsappBusinessCloud => "whatsapp_business_cloud",
-        CommunicationProviderKind::WhatsappWeb => "whatsapp_web_companion",
-        _ => "whatsapp_web_companion",
-    }
+fn fixture_provider_shape(_provider_kind: CommunicationProviderKind) -> &'static str {
+    "whatsapp_web_companion"
 }
 
-fn fixture_setup_semantics(provider_kind: CommunicationProviderKind) -> &'static str {
-    match provider_kind {
-        CommunicationProviderKind::WhatsappBusinessCloud => "business_cloud",
-        CommunicationProviderKind::WhatsappWeb => "personal_runtime",
-        _ => "personal_runtime",
-    }
+fn fixture_setup_semantics(_provider_kind: CommunicationProviderKind) -> &'static str {
+    "hidden_webview_runtime"
 }
 
-fn fixture_session_mode(provider_kind: CommunicationProviderKind) -> &'static str {
-    match provider_kind {
-        CommunicationProviderKind::WhatsappBusinessCloud => "api_credentials",
-        CommunicationProviderKind::WhatsappWeb => "device_session",
-        _ => "device_session",
-    }
+fn fixture_session_mode(_provider_kind: CommunicationProviderKind) -> &'static str {
+    "device_session"
 }
 
 fn fixture_companion_runtime(
-    provider_kind: CommunicationProviderKind,
+    _provider_kind: CommunicationProviderKind,
 ) -> WhatsappWebCompanionRuntime {
-    match provider_kind {
-        CommunicationProviderKind::WhatsappBusinessCloud => {
-            WhatsappWebCompanionRuntime::ApiCredentials
-        }
-        CommunicationProviderKind::WhatsappWeb => WhatsappWebCompanionRuntime::Fixture,
-        _ => WhatsappWebCompanionRuntime::Fixture,
-    }
+    WhatsappWebCompanionRuntime::Fixture
 }

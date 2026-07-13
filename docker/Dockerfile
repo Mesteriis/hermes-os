@@ -41,30 +41,6 @@ COPY Cargo.toml Cargo.lock ./
 COPY backend ./backend
 COPY crates ./crates
 
-RUN cargo build \
-    --manifest-path backend/Cargo.toml \
-    --bin hermes-whatsapp-business-cloud-edge-proxy \
-    --release
-
-FROM debian:bookworm-slim AS whatsapp-business-cloud-edge-proxy
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=backend-builder \
-    /workspace/target/release/hermes-whatsapp-business-cloud-edge-proxy \
-    /usr/local/bin/hermes-whatsapp-business-cloud-edge-proxy
-
-EXPOSE 8787
-
-CMD ["hermes-whatsapp-business-cloud-edge-proxy"]
-
 FROM python:3.13-slim-bookworm AS attachment-extractor
 
 ENV DEBIAN_FRONTEND=noninteractive

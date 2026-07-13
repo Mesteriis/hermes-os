@@ -1,6 +1,6 @@
 # ADR-0051 V5 WhatsApp Web Companion Boundary
 
-Status: Proposed
+Status: Superseded by ADR-0182
 
 ## Context
 

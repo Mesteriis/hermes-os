@@ -8,7 +8,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 import {
   getWhatsappWebCompanionManifest,
-  openWhatsappWebCompanion,
+  startHiddenWhatsappWebview,
   relayWhatsappWebCompanionObservation,
 } from './whatsappCompanion'
 
@@ -18,16 +18,16 @@ describe('whatsapp WebView companion Tauri bridge', () => {
     vi.unstubAllGlobals()
   })
 
-  it('opens the visible companion through Tauri invoke, not backend HTTP', async () => {
+  it('starts the hidden WebView through Tauri invoke, not backend HTTP', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     invokeMock.mockResolvedValueOnce(companionManifest({ opened_window: true }))
 
-    const result = await openWhatsappWebCompanion(' wa-live-1 ')
+    const result = await startHiddenWhatsappWebview(' wa-live-1 ')
 
     expect(result.opened_window).toBe(true)
     expect(result.provider_shape).toBe('whatsapp_web_companion')
-    expect(invokeMock).toHaveBeenCalledWith('open_whatsapp_web_companion', {
+    expect(invokeMock).toHaveBeenCalledWith('start_hidden_whatsapp_webview', {
       request: { account_id: 'wa-live-1' },
     })
     expect(fetchMock).not.toHaveBeenCalled()
@@ -87,7 +87,7 @@ describe('whatsapp WebView companion Tauri bridge', () => {
       import_batch_id: 'whatsapp-webview-companion:wa-live-1:provider-event-1',
       runtime_bridge_http_status: 200,
       event_flow:
-        'visible_webview_companion -> tauri_allowlisted_relay_preflight -> protected_runtime_bridge -> raw_evidence -> signal_hub_accepted -> projection_reconciliation',
+        'hidden_webview_companion -> tauri_allowlisted_relay_preflight -> protected_runtime_bridge -> raw_evidence -> signal_hub_accepted -> projection_reconciliation',
       completion_rule: 'provider_observed_event_reconciliation_required',
     })
 
@@ -126,7 +126,7 @@ describe('whatsapp WebView companion Tauri bridge', () => {
   })
 
   it('rejects empty account ids before invoking Tauri', async () => {
-    await expect(openWhatsappWebCompanion(' ')).rejects.toThrow(
+    await expect(startHiddenWhatsappWebview(' ')).rejects.toThrow(
       'account_id is required for WhatsApp Web companion'
     )
 
@@ -139,20 +139,20 @@ function companionManifest(overrides: Partial<{ opened_window: boolean }>) {
     account_id: 'wa-live-1',
     provider_shape: 'whatsapp_web_companion',
     runtime_kind: 'webview_companion',
-    driver_id: 'tauri_visible_webview_companion',
+    driver_id: 'tauri_hidden_webview_companion',
     window_label: 'whatsapp-companion-wa-live-1',
     target_url: 'https://web.whatsapp.com/',
     opened_window: overrides.opened_window ?? false,
-    focused_existing_window: false,
-    owner_visible: true,
-    hidden_headless_mode: 'forbidden',
+    reused_existing_window: false,
+    owner_visible: false,
+    hidden_headless_mode: 'required_tauri_webview_not_headless_browser',
     tauri_ipc_available_to_companion_window: false,
     event_flow:
-      'visible_webview_companion -> protected_runtime_bridge -> raw_evidence -> signal_hub_accepted -> projection_reconciliation',
+      'hidden_webview_companion -> protected_runtime_bridge -> raw_evidence -> signal_hub_accepted -> projection_reconciliation',
     event_extractor: {
       state: 'contract_injected_relay_dispatch_available',
       relay_command: 'whatsapp_web_companion_relay_observation',
-      initialization_script: 'installed_on_visible_companion_window',
+      initialization_script: 'installed_on_hidden_companion_webview',
       script_scope: 'main_frame_only',
       origin_guard: 'https://web.whatsapp.com',
       navigation_guard: 'https://web.whatsapp.com_only',
@@ -194,7 +194,7 @@ function companionManifest(overrides: Partial<{ opened_window: boolean }>) {
       session_material: 'host_vault_only_via_authorized_session_bridge',
       cookies: 'not_read_or_returned_by_tauri_command',
       browser_profile_secrets: 'not_read_or_returned_by_tauri_command',
-      qr_pair_code_artifacts: 'owner_visible_runtime_only',
+      qr_pair_code_artifacts: 'never_returned_by_hidden_webview_runtime',
       message_bodies: 'excluded_from_manifest_and_health',
       media_bytes: 'local_blob_storage_only_not_manifest_or_postgres',
       postgres_storage: 'metadata_bindings_only_no_session_cookie_or_profile_secret',

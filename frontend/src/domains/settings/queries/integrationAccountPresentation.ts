@@ -64,7 +64,6 @@ const PROVIDER_LABELS: Record<string, string> = {
   telegram_user: 'Telegram User',
   telegram_bot: 'Telegram Bot',
   whatsapp_web: 'WhatsApp Web',
-  whatsapp_business_cloud: 'WhatsApp Business Cloud',
   zoom_user: 'Zoom (OAuth/Live)',
   zoom_server_to_server: 'Zoom (Server-to-Server)',
   yandex_telemost_user: 'Yandex Telemost',
@@ -88,7 +87,7 @@ export function isTelegramProvider(providerKind: string): boolean {
 }
 
 export function isWhatsappProvider(providerKind: string): boolean {
-  return providerKind === 'whatsapp_web' || providerKind === 'whatsapp_business_cloud'
+  return providerKind === 'whatsapp_web'
 }
 
 export function isYandexTelemostProvider(providerKind: string): boolean {
@@ -203,7 +202,6 @@ export function defaultProviderIdFromAccount(
     case 'telegram_bot':
       return 'telegram'
     case 'whatsapp_web':
-    case 'whatsapp_business_cloud':
       return 'whatsapp'
     case 'zoom_user':
     case 'zoom_server_to_server':

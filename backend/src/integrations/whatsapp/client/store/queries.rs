@@ -4,7 +4,7 @@ use crate::integrations::whatsapp::client::models::WhatsappWebMessage;
 use crate::integrations::whatsapp::client::rows::provider_channel_message_to_whatsapp_web_message;
 use crate::integrations::whatsapp::client::validation::validate_limit;
 
-const WHATSAPP_WEB_CHANNEL_KINDS: &[&str] = &["whatsapp_web", "whatsapp_business_cloud"];
+const WHATSAPP_WEB_CHANNEL_KINDS: &[&str] = &["whatsapp_web"];
 
 impl WhatsappWebStore {
     pub async fn recent_messages(

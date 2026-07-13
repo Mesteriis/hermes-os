@@ -26,12 +26,8 @@ use crate::domains::communications::messages::ProviderChannelMessageStore;
 use crate::integrations::telegram::client::{TelegramChat, TelegramError};
 use crate::platform::communications::ProviderChannelMessage;
 
-const COMMUNICATION_SEARCH_CHANNEL_KINDS: &[&str] = &[
-    "telegram_user",
-    "telegram_bot",
-    "whatsapp_web",
-    "whatsapp_business_cloud",
-];
+const COMMUNICATION_SEARCH_CHANNEL_KINDS: &[&str] =
+    &["telegram_user", "telegram_bot", "whatsapp_web"];
 
 #[derive(Deserialize)]
 pub(crate) struct TelegramMessageSearchQuery {
@@ -553,9 +549,8 @@ fn search_channel_kinds(channel_kind: Option<&str>) -> &'static [&'static str] {
         Some("telegram") => &["telegram_user", "telegram_bot"],
         Some("telegram_user") => &["telegram_user"],
         Some("telegram_bot") => &["telegram_bot"],
-        Some("whatsapp") => &["whatsapp_web", "whatsapp_business_cloud"],
+        Some("whatsapp") => &["whatsapp_web"],
         Some("whatsapp_web") => &["whatsapp_web"],
-        Some("whatsapp_business_cloud") => &["whatsapp_business_cloud"],
         _ => COMMUNICATION_SEARCH_CHANNEL_KINDS,
     }
 }
@@ -576,7 +571,7 @@ async fn canonical_pinned_messages(
         SELECT account_id, provider_conversation_id
         FROM communication_conversations
         WHERE conversation_id = $1
-          AND channel_kind IN ('whatsapp_web', 'whatsapp_business_cloud')
+          AND channel_kind = 'whatsapp_web'
         "#,
     )
     .bind(conversation_id)
@@ -594,7 +589,7 @@ async fn canonical_pinned_messages(
         .pinned_messages(
             &account_id,
             &provider_conversation_id,
-            &["whatsapp_web", "whatsapp_business_cloud"],
+            &["whatsapp_web"],
             limit,
         )
         .await

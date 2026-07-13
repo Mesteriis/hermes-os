@@ -19,7 +19,6 @@ use crate::vault::{HostVault, VaultMode};
 
 mod mail_ai;
 mod telegram;
-mod whatsapp;
 mod zoom;
 pub(crate) mod zulip;
 
@@ -38,10 +37,6 @@ static MAIL_AI_PIPELINE_DATABASES: LazyLock<Mutex<HashSet<String>>> =
 static TELEGRAM_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static TELEGRAM_RUNTIME_RECONCILIATION_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static WHATSAPP_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static ZOOM_TOKEN_MAINTENANCE_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -96,15 +91,6 @@ const TELEGRAM_RUNTIME_RECONCILIATION_TICK_SECONDS: u64 = 15;
 const TELEGRAM_RUNTIME_CHAT_SYNC_LIMIT: i64 = 100;
 const TELEGRAM_RUNTIME_RECONNECT_INITIAL_DELAY_SECONDS: u64 = 5;
 const TELEGRAM_RUNTIME_RECONNECT_MAX_DELAY_SECONDS: u64 = 300;
-const WHATSAPP_COMMAND_EXECUTOR_RUNTIME: &str = "whatsapp_command_executor";
-const WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_RUNTIME: &str =
-    "whatsapp_runtime_restore_reconciliation";
-const WHATSAPP_NATIVE_MD_STARTUP_RESTORE_CONFIG_KEY: &str = "native_md_live_smoke_enabled";
-const WHATSAPP_NATIVE_MD_STARTUP_RESTORE_ALIAS_CONFIG_KEY: &str =
-    "whatsapp_native_md_live_smoke_enabled";
-const WHATSAPP_NATIVE_MD_RUNTIME_FEATURE_DISABLED_BLOCKER: &str =
-    "whatsapp_native_md_runtime_feature_disabled";
-const WHATSAPP_STARTUP_RESTORE_FAILED_BLOCKER: &str = "whatsapp_startup_restore_failed";
 const ZOOM_TOKEN_MAINTENANCE_RUNTIME: &str = "zoom_token_maintenance";
 const ZOOM_TOKEN_MAINTENANCE_TICK_SECONDS: u64 = 60;
 const ZOOM_TOKEN_MAINTENANCE_REFRESH_EXPIRING_WITHIN_SECONDS: i64 = 300;
@@ -810,8 +796,6 @@ pub(crate) fn whatsapp_runtime_task_specs(
     context: ApplicationBootstrapContext,
 ) -> Vec<RuntimeTaskSpec> {
     [
-        whatsapp_command_executor_task(context.clone()),
-        whatsapp_runtime_restore_reconciliation_task(context.clone()),
         whatsapp_runtime_event_projection_task(context.clone()),
         whatsapp_provider_observation_reconciliation_task(context),
     ]
@@ -868,162 +852,6 @@ pub(crate) fn core_runtime_task_specs(
     .into_iter()
     .flatten()
     .collect()
-}
-
-fn whatsapp_command_executor_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
-    if !register_whatsapp_command_executor(&database_url) {
-        return None;
-    }
-    let runtime_pool = pool.clone();
-    let vault = context.vault;
-    let event_bus = context.event_bus;
-    let runtime =
-        crate::application::provider_runtime_services::whatsapp_provider_runtime(pool.clone());
-    let event_store = hermes_events_postgres::store::EventStore::new(pool.clone());
-
-    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
-        let pool = pool.clone();
-        let runtime_pool = runtime_pool.clone();
-        let vault = vault.clone();
-        let event_bus = event_bus.clone();
-        let runtime = runtime.clone();
-        let event_store = event_store.clone();
-        Box::pin(async move {
-            let mut tick = tokio::time::interval(Duration::from_secs(5));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = cancellation.cancelled() => return Ok(()),
-                    _ = tick.tick() => {}
-                }
-                if !runtime_allows_processing(
-                    &runtime_pool,
-                    "whatsapp",
-                    WHATSAPP_COMMAND_EXECUTOR_RUNTIME,
-                    json!({
-                        "label": "WhatsApp command executor",
-                        "scope": "runtime",
-                    }),
-                )
-                .await
-                {
-                    continue;
-                }
-                crate::application::whatsapp_command_executor::execute_due_fixture_commands(
-                    pool.clone(),
-                    runtime.clone(),
-                    event_store.clone(),
-                    event_bus.clone(),
-                    10,
-                )
-                .await;
-                crate::application::whatsapp_command_executor::execute_due_live_native_md_commands(
-                    pool.clone(),
-                    runtime.clone(),
-                    vault.clone(),
-                    event_store.clone(),
-                    event_bus.clone(),
-                    10,
-                )
-                .await;
-                crate::application::whatsapp_command_executor::execute_due_live_business_cloud_commands(
-                pool.clone(),
-                runtime.clone(),
-                vault.clone(),
-                event_store.clone(),
-                event_bus.clone(),
-                10,
-            )
-            .await;
-            }
-        }) as RuntimeTaskFuture
-    });
-    Some(RuntimeTaskSpec::new(
-        WHATSAPP_COMMAND_EXECUTOR_RUNTIME,
-        RuntimeTaskClass::Background,
-        RuntimeExitPolicy::MarkDegraded,
-        task,
-    ))
-}
-
-fn whatsapp_runtime_restore_reconciliation_task(
-    context: ApplicationBootstrapContext,
-) -> Option<RuntimeTaskSpec> {
-    let Some(pool) = context.pool else {
-        return None;
-    };
-    let Some(database_url) = context.database_url else {
-        return None;
-    };
-    if !register_whatsapp_runtime_restore_reconciliation(&database_url) {
-        return None;
-    }
-    let runtime_pool = pool.clone();
-    let vault = context.vault;
-    let event_bus = context.event_bus;
-    let runtime =
-        crate::application::provider_runtime_services::whatsapp_provider_runtime(pool.clone());
-
-    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
-        let pool = pool.clone();
-        let runtime_pool = runtime_pool.clone();
-        let vault = vault.clone();
-        let event_bus = event_bus.clone();
-        let runtime = runtime.clone();
-        Box::pin(async move {
-            let mut tick = tokio::time::interval(Duration::from_secs(5));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = cancellation.cancelled() => return Ok(()),
-                    _ = tick.tick() => {}
-                }
-                if !runtime_allows_processing(
-                    &runtime_pool,
-                    "whatsapp",
-                    WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_RUNTIME,
-                    json!({
-                        "label": "WhatsApp runtime restore reconciliation",
-                        "scope": "runtime",
-                    }),
-                )
-                .await
-                {
-                    continue;
-                }
-                if !host_vault_is_unlocked(&vault) {
-                    continue;
-                }
-                if let Err(error) = whatsapp::reconcile_whatsapp_runtime_restore_once(
-                    &pool,
-                    &vault,
-                    &event_bus,
-                    runtime.clone(),
-                )
-                .await
-                {
-                    tracing::warn!(
-                        error = %error,
-                        "whatsapp runtime restore reconciliation tick failed"
-                    );
-                }
-            }
-        }) as RuntimeTaskFuture
-    });
-    Some(RuntimeTaskSpec::new(
-        WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_RUNTIME,
-        RuntimeTaskClass::Background,
-        RuntimeExitPolicy::MarkDegraded,
-        task,
-    ))
 }
 
 fn zoom_token_maintenance_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
@@ -2450,32 +2278,6 @@ fn register_telegram_runtime_reconciliation(database_url: &str) -> bool {
             tracing::warn!(
                 error = %error,
                 "telegram runtime reconciliation registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_whatsapp_command_executor(database_url: &str) -> bool {
-    match WHATSAPP_COMMAND_EXECUTOR_DATABASES.lock() {
-        Ok(mut urls) => urls.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "whatsapp command executor registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_whatsapp_runtime_restore_reconciliation(database_url: &str) -> bool {
-    match WHATSAPP_RUNTIME_RESTORE_RECONCILIATION_DATABASES.lock() {
-        Ok(mut urls) => urls.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "whatsapp runtime restore reconciliation registry is unavailable"
             );
             false
         }

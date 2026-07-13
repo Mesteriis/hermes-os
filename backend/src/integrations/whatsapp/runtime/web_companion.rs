@@ -5,10 +5,7 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 
-use super::{
-    ShapedWhatsAppProviderRuntime, WhatsAppProviderRuntime, WhatsAppProviderRuntimeShape,
-    WhatsappWebStore,
-};
+use super::{WhatsAppProviderRuntime, WhatsAppProviderRuntimeShape, WhatsappWebStore};
 use crate::platform::communications::ProviderChannelMessageLookupPort;
 
 pub(crate) fn build_runtime(
@@ -17,36 +14,33 @@ pub(crate) fn build_runtime(
     provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
     provider_channel_message_store: Arc<dyn ProviderChannelMessageLookupPort>,
 ) -> Arc<dyn WhatsAppProviderRuntime> {
-    Arc::new(ShapedWhatsAppProviderRuntime::new(
-        WhatsAppProviderRuntimeShape::WebCompanion,
-        Arc::new(WhatsappWebStore::new(
-            pool,
-            provider_account_store,
-            provider_secret_binding_store,
-            provider_channel_message_store,
-        )),
+    Arc::new(WhatsappWebStore::new(
+        pool,
+        provider_account_store,
+        provider_secret_binding_store,
+        provider_channel_message_store,
     ))
 }
 
 pub(super) fn web_companion_bridge_contract_health_check() -> Value {
     json!({
         "driver_id": "webview_companion_bridge",
-        "readiness": "visible_desktop_producer_shell_with_runtime_event_dispatch_smoke_pending",
+        "readiness": "hidden_desktop_webview_runtime_with_metadata_only_dispatch",
         "public_availability": false,
         "runtime_kind": "webview_companion",
         "provider_shape": WhatsAppProviderRuntimeShape::WebCompanion.as_str(),
         "desktop_producer": {
             "artifact": "frontend/src-tauri/src/whatsapp_companion.rs",
             "commands": [
-                "open_whatsapp_web_companion",
+            "start_hidden_whatsapp_webview",
                 "whatsapp_web_companion_manifest",
                 "whatsapp_web_companion_relay_observation"
             ],
-            "driver_id": "tauri_visible_webview_companion",
+            "driver_id": "tauri_hidden_webview_companion",
             "window_label_prefix": "whatsapp-companion",
             "target_url": "https://web.whatsapp.com/",
-            "owner_visible": true,
-            "hidden_headless_mode": "forbidden",
+            "owner_visible": false,
+            "hidden_headless_mode": "required_tauri_webview_not_headless_browser",
             "tauri_ipc_available_to_companion_window": true,
             "tauri_ipc_scope": "allowlisted_runtime_event_relay_only",
             "event_extractor": "contract_injected_relay_dispatch_available",
@@ -56,7 +50,7 @@ pub(super) fn web_companion_bridge_contract_health_check() -> Value {
             "state": "contract_injected_relay_dispatch_available",
             "artifact": "frontend/src-tauri/src/whatsapp_companion.rs",
             "capability_artifact": "frontend/src-tauri/capabilities/whatsapp-companion-relay.json",
-            "initialization_script": "installed_on_visible_companion_window",
+            "initialization_script": "installed_on_hidden_companion_webview",
             "script_scope": "main_frame_only",
             "origin_guard": "https://web.whatsapp.com",
             "navigation_guard": "https://web.whatsapp.com_only",
@@ -101,17 +95,9 @@ pub(super) fn web_companion_bridge_contract_health_check() -> Value {
             "next_gate": "manual_live_smoke_before_public_availability"
         },
         "owner_visibility": {
-            "visible_runtime_required": true,
-            "hidden_headless_mode": "forbidden",
-            "owner_controls_required": [
-                "link",
-                "stop",
-                "revoke",
-                "relink",
-                "remove",
-                "health",
-                "command_audit"
-            ]
+            "hidden_runtime_required": true,
+            "hidden_headless_mode": "tauri_webview_only_not_external_headless_browser",
+            "owner_controls_required": ["start", "stop", "revoke", "relink", "remove", "health", "command_audit"]
         },
         "session_storage": {
             "binding_store": "host_vault",

@@ -217,11 +217,7 @@ fn whatsapp_command_response_to_communication_response(
         conversation_id: conversation_id.to_owned(),
         provider_chat_id: response.provider_chat_id.clone(),
         provider_message_id: response.provider_message_id.clone(),
-        channel_kind: if response.provider_kind == "whatsapp_business_cloud" {
-            "whatsapp_business_cloud"
-        } else {
-            "whatsapp_web"
-        },
+        channel_kind: "whatsapp_web",
         status: "queued".to_owned(),
         command_id: response.command_id.clone(),
         provider: "whatsapp",

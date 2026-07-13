@@ -34,12 +34,8 @@ use crate::platform::audit::NewApiAuditRecord;
 
 use crate::platform::events::bus::telegram_event_types;
 
-const COMMUNICATION_CONVERSATION_CHANNEL_KINDS: &[&str] = &[
-    "telegram_user",
-    "telegram_bot",
-    "whatsapp_web",
-    "whatsapp_business_cloud",
-];
+const COMMUNICATION_CONVERSATION_CHANNEL_KINDS: &[&str] =
+    &["telegram_user", "telegram_bot", "whatsapp_web"];
 
 fn build_event(
     event_type: &str,
@@ -413,10 +409,7 @@ async fn canonical_message_row_to_chat(
         return Ok(None);
     };
     let channel_kind: String = row.try_get("channel_kind")?;
-    if !matches!(
-        channel_kind.as_str(),
-        "whatsapp_web" | "whatsapp_business_cloud"
-    ) {
+    if !matches!(channel_kind.as_str(), "whatsapp_web") {
         return Ok(None);
     }
     let provider_chat_id: String = row.try_get("conversation_id")?;
@@ -508,10 +501,7 @@ fn canonical_row_to_chat(
     row: sqlx::postgres::PgRow,
 ) -> Result<Option<TelegramChat>, TelegramError> {
     let channel_kind: String = row.try_get("channel_kind")?;
-    if !matches!(
-        channel_kind.as_str(),
-        "whatsapp_web" | "whatsapp_business_cloud"
-    ) {
+    if !matches!(channel_kind.as_str(), "whatsapp_web") {
         return Ok(None);
     }
     let metadata: serde_json::Value = row.try_get("metadata")?;
@@ -548,17 +538,13 @@ pub(crate) fn includes_telegram_channel_kind(channel_kind: Option<&str>) -> bool
 }
 
 pub(crate) fn includes_whatsapp_channel_kind(channel_kind: Option<&str>) -> bool {
-    matches!(
-        channel_kind,
-        None | Some("whatsapp") | Some("whatsapp_web") | Some("whatsapp_business_cloud")
-    )
+    matches!(channel_kind, None | Some("whatsapp") | Some("whatsapp_web"))
 }
 
 fn canonical_conversation_channel_kinds(channel_kind: Option<&str>) -> &'static [&'static str] {
     match channel_kind {
-        Some("whatsapp") => &["whatsapp_web", "whatsapp_business_cloud"],
+        Some("whatsapp") => &["whatsapp_web"],
         Some("whatsapp_web") => &["whatsapp_web"],
-        Some("whatsapp_business_cloud") => &["whatsapp_business_cloud"],
         Some("telegram") => &["telegram_user", "telegram_bot"],
         Some("telegram_user") => &["telegram_user"],
         Some("telegram_bot") => &["telegram_bot"],

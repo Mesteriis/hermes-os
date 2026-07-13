@@ -26,7 +26,7 @@ pub(crate) struct WhatsAppWebCompanionManifest {
     pub(crate) window_label: String,
     pub(crate) target_url: &'static str,
     pub(crate) opened_window: bool,
-    pub(crate) focused_existing_window: bool,
+    pub(crate) reused_existing_window: bool,
     pub(crate) owner_visible: bool,
     pub(crate) hidden_headless_mode: &'static str,
     pub(crate) tauri_ipc_available_to_companion_window: bool,
@@ -120,18 +120,12 @@ pub(crate) async fn whatsapp_web_companion_manifest(
 }
 
 #[tauri::command]
-pub(crate) async fn open_whatsapp_web_companion(
+pub(crate) async fn start_hidden_whatsapp_webview(
     app: AppHandle,
     request: WhatsAppWebCompanionRequest,
 ) -> Result<WhatsAppWebCompanionManifest, String> {
     let window_label = companion_window_label(&request.account_id)?;
     if let Some(window) = app.get_webview_window(&window_label) {
-        window
-            .show()
-            .map_err(|error| format!("failed to show WhatsApp companion window: {error}"))?;
-        window
-            .set_focus()
-            .map_err(|error| format!("failed to focus WhatsApp companion window: {error}"))?;
         return manifest_for_account(&request.account_id, false, true);
     }
 
@@ -140,18 +134,14 @@ pub(crate) async fn open_whatsapp_web_companion(
         .map_err(|error| format!("invalid WhatsApp Web URL: {error}"))?;
     let initialization_script =
         companion_initialization_script(&request.account_id, &window_label)?;
-    let window = WebviewWindowBuilder::new(&app, window_label, WebviewUrl::External(url))
-        .title("WhatsApp Web Companion")
-        .visible(true)
-        .resizable(true)
-        .inner_size(1160.0, 780.0)
+    WebviewWindowBuilder::new(&app, window_label, WebviewUrl::External(url))
+        .title("WhatsApp hidden WebView runtime")
+        .visible(false)
+        .resizable(false)
         .initialization_script(initialization_script)
         .on_navigation(|url| url.scheme() == "https" && url.host_str() == Some("web.whatsapp.com"))
         .build()
-        .map_err(|error| format!("failed to open WhatsApp companion window: {error}"))?;
-    window
-        .set_focus()
-        .map_err(|error| format!("failed to focus WhatsApp companion window: {error}"))?;
+        .map_err(|error| format!("failed to start hidden WhatsApp WebView: {error}"))?;
 
     manifest_for_account(&request.account_id, true, false)
 }
@@ -213,7 +203,7 @@ pub(crate) async fn whatsapp_web_companion_relay_observation(
         runtime_event_kind,
         import_batch_id,
         runtime_bridge_http_status,
-        event_flow: "visible_webview_companion -> tauri_allowlisted_relay_preflight -> protected_runtime_bridge -> raw_evidence -> signal_hub_accepted -> projection_reconciliation",
+        event_flow: "hidden_webview_companion -> tauri_allowlisted_relay_preflight -> protected_runtime_bridge -> raw_evidence -> signal_hub_accepted -> projection_reconciliation",
         completion_rule: "provider_observed_event_reconciliation_required",
     })
 }
@@ -221,24 +211,24 @@ pub(crate) async fn whatsapp_web_companion_relay_observation(
 fn manifest_for_account(
     account_id: &str,
     opened_window: bool,
-    focused_existing_window: bool,
+    reused_existing_window: bool,
 ) -> Result<WhatsAppWebCompanionManifest, String> {
     Ok(WhatsAppWebCompanionManifest {
         account_id: required_account_id(account_id)?.to_owned(),
         provider_shape: PROVIDER_SHAPE,
         runtime_kind: RUNTIME_KIND,
-        driver_id: "tauri_visible_webview_companion",
+        driver_id: "tauri_hidden_webview_companion",
         window_label: companion_window_label(account_id)?,
         target_url: WHATSAPP_WEB_URL,
         opened_window,
-        focused_existing_window,
-        owner_visible: true,
-        hidden_headless_mode: "forbidden",
+        reused_existing_window,
+        owner_visible: false,
+        hidden_headless_mode: "required_tauri_webview_not_headless_browser",
         tauri_ipc_available_to_companion_window: true,
-        event_flow: "visible_webview_companion -> protected_runtime_bridge -> raw_evidence -> signal_hub_accepted -> projection_reconciliation",
+        event_flow: "hidden_webview_companion -> protected_runtime_bridge -> raw_evidence -> signal_hub_accepted -> projection_reconciliation",
         event_extractor: WhatsAppWebCompanionExtractorContract {
             state: "contract_injected_relay_dispatch_available",
-            initialization_script: "installed_on_visible_companion_window",
+            initialization_script: "installed_on_hidden_companion_webview",
             script_scope: "main_frame_only",
             origin_guard: "https://web.whatsapp.com",
             navigation_guard: "https://web.whatsapp.com_only",
@@ -303,7 +293,7 @@ fn manifest_for_account(
             session_material: "host_vault_only_via_authorized_session_bridge",
             cookies: "not_read_or_returned_by_tauri_command",
             browser_profile_secrets: "not_read_or_returned_by_tauri_command",
-            qr_pair_code_artifacts: "owner_visible_runtime_only",
+            qr_pair_code_artifacts: "never_returned_by_hidden_webview_runtime",
             message_bodies: "excluded_from_manifest_and_health",
             media_bytes: "local_blob_storage_only_not_manifest_or_postgres",
             postgres_storage: "metadata_bindings_only_no_session_cookie_or_profile_secret",
@@ -615,7 +605,7 @@ mod tests {
 
         assert_eq!(manifest.provider_shape, "whatsapp_web_companion");
         assert_eq!(manifest.runtime_kind, "webview_companion");
-        assert_eq!(manifest.owner_visible, true);
+        assert!(!manifest.owner_visible);
         assert_eq!(manifest.tauri_ipc_available_to_companion_window, true);
         assert_eq!(
             manifest.event_extractor.state,

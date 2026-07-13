@@ -9,12 +9,8 @@ use crate::domains::communications::messages::ProviderChannelMessageStore;
 use crate::integrations::telegram::client::TelegramError;
 use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 
-const COMMUNICATION_RAW_EVIDENCE_CHANNEL_KINDS: &[&str] = &[
-    "telegram_user",
-    "telegram_bot",
-    "whatsapp_web",
-    "whatsapp_business_cloud",
-];
+const COMMUNICATION_RAW_EVIDENCE_CHANNEL_KINDS: &[&str] =
+    &["telegram_user", "telegram_bot", "whatsapp_web"];
 
 #[derive(Serialize)]
 pub(crate) struct TelegramRawMessageResponse {

@@ -54,7 +54,7 @@ use hermes_events_postgres::errors::EventStoreError;
 use hermes_events_postgres::store::EventStore;
 
 const AUDIT_ACTOR_ID: &str = "hermes-frontend";
-const WHATSAPP_CHANNEL_KINDS: &[&str] = &["whatsapp_web", "whatsapp_business_cloud"];
+const WHATSAPP_CHANNEL_KINDS: &[&str] = &["whatsapp_web"];
 static WHATSAPP_FIXTURE_EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
@@ -2734,7 +2734,7 @@ impl WhatsappFixtureIngestApplicationService {
         .fetch_one(&self.pool)
         .await?;
         let channel_kind = match provider_kind.as_str() {
-            "whatsapp_web" | "whatsapp_business_cloud" => provider_kind.clone(),
+            "whatsapp_web" => provider_kind.clone(),
             _ => "whatsapp_web".to_owned(),
         };
         Ok(WhatsappAccountProjectionContext {
