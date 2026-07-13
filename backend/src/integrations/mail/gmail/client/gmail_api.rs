@@ -6,11 +6,11 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::{Map, Value, json};
 
 use crate::integrations::mail::send::{OutgoingEmail, SendResult, build_rfc2822_message};
-use crate::integrations::mail::sync::{EmailSyncBatch, FetchedCommunicationSourceMessage};
 use crate::platform::communications::{
     AddressBookProviderBatch, AddressBookProviderEntry, AddressBookProviderUpsertRequest,
     DiscoveredMailProviderResource, MailProviderResourceKind, MailProviderSemanticRole,
 };
+use crate::platform::communications::{EmailSyncBatch, FetchedCommunicationSourceMessage};
 use crate::platform::secrets::ResolvedSecret;
 
 use super::errors::EmailProviderNetworkError;

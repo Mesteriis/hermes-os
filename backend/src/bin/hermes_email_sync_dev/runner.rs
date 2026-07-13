@@ -1,7 +1,7 @@
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::storage::port::LocalBlobPort;
-use hermes_hub_backend::integrations::mail::sync::imap_mailbox_stream_id;
+use hermes_hub_backend::platform::communications::imap_mailbox_stream_id;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::email_sync_pipeline::service::project_email_sync_batch_with_mail_blobs;

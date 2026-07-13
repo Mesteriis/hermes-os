@@ -10,7 +10,7 @@ use futures::TryStreamExt;
 use serde_json::{Value, json};
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::integrations::mail::sync::{
+use crate::platform::communications::{
     EmailSyncBatch, FetchedCommunicationSourceMessage, imap_mailbox_stream_id,
 };
 use crate::platform::secrets::ResolvedSecret;
@@ -416,7 +416,7 @@ mod tests {
     use crate::integrations::mail::gmail::client::options::{
         ImapIdleOptions, ImapMailboxListOptions,
     };
-    use crate::integrations::mail::sync::FetchedCommunicationSourceMessage;
+    use crate::platform::communications::FetchedCommunicationSourceMessage;
     use crate::platform::secrets::ResolvedSecret;
 
     #[test]

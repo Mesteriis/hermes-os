@@ -1,17 +1,17 @@
+use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
-use hermes_communications_api::accounts::{ProviderAccount, ProviderAccountSecretPurpose};
 use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use serde_json::json;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::integrations::mail::sync::{
-    EmailSyncAdapterConfig, EmailSyncPlanError, plan_email_sync,
+use hermes_hub_backend::platform::communications::email_sync::{
+    EmailSyncPlanError, plan_email_sync,
 };
-
 use hermes_hub_backend::platform::communications::{
-    IMAP_ALL_MAILBOXES, email_sync_plan_selects_all_imap_mailboxes, email_sync_plan_stream_ids,
+    EmailSyncAdapterConfig, IMAP_ALL_MAILBOXES, email_sync_plan_selects_all_imap_mailboxes,
+    email_sync_plan_stream_ids,
 };
 use hermes_hub_backend::platform::storage::Database;
 

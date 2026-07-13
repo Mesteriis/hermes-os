@@ -21,7 +21,7 @@ use hermes_observations_api::models::ObservationOriginKind;
 use hermes_observations_postgres::errors::ObservationStoreError;
 
 mod attachment_text;
-mod email_sync;
+pub mod email_sync;
 mod mbox;
 mod raw_signals;
 pub mod rfc822;

@@ -10,7 +10,7 @@ use sqlx::Row;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::storage::port::LocalBlobPort;
-use hermes_hub_backend::integrations::mail::sync::{
+use hermes_hub_backend::platform::communications::{
     EmailSyncBatch, FetchedCommunicationSourceMessage,
 };
 

@@ -1,4 +1,3 @@
-use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use std::fs;
 use std::path::{Path, PathBuf};
 

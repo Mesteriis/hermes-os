@@ -6,5 +6,4 @@ pub mod imap_write;
 pub mod outbox;
 pub mod read_state;
 pub mod send;
-pub mod sync;
 pub mod sync_provider;

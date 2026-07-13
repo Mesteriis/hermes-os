@@ -1,7 +1,7 @@
 use hermes_hub_backend::integrations::mail::gmail::client::{
     imap::ImapNetworkClient, options::ImapFetchOptions,
 };
-use hermes_hub_backend::integrations::mail::sync::EmailSyncBatch;
+use hermes_hub_backend::platform::communications::EmailSyncBatch;
 
 use crate::config::DevEmailSyncConfig;
 use crate::errors::DevEmailSyncError;

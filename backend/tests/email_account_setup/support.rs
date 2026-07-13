@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 
-use hermes_communications_api::accounts::{ProviderAccount, ProviderAccountSecretBinding};
-
 use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};

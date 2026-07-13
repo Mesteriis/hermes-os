@@ -7,7 +7,7 @@ use hermes_communications_api::accounts::CommunicationProviderKind;
 use hermes_hub_backend::domains::communications::fixtures::export::{
     EmailFixtureExportOptions, export_fixture_messages_from_sync_batch,
 };
-use hermes_hub_backend::integrations::mail::sync::{
+use hermes_hub_backend::platform::communications::{
     EmailSyncBatch, FetchedCommunicationSourceMessage,
 };
 

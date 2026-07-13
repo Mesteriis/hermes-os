@@ -22,10 +22,9 @@ use hermes_hub_backend::integrations::mail::gmail::client::{
     imap::ImapNetworkClient,
     options::{GmailContactFetchOptions, GmailFetchOptions, ImapFetchOptions},
 };
-use hermes_hub_backend::integrations::mail::sync::{
-    EmailSyncBatch, FetchedCommunicationSourceMessage,
+use hermes_hub_backend::platform::communications::{
+    AddressBookProviderUpsertRequest, EmailSyncBatch, FetchedCommunicationSourceMessage,
 };
-use hermes_hub_backend::platform::communications::AddressBookProviderUpsertRequest;
 use hermes_hub_backend::platform::secrets::ResolvedSecret;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::email_sync_pipeline::recording::{
