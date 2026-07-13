@@ -194,15 +194,15 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-media/upload",
-            post(whatsapp::post_whatsapp_media_upload),
+            post(whatsapp::media::post_whatsapp_media_upload),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-media/download",
-            post(whatsapp::post_whatsapp_media_download),
+            post(whatsapp::media::post_whatsapp_media_download),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/messages/voice-note",
-            post(whatsapp::post_whatsapp_voice_note_send),
+            post(whatsapp::media::post_whatsapp_voice_note_send),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/statuses/publish",
