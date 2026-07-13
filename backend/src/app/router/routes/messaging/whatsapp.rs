@@ -134,7 +134,7 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-sync/history",
-            post(whatsapp::post_whatsapp_sync_history),
+            post(whatsapp::sync_history::post_whatsapp_sync_history),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-sync/conversations/{provider_chat_id}/members",
