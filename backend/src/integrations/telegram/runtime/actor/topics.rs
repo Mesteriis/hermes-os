@@ -1,5 +1,6 @@
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::tdjson::{self, TdJsonClient, TelegramTdlibTopicSnapshot};
+use hermes_provider_telegram::tdlib::topics;
 
 use super::super::TDJSON_COMMAND_TIMEOUT;
 use super::responses::{receive_tdlib_extra, tdlib_provider_chat_id};
@@ -11,9 +12,7 @@ pub(super) fn actor_get_forum_topics(
 ) -> Result<Vec<TelegramTdlibTopicSnapshot>, TelegramError> {
     let chat_id = tdlib_provider_chat_id(provider_chat_id)?;
     let extra = format!("hermes-forum-topics-{provider_chat_id}");
-    client.send_json(&tdjson::tdlib_get_forum_topics_request(
-        chat_id, limit, &extra,
-    ))?;
+    client.send_json(&topics::get_forum_topics(chat_id, limit, &extra))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
     if let Some(message) = tdjson::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
@@ -29,9 +28,10 @@ pub(super) fn actor_create_forum_topic(
 ) -> Result<TelegramTdlibTopicSnapshot, TelegramError> {
     let chat_id = tdlib_provider_chat_id(provider_chat_id)?;
     let extra = format!("hermes-forum-topic-create-{command_id}");
-    client.send_json(&tdjson::tdlib_create_forum_topic_request(
-        chat_id, title, &extra,
-    )?)?;
+    client.send_json(
+        &topics::create_forum_topic(chat_id, title, &extra)
+            .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?,
+    )?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
     if let Some(message) = tdjson::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
@@ -48,7 +48,7 @@ pub(super) fn actor_toggle_forum_topic_closed(
 ) -> Result<(), TelegramError> {
     let chat_id = tdlib_provider_chat_id(provider_chat_id)?;
     let extra = format!("hermes-forum-topic-closed-{command_id}");
-    client.send_json(&tdjson::tdlib_toggle_forum_topic_is_closed_request(
+    client.send_json(&topics::toggle_forum_topic_closed(
         chat_id,
         provider_topic_id,
         is_closed,

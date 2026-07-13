@@ -29,10 +29,11 @@ use crate::integrations::telegram::client::{
     TelegramAttachmentDownloadStateUpdate, TelegramError, ensure_telegram_account_active, lifecycle,
 };
 use crate::integrations::telegram::runtime::{
-    TelegramMediaDownloadRequest, TelegramMediaDownloadResponse, TelegramMediaSendType,
+    TelegramMediaDownloadRequest, TelegramMediaDownloadResponse,
 };
 use crate::platform::audit::NewApiAuditRecord;
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+use hermes_provider_telegram::tdlib::types::TdlibMediaKind;
 
 use crate::platform::events::bus::telegram_event_types;
 use crate::workflows::telegram_media_storage::{
@@ -123,7 +124,7 @@ struct ValidatedMediaUploadRequest {
     provider_chat_id: String,
     attachment_id: Option<String>,
     blob_id: Option<String>,
-    media_type: TelegramMediaSendType,
+    media_type: TdlibMediaKind,
     caption: Option<String>,
     filename: Option<String>,
 }
@@ -482,7 +483,8 @@ fn validate_media_upload_request(
 ) -> Result<ValidatedMediaUploadRequest, TelegramError> {
     let account_id = required_string("account_id", &request.account_id)?;
     let provider_chat_id = required_string("provider_chat_id", &request.provider_chat_id)?;
-    let media_type = TelegramMediaSendType::try_from(request.media_type.as_str())?;
+    let media_type = TdlibMediaKind::try_from(request.media_type.as_str())
+        .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?;
     let command_id = match request.command_id {
         Some(command_id) => required_string("command_id", &command_id)?,
         None => lifecycle::new_command_id(),

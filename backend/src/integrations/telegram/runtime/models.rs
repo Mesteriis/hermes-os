@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use hermes_provider_telegram::tdlib::types::TdlibMediaKind;
 use serde::{Deserialize, Serialize};
 
 use crate::integrations::telegram::client::{TelegramChat, TelegramError, TelegramMessage};
@@ -213,7 +214,7 @@ pub struct TelegramMediaDownloadResponse {
 pub struct TelegramMediaSendRequest {
     pub command_id: String,
     pub provider_chat_id: String,
-    pub media_type: TelegramMediaSendType,
+    pub media_type: TdlibMediaKind,
     pub local_path: String,
     pub caption: Option<String>,
     pub filename: Option<String>,
@@ -231,50 +232,6 @@ impl TelegramMediaSendRequest {
             validate_non_empty("filename", filename)?;
         }
         Ok(())
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TelegramMediaSendType {
-    Photo,
-    Video,
-    Document,
-    Audio,
-    Voice,
-    Sticker,
-    Animation,
-}
-
-impl TelegramMediaSendType {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Photo => "photo",
-            Self::Video => "video",
-            Self::Document => "document",
-            Self::Audio => "audio",
-            Self::Voice => "voice",
-            Self::Sticker => "sticker",
-            Self::Animation => "animation",
-        }
-    }
-}
-
-impl TryFrom<&str> for TelegramMediaSendType {
-    type Error = TelegramError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value.trim() {
-            "photo" => Ok(Self::Photo),
-            "video" => Ok(Self::Video),
-            "document" => Ok(Self::Document),
-            "audio" => Ok(Self::Audio),
-            "voice" | "voice_note" => Ok(Self::Voice),
-            "sticker" => Ok(Self::Sticker),
-            "animation" | "gif" => Ok(Self::Animation),
-            other => Err(TelegramError::InvalidRequest(format!(
-                "unsupported Telegram media upload type `{other}`"
-            ))),
-        }
     }
 }
 

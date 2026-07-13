@@ -7,6 +7,7 @@ use crate::integrations::telegram::client::models::messages::TelegramProviderWri
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibMessageSnapshot, TelegramTdlibTopicSnapshot,
 };
+use hermes_provider_telegram::tdlib::types::TdlibMediaKind;
 
 use super::super::commands::{
     request_actor_add_chat_to_folder, request_actor_create_forum_topic,
@@ -17,7 +18,7 @@ use super::super::commands::{
     request_actor_toggle_chat_mute, request_actor_toggle_chat_unread,
     request_actor_toggle_forum_topic_closed,
 };
-use super::super::models::{TelegramMediaSendRequest, TelegramMediaSendType};
+use super::super::models::TelegramMediaSendRequest;
 use super::super::state::TelegramRuntimeCommand;
 
 pub(super) enum DispatchOutcome {
@@ -49,9 +50,10 @@ pub(super) async fn dispatch_command(
             let request = TelegramMediaSendRequest {
                 command_id: command.command_id.clone(),
                 provider_chat_id: command.provider_chat_id.clone(),
-                media_type: TelegramMediaSendType::try_from(
+                media_type: TdlibMediaKind::try_from(
                     payload_string(command, "media_type")?.as_str(),
-                )?,
+                )
+                .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?,
                 local_path: payload_string(command, "local_path")?,
                 caption: payload_optional_string(command, "caption"),
                 filename: payload_optional_string(command, "filename"),

@@ -1,5 +1,9 @@
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::tdjson::{self, TdJsonClient, TelegramTdlibChatMemberSnapshot};
+use hermes_provider_telegram::tdlib::chats::{
+    get_basic_group, get_basic_group_full_info, get_supergroup_administrators,
+    get_supergroup_members,
+};
 
 use super::super::TDJSON_COMMAND_TIMEOUT;
 use super::responses::receive_tdlib_extra;
@@ -16,7 +20,7 @@ pub(super) fn actor_get_supergroup_members(
         supergroup_id,
         limit,
         "recent",
-        tdjson::tdlib_get_supergroup_members_request,
+        get_supergroup_members,
     )
 }
 
@@ -30,7 +34,7 @@ pub(super) fn actor_get_supergroup_administrators(
         supergroup_id,
         limit,
         "administrators",
-        tdjson::tdlib_get_supergroup_administrators_request,
+        get_supergroup_administrators,
     )
 }
 
@@ -79,20 +83,14 @@ pub(super) fn actor_get_basic_group_members(
     basic_group_id: i64,
 ) -> Result<Vec<TelegramTdlibChatMemberSnapshot>, TelegramError> {
     let group_extra = format!("hermes-basic-group-{basic_group_id}");
-    client.send_json(&tdjson::tdlib_get_basic_group_request(
-        basic_group_id,
-        &group_extra,
-    ))?;
+    client.send_json(&get_basic_group(basic_group_id, &group_extra))?;
     let group_response = receive_tdlib_extra(client, &group_extra, TDJSON_COMMAND_TIMEOUT)?;
     if let Some(message) = tdjson::tdlib_error_message(&group_response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
 
     let full_info_extra = format!("hermes-basic-group-full-info-{basic_group_id}");
-    client.send_json(&tdjson::tdlib_get_basic_group_full_info_request(
-        basic_group_id,
-        &full_info_extra,
-    ))?;
+    client.send_json(&get_basic_group_full_info(basic_group_id, &full_info_extra))?;
     let full_info_response = receive_tdlib_extra(client, &full_info_extra, TDJSON_COMMAND_TIMEOUT)?;
     if let Some(message) = tdjson::tdlib_error_message(&full_info_response) {
         return Err(TelegramError::TdlibRuntime(message));

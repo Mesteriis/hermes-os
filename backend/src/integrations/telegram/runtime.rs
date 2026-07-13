@@ -23,7 +23,6 @@ pub(crate) use self::manager::{
 pub use self::models::{
     TelegramChatSyncRequest, TelegramChatSyncResponse, TelegramHistorySyncMode,
     TelegramHistorySyncRequest, TelegramHistorySyncResponse, TelegramMediaDownloadRequest,
-    TelegramMediaDownloadResponse, TelegramMediaSendRequest, TelegramMediaSendType,
-    TelegramRuntimeRestartRequest, TelegramRuntimeStartRequest, TelegramRuntimeStatus,
-    TelegramRuntimeStopRequest,
+    TelegramMediaDownloadResponse, TelegramMediaSendRequest, TelegramRuntimeRestartRequest,
+    TelegramRuntimeStartRequest, TelegramRuntimeStatus, TelegramRuntimeStopRequest,
 };

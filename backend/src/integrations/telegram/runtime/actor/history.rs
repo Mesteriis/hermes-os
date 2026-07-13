@@ -1,5 +1,6 @@
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::tdjson::{self, TdJsonClient, TelegramTdlibMessageSnapshot};
+use hermes_provider_telegram::tdlib::chats::get_chat_history;
 
 use super::super::TDJSON_COMMAND_TIMEOUT;
 use super::super::models::TelegramHistorySyncMode;
@@ -24,7 +25,7 @@ pub(super) fn actor_sync_history(
             "hermes-runtime-history-{chat_id}-{}-{page_index}",
             cursor.unwrap_or(0)
         );
-        client.send_json(&tdjson::tdlib_get_chat_history_request(
+        client.send_json(&get_chat_history(
             chat_id, cursor, page_limit, false, &extra,
         ))?;
         let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;

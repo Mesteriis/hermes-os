@@ -24,7 +24,7 @@ use crate::integrations::telegram::client::{
 };
 use crate::integrations::telegram::runtime::{
     TelegramChatSyncRequest, TelegramHistorySyncRequest, TelegramMediaDownloadRequest,
-    TelegramMediaSendType, TelegramRuntimeStatus,
+    TelegramRuntimeStatus,
 };
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::whatsapp::client::models::{

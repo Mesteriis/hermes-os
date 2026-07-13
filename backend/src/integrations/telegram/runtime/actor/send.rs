@@ -1,7 +1,7 @@
 use crate::integrations::telegram::client::{TelegramError, TelegramManualSendRequest};
 use crate::integrations::telegram::runtime::TelegramMediaSendRequest;
 use crate::integrations::telegram::tdjson::{self, TdJsonClient, TelegramTdlibMessageSnapshot};
-use hermes_provider_telegram::tdlib::{send_reply, send_text_message};
+use hermes_provider_telegram::tdlib::messages::{self, send_media, send_reply, send_text};
 
 use super::super::TDJSON_COMMAND_TIMEOUT;
 use super::responses::{receive_tdlib_extra, tdlib_provider_chat_id, tdlib_provider_message_id};
@@ -13,7 +13,7 @@ pub(super) fn actor_send_text(
     let chat_id = tdlib_provider_chat_id(&request.provider_chat_id)?;
     let extra = format!("hermes-runtime-send-{}", request.command_id.trim());
     client.send_json(
-        &send_text_message(chat_id, &request.text, &extra)
+        &send_text(chat_id, &request.text, &extra)
             .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?,
     )?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
@@ -30,14 +30,17 @@ pub(super) fn actor_send_media(
     request.validate()?;
     let chat_id = tdlib_provider_chat_id(&request.provider_chat_id)?;
     let extra = format!("hermes-media-send-{}", request.command_id.trim());
-    client.send_json(&tdjson::tdlib_send_media_message_request(
-        chat_id,
-        request.media_type,
-        &request.local_path,
-        request.caption.as_deref(),
-        request.filename.as_deref(),
-        &extra,
-    )?)?;
+    client.send_json(
+        &send_media(
+            chat_id,
+            request.media_type,
+            &request.local_path,
+            request.caption.as_deref(),
+            request.filename.as_deref(),
+            &extra,
+        )
+        .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?,
+    )?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
     if let Some(message) = tdjson::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
@@ -77,7 +80,7 @@ pub(super) fn actor_send_forward(
     let from_chat_id = tdlib_provider_chat_id(from_provider_chat_id)?;
     let message_id = tdlib_provider_message_id(from_provider_message_id)?;
     let extra = format!("hermes-forward-{}", command_id.trim());
-    client.send_json(&tdjson::tdlib_send_forward_request(
+    client.send_json(&messages::forward_message(
         chat_id,
         from_chat_id,
         message_id,
