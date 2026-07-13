@@ -386,8 +386,8 @@ impl From<crate::domains::communications::export::CommunicationExportError> for 
     }
 }
 
-impl From<crate::integrations::mail::send::EmailSendError> for ApiError {
-    fn from(error: crate::integrations::mail::send::EmailSendError) -> Self {
+impl From<crate::platform::communications::EmailSendError> for ApiError {
+    fn from(error: crate::platform::communications::EmailSendError) -> Self {
         tracing::error!(error = %error, "email send failed");
         ApiError::InvalidCommunicationQuery("email send failed")
     }

@@ -1,11 +1,10 @@
 use async_native_tls::TlsConnector;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 
-use crate::platform::secrets::ResolvedSecret;
-
-pub use crate::platform::communications::{
+use crate::platform::communications::{
     EmailSendError, OutgoingEmail, OutgoingEmailAttachment, SendResult, SmtpConfig, SmtpTransport,
 };
+use crate::platform::secrets::ResolvedSecret;
 
 #[derive(Clone, Default)]
 pub struct LiveSmtpTransport;

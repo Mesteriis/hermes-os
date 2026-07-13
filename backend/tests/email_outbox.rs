@@ -13,7 +13,7 @@ use hermes_hub_backend::domains::communications::outbox::{
     EmailOutboxDeliveryWorker, NewCommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender,
     OutboxRetryPolicy, OutboxSendReceipt, SmtpOutboxEmailSender, SmtpTransport,
 };
-use hermes_hub_backend::integrations::mail::send::{
+use hermes_hub_backend::platform::communications::{
     EmailSendError, OutgoingEmail, SendResult, SmtpConfig,
 };
 
