@@ -16,10 +16,8 @@ use crate::app::api_support::{
     whatsapp_capabilities::*,
 };
 use crate::app::{ApiError, AppState};
-use crate::platform::calls::{
-    CallTranscript, FixtureSpeechToTextProvider, NewCallTranscript, ProviderCall,
-    SpeechToTextProvider, TranscriptStatus,
-};
+use crate::platform::calls::stt::{FixtureSpeechToTextProvider, SpeechToTextProvider};
+use crate::platform::calls::{CallTranscript, NewCallTranscript, ProviderCall, TranscriptStatus};
 
 pub(crate) async fn post_call(
     State(state): State<AppState>,

@@ -2,7 +2,7 @@ pub mod errors;
 mod models;
 mod rows;
 mod store;
-mod stt;
+pub mod stt;
 mod validation;
 
 pub use models::{
@@ -10,4 +10,3 @@ pub use models::{
     ProviderCall, TelegramCall, TranscriptStatus,
 };
 pub use store::CallIntelligenceStore;
-pub use stt::{FixtureSpeechToTextProvider, FixtureTranscript, SpeechToTextProvider};
