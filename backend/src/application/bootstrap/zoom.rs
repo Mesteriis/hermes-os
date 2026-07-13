@@ -4,13 +4,14 @@ use hermes_provider_zoom::protocol::{
 };
 use sqlx::postgres::PgPool;
 
-use super::{
-    ZOOM_RECORDING_SYNC_LOOKBACK_DAYS, ZOOM_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT,
-    ZOOM_TOKEN_MAINTENANCE_REFRESH_EXPIRING_WITHIN_SECONDS,
-};
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::vault::HostVault;
 
+pub(crate) mod tasks;
+
+const ZOOM_TOKEN_MAINTENANCE_REFRESH_EXPIRING_WITHIN_SECONDS: i64 = 300;
+const ZOOM_RECORDING_SYNC_LOOKBACK_DAYS: i64 = 7;
+const ZOOM_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT: i64 = 100;
 pub(super) async fn run_zoom_token_maintenance_once(
     pool: &PgPool,
     vault: &HostVault,

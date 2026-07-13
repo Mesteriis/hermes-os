@@ -20,33 +20,11 @@ use crate::vault::{HostVault, VaultMode};
 pub(crate) mod mail;
 mod mail_ai;
 pub(crate) mod telegram;
-mod zoom;
+pub(crate) mod telemost;
+pub(crate) mod whatsapp;
+pub(crate) mod zoom;
 pub(crate) mod zulip;
 
-static ZOOM_TOKEN_MAINTENANCE_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static ZOOM_RECORDING_SYNC_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static ZOOM_RETENTION_CLEANUP_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static WHATSAPP_RUNTIME_EVENT_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static PERSONA_DERIVED_EVIDENCE_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static ZOOM_SIGNAL_DETECTION_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static ZOOM_CALENDAR_MATCHING_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static ZOOM_PARTICIPANT_IDENTITY_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static YANDEX_TELEMOST_RETENTION_CLEANUP_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-static YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
 static REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_CONSUMER_DATABASES: LazyLock<
     Mutex<HashSet<String>>,
 > = LazyLock::new(|| Mutex::new(HashSet::new()));
@@ -63,29 +41,11 @@ static EVENT_OUTBOX_DISPATCHER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static SIGNAL_REPLAY_DISPATCHER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
+static COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static PERSONA_DERIVED_EVIDENCE_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 
-const ZOOM_TOKEN_MAINTENANCE_RUNTIME: &str = "zoom_token_maintenance";
-const ZOOM_TOKEN_MAINTENANCE_TICK_SECONDS: u64 = 60;
-const ZOOM_TOKEN_MAINTENANCE_REFRESH_EXPIRING_WITHIN_SECONDS: i64 = 300;
-const ZOOM_RECORDING_SYNC_RUNTIME: &str = "zoom_recording_sync";
-const ZOOM_RECORDING_SYNC_TICK_SECONDS: u64 = 300;
-const ZOOM_RECORDING_SYNC_LOOKBACK_DAYS: i64 = 7;
-const ZOOM_RETENTION_CLEANUP_RUNTIME: &str = "zoom_retention_cleanup";
-const ZOOM_RETENTION_CLEANUP_TICK_SECONDS: u64 = 3600;
-const ZOOM_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT: i64 = 100;
-const YANDEX_TELEMOST_RETENTION_CLEANUP_RUNTIME: &str = "yandex_telemost_retention_cleanup";
-const YANDEX_TELEMOST_RETENTION_CLEANUP_TICK_SECONDS: u64 = 3600;
-const YANDEX_TELEMOST_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT: i64 = 100;
-const WHATSAPP_RUNTIME_EVENT_CONSUMER_RUNTIME: &str = "whatsapp_runtime_event_projection";
-const WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME: &str =
-    "whatsapp_provider_observation_reconciliation";
-const COMMUNICATION_PROVIDER_OBSERVATION_RUNTIME: &str =
-    "communication_provider_observation_projection";
-const PERSONA_DERIVED_EVIDENCE_RUNTIME: &str = "persona_derived_evidence";
-const ZOOM_SIGNAL_DETECTION_RUNTIME: &str = "zoom_signal_detection";
-const ZOOM_CALENDAR_MATCHING_RUNTIME: &str = "zoom_calendar_matching";
-const ZOOM_PARTICIPANT_IDENTITY_RUNTIME: &str = "zoom_participant_identity";
-const YANDEX_TELEMOST_CALENDAR_MATCHING_RUNTIME: &str = "yandex_telemost_calendar_matching";
 const REALTIME_CONVERSATION_TRANSCRIPT_EXECUTION_RUNTIME: &str =
     "realtime_conversation_transcript_execution";
 const PERSONA_IDENTITY_REVIEW_INBOX_RUNTIME: &str = "persona_identity_review_inbox";
@@ -99,6 +59,9 @@ const SIGNAL_HUB_RAW_SIGNAL_RUNTIME: &str = "signal_hub_raw_signal_dispatcher";
 const REALTIME_SIGNAL_PROJECTION_TICK_MILLIS: u64 = 250;
 const EVENT_OUTBOX_DISPATCHER_RUNTIME: &str = "event_outbox_dispatcher";
 const SIGNAL_REPLAY_DISPATCHER_RUNTIME: &str = "signal_replay_dispatcher";
+const COMMUNICATION_PROVIDER_OBSERVATION_RUNTIME: &str =
+    "communication_provider_observation_projection";
+const PERSONA_DERIVED_EVIDENCE_RUNTIME: &str = "persona_derived_evidence";
 
 #[derive(Clone)]
 pub(crate) struct ApplicationBootstrapContext {
@@ -118,49 +81,6 @@ pub(crate) fn start_background_services(context: ApplicationBootstrapContext) {
     let _ = context;
 }
 
-pub(crate) fn whatsapp_runtime_task_specs(
-    context: ApplicationBootstrapContext,
-) -> Vec<RuntimeTaskSpec> {
-    [
-        whatsapp_runtime_event_projection_task(context.clone()),
-        whatsapp_provider_observation_reconciliation_task(context),
-    ]
-    .into_iter()
-    .flatten()
-    .map(|task| task.with_lifecycle_source("whatsapp"))
-    .collect()
-}
-
-pub(crate) fn zoom_runtime_task_specs(
-    context: ApplicationBootstrapContext,
-) -> Vec<RuntimeTaskSpec> {
-    [
-        zoom_token_maintenance_task(context.clone()),
-        zoom_recording_sync_task(context.clone()),
-        zoom_retention_cleanup_task(context.clone()),
-        zoom_calendar_matching_projection_task(context.clone()),
-        zoom_signal_detection_projection_task(context.clone()),
-        zoom_participant_identity_projection_task(context),
-    ]
-    .into_iter()
-    .flatten()
-    .map(|task| task.with_lifecycle_source("zoom"))
-    .collect()
-}
-
-pub(crate) fn yandex_telemost_runtime_task_specs(
-    context: ApplicationBootstrapContext,
-) -> Vec<RuntimeTaskSpec> {
-    [
-        yandex_telemost_retention_cleanup_task(context.clone()),
-        yandex_telemost_calendar_matching_projection_task(context),
-    ]
-    .into_iter()
-    .flatten()
-    .map(|task| task.with_lifecycle_source("yandex_telemost"))
-    .collect()
-}
-
 pub(crate) fn core_runtime_task_specs(
     context: ApplicationBootstrapContext,
 ) -> Vec<RuntimeTaskSpec> {
@@ -178,458 +98,6 @@ pub(crate) fn core_runtime_task_specs(
     .into_iter()
     .flatten()
     .collect()
-}
-
-fn zoom_token_maintenance_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    if !context.zoom_token_maintenance_scheduler_enabled {
-        return None;
-    }
-    let pool = context.pool?;
-    let database_url = context.database_url?;
-    if !register_zoom_token_maintenance_scheduler(&database_url) {
-        return None;
-    }
-    let vault = context.vault;
-    let event_bus = context.event_bus;
-
-    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
-        let pool = pool.clone();
-        let vault = vault.clone();
-        let event_bus = event_bus.clone();
-        Box::pin(async move {
-            let mut tick =
-                tokio::time::interval(Duration::from_secs(ZOOM_TOKEN_MAINTENANCE_TICK_SECONDS));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = cancellation.cancelled() => return Ok(()),
-                    _ = tick.tick() => {}
-                }
-                if !runtime_allows_processing(
-                    &pool,
-                    "zoom",
-                    ZOOM_TOKEN_MAINTENANCE_RUNTIME,
-                    json!({
-                        "label": "Zoom token maintenance",
-                        "scope": "scheduler",
-                    }),
-                )
-                .await
-                {
-                    continue;
-                }
-                if !host_vault_is_unlocked(&vault) {
-                    continue;
-                }
-                match zoom::run_zoom_token_maintenance_once(&pool, &vault, &event_bus).await {
-                    Ok(result)
-                        if result.checked_count > 0
-                            || result.refreshed_count > 0
-                            || result.failed_count > 0 =>
-                    {
-                        tracing::info!(
-                            checked = result.checked_count,
-                            refreshed = result.refreshed_count,
-                            skipped = result.skipped_count,
-                            failed = result.failed_count,
-                            refresh_expiring_within_seconds =
-                                result.refresh_expiring_within_seconds,
-                            "zoom token maintenance scheduler tick completed"
-                        );
-                    }
-                    Ok(_) => {}
-                    Err(error) => {
-                        tracing::warn!(
-                            error = %error,
-                            "zoom token maintenance scheduler tick failed"
-                        );
-                    }
-                }
-            }
-        }) as RuntimeTaskFuture
-    });
-    Some(RuntimeTaskSpec::new(
-        ZOOM_TOKEN_MAINTENANCE_RUNTIME,
-        RuntimeTaskClass::Background,
-        RuntimeExitPolicy::MarkDegraded,
-        task,
-    ))
-}
-
-fn zoom_recording_sync_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    if !context.zoom_recording_sync_scheduler_enabled {
-        return None;
-    }
-    let pool = context.pool?;
-    let database_url = context.database_url?;
-    if !register_zoom_recording_sync_scheduler(&database_url) {
-        return None;
-    }
-    let vault = context.vault;
-    let event_bus = context.event_bus;
-
-    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
-        let pool = pool.clone();
-        let vault = vault.clone();
-        let event_bus = event_bus.clone();
-        Box::pin(async move {
-            let mut tick =
-                tokio::time::interval(Duration::from_secs(ZOOM_RECORDING_SYNC_TICK_SECONDS));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = cancellation.cancelled() => return Ok(()),
-                    _ = tick.tick() => {}
-                }
-                if !runtime_allows_processing(
-                    &pool,
-                    "zoom",
-                    ZOOM_RECORDING_SYNC_RUNTIME,
-                    json!({
-                        "label": "Zoom recording sync",
-                        "scope": "scheduler",
-                    }),
-                )
-                .await
-                {
-                    continue;
-                }
-                if !host_vault_is_unlocked(&vault) {
-                    continue;
-                }
-                match zoom::run_zoom_recording_sync_once(&pool, &vault, &event_bus).await {
-                    Ok(result)
-                        if result.accounts_checked > 0
-                            || result.accounts_synced > 0
-                            || result.failed_count > 0
-                            || result.meetings_recorded > 0
-                            || result.recordings_recorded > 0
-                            || result.media_downloads_recorded > 0
-                            || result.transcripts_recorded > 0 =>
-                    {
-                        tracing::info!(
-                            accounts_checked = result.accounts_checked,
-                            accounts_synced = result.accounts_synced,
-                            accounts_skipped = result.accounts_skipped,
-                            failed = result.failed_count,
-                            meetings_recorded = result.meetings_recorded,
-                            recordings_recorded = result.recordings_recorded,
-                            media_downloads_recorded = result.media_downloads_recorded,
-                            transcripts_recorded = result.transcripts_recorded,
-                            lookback_days = result.lookback_days,
-                            "zoom recording sync scheduler tick completed"
-                        );
-                    }
-                    Ok(_) => {}
-                    Err(error) => {
-                        tracing::warn!(error = %error, "zoom recording sync scheduler tick failed");
-                    }
-                }
-            }
-        }) as RuntimeTaskFuture
-    });
-    Some(RuntimeTaskSpec::new(
-        ZOOM_RECORDING_SYNC_RUNTIME,
-        RuntimeTaskClass::Background,
-        RuntimeExitPolicy::MarkDegraded,
-        task,
-    ))
-}
-
-fn zoom_retention_cleanup_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
-    if !context.zoom_retention_cleanup_scheduler_enabled {
-        return None;
-    }
-    let pool = context.pool?;
-    let database_url = context.database_url?;
-    if !register_zoom_retention_cleanup_scheduler(&database_url) {
-        return None;
-    }
-    let event_bus = context.event_bus;
-
-    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
-        let pool = pool.clone();
-        let event_bus = event_bus.clone();
-        Box::pin(async move {
-            let mut tick =
-                tokio::time::interval(Duration::from_secs(ZOOM_RETENTION_CLEANUP_TICK_SECONDS));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = cancellation.cancelled() => return Ok(()),
-                    _ = tick.tick() => {}
-                }
-                if !runtime_allows_processing(
-                    &pool,
-                    "zoom",
-                    ZOOM_RETENTION_CLEANUP_RUNTIME,
-                    json!({
-                        "label": "Zoom retention cleanup",
-                        "scope": "scheduler",
-                    }),
-                )
-                .await
-                {
-                    continue;
-                }
-                match zoom::run_zoom_retention_cleanup_once(&pool, &event_bus).await {
-                    Ok(result)
-                        if result.accounts_checked > 0
-                            || result.accounts_cleaned > 0
-                            || result.recordings_removed > 0
-                            || result.transcripts_removed > 0 =>
-                    {
-                        tracing::info!(
-                            accounts_checked = result.accounts_checked,
-                            accounts_cleaned = result.accounts_cleaned,
-                            recordings_removed = result.recordings_removed,
-                            transcripts_removed = result.transcripts_removed,
-                            limit_per_account = result.limit_per_account,
-                            "zoom retention cleanup scheduler tick completed"
-                        );
-                    }
-                    Ok(_) => {}
-                    Err(error) => {
-                        tracing::warn!(
-                            error = %error,
-                            "zoom retention cleanup scheduler tick failed"
-                        );
-                    }
-                }
-            }
-        }) as RuntimeTaskFuture
-    });
-    Some(RuntimeTaskSpec::new(
-        ZOOM_RETENTION_CLEANUP_RUNTIME,
-        RuntimeTaskClass::Background,
-        RuntimeExitPolicy::MarkDegraded,
-        task,
-    ))
-}
-
-fn yandex_telemost_retention_cleanup_task(
-    context: ApplicationBootstrapContext,
-) -> Option<RuntimeTaskSpec> {
-    let pool = context.pool?;
-    let database_url = context.database_url?;
-    if !register_yandex_telemost_retention_cleanup_scheduler(&database_url) {
-        return None;
-    }
-    let event_bus = context.event_bus;
-
-    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
-        let pool = pool.clone();
-        let event_bus = event_bus.clone();
-        Box::pin(async move {
-            let mut tick = tokio::time::interval(Duration::from_secs(
-                YANDEX_TELEMOST_RETENTION_CLEANUP_TICK_SECONDS,
-            ));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = cancellation.cancelled() => return Ok(()),
-                    _ = tick.tick() => {}
-                }
-                if !runtime_allows_processing(
-                    &pool,
-                    "yandex_telemost",
-                    YANDEX_TELEMOST_RETENTION_CLEANUP_RUNTIME,
-                    json!({
-                        "label": "Yandex Telemost retention cleanup",
-                        "scope": "scheduler",
-                    }),
-                )
-                .await
-                {
-                    continue;
-                }
-                match run_yandex_telemost_retention_cleanup_once(&pool, &event_bus).await {
-                    Ok(result)
-                        if result.accounts_checked > 0
-                            || result.accounts_cleaned > 0
-                            || result.audio_files_removed > 0
-                            || result.speaker_hint_files_removed > 0 =>
-                    {
-                        tracing::info!(
-                            accounts_checked = result.accounts_checked,
-                            accounts_cleaned = result.accounts_cleaned,
-                            audio_files_removed = result.audio_files_removed,
-                            speaker_hint_files_removed = result.speaker_hint_files_removed,
-                            limit_per_account = result.limit_per_account,
-                            "yandex telemost retention cleanup scheduler tick completed"
-                        );
-                    }
-                    Ok(_) => {}
-                    Err(error) => {
-                        tracing::warn!(
-                            error = %error,
-                            "yandex telemost retention cleanup scheduler tick failed"
-                        );
-                    }
-                }
-            }
-        }) as RuntimeTaskFuture
-    });
-    Some(RuntimeTaskSpec::new(
-        YANDEX_TELEMOST_RETENTION_CLEANUP_RUNTIME,
-        RuntimeTaskClass::Background,
-        RuntimeExitPolicy::MarkDegraded,
-        task,
-    ))
-}
-
-fn whatsapp_runtime_event_projection_task(
-    context: ApplicationBootstrapContext,
-) -> Option<RuntimeTaskSpec> {
-    let pool = context.pool?;
-    let database_url = context.database_url?;
-    if !register_whatsapp_runtime_event_consumer(&database_url) {
-        return None;
-    }
-    let vault = context.vault;
-
-    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
-        let pool = pool.clone();
-        let vault = vault.clone();
-        Box::pin(async move {
-            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
-                pool.clone(),
-                hermes_events_postgres::consumers::EventConsumerConfig::new(
-                    crate::application::whatsapp_runtime_event_projection::WHATSAPP_RUNTIME_EVENT_CONSUMER,
-                ),
-            );
-            let mut tick = tokio::time::interval(Duration::from_secs(5));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = cancellation.cancelled() => return Ok(()),
-                    _ = tick.tick() => {}
-                }
-                if !runtime_allows_processing(
-                    &pool,
-                    "whatsapp",
-                    WHATSAPP_RUNTIME_EVENT_CONSUMER_RUNTIME,
-                    json!({
-                        "label": "WhatsApp runtime-event projection consumer",
-                        "scope": "consumer",
-                    }),
-                )
-                .await
-                {
-                    continue;
-                }
-                let handler_pool = pool.clone();
-                let handler_vault = vault.clone();
-                if let Err(error) = runner
-                    .process_next_batch(|event| {
-                        let handler_pool = handler_pool.clone();
-                        let handler_vault = handler_vault.clone();
-                        async move {
-                            crate::application::whatsapp_runtime_event_projection::project_whatsapp_runtime_event(
-                                handler_pool.clone(),
-                                handler_vault.clone(),
-                                event,
-                            )
-                            .await
-                            .map_err(hermes_events_postgres::errors::EventStoreError::ConsumerHandlerFailed)
-                        }
-                    })
-                    .await
-                {
-                    tracing::warn!(
-                        error = %error,
-                        "whatsapp runtime-event projection consumer tick failed"
-                    );
-                }
-            }
-        }) as RuntimeTaskFuture
-    });
-    Some(RuntimeTaskSpec::new(
-        WHATSAPP_RUNTIME_EVENT_CONSUMER_RUNTIME,
-        RuntimeTaskClass::Background,
-        RuntimeExitPolicy::MarkDegraded,
-        task,
-    ))
-}
-
-fn whatsapp_provider_observation_reconciliation_task(
-    context: ApplicationBootstrapContext,
-) -> Option<RuntimeTaskSpec> {
-    let pool = context.pool?;
-    let database_url = context.database_url?;
-    if !register_whatsapp_provider_observation_reconciliation_consumer(&database_url) {
-        return None;
-    }
-    let event_bus = context.event_bus;
-
-    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
-        let pool = pool.clone();
-        let event_bus = event_bus.clone();
-        Box::pin(async move {
-            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
-                pool.clone(),
-                hermes_events_postgres::consumers::EventConsumerConfig::new(
-                    crate::application::whatsapp_provider_observation_reconciliation::WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_CONSUMER,
-                ),
-            );
-            let mut tick = tokio::time::interval(Duration::from_secs(5));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = cancellation.cancelled() => return Ok(()),
-                    _ = tick.tick() => {}
-                }
-                if !runtime_allows_processing(
-                    &pool,
-                    "whatsapp",
-                    WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME,
-                    json!({
-                        "label": "WhatsApp provider observation reconciliation consumer",
-                        "scope": "consumer",
-                    }),
-                )
-                .await
-                {
-                    continue;
-                }
-                let handler_pool = pool.clone();
-                let handler_event_bus = event_bus.clone();
-                if let Err(error) = runner
-                    .process_next_batch(|event| {
-                        let handler_pool = handler_pool.clone();
-                        let handler_event_bus = handler_event_bus.clone();
-                        async move {
-                            crate::application::whatsapp_provider_observation_reconciliation::reconcile_whatsapp_provider_observation_event(
-                                handler_pool.clone(),
-                                handler_event_bus.clone(),
-                                event,
-                            )
-                            .await
-                            .map_err(hermes_events_postgres::errors::EventStoreError::ConsumerHandlerFailed)
-                        }
-                    })
-                    .await
-                {
-                    tracing::warn!(
-                        error = %error,
-                        "whatsapp provider observation reconciliation consumer tick failed"
-                    );
-                }
-            }
-        }) as RuntimeTaskFuture
-    });
-    Some(RuntimeTaskSpec::new(
-        WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_RUNTIME,
-        RuntimeTaskClass::Background,
-        RuntimeExitPolicy::MarkDegraded,
-        task,
-    ))
 }
 
 fn communication_provider_observation_projection_task(
@@ -764,136 +232,6 @@ fn persona_derived_evidence_projection_task(
     ))
 }
 
-fn zoom_calendar_matching_projection_task(
-    context: ApplicationBootstrapContext,
-) -> Option<RuntimeTaskSpec> {
-    let pool = context.pool?;
-    let database_url = context.database_url?;
-    if !register_zoom_calendar_matching_consumer(&database_url) {
-        return None;
-    }
-
-    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
-        let pool = pool.clone();
-        Box::pin(async move {
-            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
-                pool.clone(),
-                hermes_events_postgres::consumers::EventConsumerConfig::new(
-                    crate::workflows::zoom_calendar_matching::ZOOM_CALENDAR_MATCHING_CONSUMER,
-                ),
-            );
-            let mut tick = tokio::time::interval(Duration::from_secs(5));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = cancellation.cancelled() => return Ok(()),
-                    _ = tick.tick() => {}
-                }
-                if !runtime_allows_processing(
-                    &pool,
-                    "zoom",
-                    ZOOM_CALENDAR_MATCHING_RUNTIME,
-                    json!({
-                        "label": "Zoom calendar matching consumer",
-                        "scope": "consumer",
-                    }),
-                )
-                .await
-                {
-                    continue;
-                }
-                let handler_pool = pool.clone();
-                if let Err(error) = runner
-                    .process_next_batch(|event| {
-                        crate::workflows::zoom_calendar_matching::project_zoom_calendar_matching_event(
-                            handler_pool.clone(),
-                            event,
-                        )
-                    })
-                    .await
-                {
-                    tracing::warn!(
-                        error = %error,
-                        "zoom calendar matching projection consumer tick failed"
-                    );
-                }
-            }
-        }) as RuntimeTaskFuture
-    });
-    Some(RuntimeTaskSpec::new(
-        ZOOM_CALENDAR_MATCHING_RUNTIME,
-        RuntimeTaskClass::Background,
-        RuntimeExitPolicy::MarkDegraded,
-        task,
-    ))
-}
-
-fn zoom_signal_detection_projection_task(
-    context: ApplicationBootstrapContext,
-) -> Option<RuntimeTaskSpec> {
-    let pool = context.pool?;
-    let database_url = context.database_url?;
-    if !register_zoom_signal_detection_consumer(&database_url) {
-        return None;
-    }
-
-    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
-        let pool = pool.clone();
-        Box::pin(async move {
-            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
-                pool.clone(),
-                hermes_events_postgres::consumers::EventConsumerConfig::new(
-                    crate::workflows::zoom_signal_detection::ZOOM_SIGNAL_DETECTION_CONSUMER,
-                ),
-            );
-            let mut tick = tokio::time::interval(Duration::from_secs(5));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = cancellation.cancelled() => return Ok(()),
-                    _ = tick.tick() => {}
-                }
-                if !runtime_allows_processing(
-                    &pool,
-                    "zoom",
-                    ZOOM_SIGNAL_DETECTION_RUNTIME,
-                    json!({
-                        "label": "Zoom signal detection consumer",
-                        "scope": "consumer",
-                    }),
-                )
-                .await
-                {
-                    continue;
-                }
-                let handler_pool = pool.clone();
-                if let Err(error) = runner
-                    .process_next_batch(|event| {
-                        crate::workflows::zoom_signal_detection::project_zoom_signal_detection_event(
-                            handler_pool.clone(),
-                            event,
-                        )
-                    })
-                    .await
-                {
-                    tracing::warn!(
-                        error = %error,
-                        "zoom signal detection projection consumer tick failed"
-                    );
-                }
-            }
-        }) as RuntimeTaskFuture
-    });
-    Some(RuntimeTaskSpec::new(
-        ZOOM_SIGNAL_DETECTION_RUNTIME,
-        RuntimeTaskClass::Background,
-        RuntimeExitPolicy::MarkDegraded,
-        task,
-    ))
-}
-
 fn persona_identity_review_inbox_projection_task(
     context: ApplicationBootstrapContext,
 ) -> Option<RuntimeTaskSpec> {
@@ -953,136 +291,6 @@ fn persona_identity_review_inbox_projection_task(
     });
     Some(RuntimeTaskSpec::new(
         PERSONA_IDENTITY_REVIEW_INBOX_RUNTIME,
-        RuntimeTaskClass::Background,
-        RuntimeExitPolicy::MarkDegraded,
-        task,
-    ))
-}
-
-fn zoom_participant_identity_projection_task(
-    context: ApplicationBootstrapContext,
-) -> Option<RuntimeTaskSpec> {
-    let pool = context.pool?;
-    let database_url = context.database_url?;
-    if !register_zoom_participant_identity_consumer(&database_url) {
-        return None;
-    }
-
-    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
-        let pool = pool.clone();
-        Box::pin(async move {
-            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
-                pool.clone(),
-                hermes_events_postgres::consumers::EventConsumerConfig::new(
-                    crate::workflows::zoom_participant_identity::ZOOM_PARTICIPANT_IDENTITY_CONSUMER,
-                ),
-            );
-            let mut tick = tokio::time::interval(Duration::from_secs(5));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = cancellation.cancelled() => return Ok(()),
-                    _ = tick.tick() => {}
-                }
-                if !runtime_allows_processing(
-                    &pool,
-                    "zoom",
-                    ZOOM_PARTICIPANT_IDENTITY_RUNTIME,
-                    json!({
-                        "label": "Zoom participant identity consumer",
-                        "scope": "consumer",
-                    }),
-                )
-                .await
-                {
-                    continue;
-                }
-                let handler_pool = pool.clone();
-                if let Err(error) = runner
-                    .process_next_batch(|event| {
-                        crate::workflows::zoom_participant_identity::project_zoom_participant_identity_event(
-                            handler_pool.clone(),
-                            event,
-                        )
-                    })
-                    .await
-                {
-                    tracing::warn!(
-                        error = %error,
-                        "zoom participant identity projection consumer tick failed"
-                    );
-                }
-            }
-        }) as RuntimeTaskFuture
-    });
-    Some(RuntimeTaskSpec::new(
-        ZOOM_PARTICIPANT_IDENTITY_RUNTIME,
-        RuntimeTaskClass::Background,
-        RuntimeExitPolicy::MarkDegraded,
-        task,
-    ))
-}
-
-fn yandex_telemost_calendar_matching_projection_task(
-    context: ApplicationBootstrapContext,
-) -> Option<RuntimeTaskSpec> {
-    let pool = context.pool?;
-    let database_url = context.database_url?;
-    if !register_yandex_telemost_calendar_matching_consumer(&database_url) {
-        return None;
-    }
-
-    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
-        let pool = pool.clone();
-        Box::pin(async move {
-            let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
-                pool.clone(),
-                hermes_events_postgres::consumers::EventConsumerConfig::new(
-                    crate::workflows::yandex_telemost_calendar_matching::YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER,
-                ),
-            );
-            let mut tick = tokio::time::interval(Duration::from_secs(5));
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-            loop {
-                tokio::select! {
-                    _ = cancellation.cancelled() => return Ok(()),
-                    _ = tick.tick() => {}
-                }
-                if !runtime_allows_processing(
-                    &pool,
-                    "yandex_telemost",
-                    YANDEX_TELEMOST_CALENDAR_MATCHING_RUNTIME,
-                    json!({
-                        "label": "Yandex Telemost calendar matching consumer",
-                        "scope": "consumer",
-                    }),
-                )
-                .await
-                {
-                    continue;
-                }
-                let handler_pool = pool.clone();
-                if let Err(error) = runner
-                    .process_next_batch(|event| {
-                        crate::workflows::yandex_telemost_calendar_matching::project_yandex_telemost_calendar_matching_event(
-                            handler_pool.clone(),
-                            event,
-                        )
-                    })
-                    .await
-                {
-                    tracing::warn!(
-                        error = %error,
-                        "yandex telemost calendar matching projection consumer tick failed"
-                    );
-                }
-            }
-        }) as RuntimeTaskFuture
-    });
-    Some(RuntimeTaskSpec::new(
-        YANDEX_TELEMOST_CALENDAR_MATCHING_RUNTIME,
         RuntimeTaskClass::Background,
         RuntimeExitPolicy::MarkDegraded,
         task,
@@ -1508,32 +716,6 @@ fn signal_replay_dispatcher_task(context: ApplicationBootstrapContext) -> Option
     ))
 }
 
-fn register_whatsapp_runtime_event_consumer(database_url: &str) -> bool {
-    match WHATSAPP_RUNTIME_EVENT_CONSUMER_DATABASES.lock() {
-        Ok(mut urls) => urls.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "whatsapp runtime-event projection consumer registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_whatsapp_provider_observation_reconciliation_consumer(database_url: &str) -> bool {
-    match WHATSAPP_PROVIDER_OBSERVATION_RECONCILIATION_DATABASES.lock() {
-        Ok(mut urls) => urls.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "whatsapp provider observation reconciliation consumer registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
 fn register_communication_provider_observation_consumer(database_url: &str) -> bool {
     match COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER_DATABASES.lock() {
         Ok(mut databases) => databases.insert(database_url.to_owned()),
@@ -1554,71 +736,6 @@ fn register_persona_derived_evidence_consumer(database_url: &str) -> bool {
             tracing::warn!(
                 error = %error,
                 "persona derived evidence consumer registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_zoom_signal_detection_consumer(database_url: &str) -> bool {
-    match ZOOM_SIGNAL_DETECTION_CONSUMER_DATABASES.lock() {
-        Ok(mut databases) => databases.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "zoom signal detection consumer registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_zoom_calendar_matching_consumer(database_url: &str) -> bool {
-    match ZOOM_CALENDAR_MATCHING_CONSUMER_DATABASES.lock() {
-        Ok(mut databases) => databases.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "zoom calendar matching consumer registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_zoom_participant_identity_consumer(database_url: &str) -> bool {
-    match ZOOM_PARTICIPANT_IDENTITY_CONSUMER_DATABASES.lock() {
-        Ok(mut databases) => databases.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "zoom participant identity consumer registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_yandex_telemost_retention_cleanup_scheduler(database_url: &str) -> bool {
-    match YANDEX_TELEMOST_RETENTION_CLEANUP_DATABASES.lock() {
-        Ok(mut databases) => databases.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "yandex telemost retention cleanup scheduler registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_yandex_telemost_calendar_matching_consumer(database_url: &str) -> bool {
-    match YANDEX_TELEMOST_CALENDAR_MATCHING_CONSUMER_DATABASES.lock() {
-        Ok(mut databases) => databases.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "yandex telemost calendar matching consumer registry is unavailable"
             );
             false
         }
@@ -1715,45 +832,6 @@ fn register_signal_replay_dispatcher(database_url: &str) -> bool {
     }
 }
 
-fn register_zoom_token_maintenance_scheduler(database_url: &str) -> bool {
-    match ZOOM_TOKEN_MAINTENANCE_DATABASES.lock() {
-        Ok(mut databases) => databases.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "zoom token maintenance scheduler registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_zoom_recording_sync_scheduler(database_url: &str) -> bool {
-    match ZOOM_RECORDING_SYNC_DATABASES.lock() {
-        Ok(mut databases) => databases.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "zoom recording sync scheduler registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
-fn register_zoom_retention_cleanup_scheduler(database_url: &str) -> bool {
-    match ZOOM_RETENTION_CLEANUP_DATABASES.lock() {
-        Ok(mut databases) => databases.insert(database_url.to_owned()),
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "zoom retention cleanup scheduler registry is unavailable"
-            );
-            false
-        }
-    }
-}
-
 pub(super) fn host_vault_is_unlocked(vault: &HostVault) -> bool {
     match vault.status() {
         Ok(status) => status.state == VaultMode::Unlocked,
@@ -1803,62 +881,6 @@ pub(super) async fn runtime_allows_processing(
             true
         }
     }
-}
-
-struct YandexTelemostRetentionCleanupSchedulerResult {
-    accounts_checked: usize,
-    accounts_cleaned: usize,
-    audio_files_removed: usize,
-    speaker_hint_files_removed: usize,
-    limit_per_account: i64,
-}
-
-async fn run_yandex_telemost_retention_cleanup_once(
-    pool: &PgPool,
-    event_bus: &InMemoryEventBus,
-) -> Result<YandexTelemostRetentionCleanupSchedulerResult, String> {
-    let service =
-        crate::application::provider_runtime_services::yandex_telemost_provider_runtime_service(
-            pool.clone(),
-            event_bus.clone(),
-        );
-    let accounts = service
-        .list_accounts(false)
-        .await
-        .map_err(|error| error.to_string())?
-        .items;
-    let mut result = YandexTelemostRetentionCleanupSchedulerResult {
-        accounts_checked: 0,
-        accounts_cleaned: 0,
-        audio_files_removed: 0,
-        speaker_hint_files_removed: 0,
-        limit_per_account: YANDEX_TELEMOST_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT,
-    };
-
-    for account in accounts {
-        if account.provider_kind != "yandex_telemost_user" {
-            continue;
-        }
-        result.accounts_checked += 1;
-        let response = service
-            .cleanup_retention(
-                &account.account_id,
-                &crate::integrations::yandex_telemost::client::models::YandexTelemostRetentionCleanupRequest {
-                    remove_audio: true,
-                    remove_speaker_hints: true,
-                    limit: YANDEX_TELEMOST_RETENTION_CLEANUP_LIMIT_PER_ACCOUNT,
-                },
-            )
-            .await
-            .map_err(|error| error.to_string())?;
-        if response.bundles_cleaned > 0 {
-            result.accounts_cleaned += 1;
-        }
-        result.audio_files_removed += response.audio_files_removed;
-        result.speaker_hint_files_removed += response.speaker_hint_files_removed;
-    }
-
-    Ok(result)
 }
 
 #[cfg(test)]
@@ -1955,8 +977,12 @@ mod tests {
             Utc::now().timestamp_nanos_opt().unwrap_or_default()
         );
 
-        assert!(register_zoom_token_maintenance_scheduler(&database_url));
-        assert!(!register_zoom_token_maintenance_scheduler(&database_url));
+        assert!(zoom::tasks::register_zoom_token_maintenance_scheduler(
+            &database_url
+        ));
+        assert!(!zoom::tasks::register_zoom_token_maintenance_scheduler(
+            &database_url
+        ));
     }
 
     #[test]
@@ -1966,8 +992,12 @@ mod tests {
             Utc::now().timestamp_nanos_opt().unwrap_or_default()
         );
 
-        assert!(register_zoom_recording_sync_scheduler(&database_url));
-        assert!(!register_zoom_recording_sync_scheduler(&database_url));
+        assert!(zoom::tasks::register_zoom_recording_sync_scheduler(
+            &database_url
+        ));
+        assert!(!zoom::tasks::register_zoom_recording_sync_scheduler(
+            &database_url
+        ));
     }
 
     #[test]
@@ -1977,8 +1007,12 @@ mod tests {
             Utc::now().timestamp_nanos_opt().unwrap_or_default()
         );
 
-        assert!(register_zoom_retention_cleanup_scheduler(&database_url));
-        assert!(!register_zoom_retention_cleanup_scheduler(&database_url));
+        assert!(zoom::tasks::register_zoom_retention_cleanup_scheduler(
+            &database_url
+        ));
+        assert!(!zoom::tasks::register_zoom_retention_cleanup_scheduler(
+            &database_url
+        ));
     }
 
     #[test]
@@ -1988,8 +1022,12 @@ mod tests {
             Utc::now().timestamp_nanos_opt().unwrap_or_default()
         );
 
-        assert!(register_zoom_calendar_matching_consumer(&database_url));
-        assert!(!register_zoom_calendar_matching_consumer(&database_url));
+        assert!(zoom::tasks::register_zoom_calendar_matching_consumer(
+            &database_url
+        ));
+        assert!(!zoom::tasks::register_zoom_calendar_matching_consumer(
+            &database_url
+        ));
     }
 
     #[test]
@@ -1999,8 +1037,12 @@ mod tests {
             Utc::now().timestamp_nanos_opt().unwrap_or_default()
         );
 
-        assert!(register_zoom_signal_detection_consumer(&database_url));
-        assert!(!register_zoom_signal_detection_consumer(&database_url));
+        assert!(zoom::tasks::register_zoom_signal_detection_consumer(
+            &database_url
+        ));
+        assert!(!zoom::tasks::register_zoom_signal_detection_consumer(
+            &database_url
+        ));
     }
 
     #[test]
@@ -2010,7 +1052,11 @@ mod tests {
             Utc::now().timestamp_nanos_opt().unwrap_or_default()
         );
 
-        assert!(register_zoom_participant_identity_consumer(&database_url));
-        assert!(!register_zoom_participant_identity_consumer(&database_url));
+        assert!(zoom::tasks::register_zoom_participant_identity_consumer(
+            &database_url
+        ));
+        assert!(!zoom::tasks::register_zoom_participant_identity_consumer(
+            &database_url
+        ));
     }
 }
