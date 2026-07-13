@@ -1,17 +1,222 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
-use serde_json::Value;
-use sqlx::postgres::PgPool;
-
-use super::{
-    TELEGRAM_RUNTIME_CHAT_SYNC_LIMIT, TELEGRAM_RUNTIME_RECONNECT_INITIAL_DELAY_SECONDS,
-    TELEGRAM_RUNTIME_RECONNECT_MAX_DELAY_SECONDS,
+use hermes_desktop_runtime::{
+    RuntimeExitPolicy, RuntimeTaskClass, RuntimeTaskFactory, RuntimeTaskFuture, RuntimeTaskSpec,
 };
+use serde_json::Value;
+use serde_json::json;
+use sqlx::postgres::PgPool;
+use tokio_util::sync::CancellationToken;
+
+use super::{ApplicationBootstrapContext, runtime_allows_processing};
 use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::platform::config::AppConfig;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::vault::HostVault;
+
+static TELEGRAM_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static TELEGRAM_RUNTIME_RECONCILIATION_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+const TELEGRAM_COMMAND_EXECUTOR_RUNTIME: &str = "telegram_command_executor";
+const TELEGRAM_RUNTIME_RECONCILIATION_RUNTIME: &str = "telegram_runtime_reconciliation";
+const TELEGRAM_RUNTIME_RECONCILIATION_TICK_SECONDS: u64 = 15;
+const TELEGRAM_RUNTIME_CHAT_SYNC_LIMIT: i64 = 100;
+const TELEGRAM_RUNTIME_RECONNECT_INITIAL_DELAY_SECONDS: u64 = 5;
+const TELEGRAM_RUNTIME_RECONNECT_MAX_DELAY_SECONDS: u64 = 300;
+pub(crate) fn runtime_task_specs(context: ApplicationBootstrapContext) -> Vec<RuntimeTaskSpec> {
+    [
+        telegram_command_executor_task(context.clone()),
+        telegram_runtime_reconciliation_task(context),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|task| task.with_lifecycle_source("telegram"))
+    .collect()
+}
+
+fn telegram_command_executor_task(context: ApplicationBootstrapContext) -> Option<RuntimeTaskSpec> {
+    let pool = context.pool?;
+    let database_url = context.database_url?;
+    if !register_telegram_command_executor(&database_url) {
+        return None;
+    }
+    let runtime_pool = pool.clone();
+    let runtime = context.telegram_runtime;
+    let event_bus = context.event_bus;
+    let telegram_store = crate::integrations::telegram::client::TelegramStore::new(
+        pool.clone(),
+        Arc::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            crate::domains::communications::messages::ProviderChannelMessageStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            hermes_communications_postgres::store::CommunicationIngestionStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            crate::platform::communications::EventStoreProviderMessageObservationEventPort::new(
+                pool.clone(),
+            ),
+        ),
+    );
+
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let runtime_pool = runtime_pool.clone();
+        let runtime = runtime.clone();
+        let event_bus = event_bus.clone();
+        let telegram_store = telegram_store.clone();
+        Box::pin(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &runtime_pool,
+                    "telegram",
+                    TELEGRAM_COMMAND_EXECUTOR_RUNTIME,
+                    json!({
+                        "label": "Telegram command executor",
+                        "scope": "runtime",
+                    }),
+                )
+                .await
+                {
+                    continue;
+                }
+                crate::integrations::telegram::runtime::execute_queued_commands(
+                    &telegram_store,
+                    &runtime,
+                    &event_bus,
+                    10,
+                )
+                .await;
+            }
+        }) as RuntimeTaskFuture
+    });
+    Some(RuntimeTaskSpec::new(
+        TELEGRAM_COMMAND_EXECUTOR_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
+}
+
+fn telegram_runtime_reconciliation_task(
+    context: ApplicationBootstrapContext,
+) -> Option<RuntimeTaskSpec> {
+    let pool = context.pool?;
+    let database_url = context.database_url?;
+    if !register_telegram_runtime_reconciliation(&database_url) {
+        return None;
+    }
+
+    let vault = context.vault;
+    let config = context.config;
+    let event_bus = context.event_bus;
+    let runtime = context.telegram_runtime;
+
+    let task: RuntimeTaskFactory = Arc::new(move |cancellation: CancellationToken| {
+        let pool = pool.clone();
+        let vault = vault.clone();
+        let config = config.clone();
+        let event_bus = event_bus.clone();
+        let runtime = runtime.clone();
+        Box::pin(async move {
+            let mut reconnects = HashMap::<String, RuntimeReconnectState>::new();
+            let mut tick = tokio::time::interval(Duration::from_secs(
+                TELEGRAM_RUNTIME_RECONCILIATION_TICK_SECONDS,
+            ));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            loop {
+                tokio::select! {
+                    _ = cancellation.cancelled() => return Ok(()),
+                    _ = tick.tick() => {}
+                }
+                if !runtime_allows_processing(
+                    &pool,
+                    "telegram",
+                    TELEGRAM_RUNTIME_RECONCILIATION_RUNTIME,
+                    json!({
+                        "label": "Telegram runtime reconciliation",
+                        "scope": "runtime",
+                    }),
+                )
+                .await
+                {
+                    continue;
+                }
+
+                if let Err(error) = reconcile_runtime_once(
+                    &pool,
+                    &vault,
+                    &config,
+                    &event_bus,
+                    &runtime,
+                    &mut reconnects,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "telegram runtime reconciliation tick failed"
+                    );
+                }
+            }
+        }) as RuntimeTaskFuture
+    });
+    Some(RuntimeTaskSpec::new(
+        TELEGRAM_RUNTIME_RECONCILIATION_RUNTIME,
+        RuntimeTaskClass::Background,
+        RuntimeExitPolicy::MarkDegraded,
+        task,
+    ))
+}
+
+pub(super) fn register_telegram_command_executor(database_url: &str) -> bool {
+    match TELEGRAM_COMMAND_EXECUTOR_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "telegram command executor registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+pub(super) fn register_telegram_runtime_reconciliation(database_url: &str) -> bool {
+    match TELEGRAM_RUNTIME_RECONCILIATION_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "telegram runtime reconciliation registry is unavailable"
+            );
+            false
+        }
+    }
+}
 
 #[derive(Default)]
 pub(super) struct RuntimeReconnectState {

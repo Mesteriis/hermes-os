@@ -72,13 +72,13 @@ pub(crate) fn start_application_runtime(components: &ApplicationComponents) -> A
     runtime_tasks.extend(crate::application::bootstrap::zulip::runtime_task_specs(
         components.bootstrap.clone(),
     ));
-    runtime_tasks.extend(crate::application::bootstrap::mail_runtime_task_specs(
+    runtime_tasks.extend(crate::application::bootstrap::mail::runtime_task_specs(
         components.bootstrap.clone(),
     ));
     runtime_tasks.extend(crate::application::bootstrap::whatsapp_runtime_task_specs(
         components.bootstrap.clone(),
     ));
-    runtime_tasks.extend(crate::application::bootstrap::telegram_runtime_task_specs(
+    runtime_tasks.extend(crate::application::bootstrap::telegram::runtime_task_specs(
         components.bootstrap.clone(),
     ));
     runtime_tasks.extend(crate::application::bootstrap::zoom_runtime_task_specs(
