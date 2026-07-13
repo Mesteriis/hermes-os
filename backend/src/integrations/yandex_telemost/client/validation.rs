@@ -1,15 +1,15 @@
 use serde_json::Value;
 
-use super::errors::YandexTelemostError;
+use super::errors::YandexTelemostProtocolError;
 use super::models::{YANDEX_TELEMOST_API_BASE_URL, YANDEX_TELEMOST_PROVIDER_KIND_STR};
 
 pub(crate) fn validate_required(
     field: &'static str,
     value: &str,
-) -> Result<String, YandexTelemostError> {
+) -> Result<String, YandexTelemostProtocolError> {
     let value = value.trim();
     if value.is_empty() {
-        return Err(YandexTelemostError::InvalidRequest(format!(
+        return Err(YandexTelemostProtocolError::InvalidRequest(format!(
             "{field} must not be empty"
         )));
     }
@@ -19,16 +19,18 @@ pub(crate) fn validate_required(
 pub(crate) fn validate_json_object(
     field: &'static str,
     value: &Value,
-) -> Result<(), YandexTelemostError> {
+) -> Result<(), YandexTelemostProtocolError> {
     if !value.is_object() {
-        return Err(YandexTelemostError::InvalidRequest(format!(
+        return Err(YandexTelemostProtocolError::InvalidRequest(format!(
             "{field} must be a JSON object"
         )));
     }
     Ok(())
 }
 
-pub(crate) fn validate_api_base_url(value: Option<&str>) -> Result<String, YandexTelemostError> {
+pub(crate) fn validate_api_base_url(
+    value: Option<&str>,
+) -> Result<String, YandexTelemostProtocolError> {
     let value = value
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -37,17 +39,17 @@ pub(crate) fn validate_api_base_url(value: Option<&str>) -> Result<String, Yande
         || value.starts_with("http://127.0.0.1")
         || value.starts_with("http://localhost"))
     {
-        return Err(YandexTelemostError::InvalidRequest(
+        return Err(YandexTelemostProtocolError::InvalidRequest(
             "Yandex Telemost API base URL must be HTTPS, localhost, or 127.0.0.1".to_owned(),
         ));
     }
     Ok(value.trim_end_matches('/').to_owned())
 }
 
-pub fn validate_telemost_join_url(value: &str) -> Result<String, YandexTelemostError> {
+pub fn validate_telemost_join_url(value: &str) -> Result<String, YandexTelemostProtocolError> {
     let value = validate_required("join_url", value)?;
     if !value.starts_with("https://") {
-        return Err(YandexTelemostError::InvalidRequest(
+        return Err(YandexTelemostProtocolError::InvalidRequest(
             "Yandex Telemost join URL must be HTTPS".to_owned(),
         ));
     }
@@ -60,7 +62,7 @@ pub fn validate_telemost_join_url(value: &str) -> Result<String, YandexTelemostE
         .unwrap_or_default();
     match host {
         "telemost.yandex.ru" | "telemost.yandex.com" => Ok(value),
-        _ => Err(YandexTelemostError::InvalidRequest(format!(
+        _ => Err(YandexTelemostProtocolError::InvalidRequest(format!(
             "unsupported Yandex Telemost join URL host `{host}`"
         ))),
     }

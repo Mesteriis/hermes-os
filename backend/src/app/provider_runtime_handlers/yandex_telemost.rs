@@ -267,7 +267,7 @@ pub(crate) async fn post_yandex_telemost_webview_manifest(
     State(state): State<AppState>,
     Json(request): Json<YandexTelemostConferenceOpenRequest>,
 ) -> Result<Json<YandexTelemostConferenceWebviewManifest>, ApiError> {
-    validate_telemost_join_url(&request.join_url)?;
+    validate_telemost_join_url(&request.join_url).map_err(YandexTelemostError::from)?;
     let window_label = telemost_window_label(&request.account_id, request.conference_id.as_deref());
     publish_yandex_telemost_companion_event(
         &state,
@@ -289,7 +289,7 @@ pub(crate) async fn post_yandex_telemost_recording_intent(
     State(state): State<AppState>,
     Json(request): Json<YandexTelemostConferenceOpenRequest>,
 ) -> Result<Json<YandexTelemostRecordingIntentResponse>, ApiError> {
-    validate_telemost_join_url(&request.join_url)?;
+    validate_telemost_join_url(&request.join_url).map_err(YandexTelemostError::from)?;
     publish_yandex_telemost_companion_event(
         &state,
         yandex_telemost_event_types::LOCAL_RECORDING_REQUESTED,

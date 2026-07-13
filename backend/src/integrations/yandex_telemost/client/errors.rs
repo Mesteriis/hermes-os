@@ -14,6 +14,12 @@ use hermes_events_postgres::errors::EventStoreError;
 use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, Error)]
+pub enum YandexTelemostProtocolError {
+    #[error("invalid Yandex Telemost request: {0}")]
+    InvalidRequest(String),
+}
+
+#[derive(Debug, Error)]
 pub enum YandexTelemostError {
     #[error("invalid Yandex Telemost request: {0}")]
     InvalidRequest(String),
@@ -56,4 +62,12 @@ pub enum YandexTelemostError {
 
     #[error(transparent)]
     Settings(#[from] SettingsError),
+}
+
+impl From<YandexTelemostProtocolError> for YandexTelemostError {
+    fn from(error: YandexTelemostProtocolError) -> Self {
+        match error {
+            YandexTelemostProtocolError::InvalidRequest(message) => Self::InvalidRequest(message),
+        }
+    }
 }
