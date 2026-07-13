@@ -5,7 +5,6 @@ pub mod icloud_carddav;
 pub mod imap_write;
 pub mod outbox;
 pub mod read_state;
-pub mod rfc822;
 pub mod send;
 pub mod sync;
 pub mod sync_provider;
