@@ -1,4 +1,8 @@
 use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_provider_mail::gmail::{
+    GmailHistoryItem, GmailHistoryResponse, GmailLabel, GmailLabelsResponse, GmailListResponse,
+    GmailRawMessage, GmailSendResponse, GooglePeopleConnectionsResponse, GooglePeoplePerson,
+};
 use std::time::Duration;
 
 use base64::Engine as _;
@@ -18,10 +22,6 @@ use super::errors::EmailProviderNetworkError;
 use super::helpers::{
     gmail_history_checkpoint, gmail_message_list_checkpoint, parse_gmail_internal_date,
     select_latest_history_id, sha256_fingerprint, trim_base_url, validate_non_empty,
-};
-use super::models::{
-    GmailHistoryItem, GmailHistoryResponse, GmailLabel, GmailLabelsResponse, GmailListResponse,
-    GmailRawMessage, GmailSendResponse, GooglePeopleConnectionsResponse, GooglePeoplePerson,
 };
 use super::options::{GmailContactFetchOptions, GmailFetchOptions, GmailHistoryFetchOptions};
 

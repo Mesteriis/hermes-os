@@ -1954,6 +1954,7 @@ dependencies = [
  "hermes-observations-api",
  "hermes-observations-postgres",
  "hermes-provider-api",
+ "hermes-provider-mail",
  "hermes-provider-orchestration",
  "hermes-provider-telemost",
  "hermes-provider-zoom",
@@ -2036,6 +2037,14 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "zeroize",
+]
+
+[[package]]
+name = "hermes-provider-mail"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
