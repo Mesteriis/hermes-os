@@ -2,7 +2,7 @@ use hermes_communications_api::accounts::{CommunicationProviderKind, NewProvider
 use hermes_communications_api::accounts::{
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
-use hermes_communications_api::commands::CommunicationProviderCommand;
+use hermes_communications_api::commands::{CommunicationProviderCommand, ProviderCommandQueuePort};
 use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::collections::BTreeMap;
 
@@ -30,7 +30,10 @@ struct PreparedImapCommand {
     desired_is_read: Option<bool>,
 }
 
-impl MailProviderCommandWorker {
+impl<Q> MailProviderCommandWorker<Q>
+where
+    Q: ProviderCommandQueuePort,
+{
     pub(super) async fn execute_imap_commands(
         &self,
         account: &ProviderAccount,
@@ -85,7 +88,7 @@ impl MailProviderCommandWorker {
             if let Some(desired_is_read) = desired_is_read
                 && message.is_read != desired_is_read
             {
-                self.command_store
+                self.command_queue
                     .mark_completed(
                         &command.command_id,
                         "mail",
@@ -163,7 +166,7 @@ impl MailProviderCommandWorker {
                 let batch_size = group.len();
                 let batched = batch_size > 1;
                 for item in group {
-                    self.command_store
+                    self.command_queue
                         .mark_completed(
                             &item.command.command_id,
                             "mail",

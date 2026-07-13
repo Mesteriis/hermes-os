@@ -1,7 +1,9 @@
 use hermes_communications_api::accounts::{
     CommunicationProviderKind, NewProviderAccount, ProviderAccount,
 };
-use hermes_communications_api::commands::CommunicationProviderCommand;
+use hermes_communications_api::commands::{
+    CommunicationProviderCommand, ProviderCommandQueuePort, ProviderCommandQueuePortError,
+};
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
@@ -19,9 +21,7 @@ use crate::integrations::mail::read_state::{
 };
 use crate::vault::HostVault;
 use hermes_communications_postgres::errors::CommunicationIngestionError;
-use hermes_communications_postgres::provider_commands::{
-    CommunicationProviderCommandError, CommunicationProviderCommandStore,
-};
+use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
@@ -41,19 +41,35 @@ pub struct MailProviderCommandExecutionReport {
     pub batched_commands: usize,
 }
 
-pub struct MailProviderCommandWorker {
+pub struct MailProviderCommandWorker<Q = CommunicationProviderCommandStore> {
     account_store: CommunicationProviderAccountStore,
-    command_store: CommunicationProviderCommandStore,
+    command_queue: Q,
     message_store: MessageProjectionStore,
     pub(super) provider_resource_store: MailProviderResourceStore,
     read_state: LiveEmailReadStateService,
 }
 
-impl MailProviderCommandWorker {
+impl MailProviderCommandWorker<CommunicationProviderCommandStore> {
     pub fn new(pool: PgPool, vault: HostVault, gmail_api_base_url: impl Into<String>) -> Self {
+        Self::with_command_queue(
+            pool.clone(),
+            vault,
+            gmail_api_base_url,
+            CommunicationProviderCommandStore::new(pool),
+        )
+    }
+}
+
+impl<Q> MailProviderCommandWorker<Q> {
+    pub fn with_command_queue(
+        pool: PgPool,
+        vault: HostVault,
+        gmail_api_base_url: impl Into<String>,
+        command_queue: Q,
+    ) -> Self {
         Self {
             account_store: CommunicationProviderAccountStore::new(pool.clone()),
-            command_store: CommunicationProviderCommandStore::new(pool.clone()),
+            command_queue,
             message_store: MessageProjectionStore::new(pool.clone()),
             provider_resource_store: MailProviderResourceStore::new(pool.clone()),
             read_state: LiveEmailReadStateService::new(
@@ -64,7 +80,12 @@ impl MailProviderCommandWorker {
             ),
         }
     }
+}
 
+impl<Q> MailProviderCommandWorker<Q>
+where
+    Q: ProviderCommandQueuePort,
+{
     pub async fn execute_due(
         &self,
         now: DateTime<Utc>,
@@ -86,7 +107,7 @@ impl MailProviderCommandWorker {
             })
         {
             for recovered in self
-                .command_store
+                .command_queue
                 .recover_stale_executing(
                     &account.account_id,
                     "mail",
@@ -100,7 +121,7 @@ impl MailProviderCommandWorker {
                 }
             }
             let commands = self
-                .command_store
+                .command_queue
                 .claim_due(&account.account_id, "mail", now, limit_per_account)
                 .await?;
             report.claimed += commands.len();
@@ -123,8 +144,8 @@ impl MailProviderCommandWorker {
         &self,
         command: &CommunicationProviderCommand,
         error: &str,
-    ) -> Result<(), CommunicationProviderCommandError> {
-        self.command_store
+    ) -> Result<(), ProviderCommandQueuePortError> {
+        self.command_queue
             .mark_terminal_failed(
                 &command.command_id,
                 "mail",
@@ -145,7 +166,7 @@ impl MailProviderCommandWorker {
         command: &CommunicationProviderCommand,
         error: &EmailReadStateError,
         report: &mut MailProviderCommandExecutionReport,
-    ) -> Result<(), CommunicationProviderCommandError> {
+    ) -> Result<(), ProviderCommandQueuePortError> {
         let retryable = error.is_retryable();
         let result_payload = json!({
             "kind": "mail_provider_mutation",
@@ -153,7 +174,7 @@ impl MailProviderCommandWorker {
             "retryable": retryable,
         });
         let updated = if retryable {
-            self.command_store
+            self.command_queue
                 .mark_failed(
                     &command.command_id,
                     "mail",
@@ -163,7 +184,7 @@ impl MailProviderCommandWorker {
                 )
                 .await?
         } else {
-            self.command_store
+            self.command_queue
                 .mark_terminal_failed(
                     &command.command_id,
                     "mail",
@@ -340,7 +361,7 @@ pub enum MailProviderCommandWorkerError {
     #[error(transparent)]
     Account(#[from] CommunicationIngestionError),
     #[error(transparent)]
-    Command(#[from] CommunicationProviderCommandError),
+    Command(#[from] ProviderCommandQueuePortError),
     #[error(transparent)]
     Message(#[from] MessageProjectionError),
     #[error(transparent)]
