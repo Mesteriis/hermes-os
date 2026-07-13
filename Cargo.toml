@@ -8,6 +8,7 @@ members = [
     "crates/events-nats",
     "crates/provider-api",
     "crates/provider-zulip",
+    "crates/provider-zoom",
     "crates/provider-telemost",
     "crates/provider-orchestration",
     "crates/vault-api",

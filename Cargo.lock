@@ -1956,6 +1956,7 @@ dependencies = [
  "hermes-provider-api",
  "hermes-provider-orchestration",
  "hermes-provider-telemost",
+ "hermes-provider-zoom",
  "hermes-provider-zulip",
  "hermes-signal-hub-api",
  "hermes-signal-hub-postgres",
@@ -2050,6 +2051,14 @@ dependencies = [
 
 [[package]]
 name = "hermes-provider-telemost"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "hermes-provider-zoom"
 version = "0.1.0"
 dependencies = [
  "serde_json",

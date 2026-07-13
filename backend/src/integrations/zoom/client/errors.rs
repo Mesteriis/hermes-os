@@ -1,6 +1,7 @@
 use hermes_communications_api::accounts::ProviderAccountPortError;
 use hermes_communications_api::accounts::ProviderSecretBindingPortError;
 use hermes_events_api::EventEnvelopeError;
+use hermes_provider_zoom::protocol::ZoomProtocolError;
 use thiserror::Error;
 
 use crate::platform::calls::CallError;
@@ -57,4 +58,12 @@ pub enum ZoomError {
 
     #[error(transparent)]
     Settings(#[from] SettingsError),
+}
+
+impl From<ZoomProtocolError> for ZoomError {
+    fn from(error: ZoomProtocolError) -> Self {
+        match error {
+            ZoomProtocolError::InvalidRequest(message) => Self::InvalidRequest(message),
+        }
+    }
 }

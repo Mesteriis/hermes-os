@@ -72,6 +72,7 @@ getrandom = "0.2"
 hkdf = "0.12"
 hmac = "0.12"
 hermes-provider-zulip = { path = "../crates/provider-zulip" }
+hermes-provider-zoom = { path = "../crates/provider-zoom" }
 hermes-provider-telemost = { path = "../crates/provider-telemost" }
 hermes-provider-api = { path = "../crates/provider-api" }
 hermes-provider-orchestration = { path = "../crates/provider-orchestration" }
