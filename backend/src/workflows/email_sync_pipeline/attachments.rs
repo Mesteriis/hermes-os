@@ -4,7 +4,7 @@ use crate::domains::communications::storage::{
     AttachmentSafetyScanRequest, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
     NewCommunicationAttachment, NewCommunicationBlob, scan_attachment_with_configured_clamav,
 };
-use crate::platform::communications::rfc822::{
+use crate::platform::communications::rfc822::models::{
     ParsedEmailAttachment, ParsedEmailAttachmentDisposition,
 };
 use hermes_communications_api::evidence::StoredRawCommunicationRecord;

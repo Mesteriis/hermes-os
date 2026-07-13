@@ -9,9 +9,8 @@ use crate::domains::communications::storage::{
     NewCommunicationBlob,
 };
 use crate::platform::communications::rfc822::errors::EmailRfc822ParseError;
-use crate::platform::communications::rfc822::{
-    ParsedEmailAttachmentDisposition, parse_rfc822_message,
-};
+use crate::platform::communications::rfc822::models::ParsedEmailAttachmentDisposition;
+use crate::platform::communications::rfc822::parse_rfc822_message;
 use crate::platform::communications::{MboxParseError, split_mbox_messages};
 use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use hermes_communications_api::evidence::StoredRawCommunicationRecord;
