@@ -9,8 +9,13 @@ use sqlx::postgres::PgPool;
 
 use crate::integrations::mail::accounts::EmailAccountSetupService;
 use crate::integrations::mail::gmail::client::{
-    EmailProviderNetworkError, GmailApiClient, GmailFetchOptions, GmailHistoryFetchOptions,
-    ImapFetchOptions, ImapIdleOptions, ImapIdleOutcome, ImapMailboxListOptions, ImapNetworkClient,
+    errors::EmailProviderNetworkError,
+    gmail_api::GmailApiClient,
+    imap::{ImapIdleOutcome, ImapNetworkClient},
+    options::{
+        GmailFetchOptions, GmailHistoryFetchOptions, ImapFetchOptions, ImapIdleOptions,
+        ImapMailboxListOptions,
+    },
 };
 use crate::platform::communications::{
     DiscoveredMailProviderResource, EmailProviderSyncError, EmailProviderSyncPort, EmailSyncBatch,
@@ -317,9 +322,9 @@ impl EmailProviderSyncPort for LiveEmailProviderSyncPort {
 
 fn imap_semantic_role(
     mailbox_name: &str,
-    roles: &[crate::integrations::mail::gmail::client::ImapMailboxRole],
+    roles: &[crate::integrations::mail::gmail::client::imap::ImapMailboxRole],
 ) -> Option<MailProviderSemanticRole> {
-    use crate::integrations::mail::gmail::client::ImapMailboxRole;
+    use crate::integrations::mail::gmail::client::imap::ImapMailboxRole;
 
     if mailbox_name.eq_ignore_ascii_case("INBOX") {
         return Some(MailProviderSemanticRole::Inbox);

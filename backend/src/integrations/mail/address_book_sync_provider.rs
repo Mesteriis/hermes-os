@@ -9,7 +9,9 @@ use std::sync::Arc;
 use sqlx::postgres::PgPool;
 
 use crate::integrations::mail::accounts::EmailAccountSetupService;
-use crate::integrations::mail::gmail::client::{GmailApiClient, GmailContactFetchOptions};
+use crate::integrations::mail::gmail::client::{
+    gmail_api::GmailApiClient, options::GmailContactFetchOptions,
+};
 use crate::integrations::mail::icloud_carddav::IcloudCardDavClient;
 use crate::integrations::mail::sync_provider::read_provider_secret;
 use crate::platform::communications::{

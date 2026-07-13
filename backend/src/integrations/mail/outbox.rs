@@ -4,7 +4,7 @@ use std::pin::Pin;
 use sqlx::postgres::PgPool;
 
 use crate::integrations::mail::accounts::EmailAccountSetupService;
-use crate::integrations::mail::gmail::client::GmailApiClient;
+use crate::integrations::mail::gmail::client::gmail_api::GmailApiClient;
 use crate::platform::communications::{
     EmailSendError, GmailOutboxSendRequest, GmailOutboxTransport, SendResult,
 };

@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 
 use hermes_hub_backend::integrations::ollama::client::{
-    OllamaClient, OllamaClientConfig, OllamaError,
+    OllamaClient, config::OllamaClientConfig, error::OllamaError,
 };
 
 #[tokio::test]

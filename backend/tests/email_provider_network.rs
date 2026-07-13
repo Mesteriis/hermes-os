@@ -14,12 +14,13 @@ use hermes_communications_api::accounts::{
     NewProviderAccount,
 };
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::domains::communications::storage::{
-    CommunicationStorageStore, LocalCommunicationBlobStore,
+use hermes_hub_backend::domains::communications::storage::port::{
+    CommunicationAttachmentPort, LocalBlobPort,
 };
 use hermes_hub_backend::integrations::mail::gmail::client::{
-    GmailApiClient, GmailContactFetchOptions, GmailFetchOptions, ImapFetchOptions,
-    ImapNetworkClient,
+    gmail_api::GmailApiClient,
+    imap::ImapNetworkClient,
+    options::{GmailContactFetchOptions, GmailFetchOptions, ImapFetchOptions},
 };
 use hermes_hub_backend::integrations::mail::sync::{
     EmailSyncBatch, FetchedCommunicationSourceMessage,
@@ -465,9 +466,9 @@ async fn email_sync_records_provider_batches_with_mail_blobs_against_postgres() 
     };
 
     let pool = database.pool().expect("configured pool").clone();
-    let mail_store = CommunicationStorageStore::new(pool.clone());
+    let mail_store = CommunicationAttachmentPort::new(pool.clone());
     let blob_root = tempfile::tempdir().expect("mail blob root");
-    let blob_store = LocalCommunicationBlobStore::new(blob_root.path());
+    let blob_store = LocalBlobPort::new(blob_root.path());
     let gmail_account_id = format!("acct_blob_gmail_{suffix}");
     let imap_account_id = format!("acct_blob_imap_{suffix}");
 

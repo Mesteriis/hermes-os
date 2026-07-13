@@ -1,6 +1,6 @@
 use std::env;
 
-use hermes_hub_backend::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
+use hermes_hub_backend::integrations::ollama::client::{OllamaClient, config::OllamaClientConfig};
 
 #[tokio::test]
 async fn live_ollama_qwen3_runtime_smoke() {

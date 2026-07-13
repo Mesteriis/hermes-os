@@ -10,8 +10,10 @@ use thiserror::Error;
 
 use crate::integrations::mail::accounts::EmailAccountSetupService;
 use crate::integrations::mail::gmail::client::{
-    EmailProviderNetworkError, GmailApiClient, ImapMailboxListOptions, ImapMailboxRole,
-    ImapNetworkClient,
+    errors::EmailProviderNetworkError,
+    gmail_api::GmailApiClient,
+    imap::{ImapMailboxRole, ImapNetworkClient},
+    options::ImapMailboxListOptions,
 };
 use crate::integrations::mail::imap_write::{ImapWriteClient, ImapWriteConfig, ImapWriteError};
 
@@ -539,7 +541,7 @@ mod tests {
         EmailProviderMessageMutation, EmailReadStateError, gmail_label_ids_for_mutation, imap_uid,
         imap_write_config,
     };
-    use crate::integrations::mail::gmail::client::EmailProviderNetworkError;
+    use crate::integrations::mail::gmail::client::errors::EmailProviderNetworkError;
     use crate::integrations::mail::imap_write::ImapWriteError;
     use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 

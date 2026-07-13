@@ -6,7 +6,9 @@ use hermes_communications_api::accounts::CommunicationProviderKind;
 use hermes_hub_backend::domains::communications::fixtures::export::{
     EmailFixtureExportOptions, export_fixture_messages_from_sync_batch,
 };
-use hermes_hub_backend::integrations::mail::gmail::client::{ImapFetchOptions, ImapNetworkClient};
+use hermes_hub_backend::integrations::mail::gmail::client::{
+    imap::ImapNetworkClient, options::ImapFetchOptions,
+};
 use hermes_hub_backend::platform::secrets::ResolvedSecret;
 use serde::Serialize;
 use thiserror::Error;

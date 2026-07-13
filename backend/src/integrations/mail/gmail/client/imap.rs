@@ -413,7 +413,9 @@ mod tests {
         ImapIdleOutcome, ImapMailboxRole, discover_imap_mailboxes_with_client, imap_mailbox_roles,
         imap_provider_record_id, latest_imap_uid, wait_for_imap_change_with_client,
     };
-    use crate::integrations::mail::gmail::client::{ImapIdleOptions, ImapMailboxListOptions};
+    use crate::integrations::mail::gmail::client::options::{
+        ImapIdleOptions, ImapMailboxListOptions,
+    };
     use crate::integrations::mail::sync::FetchedCommunicationSourceMessage;
     use crate::platform::secrets::ResolvedSecret;
 

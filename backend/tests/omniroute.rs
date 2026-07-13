@@ -4,7 +4,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use hermes_hub_backend::integrations::omniroute::client::{
-    OmniRouteClient, OmniRouteClientConfig, OmniRouteError,
+    OmniRouteClient, config::OmniRouteClientConfig, error::OmniRouteError,
 };
 use hermes_hub_backend::platform::secrets::ResolvedSecret;
 use serde_json::{Value, json};

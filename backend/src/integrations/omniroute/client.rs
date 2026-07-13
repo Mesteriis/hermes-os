@@ -4,9 +4,9 @@ use reqwest::Url;
 
 mod catalog;
 mod chat;
-pub(crate) mod config;
+pub mod config;
 mod embeddings;
-pub(crate) mod error;
+pub mod error;
 pub(crate) mod models;
 mod transport;
 
