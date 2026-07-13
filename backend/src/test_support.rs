@@ -9,7 +9,7 @@ use sqlx::PgPool;
 use crate::domains::communications::messages::ProviderChannelMessageStore;
 use crate::domains::signal_hub::store::{SignalHubStore, SignalRuntimeStateUpdate};
 use crate::integrations::telegram::client::TelegramStore;
-use crate::integrations::whatsapp::client::WhatsappWebStore;
+use crate::integrations::whatsapp::client::store::WhatsappWebStore;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };

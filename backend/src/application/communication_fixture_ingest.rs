@@ -25,13 +25,14 @@ use crate::domains::signal_hub::whatsapp::dispatch_whatsapp_raw_signal;
 use crate::integrations::telegram::client::{
     NewTelegramMessage, TelegramError, TelegramMessageIngestResult, TelegramStore, telegram_chat_id,
 };
+use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::whatsapp::client::{
     NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
     NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
     NewWhatsappWebPresence, NewWhatsappWebReaction, NewWhatsappWebReceipt,
     NewWhatsappWebRuntimeEvent, NewWhatsappWebStatus, NewWhatsappWebStatusDelete,
     NewWhatsappWebStatusView, WhatsappWebCallIngestResult, WhatsappWebDialogIngestResult,
-    WhatsappWebError, WhatsappWebMediaIngestResult, WhatsappWebMessageDeleteIngestResult,
+    WhatsappWebMediaIngestResult, WhatsappWebMessageDeleteIngestResult,
     WhatsappWebMessageIngestResult, WhatsappWebMessageUpdateIngestResult,
     WhatsappWebParticipantIngestResult, WhatsappWebPresenceIngestResult,
     WhatsappWebReactionIngestResult, WhatsappWebReceiptIngestResult,

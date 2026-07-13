@@ -37,6 +37,7 @@ use crate::app::{ApiError, AppState};
 use crate::application::communication_fixture_ingest::WhatsappFixtureIngestApplicationService;
 use crate::domains::communications::messages::ProviderChannelMessageStore;
 use crate::domains::communications::storage::AttachmentSafetyScanStatus;
+use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::whatsapp::client::{
     NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
     NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
@@ -44,7 +45,7 @@ use crate::integrations::whatsapp::client::{
     NewWhatsappWebRuntimeEvent, NewWhatsappWebStatus, NewWhatsappWebStatusDelete,
     NewWhatsappWebStatusView, WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupRequest,
     WhatsappWebAccountSetupResponse, WhatsappWebCallIngestResult, WhatsappWebDeliveryState,
-    WhatsappWebDialogIngestResult, WhatsappWebError, WhatsappWebMediaIngestResult,
+    WhatsappWebDialogIngestResult, WhatsappWebMediaIngestResult,
     WhatsappWebMessageDeleteIngestResult, WhatsappWebMessageIngestResult,
     WhatsappWebMessageUpdateIngestResult, WhatsappWebParticipantIngestResult,
     WhatsappWebPresenceIngestResult, WhatsappWebReactionIngestResult,

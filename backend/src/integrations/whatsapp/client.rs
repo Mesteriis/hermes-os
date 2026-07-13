@@ -1,12 +1,11 @@
 mod constants;
-mod errors;
+pub mod errors;
 mod ids;
 mod models;
 mod rows;
-mod store;
+pub mod store;
 mod validation;
 
-pub use errors::WhatsappWebError;
 pub use models::{
     NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
     NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
@@ -27,4 +26,3 @@ pub use models::{
     WhatsappWebRuntimeEventIngestResult, WhatsappWebSession, WhatsappWebStatusDeleteIngestResult,
     WhatsappWebStatusIngestResult, WhatsappWebStatusViewIngestResult,
 };
-pub use store::WhatsappWebStore;

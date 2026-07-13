@@ -154,9 +154,10 @@ use crate::integrations::telegram::client::{
     TelegramAccountSetupResponse, TelegramChat, TelegramError, TelegramMessageIngestResult,
 };
 use crate::integrations::telegram::tdjson;
+use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::whatsapp::client::{
     NewWhatsappWebMessage, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
-    WhatsappWebError, WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
+    WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
 };
 use crate::platform::secrets::DatabaseEncryptedSecretVault;
 use crate::platform::secrets::{SecretKind, SecretReferenceStore};

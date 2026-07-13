@@ -22,7 +22,7 @@ use crate::engines::automation::errors::AutomationError;
 use crate::engines::consistency::errors::ConsistencyError;
 use crate::integrations::mail::accounts::errors::EmailAccountSetupError;
 use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::whatsapp::client::WhatsappWebError;
+use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
 use crate::integrations::zoom::client::errors::ZoomError;
 use crate::platform::audit::ApiAuditError;

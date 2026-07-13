@@ -21,19 +21,20 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 
+use crate::integrations::whatsapp::client::errors::WhatsappWebError;
+use crate::integrations::whatsapp::client::store::WhatsappWebStore;
 use crate::integrations::whatsapp::client::{
     NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
     NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
     NewWhatsappWebPresence, NewWhatsappWebReaction, NewWhatsappWebReceipt,
     NewWhatsappWebRuntimeEvent, NewWhatsappWebStatus, NewWhatsappWebStatusDelete,
     NewWhatsappWebStatusView, WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupRequest,
-    WhatsappWebAccountSetupResponse, WhatsappWebError, WhatsappWebMessage, WhatsappWebObservedCall,
+    WhatsappWebAccountSetupResponse, WhatsappWebMessage, WhatsappWebObservedCall,
     WhatsappWebObservedDialog, WhatsappWebObservedMedia, WhatsappWebObservedMessage,
     WhatsappWebObservedMessageDelete, WhatsappWebObservedMessageUpdate,
     WhatsappWebObservedParticipant, WhatsappWebObservedPresence, WhatsappWebObservedReaction,
     WhatsappWebObservedReceipt, WhatsappWebObservedRuntimeEvent, WhatsappWebObservedStatus,
     WhatsappWebObservedStatusDelete, WhatsappWebObservedStatusView, WhatsappWebSession,
-    WhatsappWebStore,
 };
 use crate::platform::communications::ProviderChannelMessageLookupPort;
 use crate::platform::secrets::{

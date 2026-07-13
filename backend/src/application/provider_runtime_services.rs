@@ -26,9 +26,10 @@ use crate::integrations::telegram::runtime::{
     TelegramChatSyncRequest, TelegramHistorySyncRequest, TelegramMediaDownloadRequest,
     TelegramMediaSendType, TelegramRuntimeStatus,
 };
+use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::whatsapp::client::{
     WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupRequest,
-    WhatsappWebAccountSetupResponse, WhatsappWebError, WhatsappWebMessage, WhatsappWebSession,
+    WhatsappWebAccountSetupResponse, WhatsappWebMessage, WhatsappWebSession,
 };
 use crate::integrations::whatsapp::runtime::contracts::{
     WhatsAppAuthorizedSessionCredentialWrite, WhatsAppConversationCommandRequest,

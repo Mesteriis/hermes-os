@@ -6,13 +6,14 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::whatsapp::client::{
     NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
     NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
     NewWhatsappWebPresence, NewWhatsappWebReaction, NewWhatsappWebReceipt,
     NewWhatsappWebRuntimeEvent, NewWhatsappWebStatus, NewWhatsappWebStatusDelete,
     NewWhatsappWebStatusView, WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupRequest,
-    WhatsappWebAccountSetupResponse, WhatsappWebError, WhatsappWebMessage, WhatsappWebObservedCall,
+    WhatsappWebAccountSetupResponse, WhatsappWebMessage, WhatsappWebObservedCall,
     WhatsappWebObservedDialog, WhatsappWebObservedMedia, WhatsappWebObservedMessage,
     WhatsappWebObservedMessageDelete, WhatsappWebObservedMessageUpdate,
     WhatsappWebObservedParticipant, WhatsappWebObservedPresence, WhatsappWebObservedReaction,
