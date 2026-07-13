@@ -2061,8 +2061,12 @@ dependencies = [
 name = "hermes-provider-zoom"
 version = "0.1.0"
 dependencies = [
+ "base64",
+ "chrono",
+ "getrandom 0.2.17",
  "serde_json",
  "thiserror 2.0.18",
+ "url",
 ]
 
 [[package]]

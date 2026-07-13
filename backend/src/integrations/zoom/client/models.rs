@@ -1,12 +1,11 @@
-use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use chrono::{DateTime, TimeDelta, Utc};
-use getrandom::getrandom;
+use chrono::{DateTime, Utc};
 use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
-use hermes_provider_zoom::protocol::{validate_array, validate_non_empty, validate_object};
+use hermes_provider_zoom::protocol::{
+    DEFAULT_ZOOM_AUTHORIZATION_ENDPOINT, DEFAULT_ZOOM_TOKEN_ENDPOINT, normalized_scopes,
+    sanitize_zoom_payload, validate_array, validate_non_empty, validate_object,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use url::form_urlencoded;
 
 use crate::platform::calls::{CallDirection, CallState, NewProviderCall};
 
@@ -16,10 +15,7 @@ pub const ZOOM_PROVIDER_KIND: CommunicationProviderKind = CommunicationProviderK
 pub const ZOOM_PROVIDER_KIND_STR: &str = "zoom_user";
 pub const ZOOM_RUNTIME_KIND: &str = "zoom_fixture_runtime";
 pub const ZOOM_LIVE_AUTHORIZED_RUNTIME_KIND: &str = "zoom_live_authorized_runtime";
-pub const DEFAULT_ZOOM_AUTHORIZATION_ENDPOINT: &str = "https://zoom.us/oauth/authorize";
-pub const DEFAULT_ZOOM_TOKEN_ENDPOINT: &str = "https://zoom.us/oauth/token";
 pub const DEFAULT_ZOOM_API_BASE_URL: &str = "https://api.zoom.us/v2";
-pub const ZOOM_TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS: i64 = 60;
 pub const ZOOM_EXPLICIT_TOKEN_REFRESH_THRESHOLD_SECONDS: i64 = 60;
 pub const ZOOM_TOKEN_MAINTENANCE_REFRESH_THRESHOLD_SECONDS: i64 = 300;
 pub const ZOOM_MAX_TOKEN_REFRESH_THRESHOLD_SECONDS: i64 = 86_400;
@@ -1363,67 +1359,6 @@ fn has_optional_ref(value: &Option<String>) -> bool {
     trimmed_optional(value).is_some()
 }
 
-pub fn zoom_oauth_token_secret_ref(account_id: &str) -> String {
-    format!(
-        "secret:provider-account:{}:zoom_oauth_token",
-        account_id.trim()
-    )
-}
-
-pub fn zoom_client_secret_ref(account_id: &str) -> String {
-    format!(
-        "secret:provider-account:{}:zoom_client_secret",
-        account_id.trim()
-    )
-}
-
-pub(crate) fn zoom_oauth_expires_at(expires_in: Option<i64>) -> DateTime<Utc> {
-    let seconds = expires_in
-        .unwrap_or(3600)
-        .saturating_sub(ZOOM_TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS)
-        .max(ZOOM_TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS);
-    Utc::now() + TimeDelta::seconds(seconds)
-}
-
-fn normalized_scopes(scopes: &[String]) -> Vec<String> {
-    scopes
-        .iter()
-        .map(|scope| scope.trim())
-        .filter(|scope| !scope.is_empty())
-        .map(str::to_owned)
-        .collect()
-}
-
-pub(crate) fn random_zoom_oauth_token() -> Result<String, ZoomError> {
-    let mut bytes = [0_u8; 32];
-    getrandom(&mut bytes).map_err(|_| {
-        ZoomError::InvalidRequest("failed to generate Zoom OAuth state token".to_owned())
-    })?;
-    Ok(URL_SAFE_NO_PAD.encode(bytes))
-}
-
-pub(crate) fn zoom_authorization_url(
-    request: &ZoomOAuthStartRequest,
-    state: &str,
-) -> Result<String, ZoomError> {
-    request.validate()?;
-    let mut serializer = form_urlencoded::Serializer::new(String::new());
-    serializer
-        .append_pair("response_type", "code")
-        .append_pair("client_id", request.client_id.trim())
-        .append_pair("redirect_uri", request.redirect_uri.trim())
-        .append_pair("state", state.trim());
-    let scopes = normalized_scopes(&request.scopes);
-    if !scopes.is_empty() {
-        serializer.append_pair("scope", &scopes.join(" "));
-    }
-    Ok(format!(
-        "{}?{}",
-        request.authorization_endpoint(),
-        serializer.finish()
-    ))
-}
-
 fn validate_optional_ref(field: &'static str, value: &Option<String>) -> Result<(), ZoomError> {
     if value
         .as_ref()
@@ -1447,38 +1382,6 @@ fn validate_refresh_threshold(value: Option<i64>) -> Result<(), ZoomError> {
         ));
     }
     Ok(())
-}
-
-pub fn sanitize_zoom_payload(mut payload: Value) -> Value {
-    remove_secret_like_fields(&mut payload);
-    payload
-}
-
-fn remove_secret_like_fields(value: &mut Value) {
-    match value {
-        Value::Object(map) => {
-            map.retain(|key, _| !is_secret_like_key(key));
-            for child in map.values_mut() {
-                remove_secret_like_fields(child);
-            }
-        }
-        Value::Array(items) => {
-            for item in items {
-                remove_secret_like_fields(item);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn is_secret_like_key(key: &str) -> bool {
-    let normalized = key.trim().to_ascii_lowercase();
-    normalized.contains("token")
-        || normalized.contains("secret")
-        || normalized.contains("password")
-        || normalized == "authorization"
-        || normalized == "api_key"
-        || normalized == "apikey"
 }
 
 fn parse_zoom_transcript_file(

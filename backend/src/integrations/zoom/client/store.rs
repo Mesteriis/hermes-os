@@ -3,6 +3,11 @@ use hermes_communications_api::accounts::{
     NewProviderAccountSecretBinding, ProviderAccountCommandPort, ProviderAccountSecretPurpose,
 };
 use hermes_events_api::NewEventEnvelope;
+use hermes_provider_zoom::protocol::{
+    ZOOM_TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS, random_zoom_oauth_token, sanitize_zoom_payload,
+    zoom_authorization_url, zoom_client_secret_ref, zoom_oauth_expires_at,
+    zoom_oauth_token_secret_ref,
+};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
@@ -36,14 +41,14 @@ use super::models::{
     MAX_TRANSCRIPT_FILE_TEXT_BYTES, ZOOM_EXPLICIT_TOKEN_REFRESH_THRESHOLD_SECONDS,
     ZOOM_LIVE_AUTHORIZED_RUNTIME_KIND, ZOOM_MAX_RECORDING_MEDIA_DOWNLOAD_BYTES,
     ZOOM_MAX_TOKEN_REFRESH_THRESHOLD_SECONDS, ZOOM_PROVIDER_KIND, ZOOM_PROVIDER_KIND_STR,
-    ZOOM_RUNTIME_KIND, ZOOM_TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS,
-    ZOOM_TOKEN_MAINTENANCE_REFRESH_THRESHOLD_SECONDS, ZOOM_TOKEN_ROTATION_REQUIRED_BLOCKER,
-    ZoomAccount, ZoomAccountListResponse, ZoomAccountSetupRequest, ZoomAccountSetupResponse,
-    ZoomAuditEventItem, ZoomAuditEventResponse, ZoomAuthShape, ZoomAuthorizationResult,
-    ZoomLiveAccountSetupRequest, ZoomMeetingIngestResult, ZoomMeetingObservationRequest,
-    ZoomOAuthPendingGrant, ZoomOAuthStartRequest, ZoomOAuthTokenBundle, ZoomOAuthTokenResponse,
-    ZoomRecordingImportAuditItem, ZoomRecordingImportAuditResponse,
-    ZoomRecordingImportRemoveRequest, ZoomRecordingImportRemoveResponse, ZoomRecordingIngestResult,
+    ZOOM_RUNTIME_KIND, ZOOM_TOKEN_MAINTENANCE_REFRESH_THRESHOLD_SECONDS,
+    ZOOM_TOKEN_ROTATION_REQUIRED_BLOCKER, ZoomAccount, ZoomAccountListResponse,
+    ZoomAccountSetupRequest, ZoomAccountSetupResponse, ZoomAuditEventItem, ZoomAuditEventResponse,
+    ZoomAuthShape, ZoomAuthorizationResult, ZoomLiveAccountSetupRequest, ZoomMeetingIngestResult,
+    ZoomMeetingObservationRequest, ZoomOAuthPendingGrant, ZoomOAuthStartRequest,
+    ZoomOAuthTokenBundle, ZoomOAuthTokenResponse, ZoomRecordingImportAuditItem,
+    ZoomRecordingImportAuditResponse, ZoomRecordingImportRemoveRequest,
+    ZoomRecordingImportRemoveResponse, ZoomRecordingIngestResult,
     ZoomRecordingMediaDownloadRequest, ZoomRecordingMediaImportResult,
     ZoomRecordingObservationRequest, ZoomRecordingRef, ZoomRecordingSyncFailure,
     ZoomRecordingSyncRequest, ZoomRecordingSyncResult, ZoomRetentionCleanupItem,
@@ -56,8 +61,6 @@ use super::models::{
     ZoomWebhookSubscriptionReconcileRequest, ZoomWebhookSubscriptionReconcileResult,
     ZoomWebhookSubscriptionRemoveRequest, ZoomWebhookSubscriptionRemoveResult,
     ZoomWebhookSubscriptionStatusRequest, ZoomWebhookSubscriptionStatusResult,
-    random_zoom_oauth_token, sanitize_zoom_payload, zoom_authorization_url, zoom_client_secret_ref,
-    zoom_oauth_expires_at, zoom_oauth_token_secret_ref,
 };
 
 #[derive(Clone)]
@@ -158,7 +161,13 @@ impl ZoomStore {
             .await?;
         let setup_id = random_zoom_oauth_token()?;
         let state = random_zoom_oauth_token()?;
-        let authorization_url = zoom_authorization_url(request, &state)?;
+        let authorization_url = zoom_authorization_url(
+            &request.authorization_endpoint(),
+            &request.client_id,
+            &request.redirect_uri,
+            &request.scopes,
+            &state,
+        )?;
         Ok(ZoomOAuthPendingGrant {
             setup_id,
             account_id: request.account_id.trim().to_owned(),
