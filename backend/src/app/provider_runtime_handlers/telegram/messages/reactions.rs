@@ -16,7 +16,7 @@ use crate::app::api_support::{
     telegram_capabilities::*,
     whatsapp_capabilities::*,
 };
-use crate::app::provider_runtime_handlers::whatsapp::{
+use crate::app::provider_runtime_handlers::whatsapp::messages::{
     delete_whatsapp_command_react, post_whatsapp_command_react,
 };
 use crate::app::{ApiError, AppState};

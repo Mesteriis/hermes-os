@@ -170,27 +170,28 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/messages/send",
-            post(whatsapp::post_whatsapp_command_send_text),
+            post(whatsapp::messages::post_whatsapp_command_send_text),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/messages/{message_id}/reply",
-            post(whatsapp::post_whatsapp_command_reply),
+            post(whatsapp::messages::post_whatsapp_command_reply),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/messages/{message_id}/forward",
-            post(whatsapp::post_whatsapp_command_forward),
+            post(whatsapp::messages::post_whatsapp_command_forward),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/messages/{message_id}/edit",
-            post(whatsapp::post_whatsapp_command_edit),
+            post(whatsapp::messages::post_whatsapp_command_edit),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/messages/{message_id}/delete",
-            post(whatsapp::post_whatsapp_command_delete),
+            post(whatsapp::messages::post_whatsapp_command_delete),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-commands/messages/{message_id}/reactions",
-            post(whatsapp::post_whatsapp_command_react).delete(whatsapp::delete_whatsapp_command_react),
+            post(whatsapp::messages::post_whatsapp_command_react)
+                .delete(whatsapp::messages::delete_whatsapp_command_react),
         )
         .route(
             "/api/v1/integrations/whatsapp/provider-media/upload",

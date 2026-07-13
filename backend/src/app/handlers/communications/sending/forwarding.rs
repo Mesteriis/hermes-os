@@ -1,5 +1,5 @@
 use super::super::*;
-use crate::app::provider_runtime_handlers::whatsapp::{
+use crate::app::provider_runtime_handlers::whatsapp::messages::{
     post_whatsapp_command_forward, post_whatsapp_command_reply,
 };
 use crate::application::communication_provider_writes::{
