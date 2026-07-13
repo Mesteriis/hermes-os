@@ -1,6 +1,7 @@
 use crate::integrations::telegram::client::{TelegramError, TelegramManualSendRequest};
 use crate::integrations::telegram::runtime::TelegramMediaSendRequest;
 use crate::integrations::telegram::tdjson::{self, TdJsonClient, TelegramTdlibMessageSnapshot};
+use hermes_provider_telegram::tdlib::{send_reply, send_text_message};
 
 use super::super::TDJSON_COMMAND_TIMEOUT;
 use super::responses::{receive_tdlib_extra, tdlib_provider_chat_id, tdlib_provider_message_id};
@@ -11,11 +12,10 @@ pub(super) fn actor_send_text(
 ) -> Result<TelegramTdlibMessageSnapshot, TelegramError> {
     let chat_id = tdlib_provider_chat_id(&request.provider_chat_id)?;
     let extra = format!("hermes-runtime-send-{}", request.command_id.trim());
-    client.send_json(&tdjson::tdlib_send_text_message_request(
-        chat_id,
-        &request.text,
-        &extra,
-    )?)?;
+    client.send_json(
+        &send_text_message(chat_id, &request.text, &extra)
+            .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?,
+    )?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
     if let Some(message) = tdjson::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
@@ -55,12 +55,10 @@ pub(super) fn actor_send_reply(
     let chat_id = tdlib_provider_chat_id(provider_chat_id)?;
     let reply_to_message_id = tdlib_provider_message_id(reply_to_provider_message_id)?;
     let extra = format!("hermes-reply-{}", command_id.trim());
-    client.send_json(&tdjson::tdlib_send_reply_request(
-        chat_id,
-        reply_to_message_id,
-        text,
-        &extra,
-    )?)?;
+    client.send_json(
+        &send_reply(chat_id, reply_to_message_id, text, &extra)
+            .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?,
+    )?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
     if let Some(message) = tdjson::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));

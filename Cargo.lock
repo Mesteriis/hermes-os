@@ -1956,6 +1956,7 @@ dependencies = [
  "hermes-provider-api",
  "hermes-provider-mail",
  "hermes-provider-orchestration",
+ "hermes-provider-telegram",
  "hermes-provider-telemost",
  "hermes-provider-zoom",
  "hermes-provider-zulip",
@@ -2054,6 +2055,14 @@ dependencies = [
  "chrono",
  "hermes-communications-api",
  "hermes-provider-api",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "hermes-provider-telegram"
+version = "0.1.0"
+dependencies = [
  "serde_json",
  "thiserror 2.0.18",
 ]

@@ -147,34 +147,6 @@ pub(crate) fn tdlib_get_chat_history_request(
     })
 }
 
-pub(crate) fn tdlib_send_text_message_request(
-    chat_id: i64,
-    text: &str,
-    extra: &str,
-) -> Result<Value, TelegramError> {
-    let text = text.trim();
-    if text.is_empty() {
-        return Err(TelegramError::InvalidRequest(
-            "text must not be empty".to_owned(),
-        ));
-    }
-
-    Ok(json!({
-        "@type": "sendMessage",
-        "chat_id": chat_id,
-        "input_message_content": {
-            "@type": "inputMessageText",
-            "text": {
-                "@type": "formattedText",
-                "text": text,
-                "entities": []
-            },
-            "clear_draft": true
-        },
-        "@extra": extra.trim()
-    }))
-}
-
 pub(crate) fn tdlib_send_media_message_request(
     chat_id: i64,
     media_type: TelegramMediaSendType,
@@ -293,35 +265,6 @@ pub(crate) fn tdlib_download_file_request(file_id: i64, priority: i32, extra: &s
     })
 }
 
-pub(crate) fn tdlib_edit_message_text_request(
-    chat_id: i64,
-    message_id: i64,
-    text: &str,
-    extra: &str,
-) -> Result<Value, TelegramError> {
-    let text = text.trim();
-    if text.is_empty() {
-        return Err(TelegramError::InvalidRequest(
-            "edit text must not be empty".to_owned(),
-        ));
-    }
-    Ok(json!({
-        "@type": "editMessageText",
-        "chat_id": chat_id,
-        "message_id": message_id,
-        "input_message_content": {
-            "@type": "inputMessageText",
-            "text": {
-                "@type": "formattedText",
-                "text": text,
-                "entities": []
-            },
-            "clear_draft": false
-        },
-        "@extra": extra.trim()
-    }))
-}
-
 pub(crate) fn tdlib_delete_messages_request(
     chat_id: i64,
     message_ids: &[i64],
@@ -389,38 +332,6 @@ pub(crate) fn tdlib_pin_chat_message_request(
         "only_for_self": false,
         "@extra": extra.trim()
     })
-}
-
-pub(crate) fn tdlib_send_reply_request(
-    chat_id: i64,
-    reply_to_message_id: i64,
-    text: &str,
-    extra: &str,
-) -> Result<Value, TelegramError> {
-    let text = text.trim();
-    if text.is_empty() {
-        return Err(TelegramError::InvalidRequest(
-            "reply text must not be empty".to_owned(),
-        ));
-    }
-    Ok(json!({
-        "@type": "sendMessage",
-        "chat_id": chat_id,
-        "reply_to": {
-            "@type": "inputMessageReplyToMessage",
-            "message_id": reply_to_message_id
-        },
-        "input_message_content": {
-            "@type": "inputMessageText",
-            "text": {
-                "@type": "formattedText",
-                "text": text,
-                "entities": []
-            },
-            "clear_draft": true
-        },
-        "@extra": extra.trim()
-    }))
 }
 
 pub(crate) fn tdlib_send_forward_request(

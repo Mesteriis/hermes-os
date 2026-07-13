@@ -34,7 +34,7 @@ pub(crate) use self::requests::{
     check_database_encryption_key_request, set_tdlib_parameters_request,
     tdlib_add_chat_to_folder_request, tdlib_add_chat_to_list_request,
     tdlib_add_message_reaction_request, tdlib_create_forum_topic_request, tdlib_database_directory,
-    tdlib_delete_messages_request, tdlib_download_file_request, tdlib_edit_message_text_request,
+    tdlib_delete_messages_request, tdlib_download_file_request,
     tdlib_get_basic_group_full_info_request, tdlib_get_basic_group_request,
     tdlib_get_chat_folder_request, tdlib_get_chat_history_request, tdlib_get_chat_request,
     tdlib_get_chats_request, tdlib_get_forum_topics_request,
@@ -42,10 +42,9 @@ pub(crate) use self::requests::{
     tdlib_join_chat_request, tdlib_leave_chat_request, tdlib_load_chats_request,
     tdlib_pin_chat_message_request, tdlib_remove_message_reaction_request,
     tdlib_search_chat_messages_request, tdlib_search_messages_request, tdlib_send_forward_request,
-    tdlib_send_media_message_request, tdlib_send_reply_request, tdlib_send_text_message_request,
-    tdlib_set_chat_mute_request, tdlib_toggle_chat_marked_as_unread_request,
-    tdlib_toggle_forum_topic_is_closed_request, tdlib_unpin_chat_message_request,
-    tdlib_view_messages_request,
+    tdlib_send_media_message_request, tdlib_set_chat_mute_request,
+    tdlib_toggle_chat_marked_as_unread_request, tdlib_toggle_forum_topic_is_closed_request,
+    tdlib_unpin_chat_message_request, tdlib_view_messages_request,
 };
 pub(crate) use self::snapshots::{
     TelegramTdlibChatFolderSnapshot, TelegramTdlibChatMemberSnapshot, TelegramTdlibChatSnapshot,

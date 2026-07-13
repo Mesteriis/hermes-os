@@ -2,6 +2,7 @@ use std::path::Path;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
+use hermes_provider_telegram::tdlib::{edit_message_text, send_text_message};
 use serde_json::json;
 
 use crate::integrations::telegram::client::TelegramQrLoginStartRequest;
@@ -63,12 +64,8 @@ fn tdlib_database_key_check_uses_same_base64_key_without_plaintext_secret() {
 
 #[test]
 fn tdlib_send_text_message_request_uses_formatted_text_content() {
-    let command = super::super::tdlib_send_text_message_request(
-        123456789,
-        "Hello from Hermes",
-        "hermes-send-message-1",
-    )
-    .expect("send message request");
+    let command = send_text_message(123456789, "Hello from Hermes", "hermes-send-message-1")
+        .expect("send message request");
 
     assert_eq!(command["@type"], "sendMessage");
     assert_eq!(command["chat_id"], 123456789);
@@ -259,13 +256,8 @@ fn tdlib_toggle_forum_topic_is_closed_request_uses_expected_shape() {
 
 #[test]
 fn tdlib_edit_message_text_request_uses_edit_message_text_type() {
-    let command = super::super::tdlib_edit_message_text_request(
-        123456789,
-        987654321,
-        "Updated text",
-        "hermes-edit-cmd-1",
-    )
-    .expect("edit message request");
+    let command = edit_message_text(123456789, 987654321, "Updated text", "hermes-edit-cmd-1")
+        .expect("edit message request");
 
     assert_eq!(command["@type"], "editMessageText");
     assert_eq!(command["chat_id"], 123456789);
@@ -283,7 +275,7 @@ fn tdlib_edit_message_text_request_uses_edit_message_text_type() {
 
 #[test]
 fn tdlib_edit_message_text_request_rejects_empty_text() {
-    let result = super::super::tdlib_edit_message_text_request(123, 456, "   ", "hermes-edit-1");
+    let result = edit_message_text(123, 456, "   ", "hermes-edit-1");
     assert!(result.is_err());
 }
 

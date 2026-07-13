@@ -1,5 +1,6 @@
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::tdjson::{self, TdJsonClient};
+use hermes_provider_telegram::tdlib::edit_message_text;
 
 use super::super::TDJSON_COMMAND_TIMEOUT;
 use super::responses::{receive_tdlib_extra, tdlib_provider_chat_id, tdlib_provider_message_id};
@@ -14,9 +15,10 @@ pub(super) fn actor_edit_message(
     let chat_id = tdlib_provider_chat_id(provider_chat_id)?;
     let message_id = tdlib_provider_message_id(provider_message_id)?;
     let extra = format!("hermes-edit-{}", command_id.trim());
-    client.send_json(&tdjson::tdlib_edit_message_text_request(
-        chat_id, message_id, new_text, &extra,
-    )?)?;
+    client.send_json(
+        &edit_message_text(chat_id, message_id, new_text, &extra)
+            .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?,
+    )?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
     if let Some(message) = tdjson::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
