@@ -16,6 +16,9 @@ use tokio::time::{Duration, Instant, sleep};
 
 const LIVE_WAIT_LOG_INTERVAL: Duration = Duration::from_secs(5);
 
+use hermes_communications_api::commands::{
+    CommunicationProviderCommand, NewCommunicationProviderCommand,
+};
 use hermes_communications_api::evidence::NewIngestionCheckpoint;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
@@ -31,10 +34,7 @@ use hermes_hub_backend::application::zulip_provider_observation_reconciliation::
 use hermes_hub_backend::domains::communications::messages::{
     ProjectedMessage, consume_accepted_signal_event,
 };
-use hermes_hub_backend::domains::communications::provider_commands::{
-    CommunicationProviderCommand, CommunicationProviderCommandStore,
-    NewCommunicationProviderCommand,
-};
+use hermes_hub_backend::domains::communications::provider_commands::CommunicationProviderCommandStore;
 use hermes_hub_backend::domains::communications::storage::{
     CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachmentImport,
     NewCommunicationBlob,

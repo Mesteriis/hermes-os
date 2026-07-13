@@ -22,7 +22,8 @@ use hermes_communications_postgres::provider_store::{
 use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::integrations::zoom::client::{
-    ZoomAccountSetupRequest, ZoomMeetingObservationRequest, ZoomStore,
+    models::{ZoomAccountSetupRequest, ZoomMeetingObservationRequest},
+    store::ZoomStore,
 };
 use hermes_hub_backend::platform::calls::CallIntelligenceStore;
 

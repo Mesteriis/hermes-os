@@ -9,7 +9,8 @@ use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::domains::signal_hub::profiles::SignalHubProfileService;
 use hermes_hub_backend::domains::signal_hub::store::SignalHubStore;
 use hermes_hub_backend::integrations::zoom::client::{
-    ZoomAccountSetupRequest, ZoomMeetingObservationRequest, ZoomStore,
+    models::{ZoomAccountSetupRequest, ZoomMeetingObservationRequest},
+    store::ZoomStore,
 };
 use hermes_hub_backend::platform::calls::CallIntelligenceStore;
 use hermes_hub_backend::platform::events::bus::InMemoryEventBus;

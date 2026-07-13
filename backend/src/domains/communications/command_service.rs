@@ -1,6 +1,7 @@
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::{DateTime, Utc};
+use hermes_communications_api::commands::NewCommunicationProviderCommand;
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
@@ -28,7 +29,6 @@ use super::outbox::{
 };
 use super::provider_commands::{
     CommunicationProviderCommandError, CommunicationProviderCommandStore,
-    NewCommunicationProviderCommand,
 };
 use super::saved_searches::{
     CommunicationSavedSearch, CommunicationSavedSearchError, CommunicationSavedSearchStore,

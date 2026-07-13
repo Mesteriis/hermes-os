@@ -2,6 +2,7 @@ use hermes_communications_api::accounts::{CommunicationProviderKind, NewProvider
 use hermes_communications_api::accounts::{
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
+use hermes_communications_api::commands::CommunicationProviderCommand;
 use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::collections::BTreeMap;
 
@@ -12,7 +13,6 @@ use super::{
     MailProviderCommandExecutionReport, MailProviderCommandWorker, MailProviderCommandWorkerError,
     mutation_for_command, resolve_provider_command_payload,
 };
-use crate::domains::communications::provider_commands::CommunicationProviderCommand;
 use crate::integrations::mail::read_state::{EmailProviderMessageMutation, imap_source_mailbox};
 use hermes_communications_api::accounts::ProviderAccount;
 

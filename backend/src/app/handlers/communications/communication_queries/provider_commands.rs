@@ -1,7 +1,6 @@
 use super::super::*;
-use crate::domains::communications::provider_commands::{
-    CommunicationProviderCommandDiagnostics, CommunicationProviderCommandStore,
-};
+use crate::domains::communications::provider_commands::CommunicationProviderCommandStore;
+use hermes_communications_api::commands::CommunicationProviderCommandDiagnostics;
 
 #[derive(Deserialize)]
 pub(crate) struct ProviderCommandDiagnosticsQuery {

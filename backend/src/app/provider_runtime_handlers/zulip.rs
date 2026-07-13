@@ -5,6 +5,9 @@ use hermes_communications_api::accounts::{CommunicationProviderKind, NewProvider
 use hermes_communications_api::accounts::{
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
+use hermes_communications_api::commands::{
+    CommunicationProviderCommand, NewCommunicationProviderCommand,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use url::Url;
@@ -27,10 +30,7 @@ use crate::app::signal_hub_support::{
     provider_account_or_not_found, sync_provider_account_signal_connection,
 };
 use crate::app::{ApiError, AppState};
-use crate::domains::communications::provider_commands::{
-    CommunicationProviderCommand, CommunicationProviderCommandStore,
-    NewCommunicationProviderCommand,
-};
+use crate::domains::communications::provider_commands::CommunicationProviderCommandStore;
 
 use crate::platform::secrets::{NewSecretReference, SecretKind, SecretStoreKind};
 use crate::vault::{HostVaultError, SecretEntryContext, VaultMode};

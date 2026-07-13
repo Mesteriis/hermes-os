@@ -1,6 +1,7 @@
 use hermes_communications_api::accounts::{
     CommunicationProviderKind, NewProviderAccount, ProviderAccount,
 };
+use hermes_communications_api::commands::CommunicationProviderCommand;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
@@ -10,8 +11,7 @@ use thiserror::Error;
 
 use crate::domains::communications::messages::{MessageProjectionError, MessageProjectionStore};
 use crate::domains::communications::provider_commands::{
-    CommunicationProviderCommand, CommunicationProviderCommandError,
-    CommunicationProviderCommandStore,
+    CommunicationProviderCommandError, CommunicationProviderCommandStore,
 };
 use crate::domains::communications::provider_resources::{
     MailProviderResourceError, MailProviderResourceKind, MailProviderResourceStore,

@@ -8,7 +8,8 @@ use hermes_events_api::EventLogQuery;
 use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
 use hermes_hub_backend::integrations::zoom::client::{
-    ZoomAccountSetupRequest, ZoomMeetingObservationRequest, ZoomParticipantSnapshot, ZoomStore,
+    models::{ZoomAccountSetupRequest, ZoomMeetingObservationRequest, ZoomParticipantSnapshot},
+    store::ZoomStore,
 };
 use hermes_hub_backend::platform::calls::CallIntelligenceStore;
 use hermes_hub_backend::platform::events::bus::InMemoryEventBus;

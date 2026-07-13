@@ -9,6 +9,7 @@ use sqlx::{PgPool, Postgres, Row, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
+use hermes_communications_api::commands::NewCommunicationProviderCommand;
 use hermes_events_postgres::store::EventStore;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;
@@ -16,7 +17,6 @@ use hermes_observations_postgres::store::ObservationStore;
 use super::evidence::link_mail_entity_in_transaction;
 use super::provider_commands::{
     CommunicationProviderCommandError, CommunicationProviderCommandStore,
-    NewCommunicationProviderCommand,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]

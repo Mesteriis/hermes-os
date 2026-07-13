@@ -1,14 +1,14 @@
 use chrono::{DateTime, Utc};
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
+use hermes_communications_api::commands::CommunicationProviderCommand;
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use crate::domains::communications::credentials::ProviderCredentialReader;
 use crate::domains::communications::provider_commands::{
-    CommunicationProviderCommand, CommunicationProviderCommandError,
-    CommunicationProviderCommandStore,
+    CommunicationProviderCommandError, CommunicationProviderCommandStore,
 };
 use crate::domains::communications::storage::{
     CommunicationStorageError, CommunicationStorageStore, ImportedCommunicationAttachment,

@@ -8,7 +8,10 @@ use hermes_events_api::EventLogQuery;
 use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::domains::calendar::core::EventRelationStore;
 use hermes_hub_backend::domains::calendar::events::{CalendarEventStore, NewCalendarEvent};
-use hermes_hub_backend::integrations::zoom::client::{ZoomMeetingObservationRequest, ZoomStore};
+use hermes_hub_backend::integrations::zoom::client::{
+    models::{ZoomAccountSetupRequest, ZoomMeetingObservationRequest},
+    store::ZoomStore,
+};
 use hermes_hub_backend::platform::calls::CallIntelligenceStore;
 use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
 use hermes_hub_backend::platform::storage::Database;
@@ -59,15 +62,13 @@ async fn zoom_meeting_events_match_calendar_events_into_call_relations() {
     );
     let account_id = format!("zoom-calendar-match-{suffix}");
     zoom_store
-        .setup_fixture_account(
-            &hermes_hub_backend::integrations::zoom::client::ZoomAccountSetupRequest {
-                account_id: account_id.clone(),
-                display_name: "Zoom Calendar Match Fixture".to_owned(),
-                external_account_id: format!("zoom-calendar-match-external-{suffix}"),
-                account_email: None,
-                metadata: json!({}),
-            },
-        )
+        .setup_fixture_account(&ZoomAccountSetupRequest {
+            account_id: account_id.clone(),
+            display_name: "Zoom Calendar Match Fixture".to_owned(),
+            external_account_id: format!("zoom-calendar-match-external-{suffix}"),
+            account_email: None,
+            metadata: json!({}),
+        })
         .await
         .expect("fixture account");
 

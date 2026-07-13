@@ -1,5 +1,9 @@
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use hermes_communications_api::commands::{
+    CommunicationProviderCommand, CommunicationProviderCommandDiagnostic,
+    CommunicationProviderCommandDiagnostics, CommunicationProviderCommandStatusCount,
+    NewCommunicationProviderCommand,
+};
 use serde_json::Value;
 use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
@@ -13,164 +17,6 @@ use hermes_events_postgres::errors::EventStoreError;
 
 mod diagnostics;
 mod events;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NewCommunicationProviderCommand {
-    pub command_id: String,
-    pub account_id: String,
-    pub channel_kind: String,
-    pub command_kind: String,
-    pub idempotency_key: String,
-    pub provider_conversation_id: Option<String>,
-    pub provider_message_id: Option<String>,
-    pub target_ref: Value,
-    pub payload: Value,
-    pub capability_state: String,
-    pub action_class: String,
-    pub confirmation_decision: String,
-    pub actor_id: String,
-    pub max_retries: i32,
-}
-
-impl NewCommunicationProviderCommand {
-    pub fn new(
-        command_id: impl Into<String>,
-        account_id: impl Into<String>,
-        channel_kind: impl Into<String>,
-        command_kind: impl Into<String>,
-        idempotency_key: impl Into<String>,
-        actor_id: impl Into<String>,
-    ) -> Self {
-        Self {
-            command_id: command_id.into(),
-            account_id: account_id.into(),
-            channel_kind: channel_kind.into(),
-            command_kind: command_kind.into(),
-            idempotency_key: idempotency_key.into(),
-            provider_conversation_id: None,
-            provider_message_id: None,
-            target_ref: serde_json::json!({}),
-            payload: serde_json::json!({}),
-            capability_state: "available".to_owned(),
-            action_class: "provider_write".to_owned(),
-            confirmation_decision: "not_required".to_owned(),
-            actor_id: actor_id.into(),
-            max_retries: 3,
-        }
-    }
-
-    pub fn provider_conversation_id(mut self, provider_conversation_id: impl Into<String>) -> Self {
-        self.provider_conversation_id = Some(provider_conversation_id.into());
-        self
-    }
-
-    pub fn provider_message_id(mut self, provider_message_id: impl Into<String>) -> Self {
-        self.provider_message_id = Some(provider_message_id.into());
-        self
-    }
-
-    pub fn target_ref(mut self, target_ref: Value) -> Self {
-        self.target_ref = target_ref;
-        self
-    }
-
-    pub fn payload(mut self, payload: Value) -> Self {
-        self.payload = payload;
-        self
-    }
-
-    fn validate(&self) -> Result<(), CommunicationProviderCommandError> {
-        validate_non_empty("command_id", &self.command_id)?;
-        validate_non_empty("account_id", &self.account_id)?;
-        validate_non_empty("channel_kind", &self.channel_kind)?;
-        validate_non_empty("command_kind", &self.command_kind)?;
-        validate_non_empty("idempotency_key", &self.idempotency_key)?;
-        validate_non_empty("capability_state", &self.capability_state)?;
-        validate_non_empty("action_class", &self.action_class)?;
-        validate_non_empty("confirmation_decision", &self.confirmation_decision)?;
-        validate_non_empty("actor_id", &self.actor_id)?;
-        if self.max_retries <= 0 {
-            return Err(CommunicationProviderCommandError::Invalid(
-                "max_retries must be greater than zero".to_owned(),
-            ));
-        }
-        if !self.target_ref.is_object() {
-            return Err(CommunicationProviderCommandError::Invalid(
-                "target_ref must be a JSON object".to_owned(),
-            ));
-        }
-        if !self.payload.is_object() {
-            return Err(CommunicationProviderCommandError::Invalid(
-                "payload must be a JSON object".to_owned(),
-            ));
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CommunicationProviderCommand {
-    pub command_id: String,
-    pub account_id: String,
-    pub channel_kind: String,
-    pub command_kind: String,
-    pub idempotency_key: String,
-    pub provider_conversation_id: Option<String>,
-    pub provider_message_id: Option<String>,
-    pub target_ref: Value,
-    pub payload: Value,
-    pub capability_state: String,
-    pub action_class: String,
-    pub confirmation_decision: String,
-    pub status: String,
-    pub retry_count: i32,
-    pub max_retries: i32,
-    pub last_error: Option<String>,
-    pub result_payload: Value,
-    pub audit_metadata: Value,
-    pub provider_state: Value,
-    pub reconciliation_status: String,
-    pub next_attempt_at: Option<DateTime<Utc>>,
-    pub last_attempt_at: Option<DateTime<Utc>>,
-    pub provider_observed_at: Option<DateTime<Utc>>,
-    pub reconciled_at: Option<DateTime<Utc>>,
-    pub dead_lettered_at: Option<DateTime<Utc>>,
-    pub actor_id: String,
-    pub happened_at: DateTime<Utc>,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct CommunicationProviderCommandDiagnostic {
-    pub command_id: String,
-    pub account_id: String,
-    pub command_kind: String,
-    pub message_id: Option<String>,
-    pub status: String,
-    pub retry_count: i32,
-    pub max_retries: i32,
-    pub reconciliation_status: String,
-    pub next_attempt_at: Option<DateTime<Utc>>,
-    pub last_attempt_at: Option<DateTime<Utc>>,
-    pub dead_lettered_at: Option<DateTime<Utc>>,
-    pub last_error: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct CommunicationProviderCommandStatusCount {
-    pub status: String,
-    pub count: i64,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct CommunicationProviderCommandDiagnostics {
-    pub items: Vec<CommunicationProviderCommandDiagnostic>,
-    pub counts: Vec<CommunicationProviderCommandStatusCount>,
-}
 
 #[derive(Clone)]
 pub struct CommunicationProviderCommandStore {
@@ -196,7 +42,9 @@ impl CommunicationProviderCommandStore {
         transaction: &mut Transaction<'_, Postgres>,
         command: &NewCommunicationProviderCommand,
     ) -> Result<CommunicationProviderCommand, CommunicationProviderCommandError> {
-        command.validate()?;
+        command
+            .validate()
+            .map_err(|error| CommunicationProviderCommandError::Invalid(error.to_string()))?;
         ensure_canonical_communication_account_in_transaction(transaction, &command.account_id)
             .await?;
         let row = sqlx::query(&provider_command_returning_sql(

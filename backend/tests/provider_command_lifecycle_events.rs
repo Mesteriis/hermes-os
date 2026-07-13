@@ -1,9 +1,8 @@
 use chrono::{Duration, Utc};
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::commands::NewCommunicationProviderCommand;
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
-use hermes_hub_backend::domains::communications::provider_commands::{
-    CommunicationProviderCommandStore, NewCommunicationProviderCommand,
-};
+use hermes_hub_backend::domains::communications::provider_commands::CommunicationProviderCommandStore;
 
 use serde_json::{Value, json};
 use testkit::app::TestApp;

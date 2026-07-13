@@ -1,13 +1,12 @@
 use chrono::{DateTime, Utc};
+use hermes_communications_api::commands::CommunicationProviderCommand;
 use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 use hermes_events_api::{NewEventEnvelope, StoredEventEnvelope};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
-use crate::domains::communications::provider_commands::{
-    CommunicationProviderCommand, CommunicationProviderCommandStore,
-};
+use crate::domains::communications::provider_commands::CommunicationProviderCommandStore;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::zulip_event_types;
 use hermes_communications_api::accounts::CommunicationProviderKind;
