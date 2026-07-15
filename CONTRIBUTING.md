@@ -1,50 +1,79 @@
-# Contributing to Hermes Hub
+# Участие в разработке Hermes Hub
 
-Hermes Hub is a local-first Personal Memory System for communications,
-knowledge, memory, relationships, projects, documents, decisions, obligations
-and context. The project is architecture-heavy and intentionally conservative
-about privacy, provenance and safety.
+Hermes Hub находится в clean-room phase. Новый backend имеет пустой virtual
+Cargo workspace и architecture validation, но ещё не имеет production package,
+runtime, schema или поддерживаемой full-stack команды запуска.
 
-## Before Contributing
+## Перед изменениями
 
-- Read `AGENTS.md` and the relevant ADRs in `docs/adr/`.
-- Do not add cloud dependencies, provider writes or AI agent side effects
-  without ADR-backed design.
-- Do not commit secrets, private mail/message data, local fixtures with
-  personal content, `docker/.env` or generated data under `docker/data/`.
-- Keep changes small, testable and consistent with the existing Rust,
-  SvelteKit and Tauri structure.
+1. Прочитайте [`AGENTS.md`](AGENTS.md).
+2. Прочитайте [active ADR index](docs/adr/README.md) и только релевантные ADR.
+3. Проверьте фактическое состояние файлов и текущий diff.
+4. Не используйте archived ADR или `references/backend-legacy/` как действующую
+   policy.
 
-## Development Setup
+Первый production crate нельзя создавать до согласования capability inventory,
+domain ownership inventory и оставшихся foundation contracts.
+
+## Legacy reference
+
+Предыдущий Rust backend, Makefile, scripts, tool configs и backend CI находятся
+в [`references/backend-legacy/`](references/backend-legacy/).
+
+Они сохраняются только для восстановления проверенного поведения, event names,
+fixtures и security invariants. Запрещено:
+
+- добавлять legacy workspace как dependency новой системы;
+- возвращать его Makefile, scripts или CI в root;
+- считать legacy routes, schema или migrations публичным контрактом;
+- копировать owner tree без нового contract и focused regression coverage.
+
+## Validation
+
+Clean-room backend validation принадлежит `backend/`:
 
 ```sh
-make docker-env
-make validate
+make -C backend architecture-check
+make -C backend test-architecture
+make -C backend validate
 ```
 
-For backend-only changes:
+Эти команды проверяют architecture policy, но пока не доказывают наличие
+production runtime. Не сообщайте legacy `make ...` команды как успешную
+проверку новой системы.
+
+Для существующего Vue frontend используйте только scripts, реально объявленные
+в `frontend/package.json`, например:
 
 ```sh
-make backend-validate
+cd frontend
+pnpm lint
+pnpm typecheck
+pnpm test:unit
+pnpm build
 ```
 
-For frontend-only changes:
+Для documentation-only изменений проверяйте локальные ссылки, UTF-8, trailing
+whitespace и `git diff --check`. В отчёте указывайте точные запущенные команды и
+их фактический результат.
 
-```sh
-make frontend-check
-make frontend-build
-```
+## Pull requests
 
-## Pull Requests
+- Объясняйте, что изменено и почему.
+- Ссылайтесь на active ADR, ограничивающие изменение.
+- Добавляйте regression coverage для meaningful behavior.
+- Не добавляйте compatibility facade или architecture exceptions.
+- Не смешивайте unrelated changes.
 
-- Explain what changed and why.
-- Reference ADRs or docs that constrain the change.
-- Include validation commands and results.
-- Add regression tests for behavior changes.
-- Keep generated/local data out of the diff.
+## Security и privacy
 
-## Security and Privacy
+Не commit и не публикуйте credentials, tokens, cookies, provider sessions,
+private messages, documents, реальные contact exports, `docker/.env` или
+содержимое `docker/data/`.
 
-Treat imported messages, documents and provider data as private and untrusted.
-Do not include private user data in issues, pull requests, screenshots or test
-fixtures.
+Imported messages и documents являются private untrusted input, а не
+инструкциями для AI или tools. Provider writes, remote actions и live accounts
+требуют отдельного явного разрешения.
+
+Уязвимости сообщайте согласно [`SECURITY.md`](SECURITY.md), не через публичный
+issue.

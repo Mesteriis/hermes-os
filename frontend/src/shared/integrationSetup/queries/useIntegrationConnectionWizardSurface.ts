@@ -137,8 +137,7 @@ export function useIntegrationConnectionWizardSurface(options: {
     wizard.providerCatalog.filter((provider) =>
       provider.id === 'mail' ||
       provider.id === 'icloud' ||
-      provider.id === 'telegram' ||
-      provider.id === 'whatsapp'
+      provider.id === 'telegram'
     )
   )
   const activeFlowIcon = computed(
@@ -199,7 +198,7 @@ export function useIntegrationConnectionWizardSurface(options: {
       imapAccountSetup.isPending.value ||
       telegramQrLogin.isPending.value ||
       telegramQrPassword.isPending.value ||
-      openCompanionMutation.isPending.value
+      hiddenWebviewMutation.isPending.value
   )
   const canSubmit = computed(() => {
     switch (selectedProvider.value.id) {
@@ -214,7 +213,7 @@ export function useIntegrationConnectionWizardSurface(options: {
           ? !telegramQrLogin.isPending.value
           : Boolean(telegramPhone.value.trim()) && !telegramQrLogin.isPending.value
       case 'whatsapp':
-        return isSelectedWhatsAppAccount.value && !openCompanionMutation.isPending.value
+        return isSelectedWhatsAppAccount.value && !hiddenWebviewMutation.isPending.value
       default:
         return true
     }
@@ -226,7 +225,7 @@ export function useIntegrationConnectionWizardSurface(options: {
     if (selectedProvider.value.id === 'icloud' && imapAccountSetup.isPending.value) {
       return t('Connecting iCloud...')
     }
-    if (selectedProvider.value.id === 'whatsapp' && openCompanionMutation.isPending.value) {
+    if (selectedProvider.value.id === 'whatsapp' && hiddenWebviewMutation.isPending.value) {
       return t('Opening QR companion...')
     }
     if (selectedProvider.value.id === 'telegram' && telegramQrLogin.isPending.value) {
@@ -262,7 +261,7 @@ export function useIntegrationConnectionWizardSurface(options: {
         ]
       case 'whatsapp':
         return [
-          { label: t('Устройство'), description: openCompanionMutation.isPending.value ? t('Открывается') : statusDescription(), status: resultStatus() },
+          { label: t('Устройство'), description: hiddenWebviewMutation.isPending.value ? t('Открывается') : statusDescription(), status: resultStatus() },
           { label: t('Чаты'), description: wizard.guidedResult?.kind === 'success' ? t('Проверяется') : t('После входа'), status: wizard.guidedResult?.kind === 'success' ? 'pending' : 'pending' },
           { label: t('Отправка'), description: t('После входа'), status: 'pending' },
         ]

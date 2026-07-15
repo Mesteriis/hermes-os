@@ -1,0 +1,12 @@
+version: 1
+language: "ru"
+secrets:
+  default: "redact"
+  redacted_markers:
+    - "secret_redacted"
+wiki:
+  root: "docs/wiki"
+  generated_metadata:
+    - "repo-index.json"
+    - "source-map.yml"
+    - "coverage.yml"

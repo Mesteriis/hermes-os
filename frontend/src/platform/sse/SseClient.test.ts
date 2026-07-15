@@ -26,7 +26,7 @@ describe('SseClient', () => {
 
     const received = new Promise<void>((resolve) => {
       const client = new SseClient({
-        url: 'http://127.0.0.1:8080/api/events/stream',
+		url: 'http://127.0.0.1:8080/api/realtime/v2/events',
         secret: 'test-secret',
         reconnectDelay: 60_000,
         onStatus: (status) => statuses.push(`${status.transport}:${status.state}`),
@@ -61,7 +61,7 @@ describe('SseClient', () => {
 
     const received = new Promise<{ id: string; event: string; data: string }>((resolve) => {
       const client = new SseClient({
-        url: 'http://127.0.0.1:8080/api/events/stream',
+		url: 'http://127.0.0.1:8080/api/realtime/v2/events',
         secret: 'test-secret',
         lastEventId: '41',
         reconnectDelay: 60_000,
@@ -80,7 +80,7 @@ describe('SseClient', () => {
     })
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toBe('http://127.0.0.1:8080/api/events/stream?after_position=41')
+	expect(url).toBe('http://127.0.0.1:8080/api/realtime/v2/events?after_position=41')
     expect(init.headers).toMatchObject({
       Accept: 'text/event-stream',
       'X-Hermes-Secret': 'test-secret',
@@ -102,7 +102,7 @@ describe('SseClient', () => {
 
     const received = new Promise<void>((resolve) => {
       const client = new SseClient({
-        url: '/api/events/stream?source=frontend',
+		url: '/api/realtime/v2/events?source=frontend',
         secret: 'test-secret',
         lastEventId: '9',
         reconnectDelay: 60_000,
@@ -116,79 +116,29 @@ describe('SseClient', () => {
 
     await received
     const [url] = fetchMock.mock.calls[0]
-    expect(url).toBe('http://127.0.0.1:5174/api/events/stream?source=frontend&after_position=9')
+	expect(url).toBe('http://127.0.0.1:5174/api/realtime/v2/events?source=frontend&after_position=9')
   })
 
-  it('falls back to protected long polling after SSE reconnect attempts are exhausted', async () => {
+	it('reports SSE disconnection when its retry budget is exhausted', async () => {
     vi.useFakeTimers()
     const statuses: string[] = []
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(new Response('stream unavailable', { status: 503 }))
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            items: [
-              {
-                position: 42,
-                event: {
-                  event_id: 'evt-long-poll',
-                  event_type: 'mail.ai_state.changed',
-                  payload: { ai_state: 'PROCESSING' }
-                }
-              }
-            ],
-            next_after_position: 42,
-            has_more: false
-          }),
-          {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          }
-        )
-      )
+		.mockResolvedValueOnce(new Response('stream unavailable', { status: 503 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const received = new Promise<{ id: string; event: string; data: string }>((resolve) => {
-      const client = new SseClient({
-        url: 'http://127.0.0.1:8080/api/events/stream',
-        longPollUrl: 'http://127.0.0.1:8080/api/v1/events',
+	const client = new SseClient({
+		url: 'http://127.0.0.1:8080/api/realtime/v2/events',
         secret: 'test-secret',
         lastEventId: '41',
         maxReconnectAttempts: 0,
-        longPollDelay: 60_000,
-        longPollWaitSeconds: 15,
+		reconnectDelay: 60_000,
         onStatus: (status) => statuses.push(`${status.transport}:${status.state}`),
-        onMessage: (event) => {
-          resolve(event)
-          client.disconnect()
-        }
-      })
-      client.connect()
-    })
+	})
+	client.connect()
+	await vi.advanceTimersByTimeAsync(0)
 
-    await expect(received).resolves.toEqual({
-      id: '42',
-      event: 'event',
-      data: JSON.stringify({
-        position: 42,
-        event: {
-          event_id: 'evt-long-poll',
-          event_type: 'mail.ai_state.changed',
-          payload: { ai_state: 'PROCESSING' }
-        }
-      })
-    })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[1][0]).toBe(
-      'http://127.0.0.1:8080/api/v1/events?after_position=41&limit=100&wait_seconds=15'
-    )
-    expect(fetchMock.mock.calls[1][1].headers).toMatchObject({
-      Accept: 'application/json',
-      'X-Hermes-Secret': 'test-secret',
-      'Last-Event-ID': '41'
-    })
-    expect(statuses).toContain('long_poll:fallback')
-    expect(statuses).toContain('long_poll:connected')
+	expect(fetchMock).toHaveBeenCalledOnce()
+	expect(statuses).toContain('sse:disconnected')
   })
 })

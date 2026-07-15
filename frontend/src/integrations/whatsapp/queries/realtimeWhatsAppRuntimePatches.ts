@@ -266,10 +266,6 @@ function patchRuntimeStatus(
 				booleanValue(payload.live_runtime_available) ?? status.live_runtime_available,
 			live_send_available:
 				booleanValue(payload.live_send_available) ?? status.live_send_available,
-			qr_pairing_available:
-				booleanValue(payload.qr_pairing_available) ?? status.qr_pairing_available,
-			pair_code_available:
-				booleanValue(payload.pair_code_available) ?? status.pair_code_available,
 			media_download_available:
 				booleanValue(payload.media_download_available) ?? status.media_download_available,
 			media_upload_available:

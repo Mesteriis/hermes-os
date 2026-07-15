@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "cargo": {
+    "metadataKey": "hermes",
+    "packagePrefix": "hermes-",
+    "roles": [
+      "core",
+      "domain",
+      "integration",
+      "workflow",
+      "engine",
+      "platform",
+      "api",
+      "test"
+    ],
+    "surfaces": [
+      "contract",
+      "implementation",
+      "runtime",
+      "persistence",
+      "test_support"
+    ]
+  },
+  "domains": {
+    "registered": [
+      "communications",
+      "contacts",
+      "organizations",
+      "relationships",
+      "projects",
+      "tasks",
+      "obligations",
+      "decisions",
+      "calendar",
+      "documents",
+      "knowledge",
+      "review",
+      "ai"
+    ],
+    "developmentAllowlist": [
+      "communications",
+      "contacts",
+      "organizations",
+      "tasks",
+      "calendar",
+      "documents",
+      "ai"
+    ],
+    "blocked": [
+      "relationships",
+      "projects",
+      "obligations",
+      "decisions",
+      "knowledge",
+      "review"
+    ]
+  },
+  "projections": {
+    "blockedOwners": [
+      "graph",
+      "timeline",
+      "search",
+      "context"
+    ],
+    "blockedRoles": [
+      "projection"
+    ]
+  },
+  "owners": {
+    "platform": [
+      "events",
+      "telemetry",
+      "storage",
+      "vault",
+      "blob",
+      "clock",
+      "scheduler",
+      "runtime_protocol"
+    ],
+    "api": [
+      "gateway"
+    ],
+    "core": "kernel",
+    "test": "test"
+  },
+  "dependencies": {
+    "integrationDomainContractOwners": [
+      "communications"
+    ]
+  },
+  "storage": {
+    "clientDependencies": [
+      "sqlx",
+      "tokio-postgres",
+      "postgres",
+      "diesel",
+      "sea-orm"
+    ]
+  },
+  "kernel": {
+    "package": "hermes-kernel",
+    "requiredComponents": [
+      "supervisor",
+      "module_registry",
+      "capability_router",
+      "core_gateway",
+      "event_hub",
+      "telemetry_control"
+    ],
+    "exclusiveComponents": [
+      "event_hub",
+      "telemetry_control"
+    ]
+  },
+  "telemetry": {
+    "collectorComponent": "telemetry_collector",
+    "owner": "telemetry",
+    "forbiddenDependencies": [
+      "async-nats",
+      "nats",
+      "sqlx",
+      "tokio-postgres",
+      "postgres",
+      "diesel",
+      "sea-orm"
+    ]
+  },
+  "source": {
+    "roots": [
+      "src"
+    ],
+    "ignoredDirectories": [
+      "target",
+      "node_modules",
+      "dist",
+      "references"
+    ],
+    "ownerPathMarkers": [
+      "modules",
+      "crates",
+      "services",
+      "domains",
+      "integrations",
+      "workflows",
+      "engines",
+      "platform",
+      "api"
+    ],
+    "sqlExtensions": [
+      ".sql"
+    ],
+    "contentExtensions": [
+      ".sql",
+      ".rs"
+    ],
+    "forbidSymlinks": true
+  },
+  "tests": {
+    "workspaceRoots": [
+      "tests/support"
+    ],
+    "forbiddenProductionDirectories": [
+      "tests",
+      "fixtures",
+      "snapshots"
+    ],
+    "forbiddenProductionFilePatterns": [
+      "*_test.rs",
+      "test_*.rs",
+      "*.snap"
+    ],
+    "forbidInlineRustTests": true
+  },
+  "layout": {
+    "requiredBackendPaths": [
+      "Cargo.toml",
+      "Makefile",
+      "architecture/policy.json",
+      "scripts/check-architecture-policy.mjs",
+      "scripts/check-cargo-boundaries.mjs",
+      "tests/architecture"
+    ],
+    "forbiddenProjectPaths": [
+      "Cargo.toml",
+      "Makefile",
+      "architecture",
+      "scripts",
+      "tests/architecture",
+      "kernel",
+      "platform",
+      "api",
+      "domains",
+      "integrations",
+      "workflows",
+      "engines",
+      "services"
+    ],
+    "forbiddenBackendPaths": [
+      "migrations",
+      "kernel",
+      "platform",
+      "api",
+      "domains",
+      "integrations",
+      "workflows",
+      "engines",
+      "services"
+    ]
+  }
+}

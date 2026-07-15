@@ -1,13 +1,12 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-export type RealtimeTransportKind = 'websocket' | 'sse' | 'long_poll'
+export type RealtimeTransportKind = 'sse'
 export type RealtimeTransportState =
 	| 'idle'
 	| 'connecting'
 	| 'connected'
 	| 'reconnecting'
-	| 'fallback'
 	| 'disconnected'
 export type RealtimeStatusTone = 'neutral' | 'success' | 'warning' | 'danger'
 
@@ -33,7 +32,7 @@ export type RealtimeStatusSnapshot = {
 }
 
 const initialStatus: RealtimeStatusSnapshot = {
-	transport: 'websocket',
+	transport: 'sse',
 	state: 'idle',
 	attempt: null,
 	maxAttempts: null,
@@ -51,9 +50,7 @@ export const useRealtimeStatusStore = defineStore('realtimeStatus', () => {
 
 	const isRealtimeDegraded = computed<boolean>(() => {
 		return (
-			status.value.state === 'reconnecting' ||
-			status.value.transport === 'long_poll' ||
-			status.value.lastLaggedSkipped !== null
+			status.value.state === 'reconnecting' || status.value.lastLaggedSkipped !== null
 		)
 	})
 
@@ -65,21 +62,18 @@ export const useRealtimeStatusStore = defineStore('realtimeStatus', () => {
 		if (status.value.state === 'idle') return 'Realtime starting'
 		if (status.value.state === 'connecting') return 'Realtime connecting'
 		if (status.value.state === 'connected') {
-			return status.value.transport === 'long_poll' ? 'Realtime fallback' : 'Realtime live'
+			return 'Realtime live'
 		}
 		if (status.value.state === 'reconnecting') return 'Realtime reconnecting'
-		if (status.value.state === 'fallback') return 'Realtime fallback'
 		return 'Realtime offline'
 	})
 
 	const realtimeStatusTone = computed<RealtimeStatusTone>(() => {
-		if (status.value.state === 'connected' && status.value.transport !== 'long_poll') {
+		if (status.value.state === 'connected') {
 			return 'success'
 		}
 		if (
-			status.value.state === 'reconnecting' ||
-			status.value.state === 'fallback' ||
-			status.value.transport === 'long_poll'
+			status.value.state === 'reconnecting'
 		) {
 			return 'warning'
 		}
@@ -126,14 +120,8 @@ export const useRealtimeStatusStore = defineStore('realtimeStatus', () => {
 			error: update.error?.trim() || null,
 			lastEventId: status.value.lastEventId,
 			lastEventAt: status.value.lastEventAt,
-			lastLaggedSkipped:
-				update.state === 'connected' && update.transport !== 'long_poll'
-					? null
-					: status.value.lastLaggedSkipped,
-			lastLaggedAt:
-				update.state === 'connected' && update.transport !== 'long_poll'
-					? null
-					: status.value.lastLaggedAt,
+			lastLaggedSkipped: update.state === 'connected' ? null : status.value.lastLaggedSkipped,
+			lastLaggedAt: update.state === 'connected' ? null : status.value.lastLaggedAt,
 			updatedAt: new Date().toISOString()
 		}
 	}

@@ -75,18 +75,6 @@ const providerCatalog: ConnectionProviderOption[] = [
     flowPattern: 'managed_surface',
   },
   {
-    id: 'whatsapp',
-    label: 'WhatsApp',
-    icon: 'tabler:brand-whatsapp',
-    summary: 'Hidden companion runtime owns the WhatsApp session and keeps pairing artifacts off the settings surface.',
-    flowLabel: 'QR companion',
-    entryLabel: 'Managed runtime',
-    status: 'Resume from selected account',
-    guidance: 'Start the hidden companion runtime. Phone and session material stay off this surface.',
-    ctaLabel: 'Start hidden runtime',
-    flowPattern: 'qr_companion',
-  },
-  {
     id: 'telegram',
     label: 'Telegram',
     icon: 'tabler:brand-telegram',
@@ -97,30 +85,6 @@ const providerCatalog: ConnectionProviderOption[] = [
     guidance: 'Scan the QR code with Telegram. TDLib session material remains in the provider runtime boundary.',
     ctaLabel: 'Start Telegram QR',
     flowPattern: 'qr_companion',
-  },
-  {
-    id: 'zoom',
-    label: 'Zoom',
-    icon: 'tabler:video',
-    summary: 'Zoom authorization returns through a browser callback after the workspace-managed app is provisioned.',
-    flowLabel: 'Browser callback',
-    entryLabel: 'Workspace callback',
-    status: 'Workspace-prepared',
-    guidance: 'Zoom client credentials are provisioned outside this screen. Manual secret entry stays disabled.',
-    ctaLabel: 'Review callback route',
-    flowPattern: 'browser_callback',
-  },
-  {
-    id: 'yandex_telemost',
-    label: 'Yandex Telemost',
-    icon: 'tabler:video-plus',
-    summary: 'Telemost connections follow a managed callback flow rather than an owner-entered credential form.',
-    flowLabel: 'Browser callback',
-    entryLabel: 'Workspace callback',
-    status: 'Workspace-prepared',
-    guidance: 'OAuth and runtime secrets are provisioned by the managed flow, not by ad hoc settings fields.',
-    ctaLabel: 'Review callback route',
-    flowPattern: 'browser_callback',
   },
   {
     id: 'zulip',
@@ -145,13 +109,6 @@ export function connectionProviderIdFromAccountKind(
     case 'telegram_user':
     case 'telegram_bot':
       return 'telegram'
-    case 'whatsapp_web':
-      return 'whatsapp'
-    case 'zoom_user':
-    case 'zoom_server_to_server':
-      return 'zoom'
-    case 'yandex_telemost_user':
-      return 'yandex_telemost'
     case 'zulip_bot':
       return 'zulip'
     default:

@@ -19,8 +19,8 @@ describe('realtime status store', () => {
 		expect(store.realtimeStatusTone).toBe('success')
 		expect(store.isRealtimeDegraded).toBe(false)
 
-		store.setRealtimeStatus({ transport: 'long_poll', state: 'fallback' })
-		expect(store.realtimeStatusLabel).toBe('Realtime fallback')
+		store.setRealtimeStatus({ transport: 'sse', state: 'reconnecting' })
+		expect(store.realtimeStatusLabel).toBe('Realtime reconnecting')
 		expect(store.realtimeStatusTone).toBe('warning')
 		expect(store.isRealtimeDegraded).toBe(true)
 	})
@@ -76,7 +76,7 @@ describe('realtime status store', () => {
 		expect(store.realtimeRecoveryDetail).toContain('Skipped 7 events.')
 
 		store.setRealtimeStatus({
-			transport: 'websocket',
+			transport: 'sse',
 			state: 'connected'
 		})
 		expect(store.isRealtimeDegraded).toBe(false)
@@ -94,8 +94,8 @@ describe('realtime status store', () => {
 		expect(reconnect).toHaveBeenCalledTimes(1)
 
 		store.setRealtimeStatus({
-			transport: 'long_poll',
-			state: 'fallback'
+			transport: 'sse',
+			state: 'reconnecting'
 		})
 		expect(store.canTriggerReconnect).toBe(true)
 	})

@@ -1,288 +1,185 @@
 # Hermes Hub
 
-Hermes Hub - локальная Personal Memory System для коммуникаций, знаний,
-памяти, отношений, проектов, документов, решений, обязательств и контекста.
+Hermes Hub — local-first Personal Memory System / Personal Operating System.
+Он объединяет коммуникации, evidence, знания, память, отношения, проекты,
+документы, задачи, календарный контекст, решения и обязательства владельца.
 
-Проектируемая система объединяет Communications, Personas, Organizations,
-Projects, Documents, Tasks, Events, Knowledge, Decisions и Obligations в одну
-локальную модель памяти. Hermes не является почтовым клиентом, мессенджером,
-CRM, task tracker, calendar app или note-taking app. Центральная идея -
-долговременная, переносимая память владельца, построенная на событиях, графе
-знаний, RAG, vector search и структурированных проекциях, без fine-tuning
-пользовательских данных.
+## Текущее состояние
 
-## Статус
+> Clean-room backend ещё не реализован и не запускается.
 
-Репозиторий перешел от foundation phase к рабочей canonical evidence
-architecture.
+На 2026-07-15 репозиторий находится между предыдущей реализацией и новым
+модульным backend:
 
-## Working Today
+| Область | Текущее состояние |
+|---|---|
+| Clean-room backend | В `backend/` есть virtual Cargo workspace и executable architecture guard; production packages и runtime отсутствуют |
+| Предыдущий backend | Перенесён в `references/backend-legacy/` и используется только как evidence/reference |
+| Desktop frontend | Vue 3 + Vite + Tauri сохранён как продуктовая и миграционная поверхность, но ещё не переключён на новый Core Gateway |
+| Android | Запланирован; код клиента и окончательная Kernel topology отсутствуют |
+| Active architecture | ADR-0200…ADR-0211 в `docs/adr/`; executable policy, scripts и tests находятся внутри `backend/` |
+| Предыдущая документация | Перенесена в `references/backend-legacy/docs/` и не является действующей policy |
 
-✅ Gmail account connection
-✅ IMAP account connection
-✅ Email ingestion and storage
-✅ Telegram message ingestion
-✅ Review inbox
-✅ Semantic search infrastructure
+В новой реализации пока нет подтверждённых end-to-end функций, API routes,
+схемы базы данных, migrations или production crates.
 
-## Known Limitations
+В предыдущей реализации только Mail, Telegram и Zulip сообщались как
+работающие. После переноса в reference они не считаются проверенными функциями
+новой системы. WhatsApp и остальные providers не считаются работающими без
+нового executable evidence.
 
-🚧 Telegram production sync
-🚧 WhatsApp
-🚧 Graph workflows
+## Запуск и validation
 
-## Run Today
-
-```sh
-make dev
-```
-
-`make dev` is the single local full-stack entrypoint.
-
-Текущий результат:
-
-- продуктовая и архитектурная документация
-- базовая структура monorepo
-- ADR по ключевым долгосрочным решениям
-- roadmap до версии 5.0
-- Rust backend foundation с конфигурацией и `GET /healthz`
-- router-level local API secret guard for protected local APIs
-- append-only audit log for authorized event API access attempts
-- communication ingestion storage foundation for Gmail, iCloud Mail and generic IMAP
-- secret reference metadata boundary for provider credentials
-- host vault account setup for Gmail, iCloud Mail and generic IMAP
-- email provider networking with read/write capability boundaries; automated
-  provider tests keep read-only paths where required
-- persistent local mail blob/attachment metadata foundation
-- V1 status API for desktop shell bootstrapping
-- desktop frontend on Vue 3 + Vite packaged in the Tauri shell
-- Docker Compose окружение для локальной разработки
-- local Ollama AI runtime boundary
-- pgvector semantic embeddings with `halfvec(2560)`
-- protected AI APIs for status, agents, run history, cited answers, task candidate refresh and meeting prep
-- Telegram fixture foundation with policy-backed automation dry-run and call transcript storage
-- WhatsApp Web fixture/manual companion foundation
-- capability decision audit slice for Telegram send policy decisions
-- canonical evidence architecture:
-  - `Vault -> Observation Platform -> Ingestion -> Domains -> Knowledge -> Review -> Actions`
-  - `Observation Platform` as canonical append-only evidence store
-  - `Review` as the unified inbox domain for approval, promotion and dismissal
-  - `Context Packs` under `engines/context_packs`
-- first-class review API and review inbox UI for canonical evidence promotion
-- Vue 3 + Vite desktop frontend packaged in the Tauri shell
-
-Current architecture completion report:
-
-- [Canonical Evidence Final Report](canonical-evidence-final-report.md)
-
-## Open Source
-
-Hermes Hub is published as an open source repository under the MIT License.
-
-Documentation portal:
-
-- [Hermes Hub Documentation](https://mesteriis.github.io/hermes-os/) - styled
-  GitHub Pages entrypoint for the canonical documentation model.
-- [Repository Documentation Index](docs/README.md) - source documentation in
-  the repository.
-
-Before contributing:
-
-- read [CONTRIBUTING.md](CONTRIBUTING.md);
-- do not commit secrets, private message data, local `.env` files or generated data under `docker/data/`;
-- report security issues through [SECURITY.md](SECURITY.md), not public issues;
-- keep changes aligned with the relevant ADRs in [docs/adr](docs/adr).
-
-## Принципы
-
-- Local first: пользователь владеет данными, облако не является обязательной точкой отказа.
-- Knowledge graph first: память живет в графе, индексах и событиях, а не в весах модели.
-- Event spine + canonical evidence: значимые изменения фиксируются event log,
-  а входное evidence идет через Observation Platform.
-- AI native: AI является частью всех подсистем, а не отдельным чат-виджетом.
-- Long-term product: проектируется конечная система, не MVP.
-
-## Целевая технологическая рамка
-
-- Backend: Rust
-- Frontend: Vue 3 + Vite
-- Desktop: Tauri
-- Database: PostgreSQL
-- Full text search: Tantivy
-- Local AI: Ollama
-- Telemetry: OpenTelemetry
-
-## Структура
-
-- [docs/foundation](docs/foundation) - каноническая модель, glossary, engines и domain map.
-- [docs/site](docs/site) - GitHub Pages documentation portal styled with the
-  Hermes shell design language.
-- [docs/vision](docs/vision) - долгосрочное видение.
-- [docs/product](docs/product) - charter, scope и продуктовые границы.
-- [docs/architecture](docs/architecture) - системная архитектура и ключевые технические модели.
-- [docs/app](docs/app) - HTTP/router/application shell layer.
-- [docs/application](docs/application) - application-service coordination.
-- [docs/domains](docs/domains) - доменные области, зеркальные `backend/src/domains`.
-- [docs/engines](docs/engines) - reusable engines.
-- [docs/integrations](docs/integrations) - provider/runtime integrations.
-- [docs/platform](docs/platform) - platform primitives.
-- [docs/vault](docs/vault) - host-vault and secret-payload boundary.
-- [docs/adr](docs/adr) - Architecture Decision Records.
-- [docs/ai](docs/ai) - AI layer and agent architecture.
-- [docs/ui](docs/ui) - UI architecture и design system vision.
-- [docs/roadmap](docs/roadmap) - план развития до версии 5.0.
-- [docs/research](docs/research) - вопросы исследования и открытые риски.
-- [backend](backend) - Rust backend.
-- [frontend](frontend) - desktop-only Vue 3 + Vite frontend packaged in a Tauri shell.
-- [infrastructure](infrastructure) - self-hosted и локальная инфраструктура.
-- [tools](tools) - будущие developer и data tools.
-- [examples](examples) - будущие спецификации примеров и тестовых сценариев.
-
-## V1 Local Run
+Поддерживаемой команды запуска clean-room full stack пока нет. Доступен только
+новый статический architecture gate:
 
 ```sh
-make dev
+make -C backend architecture-check
+make -C backend test-architecture
+make -C backend validate
 ```
 
-`make dev` is the single local full-stack entrypoint. It creates `docker/.env`
-from `docker/.env.example` when missing, starts PostgreSQL in Docker, runs the
-Rust backend through repo-local `bacon`, runs the Vue 3 + Vite frontend
-natively, and writes structured local logs under
-`.local/dev-logs/`. Ports held by stale dev processes from a previous session
-are reclaimed automatically.
+Текущий `make -C backend validate` проверяет только clean-room architecture
+policy и её negative self-tests; он не собирает и не запускает отсутствующий
+backend runtime.
 
-To also open the Tauri desktop shell window on top of the same dev loop:
+Не следует использовать старые `make dev`, `make build`,
+`/api/v1/**` routes или `X-Hermes-Secret` как описание новой системы. Legacy
+Makefile, scripts и связанные tool/CI configs перенесены в
+`references/backend-legacy/` и не являются поддерживаемым command surface.
 
-```sh
-make dev-desktop
+Для scoped frontend-работы сначала проверяйте актуальные scripts в
+`frontend/package.json`. Успешная frontend-команда не является доказательством
+работающего backend или end-to-end приложения.
+
+Legacy backend можно читать и исследовать, но запрещено:
+
+- импортировать его как dependency clean-room backend;
+- считать его routes, schema, migrations или architecture действующим
+  контрактом;
+- запускать live provider actions или использовать реальные credentials;
+- переносить код без повторной проверки ownership, security и новых ADR.
+
+## Продуктовая модель
+
+Hermes имеет два связанных пользовательских слоя:
+
+1. Полноценные provider-specific operational experiences для Mail, Telegram,
+   WhatsApp, Zulip и других встроенных integrations.
+2. Provider-neutral evidence, memory и context над всеми каналами.
+
+Integration владеет внешним протоколом, auth/session runtime, cursor,
+operational contract и преобразованием наблюдений в neutral evidence. Domain
+не знает об integration implementation и не меняет поведение по provider
+identity.
+
+Базовый поток:
+
+```text
+External signal
+        ↓
+Integration module
+        ├─→ provider operational projection → channel screen
+        └─→ neutral evidence observation
+                    ↓
+              Review / workflows
+                    ↓
+        domain command and durable truth
 ```
 
-For a stable tail target during one dev session:
+Raw provider data и AI output не становятся durable business truth напрямую.
+Они сохраняются как evidence/candidate с provenance и проходят через owner
+domain или явный workflow.
 
-```sh
-make logs
+## Архитектура clean-room backend
+
+```text
+Tauri / planned Android / headless client
+                    ↓
+               Core Gateway
+                    ↓
+       Kernel identity/capability router
+                    ↓
+   isolated domain, workflow and integration runtimes
+             ↙                    ↘
+     PgBouncer → PostgreSQL     NATS JetStream
 ```
 
-## Разработка
+Основные инварианты:
 
-Поддерживаемый публичный command surface intentionally small:
+- Kernel — только технический control plane, а не business layer.
+- Каждый independently restartable module является отдельным OS-процессом.
+- Ошибка одного domain, workflow или integration не останавливает соседние
+  runtime.
+- Kernel достигает `recovery_only` без PostgreSQL, PgBouncer, NATS, vault и
+  modules.
+- Module-to-module implementation imports, sockets и cross-module SQL
+  запрещены.
+- Каждый durable owner использует отдельную PostgreSQL role/grants через
+  PgBouncer.
+- Durable commands/events доставляются через transactional outbox/inbox и NATS
+  JetStream с at-least-once semantics.
+- Desktop и Android общаются только с Core Gateway.
+- Client queries/commands используют ConnectRPC/Protobuf, realtime —
+  replayable SSE, blobs — bounded HTTP по opaque references.
+- Provider operational contracts не видны context domains.
+- Plugin store, remote executable code и silent topology fallback не
+  поддерживаются.
 
-```sh
-make dev
-make dev-desktop
-make logs
-make build
-make migrate
-make vault-backup
-make vault-restore
-make clean
-make clean-dev
-make clean-validate
-make clean-build
-make clean-data
-make clean-vault
-```
+## Структура репозитория
 
-`make build` делает native release build backend, frontend и Tauri app, включая
-внутреннюю подготовку bundled resources. `make migrate` поднимает PostgreSQL
-при необходимости и запускает backend-managed SQLx migrations.
+- [`backend/`](backend/) — единственная граница clean-room backend: virtual
+  Cargo workspace, policy, scripts и tests уже существуют; production code
+  пока отсутствует.
+- [`references/backend-legacy/`](references/backend-legacy/) — предыдущий Rust
+  backend и workspace только для исследования.
+- [`frontend/`](frontend/) — существующий Vue 3 / Vite / Tauri client,
+  ожидающий перехода на новые contracts.
+- [`docs/`](docs/) — только действующие clean-room ADR и минимальные
+  architecture summaries.
+- [`references/backend-legacy/docs/`](references/backend-legacy/docs/) — вся
+  документация предыдущей реализации, включая archive, product/domain specs,
+  roadmaps, testing/status материалы и generated wiki.
+- [`docker/`](docker/) — унаследованные local infrastructure assets; до
+  clean-room замены каждое использование требует проверки фактических путей и
+  dependencies.
+- [`references/backend-legacy/scripts/`](references/backend-legacy/scripts/) и
+  [`references/backend-legacy/Makefile`](references/backend-legacy/Makefile) —
+  неисполняемый operational reference предыдущей системы.
 
-Cargo artifacts are split by workflow:
+## Порядок чтения для разработки
 
-- `make dev` and `make migrate` use `target/dev`.
-- `make validate` uses `target/validate` with `CARGO_INCREMENTAL=0`.
-- `make build` uses `target/build` for backend release sidecar builds.
-- Tauri still uses `frontend/src-tauri/target`.
+1. [`AGENTS.md`](AGENTS.md) — обязательные правила работы в репозитории.
+2. [Backend clean-room boundary](backend/README.md).
+3. [Active ADR index](docs/adr/README.md).
+4. [Architecture overview](docs/architecture/architecture-overview.md).
+5. [Component communication contract](docs/architecture/component-communication.md).
+6. [Executable architecture policy](backend/architecture/README.md).
 
-`make clean` удаляет все build artifacts, frontend cache/artifacts, temp files
-и logs, но не удаляет базу. `make clean-dev`, `make clean-validate` and
-`make clean-build` clean only the corresponding artifact family. `make clean-data`
-требует подтверждения и удаляет только локальные данные PostgreSQL под
-`docker/data/postgres/`. `make clean-vault` требует подтверждения и удаляет
-только локальные данные vault под `HERMES_HOST_VAULT_HOME`.
+Первый production crate нельзя создавать до согласования capability inventory,
+domain ownership inventory и оставшихся foundation contracts, перечисленных в
+active ADR.
 
-Создать timestamped backup PostgreSQL и host vault:
+## Безопасность и данные
 
-```sh
-make vault-backup
-```
+- Не commit и не печатайте credentials, tokens, cookies, private keys,
+  provider sessions, private messages или documents.
+- PostgreSQL является canonical durable store; NATS является delivery/replay
+  transport, а не source of truth.
+- Search indexes, embeddings, projections и context packs являются
+  rebuildable state.
+- Provider credentials и session state остаются за vault boundary.
+- Imported content считается untrusted input и не является инструкцией для AI
+  или tool runtime.
 
-Backup сохраняется под `backups/YYYY-MM-DD/<timestamp>/` и включает:
+Security issues следует сообщать согласно [`SECURITY.md`](SECURITY.md), а не в
+публичном issue.
 
-- `postgres.sql`
-- `vault/`
-- `manifest.json`
-- `RESTORE.txt`
+## Документация и лицензия
 
-Восстановить backup интерактивно:
-
-```sh
-make vault-restore
-```
-
-`make vault-restore` предлагает список доступных backup directories, требует
-подтверждения и затем восстанавливает PostgreSQL dump и host vault snapshot.
-
-`/api/v1/events` и `/api/v1/audit/events` требуют локальный API secret header:
-
-```sh
-X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>
-```
-
-`/api/v1/status` используется desktop shell и также требует локальный API secret header:
-
-```sh
-GET /api/v1/status
-X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>
-```
-
-Communication message read endpoints for the desktop shell use the same local API secret and secret header:
-
-```sh
-GET /api/v1/communications/messages?limit=50
-GET /api/v1/communications/messages/<message_id>
-X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>
-```
-
-The message list reads canonical `communication_messages`; message detail returns canonical body text plus attachment metadata and local blob references. It does not read or return attachment bytes.
-
-AI APIs use the same local secret and secret header:
-
-```sh
-GET /api/v1/ai/status
-GET /api/v1/ai/agents
-GET /api/v1/ai/runs
-GET /api/v1/ai/runs/<run_id>
-POST /api/v1/ai/answers
-POST /api/v1/ai/task-candidates/refresh
-POST /api/v1/ai/meeting-prep
-X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>
-```
-
-AI task extraction writes only `suggested` task candidates. Existing review APIs remain the only path to active tasks.
-
-Account setup endpoints require the host vault to be initialized and unlocked.
-New credential payloads are stored in the host vault; PostgreSQL stores
-non-secret account metadata, secret references and account-to-secret bindings.
-`HERMES_SECRET_VAULT_KEY` remains a legacy migration compatibility variable only.
-
-UI scope is desktop/laptop only while ADR-0031 is active; mobile UI is not implemented or validated.
-
-## Главные документы
-
-- [Documentation Index](docs/README.md)
-- [Product Master Spec](docs/product/master-spec.md)
-- [Product Development Roadmap](docs/product/development-roadmap.md)
-- [Foundation Vision](docs/foundation/vision.md)
-- [Foundation Glossary](docs/foundation/glossary.md)
-- [World Model](docs/foundation/world-model.md)
-- [Engines](docs/foundation/engines.md)
-- [Vision Document](docs/vision/vision-document.md)
-- [Product Charter](docs/product/product-charter.md)
-- [Product Scope](docs/product/product-scope.md)
-- [Product Roadmap](docs/roadmap/product-roadmap.md)
-- [V1 Closure Checklist](docs/roadmap/v1-closure-checklist.md)
-- [V2 Graph Core Checklist](docs/roadmap/v2-graph-core-checklist.md)
-- [Architecture Overview](docs/architecture/architecture-overview.md)
-- [ADR Index](docs/adr/README.md)
-- [License](LICENSE)
+- [Documentation index](docs/README.md)
+- [Active ADR index](docs/adr/README.md)
+- [Legacy documentation reference](references/backend-legacy/docs/README.md)
+- [Contributing](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [MIT License](LICENSE)

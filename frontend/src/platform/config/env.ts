@@ -2,11 +2,8 @@ export type FrontendConfig = {
 	apiBaseUrl: string
 	apiSecret: string
 	sseUrl: string
-	webSocketUrl: string
-	realtimeTransport: RealtimeTransportPreference
 }
 
-export type RealtimeTransportPreference = 'websocket' | 'sse'
 type EnvSource = Record<string, string | boolean | undefined>
 
 const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8080'
@@ -24,10 +21,7 @@ export function loadFrontendConfig(env: EnvSource = import.meta.env): FrontendCo
 	return {
 		apiBaseUrl,
 		apiSecret,
-		sseUrl: stringValue(env.VITE_HERMES_SSE_URL) ?? `${apiBaseUrl}/api/events/stream`,
-		webSocketUrl:
-			stringValue(env.VITE_HERMES_WEBSOCKET_URL) ?? defaultWebSocketUrl(apiBaseUrl),
-		realtimeTransport: realtimeTransportPreference(env.VITE_HERMES_REALTIME_TRANSPORT)
+		sseUrl: stringValue(env.VITE_HERMES_SSE_URL) ?? `${apiBaseUrl}/api/realtime/v2/events`
 	}
 }
 
@@ -37,21 +31,4 @@ function stringValue(value: string | boolean | undefined): string | undefined {
 
 function normalizeBaseUrl(value: string): string {
 	return value.replace(/\/+$/, '')
-}
-
-function defaultWebSocketUrl(apiBaseUrl: string): string {
-	const parsed = new URL(apiBaseUrl)
-	parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:'
-	parsed.pathname = '/api/events/ws'
-	parsed.search = ''
-	parsed.hash = ''
-	return parsed.toString().replace(/\/$/, '')
-}
-
-function realtimeTransportPreference(
-	value: string | boolean | undefined
-): RealtimeTransportPreference {
-	const normalized = stringValue(value)?.toLowerCase()
-	if (normalized === 'websocket') return 'websocket'
-	return 'sse'
 }

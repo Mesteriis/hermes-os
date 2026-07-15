@@ -65,8 +65,6 @@ export type WhatsAppRuntimeStatus = {
   status: string
   live_runtime_available: boolean
   live_send_available: boolean
-  qr_pairing_available: boolean
-  pair_code_available: boolean
   media_download_available: boolean
   media_upload_available: boolean
   session_restore_available: boolean

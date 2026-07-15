@@ -162,7 +162,7 @@ function realtimeHealthCheck(
     }
   }
 
-  if (realtime.state === 'connected' && realtime.transport !== 'long_poll') {
+  if (realtime.state === 'connected') {
     return {
       id: 'frontend-realtime',
       label: 'Frontend realtime',
@@ -173,9 +173,7 @@ function realtimeHealthCheck(
 
   if (
     realtime.state === 'connecting' ||
-    realtime.state === 'reconnecting' ||
-    realtime.state === 'fallback' ||
-    realtime.transport === 'long_poll'
+    realtime.state === 'reconnecting'
   ) {
     return {
       id: 'frontend-realtime',

@@ -144,7 +144,7 @@ function mailStatus(overrides: Partial<MailSyncStatus>): MailSyncStatus {
 
 function realtimeStatus(): RealtimeStatusSnapshot {
   return {
-    transport: 'websocket',
+    transport: 'sse',
     state: 'connected',
     attempt: null,
     maxAttempts: null,

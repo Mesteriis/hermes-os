@@ -1,0 +1,11 @@
+{
+  "batch_id": "batch-20260628T214902",
+  "chunks": 163,
+  "detail_pages": 163,
+  "target_pages": 16,
+  "drift_sections_requiring_review": 24,
+  "no_drift_or_insufficient_context_sections": 139,
+  "source_refs": 2949,
+  "unique_source_refs": 2949,
+  "generated_at": "2026-06-29T01:25:29"
+}

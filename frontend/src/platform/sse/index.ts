@@ -9,11 +9,3 @@ export type {
 	SseStatusHandler,
 	SseTransport
 } from './SseClient'
-export { WebSocketClient } from './WebSocketClient'
-export type {
-	WebSocketClientOptions,
-	WebSocketErrorHandler,
-	WebSocketEventHandler,
-	WebSocketStatusEvent,
-	WebSocketStatusHandler
-} from './WebSocketClient'

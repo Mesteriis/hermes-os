@@ -1,11 +1,5 @@
-import { SseClient, WebSocketClient } from '../sse'
-import type {
-	SseClientOptions,
-	SseMessageEvent,
-	SseStatusEvent,
-	WebSocketClientOptions,
-	WebSocketStatusEvent
-} from '../sse'
+import { SseClient } from '../sse'
+import type { SseClientOptions, SseMessageEvent, SseStatusEvent } from '../sse'
 import type { FrontendConfig } from '../config/env'
 import { applyMailRealtimePatch } from '../../domains/communications/queries/realtimeMailPatches'
 import { applyWhatsAppRealtimePatch } from '../../domains/communications/queries/realtimeWhatsAppPatches'
@@ -33,9 +27,9 @@ export type RealtimeQueryClient = {
 	) => unknown
 }
 
-export type RealtimeClientOptions = SseClientOptions | WebSocketClientOptions
+export type RealtimeClientOptions = SseClientOptions
 export type RealtimeClientFactory = (options: RealtimeClientOptions) => RealtimeClient
-export type RealtimeStatusHandler = (status: SseStatusEvent | WebSocketStatusEvent) => void
+export type RealtimeStatusHandler = (status: SseStatusEvent) => void
 
 export type RealtimeBootstrapOptions = {
 	createClient?: RealtimeClientFactory
@@ -118,13 +112,7 @@ export function initializeRealtime(
 ): RealtimeClient {
 	const bootstrapOptions = normalizeRealtimeBootstrapOptions(options)
 	const createClient: RealtimeClientFactory =
-		bootstrapOptions.createClient ??
-		((clientOptions) =>
-			adaptRealtimeClient(
-				isWebSocketClientOptions(clientOptions)
-					? new WebSocketClient(clientOptions)
-					: new SseClient(clientOptions)
-			))
+		bootstrapOptions.createClient ?? ((clientOptions) => adaptRealtimeClient(new SseClient(clientOptions)))
 
 	const clientOptions = realtimeClientOptions(
 		config,
@@ -133,64 +121,15 @@ export function initializeRealtime(
 		bootstrapOptions.onLaggedObserved,
 		bootstrapOptions.onStatus
 	)
-	const createSseClient = (): RealtimeClient => createClient(clientOptions.sse)
-
-	if (config.realtimeTransport !== 'websocket') {
-		const client = createSseClient()
-		client.connect()
-		return {
-			connect: () => client.connect(),
-			disconnect: () => client.disconnect(),
-			reconnect: () => {
-				client.disconnect()
-				client.connect()
-			}
-		}
-	}
-
-	let sseFallbackClient: RealtimeClient | null = null
-	let disconnected = false
-	let reconnecting = false
-	const webSocketClient = createClient({
-		...clientOptions.webSocket,
-		onStatus: (status: WebSocketStatusEvent) => {
-			bootstrapOptions.onStatus?.(status)
-			if (
-				status.state === 'disconnected' &&
-				!disconnected &&
-				!reconnecting &&
-				!sseFallbackClient
-			) {
-				sseFallbackClient = createSseClient()
-				sseFallbackClient.connect()
-			}
-		}
-	})
-	webSocketClient.connect()
+	const client = createClient(clientOptions)
+	client.connect()
 
 	return {
-		connect: () => {
-			disconnected = false
-			if (sseFallbackClient) {
-				sseFallbackClient.connect()
-				return
-			}
-			webSocketClient.connect()
-		},
-		disconnect: () => {
-			disconnected = true
-			webSocketClient.disconnect()
-			sseFallbackClient?.disconnect()
-		},
+		connect: () => client.connect(),
+		disconnect: () => client.disconnect(),
 		reconnect: () => {
-			reconnecting = true
-			disconnected = true
-			sseFallbackClient?.disconnect()
-			sseFallbackClient = null
-			webSocketClient.disconnect()
-			disconnected = false
-			reconnecting = false
-			webSocketClient.connect()
+			client.disconnect()
+			client.connect()
 		}
 	}
 }
@@ -201,7 +140,7 @@ function realtimeClientOptions(
 	onEventObserved?: (eventId: string) => void,
 	onLaggedObserved?: (skipped: number) => void,
 	onStatus?: RealtimeStatusHandler
-): { sse: SseClientOptions; webSocket: WebSocketClientOptions } {
+): SseClientOptions {
 	const realtimeQueryClient = bindRealtimeQueryClient(queryClient)
 	const common = {
 		secret: config.apiSecret,
@@ -220,23 +159,10 @@ function realtimeClientOptions(
 	}
 
 	return {
-		sse: {
-			...common,
-			url: config.sseUrl,
-			longPollUrl: `${config.apiBaseUrl}/api/v1/events`,
-			onError: (error) => {
-				console.warn('[Realtime] SSE stream unavailable', error)
-			},
-			onStatus
-		},
-		webSocket: {
-			...common,
-			url: config.webSocketUrl,
-			onError: (error) => {
-				console.warn('[Realtime] WebSocket stream unavailable', error)
-			},
-			onStatus
-		}
+		...common,
+		url: config.sseUrl,
+		onError: (error) => console.warn('[Realtime] SSE stream unavailable', error),
+		onStatus
 	}
 }
 
@@ -268,12 +194,6 @@ function normalizeRealtimeBootstrapOptions(
 	}
 
 	return options
-}
-
-function isWebSocketClientOptions(
-	options: RealtimeClientOptions
-): options is WebSocketClientOptions {
-	return options.url.includes('/api/events/ws')
 }
 
 function adaptRealtimeClient(client: { connect: () => void; disconnect: () => void }): RealtimeClient {

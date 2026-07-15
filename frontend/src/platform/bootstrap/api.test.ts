@@ -11,9 +11,7 @@ describe('initializeApiClient', () => {
 		initializeApiClient({
 			apiBaseUrl: 'http://127.0.0.1:8080',
 			apiSecret: 'dev-secret',
-			sseUrl: 'http://127.0.0.1:8080/api/events/stream',
-			webSocketUrl: 'ws://127.0.0.1:8080/api/events/ws',
-			realtimeTransport: 'websocket'
+			sseUrl: 'http://127.0.0.1:8080/api/realtime/v2/events'
 		})
 
 		expect(ApiClient.instance).toBeInstanceOf(ApiClient)

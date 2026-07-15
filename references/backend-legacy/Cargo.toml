@@ -1,0 +1,64 @@
+[workspace]
+resolver = "2"
+members = [
+    "backend",
+    "crates/kernel",
+    "crates/events-api",
+    "crates/events-postgres",
+    "crates/events-nats",
+    "crates/provider-api",
+    "crates/provider-zulip",
+    "crates/zulip-connector",
+    "crates/provider-zoom",
+    "crates/provider-telemost",
+    "crates/provider-mail",
+    "crates/provider-telegram",
+    "crates/provider-whatsapp",
+    "crates/provider-orchestration",
+    "crates/vault-api",
+    "crates/blob-api",
+    "crates/communications-api",
+    "crates/communications-postgres",
+    "crates/personas-api",
+    "crates/personas-postgres",
+    "crates/graph-api",
+    "crates/graph-postgres",
+    "crates/relationships-api",
+    "crates/relationships-postgres",
+    "crates/signal-hub-api",
+    "crates/signal-hub-postgres",
+    "crates/observations-api",
+    "crates/observations-postgres",
+    "crates/connectrpc-contracts",
+    "crates/desktop-runtime",
+    "crates/api",
+    "crates/worker-runtime",
+    "crates/decisions-api",
+    "crates/decisions-postgres",
+    "crates/obligations-api",
+    "crates/obligations-postgres",
+    "crates/calendar-api",
+    "crates/calendar-postgres",
+    "crates/tasks-api",
+    "crates/tasks-postgres",
+    "crates/projects-api",
+    "crates/projects-postgres",
+    "crates/test-session",
+    "crates/testkit",
+    "crates/schema",
+]
+exclude = ["frontend/src-tauri"]
+
+[profile.dev]
+debug = "line-tables-only"
+incremental = true
+codegen-units = 256
+lto = false
+opt-level = 0
+
+[profile.test]
+debug = "line-tables-only"
+incremental = true
+codegen-units = 256
+lto = false
+opt-level = 0
