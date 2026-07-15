@@ -1,4 +1,29 @@
-use super::support::*;
+use crate::app::handlers::communications::communication_messages::*;
+use crate::app::handlers::communications::communication_queries::{
+    attachments::*, drafts::*, folders::*, imports::*, outbox::*, personas::*,
+    provider_commands::*, read_receipts::*, saved_searches::*, search::*, threads::*,
+};
+use crate::app::handlers::communications::eml_import::*;
+use crate::app::handlers::communications::finance_analytics::{
+    analytics::*, explain::*, invoices::*,
+};
+use crate::app::handlers::communications::legal_export::*;
+use crate::app::handlers::communications::message_actions::*;
+use crate::app::handlers::communications::message_ai_state::*;
+use crate::app::handlers::communications::provider_command_recovery::*;
+use crate::app::handlers::communications::sending::{
+    ai_reply::*, bilingual_reply_flow::*, certificates::*, extraction::*, forwarding::*,
+    local_state::*, multilingual::*, provider_send::*,
+};
+use crate::app::handlers::communications::templates_status::*;
+use crate::app::handlers::communications::workflow_actions::handler::post_v1_workflow_action;
+use crate::app::handlers::communications::workflow_state::{
+    get_v1_message_workflow_state_counts, post_v1_message_analyze, put_v1_message_workflow_state,
+};
+use crate::app::provider_runtime_handlers::telegram::messages::*;
+use crate::app::state::AppState;
+use axum::Router;
+use axum::routing::{delete, get, post, put};
 
 pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
     router

@@ -11,8 +11,9 @@ use hermes_hub_backend::integrations::mail::accounts::models::GmailOAuthSetupReq
 use hermes_hub_backend::integrations::mail::accounts::service::EmailAccountSetupService;
 
 use hermes_hub_backend::platform::secrets::{
-    DatabaseEncryptedSecretVault, NewSecretReference, ResolvedSecret, SecretKind, SecretResolver,
-    SecretStoreKind,
+    database_vault::DatabaseEncryptedSecretVault,
+    models::{NewSecretReference, ResolvedSecret, SecretKind, SecretStoreKind},
+    resolver::SecretResolver,
 };
 
 use super::support::{MockTokenServer, live_setup_context, secret_reference};

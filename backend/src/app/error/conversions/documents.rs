@@ -1,7 +1,6 @@
 use super::super::types::ApiError;
-use crate::domains::documents::processing::{
-    DocumentProcessingCommandServiceError, DocumentProcessingError,
-};
+use crate::domains::documents::processing::errors::DocumentProcessingError;
+use crate::domains::documents::processing::service::DocumentProcessingCommandServiceError;
 
 impl From<DocumentProcessingError> for ApiError {
     fn from(error: DocumentProcessingError) -> Self {

@@ -1,5 +1,6 @@
+use super::CalendarIntelligenceService;
 use super::classification::contains_any;
-use super::{CalendarIntelligenceService, EventFingerprint};
+use super::models::EventFingerprint;
 
 impl CalendarIntelligenceService {
     pub fn heuristic_fingerprint(

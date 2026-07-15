@@ -7,10 +7,9 @@ use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::errors::ObservationStoreError;
 use hermes_observations_postgres::store::ObservationStore;
 
-use super::{
-    ProjectLinkReviewCommand, ProjectLinkReviewCommandResult, ProjectLinkReviewError,
-    ProjectLinkReviewStore,
-};
+use super::errors::ProjectLinkReviewError;
+use super::models::{ProjectLinkReviewCommand, ProjectLinkReviewCommandResult};
+use super::store::ProjectLinkReviewStore;
 
 #[derive(Clone)]
 pub struct ProjectLinkReviewService {

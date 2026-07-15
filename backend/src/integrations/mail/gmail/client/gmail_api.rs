@@ -1,4 +1,11 @@
 use hermes_communications_api::accounts::CommunicationProviderKind;
+use hermes_communications_api::address_book::{
+    AddressBookProviderBatch, AddressBookProviderEntry, AddressBookProviderUpsertRequest,
+};
+use hermes_communications_api::email::{OutgoingEmail, SendResult};
+use hermes_communications_api::mail_resources::{
+    DiscoveredMailProviderResource, MailProviderResourceKind, MailProviderSemanticRole,
+};
 use hermes_provider_mail::gmail::{
     GmailHistoryItem, GmailHistoryResponse, GmailLabel, GmailLabelsResponse, GmailListResponse,
     GmailRawMessage, GmailSendResponse, GooglePeopleConnectionsResponse, GooglePeoplePerson,
@@ -10,13 +17,8 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::{Map, Value, json};
 
 use crate::integrations::mail::send::build_rfc2822_message;
-use crate::platform::communications::{
-    AddressBookProviderBatch, AddressBookProviderEntry, AddressBookProviderUpsertRequest,
-    DiscoveredMailProviderResource, MailProviderResourceKind, MailProviderSemanticRole,
-    OutgoingEmail, SendResult,
-};
-use crate::platform::communications::{EmailSyncBatch, FetchedCommunicationSourceMessage};
-use crate::platform::secrets::ResolvedSecret;
+use crate::platform::secrets::models::ResolvedSecret;
+use hermes_communications_api::email_sync::{EmailSyncBatch, FetchedCommunicationSourceMessage};
 
 use super::errors::EmailProviderNetworkError;
 use super::helpers::{

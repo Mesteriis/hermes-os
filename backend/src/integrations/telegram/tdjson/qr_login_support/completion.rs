@@ -1,6 +1,6 @@
 use std::sync::{Arc, Condvar, Mutex};
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
 use super::constants::QR_CANCEL_WAIT_TIMEOUT;
 use super::types::QrLoginWorkerCompletion;

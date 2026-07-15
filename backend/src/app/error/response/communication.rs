@@ -29,12 +29,6 @@ pub(super) fn parts(error: ApiError) -> ErrorParts {
             message.to_owned(),
             false,
         ),
-        ApiError::EmailAccountDeleteConflict => (
-            StatusCode::CONFLICT,
-            "email_account_delete_conflict",
-            "email account has retained communication evidence and cannot be deleted".to_owned(),
-            false,
-        ),
         ApiError::ProviderWriteConfirmationRequired => (
             StatusCode::BAD_REQUEST,
             "provider_write_confirmation_required",

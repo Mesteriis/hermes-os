@@ -6,7 +6,8 @@ use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 use super::command_service::{TaskCommandService, TaskCommandServiceError};
-use super::core::{TaskCoreError, materialize_task_observation_link_in_transaction};
+use super::core::errors::TaskCoreError;
+use super::core::observation_links::materialize_task_observation_link_in_transaction;
 use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

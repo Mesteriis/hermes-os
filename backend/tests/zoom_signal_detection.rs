@@ -13,10 +13,10 @@ use hermes_hub_backend::integrations::zoom::client::{
     models::{ZoomAccountSetupRequest, ZoomMeetingObservationRequest},
     store::ZoomStore,
 };
-use hermes_hub_backend::platform::calls::CallIntelligenceStore;
+use hermes_hub_backend::platform::calls::store::CallIntelligenceStore;
 use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
-use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::settings::store::ApplicationSettingsStore;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::zoom_signal_detection::project_zoom_signal_detection;
 use serde_json::json;
 
@@ -38,7 +38,7 @@ async fn zoom_meeting_events_flow_into_signal_hub_detection_events() {
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
         Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
         Arc::new(
-            hermes_hub_backend::domains::communications::storage::CommunicationStorageStore::new(
+            hermes_hub_backend::domains::communications::storage::store::CommunicationStorageStore::new(
                 pool.clone(),
             ),
         ),
@@ -186,7 +186,7 @@ async fn zoom_meeting_signal_detection_respects_testing_profile_muting() {
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
         Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
         Arc::new(
-            hermes_hub_backend::domains::communications::storage::CommunicationStorageStore::new(
+            hermes_hub_backend::domains::communications::storage::store::CommunicationStorageStore::new(
                 pool.clone(),
             ),
         ),

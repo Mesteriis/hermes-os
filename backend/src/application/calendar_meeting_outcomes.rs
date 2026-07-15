@@ -5,18 +5,21 @@ use sqlx::{Postgres, Transaction};
 use thiserror::Error;
 
 use crate::domains::calendar::evidence::link_calendar_entity_in_transaction;
-use crate::domains::calendar::meetings::{MeetingOutcome, MeetingOutcomeStore, MeetingsError};
-use crate::domains::decisions::{
-    DecisionEntityKind, DecisionEvidenceSourceKind, DecisionReviewState, DecisionStore,
-    DecisionStoreError, NewDecision, NewDecisionEvidence, NewDecisionImpactedEntity,
-};
-use crate::domains::obligations::{
-    NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationEvidenceSourceKind,
-    ObligationReviewState, ObligationStore, ObligationStoreError,
-};
+use crate::domains::calendar::meetings::errors::MeetingsError;
+use crate::domains::calendar::meetings::models::MeetingOutcome;
+use crate::domains::calendar::ports::{CalendarEventQueryPort, MeetingOutcomePort};
+use crate::domains::decisions::errors::DecisionStoreError;
+use crate::domains::decisions::models::decision::NewDecision;
+use crate::domains::decisions::ports::DecisionReviewPort;
+use crate::domains::obligations::errors::ObligationStoreError;
+use crate::domains::obligations::models::entity_kind::ObligationEntityKind;
+use crate::domains::obligations::models::evidence::NewObligationEvidence;
+use crate::domains::obligations::models::obligation::NewObligation;
+use crate::domains::obligations::models::source_kind::ObligationEvidenceSourceKind;
+use crate::domains::obligations::ports::ObligationReviewPort;
 use crate::workflows::review_mirror::{
-    ReviewMirrorError, sync_decision_review_state_in_transaction,
-    sync_obligation_review_state_in_transaction,
+    ReviewMirrorError, decision::sync_decision_review_state_in_transaction,
+    obligation::sync_obligation_review_state_in_transaction,
 };
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::errors::ObservationStoreError;
@@ -66,7 +69,7 @@ impl CalendarMeetingOutcomeApplicationService {
             .await?;
 
         let mut transaction = self.pool.begin().await?;
-        let mut outcome = MeetingOutcomeStore::add_with_observation_in_transaction(
+        let mut outcome = MeetingOutcomePort::add_with_observation_in_transaction(
             &mut transaction,
             event_id,
             outcome_type,
@@ -82,7 +85,7 @@ impl CalendarMeetingOutcomeApplicationService {
         if let Some(linked_entity_id) =
             linked_entity_for_outcome(&mut transaction, &outcome).await?
         {
-            outcome = MeetingOutcomeStore::set_linked_entity_id_in_transaction(
+            outcome = MeetingOutcomePort::set_linked_entity_id_in_transaction(
                 &mut transaction,
                 &outcome.id,
                 &linked_entity_id,
@@ -131,16 +134,7 @@ async fn calendar_event_observation_id(
     transaction: &mut Transaction<'_, Postgres>,
     event_id: &str,
 ) -> Result<Option<String>, sqlx::Error> {
-    sqlx::query_scalar(
-        r#"
-        SELECT observation_id
-        FROM calendar_events
-        WHERE event_id = $1
-        "#,
-    )
-    .bind(event_id)
-    .fetch_optional(&mut **transaction)
-    .await
+    CalendarEventQueryPort::observation_id_in_transaction(transaction, event_id).await
 }
 
 async fn linked_decision_for_outcome(
@@ -180,7 +174,7 @@ async fn linked_decision_for_outcome(
         NewDecisionImpactedEntity::new(DecisionEntityKind::Event, outcome.event_id.clone())
             .impact_type("meeting_outcome")
             .metadata(json!({ "meeting_outcome_id": outcome.id }));
-    let stored = DecisionStore::upsert_with_evidence_in_transaction(
+    let stored = DecisionReviewPort::upsert_with_evidence_in_transaction(
         transaction,
         &decision,
         &[evidence],
@@ -234,9 +228,12 @@ async fn linked_obligation_for_outcome(
         "source_domain": "calendar",
         "meeting_outcome_id": outcome.id,
     }));
-    let stored =
-        ObligationStore::upsert_with_evidence_in_transaction(transaction, &obligation, &[evidence])
-            .await?;
+    let stored = ObligationReviewPort::upsert_with_evidence_in_transaction(
+        transaction,
+        &obligation,
+        &[evidence],
+    )
+    .await?;
     sync_obligation_review_state_in_transaction(transaction, &stored).await?;
     Ok(Some(stored.obligation_id))
 }
@@ -261,3 +258,9 @@ pub enum CalendarMeetingOutcomeApplicationError {
     #[error(transparent)]
     ReviewMirror(#[from] ReviewMirrorError),
 }
+use crate::domains::decisions::models::entity_kind::DecisionEntityKind;
+use crate::domains::decisions::models::evidence::NewDecisionEvidence;
+use crate::domains::decisions::models::impacted_entity::NewDecisionImpactedEntity;
+use crate::domains::decisions::models::source_kind::DecisionEvidenceSourceKind;
+use crate::domains::decisions::models::states::DecisionReviewState;
+use crate::domains::obligations::models::states::ObligationReviewState;

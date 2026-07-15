@@ -8,10 +8,11 @@ use hermes_observations_postgres::errors::ObservationStoreError;
 use hermes_observations_postgres::store::ObservationStore;
 
 use super::api::{Organization, OrganizationError, OrganizationStore, OrganizationUpdate};
-use super::core::{
-    OrgAliasStore, OrgCoreError, OrgDepartment, OrgDepartmentStore, OrgIdentityStore,
-    OrgPersonaLink, OrgPersonaLinkStore, OrganizationAlias, OrganizationIdentity,
-};
+use super::core::aliases::{OrgAliasStore, OrganizationAlias};
+use super::core::departments::{OrgDepartment, OrgDepartmentStore};
+use super::core::errors::OrgCoreError;
+use super::core::identity::{OrgIdentityStore, OrganizationIdentity};
+use super::core::persona_links::{OrgPersonaLink, OrgPersonaLinkStore};
 use super::enrichment::{OrgEnrichmentError, OrgEnrichmentStore};
 use super::health::{OrgHealthError, OrgHealthStore};
 

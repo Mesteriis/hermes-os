@@ -1,4 +1,4 @@
-use crate::integrations::telegram::tdjson::TelegramTdlibMessageSnapshot;
+use crate::integrations::telegram::tdjson::snapshots::TelegramTdlibMessageSnapshot;
 
 pub(in crate::integrations::telegram::runtime) fn oldest_tdlib_message_id(
     snapshots: &[TelegramTdlibMessageSnapshot],

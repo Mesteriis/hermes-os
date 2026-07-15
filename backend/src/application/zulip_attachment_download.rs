@@ -1,22 +1,24 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
-use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use crate::domains::communications::credentials::ProviderCredentialReader;
-use crate::domains::communications::messages::ProviderChannelMessageStore;
+use crate::domains::communications::messages::provider_channel_store::ProviderChannelMessageStore;
+use hermes_communications_api::attachments::CommunicationMessageAttachmentScanPort;
+use hermes_communications_postgres::attachment_scan::PostgresCommunicationMessageAttachmentScan;
 use hermes_communications_postgres::errors::CommunicationIngestionError;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
 
 use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
-use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
+use crate::platform::secrets::resolver::SecretResolver;
 use crate::workflows::zulip_attachment_storage::{
     ZulipAttachmentBytes, ZulipAttachmentMaterialization, ZulipAttachmentStorageError,
     persist_zulip_attachment_bytes,
@@ -42,6 +44,7 @@ pub struct ZulipAttachmentDownloadWorker<R> {
     provider_account_store: CommunicationProviderAccountStore,
     provider_secret_binding_store: CommunicationProviderSecretBindingStore,
     secret_store: SecretReferenceStore,
+    attachment_scan: PostgresCommunicationMessageAttachmentScan,
     resolver: R,
     blob_root: PathBuf,
 }
@@ -57,6 +60,7 @@ where
                 pool.clone(),
             ),
             secret_store: SecretReferenceStore::new(pool.clone()),
+            attachment_scan: PostgresCommunicationMessageAttachmentScan::new(pool.clone()),
             pool,
             resolver,
             blob_root: PathBuf::from(DEFAULT_MAIL_SYNC_BLOB_ROOT),
@@ -214,28 +218,17 @@ where
             return Ok(PendingZulipAttachmentScan::default());
         }
         let row_limit = limit.saturating_mul(5).clamp(1, MAX_MESSAGE_SCAN_LIMIT);
-        let rows = sqlx::query(
-            r#"
-            SELECT account_id, provider_record_id, message_metadata
-            FROM communication_messages
-            WHERE account_id = $1
-              AND channel_kind = $2
-              AND jsonb_typeof(message_metadata -> 'attachments') = 'array'
-            ORDER BY COALESCE(occurred_at, projected_at) ASC, message_id ASC
-            LIMIT $3
-            "#,
-        )
-        .bind(account_id.trim())
-        .bind(ZULIP_CHANNEL_KIND)
-        .bind(row_limit)
-        .fetch_all(&self.pool)
-        .await?;
+        let rows = self
+            .attachment_scan
+            .scan_message_attachments(account_id, ZULIP_CHANNEL_KIND, row_limit)
+            .await
+            .map_err(|error| ZulipAttachmentDownloadWorkerError::AttachmentScan(error.0))?;
 
         let mut scan = PendingZulipAttachmentScan::default();
         for row in rows {
-            let account_id = row.try_get::<String, _>("account_id")?;
-            let provider_message_id = row.try_get::<String, _>("provider_record_id")?;
-            let metadata = row.try_get::<Value, _>("message_metadata")?;
+            let account_id = row.account_id;
+            let provider_message_id = row.provider_record_id;
+            let metadata = row.message_metadata;
             let extraction =
                 pending_attachments_from_metadata(&account_id, &provider_message_id, &metadata);
             scan.skipped += extraction.skipped;
@@ -450,6 +443,8 @@ pub enum ZulipAttachmentDownloadWorkerError {
     InvalidProviderResponse,
     #[error(transparent)]
     Communication(#[from] CommunicationIngestionError),
+    #[error("communication attachment scan failed: {0}")]
+    AttachmentScan(String),
     #[error(transparent)]
     Database(#[from] sqlx::Error),
     #[error(transparent)]

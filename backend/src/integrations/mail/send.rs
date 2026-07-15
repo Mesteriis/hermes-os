@@ -1,10 +1,9 @@
 use async_native_tls::TlsConnector;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 
-use crate::platform::communications::{
-    EmailSendError, OutgoingEmail, OutgoingEmailAttachment, SendResult, SmtpConfig, SmtpTransport,
-};
-use crate::platform::secrets::ResolvedSecret;
+use crate::platform::communications::SmtpTransport;
+use crate::platform::secrets::models::ResolvedSecret;
+use hermes_communications_api::email::{EmailSendError, OutgoingEmail, SendResult, SmtpConfig};
 
 #[derive(Clone, Default)]
 pub struct LiveSmtpTransport;
@@ -50,7 +49,10 @@ impl SmtpClient {
             starttls_smtp(tcp_stream, config, password, email).await
         } else if config.tls {
             let tls = TlsConnector::new();
-            let tls_stream = tls.connect(&config.host, tcp_stream).await?;
+            let tls_stream = tls
+                .connect(&config.host, tcp_stream)
+                .await
+                .map_err(|error| EmailSendError::Tls(error.to_string()))?;
             send_smtp(tls_stream, config, password, email).await
         } else {
             send_smtp(tcp_stream, config, password, email).await
@@ -91,7 +93,10 @@ async fn starttls_smtp(
     }
     let tcp_stream = reader.into_inner();
     let tls = TlsConnector::new();
-    let tls_stream = tls.connect(&config.host, tcp_stream).await?;
+    let tls_stream = tls
+        .connect(&config.host, tcp_stream)
+        .await
+        .map_err(|error| EmailSendError::Tls(error.to_string()))?;
     send_smtp_after_greeting(BufReader::new(tls_stream), config, password, email).await
 }
 

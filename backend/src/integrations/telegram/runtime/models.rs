@@ -2,7 +2,9 @@ use chrono::{DateTime, Utc};
 use hermes_provider_telegram::tdlib::types::TdlibMediaKind;
 use serde::{Deserialize, Serialize};
 
-use crate::integrations::telegram::client::{TelegramChat, TelegramError, TelegramMessage};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::chats::TelegramChat;
+use crate::integrations::telegram::client::models::messages::TelegramMessage;
 
 use super::validation::{validate_limit, validate_non_empty};
 

@@ -1,7 +1,7 @@
 use axum::http::HeaderMap;
 
-use crate::app::ApiError;
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::app::error::types::ApiError;
+use crate::domains::communications::messages::models::ProjectedMessage;
 
 use super::models::WorkflowActionRequest;
 

@@ -9,25 +9,27 @@ pub(crate) use axum::http::{Request, StatusCode, header};
 pub(crate) use axum::routing::{get, post};
 pub(crate) use axum::{Json, Router};
 pub(crate) use hermes_communications_postgres::store::CommunicationIngestionStore;
-pub(crate) use hermes_hub_backend::ai::control_center::{
-    AiControlCenterStore, AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest,
+pub(crate) use hermes_hub_backend::ai::control_center::models::{
+    AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest,
 };
-pub(crate) use hermes_hub_backend::ai::core::{
-    AiRunStore, NewSemanticEmbedding, SemanticEmbeddingStore, SemanticSourceKind,
+pub(crate) use hermes_hub_backend::ai::control_center::store::AiControlCenterStore;
+pub(crate) use hermes_hub_backend::ai::core::runs::{AiAgentRun, AiRunStore};
+pub(crate) use hermes_hub_backend::ai::core::semantic::models::{
+    NewSemanticEmbedding, SemanticSourceKind,
 };
-pub(crate) use hermes_hub_backend::app::{build_router, build_router_with_database};
-pub(crate) use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
-};
-pub(crate) use hermes_hub_backend::domains::documents::core::{
-    DocumentImportStore, NewDocumentImport,
-};
-pub(crate) use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
-pub(crate) use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};
+pub(crate) use hermes_hub_backend::ai::core::semantic::store::SemanticEmbeddingStore;
+pub(crate) use hermes_hub_backend::app::router::{build_router, build_router_with_database};
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+pub(crate) use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
+pub(crate) use hermes_hub_backend::domains::documents::core::models::NewDocumentImport;
+pub(crate) use hermes_hub_backend::domains::documents::core::store::DocumentImportStore;
+pub(crate) use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
+pub(crate) use hermes_hub_backend::domains::projects::core::models::NewProject;
+pub(crate) use hermes_hub_backend::domains::projects::core::store::ProjectStore;
 
-pub(crate) use hermes_hub_backend::platform::config::AppConfig;
-pub(crate) use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
-pub(crate) use hermes_hub_backend::platform::storage::Database;
+pub(crate) use hermes_hub_backend::platform::config::app_config::AppConfig;
+pub(crate) use hermes_hub_backend::platform::settings::store::ApplicationSettingsStore;
+pub(crate) use hermes_hub_backend::platform::storage::database::Database;
 pub(crate) use serde_json::{Value, json};
 pub(crate) use sqlx::Row;
 pub(crate) use sqlx::postgres::PgPool;
@@ -263,7 +265,7 @@ pub(crate) async fn wait_for_run_status(
     pool: &PgPool,
     run_id: &str,
     expected_status: &str,
-) -> hermes_hub_backend::ai::core::AiAgentRun {
+) -> AiAgentRun {
     for _ in 0..80 {
         if let Some(run) = AiRunStore::new(pool.clone())
             .get_run(run_id)

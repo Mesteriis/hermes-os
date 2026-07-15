@@ -6,19 +6,18 @@ use thiserror::Error;
 use crate::application::relationship_graph::{
     RelationshipGraphCoordinator, RelationshipGraphCoordinatorError,
 };
-use crate::domains::decisions::{
-    DecisionEntityKind, DecisionReviewPortError, DecisionReviewState, NewDecision,
-    NewDecisionEvidence, NewDecisionImpactedEntity,
-};
-use crate::domains::projects::link_reviews::{
-    ProjectLinkReviewError, ProjectLinkReviewState, ProjectLinkTargetKind,
+use crate::domains::decisions::models::decision::NewDecision;
+use crate::domains::decisions::ports::DecisionReviewPortError;
+use crate::domains::projects::link_reviews::errors::ProjectLinkReviewError;
+use crate::domains::projects::link_reviews::models::{
+    ProjectLinkReviewState, ProjectLinkTargetKind,
 };
 use crate::domains::relationships::models::{
     NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
 };
 use crate::workflows::review_mirror::{
-    ReviewMirrorError, ensure_relationship_review_item,
-    sync_relationship_review_state_in_transaction,
+    ReviewMirrorError, relationship::ensure_relationship_review_item,
+    relationship::sync_relationship_review_state_in_transaction,
 };
 use hermes_events_postgres::errors::EventStoreError;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
@@ -176,15 +175,17 @@ async fn sync_relationship_review_item(
 ) -> Result<(), ProjectLinkReviewEffectsWorkflowError> {
     let _ = ensure_relationship_review_item(
         pool,
-        &relationship.relationship_id,
-        &relationship.relationship_type,
-        relationship.source_entity_kind.as_str(),
-        &relationship.source_entity_id,
-        relationship.target_entity_kind.as_str(),
-        &relationship.target_entity_id,
-        relationship.confidence,
-        None,
-        observation_id,
+        crate::workflows::review_mirror::relationship::RelationshipReviewInput {
+            relationship_id: &relationship.relationship_id,
+            relationship_type: &relationship.relationship_type,
+            source_entity_kind: relationship.source_entity_kind.as_str(),
+            source_entity_id: &relationship.source_entity_id,
+            target_entity_kind: relationship.target_entity_kind.as_str(),
+            target_entity_id: &relationship.target_entity_id,
+            confidence: relationship.confidence,
+            summary: None,
+            observation_id,
+        },
     )
     .await?;
 
@@ -199,7 +200,10 @@ async fn materialize_decision(
     event: &EventEnvelope,
     review: &ProjectLinkReviewEffect,
     observation_id: &str,
-) -> Result<crate::domains::decisions::Decision, ProjectLinkReviewEffectsWorkflowError> {
+) -> Result<
+    crate::domains::decisions::models::decision::Decision,
+    ProjectLinkReviewEffectsWorkflowError,
+> {
     let decision = NewDecision::new(
         "Project link review confirmed",
         format!(
@@ -230,7 +234,7 @@ async fn materialize_decision(
     ];
 
     Ok(
-        crate::domains::decisions::DecisionReviewPort::new(pool.clone())
+        crate::domains::decisions::ports::DecisionReviewPort::new(pool.clone())
             .upsert_with_evidence(&decision, &[evidence], &impacted_entities)
             .await?,
     )
@@ -333,3 +337,7 @@ fn required_string<'a>(
             },
         )
 }
+use crate::domains::decisions::models::entity_kind::DecisionEntityKind;
+use crate::domains::decisions::models::evidence::NewDecisionEvidence;
+use crate::domains::decisions::models::impacted_entity::NewDecisionImpactedEntity;
+use crate::domains::decisions::models::states::DecisionReviewState;

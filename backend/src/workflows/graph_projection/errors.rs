@@ -1,7 +1,7 @@
 use thiserror::Error;
 
-use crate::domains::graph::core::GraphProjectionPortError;
-use crate::domains::projects::core::ProjectCommandPortError;
+use crate::domains::graph::ports::GraphProjectionPortError;
+use crate::domains::projects::ports::ProjectCommandPortError;
 
 #[derive(Debug, Error)]
 pub enum GraphProjectionError {

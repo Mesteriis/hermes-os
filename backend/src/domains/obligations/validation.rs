@@ -1,7 +1,8 @@
 use serde_json::Value;
 
 use super::errors::ObligationStoreError;
-use super::models::{NewObligation, NewObligationEvidence};
+use super::models::evidence::NewObligationEvidence;
+use super::models::obligation::NewObligation;
 
 pub(super) fn validate_obligation_with_evidence(
     obligation: &NewObligation,

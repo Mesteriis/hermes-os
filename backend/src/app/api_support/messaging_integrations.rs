@@ -31,11 +31,6 @@ pub(crate) struct WhatsappWebSessionListResponse {
     pub(crate) items: Vec<WhatsappWebSession>,
 }
 
-#[derive(Serialize)]
-pub(crate) struct WhatsappWebMessageListResponse {
-    pub(crate) items: Vec<WhatsappWebMessage>,
-}
-
 #[derive(Deserialize)]
 pub(crate) struct TelegramReactionDeleteQuery {
     pub(crate) account_id: String,

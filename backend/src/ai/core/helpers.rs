@@ -10,7 +10,7 @@ use hermes_events_postgres::store::EventStore;
 
 use super::constants::AI_EMBEDDING_DIMENSION;
 use super::errors::AiError;
-use super::semantic::SemanticSearchResult;
+use super::semantic::models::SemanticSearchResult;
 
 pub(super) fn merge_retrieval_results(
     vector_results: Vec<SemanticSearchResult>,

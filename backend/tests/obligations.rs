@@ -2,12 +2,16 @@ use hermes_backend_testkit::context::TestContext;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
-use hermes_hub_backend::domains::obligations::{
-    NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationEvidenceSourceKind,
-    ObligationReviewState, ObligationRiskState, ObligationStatus, ObligationStore,
-    ObligationStoreError,
+use hermes_hub_backend::domains::obligations::errors::ObligationStoreError;
+use hermes_hub_backend::domains::obligations::models::states::ObligationReviewState;
+use hermes_hub_backend::domains::obligations::models::{
+    entity_kind::ObligationEntityKind,
+    evidence::NewObligationEvidence,
+    obligation::NewObligation,
+    source_kind::ObligationEvidenceSourceKind,
+    states::{ObligationRiskState, ObligationStatus},
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::graph_projection::service::GraphProjectionService;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;
@@ -431,3 +435,4 @@ fn unique_suffix() -> u128 {
         .expect("system clock after unix epoch")
         .as_nanos()
 }
+use hermes_hub_backend::domains::obligations::store::ObligationStore;

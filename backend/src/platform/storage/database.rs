@@ -1,12 +1,10 @@
-use serde::Serialize;
+use crate::platform::settings::store::ApplicationSettingsStore;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
 use crate::platform::events::migrations::expected_migration_summary;
 use crate::platform::events::migrations::run_migrations;
-use crate::platform::settings::{ApplicationSettingsStore, SettingsError};
 use crate::platform::storage::errors::StorageError;
 use crate::platform::storage::models::{DatabaseReadiness, MigrationReadiness};
-use hermes_events_postgres::errors::EventStoreError;
 
 const DEFAULT_DATABASE_MAX_CONNECTIONS: u32 = 32;
 

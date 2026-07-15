@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use super::super::models::{
+use super::super::models::chats::{
     NewTelegramChat, NewTelegramChatParticipant, TelegramChatKind, TelegramSyncState,
 };
 use super::super::store::TelegramStore;
@@ -116,7 +116,7 @@ fn derives_inactive_roster_membership_state_from_status_or_role() {
 
 #[tokio::test]
 async fn marks_stale_tdlib_participants_as_absent_from_exhaustive_roster() {
-    use crate::platform::storage::Database;
+    use crate::platform::storage::database::Database;
     use hermes_backend_testkit::context::TestContext;
 
     let ctx = TestContext::new().await;

@@ -2,8 +2,9 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::telegram::tdjson::{self, TdJsonClient};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::tdjson::client::TdJsonClient;
+use crate::integrations::telegram::tdjson::{self};
 
 use super::super::TDJSON_RECEIVE_POLL_SECONDS;
 
@@ -20,7 +21,7 @@ pub(super) fn receive_tdlib_extra(
         if event.get("@extra").and_then(Value::as_str) == Some(expected_extra) {
             return Ok(event);
         }
-        if let Some(message) = tdjson::tdlib_error_message(&event) {
+        if let Some(message) = tdjson::parsing::events::tdlib_error_message(&event) {
             tracing::debug!(error = %message, "ignored unrelated TDLib error while waiting for correlated response");
         }
     }

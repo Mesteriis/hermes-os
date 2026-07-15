@@ -1,4 +1,6 @@
-use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};
+use hermes_hub_backend::domains::projects::core::errors::ProjectStoreError;
+use hermes_hub_backend::domains::projects::core::models::{NewProject, Project};
+use hermes_hub_backend::domains::projects::core::store::ProjectStore;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
@@ -36,12 +38,7 @@ impl<'a> ProjectFactory<'a> {
         self
     }
 
-    pub async fn create(
-        self,
-    ) -> Result<
-        hermes_hub_backend::domains::projects::core::Project,
-        hermes_hub_backend::domains::projects::core::ProjectStoreError,
-    > {
+    pub async fn create(self) -> Result<Project, ProjectStoreError> {
         let store = ProjectStore::new(self.pool.clone());
         let project_id = format!("proj:v1:test:{}", Uuid::new_v4());
         let new_project = NewProject {

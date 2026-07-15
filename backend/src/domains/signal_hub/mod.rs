@@ -9,6 +9,7 @@ pub mod mail;
 pub mod policies;
 pub mod profiles;
 pub mod raw_signal_port;
+pub mod replay_contracts;
 pub mod service;
 pub mod store;
 pub mod telegram;

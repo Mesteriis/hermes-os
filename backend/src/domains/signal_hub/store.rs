@@ -10,9 +10,9 @@ use uuid::Uuid;
 use super::fixtures::{
     SystemProfileFixture, SystemSourceFixture, system_profile_fixtures, system_source_fixtures,
 };
-use crate::platform::settings::SettingsError;
+use crate::platform::settings::errors::SettingsError;
 use hermes_events_postgres::errors::EventStoreError;
-use hermes_signal_hub_api::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
+use hermes_signal_hub_api::policies::{SignalPolicyMode, SignalPolicyScope};
 use hermes_signal_hub_api::raw_signals::{
     RawSignalPersistenceError, RawSignalPersistenceErrorKind,
 };
@@ -26,9 +26,7 @@ mod sources;
 mod validation;
 
 use validation::{
-    connection_status_value, is_unique_violation, parse_optional_uuid, parse_required_uuid,
-    runtime_state_value, truncate_redacted_error, validate_non_empty, validate_object,
-    validate_profile_policies,
+    is_unique_violation, parse_required_uuid, validate_non_empty, validate_profile_policies,
 };
 
 #[derive(Debug, Error)]
@@ -849,43 +847,6 @@ pub struct SignalRuntimeStateUpdate {
     pub source_code: String,
     pub runtime_kind: String,
     pub state: String,
-    pub metadata: Value,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct SignalReplayRequest {
-    pub id: String,
-    pub source_code: Option<String>,
-    pub connection_id: Option<String>,
-    pub event_pattern: Option<String>,
-    pub from_position: Option<i64>,
-    pub to_position: Option<i64>,
-    pub from_time: Option<DateTime<Utc>>,
-    pub to_time: Option<DateTime<Utc>>,
-    pub target_consumer: Option<String>,
-    pub target_projection: Option<String>,
-    pub status: String,
-    pub requested_by: String,
-    pub requested_at: DateTime<Utc>,
-    pub started_at: Option<DateTime<Utc>>,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub last_error_redacted: Option<String>,
-    pub replayed_count: i32,
-    pub metadata: Value,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SignalReplayRequestCreate {
-    pub source_code: Option<String>,
-    pub connection_id: Option<String>,
-    pub event_pattern: Option<String>,
-    pub from_position: Option<i64>,
-    pub to_position: Option<i64>,
-    pub from_time: Option<DateTime<Utc>>,
-    pub to_time: Option<DateTime<Utc>>,
-    pub target_consumer: Option<String>,
-    pub target_projection: Option<String>,
-    pub requested_by: String,
     pub metadata: Value,
 }
 

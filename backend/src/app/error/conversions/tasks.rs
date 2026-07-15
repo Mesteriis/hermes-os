@@ -3,7 +3,7 @@ use crate::application::task_relationship::TaskRelationshipApplicationError;
 use crate::domains::tasks::api::TaskError;
 use crate::domains::tasks::brain::TaskBrainError;
 use crate::domains::tasks::command_service::TaskCommandServiceError;
-use crate::domains::tasks::core::TaskCoreError;
+use crate::domains::tasks::core::errors::TaskCoreError;
 use crate::domains::tasks::health::TaskHealthError;
 use crate::domains::tasks::rules::TaskRuleError;
 

@@ -9,14 +9,15 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::app::router::build_router_with_database;
 use hermes_hub_backend::domains::signal_hub::store::SignalHubStore;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::platform::secrets::{
-    NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
+use hermes_hub_backend::platform::secrets::models::{
+    NewSecretReference, SecretKind, SecretStoreKind,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::secrets::store::SecretReferenceStore;
+use hermes_hub_backend::platform::storage::database::Database;
 use sqlx::Row;
 
 const TOKEN: &str = "mail-account-management-test-token";

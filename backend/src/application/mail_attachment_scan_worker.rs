@@ -1,11 +1,15 @@
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::storage::{
-    AttachmentSafetyScanError, AttachmentSafetyScanReport, AttachmentSafetyScanRequest,
-    AttachmentSafetyScanStatus, CommunicationStorageError, CommunicationStorageStore,
-    LocalCommunicationBlobStore, scan_attachment_with_clamav,
+use crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use crate::domains::communications::storage::errors::{
+    AttachmentSafetyScanError, CommunicationStorageError,
 };
+use crate::domains::communications::storage::scanner::{
+    AttachmentSafetyScanReport, AttachmentSafetyScanRequest, AttachmentSafetyScanStatus,
+    scan_attachment_with_clamav,
+};
+use crate::domains::communications::storage::store::CommunicationStorageStore;
 use crate::platform::attachment_scanning::ClamAvClient;
 use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 

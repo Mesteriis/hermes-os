@@ -1,8 +1,9 @@
 use sqlx::{Postgres, Transaction};
 
-use crate::domains::graph::core::{
-    GraphNodeKind, GraphProjectionPort, GraphReviewState, NewGraphEdge, NewGraphNode, node_id,
-};
+use crate::domains::graph::core::models::{GraphReviewState, NewGraphEdge, NewGraphNode};
+use crate::domains::graph::ports::GraphProjectionPort;
+use crate::platform::graph::GraphNodeKind;
+use crate::platform::graph::node_id;
 
 use super::errors::GraphProjectionError;
 use super::evidence::message_evidence;

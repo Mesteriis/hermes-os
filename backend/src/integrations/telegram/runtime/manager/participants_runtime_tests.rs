@@ -1,18 +1,19 @@
 use super::super::{TelegramMemberSyncContext, TelegramRuntimeEventBridgeContext};
 use super::sync_provider_roster_snapshots;
-use crate::integrations::telegram::client::TelegramChat;
 use crate::integrations::telegram::client::commands::insert_command;
-use crate::integrations::telegram::client::models::{
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::chats::NewTelegramChatParticipant;
+use crate::integrations::telegram::client::models::chats::TelegramChat;
+use crate::integrations::telegram::client::models::chats::{
     NewTelegramChat, TelegramChatKind, TelegramSyncState,
 };
 use crate::integrations::telegram::client::participants::upsert_chat_participant;
-use crate::integrations::telegram::client::{
-    NewTelegramChatParticipant, TelegramError, TelegramStore,
-};
-use crate::platform::config::AppConfig;
+use crate::integrations::telegram::client::store::TelegramStore;
+use crate::platform::config::app_config::AppConfig;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
-use crate::platform::secrets::{InMemorySecretResolver, SecretReferenceStore};
+use crate::platform::secrets::resolver::InMemorySecretResolver;
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_backend_testkit::context::TestContext;
 use serde_json::json;
 use sqlx::{PgPool, Row};
@@ -99,7 +100,7 @@ async fn sync_provider_roster_snapshots_appends_join_reconciliation_after_partic
         &chat,
         "user:42",
         vec![
-            crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot {
+            crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot {
                 provider_member_id: "user:42".to_owned(),
                 display_name: Some("Owner User".to_owned()),
                 username: Some("owner".to_owned()),

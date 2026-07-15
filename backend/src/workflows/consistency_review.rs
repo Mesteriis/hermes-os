@@ -4,13 +4,13 @@ use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Transaction};
 use thiserror::Error;
 
-use crate::domains::review::{
-    NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxPort, ReviewItemKind,
-    ReviewItemStatus,
+use crate::domains::review::errors::ReviewInboxError;
+use crate::domains::review::models::{
+    NewReviewItem, NewReviewItemEvidence, ReviewItemKind, ReviewItemStatus,
 };
+use crate::domains::review::ports::ReviewInboxPort;
 use crate::engines::consistency::{
     errors::ConsistencyError,
-    evidence::link_consistency_entity_in_transaction,
     models::{ContradictionObservation, ContradictionReviewState},
     store::ContradictionObservationStore,
 };

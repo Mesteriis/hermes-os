@@ -1,7 +1,7 @@
 use sqlx::{Postgres, Transaction};
 
-use crate::app::ApiError;
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::app::error::types::ApiError;
+use crate::domains::communications::messages::models::ProjectedMessage;
 use crate::workflows::task_creation::{WorkflowTaskCreateInput, create_task_from_workflow_input};
 
 use super::super::models::{

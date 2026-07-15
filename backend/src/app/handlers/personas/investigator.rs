@@ -1,4 +1,14 @@
-use super::support::*;
+use axum::Json;
+use axum::extract::{Path, State};
+use serde::Deserialize;
+use serde_json::{Value, json};
+
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::domains::personas::investigator::models::{
+    DossierReviewState, DossierSnapshot, PersonaDossier,
+};
+use crate::domains::personas::investigator::service::PersonaInvestigator;
 // ── Persona Investigator ───────────────────────────────────────────────────
 
 pub(crate) async fn post_persona_investigate(

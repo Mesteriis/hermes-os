@@ -3,8 +3,8 @@ use crate::application::organization_persona_links::OrganizationPersonaLinkAppli
 use crate::domains::organizations::api::OrganizationError;
 use crate::domains::organizations::service::OrganizationCommandServiceError;
 
-impl From<crate::domains::organizations::core::OrgCoreError> for ApiError {
-    fn from(error: crate::domains::organizations::core::OrgCoreError) -> Self {
+impl From<crate::domains::organizations::core::errors::OrgCoreError> for ApiError {
+    fn from(error: crate::domains::organizations::core::errors::OrgCoreError) -> Self {
         tracing::error!(error = %error, "org core operation failed");
         ApiError::InvalidCommunicationQuery("org core operation failed")
     }
@@ -17,8 +17,8 @@ impl From<crate::domains::organizations::memory::OrgMemoryError> for ApiError {
     }
 }
 
-impl From<crate::domains::organizations::workflows::OrgWorkflowError> for ApiError {
-    fn from(error: crate::domains::organizations::workflows::OrgWorkflowError) -> Self {
+impl From<crate::domains::organizations::workflows::errors::OrgWorkflowError> for ApiError {
+    fn from(error: crate::domains::organizations::workflows::errors::OrgWorkflowError) -> Self {
         tracing::error!(error = %error, "org workflow operation failed");
         ApiError::InvalidCommunicationQuery("org workflow operation failed")
     }

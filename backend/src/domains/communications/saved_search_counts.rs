@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, QueryBuilder, Row};
 
-use crate::domains::communications::messages::parse_communication_message_search_query;
-use crate::domains::communications::messages::{MessageSearchQuery, append_message_search_filter};
+use crate::domains::communications::messages::models::MessageSearchQuery;
+use crate::domains::communications::messages::query_parser::parse_communication_message_search_query;
+use crate::domains::communications::messages::search::append_message_search_filter;
 use crate::domains::communications::saved_searches::{
     CommunicationSavedSearchError, SavedSearchRecord,
 };

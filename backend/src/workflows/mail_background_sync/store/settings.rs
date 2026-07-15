@@ -1,5 +1,5 @@
 use super::super::errors::MailSyncError;
-use super::super::models::{MailSyncSettings, MailSyncSettingsUpdate};
+use super::super::models::settings::{MailSyncSettings, MailSyncSettingsUpdate};
 use super::super::rows::row_to_settings;
 use super::super::validation::{validate_account_id, validate_settings};
 use super::super::{DEFAULT_MAIL_SYNC_BATCH_SIZE, DEFAULT_MAIL_SYNC_POLL_INTERVAL_SECONDS};

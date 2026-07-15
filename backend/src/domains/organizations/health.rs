@@ -7,7 +7,8 @@ use sqlx::postgres::PgPool;
 use sqlx::postgres::Postgres;
 use thiserror::Error;
 
-use crate::domains::organizations::core::{OrgCoreError, link_entity_in_transaction};
+use crate::domains::organizations::core::errors::OrgCoreError;
+use crate::domains::organizations::core::evidence::link_entity_in_transaction;
 use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Clone, Debug, Serialize)]

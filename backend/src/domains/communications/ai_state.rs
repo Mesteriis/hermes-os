@@ -1,4 +1,4 @@
-use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
+use hermes_events_api::NewEventEnvelope;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
@@ -81,8 +81,6 @@ pub struct CommunicationAiStateTransitionRequest {
 pub struct CommunicationAiStateStore {
     pool: PgPool,
 }
-
-pub type CommunicationAiStatePort = CommunicationAiStateStore;
 
 impl CommunicationAiStateStore {
     pub fn new(pool: PgPool) -> Self {

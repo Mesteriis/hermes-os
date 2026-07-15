@@ -1,5 +1,6 @@
 use super::*;
 use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
+use hermes_communications_api::sensitive_forwarding::StoredSensitiveForwardingPolicy;
 
 #[derive(Serialize)]
 pub(crate) struct MailSyncStatusListResponse {
@@ -57,13 +58,13 @@ pub(crate) struct EmailAccountDeleteResponse {
 }
 
 #[derive(Deserialize)]
-pub(super) struct EmailAccountImportRequest {
+pub(crate) struct EmailAccountImportRequest {
     pub(super) account: EmailAccountImportAccount,
     pub(super) sync_settings: Option<EmailAccountImportSyncSettings>,
 }
 
 #[derive(Deserialize)]
-pub(super) struct EmailAccountImportAccount {
+pub(crate) struct EmailAccountImportAccount {
     pub(super) account_id: String,
     pub(super) provider_kind: String,
     pub(super) display_name: String,
@@ -73,7 +74,7 @@ pub(super) struct EmailAccountImportAccount {
 }
 
 #[derive(Deserialize)]
-pub(super) struct EmailAccountImportSyncSettings {
+pub(crate) struct EmailAccountImportSyncSettings {
     pub(super) sync_enabled: Option<bool>,
     pub(super) batch_size: Option<i32>,
     pub(super) poll_interval_seconds: Option<i32>,
@@ -104,8 +105,7 @@ pub(crate) struct MailContentEgressSettingsPatch {
 
 #[derive(Serialize)]
 pub(crate) struct MailSensitiveForwardingPolicyListResponse {
-    pub(super) items:
-        Vec<crate::domains::communications::sensitive_forwarding::StoredSensitiveForwardingPolicy>,
+    pub(super) items: Vec<StoredSensitiveForwardingPolicy>,
 }
 
 #[derive(Deserialize)]
@@ -137,7 +137,7 @@ pub(crate) struct MailSensitiveForwardingPolicyDeleteResponse {
 fn empty_json_object() -> Value {
     json!({})
 }
-pub(super) async fn email_account_or_not_found(
+pub(crate) async fn email_account_or_not_found(
     state: &AppState,
     account_id: &str,
 ) -> Result<ProviderAccount, ApiError> {
@@ -159,14 +159,14 @@ pub(super) async fn email_account_or_not_found(
     Ok(account)
 }
 
-pub(super) fn email_account_view(account: ProviderAccount) -> EmailAccountView {
+pub(crate) fn email_account_view(account: ProviderAccount) -> EmailAccountView {
     EmailAccountView {
         capabilities: email_account_capabilities(&account),
         account,
     }
 }
 
-pub(super) fn email_account_capabilities(account: &ProviderAccount) -> EmailAccountCapabilities {
+pub(crate) fn email_account_capabilities(account: &ProviderAccount) -> EmailAccountCapabilities {
     let logged_out = account
         .config
         .get("auth_state")
@@ -220,7 +220,7 @@ pub(super) fn email_account_capabilities(account: &ProviderAccount) -> EmailAcco
     }
 }
 
-pub(super) fn smtp_configured(account: &ProviderAccount) -> bool {
+pub(crate) fn smtp_configured(account: &ProviderAccount) -> bool {
     let explicit_smtp = account
         .config
         .as_object()
@@ -239,7 +239,7 @@ fn has_explicit_smtp_config(object: &serde_json::Map<String, Value>) -> bool {
         && object.get("smtp_port").and_then(Value::as_i64).is_some()
 }
 
-pub(super) fn sanitize_account_config(value: &Value) -> Value {
+pub(crate) fn sanitize_account_config(value: &Value) -> Value {
     match value {
         Value::Object(object) => Value::Object(
             object
@@ -258,7 +258,7 @@ pub(super) fn sanitize_account_config(value: &Value) -> Value {
     }
 }
 
-pub(super) fn contains_secret_material(value: &Value) -> bool {
+pub(crate) fn contains_secret_material(value: &Value) -> bool {
     match value {
         Value::Object(object) => object
             .iter()
@@ -268,7 +268,7 @@ pub(super) fn contains_secret_material(value: &Value) -> bool {
     }
 }
 
-pub(super) fn is_secret_config_key(key: &str) -> bool {
+pub(crate) fn is_secret_config_key(key: &str) -> bool {
     let key = key.to_ascii_lowercase();
     [
         "password",
@@ -286,7 +286,7 @@ pub(super) fn is_secret_config_key(key: &str) -> bool {
     .any(|marker| key.contains(marker))
 }
 
-pub(super) fn require_unlocked_host_vault(state: &AppState) -> Result<(), ApiError> {
+pub(crate) fn require_unlocked_host_vault(state: &AppState) -> Result<(), ApiError> {
     match state.vault.status()?.state {
         VaultMode::Unlocked => Ok(()),
         VaultMode::Locked => Err(ApiError::HostVault(HostVaultError::Locked)),
@@ -294,7 +294,7 @@ pub(super) fn require_unlocked_host_vault(state: &AppState) -> Result<(), ApiErr
     }
 }
 
-pub(super) fn mail_sync_store(state: &AppState) -> Result<MailSyncStore, MailSyncError> {
+pub(crate) fn mail_sync_store(state: &AppState) -> Result<MailSyncStore, MailSyncError> {
     let Some(pool) = state.database.pool() else {
         return Err(MailSyncError::InvalidSetting {
             field: "database",
@@ -307,7 +307,7 @@ pub(super) fn mail_sync_store(state: &AppState) -> Result<MailSyncStore, MailSyn
     >(pool.clone()))
 }
 
-pub(super) fn mail_sync_service(
+pub(crate) fn mail_sync_service(
     state: &AppState,
 ) -> Result<MailBackgroundSyncService, MailSyncError> {
     let Some(pool) = state.database.pool() else {
@@ -349,7 +349,7 @@ pub(super) fn mail_sync_service(
     ))
 }
 
-pub(super) fn address_book_sync_service(
+pub(crate) fn address_book_sync_service(
     state: &AppState,
 ) -> Result<AddressBookSyncService, AddressBookSyncError> {
     let Some(pool) = state.database.pool() else {
@@ -372,7 +372,7 @@ pub(super) fn address_book_sync_service(
     ))
 }
 
-pub(super) fn mail_sync_api_error(error: MailSyncError) -> ApiError {
+pub(crate) fn mail_sync_api_error(error: MailSyncError) -> ApiError {
     match error {
         MailSyncError::AccountNotFound => ApiError::NotFound,
         MailSyncError::RunAlreadyActive | MailSyncError::RunNotFound => {
@@ -411,7 +411,7 @@ pub(super) fn mail_sync_api_error(error: MailSyncError) -> ApiError {
     }
 }
 
-pub(super) fn address_book_sync_api_error(error: AddressBookSyncError) -> ApiError {
+pub(crate) fn address_book_sync_api_error(error: AddressBookSyncError) -> ApiError {
     match error {
         AddressBookSyncError::AccountNotFound(_) => ApiError::NotFound,
         AddressBookSyncError::DatabaseNotConfigured => ApiError::DatabaseNotConfigured,

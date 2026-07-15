@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::platform::secrets::ResolvedSecret;
+use crate::platform::secrets::models::ResolvedSecret;
 
 use super::super::errors::ConfigError;
 use super::super::parsing::parse_bool_env;

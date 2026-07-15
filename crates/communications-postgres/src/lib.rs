@@ -1,9 +1,17 @@
 pub mod accounts;
+pub mod attachment_scan;
+pub mod attachments;
+pub mod calls;
+pub mod canonical;
 pub mod checkpoints;
+pub mod conversations;
 pub mod errors;
+pub mod projection_state;
+pub mod projections;
 pub mod provider_commands;
 pub mod provider_store;
 pub mod raw_records;
 pub mod rows;
+pub mod runtime_leases;
 pub mod store;
 pub mod validation;

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{TimeZone, Utc};
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_observations_api::models::{
     NewObservation, NewObservationIngestionRun, NewObservationLink, ObservationIngestionRunStatus,
     ObservationOriginKind,

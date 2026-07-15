@@ -1,6 +1,8 @@
-use crate::integrations::telegram::client::{TelegramError, TelegramManualSendRequest};
-use crate::integrations::telegram::runtime::TelegramMediaSendRequest;
-use crate::integrations::telegram::tdjson::{self, TdJsonClient, TelegramTdlibMessageSnapshot};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::messages::TelegramManualSendRequest;
+use crate::integrations::telegram::runtime::models::TelegramMediaSendRequest;
+use crate::integrations::telegram::tdjson::client::TdJsonClient;
+use crate::integrations::telegram::tdjson::{self, snapshots::TelegramTdlibMessageSnapshot};
 use hermes_provider_telegram::tdlib::messages::{self, send_media, send_reply, send_text};
 
 use super::super::TDJSON_COMMAND_TIMEOUT;
@@ -17,10 +19,10 @@ pub(super) fn actor_send_text(
             .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?,
     )?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
-    tdjson::parse_tdlib_message_snapshot(&response)
+    tdjson::parsing::messages::parse_tdlib_message_snapshot(&response)
 }
 
 pub(super) fn actor_send_media(
@@ -42,10 +44,10 @@ pub(super) fn actor_send_media(
         .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?,
     )?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
-    tdjson::parse_tdlib_message_snapshot(&response)
+    tdjson::parsing::messages::parse_tdlib_message_snapshot(&response)
 }
 
 pub(super) fn actor_send_reply(
@@ -63,10 +65,10 @@ pub(super) fn actor_send_reply(
             .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?,
     )?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
-    tdjson::parse_tdlib_message_snapshot(&response)
+    tdjson::parsing::messages::parse_tdlib_message_snapshot(&response)
 }
 
 pub(super) fn actor_send_forward(
@@ -87,8 +89,8 @@ pub(super) fn actor_send_forward(
         &extra,
     ))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
-    tdjson::parse_tdlib_message_snapshot(&response)
+    tdjson::parsing::messages::parse_tdlib_message_snapshot(&response)
 }

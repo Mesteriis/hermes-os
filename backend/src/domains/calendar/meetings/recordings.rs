@@ -1,12 +1,11 @@
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Transaction};
 
-use crate::domains::calendar::evidence::{
-    link_calendar_entity, link_calendar_entity_in_transaction,
-};
+use crate::domains::calendar::evidence::link_calendar_entity_in_transaction;
 
+use super::errors::MeetingsError;
+use super::models::EventRecording;
 use super::rows::{EVENT_RECORDING_COLUMNS, row_to_event_recording};
-use super::{EventRecording, MeetingsError};
 
 #[derive(Clone)]
 pub struct EventRecordingStore {

@@ -1,7 +1,6 @@
-use sqlx::PgPool;
-
 use super::errors::TelegramError;
-use super::models::{TelegramChat, TelegramMessage};
+use super::models::chats::TelegramChat;
+use super::models::messages::TelegramMessage;
 use super::rows::{provider_channel_message_to_telegram_message, row_to_telegram_chat};
 use super::store::TelegramStore;
 

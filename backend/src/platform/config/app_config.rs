@@ -10,7 +10,7 @@ mod test_support;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use crate::platform::secrets::ResolvedSecret;
+use crate::platform::secrets::models::ResolvedSecret;
 
 use super::ai::AiRuntimeProvider;
 use super::google::GoogleOAuthClientConfig;

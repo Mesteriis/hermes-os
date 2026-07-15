@@ -6,22 +6,25 @@ use chrono::Utc;
 use serde_json::Value;
 use sqlx::postgres::PgPool;
 
-use crate::platform::communications::{
-    SharedEmailProviderSyncPort, SharedMailProviderResourceCommandPort,
+use crate::platform::communications::email_sync::{
     email_sync_plan_selects_all_imap_mailboxes, email_sync_plan_stream_ids,
     imap_mailbox_stream_prefix, plan_email_sync,
 };
 use crate::vault::HostVault;
-use hermes_communications_api::evidence::{
-    CommunicationEvidencePort, IngestionCheckpointCommandPort, IngestionCheckpointQueryPort,
-};
+use hermes_communications_api::evidence::CommunicationEvidencePort;
+use hermes_communications_api::mail_resources::SharedEmailProviderSyncPort;
+use hermes_communications_api::mail_resources::SharedMailProviderResourceCommandPort;
 
 use super::errors::MailSyncError;
+use super::models::progress::MailSyncTrigger;
+use super::models::runs::MailSyncRunResponse;
+use super::models::settings::MailSyncSettings;
 use super::models::{
-    FinishRun, MailSyncPhase, MailSyncRunResponse, MailSyncRunStatus, MailSyncSettings,
-    MailSyncTrigger, ProgressMode, SanitizedSyncFailure,
+    failures::SanitizedSyncFailure,
+    finish::FinishRun,
+    progress::{MailSyncPhase, MailSyncRunStatus, ProgressMode},
 };
-use super::provider::ProviderSyncContext;
+use super::provider::types::ProviderSyncContext;
 use super::store::MailSyncStatePort;
 use super::validation::{next_run_at, require_unlocked_vault};
 

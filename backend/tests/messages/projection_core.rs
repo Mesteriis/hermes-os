@@ -1,6 +1,9 @@
 use chrono::Utc;
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use hermes_communications_api::evidence::NewRawCommunicationRecord;
+use hermes_communications_api::mail_resources::{
+    MailProviderResourceKind, MailProviderSemanticRole,
+};
 use serde_json::json;
 
 use hermes_hub_backend::domains::communications::bulk_actions::{
@@ -9,18 +12,18 @@ use hermes_hub_backend::domains::communications::bulk_actions::{
 use hermes_hub_backend::domains::communications::folders::{
     CommunicationFolderStore, NewCommunicationFolder,
 };
-use hermes_hub_backend::domains::communications::messages::{
-    NewProjectedMessage, project_raw_email_message, project_raw_email_message_from_blob,
+use hermes_hub_backend::domains::communications::messages::models::NewProjectedMessage;
+use hermes_hub_backend::domains::communications::messages::projection::{
+    project_raw_email_message, project_raw_email_message_from_blob,
 };
+use hermes_hub_backend::domains::communications::outbox::delivery::OutboxSendReceipt;
 use hermes_hub_backend::domains::communications::outbox::{
     CommunicationOutboxStatus, CommunicationOutboxStore, NewCommunicationOutboxItem,
-    OutboxSendReceipt,
 };
 use hermes_hub_backend::domains::communications::provider_resources::{
-    MailProviderResourceKind, MailProviderResourceMappingUpdate, MailProviderResourceStore,
-    MailProviderSemanticRole, NewMailProviderResource,
+    MailProviderResourceMappingUpdate, MailProviderResourceStore, NewMailProviderResource,
 };
-use hermes_hub_backend::domains::communications::storage::LocalCommunicationBlobStore;
+use hermes_hub_backend::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
 
 use super::support::{
     live_projection_context, record_raw_email_message, store_provider_account, unique_suffix,

@@ -1,7 +1,6 @@
 mod ai_agents;
 mod email_projection;
 mod owner;
-mod persona_reads;
 mod persona_type;
 mod persona_writes;
 mod review_projection;
@@ -18,7 +17,7 @@ impl PersonaProjectionStore {
         Self { pool }
     }
 
-    pub(super) fn pool(&self) -> &PgPool {
+    pub(crate) fn pool(&self) -> &PgPool {
         &self.pool
     }
 }

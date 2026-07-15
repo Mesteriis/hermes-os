@@ -1,4 +1,4 @@
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
 use super::super::commands::{request_actor_search_chat_messages, request_actor_search_messages};
 use super::super::status::account_runtime_kind;
@@ -23,7 +23,7 @@ impl TelegramRuntimeManager {
         request: &TelegramProviderSearchRequest,
     ) -> Result<Vec<String>, TelegramError>
     where
-        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+        S: crate::platform::secrets::resolver::SecretResolver + Sync + ?Sized,
     {
         if request.query.trim().is_empty() {
             return Ok(vec![]);

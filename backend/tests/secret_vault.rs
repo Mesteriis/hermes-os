@@ -5,14 +5,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::Utc;
 use tempfile::tempdir;
 
-use hermes_hub_backend::platform::secrets::{DatabaseEncryptedSecretVault, EncryptedSecretVault};
-use hermes_hub_backend::platform::secrets::{
-    NewSecretReference, ResolvedSecret, SecretKind, SecretReference, SecretReferenceStore,
-    SecretResolutionError, SecretResolver, SecretStoreKind,
+use hermes_hub_backend::platform::secrets::database_vault::DatabaseEncryptedSecretVault;
+use hermes_hub_backend::platform::secrets::errors::SecretResolutionError;
+use hermes_hub_backend::platform::secrets::file_vault::EncryptedSecretVault;
+use hermes_hub_backend::platform::secrets::models::{
+    NewSecretReference, ResolvedSecret, SecretKind, SecretReference, SecretStoreKind,
 };
-use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::vault::{
-    EntropyEvent, HostVault, HostVaultConfig, SecretEntryContext, VaultMode,
+use hermes_hub_backend::platform::secrets::resolver::SecretResolver;
+use hermes_hub_backend::platform::secrets::store::SecretReferenceStore;
+use hermes_hub_backend::platform::storage::database::Database;
+use hermes_hub_backend::vault::HostVault;
+use hermes_hub_backend::vault::models::{
+    EntropyEvent, HostVaultConfig, SecretEntryContext, VaultMode,
 };
 
 #[tokio::test]

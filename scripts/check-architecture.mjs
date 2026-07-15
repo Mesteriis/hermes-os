@@ -37,6 +37,16 @@ const communicationProviderCrudFacadeOwners = new Set([
 	'backend/src/domains/communications/core/secrets.rs'
 ]);
 const telegramCommandQueueOwner = 'backend/src/integrations/telegram/client/commands.rs';
+const facadeFreeFiles = [
+	'backend/src/platform/secrets.rs',
+	'backend/src/app/mod.rs',
+	'backend/src/integrations/telegram/client/models.rs',
+	'backend/src/integrations/telegram/client/models/messages.rs',
+	'backend/src/integrations/telegram/client/lifecycle.rs',
+	'backend/src/integrations/telegram/client/mod.rs',
+	'backend/src/integrations/telegram/client/commands.rs',
+	'backend/src/integrations/telegram/runtime.rs'
+];
 const mailSyncRunMutationOwners = new Set([
 	'backend/src/domains/communications/background_sync/store/run_start.rs',
 	'backend/src/domains/communications/background_sync/store/run_progress.rs',
@@ -477,7 +487,6 @@ function integrationCommunicationBusinessSqlFailuresForSource(relativePath, sour
 		[
 			'backend/src/integrations/whatsapp/runtime/mod.rs',
 			new Set([
-				'communication_accounts',
 				'communication_provider_accounts',
 				'communication_provider_commands'
 			])
@@ -2059,6 +2068,17 @@ async function checkLayerBoundaries() {
 	failures.push(...await routeOwnershipFailures());
 }
 
+async function checkFacadeFreeFiles() {
+	for (const relativePath of facadeFreeFiles) {
+		const absolutePath = path.join(repoRoot, relativePath);
+		if (!(await exists(absolutePath))) continue;
+		const source = await readFile(absolutePath, 'utf8');
+		if (/^\s*pub(?:\([^)]*\))?\s+use\b/m.test(source)) {
+			failures.push(`${relativePath}: compatibility re-export facade is forbidden`);
+		}
+	}
+}
+
 async function frontendProviderBusinessCacheRootFailures() {
 	const frontendFiles = await collectFiles('frontend/src', new Set(['.ts', '.vue']));
 	const errors = [];
@@ -2764,6 +2784,7 @@ async function main() {
 	await checkDockerBoundary();
 	await checkCanonicalEvidenceBoundaries();
 	await checkLayerBoundaries();
+	await checkFacadeFreeFiles();
 
 	if (failures.length > 0) {
 		console.error(failures.join('\n'));

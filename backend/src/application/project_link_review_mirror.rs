@@ -1,6 +1,8 @@
 use sqlx::{Postgres, Transaction};
 
-use crate::domains::projects::link_reviews::{ProjectLinkReviewState, ProjectLinkTargetKind};
+use crate::domains::projects::link_reviews::models::{
+    ProjectLinkReviewState, ProjectLinkTargetKind,
+};
 use crate::workflows::review_mirror::ReviewMirrorError;
 
 #[allow(clippy::too_many_arguments)]
@@ -15,7 +17,7 @@ pub(crate) async fn ensure_project_link_candidate_review_item(
     observation_id: &str,
     graph_node_id: Option<&str>,
 ) -> Result<(), ReviewMirrorError> {
-    crate::workflows::review_mirror::ensure_project_link_candidate_review_item(
+    crate::workflows::review_mirror::project_link::ensure_project_link_candidate_review_item(
         pool,
         project_id,
         target_kind,
@@ -41,7 +43,7 @@ pub(crate) async fn sync_project_link_review_state_in_transaction(
     confidence: f64,
     observation_id: &str,
 ) -> Result<(), ReviewMirrorError> {
-    crate::workflows::review_mirror::sync_project_link_review_state_in_transaction(
+    crate::workflows::review_mirror::project_link::sync_project_link_review_state_in_transaction(
         transaction,
         project_id,
         target_kind,

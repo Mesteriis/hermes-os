@@ -2,8 +2,8 @@ use hermes_backend_testkit::context::TestContext;
 use serde_json::json;
 
 use crate::integrations::telegram::client::commands::insert_command;
-use crate::integrations::telegram::client::models::TelegramChat;
-use crate::integrations::telegram::tdjson::TelegramTdlibChatMarkedAsUnreadSnapshot;
+use crate::integrations::telegram::client::models::chats::TelegramChat;
+use crate::integrations::telegram::tdjson::parsing::events::TelegramTdlibChatMarkedAsUnreadSnapshot;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
 

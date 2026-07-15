@@ -1,18 +1,17 @@
 use thiserror::Error;
 
 use crate::application::relationship_graph::RelationshipGraphCoordinatorError;
-use crate::domains::communications::messages::{
-    CommunicationSignalProjectionError, MessageProjectionError,
-};
-use crate::domains::communications::storage::{
+use crate::domains::communications::messages::errors::MessageProjectionError;
+use crate::domains::communications::messages::provider_observation_projection::CommunicationSignalProjectionError;
+use crate::domains::communications::storage::errors::{
     AttachmentSafetyScanError, CommunicationStorageError,
 };
-use crate::domains::decisions::DecisionReviewPortError;
+use crate::domains::decisions::ports::DecisionReviewPortError;
 use crate::domains::organizations::api::OrganizationError;
-use crate::domains::organizations::core::OrgCoreError;
-use crate::domains::personas::memory::PersonaMemoryError;
+use crate::domains::organizations::core::errors::OrgCoreError;
+use crate::domains::personas::memory::errors::PersonaMemoryError;
 use crate::domains::signal_hub::store::SignalHubError;
-use crate::domains::tasks::candidates::TaskCandidateError;
+use crate::domains::tasks::candidates::errors::TaskCandidateError;
 use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 use hermes_communications_api::evidence::CommunicationEvidencePortError;
 

@@ -5,12 +5,13 @@ use axum::routing::{get as axum_get, post as axum_post};
 use axum::{Json, Router};
 use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::ai::control_center::{
-    AiControlCenterStore, AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest,
+    models::{AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest},
+    store::AiControlCenterStore,
 };
-use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::app::router::build_router_with_database;
 use hermes_hub_backend::domains::signal_hub::store::SignalHubStore;
-use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::settings::store::ApplicationSettingsStore;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_signal_hub_api::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
 use serde_json::json;
 use tokio::net::TcpListener;

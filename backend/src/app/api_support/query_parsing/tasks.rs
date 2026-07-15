@@ -1,7 +1,7 @@
 use url::form_urlencoded;
 
-use crate::app::ApiError;
-use crate::domains::tasks::candidates::TaskCandidateReviewState;
+use crate::app::error::types::ApiError;
+use crate::domains::tasks::candidates::models::TaskCandidateReviewState;
 
 pub(crate) struct TaskCandidatesQuery {
     pub(crate) limit: Option<i64>,

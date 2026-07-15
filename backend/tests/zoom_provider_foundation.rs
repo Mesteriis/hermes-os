@@ -20,23 +20,25 @@ use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
 use hermes_events_postgres::store::EventStore;
-use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::app::router::build_router_with_database;
 use hermes_hub_backend::integrations::zoom::client::{
     models::{ZoomAccountSetupRequest, ZoomMeetingObservationRequest},
     store::ZoomStore,
 };
-use hermes_hub_backend::platform::calls::CallIntelligenceStore;
+use hermes_hub_backend::platform::calls::store::CallIntelligenceStore;
 
 use hermes_hub_backend::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
 use hermes_hub_backend::platform::events::bus::zoom_event_types;
-use hermes_hub_backend::platform::secrets::{
-    NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
+use hermes_hub_backend::platform::secrets::models::{
+    NewSecretReference, SecretKind, SecretStoreKind,
 };
-use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
-use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::vault::{
-    EntropyEvent, HostVault, HostVaultConfig, SecretEntryContext, VaultMode,
+use hermes_hub_backend::platform::secrets::store::SecretReferenceStore;
+use hermes_hub_backend::platform::settings::store::ApplicationSettingsStore;
+use hermes_hub_backend::platform::storage::database::Database;
+use hermes_hub_backend::vault::HostVault;
+use hermes_hub_backend::vault::models::{
+    EntropyEvent, HostVaultConfig, SecretEntryContext, VaultMode,
 };
 
 const LOCAL_API_TOKEN: &str = "zoom-provider-test-secret";
@@ -3294,7 +3296,7 @@ async fn zoom_store_broadcasts_meeting_events_on_runtime_bus() {
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
         Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
         Arc::new(
-            hermes_hub_backend::domains::communications::storage::CommunicationStorageStore::new(
+            hermes_hub_backend::domains::communications::storage::store::CommunicationStorageStore::new(
                 pool.clone(),
             ),
         ),

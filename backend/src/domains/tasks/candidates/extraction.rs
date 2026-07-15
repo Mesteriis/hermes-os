@@ -5,7 +5,6 @@ use crate::engines::obligation::models::ObligationCandidate;
 use super::constants::{
     OBLIGATION_CANDIDATE_METADATA_KEY, REVIEW_TEXT_SNIPPET_CHARS, TITLE_PREVIEW_CHARS,
 };
-use super::errors::TaskCandidateError;
 use super::models::{CandidatePayload, TaskCandidateKind, TaskCandidateSourceKind};
 use super::validation::text_preview;
 

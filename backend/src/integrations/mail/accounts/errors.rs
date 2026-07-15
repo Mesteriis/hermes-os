@@ -1,9 +1,8 @@
 use thiserror::Error;
 
-use crate::platform::secrets::{
-    DatabaseEncryptedVaultError, SecretReferenceError, SecretResolutionError,
-};
-use crate::vault::HostVaultError;
+use crate::platform::secrets::database_vault::DatabaseEncryptedVaultError;
+use crate::platform::secrets::errors::{SecretReferenceError, SecretResolutionError};
+use crate::vault::errors::HostVaultError;
 
 #[derive(Debug, Error)]
 pub enum EmailAccountSetupError {

@@ -6,25 +6,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
     messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
+    stores::{domain_stores::*, integration_stores::*},
 };
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::application::telegram_runtime;
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramTopic, TelegramTopicCloseRequest, TelegramTopicCreateRequest,
-    TelegramTopicLifecycleResponse, TelegramTopicListResponse,
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::topics::{
+    TelegramTopic, TelegramTopicCloseRequest, TelegramTopicCreateRequest,
+    TelegramTopicLifecycleResponse,
 };
-use crate::platform::audit::NewApiAuditRecord;
+use crate::platform::audit::models::NewApiAuditRecord;
 
 use crate::platform::events::bus::telegram_event_types;
 

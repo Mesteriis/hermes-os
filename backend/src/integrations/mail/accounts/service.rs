@@ -14,7 +14,7 @@ use reqwest::Client;
 use sqlx::postgres::PgPool;
 use std::sync::Arc;
 
-use crate::platform::secrets::SecretReferenceStore;
+use crate::platform::secrets::store::SecretReferenceStore;
 
 use super::vault::AccountSecretVault;
 

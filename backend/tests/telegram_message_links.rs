@@ -11,12 +11,14 @@ use hermes_backend_testkit::context::TestContext;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::messages::ProviderChannelMessageStore;
-use hermes_hub_backend::integrations::telegram::client::{
-    NewTelegramChat, TelegramChatKind, TelegramStore, TelegramSyncState,
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::communications::messages::provider_channel_store::ProviderChannelMessageStore;
+use hermes_hub_backend::integrations::telegram::client::models::chats::TelegramSyncState;
+use hermes_hub_backend::integrations::telegram::client::models::chats::{
+    NewTelegramChat, TelegramChatKind,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::integrations::telegram::client::store::TelegramStore;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const LOCAL_API_TOKEN: &str = "telegram-message-link-test-secret";
 

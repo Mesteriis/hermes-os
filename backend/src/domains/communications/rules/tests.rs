@@ -1,9 +1,8 @@
 use chrono::Utc;
 use serde_json::json;
 
-use crate::domains::communications::messages::{
-    LocalMessageState, ProjectedMessage, WorkflowState,
-};
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::communications::messages::states::{LocalMessageState, WorkflowState};
 
 use super::evaluation::evaluate_conditions;
 use super::mode::RuleMode;

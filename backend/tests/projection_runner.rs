@@ -11,7 +11,7 @@ use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::platform::projections::{
     ProjectionBatchOutcome, ProjectionHandlerError, run_projection_batch,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 #[tokio::test]
 async fn projection_runner_processes_batch_and_advances_cursor_against_postgres() {

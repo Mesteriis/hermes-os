@@ -1,4 +1,4 @@
-use crate::platform::secrets::ResolvedSecret;
+use crate::platform::secrets::models::ResolvedSecret;
 
 use super::super::ai::AiRuntimeProvider;
 use super::super::errors::ConfigError;

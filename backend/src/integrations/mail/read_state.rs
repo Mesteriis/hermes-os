@@ -1,3 +1,4 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_api::accounts::{
     CommunicationProviderKind, ProviderAccount, ProviderSecretBindingLookupPort,
@@ -17,7 +18,7 @@ use crate::integrations::mail::gmail::client::{
 };
 use crate::integrations::mail::imap_write::{ImapWriteClient, ImapWriteConfig, ImapWriteError};
 
-use crate::platform::secrets::{ResolvedSecret, SecretReferenceStore};
+use crate::platform::secrets::models::ResolvedSecret;
 use crate::vault::HostVault;
 
 use super::sync_provider::read_provider_secret;

@@ -1,6 +1,7 @@
 use crate::ai::hub::{AiHub, AiModelRoute, LocalAiInspection, SharedAiHub};
+use crate::domains::communications::messages::models::ProjectedMessage;
 use crate::domains::communications::messages::port::MessageProjectionPort;
-use crate::domains::communications::messages::{ProjectedMessage, WorkflowState};
+use crate::domains::communications::messages::states::WorkflowState;
 use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
 use crate::workflows::email_intelligence::heuristics;
 use crate::workflows::email_intelligence::models::{EmailAnalysis, EmailSummaryContract};

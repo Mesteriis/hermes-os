@@ -13,6 +13,8 @@ use hermes_communications_api::accounts::{
     CommunicationProviderKind, CommunicationProviderKind as PlatformEmailProviderKind,
     NewProviderAccount,
 };
+use hermes_communications_api::address_book::AddressBookProviderUpsertRequest;
+use hermes_communications_api::email_sync::{EmailSyncBatch, FetchedCommunicationSourceMessage};
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::storage::port::{
     CommunicationAttachmentPort, LocalBlobPort,
@@ -22,11 +24,8 @@ use hermes_hub_backend::integrations::mail::gmail::client::{
     imap::ImapNetworkClient,
     options::{GmailContactFetchOptions, GmailFetchOptions, ImapFetchOptions},
 };
-use hermes_hub_backend::platform::communications::{
-    AddressBookProviderUpsertRequest, EmailSyncBatch, FetchedCommunicationSourceMessage,
-};
-use hermes_hub_backend::platform::secrets::ResolvedSecret;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::secrets::models::ResolvedSecret;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::email_sync_pipeline::recording::{
     record_email_sync_batch, record_email_sync_batch_with_mail_blobs,
 };

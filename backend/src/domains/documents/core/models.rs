@@ -4,7 +4,7 @@ use super::errors::DocumentImportError;
 use super::fingerprint::local_markdown_fingerprint;
 use super::markdown::extract_markdown_text;
 use super::validation::{ValidatedDocumentImport, validate_document_import};
-use crate::domains::documents::processing::DocumentProcessingJob;
+use crate::domains::documents::processing::models::DocumentProcessingJob;
 
 pub(super) const DOCUMENT_KIND_MARKDOWN: &str = "markdown";
 pub(super) const DOCUMENT_KIND_PDF: &str = "pdf";

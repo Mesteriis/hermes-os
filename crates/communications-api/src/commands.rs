@@ -121,6 +121,7 @@ pub struct CommunicationProviderCommand {
     pub status: String,
     pub retry_count: i32,
     pub max_retries: i32,
+    pub lease_epoch: i64,
     pub last_error: Option<String>,
     pub result_payload: Value,
     pub audit_metadata: Value,
@@ -178,6 +179,38 @@ impl ProviderCommandQueuePortError {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderRuntimeLease {
+    pub provider: String,
+    pub account_id: String,
+    pub topology: String,
+    pub holder: String,
+    pub epoch: i64,
+    pub state: String,
+    pub expires_at: DateTime<Utc>,
+}
+
+pub type ProviderRuntimeLeaseFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, ProviderCommandQueuePortError>> + Send + 'a>>;
+
+pub trait ProviderRuntimeLeasePort: Send + Sync {
+    fn acquire<'a>(
+        &'a self,
+        provider: &'a str,
+        account_id: &'a str,
+        topology: &'a str,
+        holder: &'a str,
+        ttl: chrono::Duration,
+    ) -> ProviderRuntimeLeaseFuture<'a, ProviderRuntimeLease>;
+
+    fn revoke<'a>(
+        &'a self,
+        provider: &'a str,
+        account_id: &'a str,
+        holder: &'a str,
+    ) -> ProviderRuntimeLeaseFuture<'a, Option<ProviderRuntimeLease>>;
+}
+
 pub type ProviderCommandQueuePortFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, ProviderCommandQueuePortError>> + Send + 'a>>;
 
@@ -197,6 +230,41 @@ pub trait ProviderCommandQueuePort: Send + Sync {
         now: DateTime<Utc>,
         result_payload: Value,
     ) -> ProviderCommandQueuePortFuture<'a, Option<CommunicationProviderCommand>>;
+
+    fn mark_completed_at_epoch<'a>(
+        &'a self,
+        command_id: &'a str,
+        channel_kind: &'a str,
+        now: DateTime<Utc>,
+        result_payload: Value,
+        _lease_epoch: i64,
+    ) -> ProviderCommandQueuePortFuture<'a, Option<CommunicationProviderCommand>> {
+        self.mark_completed(command_id, channel_kind, now, result_payload)
+    }
+
+    fn mark_failed_at_epoch<'a>(
+        &'a self,
+        command_id: &'a str,
+        channel_kind: &'a str,
+        now: DateTime<Utc>,
+        error: &'a str,
+        result_payload: Value,
+        _lease_epoch: i64,
+    ) -> ProviderCommandQueuePortFuture<'a, Option<CommunicationProviderCommand>> {
+        self.mark_failed(command_id, channel_kind, now, error, result_payload)
+    }
+
+    fn mark_terminal_failed_at_epoch<'a>(
+        &'a self,
+        command_id: &'a str,
+        channel_kind: &'a str,
+        now: DateTime<Utc>,
+        error: &'a str,
+        result_payload: Value,
+        _lease_epoch: i64,
+    ) -> ProviderCommandQueuePortFuture<'a, Option<CommunicationProviderCommand>> {
+        self.mark_terminal_failed(command_id, channel_kind, now, error, result_payload)
+    }
 
     fn mark_failed<'a>(
         &'a self,
@@ -233,6 +301,25 @@ pub trait ProviderCommandQueuePort: Send + Sync {
         observed_at: DateTime<Utc>,
         provider_state: Value,
     ) -> ProviderCommandQueuePortFuture<'a, Vec<CommunicationProviderCommand>>;
+}
+
+/// Read-only projection feed for provider runtimes importing canonical commands.
+pub trait ProviderCommandProjectionPort: Send + Sync {
+    fn list_for_runtime_import<'a>(
+        &'a self,
+        channel_kind: &'a str,
+        limit: i64,
+    ) -> ProviderCommandQueuePortFuture<'a, Vec<CommunicationProviderCommand>>;
+}
+
+pub type ProviderCommandMirrorPortFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, ProviderCommandQueuePortError>> + Send + 'a>>;
+
+pub trait ProviderCommandMirrorPort: Send + Sync {
+    fn mirror<'a>(
+        &'a self,
+        command: &'a CommunicationProviderCommand,
+    ) -> ProviderCommandMirrorPortFuture<'a, ()>;
 }
 
 fn required_non_empty(

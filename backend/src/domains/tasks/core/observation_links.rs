@@ -4,7 +4,7 @@ use sqlx::postgres::Postgres;
 
 use hermes_observations_postgres::review_links::link_domain_entity_in_transaction;
 
-use super::TaskCoreError;
+use super::errors::TaskCoreError;
 
 pub(crate) async fn materialize_task_observation_link_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,

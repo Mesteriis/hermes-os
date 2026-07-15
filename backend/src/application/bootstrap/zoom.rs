@@ -4,6 +4,8 @@ use hermes_provider_zoom::protocol::{
 };
 use sqlx::postgres::PgPool;
 
+use crate::integrations::zoom::client::models::oauth_models::ZoomTokenMaintenanceRequest;
+use crate::integrations::zoom::client::models::oauth_models::ZoomTokenMaintenanceResult;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::vault::HostVault;
 
@@ -16,13 +18,13 @@ pub(super) async fn run_zoom_token_maintenance_once(
     pool: &PgPool,
     vault: &HostVault,
     event_bus: &InMemoryEventBus,
-) -> Result<crate::integrations::zoom::client::models::ZoomTokenMaintenanceResult, String> {
-    let secret_store = crate::platform::secrets::SecretReferenceStore::new(pool.clone());
-    let service = crate::application::provider_runtime_services::zoom_provider_runtime_service(
+) -> Result<ZoomTokenMaintenanceResult, String> {
+    let secret_store = crate::platform::secrets::store::SecretReferenceStore::new(pool.clone());
+    let service = crate::application::provider_runtime_factories::zoom_provider_runtime_service(
         pool.clone(),
         event_bus.clone(),
     );
-    let request = crate::integrations::zoom::client::models::ZoomTokenMaintenanceRequest {
+    let request = ZoomTokenMaintenanceRequest {
         account_id: None,
         force: false,
         refresh_expiring_within_seconds: Some(
@@ -60,7 +62,7 @@ pub(super) async fn run_zoom_recording_sync_once(
     vault: &HostVault,
     event_bus: &InMemoryEventBus,
 ) -> Result<ZoomRecordingSyncSchedulerResult, String> {
-    let settings = crate::platform::settings::ApplicationSettingsStore::new(pool.clone());
+    let settings = crate::platform::settings::store::ApplicationSettingsStore::new(pool.clone());
     let allow_remote_transcript_downloads = settings
         .setting("privacy.zoom_remote_transcript_download_enabled")
         .await
@@ -74,8 +76,8 @@ pub(super) async fn run_zoom_recording_sync_once(
         .and_then(|setting| setting.value.as_bool())
         .unwrap_or(false);
 
-    let secret_store = crate::platform::secrets::SecretReferenceStore::new(pool.clone());
-    let service = crate::application::provider_runtime_services::zoom_provider_runtime_service(
+    let secret_store = crate::platform::secrets::store::SecretReferenceStore::new(pool.clone());
+    let service = crate::application::provider_runtime_factories::zoom_provider_runtime_service(
         pool.clone(),
         event_bus.clone(),
     );
@@ -161,7 +163,7 @@ pub(super) async fn run_zoom_retention_cleanup_once(
     pool: &PgPool,
     event_bus: &InMemoryEventBus,
 ) -> Result<ZoomRetentionCleanupSchedulerResult, String> {
-    let service = crate::application::provider_runtime_services::zoom_provider_runtime_service(
+    let service = crate::application::provider_runtime_factories::zoom_provider_runtime_service(
         pool.clone(),
         event_bus.clone(),
     );

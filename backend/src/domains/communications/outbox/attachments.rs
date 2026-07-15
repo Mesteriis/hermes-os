@@ -1,12 +1,12 @@
-use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::email::OutgoingEmailAttachment;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::storage::LocalCommunicationBlobStore;
-use crate::platform::communications::{DEFAULT_MAIL_SYNC_BLOB_ROOT, OutgoingEmailAttachment};
+use crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 
-use super::OutboxDeliveryError;
+use super::delivery::OutboxDeliveryError;
 
 const MAX_OUTBOX_ATTACHMENT_BYTES: usize = 50 * 1024 * 1024;
 
@@ -54,7 +54,7 @@ pub(super) async fn load_sendable_attachments(
         let storage_path: String = row
             .try_get("storage_path")
             .map_err(|error| loader_error("mail attachment metadata is invalid", error))?;
-        let bytes = blob_store
+        let bytes: Vec<u8> = blob_store
             .read_blob(&storage_path)
             .await
             .map_err(|error| loader_error("mail attachment blob could not be read", error))?;
@@ -128,11 +128,12 @@ mod tests {
     use serde_json::json;
 
     use super::load_sendable_attachments;
-    use crate::domains::communications::outbox::OutboxDeliveryError;
-    use crate::domains::communications::storage::{
-        CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachmentImport,
-        NewCommunicationBlob,
+    use crate::domains::communications::outbox::delivery::OutboxDeliveryError;
+    use crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+    use crate::domains::communications::storage::models::{
+        NewCommunicationAttachmentImport, NewCommunicationBlob,
     };
+    use crate::domains::communications::storage::store::CommunicationStorageStore;
     use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
     use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
     use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;

@@ -1,3 +1,4 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_communications_api::accounts::{
     NewProviderAccountSecretBinding, ProviderAccountCommandPort, ProviderAccountSecretPurpose,
 };
@@ -13,7 +14,7 @@ use hermes_provider_telemost::protocol::{
     validate_required, yandex_telemost_oauth_token_secret_ref,
 };
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
@@ -24,15 +25,16 @@ use uuid::Uuid;
 
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::yandex_telemost_event_types;
-use crate::platform::secrets::{
-    NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
-};
-use crate::platform::settings::ApplicationSettingsStore;
-use crate::vault::{HostVault, SecretEntryContext};
+use crate::platform::secrets::models::{SecretKind, SecretStoreKind};
+use crate::platform::settings::store::ApplicationSettingsStore;
+use crate::vault::HostVault;
 use hermes_events_api::EventLogQuery;
 use hermes_events_postgres::store::EventStore;
 
 use super::errors::YandexTelemostError;
+mod auth;
+mod policy;
+mod retention;
 use super::models::{
     YANDEX_TELEMOST_LIVE_RUNTIME_KIND, YANDEX_TELEMOST_RUNTIME_KIND, YandexTelemostAccount,
     YandexTelemostAccountListResponse, YandexTelemostAccountSetupRequest,
@@ -40,6 +42,16 @@ use super::models::{
     YandexTelemostRetentionCleanupItem, YandexTelemostRetentionCleanupRequest,
     YandexTelemostRetentionCleanupResponse, YandexTelemostRuntimeStatus, telemost_provider_kind,
     yandex_telemost_capabilities, yandex_telemost_default_config,
+};
+use auth::store_oauth_token;
+use policy::{
+    client_for_account, merge_metadata, provider_payload, runtime_status_from_account,
+    validate_account_setup_request, validate_conference_patch_request, validate_conference_request,
+};
+use retention::{
+    LocalRecordingRetentionPolicy, local_recording_retention_policy_from_days,
+    local_recording_retention_policy_from_manifest, record_retention_cleanup_in_manifest,
+    remove_local_file_if_exists, retention_cleanup_candidate_from_event,
 };
 
 const YANDEX_TELEMOST_RECORDING_RETENTION_DAYS_SETTING_KEY: &str =
@@ -784,344 +796,6 @@ impl YandexTelemostStore {
     }
 }
 
-async fn store_oauth_token(
-    secret_store: &SecretReferenceStore,
-    vault: &HostVault,
-    account_id: &str,
-    secret_ref: &str,
-    token: &str,
-    metadata: &Value,
-) -> Result<(), YandexTelemostError> {
-    validate_required("oauth_token", token)?;
-    validate_json_object("metadata", metadata)?;
-    let reference = NewSecretReference::new(
-        secret_ref,
-        SecretKind::OauthToken,
-        SecretStoreKind::HostVault,
-        "Yandex Telemost OAuth token",
-    )
-    .metadata(json!({
-        "provider": YANDEX_TELEMOST_PROVIDER_KIND_STR,
-        "account_id": account_id,
-        "secret_material": "excluded",
-        "metadata": sanitize_yandex_telemost_payload(metadata.clone()),
-    }));
-    secret_store.upsert_secret_reference(&reference).await?;
-    let vault_metadata = json!({
-        "provider": YANDEX_TELEMOST_PROVIDER_KIND_STR,
-        "provider_kind": YANDEX_TELEMOST_PROVIDER_KIND_STR,
-        "account_id": account_id,
-        "secret_purpose": ProviderAccountSecretPurpose::YandexTelemostOauthToken.as_str(),
-        "metadata": sanitize_yandex_telemost_payload(metadata.clone()),
-    });
-    vault.store_secret(
-        secret_ref,
-        token.trim(),
-        SecretEntryContext {
-            entry_kind: "provider_credential",
-            account_id,
-            purpose: ProviderAccountSecretPurpose::YandexTelemostOauthToken.as_str(),
-            secret_kind: SecretKind::OauthToken.as_str(),
-            label: "Yandex Telemost OAuth token",
-            metadata: &vault_metadata,
-        },
-    )?;
-    Ok(())
-}
-
-fn merge_metadata(mut config: Value, metadata: &Value) -> Value {
-    if let Some(object) = config.as_object_mut() {
-        object.insert(
-            "metadata".to_owned(),
-            sanitize_yandex_telemost_payload(metadata.clone()),
-        );
-    }
-    config
-}
-
-fn runtime_status_from_account(
-    account: YandexTelemostAccount,
-    authorized: bool,
-) -> YandexTelemostRuntimeStatus {
-    let blockers = if authorized {
-        vec![]
-    } else {
-        vec!["yandex_telemost_oauth_token_missing".to_owned()]
-    };
-    let mut capabilities = yandex_telemost_capabilities(authorized);
-    if !authorized {
-        capabilities.push(YandexTelemostCapabilityState {
-            capability: "telemost.oauth_token.required".to_owned(),
-            status: "blocked".to_owned(),
-            source: "provider_secret_binding_store".to_owned(),
-            confidence: 0.95,
-            evidence: json!({
-                "missing_secret_purpose": ProviderAccountSecretPurpose::YandexTelemostOauthToken.as_str()
-            }),
-        });
-    }
-    YandexTelemostRuntimeStatus {
-        account_id: account.account_id,
-        provider_kind: account.provider_kind,
-        lifecycle_state: if authorized {
-            "authorized".to_owned()
-        } else {
-            account.lifecycle_state
-        },
-        runtime_kind: if authorized {
-            YANDEX_TELEMOST_LIVE_RUNTIME_KIND.to_owned()
-        } else {
-            YANDEX_TELEMOST_RUNTIME_KIND.to_owned()
-        },
-        checked_at: Utc::now(),
-        api_base_url: account.api_base_url,
-        authorized,
-        blockers,
-        capabilities,
-    }
-}
-
-fn client_for_account(
-    account: &ProviderAccount,
-) -> Result<YandexTelemostHttpClient, YandexTelemostError> {
-    YandexTelemostHttpClient::new(account.config.get("api_base_url").and_then(Value::as_str))
-}
-
-fn provider_payload<T: Serialize>(request: &T) -> Result<Value, YandexTelemostError> {
-    let mut value = serde_json::to_value(request)?;
-    if let Value::Object(ref mut object) = value {
-        object.remove("metadata");
-    }
-    Ok(value)
-}
-
-fn validate_account_setup_request(
-    request: &YandexTelemostAccountSetupRequest,
-) -> Result<(), YandexTelemostError> {
-    validate_required("account_id", &request.account_id)?;
-    validate_required("display_name", &request.display_name)?;
-    validate_required("external_account_id", &request.external_account_id)?;
-    validate_json_object("metadata", &request.metadata)?;
-    validate_api_base_url(request.api_base_url.as_deref())?;
-    if request
-        .oauth_token
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .is_none()
-        && request
-            .oauth_token_ref
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .is_none()
-    {
-        return Err(YandexTelemostError::InvalidRequest(
-            "oauth_token or oauth_token_ref must be provided for live Yandex Telemost API calls"
-                .to_owned(),
-        ));
-    }
-    Ok(())
-}
-
-fn validate_conference_request(
-    request: &YandexTelemostConferenceRequest,
-) -> Result<(), YandexTelemostError> {
-    validate_json_object("metadata", &request.metadata)?;
-    validate_cohosts(&request.cohosts)
-}
-
-fn validate_conference_patch_request(
-    request: &YandexTelemostConferencePatchRequest,
-) -> Result<(), YandexTelemostError> {
-    validate_json_object("metadata", &request.metadata)?;
-    validate_cohosts(&request.cohosts)
-}
-
-fn validate_cohosts(cohosts: &[TelemostCohost]) -> Result<(), YandexTelemostError> {
-    if cohosts.len() > 30 {
-        return Err(YandexTelemostError::InvalidRequest(
-            "Yandex Telemost supports at most 30 cohosts".to_owned(),
-        ));
-    }
-    for cohost in cohosts {
-        validate_required("cohost.email", &cohost.email)?;
-        if !cohost.email.contains('@') {
-            return Err(YandexTelemostError::InvalidRequest(format!(
-                "cohost `{}` must be an email address",
-                cohost.email
-            )));
-        }
-    }
-    Ok(())
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct TelemostRetentionCleanupCandidate {
-    account_id: String,
-    bundle_id: String,
-    conference_id: Option<String>,
-    bundle_root: PathBuf,
-    manifest_path: PathBuf,
-    audio_path: PathBuf,
-    speaker_jsonl_path: PathBuf,
-    speaker_txt_path: PathBuf,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct LocalRecordingRetentionPolicy {
-    recording_retention_days: i64,
-    speaker_hint_retention_days: i64,
-    audio_expires_at: Option<DateTime<Utc>>,
-    speaker_hints_expires_at: Option<DateTime<Utc>>,
-}
-
-fn retention_cleanup_candidate_from_event(
-    payload: &Value,
-    occurred_at: DateTime<Utc>,
-) -> Option<TelemostRetentionCleanupCandidate> {
-    let account_id = payload.get("account_id")?.as_str()?.trim();
-    let bundle_id = payload
-        .get("bundle_id")
-        .or_else(|| payload.get("recording_session_id"))?
-        .as_str()?
-        .trim();
-    let bundle_root = PathBuf::from(payload.get("bundle_root")?.as_str()?.trim());
-    let manifest_path = PathBuf::from(payload.get("manifest_path")?.as_str()?.trim());
-    let audio_path = PathBuf::from(payload.get("audio_path")?.as_str()?.trim());
-    let speaker_jsonl_path = PathBuf::from(payload.get("speaker_jsonl_path")?.as_str()?.trim());
-    let speaker_txt_path = PathBuf::from(payload.get("speaker_txt_path")?.as_str()?.trim());
-    if account_id.is_empty()
-        || bundle_id.is_empty()
-        || !bundle_root.is_absolute()
-        || !manifest_path.is_absolute()
-        || !audio_path.is_absolute()
-        || !speaker_jsonl_path.is_absolute()
-        || !speaker_txt_path.is_absolute()
-        || occurred_at.timestamp() <= 0
-    {
-        return None;
-    }
-    if !audio_path.starts_with(&bundle_root)
-        || !speaker_jsonl_path.starts_with(&bundle_root)
-        || !speaker_txt_path.starts_with(&bundle_root)
-        || !manifest_path.starts_with(&bundle_root)
-    {
-        return None;
-    }
-
-    Some(TelemostRetentionCleanupCandidate {
-        account_id: account_id.to_owned(),
-        bundle_id: bundle_id.to_owned(),
-        conference_id: payload
-            .get("conference_id")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_owned),
-        bundle_root,
-        manifest_path,
-        audio_path,
-        speaker_jsonl_path,
-        speaker_txt_path,
-    })
-}
-
-fn local_recording_retention_policy_from_manifest(
-    manifest: &Value,
-) -> Option<LocalRecordingRetentionPolicy> {
-    let retention = manifest
-        .get("provenance")?
-        .get("retention_policy")?
-        .get("local_recording")?;
-    Some(LocalRecordingRetentionPolicy {
-        recording_retention_days: retention
-            .get("recording_retention_days")
-            .and_then(Value::as_i64)
-            .unwrap_or(0)
-            .max(0),
-        speaker_hint_retention_days: retention
-            .get("speaker_hint_retention_days")
-            .and_then(Value::as_i64)
-            .unwrap_or(0)
-            .max(0),
-        audio_expires_at: parse_optional_datetime(retention.get("audio_expires_at")),
-        speaker_hints_expires_at: parse_optional_datetime(
-            retention.get("speaker_hints_expires_at"),
-        ),
-    })
-}
-
-fn local_recording_retention_policy_from_days(
-    observed_at: DateTime<Utc>,
-    recording_retention_days: i64,
-    speaker_hint_retention_days: i64,
-) -> LocalRecordingRetentionPolicy {
-    LocalRecordingRetentionPolicy {
-        recording_retention_days,
-        speaker_hint_retention_days,
-        audio_expires_at: if recording_retention_days > 0 {
-            Some(observed_at + chrono::TimeDelta::days(recording_retention_days))
-        } else {
-            None
-        },
-        speaker_hints_expires_at: if speaker_hint_retention_days > 0 {
-            Some(observed_at + chrono::TimeDelta::days(speaker_hint_retention_days))
-        } else {
-            None
-        },
-    }
-}
-
-fn parse_optional_datetime(value: Option<&Value>) -> Option<DateTime<Utc>> {
-    value
-        .and_then(Value::as_str)
-        .and_then(|raw| chrono::DateTime::parse_from_rfc3339(raw).ok())
-        .map(|value| value.with_timezone(&Utc))
-}
-
-fn remove_local_file_if_exists(path: &Path) -> Result<bool, YandexTelemostError> {
-    if !path.exists() {
-        return Ok(false);
-    }
-    if !path.is_file() {
-        return Ok(false);
-    }
-    fs::remove_file(path)?;
-    Ok(true)
-}
-
-fn record_retention_cleanup_in_manifest(
-    manifest_path: &Path,
-    policy: &LocalRecordingRetentionPolicy,
-    audio_removed: bool,
-    speaker_removed: bool,
-    removed_at: DateTime<Utc>,
-) -> Result<(), YandexTelemostError> {
-    if !manifest_path.exists() {
-        return Ok(());
-    }
-    let mut manifest: Value = serde_json::from_str(&fs::read_to_string(manifest_path)?)?;
-    let Some(provenance) = manifest
-        .get_mut("provenance")
-        .and_then(Value::as_object_mut)
-    else {
-        return Ok(());
-    };
-    provenance.insert(
-        "retention_cleanup".to_owned(),
-        json!({
-            "audio_removed": audio_removed,
-            "speaker_hints_removed": speaker_removed,
-            "removed_at": removed_at,
-            "recording_retention_days": policy.recording_retention_days,
-            "speaker_hint_retention_days": policy.speaker_hint_retention_days,
-        }),
-    );
-    fs::write(manifest_path, serde_json::to_string_pretty(&manifest)?)?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1138,34 +812,5 @@ mod tests {
         let payload = provider_payload(&request).unwrap();
         assert!(payload.get("metadata").is_none());
         assert_eq!(payload["waiting_room_level"], "all");
-    }
-
-    #[test]
-    fn retention_cleanup_candidate_rejects_relative_paths() {
-        let candidate = retention_cleanup_candidate_from_event(
-            &json!({
-                "account_id": "telemost-main",
-                "bundle_id": "bundle-1",
-                "bundle_root": "relative/root",
-                "manifest_path": "/tmp/manifest.json",
-                "audio_path": "/tmp/audio.mp3",
-                "speaker_jsonl_path": "/tmp/speaker.jsonl",
-                "speaker_txt_path": "/tmp/speaker.txt"
-            }),
-            Utc::now(),
-        );
-
-        assert!(candidate.is_none());
-    }
-
-    #[test]
-    fn local_recording_retention_policy_from_days_sets_expiry_for_positive_values() {
-        let observed_at = Utc::now();
-        let policy = local_recording_retention_policy_from_days(observed_at, 7, 3);
-
-        assert_eq!(policy.recording_retention_days, 7);
-        assert_eq!(policy.speaker_hint_retention_days, 3);
-        assert!(policy.audio_expires_at.is_some());
-        assert!(policy.speaker_hints_expires_at.is_some());
     }
 }

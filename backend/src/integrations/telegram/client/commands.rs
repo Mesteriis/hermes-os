@@ -12,12 +12,7 @@ use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;
 
 #[path = "commands/queries.rs"]
-mod queries;
-
-pub use queries::{
-    find_command_by_idempotency, list_commands, list_commands_filtered,
-    list_queued_commands_for_execution,
-};
+pub mod queries;
 
 pub const TELEGRAM_OUTBOX_WORKER_ID: &str = "telegram-outbox-worker";
 const COMMAND_QUEUE_ACTOR: &str = "telegram.client.commands";
@@ -199,6 +194,14 @@ pub async fn update_command_status(
         SET status = $2, result_payload = $3, last_error = $4,
             completed_at = $5, updated_at = now()
         WHERE command_id = $1
+          AND EXISTS (
+                SELECT 1 FROM provider_runtime_leases lease
+                WHERE lease.provider = 'telegram'
+                  AND lease.account_id = telegram_provider_write_commands.account_id
+                  AND lease.state = 'active'
+                  AND lease.epoch = telegram_provider_write_commands.lease_epoch
+                  AND lease.expires_at > COALESCE($5, now())
+          )
         "#,
     )
     .bind(command_id)
@@ -252,6 +255,14 @@ pub async fn schedule_command_retry(
             reconciliation_status = 'not_observed',
             updated_at = $2
         WHERE command_id = $1
+          AND EXISTS (
+                SELECT 1 FROM provider_runtime_leases lease
+                WHERE lease.provider = 'telegram'
+                  AND lease.account_id = telegram_provider_write_commands.account_id
+                  AND lease.state = 'active'
+                  AND lease.epoch = telegram_provider_write_commands.lease_epoch
+                  AND lease.expires_at > $2
+          )
           AND status = 'executing'
         "#,
     )
@@ -377,6 +388,14 @@ pub async fn mark_command_reconciled(
             dead_lettered_at = NULL,
             updated_at = $2
         WHERE command_id = $1
+          AND EXISTS (
+                SELECT 1 FROM provider_runtime_leases lease
+                WHERE lease.provider = 'telegram'
+                  AND lease.account_id = telegram_provider_write_commands.account_id
+                  AND lease.state = 'active'
+                  AND lease.epoch = telegram_provider_write_commands.lease_epoch
+                  AND lease.expires_at > $2
+          )
         RETURNING *
         "#,
     )
@@ -426,6 +445,14 @@ pub async fn mark_command_mismatch(
             dead_lettered_at = NULL,
             updated_at = $2
         WHERE command_id = $1
+          AND EXISTS (
+                SELECT 1 FROM provider_runtime_leases lease
+                WHERE lease.provider = 'telegram'
+                  AND lease.account_id = telegram_provider_write_commands.account_id
+                  AND lease.state = 'active'
+                  AND lease.epoch = telegram_provider_write_commands.lease_epoch
+                  AND lease.expires_at > $2
+          )
         RETURNING *
         "#,
     )

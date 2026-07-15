@@ -1,14 +1,13 @@
 use chrono::{DateTime, Utc};
-use hermes_events_api::EventEnvelope;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use super::messages::COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER;
-use super::outbox::{
-    CommunicationOutboxStore, NewOutboxDeliveryStatus, OutboxDeliveryStatus,
-    OutboxDeliveryStatusRecord,
+use super::messages::provider_observation_projection::COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER;
+use super::outbox::CommunicationOutboxStore;
+use super::outbox::delivery_status::{
+    NewOutboxDeliveryStatus, OutboxDeliveryStatus, OutboxDeliveryStatusRecord,
 };
 use super::read_receipts::{
     CommunicationReadReceipt, CommunicationReadReceiptStore, NewCommunicationReadReceipt,

@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
 fn non_empty_trimmed_text(value: Option<&str>) -> String {
     value

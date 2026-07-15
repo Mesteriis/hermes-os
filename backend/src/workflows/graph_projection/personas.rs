@@ -1,9 +1,10 @@
 use serde_json::json;
 
-use crate::domains::graph::core::{
-    GraphEvidenceSourceKind, GraphNodeKind, GraphReviewState, NewGraphEdge, NewGraphEvidence,
-    NewGraphNode, RelationshipType,
+use crate::domains::graph::core::models::{
+    GraphEvidenceSourceKind, GraphReviewState, NewGraphEdge, NewGraphEvidence, NewGraphNode,
+    RelationshipType,
 };
+use crate::platform::graph::GraphNodeKind;
 
 use super::errors::GraphProjectionError;
 use super::helpers::normalize_email_address;

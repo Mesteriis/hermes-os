@@ -2,7 +2,7 @@ use super::super::*;
 
 #[derive(Serialize)]
 pub(crate) struct EventRelationsResponse {
-    items: Vec<crate::domains::calendar::core::EventRelation>,
+    items: Vec<crate::domains::calendar::core::relations::EventRelation>,
 }
 
 pub(crate) async fn get_event_relations(
@@ -33,7 +33,7 @@ pub(crate) async fn post_event_relation(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
     Json(req): Json<NewRelationRequest>,
-) -> Result<Json<crate::domains::calendar::core::EventRelation>, ApiError> {
+) -> Result<Json<crate::domains::calendar::core::relations::EventRelation>, ApiError> {
     let pool = state
         .database
         .pool()

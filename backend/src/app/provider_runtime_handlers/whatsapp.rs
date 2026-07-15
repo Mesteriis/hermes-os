@@ -2,43 +2,32 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
-use hermes_communications_api::accounts::ProviderAccount;
+use hermes_communications_api::attachments::CanonicalMediaReadPort;
+use hermes_communications_api::calls::CanonicalCallReadPort;
+use hermes_communications_api::conversations::ConversationReadPort;
 use hermes_events_api::NewEventEnvelope;
+use hermes_personas_api::PersonaIdentityProjectionPort;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
-use sqlx::Row;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
     ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
+    stores::{domain_stores::*, integration_stores::*},
 };
+use crate::app::error::types::ApiError;
 use crate::app::signal_hub_support::{
-    provider_account_or_not_found, remove_provider_account_signal_connection,
-    sync_provider_account_signal_connection, sync_whatsapp_runtime_signal_connection,
+    provider_account_or_not_found, sync_provider_account_signal_connection,
+    sync_whatsapp_runtime_signal_connection,
 };
-use crate::app::{ApiError, AppState};
-use crate::application::communication_fixture_ingest::WhatsappFixtureIngestApplicationService;
-use crate::domains::communications::storage::AttachmentSafetyScanStatus;
+use crate::app::state::AppState;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::whatsapp::client::models::{
     NewWhatsappWebCall, NewWhatsappWebDialog, NewWhatsappWebMedia, NewWhatsappWebMessage,
     NewWhatsappWebMessageDelete, NewWhatsappWebMessageUpdate, NewWhatsappWebParticipant,
     NewWhatsappWebPresence, NewWhatsappWebReaction, NewWhatsappWebReceipt,
     NewWhatsappWebRuntimeEvent, NewWhatsappWebStatus, NewWhatsappWebStatusDelete,
-    NewWhatsappWebStatusView, WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupRequest,
-    WhatsappWebAccountSetupResponse, WhatsappWebCallIngestResult, WhatsappWebDeliveryState,
-    WhatsappWebDialogIngestResult, WhatsappWebMediaIngestResult,
+    NewWhatsappWebStatusView, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
+    WhatsappWebCallIngestResult, WhatsappWebDialogIngestResult, WhatsappWebMediaIngestResult,
     WhatsappWebMessageDeleteIngestResult, WhatsappWebMessageIngestResult,
     WhatsappWebMessageUpdateIngestResult, WhatsappWebParticipantIngestResult,
     WhatsappWebPresenceIngestResult, WhatsappWebReactionIngestResult,
@@ -48,19 +37,20 @@ use crate::integrations::whatsapp::client::models::{
 };
 use crate::integrations::whatsapp::runtime::contracts::{
     WhatsAppAuthorizedSessionCredentialWrite, WhatsAppCommandDeadLetterRequest,
-    WhatsAppCredentialBinding, WhatsAppMediaDownloadRequest, WhatsAppMediaUploadRequest,
-    WhatsAppPairCodeSession, WhatsAppPairCodeStartRequest, WhatsAppProviderCommand,
-    WhatsAppProviderCommandListResponse, WhatsAppProviderCommandResponse,
-    WhatsAppProviderRuntimeShape, WhatsAppQrLinkSession, WhatsAppQrLinkStartRequest,
-    WhatsAppRuntimeHealth, WhatsAppRuntimeRelinkRequest, WhatsAppRuntimeRemoveRequest,
-    WhatsAppRuntimeRemoveResponse, WhatsAppRuntimeRevokeRequest, WhatsAppRuntimeStartRequest,
-    WhatsAppRuntimeStatus, WhatsAppRuntimeStopRequest, WhatsAppVoiceNoteSendRequest,
+    WhatsAppCredentialBinding, WhatsAppProviderCommand, WhatsAppProviderCommandListResponse,
+    WhatsAppProviderCommandResponse, WhatsAppRuntimeStatus,
 };
 use crate::platform::events::bus::{sanitize_event_payload, whatsapp_event_types};
-use hermes_observations_api::models::ObservationOriginKind;
 
 pub(crate) mod accounts;
 pub(crate) mod conversations;
+mod event_builders;
+#[path = "whatsapp/event_types.rs"]
+mod event_types;
+#[path = "whatsapp/input_policy.rs"]
+mod input_policy;
+use input_policy::*;
+mod lifecycle_projection;
 pub(crate) mod media;
 pub(crate) mod messages;
 pub(crate) mod statuses;
@@ -69,9 +59,11 @@ pub(crate) mod sync_chats;
 pub(crate) mod sync_history;
 pub(crate) mod sync_presence;
 pub(crate) mod sync_statuses;
+#[path = "whatsapp_support.rs"]
+mod whatsapp_support;
+use whatsapp_support::*;
 
 const AUDIT_ACTOR_ID: &str = "hermes-frontend";
-static WHATSAPP_EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Deserialize)]
 pub(crate) struct WhatsAppCommandListQuery {
@@ -575,7 +567,7 @@ pub(crate) async fn post_whatsapp_sync_contacts(
     )
     .await?;
     let runtime_kind = current_whatsapp_runtime_kind(&state, &account_id).await?;
-    let items = match list_whatsapp_sync_contacts(&state, &account_id, limit).await {
+    let items = match list_whatsapp_sync_contacts_via_ports(&state, &account_id, limit).await {
         Ok(items) => items,
         Err(error) => {
             capture_whatsapp_sync_runtime_signal(
@@ -1268,37 +1260,8 @@ pub(crate) async fn post_whatsapp_fixture_runtime_event(
         request.observed_at,
     )
     .await?;
-    project_runtime_bridge_lifecycle_state(&state, &request).await?;
+    lifecycle_projection::project_runtime_bridge_lifecycle_state(&state, &request).await?;
     Ok(Json(result))
-}
-
-async fn project_runtime_bridge_lifecycle_state(
-    state: &AppState,
-    request: &NewWhatsappWebRuntimeEvent,
-) -> Result<(), ApiError> {
-    let Some(lifecycle_state) = request.effective_lifecycle_state() else {
-        return Ok(());
-    };
-    if !matches!(
-        lifecycle_state,
-        "linked"
-            | "available"
-            | "syncing"
-            | "degraded"
-            | "blocked"
-            | "revoked"
-            | "removed"
-            | "qr_pending"
-            | "pair_code_pending"
-            | "created"
-    ) {
-        return Ok(());
-    }
-    communication_provider_account_store(state)?
-        .update_whatsapp_lifecycle_state(&request.account_id, lifecycle_state)
-        .await
-        .map_err(|error| WhatsappWebError::ProviderAccountStore(error.to_string()))?;
-    Ok(())
 }
 
 pub(crate) async fn post_whatsapp_fixture_dialog(
@@ -1394,7 +1357,9 @@ pub(crate) async fn post_whatsapp_fixture_authorized_session(
 ) -> Result<Json<WhatsAppCredentialBinding>, ApiError> {
     ensure_fixture_routes_enabled(&state)?;
     let provider_account = provider_account_or_not_found(&state, &request.account_id).await?;
-    let lifecycle_source = authorized_session_lifecycle_source(&state, &request.account_id).await?;
+    let lifecycle_source =
+        lifecycle_projection::authorized_session_lifecycle_source(&state, &request.account_id)
+            .await?;
     let binding = whatsapp_provider_runtime_service(&state)?
         .store_authorized_session_credential(
             &whatsapp_secret_reference_store(&state)?,
@@ -1599,10 +1564,8 @@ pub(crate) async fn post_whatsapp_runtime_bridge_media_lifecycle(
     State(state): State<AppState>,
     Json(request): Json<WhatsAppRuntimeBridgeMediaLifecycleRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let event_type = whatsapp_runtime_bridge_media_event_type(
-        &request.media_direction,
-        &request.lifecycle_phase,
-    )?;
+    let event_type =
+        event_types::runtime_bridge_media(&request.media_direction, &request.lifecycle_phase)?;
     let progress_percent = match request.lifecycle_phase.as_str() {
         "requested" => None,
         "failed" => request.progress_percent,
@@ -1714,8 +1677,19 @@ pub(crate) async fn post_whatsapp_runtime_bridge_claim_commands(
         .expect("database pool configured")
         .clone();
     let now = Utc::now();
-    let imported = crate::integrations::whatsapp::runtime::import_canonical_provider_commands(
-        &pool, now, limit,
+    let projection =
+        hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore::new(
+            pool.clone(),
+        );
+    let account_lookup =
+        hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
+            pool.clone(),
+        );
+    let imported = crate::integrations::whatsapp::runtime::command_execution::import_canonical_provider_commands(
+        &pool,
+        &projection,
+        now,
+        limit,
     )
     .await?;
     for command in &imported {
@@ -1728,6 +1702,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_claim_commands(
     }
     let recovered = crate::integrations::whatsapp::runtime::recover_stale_live_executing_commands(
         &pool,
+        &account_lookup,
         now,
         account_id.as_deref(),
     )
@@ -1736,8 +1711,9 @@ pub(crate) async fn post_whatsapp_runtime_bridge_claim_commands(
         publish_whatsapp_command_record_event(&state, &command.clone().into(), "stale_recovery")
             .await?;
     }
-    let claimed = crate::integrations::whatsapp::runtime::claim_due_live_commands_for_execution(
+    let claimed = crate::integrations::whatsapp::runtime::command_execution::claim_due_live_commands_for_execution(
         &pool,
+        &account_lookup,
         now,
         limit,
         account_id.as_deref(),
@@ -1806,21 +1782,22 @@ pub(crate) async fn post_whatsapp_runtime_bridge_command_failed(
         .pool()
         .expect("database pool configured")
         .clone();
-    let updated = crate::integrations::whatsapp::runtime::reschedule_failed_command(
-        &pool,
-        &command_id,
-        Utc::now(),
-        &required_string("error_message", &request.error_message)?,
-        request
-            .error_code
-            .as_deref()
-            .map(|value| required_string("error_code", value))
-            .transpose()?
-            .as_deref(),
-        request.retry_after_seconds,
-    )
-    .await?
-    .ok_or(ApiError::NotFound)?;
+    let updated =
+        crate::integrations::whatsapp::runtime::retry_execution::reschedule_failed_command(
+            &pool,
+            &command_id,
+            Utc::now(),
+            &required_string("error_message", &request.error_message)?,
+            request
+                .error_code
+                .as_deref()
+                .map(|value| required_string("error_code", value))
+                .transpose()?
+                .as_deref(),
+            request.retry_after_seconds,
+        )
+        .await?
+        .ok_or(ApiError::NotFound)?;
     let command: WhatsAppProviderCommand = updated.into();
     publish_whatsapp_command_record_event(&state, &command, "runtime_bridge_failed").await?;
     Ok(Json(command))
@@ -2016,7 +1993,7 @@ pub(crate) async fn post_whatsapp_runtime_bridge_runtime_event(
         request.observed_at,
     )
     .await?;
-    project_runtime_bridge_lifecycle_state(&state, &request).await?;
+    lifecycle_projection::project_runtime_bridge_lifecycle_state(&state, &request).await?;
     Ok(Json(result))
 }
 
@@ -2110,7 +2087,9 @@ pub(crate) async fn post_whatsapp_runtime_bridge_authorized_session(
     Json(request): Json<WhatsAppAuthorizedSessionCredentialWrite>,
 ) -> Result<Json<WhatsAppCredentialBinding>, ApiError> {
     let provider_account = provider_account_or_not_found(&state, &request.account_id).await?;
-    let lifecycle_source = authorized_session_lifecycle_source(&state, &request.account_id).await?;
+    let lifecycle_source =
+        lifecycle_projection::authorized_session_lifecycle_source(&state, &request.account_id)
+            .await?;
     let binding = whatsapp_provider_runtime_service(&state)?
         .store_authorized_session_credential(
             &whatsapp_secret_reference_store(&state)?,
@@ -2139,1148 +2118,4 @@ pub(crate) async fn post_whatsapp_runtime_bridge_authorized_session(
     )
     .await?;
     Ok(Json(binding))
-}
-
-pub(crate) async fn publish_whatsapp_command_event(
-    state: &AppState,
-    response: &WhatsAppProviderCommandResponse,
-) -> Result<(), ApiError> {
-    let event = build_whatsapp_command_event(response);
-    event_store(state)?.append(&event).await?;
-    let _ = state.event_bus.broadcast(event);
-    Ok(())
-}
-
-async fn publish_whatsapp_command_record_event(
-    state: &AppState,
-    command: &WhatsAppProviderCommand,
-    source: &str,
-) -> Result<(), ApiError> {
-    let event = build_whatsapp_command_record_event(command, source);
-    event_store(state)?.append(&event).await?;
-    let _ = state.event_bus.broadcast(event);
-    Ok(())
-}
-
-pub(crate) async fn publish_whatsapp_media_event(
-    state: &AppState,
-    event_type: &str,
-    command_id: &str,
-    payload: serde_json::Value,
-) -> Result<(), ApiError> {
-    let now = Utc::now();
-    if let Some(account_id) = payload.get("account_id").and_then(Value::as_str) {
-        let _ = whatsapp_fixture_ingest_service(state)?
-            .capture_media_lifecycle_event(
-                account_id,
-                command_id,
-                event_type,
-                payload.clone(),
-                &format!("media_{}", event_type.replace('.', "_")),
-                now,
-            )
-            .await?;
-    }
-    let event = NewEventEnvelope::builder(
-        whatsapp_event_id("media", command_id, now),
-        event_type.to_owned(),
-        now,
-        json!({
-            "channel": "whatsapp",
-            "actor_id": AUDIT_ACTOR_ID,
-            "kind": "whatsapp_provider_commands",
-            "source_id": command_id,
-        }),
-        json!({
-            "id": command_id,
-            "entity_id": command_id,
-            "kind": "whatsapp_media_command",
-        }),
-    )
-    .payload(payload)
-    .build()
-    .expect("WhatsApp media event envelope must be valid");
-    event_store(state)?.append(&event).await?;
-    let _ = state.event_bus.broadcast(event);
-    Ok(())
-}
-
-pub(crate) async fn publish_whatsapp_sync_event(
-    state: &AppState,
-    event_type: &str,
-    account_id: &str,
-    subject_id: &str,
-    payload: serde_json::Value,
-) -> Result<(), ApiError> {
-    let now = Utc::now();
-    let scope = payload
-        .get("scope")
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("unknown");
-    let source_id = format!("{subject_id}:{scope}");
-    let event = NewEventEnvelope::builder(
-        whatsapp_event_id("sync", subject_id, now),
-        event_type.to_owned(),
-        now,
-        json!({
-            "channel": "whatsapp",
-            "account_id": account_id,
-            "actor_id": AUDIT_ACTOR_ID,
-            "kind": "whatsapp_sync_requests",
-            "source_id": source_id,
-        }),
-        json!({
-            "id": subject_id,
-            "entity_id": subject_id,
-            "kind": "whatsapp_sync",
-        }),
-    )
-    .payload(payload)
-    .build()
-    .expect("WhatsApp sync event envelope must be valid");
-    event_store(state)?.append(&event).await?;
-    let _ = state.event_bus.broadcast(event);
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn publish_whatsapp_projection_event(
-    state: &AppState,
-    event_type: &str,
-    subject_kind: &str,
-    subject_id: &str,
-    provider_chat_id: Option<&str>,
-    provider_message_id: Option<&str>,
-    occurred_at: DateTime<Utc>,
-    payload: serde_json::Value,
-) -> Result<(), ApiError> {
-    let source_id = payload
-        .get("raw_record_id")
-        .and_then(Value::as_str)
-        .unwrap_or(subject_id);
-    let source_kind = if payload
-        .get("raw_record_id")
-        .and_then(Value::as_str)
-        .is_some()
-    {
-        "communication_raw_records"
-    } else {
-        "whatsapp_projection_events"
-    };
-    let event = NewEventEnvelope::builder(
-        whatsapp_event_id("projection", subject_id, occurred_at),
-        event_type.to_owned(),
-        occurred_at,
-        json!({
-            "channel": "whatsapp",
-            "actor_id": AUDIT_ACTOR_ID,
-            "kind": source_kind,
-            "source_id": source_id,
-        }),
-        json!({
-            "id": subject_id,
-            "entity_id": subject_id,
-            "kind": subject_kind,
-            "provider_chat_id": provider_chat_id,
-            "provider_message_id": provider_message_id,
-        }),
-    )
-    .payload(sanitize_event_payload(payload))
-    .build()
-    .expect("WhatsApp projection event envelope must be valid");
-    event_store(state)?.append(&event).await?;
-    let _ = state.event_bus.broadcast(event);
-    Ok(())
-}
-
-pub(super) async fn publish_whatsapp_runtime_status_event(
-    state: &AppState,
-    status: &WhatsAppRuntimeStatus,
-    source: &str,
-) -> Result<(), ApiError> {
-    let now = Utc::now();
-    let source_id = format!(
-        "{}:{}:{}:{}",
-        status.account_id,
-        source,
-        status.status,
-        status.updated_at.timestamp_micros()
-    );
-    let event = NewEventEnvelope::builder(
-        whatsapp_event_id("runtime", &status.account_id, now),
-        whatsapp_event_types::RUNTIME_STATUS_CHANGED.to_owned(),
-        now,
-        json!({
-            "channel": "whatsapp",
-            "account_id": status.account_id,
-            "actor_id": AUDIT_ACTOR_ID,
-            "kind": "whatsapp_runtime_status",
-            "source_id": source_id,
-        }),
-        json!({
-            "id": status.account_id,
-            "entity_id": status.account_id,
-            "kind": "whatsapp_runtime",
-        }),
-    )
-    .payload(sanitize_event_payload(json!({
-        "account_id": status.account_id,
-        "provider_kind": status.provider_kind,
-        "provider_shape": status.provider_shape,
-        "runtime_kind": status.runtime_kind,
-        "status": status.status,
-        "fixture_runtime": status.fixture_runtime,
-        "live_runtime_available": status.live_runtime_available,
-        "live_send_available": status.live_send_available,
-        "qr_pairing_available": status.qr_pairing_available,
-        "pair_code_available": status.pair_code_available,
-        "media_download_available": status.media_download_available,
-        "media_upload_available": status.media_upload_available,
-        "session_restore_available": status.session_restore_available,
-        "runtime_blockers": status.runtime_blockers,
-        "last_error": status.last_error,
-        "source": source,
-    })))
-    .build()
-    .expect("WhatsApp runtime status event envelope must be valid");
-    event_store(state)?.append(&event).await?;
-    let _ = state.event_bus.broadcast(event);
-    Ok(())
-}
-
-pub(super) async fn publish_whatsapp_session_link_state_event(
-    state: &AppState,
-    account_id: &str,
-    provider_shape: &str,
-    runtime_kind: &str,
-    link_state: &str,
-    source: &str,
-    observed_at: chrono::DateTime<chrono::Utc>,
-) -> Result<(), ApiError> {
-    let now = Utc::now();
-    let source_id = format!(
-        "{}:{}:{}:{}",
-        account_id,
-        source,
-        link_state,
-        observed_at.timestamp_micros()
-    );
-    let event = NewEventEnvelope::builder(
-        whatsapp_event_id("session", account_id, now),
-        whatsapp_event_types::SESSION_LINK_STATE_CHANGED.to_owned(),
-        now,
-        json!({
-            "channel": "whatsapp",
-            "account_id": account_id,
-            "actor_id": AUDIT_ACTOR_ID,
-            "kind": "whatsapp_session_link_state",
-            "source_id": source_id,
-        }),
-        json!({
-            "id": account_id,
-            "entity_id": account_id,
-            "kind": "whatsapp_session",
-        }),
-    )
-    .payload(sanitize_event_payload(json!({
-        "account_id": account_id,
-        "provider_shape": provider_shape,
-        "runtime_kind": runtime_kind,
-        "link_state": link_state,
-        "source": source,
-    })))
-    .build()
-    .expect("WhatsApp session lifecycle event envelope must be valid");
-    event_store(state)?.append(&event).await?;
-    let _ = state.event_bus.broadcast(event);
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn publish_whatsapp_runtime_event(
-    state: &AppState,
-    account_id: &str,
-    provider_event_id: &str,
-    runtime_event_kind: &str,
-    runtime_status: Option<&str>,
-    lifecycle_state: Option<&str>,
-    severity: Option<&str>,
-    metadata_keys: Vec<String>,
-    observed_at: chrono::DateTime<chrono::Utc>,
-) -> Result<(), ApiError> {
-    let now = Utc::now();
-    let source_id = format!(
-        "{}:{}:{}:{}",
-        account_id,
-        provider_event_id,
-        runtime_event_kind,
-        observed_at.timestamp_micros()
-    );
-    let event = NewEventEnvelope::builder(
-        whatsapp_event_id("runtime_event", provider_event_id, now),
-        whatsapp_event_types::RUNTIME_EVENT.to_owned(),
-        now,
-        json!({
-            "channel": "whatsapp",
-            "account_id": account_id,
-            "actor_id": AUDIT_ACTOR_ID,
-            "kind": "whatsapp_runtime_events",
-            "source_id": source_id,
-        }),
-        json!({
-            "id": provider_event_id,
-            "entity_id": account_id,
-            "kind": "whatsapp_runtime_event",
-        }),
-    )
-    .payload(sanitize_event_payload(json!({
-        "account_id": account_id,
-        "provider_event_id": provider_event_id,
-        "runtime_event_kind": runtime_event_kind,
-        "runtime_status": runtime_status,
-        "lifecycle_state": lifecycle_state,
-        "severity": severity,
-        "metadata_keys": metadata_keys,
-        "observed_at": observed_at,
-    })))
-    .build()
-    .expect("WhatsApp runtime event envelope must be valid");
-    event_store(state)?.append(&event).await?;
-    let _ = state.event_bus.broadcast(event);
-    Ok(())
-}
-
-pub(super) async fn capture_whatsapp_runtime_lifecycle_signal(
-    state: &AppState,
-    status: &WhatsAppRuntimeStatus,
-    source: &str,
-) -> Result<(), ApiError> {
-    let provider_event_id = format!(
-        "{}:{}:{}",
-        status.account_id,
-        source,
-        status.updated_at.timestamp_micros()
-    );
-    let metadata = json!({
-        "source": source,
-        "provider_kind": status.provider_kind,
-        "provider_shape": status.provider_shape,
-        "runtime_kind": status.runtime_kind,
-        "fixture_runtime": status.fixture_runtime,
-        "live_runtime_available": status.live_runtime_available,
-        "live_send_available": status.live_send_available,
-        "qr_pairing_available": status.qr_pairing_available,
-        "pair_code_available": status.pair_code_available,
-        "media_download_available": status.media_download_available,
-        "media_upload_available": status.media_upload_available,
-        "session_restore_available": status.session_restore_available,
-        "runtime_blockers": status.runtime_blockers,
-        "last_error": status.last_error,
-    });
-    let _ = whatsapp_fixture_ingest_service(state)?
-        .capture_runtime_lifecycle_event(
-            &status.account_id,
-            &provider_event_id,
-            source,
-            Some(&status.status),
-            Some(&status.status),
-            Some(
-                if status.status == "available" || status.status == "linked" {
-                    "info"
-                } else if status.status == "degraded" {
-                    "warning"
-                } else {
-                    "blocked"
-                },
-            ),
-            metadata,
-            source,
-            status.updated_at,
-        )
-        .await?;
-    Ok(())
-}
-
-pub(crate) async fn capture_whatsapp_sync_runtime_signal(
-    state: &AppState,
-    account_id: &str,
-    subject_id: &str,
-    scope: &str,
-    phase: &str,
-    metadata: Value,
-) -> Result<(), ApiError> {
-    let observed_at = Utc::now();
-    let provider_event_id = format!(
-        "{}:{}:{}:{}",
-        account_id,
-        scope,
-        phase,
-        observed_at.timestamp_micros()
-    );
-    let runtime_status = match phase {
-        "started" | "progress" => Some("syncing"),
-        "completed" => Some("synced"),
-        "failed" => Some("failed"),
-        _ => None,
-    };
-    let severity = match phase {
-        "failed" => Some("warning"),
-        _ => Some("info"),
-    };
-    let _ = whatsapp_fixture_ingest_service(state)?
-        .capture_runtime_lifecycle_event(
-            account_id,
-            &provider_event_id,
-            &format!("sync.{scope}.{phase}"),
-            runtime_status,
-            runtime_status,
-            severity,
-            merged_whatsapp_runtime_event_metadata(
-                metadata,
-                json!({
-                    "subject_id": subject_id,
-                    "phase": phase,
-                }),
-            ),
-            &format!("sync_{scope}_{phase}"),
-            observed_at,
-        )
-        .await?;
-    Ok(())
-}
-
-pub(crate) async fn capture_whatsapp_status_publish_runtime_signal(
-    state: &AppState,
-    account_id: &str,
-    command_id: &str,
-    phase: &str,
-    metadata: Value,
-) -> Result<(), ApiError> {
-    let observed_at = Utc::now();
-    let provider_event_id = format!(
-        "{}:status.publish:{}:{}",
-        command_id,
-        phase,
-        observed_at.timestamp_micros()
-    );
-    let runtime_status = match phase {
-        "failed" => Some("degraded"),
-        _ => None,
-    };
-    let severity = match phase {
-        "failed" => Some("warning"),
-        _ => Some("info"),
-    };
-    let _ = whatsapp_fixture_ingest_service(state)?
-        .capture_runtime_lifecycle_event(
-            account_id,
-            &provider_event_id,
-            &format!("status.publish.{phase}"),
-            runtime_status,
-            Some(phase),
-            severity,
-            metadata,
-            &format!("status_publish_{phase}"),
-            observed_at,
-        )
-        .await?;
-    Ok(())
-}
-
-fn merged_whatsapp_runtime_event_metadata(current: Value, patch: Value) -> Value {
-    let mut current_map = current.as_object().cloned().unwrap_or_default();
-    if let Some(patch_map) = patch.as_object() {
-        current_map.extend(patch_map.clone());
-    }
-    Value::Object(current_map)
-}
-
-async fn authorized_session_lifecycle_source(
-    state: &AppState,
-    account_id: &str,
-) -> Result<&'static str, ApiError> {
-    let status = whatsapp_provider_runtime_service(state)?
-        .runtime_status(
-            &whatsapp_secret_reference_store(state)?,
-            &state.vault,
-            account_id,
-        )
-        .await?;
-    Ok(if status.session_restore_available {
-        "session_rotated"
-    } else {
-        "session_authorized"
-    })
-}
-
-fn build_whatsapp_command_event(response: &WhatsAppProviderCommandResponse) -> NewEventEnvelope {
-    let now = Utc::now();
-    let source_id = format!(
-        "{}:{}:{}:{}",
-        response.command_id,
-        response.command_kind,
-        response.status,
-        response.updated_at.timestamp_micros()
-    );
-    NewEventEnvelope::builder(
-        whatsapp_event_id("command_response", &response.command_id, now),
-        whatsapp_event_types::COMMAND_STATUS_CHANGED.to_owned(),
-        now,
-        json!({
-            "channel": "whatsapp",
-            "account_id": response.account_id,
-            "actor_id": AUDIT_ACTOR_ID,
-            "kind": "whatsapp_provider_commands",
-            "source_id": source_id,
-        }),
-        json!({
-            "id": response.command_id,
-            "entity_id": response.command_id,
-            "kind": "whatsapp_provider_command",
-        }),
-    )
-    .payload(json!({
-        "account_id": response.account_id,
-        "command_id": response.command_id,
-        "idempotency_key": response.idempotency_key,
-        "command_kind": response.command_kind,
-        "action": response.command_kind,
-        "provider_chat_id": response.provider_chat_id,
-        "provider_message_id": response.provider_message_id,
-        "status": response.status,
-        "durable_status": response.durable_status,
-        "delivery_state": response.delivery_state,
-        "runtime_kind": response.runtime_kind,
-        "provider_shape": response.provider_shape,
-        "session_restore_available": response.session_restore_available,
-        "runtime_blockers": response.runtime_blockers,
-        "rendered_preview_hash": response.rendered_preview_hash,
-    }))
-    .build()
-    .expect("WhatsApp command event envelope must be valid")
-}
-
-fn build_whatsapp_command_record_event(
-    command: &WhatsAppProviderCommand,
-    source: &str,
-) -> NewEventEnvelope {
-    let now = Utc::now();
-    let source_id = format!(
-        "{}:{}:{}:{}:{}",
-        command.command_id,
-        command.command_kind,
-        command.status,
-        source,
-        command.updated_at.timestamp_micros()
-    );
-    NewEventEnvelope::builder(
-        whatsapp_event_id("command_record", &command.command_id, now),
-        whatsapp_event_types::COMMAND_STATUS_CHANGED.to_owned(),
-        now,
-        json!({
-            "channel": "whatsapp",
-            "account_id": command.account_id,
-            "actor_id": AUDIT_ACTOR_ID,
-            "kind": "whatsapp_provider_commands",
-            "source_id": source_id,
-        }),
-        json!({
-            "id": command.command_id,
-            "entity_id": command.command_id,
-            "kind": "whatsapp_provider_command",
-        }),
-    )
-    .payload(json!({
-        "account_id": command.account_id,
-        "command_id": command.command_id,
-        "idempotency_key": command.idempotency_key,
-        "command_kind": command.command_kind,
-        "action": command.command_kind,
-        "provider_chat_id": command.provider_chat_id,
-        "provider_message_id": command.provider_message_id,
-        "capability_state": command.capability_state,
-        "action_class": command.action_class,
-        "confirmation_decision": command.confirmation_decision,
-        "status": command.status,
-        "retry_count": command.retry_count,
-        "max_retries": command.max_retries,
-        "last_error": command.last_error,
-        "result_payload": command.result_payload,
-        "audit_metadata": command.audit_metadata,
-        "provider_state": command.provider_state,
-        "reconciliation_status": command.reconciliation_status,
-        "next_attempt_at": command.next_attempt_at,
-        "last_attempt_at": command.last_attempt_at,
-        "provider_observed_at": command.provider_observed_at,
-        "reconciled_at": command.reconciled_at,
-        "dead_lettered_at": command.dead_lettered_at,
-        "completed_at": command.completed_at,
-        "source": source,
-    }))
-    .build()
-    .expect("WhatsApp command record event envelope must be valid")
-}
-
-fn whatsapp_event_id(scope: &str, subject: &str, now: chrono::DateTime<chrono::Utc>) -> String {
-    let seq = WHATSAPP_EVENT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    format!(
-        "evt_whatsapp_{}_{}_{}_{}",
-        scope,
-        subject.replace(|c: char| !c.is_ascii_alphanumeric(), "_"),
-        now.timestamp_nanos_opt().unwrap_or_default(),
-        seq
-    )
-}
-
-fn whatsapp_runtime_bridge_media_event_type(
-    media_direction: &str,
-    lifecycle_phase: &str,
-) -> Result<&'static str, ApiError> {
-    match (media_direction, lifecycle_phase) {
-        ("upload", "requested") => Ok(whatsapp_event_types::MEDIA_UPLOAD_REQUESTED),
-        ("upload", "started") => Ok("whatsapp.media.upload.started"),
-        ("upload", "progress") => Ok("whatsapp.media.upload.progress"),
-        ("upload", "completed") => Ok("whatsapp.media.upload.completed"),
-        ("upload", "failed") => Ok(whatsapp_event_types::MEDIA_UPLOAD_FAILED),
-        ("download", "requested") => Ok(whatsapp_event_types::MEDIA_DOWNLOAD_REQUESTED),
-        ("download", "started") => Ok("whatsapp.media.download.started"),
-        ("download", "progress") => Ok("whatsapp.media.download.progress"),
-        ("download", "completed") => Ok("whatsapp.media.download.completed"),
-        ("download", "failed") => Ok(whatsapp_event_types::MEDIA_DOWNLOAD_FAILED),
-        _ => Err(WhatsappWebError::InvalidRequest(format!(
-            "unsupported runtime bridge media lifecycle `{media_direction}.{lifecycle_phase}`"
-        ))
-        .into()),
-    }
-}
-
-pub(crate) async fn current_whatsapp_runtime_kind(
-    state: &AppState,
-    account_id: &str,
-) -> Result<String, ApiError> {
-    let status = whatsapp_provider_runtime_service(state)?
-        .runtime_status(
-            &whatsapp_secret_reference_store(state)?,
-            &state.vault,
-            account_id,
-        )
-        .await?;
-    Ok(status.runtime_kind)
-}
-
-pub(crate) async fn ensure_whatsapp_sync_supported(
-    state: &AppState,
-    account_id: &str,
-    operation: &'static str,
-) -> Result<(), ApiError> {
-    let status = whatsapp_provider_runtime_service(state)?
-        .runtime_status(
-            &whatsapp_secret_reference_store(state)?,
-            &state.vault,
-            account_id,
-        )
-        .await?;
-    let _ = operation;
-    Ok(())
-}
-
-async fn list_whatsapp_sync_members(
-    state: &AppState,
-    account_id: &str,
-    provider_chat_id: &str,
-    limit: i64,
-) -> Result<Vec<WhatsAppMembersSyncItem>, ApiError> {
-    let pool = state
-        .database
-        .pool()
-        .expect("database pool configured")
-        .clone();
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            participant.participant_id,
-            conversation.conversation_id,
-            conversation.account_id,
-            conversation.provider_conversation_id,
-            participant.display_name,
-            participant.role,
-            participant.address,
-            participant.metadata AS participant_metadata,
-            identity.provider_identity_id,
-            identity.identity_kind,
-            identity.metadata AS identity_metadata
-        FROM communication_conversation_participants participant
-        JOIN communication_conversations conversation
-          ON conversation.conversation_id = participant.conversation_id
-        LEFT JOIN communication_identities identity
-          ON identity.identity_id = participant.identity_id
-        WHERE conversation.account_id = $1
-          AND conversation.provider_conversation_id = $2
-          AND conversation.channel_kind = 'whatsapp_web'
-        ORDER BY participant.created_at ASC, participant.participant_id ASC
-        LIMIT $3
-        "#,
-    )
-    .bind(account_id)
-    .bind(provider_chat_id)
-    .bind(limit)
-    .fetch_all(&pool)
-    .await
-    .map_err(WhatsappWebError::from)?;
-
-    rows.into_iter()
-        .map(|row| {
-            let participant_metadata: Value = row
-                .try_get("participant_metadata")
-                .map_err(WhatsappWebError::from)?;
-            let identity_metadata: Option<Value> = row
-                .try_get("identity_metadata")
-                .map_err(WhatsappWebError::from)?;
-            let provider_identity_id: Option<String> = row
-                .try_get("provider_identity_id")
-                .map_err(WhatsappWebError::from)?;
-            let provider_member_id = provider_identity_id
-                .clone()
-                .unwrap_or_else(|| row.try_get("participant_id").unwrap_or_default());
-            Ok(WhatsAppMembersSyncItem {
-                participant_id: row
-                    .try_get("participant_id")
-                    .map_err(WhatsappWebError::from)?,
-                conversation_id: row
-                    .try_get("conversation_id")
-                    .map_err(WhatsappWebError::from)?,
-                account_id: row.try_get("account_id").map_err(WhatsappWebError::from)?,
-                provider_chat_id: row
-                    .try_get("provider_conversation_id")
-                    .map_err(WhatsappWebError::from)?,
-                provider_member_id,
-                provider_identity_id,
-                sender_display_name: row
-                    .try_get("display_name")
-                    .map_err(WhatsappWebError::from)?,
-                role: row.try_get("role").map_err(WhatsappWebError::from)?,
-                status: Some("active".to_owned()),
-                identity_kind: row
-                    .try_get("identity_kind")
-                    .map_err(WhatsappWebError::from)?,
-                address: row.try_get("address").map_err(WhatsappWebError::from)?,
-                is_admin: participant_metadata
-                    .get("is_admin")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false),
-                is_owner: participant_metadata
-                    .get("is_owner")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false),
-                participant_metadata,
-                identity_metadata: identity_metadata.unwrap_or_else(|| json!({})),
-            })
-        })
-        .collect::<Result<Vec<_>, WhatsappWebError>>()
-        .map_err(Into::into)
-}
-
-async fn list_whatsapp_sync_presence(
-    state: &AppState,
-    account_id: &str,
-    provider_chat_id: Option<&str>,
-    limit: i64,
-) -> Result<Vec<WhatsAppPresenceSyncItem>, ApiError> {
-    let pool = state
-        .database
-        .pool()
-        .expect("database pool configured")
-        .clone();
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            identity.identity_id,
-            identity.account_id,
-            channel.channel_kind,
-            identity.provider_identity_id,
-            identity.identity_kind,
-            identity.display_name,
-            identity.address,
-            identity.metadata
-        FROM communication_identities identity
-        JOIN communication_channels channel
-          ON channel.channel_id = identity.channel_id
-        WHERE identity.account_id = $1
-          AND channel.channel_kind = 'whatsapp_web'
-          AND identity.metadata ? 'presence_state'
-          AND ($2::text IS NULL OR identity.metadata->>'presence_provider_chat_id' = $2)
-        ORDER BY COALESCE(identity.metadata->>'presence_observed_at', '') DESC, identity.identity_id ASC
-        LIMIT $3
-        "#,
-    )
-    .bind(account_id)
-    .bind(provider_chat_id)
-    .bind(limit)
-    .fetch_all(&pool)
-    .await
-    .map_err(WhatsappWebError::from)?;
-
-    rows.into_iter()
-        .map(|row| {
-            let identity_metadata: Value =
-                row.try_get("metadata").map_err(WhatsappWebError::from)?;
-            Ok(WhatsAppPresenceSyncItem {
-                identity_id: row.try_get("identity_id").map_err(WhatsappWebError::from)?,
-                account_id: row.try_get("account_id").map_err(WhatsappWebError::from)?,
-                channel_kind: row
-                    .try_get("channel_kind")
-                    .map_err(WhatsappWebError::from)?,
-                provider_chat_id: identity_metadata
-                    .get("presence_provider_chat_id")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                provider_identity_id: row
-                    .try_get("provider_identity_id")
-                    .map_err(WhatsappWebError::from)?,
-                identity_kind: row
-                    .try_get("identity_kind")
-                    .map_err(WhatsappWebError::from)?,
-                display_name: row
-                    .try_get("display_name")
-                    .map_err(WhatsappWebError::from)?,
-                address: row.try_get("address").map_err(WhatsappWebError::from)?,
-                presence_state: identity_metadata
-                    .get("presence_state")
-                    .and_then(Value::as_str)
-                    .unwrap_or("unknown")
-                    .to_owned(),
-                last_seen_at: identity_metadata
-                    .get("last_seen_at")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                observed_at: identity_metadata
-                    .get("presence_observed_at")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                identity_metadata,
-            })
-        })
-        .collect::<Result<Vec<_>, WhatsappWebError>>()
-        .map_err(Into::into)
-}
-
-async fn list_whatsapp_sync_calls(
-    state: &AppState,
-    account_id: &str,
-    provider_chat_id: Option<&str>,
-    limit: i64,
-) -> Result<Vec<WhatsAppCallsSyncItem>, ApiError> {
-    let pool = state
-        .database
-        .pool()
-        .expect("database pool configured")
-        .clone();
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            call_id,
-            account_id,
-            provider_call_id,
-            provider_chat_id,
-            direction,
-            call_state,
-            started_at,
-            ended_at,
-            metadata
-        FROM telegram_calls
-        WHERE account_id = $1
-          AND metadata->>'provider' = 'whatsapp_web'
-          AND ($2::text IS NULL OR provider_chat_id = $2)
-        ORDER BY COALESCE(started_at, created_at) DESC, call_id ASC
-        LIMIT $3
-        "#,
-    )
-    .bind(account_id)
-    .bind(provider_chat_id)
-    .bind(limit)
-    .fetch_all(&pool)
-    .await
-    .map_err(WhatsappWebError::from)?;
-
-    rows.into_iter()
-        .map(|row| {
-            let metadata: Value = row.try_get("metadata").map_err(WhatsappWebError::from)?;
-            Ok(WhatsAppCallsSyncItem {
-                call_id: row.try_get("call_id").map_err(WhatsappWebError::from)?,
-                account_id: row.try_get("account_id").map_err(WhatsappWebError::from)?,
-                provider_call_id: row
-                    .try_get("provider_call_id")
-                    .map_err(WhatsappWebError::from)?,
-                provider_chat_id: row
-                    .try_get("provider_chat_id")
-                    .map_err(WhatsappWebError::from)?,
-                direction: row.try_get("direction").map_err(WhatsappWebError::from)?,
-                call_state: row.try_get("call_state").map_err(WhatsappWebError::from)?,
-                started_at: row
-                    .try_get::<Option<chrono::DateTime<Utc>>, _>("started_at")
-                    .map_err(WhatsappWebError::from)?
-                    .map(|value| value.to_rfc3339()),
-                ended_at: row
-                    .try_get::<Option<chrono::DateTime<Utc>>, _>("ended_at")
-                    .map_err(WhatsappWebError::from)?
-                    .map(|value| value.to_rfc3339()),
-                observed_at: metadata
-                    .get("observed_at")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                metadata,
-            })
-        })
-        .collect::<Result<Vec<_>, WhatsappWebError>>()
-        .map_err(Into::into)
-}
-
-async fn list_whatsapp_sync_contacts(
-    state: &AppState,
-    account_id: &str,
-    limit: i64,
-) -> Result<Vec<WhatsAppContactsSyncItem>, ApiError> {
-    let pool = state
-        .database
-        .pool()
-        .expect("database pool configured")
-        .clone();
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            identity.identity_id,
-            identity.account_id,
-            channel.channel_kind,
-            identity.provider_identity_id,
-            identity.identity_kind,
-            identity.display_name,
-            identity.address,
-            identity.metadata AS identity_metadata,
-            whatsapp_trace.metadata AS whatsapp_trace_metadata,
-            phone_trace.metadata AS phone_trace_metadata
-        FROM communication_identities identity
-        JOIN communication_channels channel
-          ON channel.channel_id = identity.channel_id
-        LEFT JOIN persona_identities whatsapp_trace
-          ON whatsapp_trace.source = 'communication_projection'
-         AND whatsapp_trace.status = 'active'
-         AND whatsapp_trace.identity_type = 'whatsapp'
-         AND whatsapp_trace.identity_value = identity.provider_identity_id
-        LEFT JOIN persona_identities phone_trace
-          ON phone_trace.source = 'communication_projection'
-         AND phone_trace.status = 'active'
-         AND phone_trace.identity_type = 'phone'
-         AND phone_trace.identity_value = identity.address
-        WHERE identity.account_id = $1
-          AND channel.channel_kind = 'whatsapp_web'
-        ORDER BY identity.updated_at DESC, identity.identity_id ASC
-        LIMIT $2
-        "#,
-    )
-    .bind(account_id)
-    .bind(limit)
-    .fetch_all(&pool)
-    .await
-    .map_err(WhatsappWebError::from)?;
-
-    rows.into_iter()
-        .map(|row| {
-            let identity_metadata: Value = row
-                .try_get("identity_metadata")
-                .map_err(WhatsappWebError::from)?;
-            let display_name_history = identity_metadata
-                .get("display_name_history")
-                .and_then(Value::as_array)
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(str::to_owned)
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            Ok(WhatsAppContactsSyncItem {
-                identity_id: row.try_get("identity_id").map_err(WhatsappWebError::from)?,
-                account_id: row.try_get("account_id").map_err(WhatsappWebError::from)?,
-                channel_kind: row
-                    .try_get("channel_kind")
-                    .map_err(WhatsappWebError::from)?,
-                provider_identity_id: row
-                    .try_get("provider_identity_id")
-                    .map_err(WhatsappWebError::from)?,
-                identity_kind: row
-                    .try_get("identity_kind")
-                    .map_err(WhatsappWebError::from)?,
-                display_name: row
-                    .try_get("display_name")
-                    .map_err(WhatsappWebError::from)?,
-                address: row.try_get("address").map_err(WhatsappWebError::from)?,
-                push_name: identity_metadata
-                    .get("push_name")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                business_profile: identity_metadata
-                    .get("business_profile")
-                    .cloned()
-                    .unwrap_or_else(|| json!({})),
-                profile_photo_ref: identity_metadata
-                    .get("profile_photo_ref")
-                    .cloned()
-                    .unwrap_or_else(|| json!({})),
-                display_name_history,
-                identity_metadata,
-                whatsapp_trace_metadata: row
-                    .try_get::<Option<Value>, _>("whatsapp_trace_metadata")
-                    .map_err(WhatsappWebError::from)?
-                    .unwrap_or_else(|| json!({})),
-                phone_trace_metadata: row
-                    .try_get::<Option<Value>, _>("phone_trace_metadata")
-                    .map_err(WhatsappWebError::from)?
-                    .unwrap_or_else(|| json!({})),
-            })
-        })
-        .collect::<Result<Vec<_>, WhatsappWebError>>()
-        .map_err(Into::into)
-}
-
-async fn list_whatsapp_sync_media(
-    state: &AppState,
-    account_id: &str,
-    provider_chat_id: Option<&str>,
-    content_type: Option<&str>,
-    limit: i64,
-) -> Result<Vec<WhatsAppMediaSyncItem>, ApiError> {
-    let pool = state
-        .database
-        .pool()
-        .expect("database pool configured")
-        .clone();
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            a.attachment_id,
-            a.message_id,
-            a.raw_record_id,
-            m.account_id,
-            m.channel_kind,
-            COALESCE(c.provider_conversation_id, m.conversation_id) AS provider_conversation_id,
-            m.provider_record_id,
-            a.provider_attachment_id,
-            a.filename,
-            a.content_type,
-            a.size_bytes,
-            a.sha256,
-            a.scan_status,
-            b.storage_kind,
-            b.storage_path,
-            m.subject,
-            m.sender,
-            m.sender_display_name,
-            m.occurred_at,
-            a.created_at
-        FROM communication_attachments a
-        JOIN communication_messages m ON m.message_id = a.message_id
-        JOIN communication_mail_blobs b ON b.blob_id = a.blob_id
-        LEFT JOIN communication_conversations c
-          ON c.conversation_id = m.conversation_id
-          OR c.provider_conversation_id = m.conversation_id
-        WHERE m.account_id = $1
-          AND m.local_state = 'active'
-          AND m.channel_kind = 'whatsapp_web'
-          AND ($2::text IS NULL OR COALESCE(c.provider_conversation_id, m.conversation_id) = $2)
-          AND ($3::text IS NULL OR a.content_type ILIKE $3 || '%')
-        ORDER BY COALESCE(m.occurred_at, m.projected_at) DESC, a.created_at DESC, a.attachment_id ASC
-        LIMIT $4
-        "#,
-    )
-    .bind(account_id)
-    .bind(provider_chat_id)
-    .bind(content_type)
-    .bind(limit)
-    .fetch_all(&pool)
-    .await
-    .map_err(WhatsappWebError::from)?;
-
-    rows.into_iter()
-        .map(|row| {
-            let occurred_at = row
-                .try_get::<Option<chrono::DateTime<Utc>>, _>("occurred_at")
-                .map_err(WhatsappWebError::from)?
-                .map(|value| value.to_rfc3339());
-            let created_at = row
-                .try_get::<chrono::DateTime<Utc>, _>("created_at")
-                .map_err(WhatsappWebError::from)?
-                .to_rfc3339();
-            Ok(WhatsAppMediaSyncItem {
-                attachment_id: row
-                    .try_get("attachment_id")
-                    .map_err(WhatsappWebError::from)?,
-                message_id: row.try_get("message_id").map_err(WhatsappWebError::from)?,
-                raw_record_id: row
-                    .try_get("raw_record_id")
-                    .map_err(WhatsappWebError::from)?,
-                account_id: row.try_get("account_id").map_err(WhatsappWebError::from)?,
-                channel_kind: row
-                    .try_get("channel_kind")
-                    .map_err(WhatsappWebError::from)?,
-                provider_chat_id: row
-                    .try_get("provider_conversation_id")
-                    .map_err(WhatsappWebError::from)?,
-                provider_message_id: row
-                    .try_get("provider_record_id")
-                    .map_err(WhatsappWebError::from)?,
-                provider_attachment_id: row
-                    .try_get("provider_attachment_id")
-                    .map_err(WhatsappWebError::from)?,
-                filename: row.try_get("filename").map_err(WhatsappWebError::from)?,
-                content_type: row
-                    .try_get("content_type")
-                    .map_err(WhatsappWebError::from)?,
-                size_bytes: row.try_get("size_bytes").map_err(WhatsappWebError::from)?,
-                sha256: row.try_get("sha256").map_err(WhatsappWebError::from)?,
-                scan_status: row.try_get("scan_status").map_err(WhatsappWebError::from)?,
-                storage_kind: row
-                    .try_get("storage_kind")
-                    .map_err(WhatsappWebError::from)?,
-                storage_path: row
-                    .try_get("storage_path")
-                    .map_err(WhatsappWebError::from)?,
-                message_subject: row.try_get("subject").map_err(WhatsappWebError::from)?,
-                sender: row.try_get("sender").map_err(WhatsappWebError::from)?,
-                sender_display_name: row
-                    .try_get("sender_display_name")
-                    .map_err(WhatsappWebError::from)?,
-                occurred_at,
-                created_at,
-            })
-        })
-        .collect::<Result<Vec<_>, WhatsappWebError>>()
-        .map_err(Into::into)
-}
-
-pub(crate) fn required_string(field: &'static str, value: &str) -> Result<String, ApiError> {
-    let value = value.trim();
-    if value.is_empty() {
-        return Err(WhatsappWebError::InvalidRequest(format!("{field} must not be empty")).into());
-    }
-    Ok(value.to_owned())
-}
-
-pub(crate) fn optional_string(
-    field: &'static str,
-    value: Option<String>,
-) -> Result<Option<String>, ApiError> {
-    value
-        .map(|value| required_string(field, &value))
-        .transpose()
-}
-
-fn parse_command_kinds(value: &str) -> Vec<String> {
-    value
-        .split(',')
-        .map(str::trim)
-        .filter(|item| !item.is_empty())
-        .map(ToOwned::to_owned)
-        .collect()
 }

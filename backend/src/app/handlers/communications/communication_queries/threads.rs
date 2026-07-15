@@ -1,4 +1,7 @@
 use super::super::*;
+use crate::app::handlers::communications::workflow_state::{
+    ThreadListQuery, ThreadListResponse, ThreadMessagesQuery, ThreadMessagesResponse,
+};
 
 pub(crate) async fn get_v1_threads(
     State(state): State<AppState>,

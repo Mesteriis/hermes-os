@@ -6,9 +6,9 @@ use serde_json::json;
 use tower::ServiceExt;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::integrations::telegram::client::lifecycle;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::integrations::telegram::client::references;
+use hermes_hub_backend::platform::storage::database::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, get_request_with_token, json_body, json_post_request_with_actor,
     unique_suffix,
@@ -151,7 +151,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     .await;
 
     let pool = ctx.pool();
-    lifecycle::insert_reply_ref(
+    references::insert_reply_ref(
         pool,
         &reply_message_id,
         &root_message_id,
@@ -163,7 +163,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     )
     .await
     .expect("insert reply ref");
-    lifecycle::insert_reply_ref(
+    references::insert_reply_ref(
         pool,
         &leaf_message_id,
         &reply_message_id,
@@ -175,7 +175,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     )
     .await
     .expect("insert leaf reply ref");
-    lifecycle::insert_reply_ref(
+    references::insert_reply_ref(
         pool,
         &root_message_id,
         &leaf_message_id,
@@ -187,7 +187,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     )
     .await
     .expect("insert reply cycle ref");
-    lifecycle::insert_forward_ref(
+    references::insert_forward_ref(
         pool,
         &forward_message_id,
         &account_id,
@@ -205,7 +205,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     )
     .await
     .expect("insert forward ref");
-    lifecycle::insert_forward_ref(
+    references::insert_forward_ref(
         pool,
         &final_forward_message_id,
         &account_id,
@@ -219,7 +219,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     )
     .await
     .expect("insert final forward ref");
-    lifecycle::insert_forward_ref(
+    references::insert_forward_ref(
         pool,
         &root_message_id,
         &account_id,

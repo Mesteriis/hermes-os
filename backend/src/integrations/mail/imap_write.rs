@@ -1,4 +1,4 @@
-use crate::platform::secrets::ResolvedSecret;
+use crate::platform::secrets::models::ResolvedSecret;
 use futures::TryStreamExt;
 use std::fmt::Debug;
 use thiserror::Error;

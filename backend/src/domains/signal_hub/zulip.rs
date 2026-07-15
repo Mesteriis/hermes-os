@@ -11,8 +11,55 @@ use super::store::{SignalHubError, SignalHubStore};
 use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 use hermes_events_postgres::store::EventStore;
 use hermes_observations_postgres::store::observation_captured_event_id;
+use hermes_signal_hub_api::raw_signals::{
+    ProviderRawSignalInput, ProviderRawSignalPort, ProviderRawSignalPortFuture, RawSignalPortError,
+};
+
+#[derive(Clone)]
+pub struct PostgresZulipSignalDispatch {
+    pool: PgPool,
+}
+
+impl PostgresZulipSignalDispatch {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+impl ProviderRawSignalPort for PostgresZulipSignalDispatch {
+    fn dispatch_provider_record<'a>(
+        &'a self,
+        record: &'a ProviderRawSignalInput,
+    ) -> ProviderRawSignalPortFuture<'a> {
+        Box::pin(async move {
+            let raw_record = StoredRawCommunicationRecord {
+                raw_record_id: record.raw_record_id.clone(),
+                observation_id: record.observation_id.clone(),
+                account_id: record.account_id.clone(),
+                record_kind: record.record_kind.clone(),
+                provider_record_id: record.provider_record_id.clone(),
+                source_fingerprint: record.source_fingerprint.clone(),
+                import_batch_id: record.import_batch_id.clone(),
+                occurred_at: record.occurred_at,
+                captured_at: record.captured_at,
+                payload: record.payload.clone(),
+                provenance: record.provenance.clone(),
+            };
+            dispatch_zulip_raw_signal_with_pool(self.pool.clone(), &raw_record)
+                .await
+                .map_err(RawSignalPortError::new)
+        })
+    }
+}
 
 pub async fn dispatch_zulip_raw_signal(
+    pool: PgPool,
+    raw_record: &StoredRawCommunicationRecord,
+) -> Result<Option<EventEnvelope>, SignalHubError> {
+    dispatch_zulip_raw_signal_with_pool(pool, raw_record).await
+}
+
+async fn dispatch_zulip_raw_signal_with_pool(
     pool: PgPool,
     raw_record: &StoredRawCommunicationRecord,
 ) -> Result<Option<EventEnvelope>, SignalHubError> {

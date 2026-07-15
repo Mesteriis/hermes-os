@@ -4,8 +4,8 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::calendar::core::CalendarCoreError;
-use crate::domains::calendar::core::EventContextPackStore;
+use crate::domains::calendar::core::context_packs::EventContextPackStore;
+use crate::domains::calendar::core::errors::CalendarCoreError;
 
 pub struct CalendarBrainService;
 

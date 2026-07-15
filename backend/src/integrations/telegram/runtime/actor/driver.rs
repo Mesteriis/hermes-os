@@ -4,9 +4,11 @@ use std::time::Duration;
 use serde_json::json;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::integrations::telegram::client::{TelegramError, TelegramQrLoginStartRequest};
-use crate::integrations::telegram::tdjson::{self, TdJsonClient};
-use crate::platform::config::AppConfig;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::qr_login::TelegramQrLoginStartRequest;
+use crate::integrations::telegram::tdjson::client::TdJsonClient;
+use crate::integrations::telegram::tdjson::{self};
+use crate::platform::config::app_config::AppConfig;
 
 use super::super::state::{TelegramRuntimeCommand, TelegramRuntimeEvent};
 use super::authorization::{prepare_tdlib_client, wait_for_tdlib_ready};
@@ -34,7 +36,7 @@ pub(super) fn drive_tdlib_actor(
     command_rx: mpsc::Receiver<TelegramRuntimeCommand>,
     runtime_event_tx: Option<UnboundedSender<TelegramRuntimeEvent>>,
 ) -> Result<(), TelegramError> {
-    let library = tdjson::TdJsonLibrary::load(config.tdjson_path())?;
+    let library = tdjson::client::TdJsonLibrary::load(config.tdjson_path())?;
     let client = library.create_client()?;
     prepare_tdlib_client(&client, &start_request)?;
     wait_for_tdlib_ready(&client, &start_request)?;
@@ -356,57 +358,83 @@ fn drain_unsolicited_tdlib_events(
     };
 
     while let Some(event) = client.receive_json(0.0)? {
-        if let Some(snapshot) = tdjson::parse_tdlib_new_message_snapshot(&event)? {
+        if let Some(snapshot) =
+            tdjson::parsing::message_events::parse_tdlib_new_message_snapshot(&event)?
+        {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageCreated(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_message_content_snapshot(&event)? {
+        if let Some(snapshot) =
+            tdjson::parsing::message_events::parse_tdlib_message_content_snapshot(&event)?
+        {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageContentUpdated(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_message_edited_snapshot(&event)? {
+        if let Some(snapshot) =
+            tdjson::parsing::message_events::parse_tdlib_message_edited_snapshot(&event)?
+        {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageEdited(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_message_pinned_snapshot(&event)? {
+        if let Some(snapshot) =
+            tdjson::parsing::message_events::parse_tdlib_message_pinned_snapshot(&event)?
+        {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessagePinnedUpdated(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_message_send_failed_snapshot(&event)? {
+        if let Some(snapshot) =
+            tdjson::parsing::message_events::parse_tdlib_message_send_failed_snapshot(&event)?
+        {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageSendFailed(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_message_send_succeeded_snapshot(&event)? {
+        if let Some(snapshot) =
+            tdjson::parsing::message_events::parse_tdlib_message_send_succeeded_snapshot(&event)?
+        {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageSendSucceeded(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_message_delete_snapshot(&event)? {
+        if let Some(snapshot) =
+            tdjson::parsing::message_events::parse_tdlib_message_delete_snapshot(&event)?
+        {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageDeleted(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_message_interaction_info_snapshot(&event)? {
+        if let Some(snapshot) =
+            tdjson::parsing::message_events::parse_tdlib_message_interaction_info_snapshot(&event)?
+        {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageInteractionInfoUpdated(
                 snapshot,
             ));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_typing_snapshot(&event) {
+        if let Some(snapshot) = tdjson::parsing::events::parse_tdlib_typing_snapshot(&event) {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::TypingChanged(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_topic_update_snapshot(&event)? {
+        if let Some(snapshot) = tdjson::parsing::events::parse_tdlib_topic_update_snapshot(&event)?
+        {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::TopicUpdated(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_chat_unread_snapshot(&event)? {
+        if let Some(snapshot) = tdjson::parsing::events::parse_tdlib_chat_unread_snapshot(&event)? {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::ChatUnreadUpdated(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_chat_marked_as_unread_snapshot(&event)? {
+        if let Some(snapshot) =
+            tdjson::parsing::events::parse_tdlib_chat_marked_as_unread_snapshot(&event)?
+        {
             let _ =
                 runtime_event_tx.send(TelegramRuntimeEvent::ChatMarkedAsUnreadUpdated(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_chat_notification_settings_snapshot(&event)? {
+        if let Some(snapshot) =
+            tdjson::parsing::events::parse_tdlib_chat_notification_settings_snapshot(&event)?
+        {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::ChatNotificationSettingsUpdated(
                 snapshot,
             ));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_chat_position_snapshot(&event)? {
+        if let Some(snapshot) = tdjson::parsing::events::parse_tdlib_chat_position_snapshot(&event)?
+        {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::ChatPositionUpdated(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_chat_removed_from_list_snapshot(&event)? {
+        if let Some(snapshot) =
+            tdjson::parsing::events::parse_tdlib_chat_removed_from_list_snapshot(&event)?
+        {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::ChatRemovedFromList(snapshot));
         }
-        if let Some(snapshot) = tdjson::parse_tdlib_chat_folders_update_snapshot(&event)? {
+        if let Some(snapshot) =
+            tdjson::parsing::events::parse_tdlib_chat_folders_update_snapshot(&event)?
+        {
             let _ =
                 runtime_event_tx.send(TelegramRuntimeEvent::ChatFoldersUpdated(snapshot.folders));
         }

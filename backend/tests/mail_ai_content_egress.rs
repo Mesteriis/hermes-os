@@ -7,10 +7,9 @@ use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::ai_state::{
     CommunicationAiState, CommunicationAiStateStore,
 };
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
-};
-use hermes_hub_backend::domains::communications::sensitive_forwarding::SensitiveForwardingStore;
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
+use hermes_hub_backend::domains::communications::sensitive_forwarding::SensitiveForwardingPgStore;
 
 use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::workflows::email_intelligence::pipeline::MailAiPipelineService;
@@ -60,7 +59,7 @@ async fn external_mail_ai_requires_explicit_body_egress_permission() {
         pool.clone(),
         None,
         "ru",
-        Arc::new(SensitiveForwardingStore::new(pool.clone())),
+        Arc::new(SensitiveForwardingPgStore::new(pool.clone())),
     )
     .requiring_external_body_egress(true)
     .process_next_batch(10)

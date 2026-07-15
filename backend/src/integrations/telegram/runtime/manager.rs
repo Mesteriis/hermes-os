@@ -1,22 +1,25 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_communications_api::accounts::ProviderAccountLookupPort;
 use hermes_communications_api::accounts::ProviderSecretBindingLookupPort;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::integrations::telegram::client::TelegramStore;
+use crate::integrations::telegram::client::store::TelegramStore;
 use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
-use crate::platform::config::AppConfig;
+use crate::platform::config::app_config::AppConfig;
 use crate::platform::events::bus::InMemoryEventBus;
-use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
-use sqlx::PgPool;
+use crate::platform::secrets::resolver::SecretResolver;
 
+use self::realtime_events::TelegramRuntimeEventBridgeContext;
+use self::search::TelegramProviderSearchRequest;
 use super::models::{
     TelegramChatSyncRequest, TelegramChatSyncResponse, TelegramHistorySyncRequest,
     TelegramHistorySyncResponse,
 };
 use super::state::TelegramRuntimeActorHandle;
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramForwardRequest, TelegramManualSendRequest, TelegramManualSendResponse,
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::messages::{
+    TelegramForwardRequest, TelegramManualSendRequest, TelegramManualSendResponse,
     TelegramReplyRequest,
 };
 
@@ -32,9 +35,9 @@ mod media_download;
 mod message_events;
 mod participant_events;
 mod participants;
-mod realtime_events;
+pub(crate) mod realtime_events;
 mod registry;
-mod search;
+pub(crate) mod search;
 mod send;
 mod sync_chats;
 mod sync_history;
@@ -42,9 +45,6 @@ mod sync_history_tdlib;
 mod tdlib_actor;
 mod topic_events;
 mod topics;
-
-pub(crate) use self::realtime_events::TelegramRuntimeEventBridgeContext;
-pub(crate) use self::search::TelegramProviderSearchRequest;
 
 #[derive(Clone, Default)]
 pub struct TelegramRuntimeManager {

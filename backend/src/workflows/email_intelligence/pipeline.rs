@@ -1,20 +1,21 @@
 use crate::domains::communications::messages::port::MessageProjectionPort;
-use serde_json::{Value, json};
+use serde_json::json;
 use sqlx::postgres::PgPool;
 use std::sync::Arc;
 
 use crate::ai::hub::{AiHub, LocalAiInspection, SensitivityLevel, SharedAiHub};
 use crate::domains::communications::ai_state::{
-    CommunicationAiState, CommunicationAiStatePort, CommunicationAiStateTransitionRequest,
+    CommunicationAiState, CommunicationAiStateTransitionRequest,
 };
-use crate::domains::communications::messages::{ProjectedMessage, WorkflowState};
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::communications::messages::states::WorkflowState;
+use crate::domains::communications::ports::{CommunicationAiStatePort, SenderReputationPort};
 use crate::domains::communications::sensitive_forwarding::SensitiveForwardingCommandPort;
 use crate::domains::communications::spam_reputation::{
-    SenderReputationClassification, SenderReputationDecision, SenderReputationPort,
+    SenderReputationClassification, SenderReputationDecision,
 };
-use crate::domains::review::{
-    NewReviewItem, NewReviewItemEvidence, ReviewInboxPort, ReviewItemKind,
-};
+use crate::domains::review::models::{NewReviewItem, NewReviewItemEvidence, ReviewItemKind};
+use crate::domains::review::ports::ReviewInboxPort;
 use crate::domains::signal_hub::ai::dispatch_ai_helper_signal_best_effort;
 use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
 use crate::workflows::email_intelligence::models::{EmailAnalysis, EmailKnowledgeCandidate};

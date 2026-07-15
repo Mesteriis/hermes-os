@@ -10,9 +10,7 @@ use super::super::constants::{
 };
 use super::super::errors::PersonaIdentityError;
 use super::super::events::{ReviewCommandEvent, ReviewEvent};
-use super::super::models::{
-    PersonaIdentityReviewCommand, PersonaIdentityReviewCommandResult, PersonaIdentityReviewState,
-};
+use super::super::models::{PersonaIdentityReviewCommand, PersonaIdentityReviewCommandResult};
 use super::super::validation::validate_non_empty;
 use super::PersonaIdentityReviewStore;
 use super::review_state::{apply_review_state_in_transaction, ensure_candidate_exists};

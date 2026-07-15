@@ -1,7 +1,7 @@
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, header};
-use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::config::app_config::AppConfig;
 use serde_json::Value;
 
 use crate::context::TestContext;

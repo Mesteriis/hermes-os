@@ -2,7 +2,7 @@ use serde_json::json;
 
 use super::super::models::SettingValueKind;
 use super::*;
-use crate::platform::settings::SettingsError;
+use crate::platform::settings::errors::SettingsError;
 
 #[test]
 fn mail_degradation_threshold_is_declared_as_a_bounded_integer() {

@@ -1,6 +1,7 @@
 use sqlx::postgres::PgPool;
 
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 
 pub(super) fn database_pool(state: &AppState) -> Result<PgPool, ApiError> {
     state

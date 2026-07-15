@@ -1,30 +1,21 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
+use hermes_communications_api::attachments::CanonicalMessageAttachmentReadPort;
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 
 use super::chats::{
     dedupe_and_sort_chats, includes_telegram_channel_kind, includes_whatsapp_channel_kind,
     list_canonical_communication_conversations, normalized_channel_kind,
 };
-use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
-};
-use crate::app::{ApiError, AppState};
+use crate::app::api_support::stores::integration_stores::*;
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::application::telegram_runtime;
-use crate::domains::communications::messages::ProviderChannelMessageStore;
-use crate::integrations::telegram::client::{TelegramChat, TelegramError};
-use crate::platform::communications::ProviderChannelMessage;
+use crate::domains::communications::messages::provider_channel_store::ProviderChannelMessageStore;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::chats::TelegramChat;
+use hermes_communications_api::conversations::ConversationReadPort;
+use hermes_communications_api::provider_messages::ProviderChannelMessage;
 
 const COMMUNICATION_SEARCH_CHANNEL_KINDS: &[&str] =
     &["telegram_user", "telegram_bot", "whatsapp_web"];
@@ -402,39 +393,19 @@ pub(crate) async fn search_telegram_media(
         .map(|message| message.message_id.clone())
         .collect::<Vec<_>>();
     if !message_ids.is_empty() {
-        let attachment_rows = sqlx::query(
-            r#"
-            SELECT
-                m.message_id,
-                m.provider_record_id AS provider_message_id,
-                COALESCE(m.conversation_id, '') AS provider_chat_id,
-                a.attachment_id,
-                a.provider_attachment_id,
-                a.filename,
-                a.content_type,
-                a.size_bytes,
-                b.storage_path,
-                m.occurred_at
-            FROM communication_attachments a
-            JOIN communication_messages m ON m.message_id = a.message_id
-            JOIN communication_mail_blobs b ON b.blob_id = a.blob_id
-            WHERE m.message_id = ANY($1)
-            ORDER BY COALESCE(m.occurred_at, m.projected_at) DESC, a.attachment_id ASC
-            "#,
-        )
-        .bind(&message_ids)
-        .fetch_all(&pool)
-        .await
-        .map_err(TelegramError::from)?;
+        let attachment_rows =
+            hermes_communications_postgres::attachments::CanonicalMessageAttachmentReadStore::new(
+                pool.clone(),
+            )
+            .list_for_messages(&message_ids)
+            .await
+            .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?;
 
         for row in attachment_rows {
-            let file_name = row
-                .try_get::<Option<String>, _>("filename")
-                .map_err(TelegramError::from)?
-                .unwrap_or_else(|| "unknown".to_owned());
-            let mime_type = row
-                .try_get::<String, _>("content_type")
-                .map_err(TelegramError::from)?;
+            let file_name = row.filename.unwrap_or_else(|| "unknown".to_owned());
+            let mime_type = row.content_type;
+            let provider_message_id = row.provider_message_id;
+            let provider_attachment_id = row.provider_attachment_id;
             let kind = media_kind_from_mime_type(&mime_type);
             if query
                 .kind
@@ -449,41 +420,27 @@ pub(crate) async fn search_telegram_media(
                     file_name.to_lowercase(),
                     mime_type.to_lowercase(),
                     kind.to_owned(),
-                    row.try_get::<String, _>("provider_message_id")
-                        .map_err(TelegramError::from)?
-                        .to_lowercase(),
-                    row.try_get::<String, _>("provider_attachment_id")
-                        .map_err(TelegramError::from)?
-                        .to_lowercase(),
+                    provider_message_id.to_lowercase(),
+                    provider_attachment_id.to_lowercase(),
                 ];
                 if !haystacks.into_iter().any(|value| value.contains(&needle)) {
                     continue;
                 }
             }
             items.push(TelegramMediaItem {
-                attachment_id: Some(row.try_get("attachment_id").map_err(TelegramError::from)?),
-                message_id: row.try_get("message_id").map_err(TelegramError::from)?,
-                provider_message_id: row
-                    .try_get("provider_message_id")
-                    .map_err(TelegramError::from)?,
-                provider_chat_id: row
-                    .try_get("provider_chat_id")
-                    .map_err(TelegramError::from)?,
+                attachment_id: Some(row.attachment_id),
+                message_id: row.message_id,
+                provider_message_id,
+                provider_chat_id: row.provider_chat_id,
                 file_name,
                 kind: kind.to_owned(),
                 mime_type: Some(mime_type),
-                size_bytes: Some(row.try_get("size_bytes").map_err(TelegramError::from)?),
-                occurred_at: row
-                    .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("occurred_at")
-                    .map_err(TelegramError::from)?
-                    .map(|timestamp| timestamp.to_rfc3339()),
+                size_bytes: Some(row.size_bytes),
+                occurred_at: row.occurred_at.map(|timestamp| timestamp.to_rfc3339()),
                 download_state: "available".to_owned(),
                 tdlib_file_id: None,
-                provider_attachment_id: Some(
-                    row.try_get("provider_attachment_id")
-                        .map_err(TelegramError::from)?,
-                ),
-                local_path: Some(row.try_get("storage_path").map_err(TelegramError::from)?),
+                provider_attachment_id: Some(provider_attachment_id),
+                local_path: row.storage_path,
             });
         }
     }
@@ -566,25 +523,16 @@ async fn canonical_pinned_messages(
         .pool()
         .expect("database pool configured")
         .clone();
-    let row = sqlx::query(
-        r#"
-        SELECT account_id, provider_conversation_id
-        FROM communication_conversations
-        WHERE conversation_id = $1
-          AND channel_kind = 'whatsapp_web'
-        "#,
-    )
-    .bind(conversation_id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(TelegramError::from)?;
+    let row =
+        hermes_communications_postgres::conversations::ConversationReadStore::new(pool.clone())
+            .get_conversation(conversation_id, &["whatsapp_web"])
+            .await
+            .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?;
     let Some(row) = row else {
         return Err(ApiError::NotFound);
     };
-    let account_id: String = row.try_get("account_id").map_err(TelegramError::from)?;
-    let provider_conversation_id: String = row
-        .try_get("provider_conversation_id")
-        .map_err(TelegramError::from)?;
+    let account_id = row.account_id;
+    let provider_conversation_id = row.provider_conversation_id;
     Ok(ProviderChannelMessageStore::new(pool)
         .pinned_messages(
             &account_id,

@@ -6,7 +6,6 @@ pub(crate) const TASK_ID_PREFIX: &str = "task:v1:";
 pub(crate) const TASK_CANDIDATE_EVENT_PREFIX: &str = "task_candidate_review:";
 pub(crate) const TASK_CANDIDATE_KIND_TASK: &str = "task";
 pub(crate) const TASK_CANDIDATE_KIND_OBLIGATION_TASK: &str = "obligation_task";
-pub(crate) const OBLIGATION_TASK_LINK_KIND: &str = "fulfillment_task";
 pub(crate) const OBLIGATION_CANDIDATE_METADATA_KEY: &str = "obligation_candidate";
 pub(crate) const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
 pub(crate) const FNV_PRIME: u64 = 0x100000001b3;

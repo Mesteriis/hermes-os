@@ -1,14 +1,16 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_communications_api::accounts::{ProviderAccount, ProviderSecretBindingLookupPort};
 use std::sync::mpsc::Sender;
 
 use chrono::Utc;
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
-use crate::platform::config::AppConfig;
-use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
+use crate::platform::config::app_config::AppConfig;
+use crate::platform::secrets::resolver::SecretResolver;
 
-use super::super::actor::{optional_telegram_session_key, spawn_tdlib_actor};
+use super::super::actor::session::optional_telegram_session_key;
+use super::super::actor::spawn::spawn_tdlib_actor;
 use super::super::state::{TelegramRuntimeActorHandle, TelegramRuntimeCommand};
 use super::TelegramRuntimeManager;
 use super::actor_states::running_actor_state;

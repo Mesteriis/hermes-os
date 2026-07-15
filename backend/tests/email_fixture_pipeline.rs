@@ -6,7 +6,7 @@ use sqlx::Row;
 
 use hermes_communications_api::accounts::CommunicationProviderKind;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::email_fixture_pipeline::{
     EmailFixturePipelineRequest, project_fixture_email_messages,
 };

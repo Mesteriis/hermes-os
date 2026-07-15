@@ -8,12 +8,12 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::{build_router, build_router_with_database};
+use hermes_hub_backend::app::router::{build_router, build_router_with_database};
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::workflows::mail_background_sync::MailSyncStore;
+use hermes_hub_backend::platform::config::app_config::AppConfig;
+use hermes_hub_backend::platform::storage::database::Database;
+use hermes_hub_backend::workflows::mail_background_sync::store::MailSyncStore;
 
 const T: &str = "v1comms-test-token";
 

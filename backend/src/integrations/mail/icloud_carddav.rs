@@ -1,13 +1,13 @@
 use std::time::Duration;
 
+use hermes_communications_api::address_book::{AddressBookProviderBatch, AddressBookProviderEntry};
 use quick_xml::escape::unescape;
 use reqwest::{Client, Method};
 use serde_json::Value;
 use thiserror::Error;
 use url::Url;
 
-use crate::platform::communications::{AddressBookProviderBatch, AddressBookProviderEntry};
-use crate::platform::secrets::ResolvedSecret;
+use crate::platform::secrets::models::ResolvedSecret;
 
 const DEFAULT_ICLOUD_CARDDAV_URL: &str = "https://contacts.icloud.com/";
 const XML_CONTENT_TYPE: &str = "application/xml; charset=utf-8";

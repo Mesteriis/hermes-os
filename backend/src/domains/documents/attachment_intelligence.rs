@@ -1,6 +1,6 @@
 mod classification;
 mod file_kinds;
-mod models;
+pub mod models;
 
 #[cfg(test)]
 mod tests;
@@ -8,10 +8,7 @@ mod tests;
 use classification::classify_by_name_and_type;
 use file_kinds::{is_archive_type, is_document_type, is_executable_type};
 
-pub use models::{
-    AttachmentCategory, AttachmentClassification, AttachmentIntelligenceError,
-    AttachmentIntelligenceInput, RiskLevel,
-};
+use models::{AttachmentClassification, AttachmentIntelligenceInput, RiskLevel};
 
 pub struct AttachmentIntelligenceService;
 

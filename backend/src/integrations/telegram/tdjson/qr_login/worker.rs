@@ -1,18 +1,21 @@
-use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Instant;
 
 use serde_json::json;
 
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramQrLoginStartRequest, TelegramQrLoginStatus,
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::qr_login::{
+    TelegramQrLoginStartRequest, TelegramQrLoginStatus,
 };
-use crate::platform::config::AppConfig;
+use crate::platform::config::app_config::AppConfig;
 
 use super::super::client::TdJsonLibrary;
-use super::super::qr_login_support::{
-    DrainedQrLoginCommand, PendingQrLoginMap, QR_FIRST_LINK_TIMEOUT, QR_POLL_AFTER_MS,
-    QR_SESSION_LIFETIME, QrLoginWorkerCompletion, TelegramQrLoginCommand, mark_pending_status,
+use super::super::qr_login_support::constants::{
+    QR_FIRST_LINK_TIMEOUT, QR_POLL_AFTER_MS, QR_SESSION_LIFETIME,
+};
+use super::super::qr_login_support::pending::mark_pending_status;
+use super::super::qr_login_support::types::{
+    DrainedQrLoginCommand, PendingQrLoginMap, QrLoginWorkerCompletion, TelegramQrLoginCommand,
 };
 use super::super::requests::{check_database_encryption_key_request, tdlib_database_directory};
 use super::authorization::handle_qr_login_event;
@@ -138,14 +141,14 @@ pub(super) fn handle_tdlib_setup_event(
     state: &mut QrLoginRuntimeState,
     event: &serde_json::Value,
 ) -> Result<bool, TelegramError> {
-    if super::super::parsing::is_tdlib_parameters_not_specified_error(event) {
+    if super::super::parsing::events::is_tdlib_parameters_not_specified_error(event) {
         if !state.tdlib_parameters_sent {
             send_tdlib_parameters(context.client, context.request, context.database_directory)?;
             state.tdlib_parameters_sent = true;
         }
         return Ok(true);
     }
-    if super::super::parsing::is_tdlib_database_encryption_key_needed_error(event) {
+    if super::super::parsing::events::is_tdlib_database_encryption_key_needed_error(event) {
         if !state.database_encryption_key_checked {
             context
                 .client

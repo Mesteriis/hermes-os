@@ -1,7 +1,9 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 
-use hermes_hub_backend::platform::config::{AiRuntimeProvider, AppConfig, ConfigError};
+use hermes_hub_backend::platform::config::{
+    ai::AiRuntimeProvider, app_config::AppConfig, errors::ConfigError,
+};
 
 #[test]
 fn default_config_binds_to_localhost_without_database_url() {

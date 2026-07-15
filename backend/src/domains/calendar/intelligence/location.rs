@@ -1,4 +1,5 @@
-use super::{CalendarIntelligenceService, LocationInfo};
+use super::CalendarIntelligenceService;
+use super::models::LocationInfo;
 
 impl CalendarIntelligenceService {
     pub fn parse_location(location: &str) -> LocationInfo {

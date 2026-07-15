@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 
 use super::super::errors::TelegramError;
-use super::super::models::TelegramChat;
 use super::TelegramStore;
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];

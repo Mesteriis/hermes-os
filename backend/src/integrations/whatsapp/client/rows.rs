@@ -1,7 +1,7 @@
 use sqlx::Row;
 use sqlx::postgres::PgRow;
 
-use crate::platform::communications::ProviderChannelMessage;
+use hermes_communications_api::provider_messages::ProviderChannelMessage;
 
 use super::errors::WhatsappWebError;
 use super::models::{WhatsappWebMessage, WhatsappWebSession};

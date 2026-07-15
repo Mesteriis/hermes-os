@@ -7,14 +7,17 @@ use hermes_communications_postgres::provider_store::CommunicationProviderAccount
 use hermes_hub_backend::domains::communications::drafts::{
     CommunicationDraftStore, DraftStatus, NewCommunicationDraft,
 };
+use hermes_hub_backend::domains::communications::outbox::delivery::{
+    EmailOutboxDeliveryWorker, OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt,
+};
 use hermes_hub_backend::domains::communications::outbox::{
-    CommunicationOutboxStatus, CommunicationOutboxStore, EmailOutboxDeliveryWorker,
-    NewCommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt,
+    CommunicationOutboxStatus, CommunicationOutboxStore, NewCommunicationOutboxItem,
 };
-use hermes_hub_backend::domains::communications::storage::{
-    CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachmentImport,
-    NewCommunicationBlob,
+use hermes_hub_backend::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use hermes_hub_backend::domains::communications::storage::models::{
+    NewCommunicationAttachmentImport, NewCommunicationBlob,
 };
+use hermes_hub_backend::domains::communications::storage::store::CommunicationStorageStore;
 use hermes_hub_backend::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 
 #[derive(Clone)]

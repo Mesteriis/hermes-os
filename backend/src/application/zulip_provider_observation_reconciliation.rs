@@ -1,6 +1,5 @@
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use hermes_communications_api::commands::CommunicationProviderCommand;
-use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 use hermes_events_api::{NewEventEnvelope, StoredEventEnvelope};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
@@ -22,7 +21,7 @@ pub async fn reconcile_zulip_provider_observation_event(
     event_bus: InMemoryEventBus,
     event: StoredEventEnvelope,
 ) -> Result<(), String> {
-    if !supports_zulip_provider_reconciliation_event(&event.event.event_type) {
+    if !hermes_provider_zulip::reconciliation::supports_observation_event(&event.event.event_type) {
         return Ok(());
     }
 
@@ -45,13 +44,21 @@ pub async fn reconcile_zulip_provider_observation_event(
     }
 
     let provider_message_id = required_json_str(&raw_record.payload, "provider_message_id")?;
-    let command_kinds =
-        command_kinds_for_zulip_observation(&event.event.event_type, &raw_record.payload);
+    let command_kinds = hermes_provider_zulip::reconciliation::command_kinds_for_observation(
+        &event.event.event_type,
+        &raw_record.payload,
+    );
     if command_kinds.is_empty() {
         return Ok(());
     }
     let observed_at = raw_record.occurred_at.unwrap_or(event.event.occurred_at);
-    let provider_state = provider_state_for_observation(&event, &raw_record, observed_at);
+    let provider_state = hermes_provider_zulip::reconciliation::provider_state(
+        &event.event.event_id,
+        &event.event.event_type,
+        &raw_record.raw_record_id,
+        &raw_record.payload,
+        observed_at,
+    );
     let command_store = CommunicationProviderCommandStore::new(pool.clone());
     let commands = hermes_provider_orchestration::reconcile_provider_command_observation(
         &command_store,
@@ -78,57 +85,6 @@ pub async fn reconcile_zulip_provider_observation_event(
     }
 
     Ok(())
-}
-
-fn supports_zulip_provider_reconciliation_event(event_type: &str) -> bool {
-    matches!(
-        event_type,
-        "signal.accepted.zulip.message"
-            | "signal.accepted.zulip.reaction"
-            | "signal.accepted.zulip.message_update"
-            | "signal.accepted.zulip.message_delete"
-    )
-}
-
-fn command_kinds_for_zulip_observation(event_type: &str, payload: &Value) -> Vec<&'static str> {
-    match event_type {
-        "signal.accepted.zulip.message" => vec![
-            "send_stream_message",
-            "send_direct_message",
-            "send_stream_message_with_upload",
-            "send_direct_message_with_upload",
-        ],
-        "signal.accepted.zulip.message_update" => vec!["update_message"],
-        "signal.accepted.zulip.message_delete" => vec!["delete_message"],
-        "signal.accepted.zulip.reaction" => match payload
-            .get("reaction_op")
-            .and_then(Value::as_str)
-            .map(str::trim)
-        {
-            Some("add") => vec!["add_reaction"],
-            Some("remove") => vec!["remove_reaction"],
-            _ => vec!["add_reaction", "remove_reaction"],
-        },
-        _ => Vec::new(),
-    }
-}
-
-fn provider_state_for_observation(
-    event: &StoredEventEnvelope,
-    raw_record: &StoredRawCommunicationRecord,
-    observed_at: DateTime<Utc>,
-) -> Value {
-    json!({
-        "provider": "zulip",
-        "observed_via": "signal_hub_accepted_event",
-        "accepted_event_id": event.event.event_id,
-        "accepted_event_type": event.event.event_type,
-        "raw_record_id": raw_record.raw_record_id,
-        "provider_event_id": raw_record.payload.get("provider_event_id").cloned().unwrap_or(Value::Null),
-        "provider_event_type": raw_record.payload.get("provider_event_type").cloned().unwrap_or(Value::Null),
-        "provider_message_id": raw_record.payload.get("provider_message_id").cloned().unwrap_or(Value::Null),
-        "provider_observed_at": observed_at,
-    })
 }
 
 async fn publish_zulip_command_events(
@@ -213,13 +169,7 @@ async fn publish_zulip_command_event(
         "parent_event_id": parent.event.event_id,
     }))
     .causation_id(parent.event.event_id.clone())
-    .correlation_id(
-        parent
-            .event
-            .correlation_id
-            .clone()
-            .unwrap_or_else(|| parent.event.event_id.clone()),
-    )
+    .correlation_id(parent.event.correlation_id.clone().unwrap_or_else(|| parent.event.event_id.clone()))
     .build()
     .map_err(|error| error.to_string())?;
     event_store
@@ -246,21 +196,24 @@ mod tests {
     #[test]
     fn command_kinds_for_zulip_reaction_uses_reaction_op() {
         assert_eq!(
-            command_kinds_for_zulip_observation(
+            hermes_provider_zulip::reconciliation::command_kinds_for_observation(
                 "signal.accepted.zulip.reaction",
                 &json!({"reaction_op": "add"}),
             ),
             vec!["add_reaction"]
         );
         assert_eq!(
-            command_kinds_for_zulip_observation(
+            hermes_provider_zulip::reconciliation::command_kinds_for_observation(
                 "signal.accepted.zulip.reaction",
                 &json!({"reaction_op": "remove"}),
             ),
             vec!["remove_reaction"]
         );
         assert_eq!(
-            command_kinds_for_zulip_observation("signal.accepted.zulip.reaction", &json!({})),
+            hermes_provider_zulip::reconciliation::command_kinds_for_observation(
+                "signal.accepted.zulip.reaction",
+                &json!({}),
+            ),
             vec!["add_reaction", "remove_reaction"]
         );
     }

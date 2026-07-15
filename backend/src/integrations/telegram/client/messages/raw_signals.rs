@@ -1,11 +1,10 @@
-use crate::integrations::telegram::client::TelegramStore;
-use crate::integrations::telegram::client::models::TelegramObservedMessage;
-use crate::platform::communications::{
-    CommunicationRawSignalSource, ProviderCommunicationMessagePortError,
-    build_communication_raw_signal_event,
+use crate::integrations::telegram::client::models::messages::TelegramObservedMessage;
+use crate::integrations::telegram::client::store::TelegramStore;
+use crate::platform::communications::errors::ProviderCommunicationMessagePortError;
+use crate::platform::communications::raw_signals::{
+    CommunicationRawSignalSource, build_communication_raw_signal_event,
 };
 use crate::platform::events::bus::InMemoryEventBus;
-use hermes_communications_api::evidence::CommunicationRawEvidenceCommandPort;
 use hermes_events_postgres::store::EventStore;
 
 use super::super::errors::TelegramError;

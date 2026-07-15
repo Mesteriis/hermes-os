@@ -78,12 +78,6 @@ pub(super) fn yandex_telemost_error_parts(error: YandexTelemostError) -> ErrorPa
             "yandex_telemost_observation_store_error",
             "Yandex Telemost observation capture failed",
         ),
-        YandexTelemostError::ReviewInbox(error) => internal(
-            error,
-            "Yandex Telemost review inbox mirroring failed",
-            "yandex_telemost_review_inbox_error",
-            "Yandex Telemost review inbox mirroring failed",
-        ),
         YandexTelemostError::Settings(error) if error.is_invalid_request() => (
             StatusCode::BAD_REQUEST,
             "invalid_yandex_telemost_setting",

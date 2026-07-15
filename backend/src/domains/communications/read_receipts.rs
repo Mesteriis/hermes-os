@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
+use hermes_events_api::NewEventEnvelope;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgRow};

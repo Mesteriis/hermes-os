@@ -2,9 +2,9 @@ use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
 use super::errors::TelegramError;
-use super::models::TelegramMessage;
+use super::models::messages::TelegramMessage;
 use super::store::TelegramStore;
-use crate::platform::communications::ProviderMessageObservationEvent;
+use hermes_communications_api::provider_messages::ProviderMessageObservationEvent;
 
 pub(in crate::integrations::telegram) struct TelegramAttachmentDownloadObservation<'a> {
     pub(in crate::integrations::telegram) provider_attachment_id: &'a str,

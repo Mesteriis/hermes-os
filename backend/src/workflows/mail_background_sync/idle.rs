@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use crate::platform::communications::{
-    EmailSyncAdapterConfig, ImapIdleWaitOutcome, ImapIdleWaitRequest, plan_email_sync,
-};
+use crate::platform::communications::email_sync::{IMAP_ALL_MAILBOXES, plan_email_sync};
+use hermes_communications_api::email_sync::EmailSyncAdapterConfig;
+use hermes_communications_api::mail_resources::{ImapIdleWaitOutcome, ImapIdleWaitRequest};
 
 use super::errors::MailSyncError;
 use super::service::MailBackgroundSyncService;
@@ -70,7 +70,7 @@ impl MailBackgroundSyncService {
 fn idle_mailbox(mailboxes: &[String]) -> &str {
     mailboxes
         .iter()
-        .find(|mailbox| mailbox.as_str() != crate::platform::communications::IMAP_ALL_MAILBOXES)
+        .find(|mailbox| mailbox.as_str() != IMAP_ALL_MAILBOXES)
         .map(String::as_str)
         .unwrap_or(DEFAULT_IDLE_MAILBOX)
 }

@@ -2,10 +2,10 @@ use std::time::Instant;
 
 use serde_json::{Value, json};
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
 use super::super::client::TdJsonClient;
-use super::super::parsing::tdlib_error_message;
+use super::super::parsing::events::tdlib_error_message;
 use super::constants::QR_GET_ME_TIMEOUT;
 use super::types::TelegramQrLoginIdentity;
 

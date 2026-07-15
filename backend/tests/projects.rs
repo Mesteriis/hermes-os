@@ -8,17 +8,19 @@ use serde_json::json;
 use sqlx::postgres::PgPool;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
+use hermes_hub_backend::domains::documents::core::{
+    models::NewDocumentImport, store::DocumentImportStore,
 };
-use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
-use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
+use hermes_hub_backend::domains::projects::core::{models::NewProject, store::ProjectStore};
 use hermes_hub_backend::domains::projects::link_reviews::{
-    ProjectLinkReviewCommand, ProjectLinkReviewState, ProjectLinkReviewStore, ProjectLinkTargetKind,
+    models::{ProjectLinkReviewCommand, ProjectLinkReviewState, ProjectLinkTargetKind},
+    store::ProjectLinkReviewStore,
 };
 
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 #[tokio::test]
 async fn project_detail_links_keyword_messages_documents_and_personas_against_postgres() {

@@ -1,5 +1,5 @@
 mod account_lookup;
-mod attachments;
+pub(crate) mod attachments;
 mod chat_lookup;
 mod ingestion;
 mod intelligence;
@@ -9,5 +9,3 @@ mod queries;
 mod raw_signals;
 pub(in crate::integrations::telegram) mod reaction_metadata;
 mod tdlib_ingestion;
-
-pub(crate) use attachments::TelegramAttachmentDownloadStateUpdate;

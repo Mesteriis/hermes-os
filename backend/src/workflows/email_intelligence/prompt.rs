@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::ai::hub::LocalAiInspection;
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::domains::communications::messages::models::ProjectedMessage;
 
 pub(super) const EMAIL_INTELLIGENCE_PROMPT_VERSION: &str =
     "v4-mail-ai-privacy-gated-candidates-2026-07-08";
@@ -77,7 +77,7 @@ mod tests {
 
     use super::*;
     use crate::ai::hub::AiHub;
-    use crate::domains::communications::messages::{LocalMessageState, WorkflowState};
+    use crate::domains::communications::messages::states::{LocalMessageState, WorkflowState};
 
     fn message(body_text: &str) -> ProjectedMessage {
         ProjectedMessage {

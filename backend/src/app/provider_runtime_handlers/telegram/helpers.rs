@@ -1,19 +1,11 @@
 use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
+    stores::{domain_stores::*, integration_stores::*},
     telegram_capabilities::*,
-    whatsapp_capabilities::*,
 };
-use crate::app::{ApiError, AppState};
-use crate::integrations::telegram::client::TelegramError;
-use crate::platform::config::AppConfig;
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::platform::config::app_config::AppConfig;
 use hermes_events_api::NewEventEnvelope;
 
 pub(super) const AUDIT_ACTOR_ID: &str = "hermes-frontend";
@@ -26,7 +18,7 @@ pub(super) fn telegram_api_hash_from_config(config: &AppConfig) -> Option<String
 
 pub(super) fn telegram_secret_store(
     state: &AppState,
-) -> Result<crate::platform::secrets::SecretReferenceStore, ApiError> {
+) -> Result<crate::platform::secrets::store::SecretReferenceStore, ApiError> {
     telegram_secret_reference_store(state)
 }
 

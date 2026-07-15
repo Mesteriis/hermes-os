@@ -1,4 +1,5 @@
-use crate::domains::projects::link_reviews::{ProjectLinkReviewStore, ProjectReviewedTarget};
+use crate::domains::projects::link_reviews::models::ProjectReviewedTarget;
+use crate::domains::projects::link_reviews::store::ProjectLinkReviewStore;
 
 use super::super::errors::ProjectStoreError;
 use super::super::store::ProjectStore;

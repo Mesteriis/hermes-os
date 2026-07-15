@@ -1,36 +1,29 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use chrono::Utc;
+use hermes_communications_api::conversations::ConversationReadPort;
 use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
-use sqlx::Row;
 
 use super::helpers::{
     AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed, publish_telegram_event,
 };
 use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
     messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
+    stores::{domain_stores::*, integration_stores::*},
 };
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::application::telegram_runtime;
-use crate::integrations::telegram::client::{
-    TelegramChat, TelegramChatGroupFilterListResponse, TelegramChatMember, TelegramError,
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::chats::{
+    TelegramChat, TelegramChatGroupFilterListResponse, TelegramChatMember,
 };
-use crate::integrations::telegram::runtime::{
+use crate::integrations::telegram::runtime::models::{
     TelegramChatSyncRequest, TelegramChatSyncResponse, TelegramHistorySyncRequest,
     TelegramHistorySyncResponse,
 };
-use crate::platform::audit::NewApiAuditRecord;
+use crate::platform::audit::models::NewApiAuditRecord;
 
 use crate::platform::events::bus::telegram_event_types;
 
@@ -299,36 +292,18 @@ pub(crate) async fn list_canonical_communication_conversations(
         .filter(|value| !value.is_empty())
         .map(|value| format!("%{value}%"));
     let canonical_channel_kinds = canonical_conversation_channel_kinds(channel_kind);
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            conversation_id,
+    let rows = hermes_communications_postgres::conversations::ConversationReadStore::new(pool)
+        .list_conversations(
             account_id,
-            channel_kind,
-            provider_conversation_id,
-            title,
-            last_message_at,
-            metadata,
-            created_at,
-            updated_at
-        FROM communication_conversations
-        WHERE channel_kind = ANY($1)
-          AND ($2::text IS NULL OR account_id = $2)
-          AND ($3::text IS NULL OR title ILIKE $3)
-        ORDER BY COALESCE(last_message_at, updated_at) DESC, conversation_id ASC
-        LIMIT $4
-        "#,
-    )
-    .bind(canonical_channel_kinds)
-    .bind(account_id.map(str::trim).filter(|value| !value.is_empty()))
-    .bind(like_pattern.as_deref())
-    .bind(limit)
-    .fetch_all(&pool)
-    .await
-    .map_err(TelegramError::from)?;
+            canonical_channel_kinds,
+            like_pattern.as_deref(),
+            limit,
+        )
+        .await
+        .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?;
 
     rows.into_iter()
-        .filter_map(|row| canonical_row_to_chat(row).transpose())
+        .filter_map(|row| canonical_conversation_to_chat(row).transpose())
         .collect::<Result<Vec<_>, _>>()
         .map_err(Into::into)
 }
@@ -342,31 +317,13 @@ pub(crate) async fn canonical_communication_conversation(
         .pool()
         .expect("database pool configured")
         .clone();
-    let row = sqlx::query(
-        r#"
-        SELECT
-            conversation_id,
-            account_id,
-            channel_kind,
-            provider_conversation_id,
-            title,
-            last_message_at,
-            metadata,
-            created_at,
-            updated_at
-        FROM communication_conversations
-        WHERE (conversation_id = $1 OR provider_conversation_id = $1)
-          AND channel_kind = ANY($2)
-        "#,
-    )
-    .bind(conversation_id.trim())
-    .bind(COMMUNICATION_CONVERSATION_CHANNEL_KINDS)
-    .fetch_optional(&pool)
-    .await
-    .map_err(TelegramError::from)?;
+    let row = hermes_communications_postgres::conversations::ConversationReadStore::new(pool)
+        .get_conversation(conversation_id, COMMUNICATION_CONVERSATION_CHANNEL_KINDS)
+        .await
+        .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?;
 
     match row {
-        Some(row) => canonical_row_to_chat(row).map_err(Into::into),
+        Some(row) => Ok(canonical_conversation_to_chat(row)?),
         None => canonical_message_row_to_chat(state, conversation_id)
             .await
             .map_err(Into::into),
@@ -382,52 +339,32 @@ async fn canonical_message_row_to_chat(
         .pool()
         .expect("database pool configured")
         .clone();
-    let row = sqlx::query(
-        r#"
-        SELECT
+    let row = hermes_communications_postgres::conversations::ConversationReadStore::new(pool)
+        .get_conversation_from_message_projection(
             conversation_id,
-            account_id,
-            channel_kind,
-            MAX(COALESCE(occurred_at, projected_at)) AS last_message_at,
-            MIN(projected_at) AS created_at,
-            MAX(projected_at) AS updated_at
-        FROM communication_messages
-        WHERE conversation_id = $1
-          AND channel_kind = ANY($2)
-        GROUP BY conversation_id, account_id, channel_kind
-        ORDER BY last_message_at DESC NULLS LAST
-        LIMIT 1
-        "#,
-    )
-    .bind(conversation_id.trim())
-    .bind(COMMUNICATION_CONVERSATION_CHANNEL_KINDS)
-    .fetch_optional(&pool)
-    .await
-    .map_err(TelegramError::from)?;
-
+            COMMUNICATION_CONVERSATION_CHANNEL_KINDS,
+        )
+        .await
+        .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?;
     let Some(row) = row else {
         return Ok(None);
     };
-    let channel_kind: String = row.try_get("channel_kind")?;
-    if !matches!(channel_kind.as_str(), "whatsapp_web") {
+    if !matches!(row.channel_kind.as_str(), "whatsapp_web") {
         return Ok(None);
     }
-    let provider_chat_id: String = row.try_get("conversation_id")?;
+    let provider_chat_id = row.provider_conversation_id.clone();
     Ok(Some(TelegramChat {
         telegram_chat_id: provider_chat_id.clone(),
-        account_id: row.try_get("account_id")?,
-        provider_chat_id: provider_chat_id.clone(),
+        account_id: row.account_id,
+        provider_chat_id,
         chat_kind: "group".to_owned(),
-        title: provider_chat_id,
+        title: row.conversation_id,
         username: None,
         sync_state: "fixture".to_owned(),
-        last_message_at: row.try_get("last_message_at")?,
-        metadata: json!({
-            "chat_kind": "group",
-            "source": "message_projection_fallback",
-        }),
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
+        last_message_at: row.last_message_at,
+        metadata: row.metadata,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     }))
 }
 
@@ -450,77 +387,47 @@ async fn list_canonical_conversation_members(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| format!("%{value}%"));
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            participant.participant_id,
-            participant.display_name,
-            participant.role,
-            participant.address,
-            participant.metadata AS participant_metadata,
-            identity.provider_identity_id,
-            identity.identity_kind,
-            identity.metadata AS identity_metadata,
-            conversation.last_message_at
-        FROM communication_conversation_participants participant
-        JOIN communication_conversations conversation
-          ON conversation.conversation_id = participant.conversation_id
-        LEFT JOIN communication_identities identity
-          ON identity.identity_id = participant.identity_id
-        WHERE participant.conversation_id = $1
-          AND conversation.channel_kind = ANY($2)
-          AND ($3::text IS NULL OR participant.role = $3)
-          AND (
-              $4::text IS NULL
-              OR participant.display_name ILIKE $4
-              OR participant.address ILIKE $4
-              OR identity.provider_identity_id ILIKE $4
-          )
-        ORDER BY participant.created_at ASC, participant.participant_id ASC
-        OFFSET $5
-        LIMIT $6
-        "#,
-    )
-    .bind(conversation_id.trim())
-    .bind(COMMUNICATION_CONVERSATION_CHANNEL_KINDS)
-    .bind(role.map(str::trim).filter(|value| !value.is_empty()))
-    .bind(like_pattern.as_deref())
-    .bind(offset)
-    .bind(limit)
-    .fetch_all(&pool)
-    .await
-    .map_err(TelegramError::from)?;
+    let rows = hermes_communications_postgres::conversations::ConversationReadStore::new(pool)
+        .list_conversation_members(
+            conversation_id,
+            COMMUNICATION_CONVERSATION_CHANNEL_KINDS,
+            like_pattern.as_deref(),
+            role.map(str::trim).filter(|value| !value.is_empty()),
+            offset,
+            limit,
+        )
+        .await
+        .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?;
 
     rows.into_iter()
-        .map(canonical_row_to_member)
+        .map(canonical_member_to_chat_member)
         .collect::<Result<Vec<_>, _>>()
         .map_err(Into::into)
 }
 
-fn canonical_row_to_chat(
-    row: sqlx::postgres::PgRow,
+fn canonical_conversation_to_chat(
+    row: hermes_communications_api::conversations::CanonicalConversationRecord,
 ) -> Result<Option<TelegramChat>, TelegramError> {
-    let channel_kind: String = row.try_get("channel_kind")?;
-    if !matches!(channel_kind.as_str(), "whatsapp_web") {
+    if !matches!(row.channel_kind.as_str(), "whatsapp_web") {
         return Ok(None);
     }
-    let metadata: serde_json::Value = row.try_get("metadata")?;
     Ok(Some(TelegramChat {
-        telegram_chat_id: row.try_get("conversation_id")?,
-        account_id: row.try_get("account_id")?,
-        provider_chat_id: row.try_get("provider_conversation_id")?,
-        chat_kind: metadata
+        telegram_chat_id: row.conversation_id,
+        account_id: row.account_id,
+        provider_chat_id: row.provider_conversation_id,
+        chat_kind: row
+            .metadata
             .get("chat_kind")
             .and_then(|value| value.as_str())
             .unwrap_or("group")
             .to_owned(),
-        title: row.try_get("title")?,
+        title: row.title,
         username: None,
         sync_state: "fixture".to_owned(),
-        last_message_at: row.try_get("last_message_at")?,
-        metadata,
-        created_at: row.try_get("created_at")?,
-        updated_at: row.try_get("updated_at")?,
+        last_message_at: row.last_message_at,
+        metadata: row.metadata,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     }))
 }
 
@@ -552,15 +459,15 @@ fn canonical_conversation_channel_kinds(channel_kind: Option<&str>) -> &'static 
     }
 }
 
-fn canonical_row_to_member(
-    row: sqlx::postgres::PgRow,
+fn canonical_member_to_chat_member(
+    row: hermes_communications_api::conversations::CanonicalConversationMemberRecord,
 ) -> Result<TelegramChatMember, TelegramError> {
-    let participant_metadata: serde_json::Value = row.try_get("participant_metadata")?;
-    let identity_metadata: Option<serde_json::Value> = row.try_get("identity_metadata")?;
-    let provider_identity_id: Option<String> = row.try_get("provider_identity_id")?;
+    let participant_metadata = row.participant_metadata;
+    let identity_metadata = row.identity_metadata;
+    let provider_identity_id = row.provider_identity_id;
     let provider_member_id = provider_identity_id
         .clone()
-        .unwrap_or_else(|| row.try_get("participant_id").unwrap_or_default());
+        .unwrap_or_else(|| row.participant_id.clone());
     let is_admin = participant_metadata
         .get("is_admin")
         .and_then(|value| value.as_bool())
@@ -571,13 +478,13 @@ fn canonical_row_to_member(
         .unwrap_or(false);
     Ok(TelegramChatMember {
         sender_id: provider_member_id.clone(),
-        sender_display_name: row.try_get("display_name")?,
+        sender_display_name: Some(row.display_name),
         message_count: 0,
-        last_message_at: row.try_get("last_message_at")?,
+        last_message_at: row.last_message_at,
         source: "canonical_communications".to_owned(),
         provider_member_id,
         username: None,
-        role: row.try_get("role")?,
+        role: Some(row.role),
         status: participant_metadata
             .get("status")
             .and_then(|value| value.as_str())
@@ -585,8 +492,8 @@ fn canonical_row_to_member(
         is_admin,
         is_owner,
         permissions: json!({
-            "identity_kind": row.try_get::<Option<String>, _>("identity_kind")?,
-            "address": row.try_get::<Option<String>, _>("address")?,
+            "identity_kind": row.identity_kind,
+            "address": row.address,
             "participant_metadata": participant_metadata,
             "identity_metadata": identity_metadata,
         }),

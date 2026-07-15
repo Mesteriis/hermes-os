@@ -6,13 +6,13 @@ use super::message_versions::{
     insert_message_version, latest_message_version, latest_version_number, local_edit_diff,
 };
 use super::tombstones::insert_tombstone;
-use crate::integrations::telegram::client::TelegramStore;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::telegram::client::models::messages::{
     TelegramCommandKind, TelegramDeleteRequest, TelegramEditRequest, TelegramLifecycleResponse,
     TelegramPinRequest, TelegramRestoreVisibilityRequest,
 };
+use crate::integrations::telegram::client::store::TelegramStore;
 
 pub async fn record_edit(
     store: &TelegramStore,

@@ -9,16 +9,22 @@ use tower::ServiceExt;
 
 use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::ai::control_center::{
-    AiControlCenterError, AiControlCenterStore, AiModelAvailabilityUpdateRequest,
-    AiModelRouteUpdateRequest, AiPromptCreateRequest, AiProviderConsentRequest,
-    AiProviderCreateRequest,
+    errors::AiControlCenterError,
+    models::{
+        AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest, AiPromptActivateRequest,
+        AiPromptCreateRequest, AiPromptTestRequest, AiPromptVersionCreateRequest,
+        AiProviderCommandKind, AiProviderConsentRequest, AiProviderCreateRequest,
+        AiProviderPatchRequest,
+    },
+    store::AiControlCenterStore,
 };
-use hermes_hub_backend::app::{build_router, build_router_with_database};
-use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::secrets::{
-    NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
+use hermes_hub_backend::app::router::{build_router, build_router_with_database};
+use hermes_hub_backend::platform::config::app_config::AppConfig;
+use hermes_hub_backend::platform::secrets::models::{
+    NewSecretReference, SecretKind, SecretStoreKind,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::secrets::store::SecretReferenceStore;
+use hermes_hub_backend::platform::storage::database::Database;
 use tokio::net::TcpListener;
 
 const LOCAL_API_TOKEN: &str = "ai-control-center-test-token";
@@ -507,7 +513,7 @@ async fn ollama_model_sync_preserves_user_availability_state() {
     store
         .update_provider(
             "provider:built_in:ollama",
-            &hermes_hub_backend::ai::control_center::AiProviderPatchRequest {
+            &AiProviderPatchRequest {
                 display_name: None,
                 base_url: Some(ollama_base_url),
                 config: None,
@@ -572,7 +578,7 @@ async fn ollama_model_download_marks_model_available_without_creating_route() {
     store
         .update_provider(
             "provider:built_in:ollama",
-            &hermes_hub_backend::ai::control_center::AiProviderPatchRequest {
+            &AiProviderPatchRequest {
                 display_name: None,
                 base_url: Some(ollama_base_url),
                 config: None,
@@ -635,7 +641,7 @@ async fn ollama_model_download_failure_appends_failed_event() {
     store
         .update_provider(
             "provider:built_in:ollama",
-            &hermes_hub_backend::ai::control_center::AiProviderPatchRequest {
+            &AiProviderPatchRequest {
                 display_name: None,
                 base_url: Some(ollama_base_url),
                 config: None,
@@ -711,7 +717,7 @@ async fn remote_api_provider_models_require_host_vault_secret_before_private_con
     let prompt_error = store
         .test_prompt(
             "prompt:system:global:default_chat",
-            &hermes_hub_backend::ai::control_center::AiPromptTestRequest {
+            &AiPromptTestRequest {
                 prompt_version_id: "prompt-version:system:global:default_chat:v1".to_owned(),
                 provider_id: provider.provider_id.clone(),
                 model_key: "gpt-5.5".to_owned(),
@@ -1072,7 +1078,7 @@ async fn ai_control_center_mutations_record_observation_trail_against_postgres()
     store
         .update_provider(
             &provider.provider_id,
-            &hermes_hub_backend::ai::control_center::AiProviderPatchRequest {
+            &AiProviderPatchRequest {
                 display_name: Some("OpenAI Trail Updated".to_owned()),
                 base_url: Some("https://api.openai.com/v1".to_owned()),
                 config: Some(json!({"region": "us"})),
@@ -1100,15 +1106,12 @@ async fn ai_control_center_mutations_record_observation_trail_against_postgres()
         .await
         .expect("put model route");
     store
-        .provider_command(
-            &provider.provider_id,
-            hermes_hub_backend::ai::control_center::AiProviderCommandKind::SyncModels,
-        )
+        .provider_command(&provider.provider_id, AiProviderCommandKind::SyncModels)
         .await
         .expect("sync models");
     let prompt = store
         .create_prompt(
-            &hermes_hub_backend::ai::control_center::AiPromptCreateRequest {
+            &AiPromptCreateRequest {
                 prompt_id: Some("prompt:test:trail".to_owned()),
                 name: "Trail prompt".to_owned(),
                 entity_scope: "global".to_owned(),
@@ -1123,7 +1126,7 @@ async fn ai_control_center_mutations_record_observation_trail_against_postgres()
     let version = store
         .create_prompt_version(
             &prompt.prompt_id,
-            &hermes_hub_backend::ai::control_center::AiPromptVersionCreateRequest {
+            &AiPromptVersionCreateRequest {
                 prompt_version_id: Some("prompt-version:test:trail".to_owned()),
                 version_label: Some("v1".to_owned()),
                 body_template: "Answer {{query}}".to_owned(),
@@ -1136,7 +1139,7 @@ async fn ai_control_center_mutations_record_observation_trail_against_postgres()
     store
         .activate_prompt_version(
             &prompt.prompt_id,
-            &hermes_hub_backend::ai::control_center::AiPromptActivateRequest {
+            &AiPromptActivateRequest {
                 prompt_version_id: version.prompt_version_id.clone(),
             },
             "hermes-frontend",
@@ -1146,7 +1149,7 @@ async fn ai_control_center_mutations_record_observation_trail_against_postgres()
     let eval_run = store
         .test_prompt(
             &prompt.prompt_id,
-            &hermes_hub_backend::ai::control_center::AiPromptTestRequest {
+            &AiPromptTestRequest {
                 prompt_version_id: version.prompt_version_id.clone(),
                 provider_id: provider.provider_id.clone(),
                 model_key: "gpt-5.5".to_owned(),

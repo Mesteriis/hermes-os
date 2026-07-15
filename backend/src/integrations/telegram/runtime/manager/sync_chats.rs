@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
 use super::super::commands::{request_actor_chat_folders, request_actor_chats};
 use super::super::models::{TelegramChatSyncRequest, TelegramChatSyncResponse};
@@ -17,7 +17,7 @@ impl TelegramRuntimeManager {
         request: &TelegramChatSyncRequest,
     ) -> Result<TelegramChatSyncResponse, TelegramError>
     where
-        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+        S: crate::platform::secrets::resolver::SecretResolver + Sync + ?Sized,
     {
         request.validate()?;
         let account =
@@ -89,7 +89,7 @@ impl TelegramRuntimeManager {
 }
 
 fn tdlib_folder_ids_from_chat_snapshots(
-    snapshots: &[crate::integrations::telegram::tdjson::TelegramTdlibChatSnapshot],
+    snapshots: &[crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatSnapshot],
 ) -> Vec<i64> {
     let mut folder_ids = BTreeSet::new();
     for snapshot in snapshots {

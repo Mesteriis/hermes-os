@@ -1,15 +1,16 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::application::organization_persona_links::OrganizationPersonaLinkApplicationService;
-use crate::domains::organizations::core::{
-    OrgAliasStore, OrgDepartment, OrgDepartmentStore, OrgDomainStore, OrgIdentityStore,
-    OrgPersonaLink, OrgPersonaLinkStore, OrganizationAlias, OrganizationDomain,
-    OrganizationIdentity, RelatedOrgStore, RelatedOrganization,
-};
+use crate::domains::organizations::core::aliases::{OrgAliasStore, OrganizationAlias};
+use crate::domains::organizations::core::departments::{OrgDepartment, OrgDepartmentStore};
+use crate::domains::organizations::core::domains::{OrgDomainStore, OrganizationDomain};
+use crate::domains::organizations::core::identity::{OrgIdentityStore, OrganizationIdentity};
+use crate::domains::organizations::core::persona_links::{OrgPersonaLink, OrgPersonaLinkStore};
+use crate::domains::organizations::core::related::{RelatedOrgStore, RelatedOrganization};
 use crate::domains::organizations::service::OrganizationCommandService;
 
 use super::support::database_pool;

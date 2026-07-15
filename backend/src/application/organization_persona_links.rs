@@ -2,7 +2,7 @@ use serde_json::json;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::organizations::core::OrgPersonaLink;
+use crate::domains::organizations::core::persona_links::OrgPersonaLink;
 use crate::domains::organizations::service::{
     OrganizationCommandService, OrganizationCommandServiceError,
 };

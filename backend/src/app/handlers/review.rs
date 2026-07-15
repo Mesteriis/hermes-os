@@ -4,11 +4,14 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::app::{ApiError, AppState};
-use crate::domains::review::{
-    NewReviewItem, NewReviewItemEvidence, ReviewInboxService, ReviewInboxStore, ReviewItem,
-    ReviewItemEvidenceRecord, ReviewItemKind, ReviewItemStatus, ReviewPromotionTarget,
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::domains::review::models::{
+    NewReviewItem, NewReviewItemEvidence, ReviewItem, ReviewItemKind, ReviewItemStatus,
+    ReviewPromotionTarget,
 };
+use crate::domains::review::service::ReviewInboxService;
+use crate::domains::review::store::{ReviewInboxStore, ReviewItemEvidenceRecord};
 use crate::engines::attention::{
     engine::AttentionEngine,
     models::{
@@ -324,22 +327,13 @@ async fn review_item_trace_id(state: &AppState, review_item_id: &str) -> Result<
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    let trace_id = sqlx::query_scalar::<_, String>(
-        r#"
-        SELECT COALESCE(correlation_id, event_id)
-        FROM event_log
-        WHERE subject ->> 'review_item_id' = $1
-        ORDER BY position ASC
-        LIMIT 1
-        "#,
-    )
-    .bind(review_item_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|error| {
-        tracing::error!(error = %error, "review attention trace lookup failed");
-        ApiError::InvalidReviewQuery("review attention trace lookup failed")
-    })?;
+    let trace_id = hermes_events_postgres::store::EventStore::new(pool.clone())
+        .first_trace_id_for_subject("review_item_id", review_item_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, "review attention trace lookup failed");
+            ApiError::InvalidReviewQuery("review attention trace lookup failed")
+        })?;
 
     Ok(trace_id.unwrap_or_else(|| review_item_id.to_owned()))
 }

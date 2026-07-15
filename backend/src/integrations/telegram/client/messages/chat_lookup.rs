@@ -1,5 +1,5 @@
 use super::super::errors::TelegramError;
-use super::super::models::TelegramChat;
+use super::super::models::chats::TelegramChat;
 use super::super::rows::row_to_telegram_chat;
 use super::super::store::TelegramStore;
 

@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-pub use crate::platform::graph::GraphNodeKind;
+use crate::platform::graph::GraphNodeKind;
 
 use super::errors::GraphStoreError;
 use super::validation::{validate_json_object, validate_non_empty};
@@ -258,21 +258,6 @@ pub struct GraphEdge {
     pub valid_to: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct GraphCount {
-    pub key: String,
-    pub count: i64,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct GraphSummary {
-    pub node_counts: Vec<GraphCount>,
-    pub edge_counts: Vec<GraphCount>,
-    pub evidence_count: i64,
-    pub latest_projection_at: Option<DateTime<Utc>>,
-    pub is_empty: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

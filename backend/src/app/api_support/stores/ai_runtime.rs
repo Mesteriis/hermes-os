@@ -1,9 +1,10 @@
 use super::super::*;
 use super::ai_routing::ai_model_routing;
 use super::database::database_pool;
-use crate::ai::control_center::AiControlCenterStore;
+use crate::ai::control_center::store::AiControlCenterStore;
 use crate::domains::signal_hub::store::{SignalHubError, SignalHubStore};
-use crate::platform::config::AiRuntimeProvider;
+use crate::platform::config::ai::AiRuntimeProvider;
+use crate::platform::settings::store::ApplicationSettingsStore;
 use sqlx::postgres::PgPool;
 use std::future::Future;
 use std::pin::Pin;
@@ -54,7 +55,7 @@ pub(crate) async fn mail_ai_content_egress_allowed(
         return true;
     }
 
-    match crate::domains::communications::sensitive_forwarding::SensitiveForwardingStore::new(
+    match crate::domains::communications::sensitive_forwarding::SensitiveForwardingPgStore::new(
         pool.clone(),
     )
     .content_egress_permissions(account_id)
@@ -83,7 +84,9 @@ impl PersonaProjectionAiPersonaAttributionPort {
     }
 }
 
-impl crate::ai::core::AiPersonaAttributionPort for PersonaProjectionAiPersonaAttributionPort {
+impl crate::ai::core::service::attribution_port::AiPersonaAttributionPort
+    for PersonaProjectionAiPersonaAttributionPort
+{
     fn upsert_ai_agent_persona<'a>(
         &'a self,
         agent_id: &'a str,
@@ -92,27 +95,30 @@ impl crate::ai::core::AiPersonaAttributionPort for PersonaProjectionAiPersonaAtt
         Box<
             dyn Future<
                     Output = Result<
-                        crate::ai::core::AiAgentPersonaAttribution,
-                        crate::ai::core::AiPersonaAttributionError,
+                        crate::ai::core::service::attribution_port::AiAgentPersonaAttribution,
+                        crate::ai::core::service::attribution_port::AiPersonaAttributionError,
                     >,
                 > + Send
                 + 'a,
         >,
     > {
         Box::pin(async move {
-            let persona =
-                crate::domains::personas::api::PersonaProjectionStore::new(self.pool.clone())
-                    .upsert_ai_agent_persona(agent_id, display_name)
-                    .await
-                    .map_err(|error| {
-                        crate::ai::core::AiPersonaAttributionError::Store(error.to_string())
-                    })?;
+            let persona = crate::domains::personas::api::store::PersonaProjectionStore::new(
+                self.pool.clone(),
+            )
+            .upsert_ai_agent_persona(agent_id, display_name)
+            .await
+            .map_err(|error| {
+                crate::ai::core::service::attribution_port::AiPersonaAttributionError::Store(
+                    error.to_string(),
+                )
+            })?;
 
-            Ok(crate::ai::core::AiAgentPersonaAttribution {
+            Ok(crate::ai::core::service::attribution_port::AiAgentPersonaAttribution {
                 persona_id: persona.persona_id,
                 persona_type: persona.persona_type.as_str(),
                 persona_email: persona.email_address.ok_or_else(|| {
-                    crate::ai::core::AiPersonaAttributionError::Store(
+                    crate::ai::core::service::attribution_port::AiPersonaAttributionError::Store(
                         "ai agent persona is missing email_address".to_owned(),
                     )
                 })?,
@@ -124,27 +130,39 @@ impl crate::ai::core::AiPersonaAttributionPort for PersonaProjectionAiPersonaAtt
         &'a self,
     ) -> Pin<
         Box<
-            dyn Future<Output = Result<Option<String>, crate::ai::core::AiPersonaAttributionError>>
-                + Send
+            dyn Future<
+                    Output = Result<
+                        Option<String>,
+                        crate::ai::core::service::attribution_port::AiPersonaAttributionError,
+                    >,
+                > + Send
                 + 'a,
         >,
     > {
         Box::pin(async move {
             Ok(
-                crate::domains::personas::api::PersonaProjectionStore::new(self.pool.clone())
-                    .owner_persona()
-                    .await
-                    .map_err(|error| {
-                        crate::ai::core::AiPersonaAttributionError::Store(error.to_string())
-                    })?
-                    .map(|persona| persona.persona_id),
+                crate::domains::personas::api::store::PersonaProjectionStore::new(
+                    self.pool.clone(),
+                )
+                .owner_persona()
+                .await
+                .map_err(|error| {
+                    crate::ai::core::service::attribution_port::AiPersonaAttributionError::Store(
+                        error.to_string(),
+                    )
+                })?
+                .map(|persona| persona.persona_id),
             )
         })
     }
 }
 
-pub(crate) fn ai_run_store(state: &AppState) -> Result<crate::ai::core::AiRunStore, ApiError> {
-    Ok(crate::ai::core::AiRunStore::new(database_pool(state)?))
+pub(crate) fn ai_run_store(
+    state: &AppState,
+) -> Result<crate::ai::core::runs::AiRunStore, ApiError> {
+    Ok(crate::ai::core::runs::AiRunStore::new(database_pool(
+        state,
+    )?))
 }
 
 pub(crate) async fn ai_service(state: &AppState) -> Result<AiService, ApiError> {
@@ -182,14 +200,14 @@ pub(crate) async fn ai_requests_allowed(state: &AppState) -> Result<bool, ApiErr
 
 pub(crate) fn ai_persona_attribution_port_from_pool(
     pool: sqlx::postgres::PgPool,
-) -> crate::ai::core::SharedAiPersonaAttributionPort {
+) -> crate::ai::core::service::attribution_port::SharedAiPersonaAttributionPort {
     Arc::new(PersonaProjectionAiPersonaAttributionPort::new(pool))
-        as crate::ai::core::SharedAiPersonaAttributionPort
+        as crate::ai::core::service::attribution_port::SharedAiPersonaAttributionPort
 }
 
 pub(crate) fn ai_persona_attribution_port_optional(
     state: &AppState,
-) -> Option<crate::ai::core::SharedAiPersonaAttributionPort> {
+) -> Option<crate::ai::core::service::attribution_port::SharedAiPersonaAttributionPort> {
     state
         .database
         .pool()

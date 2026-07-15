@@ -9,8 +9,9 @@ use super::fetcher::fetch_remote_image;
 use super::reference::message_html_references_url;
 use super::url_policy::parse_remote_image_url;
 use crate::app::api_support::stores::domain_stores::message_store;
+use crate::app::error::types::ApiError;
 use crate::app::handlers::communications::communication_messages::rich_body_html_for_message;
-use crate::app::{ApiError, AppState};
+use crate::app::state::AppState;
 
 #[derive(Deserialize)]
 pub(crate) struct RemoteImageQuery {

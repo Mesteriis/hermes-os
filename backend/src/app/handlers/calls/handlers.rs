@@ -3,21 +3,14 @@ use axum::extract::{Path, Query, State};
 use serde_json::json;
 
 use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
+    automation_calls::*, messaging_integrations::*, stores::integration_stores::*,
 };
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::platform::calls::models::{
+    CallTranscript, NewCallTranscript, ProviderCall, TranscriptStatus,
+};
 use crate::platform::calls::stt::{FixtureSpeechToTextProvider, SpeechToTextProvider};
-use crate::platform::calls::{CallTranscript, NewCallTranscript, ProviderCall, TranscriptStatus};
 
 pub(crate) async fn post_call(
     State(state): State<AppState>,

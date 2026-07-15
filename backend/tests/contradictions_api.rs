@@ -8,7 +8,7 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use tower::ServiceExt;
 
-use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::app::router::build_router_with_database;
 use hermes_hub_backend::engines::consistency::{
     models::{
         ContradictionObservation, ContradictionReviewState, ContradictionSeverity,
@@ -16,7 +16,7 @@ use hermes_hub_backend::engines::consistency::{
     },
     store::ContradictionObservationStore,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::consistency_review::sync_contradiction_review_item;
 
 const LOCAL_API_TOKEN: &str = "contradictions-api-test-token";

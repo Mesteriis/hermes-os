@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::domains::communications::storage::CommunicationStorageError;
+use crate::domains::communications::storage::errors::CommunicationStorageError;
 use crate::platform::communications::rfc822::errors::EmailRfc822ParseError;
 use hermes_communications_postgres::provider_commands::CommunicationProviderCommandError;
 use hermes_observations_postgres::errors::ObservationStoreError;
@@ -57,6 +57,9 @@ pub enum MessageProjectionError {
 
     #[error("communication message was not found")]
     MessageNotFound,
+
+    #[error("communication projection write failed: {0}")]
+    ProjectionWrite(String),
 
     #[error("invalid workflow state: {0}")]
     InvalidWorkflowState(String),

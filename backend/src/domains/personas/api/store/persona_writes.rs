@@ -4,7 +4,7 @@ use crate::domains::personas::api::errors::PersonaProjectionError;
 use crate::domains::personas::api::models::Persona;
 use crate::domains::personas::api::rows::row_to_persona;
 use crate::domains::personas::api::validation::validate_display_name;
-use crate::domains::personas::core::link_persona_entity_in_transaction;
+use crate::domains::personas::core::evidence::link_persona_entity_in_transaction;
 
 impl PersonaProjectionStore {
     pub async fn update_persona(

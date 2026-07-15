@@ -4,16 +4,18 @@ use std::thread;
 
 use tokio::task;
 
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramQrLoginStartRequest, TelegramQrLoginStatusResponse,
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::qr_login::{
+    TelegramQrLoginStartRequest, TelegramQrLoginStatusResponse,
 };
-use crate::platform::config::AppConfig;
+use crate::platform::config::app_config::AppConfig;
 
 use super::super::client::TdJsonLibrary;
-use super::super::qr_login_support::{
-    PendingQrLoginMap, mark_pending_status, mark_worker_complete, new_setup_id,
-    new_worker_completion, qr_preparing_response, short_thread_suffix, upsert_pending_response,
-};
+use super::super::qr_login_support::completion::{mark_worker_complete, new_worker_completion};
+use super::super::qr_login_support::identifiers::{new_setup_id, short_thread_suffix};
+use super::super::qr_login_support::pending::{mark_pending_status, upsert_pending_response};
+use super::super::qr_login_support::responses::qr_preparing_response;
+use super::super::qr_login_support::types::PendingQrLoginMap;
 use super::commands::cancel_existing_qr_logins_for_account;
 use super::worker::drive_qr_login;
 
@@ -74,7 +76,7 @@ fn start_qr_login_driver(
                     let _ = mark_pending_status(
                         &pending_logins,
                         &setup_id,
-                        crate::integrations::telegram::client::TelegramQrLoginStatus::Failed,
+                        crate::integrations::telegram::client::models::qr_login::TelegramQrLoginStatus::Failed,
                         "Telegram QR login failed before the QR code was issued.",
                         0,
                     );

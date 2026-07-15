@@ -14,7 +14,7 @@ use hermes_hub_backend::domains::communications::sources::{
     FixtureCommunicationSourceMessage, parse_fixture_email_messages,
 };
 
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 #[test]
 fn fixture_email_source_parses_account_scoped_messages() {

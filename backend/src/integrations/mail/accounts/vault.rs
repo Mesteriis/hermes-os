@@ -1,10 +1,10 @@
 use serde_json::Value;
 
-use crate::platform::secrets::{
-    DatabaseEncryptedSecretVault, SecretKind, SecretReference, SecretResolutionFuture,
-    SecretResolver, SecretStoreKind,
-};
-use crate::vault::{HostVault, SecretEntryContext};
+use crate::platform::secrets::database_vault::DatabaseEncryptedSecretVault;
+use crate::platform::secrets::models::{SecretKind, SecretReference, SecretStoreKind};
+use crate::platform::secrets::resolver::{SecretResolutionFuture, SecretResolver};
+use crate::vault::HostVault;
+use crate::vault::models::SecretEntryContext;
 
 use super::errors::EmailAccountSetupError;
 use super::helpers::vault_secret_reference;

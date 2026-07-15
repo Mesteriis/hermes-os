@@ -3,7 +3,7 @@ use serde_json::json;
 use sqlx::{Postgres, Transaction};
 
 use crate::integrations::telegram::tdjson::{
-    TelegramTdlibChatFolderSnapshot, TelegramTdlibChatSnapshot,
+    snapshots::TelegramTdlibChatFolderSnapshot, snapshots::TelegramTdlibChatSnapshot,
 };
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;
@@ -12,8 +12,8 @@ use super::TELEGRAM_CHAT_RECORD_KIND;
 use super::chat_metadata::tdlib_chat_projection_metadata;
 use super::errors::TelegramError;
 use super::evidence::link_telegram_entity_in_transaction;
-use super::identifiers::{stable_hash, telegram_chat_id, telegram_raw_record_id};
-use super::models::{
+use super::identifiers::{telegram_chat_id, telegram_raw_record_id};
+use super::models::chats::{
     NewTelegramChat, TelegramChat, TelegramChatGroupFilter, TelegramChatMember, TelegramSyncState,
 };
 use super::rows::row_to_telegram_chat;

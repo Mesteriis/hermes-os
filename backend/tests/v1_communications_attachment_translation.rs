@@ -9,23 +9,26 @@ use tower::ServiceExt;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::ai::control_center::{
-    AiControlCenterStore, AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest,
+    models::{AiModelAvailabilityUpdateRequest, AiModelRouteUpdateRequest},
+    store::AiControlCenterStore,
 };
-use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::app::router::build_router_with_database;
 use hermes_hub_backend::domains::communications::attachment_text_extraction::AttachmentTextExtractionService;
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
+use hermes_hub_backend::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use hermes_hub_backend::domains::communications::storage::models::{
+    CommunicationAttachmentDisposition, NewCommunicationAttachment, NewCommunicationBlob,
 };
-use hermes_hub_backend::domains::communications::storage::{
-    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
-    CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachment,
-    NewCommunicationBlob,
+use hermes_hub_backend::domains::communications::storage::scanner::{
+    AttachmentSafetyScanReport, AttachmentSafetyScanStatus,
 };
+use hermes_hub_backend::domains::communications::storage::store::CommunicationStorageStore;
 use hermes_hub_backend::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::settings::store::ApplicationSettingsStore;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const LOCAL_API_TOKEN: &str = "v1comms-attachment-translation-test-token";
 

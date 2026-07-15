@@ -3,8 +3,9 @@ use sqlx::{Postgres, Transaction};
 
 use crate::domains::calendar::evidence::link_calendar_entity_in_transaction;
 
+use super::errors::MeetingsError;
+use super::models::EventTranscript;
 use super::rows::{EVENT_TRANSCRIPT_COLUMNS, row_to_event_transcript};
-use super::{EventTranscript, MeetingsError};
 
 #[derive(Clone)]
 pub struct EventTranscriptStore {

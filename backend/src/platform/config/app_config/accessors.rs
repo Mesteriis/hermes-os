@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::path::Path;
 
-use crate::platform::secrets::ResolvedSecret;
+use crate::platform::secrets::models::ResolvedSecret;
 
 use super::super::ai::AiRuntimeProvider;
 use super::super::google::GoogleOAuthClientConfig;

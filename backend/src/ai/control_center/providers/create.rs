@@ -1,5 +1,4 @@
 use serde_json::{Value, json};
-use sqlx::Row;
 
 use super::super::errors::AiControlCenterError;
 use super::super::evidence::capture_provider_account_observation;

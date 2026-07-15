@@ -1,9 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::constants::AI_EMBEDDING_DIMENSION;
 use super::helpers::text_preview;
-use super::semantic::SemanticSearchResult;
+use super::semantic::models::SemanticSearchResult;
 
 #[derive(Clone)]
 pub struct AiModelRouting {

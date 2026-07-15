@@ -1,11 +1,11 @@
 use serde_json::Value;
 use sqlx::PgPool;
 
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::telegram::client::TelegramManualSendRequest;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::messages::TelegramManualSendRequest;
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
 use crate::integrations::telegram::tdjson::{
-    TelegramTdlibMessageSnapshot, TelegramTdlibTopicSnapshot,
+    snapshots::TelegramTdlibMessageSnapshot, snapshots::TelegramTdlibTopicSnapshot,
 };
 use hermes_provider_telegram::tdlib::types::TdlibMediaKind;
 

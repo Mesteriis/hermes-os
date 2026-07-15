@@ -1,4 +1,5 @@
-use crate::domains::communications::messages::{MessageProjectionStore, ProjectedMessage};
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::communications::messages::store::MessageProjectionStore;
 use crate::engines::search::{
     engine::SearchIndex,
     models::{SearchDocument, SearchResult},
@@ -44,5 +45,5 @@ pub enum IndexEmailError {
     #[error(transparent)]
     Search(#[from] crate::engines::search::errors::SearchError),
     #[error(transparent)]
-    Messages(#[from] crate::domains::communications::messages::MessageProjectionError),
+    Messages(#[from] crate::domains::communications::messages::errors::MessageProjectionError),
 }

@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::app::handlers::communications::legal_export::{SendRequest, SendResponse};
 use crate::application::communication_send::{
     CommunicationSendDependencies, CommunicationSendError, CommunicationSendRequest, send_email,
 };

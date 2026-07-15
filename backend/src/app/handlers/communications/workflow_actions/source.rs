@@ -1,5 +1,6 @@
-use crate::app::ApiError;
-use crate::domains::communications::messages::{MessageProjectionStore, ProjectedMessage};
+use crate::app::error::types::ApiError;
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::communications::messages::store::MessageProjectionStore;
 
 use super::models::WorkflowActionSource;
 use super::validation::normalize_non_empty;

@@ -5,13 +5,14 @@ pub(crate) use chrono::Utc;
 pub(crate) use hermes_events_api::NewEventEnvelope;
 use hermes_events_postgres::store::EventStore;
 pub(crate) use hermes_hub_backend::domains::documents::core::{
-    DocumentImportStore, NewDocumentImport,
+    models::NewDocumentImport, store::DocumentImportStore,
 };
 pub(crate) use hermes_hub_backend::domains::documents::processing::{
-    DocumentProcessingError, DocumentProcessingRetryCommand, DocumentProcessingStatus,
-    DocumentProcessingStore,
+    errors::DocumentProcessingError,
+    models::{DocumentProcessingRetryCommand, DocumentProcessingStatus, DocumentProcessingStep},
+    store::DocumentProcessingStore,
 };
-pub(crate) use hermes_hub_backend::platform::storage::Database;
+pub(crate) use hermes_hub_backend::platform::storage::database::Database;
 pub(crate) use serde_json::json;
 pub(crate) use sqlx::postgres::PgPool;
 pub(crate) use sqlx::query_scalar;
@@ -40,14 +41,10 @@ pub(crate) fn unique_suffix() -> u128 {
         .as_nanos()
 }
 
-pub(crate) fn step_name(
-    step: &hermes_hub_backend::domains::documents::processing::DocumentProcessingStep,
-) -> &'static str {
+pub(crate) fn step_name(step: &DocumentProcessingStep) -> &'static str {
     match step {
-        hermes_hub_backend::domains::documents::processing::DocumentProcessingStep::ExtractText => {
-            "extract_text"
-        }
-        hermes_hub_backend::domains::documents::processing::DocumentProcessingStep::Ocr => "ocr",
+        DocumentProcessingStep::ExtractText => "extract_text",
+        DocumentProcessingStep::Ocr => "ocr",
     }
 }
 

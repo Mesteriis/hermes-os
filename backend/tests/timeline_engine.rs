@@ -5,8 +5,8 @@ use chrono::{TimeZone, Utc};
 use hermes_events_api::{EventEnvelope, NewEventEnvelope, StoredEventEnvelope};
 use hermes_events_postgres::cursors::ProjectionCursorStore;
 use hermes_events_postgres::store::EventStore;
-use hermes_hub_backend::engines::timeline::{TimelineEngine, TimelineEventDraft};
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::engines::timeline::{TimelineEngine, models::TimelineEventDraft};
+use hermes_hub_backend::platform::storage::database::Database;
 use serde_json::json;
 
 #[test]

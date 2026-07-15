@@ -2,9 +2,9 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::domains::communications::messages::{
-    MessageProjectionError, MessageProjectionStore, ProjectedMessage,
-};
+use crate::domains::communications::messages::errors::MessageProjectionError;
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::communications::messages::store::MessageProjectionStore;
 
 /// Pin/snooze/label operations on messages stored in message_metadata JSONB.
 pub struct MessageFlags;
@@ -307,7 +307,7 @@ pub enum MessageFlagsError {
 mod tests {
     #![allow(unused_imports)]
     use super::*;
-    use crate::domains::communications::messages::{LocalMessageState, WorkflowState};
+    use crate::domains::communications::messages::states::{LocalMessageState, WorkflowState};
     use chrono::Utc;
     use serde_json::json;
 

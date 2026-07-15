@@ -3,7 +3,8 @@ use axum::extract::{Query, State};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::domains::tasks::health::TaskWatchtowerService;
 
 use super::support::database_pool;

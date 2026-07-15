@@ -1,5 +1,5 @@
 use super::super::errors::TelegramError;
-use super::super::models::TelegramMessage;
+use super::super::models::messages::TelegramMessage;
 use super::super::rows::provider_channel_message_to_telegram_message;
 use super::super::store::TelegramStore;
 use super::super::validation::validate_message_list_limit;

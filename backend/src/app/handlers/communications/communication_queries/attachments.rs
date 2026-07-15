@@ -100,7 +100,7 @@ pub(crate) async fn post_v1_attachment_text_extraction(
     };
     let service = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
         pool,
-        crate::domains::communications::storage::LocalCommunicationBlobStore::new(
+        crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore::new(
             crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT,
         ),
     );
@@ -138,7 +138,7 @@ pub(crate) async fn get_v1_attachment_extracted_text(
     };
     let service = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
         pool,
-        crate::domains::communications::storage::LocalCommunicationBlobStore::new(
+        crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore::new(
             crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT,
         ),
     );
@@ -564,13 +564,13 @@ fn attachment_preview_kind(
 
 fn is_derived_text_preview_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
     matches!(
-        crate::platform::communications::rich_attachment_extraction_kind(
+        crate::platform::communications::attachment_text::rich_attachment_extraction_kind(
             &attachment.attachment.content_type,
             attachment.attachment.filename.as_deref(),
         ),
         Some(
-            crate::platform::communications::RichAttachmentExtractionKind::Pdf
-                | crate::platform::communications::RichAttachmentExtractionKind::Docx
+            crate::platform::communications::attachment_text::RichAttachmentExtractionKind::Pdf
+                | crate::platform::communications::attachment_text::RichAttachmentExtractionKind::Docx
         )
     )
 }

@@ -1,3 +1,4 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -19,7 +20,7 @@ use crate::integrations::whatsapp::client::models::{
     WhatsappWebObservedReceipt, WhatsappWebObservedRuntimeEvent, WhatsappWebObservedStatus,
     WhatsappWebObservedStatusDelete, WhatsappWebObservedStatusView, WhatsappWebSession,
 };
-use crate::platform::secrets::{SecretKind, SecretReferenceStore, SecretStoreKind};
+use crate::platform::secrets::models::{SecretKind, SecretStoreKind};
 use crate::vault::HostVault;
 
 pub type WhatsAppProviderRuntimeFuture<'a, T> =

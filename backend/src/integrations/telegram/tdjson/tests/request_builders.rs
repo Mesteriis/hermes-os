@@ -4,7 +4,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use serde_json::json;
 
-use crate::integrations::telegram::client::TelegramQrLoginStartRequest;
+use crate::integrations::telegram::client::models::qr_login::TelegramQrLoginStartRequest;
 
 #[test]
 fn tdlib_parameters_use_legacy_nested_shape_for_tdlib_1_8_runtime() {
@@ -19,7 +19,7 @@ fn tdlib_parameters_use_legacy_nested_shape_for_tdlib_1_8_runtime() {
         transcription_enabled: true,
     };
 
-    let command = super::super::set_tdlib_parameters_request(
+    let command = super::super::requests::set_tdlib_parameters_request(
         &request,
         Path::new("docker/data/telegram/telegram-qr"),
     )
@@ -48,7 +48,7 @@ fn tdlib_database_key_check_uses_same_base64_key_without_plaintext_secret() {
         transcription_enabled: true,
     };
 
-    let command = super::super::check_database_encryption_key_request(&request);
+    let command = super::super::requests::check_database_encryption_key_request(&request);
 
     assert_eq!(command["@type"], "checkDatabaseEncryptionKey");
     assert_eq!(
@@ -60,7 +60,7 @@ fn tdlib_database_key_check_uses_same_base64_key_without_plaintext_secret() {
 
 #[test]
 fn tdlib_edit_chat_folder_remove_chat_request_preserves_shape_and_excludes_chat() {
-    let command = super::super::tdlib_edit_chat_folder_remove_chat_request(
+    let command = super::super::folder_requests::tdlib_edit_chat_folder_remove_chat_request(
         7,
         222,
         &json!({

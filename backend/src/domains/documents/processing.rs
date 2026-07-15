@@ -1,23 +1,14 @@
 mod artifacts;
 mod constants;
 mod documents;
-mod errors;
+pub mod errors;
 mod evidence;
 mod ids;
 mod jobs;
-mod models;
+pub mod models;
 mod retry;
 mod rows;
 mod runner;
-mod service;
-mod store;
+pub mod service;
+pub mod store;
 mod validation;
-
-pub use errors::DocumentProcessingError;
-pub use models::{
-    DocumentArtifactKind, DocumentProcessingArtifact, DocumentProcessingJob,
-    DocumentProcessingRecord, DocumentProcessingRetryCommand, DocumentProcessingRetryCommandResult,
-    DocumentProcessingRunReport, DocumentProcessingStatus, DocumentProcessingStep,
-};
-pub use service::{DocumentProcessingCommandService, DocumentProcessingCommandServiceError};
-pub use store::DocumentProcessingStore;

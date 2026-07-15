@@ -3,8 +3,9 @@ use axum::extract::{Query, State};
 use serde::Deserialize;
 
 use crate::app::api_support::stores::integration_stores::telegram_provider_runtime_service;
-use crate::app::{ApiError, AppState};
-use crate::integrations::telegram::client::TelegramError;
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::telegram::client::models::messages::TelegramCommandListResponse;
 
 #[derive(Deserialize)]

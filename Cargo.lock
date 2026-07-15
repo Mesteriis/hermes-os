@@ -1730,9 +1730,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-calendar-api"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "hermes-calendar-postgres"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hermes-calendar-api",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-communications-api"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "serde",
  "serde_json",
@@ -1743,6 +1762,7 @@ dependencies = [
 name = "hermes-communications-postgres"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "hermes-communications-api",
  "hermes-events-api",
@@ -1763,6 +1783,27 @@ dependencies = [
  "connectrpc-build",
  "http-body",
  "serde",
+]
+
+[[package]]
+name = "hermes-decisions-api"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "hermes-decisions-postgres"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hermes-decisions-api",
+ "hermes-observations-postgres",
+ "serde_json",
+ "sqlx",
 ]
 
 [[package]]
@@ -1807,6 +1848,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-graph-api"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "hermes-graph-postgres"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hermes-graph-api",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-hub-backend"
 version = "0.1.0"
 dependencies = [
@@ -1827,15 +1887,28 @@ dependencies = [
  "futures",
  "getrandom 0.2.17",
  "hermes-backend-testkit",
+ "hermes-blob-api",
+ "hermes-calendar-api",
+ "hermes-calendar-postgres",
  "hermes-communications-api",
  "hermes-communications-postgres",
  "hermes-connectrpc-contracts",
+ "hermes-decisions-api",
+ "hermes-decisions-postgres",
  "hermes-desktop-runtime",
  "hermes-events-api",
  "hermes-events-nats",
  "hermes-events-postgres",
+ "hermes-graph-api",
+ "hermes-graph-postgres",
+ "hermes-obligations-api",
+ "hermes-obligations-postgres",
  "hermes-observations-api",
  "hermes-observations-postgres",
+ "hermes-personas-api",
+ "hermes-personas-postgres",
+ "hermes-projects-api",
+ "hermes-projects-postgres",
  "hermes-provider-api",
  "hermes-provider-mail",
  "hermes-provider-orchestration",
@@ -1844,8 +1917,12 @@ dependencies = [
  "hermes-provider-whatsapp",
  "hermes-provider-zoom",
  "hermes-provider-zulip",
+ "hermes-relationships-api",
+ "hermes-relationships-postgres",
  "hermes-signal-hub-api",
  "hermes-signal-hub-postgres",
+ "hermes-tasks-api",
+ "hermes-tasks-postgres",
  "hkdf",
  "hmac",
  "http-body",
@@ -1885,6 +1962,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-obligations-api"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "hermes-obligations-postgres"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hermes-obligations-api",
+ "hermes-observations-postgres",
+ "serde_json",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-observations-api"
 version = "0.1.0"
 dependencies = [
@@ -1909,6 +2007,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-personas-api"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "hermes-personas-postgres"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hermes-personas-api",
+ "sqlx",
+]
+
+[[package]]
+name = "hermes-projects-api"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "hermes-projects-postgres"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hermes-projects-api",
+ "serde_json",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-provider-api"
 version = "0.1.0"
 dependencies = [
@@ -1925,6 +2062,7 @@ dependencies = [
 name = "hermes-provider-mail"
 version = "0.1.0"
 dependencies = [
+ "hermes-provider-api",
  "serde",
  "serde_json",
 ]
@@ -1936,6 +2074,7 @@ dependencies = [
  "chrono",
  "hermes-communications-api",
  "hermes-provider-api",
+ "hermes-signal-hub-api",
  "serde_json",
  "thiserror 2.0.18",
 ]
@@ -1944,6 +2083,7 @@ dependencies = [
 name = "hermes-provider-telegram"
 version = "0.1.0"
 dependencies = [
+ "hermes-provider-api",
  "serde_json",
  "thiserror 2.0.18",
 ]
@@ -1952,6 +2092,7 @@ dependencies = [
 name = "hermes-provider-telemost"
 version = "0.1.0"
 dependencies = [
+ "hermes-provider-api",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1961,6 +2102,7 @@ dependencies = [
 name = "hermes-provider-whatsapp"
 version = "0.1.0"
 dependencies = [
+ "hermes-provider-api",
  "sha2",
 ]
 
@@ -1971,6 +2113,7 @@ dependencies = [
  "base64",
  "chrono",
  "getrandom 0.2.17",
+ "hermes-provider-api",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1991,6 +2134,28 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "hermes-relationships-api"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "hermes-relationships-postgres"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hermes-observations-postgres",
+ "hermes-relationships-api",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2016,10 +2181,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-tasks-api"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "hermes-tasks-postgres"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hermes-tasks-api",
+ "serde_json",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-test-session"
 version = "0.1.0"
 dependencies = [
  "async-nats",
+ "sqlx",
  "testcontainers",
  "tokio",
  "uuid",
@@ -2032,6 +2218,18 @@ dependencies = [
  "chrono",
  "hermes-provider-api",
  "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "hermes-zulip-connector"
+version = "0.1.0"
+dependencies = [
+ "hermes-provider-api",
+ "hermes-provider-zulip",
+ "rusqlite",
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 

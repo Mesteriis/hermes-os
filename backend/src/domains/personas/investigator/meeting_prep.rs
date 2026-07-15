@@ -2,8 +2,9 @@ use sqlx::postgres::PgPool;
 
 use super::errors::InvestigatorError;
 use super::models::MeetingPrep;
-use crate::domains::personas::enrichment::PersonaEnrichmentStore;
-use crate::domains::personas::trust::{PersonaPromiseStore, PersonaRiskStore};
+use crate::domains::personas::enrichment::store::PersonaEnrichmentStore;
+use crate::domains::personas::trust::promises::PersonaPromiseStore;
+use crate::domains::personas::trust::risks::PersonaRiskStore;
 
 pub(super) async fn meeting_prep(
     pool: &PgPool,

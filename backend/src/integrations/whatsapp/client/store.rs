@@ -1,5 +1,6 @@
 use hermes_communications_api::accounts::ProviderAccountCommandPort;
 use hermes_communications_api::accounts::ProviderSecretBindingCommandPort;
+use hermes_communications_api::commands::ProviderCommandMirrorPort;
 mod accounts;
 mod evidence;
 mod ingestion;
@@ -19,6 +20,7 @@ pub struct WhatsappWebStore {
     provider_account_store: Arc<dyn ProviderAccountCommandPort>,
     provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
     provider_channel_message_store: Arc<dyn ProviderChannelMessageLookupPort>,
+    provider_command_mirror: Arc<dyn ProviderCommandMirrorPort>,
 }
 
 impl WhatsappWebStore {
@@ -27,12 +29,14 @@ impl WhatsappWebStore {
         provider_account_store: Arc<dyn ProviderAccountCommandPort>,
         provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
         provider_channel_message_store: Arc<dyn ProviderChannelMessageLookupPort>,
+        provider_command_mirror: Arc<dyn ProviderCommandMirrorPort>,
     ) -> Self {
         Self {
             pool,
             provider_account_store,
             provider_secret_binding_store,
             provider_channel_message_store,
+            provider_command_mirror,
         }
     }
 
@@ -56,5 +60,11 @@ impl WhatsappWebStore {
         &self,
     ) -> &dyn ProviderChannelMessageLookupPort {
         self.provider_channel_message_store.as_ref()
+    }
+
+    pub(in crate::integrations::whatsapp) fn provider_command_mirror(
+        &self,
+    ) -> &dyn ProviderCommandMirrorPort {
+        self.provider_command_mirror.as_ref()
     }
 }

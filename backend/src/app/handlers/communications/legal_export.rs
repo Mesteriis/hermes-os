@@ -1,3 +1,4 @@
+use super::message_actions::{LegalDocListResponse, LegalDocQuery};
 use super::*;
 
 pub(crate) async fn get_v1_legal_docs(

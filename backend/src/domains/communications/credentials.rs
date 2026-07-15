@@ -1,10 +1,12 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use thiserror::Error;
 
-use crate::platform::communications::ProviderCredential;
-use crate::platform::secrets::{
-    SecretKind, SecretReferenceError, SecretReferenceStore, SecretResolutionError, SecretResolver,
+use crate::platform::secrets::errors::{SecretReferenceError, SecretResolutionError};
+use crate::platform::secrets::models::{ProviderCredential, SecretKind};
+use crate::platform::secrets::resolver::SecretResolver;
+use hermes_communications_api::accounts::{
+    ProviderAccountSecretPurpose, ProviderSecretBindingLookupPort, ProviderSecretBindingPortError,
 };
-use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_postgres::errors::CommunicationIngestionError;
 use hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore;
 
@@ -12,6 +14,9 @@ use hermes_communications_postgres::provider_store::CommunicationProviderSecretB
 pub enum ProviderCredentialError {
     #[error(transparent)]
     Communication(#[from] CommunicationIngestionError),
+
+    #[error(transparent)]
+    SecretBinding(#[from] ProviderSecretBindingPortError),
 
     #[error(transparent)]
     SecretReference(#[from] SecretReferenceError),
@@ -40,15 +45,24 @@ pub enum ProviderCredentialError {
     },
 }
 
-pub struct ProviderCredentialReader<'a, R: SecretResolver + ?Sized> {
-    secret_binding_store: CommunicationProviderSecretBindingStore,
+pub struct ProviderCredentialReader<
+    'a,
+    R: SecretResolver + ?Sized,
+    B = CommunicationProviderSecretBindingStore,
+> where
+    B: ProviderSecretBindingLookupPort,
+{
+    secret_binding_store: B,
     secret_store: SecretReferenceStore,
     resolver: &'a R,
 }
 
-impl<'a, R: SecretResolver + ?Sized> ProviderCredentialReader<'a, R> {
+impl<'a, R: SecretResolver + ?Sized, B> ProviderCredentialReader<'a, R, B>
+where
+    B: ProviderSecretBindingLookupPort,
+{
     pub fn new(
-        secret_binding_store: CommunicationProviderSecretBindingStore,
+        secret_binding_store: B,
         secret_store: SecretReferenceStore,
         resolver: &'a R,
     ) -> Self {
@@ -71,7 +85,8 @@ impl<'a, R: SecretResolver + ?Sized> ProviderCredentialReader<'a, R> {
         let binding = self
             .secret_binding_store
             .get_for_account(account_id, secret_purpose)
-            .await?
+            .await
+            .map_err(ProviderCredentialError::SecretBinding)?
             .ok_or_else(|| ProviderCredentialError::MissingBinding {
                 account_id: account_id.trim().to_owned(),
                 secret_purpose,

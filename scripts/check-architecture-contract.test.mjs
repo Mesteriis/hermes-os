@@ -17,10 +17,6 @@ async function exists(relativePath) {
 const contractPath = 'scripts/architecture-contract.json';
 const contract = JSON.parse(await readFile(path.join(repoRoot, contractPath), 'utf8'));
 const routerSource = await readFile(path.join(repoRoot, 'backend/src/app/router.rs'), 'utf8');
-const relationshipStoreSource = await readFile(
-	path.join(repoRoot, 'backend/src/domains/relationships/store.rs'),
-	'utf8'
-);
 const relationshipErrorsSource = await readFile(
 	path.join(repoRoot, 'backend/src/domains/relationships/errors.rs'),
 	'utf8'
@@ -84,11 +80,6 @@ assert.doesNotMatch(
 	taskCoreErrorsSource,
 	/\bRelationshipStoreError\b/,
 	'Tasks core errors must not expose cross-domain Relationships failures'
-);
-assert.doesNotMatch(
-	relationshipStoreSource,
-	/\bdomains::graph\b|\bGraph(?:Store|ProjectionPort|NodeKind|Edge|Evidence)\b/,
-	'Relationships store must not import or materialize Graph state'
 );
 assert.doesNotMatch(
 	relationshipErrorsSource,

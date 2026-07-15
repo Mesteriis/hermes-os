@@ -6,8 +6,11 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 
 use super::errors::PersonaMemoryError;
-use crate::domains::personas::core::{link_persona_entity, link_persona_entity_in_transaction};
-use crate::engines::timeline::{TimelineEngine, TimelineEventDraft};
+use crate::domains::personas::core::evidence::{
+    link_persona_entity, link_persona_entity_in_transaction,
+};
+use crate::engines::timeline::TimelineEngine;
+use crate::engines::timeline::models::TimelineEventDraft;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RelationshipEvent {

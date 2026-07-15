@@ -1,10 +1,10 @@
 use hermes_backend_testkit::context::TestContext;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hermes_hub_backend::domains::documents::core::{
-    DocumentImportError, DocumentImportStore, NewDocumentImport,
-};
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::domains::documents::core::errors::DocumentImportError;
+use hermes_hub_backend::domains::documents::core::models::NewDocumentImport;
+use hermes_hub_backend::domains::documents::core::store::DocumentImportStore;
+use hermes_hub_backend::platform::storage::database::Database;
 
 #[tokio::test]
 async fn document_import_stores_markdown_text_against_postgres() {

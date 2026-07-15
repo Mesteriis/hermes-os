@@ -4,9 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub(crate) use axum::Router;
 pub(crate) use axum::body::{Body, to_bytes};
 pub(crate) use axum::http::{Method, Request, StatusCode, header};
-pub(crate) use hermes_hub_backend::app::{build_router, build_router_with_database};
-pub(crate) use hermes_hub_backend::platform::config::AppConfig;
-pub(crate) use hermes_hub_backend::platform::storage::Database;
+pub(crate) use hermes_hub_backend::app::router::{build_router, build_router_with_database};
+pub(crate) use hermes_hub_backend::platform::config::app_config::AppConfig;
+pub(crate) use hermes_hub_backend::platform::storage::database::Database;
 pub(crate) use serde_json::{Value, json};
 pub(crate) use tower::ServiceExt;
 

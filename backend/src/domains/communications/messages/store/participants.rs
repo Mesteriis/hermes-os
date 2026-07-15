@@ -2,9 +2,9 @@ use serde_json::json;
 use sqlx::Row;
 
 use crate::domains::communications::evidence::link_mail_entity_in_transaction;
-use crate::domains::communications::messages::{
-    MessageProjectionError, MessageProjectionStore, ProjectedMessage,
-};
+use crate::domains::communications::messages::errors::MessageProjectionError;
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::communications::messages::store::MessageProjectionStore;
 
 impl MessageProjectionStore {
     pub async fn upsert_email_participant(

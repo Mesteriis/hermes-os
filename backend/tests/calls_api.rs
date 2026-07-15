@@ -6,9 +6,9 @@ use axum::http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use hermes_hub_backend::app::{build_router, build_router_with_database};
-use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::app::router::{build_router, build_router_with_database};
+use hermes_hub_backend::platform::config::app_config::AppConfig;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const TOKEN: &str = "calls-test-token";
 

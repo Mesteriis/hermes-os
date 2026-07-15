@@ -1,4 +1,4 @@
-use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
+use hermes_events_api::NewEventEnvelope;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
@@ -11,7 +11,7 @@ use sqlx::{Row, Transaction};
 use thiserror::Error;
 
 use crate::domains::communications::evidence::{link_mail_entity_in_transaction, merge_metadata};
-use crate::domains::communications::messages::{LocalMessageState, WorkflowState};
+use crate::domains::communications::messages::states::{LocalMessageState, WorkflowState};
 use crate::domains::communications::saved_search_counts::{
     count_messages_for_saved_search, load_message_counts_for_saved_searches,
 };

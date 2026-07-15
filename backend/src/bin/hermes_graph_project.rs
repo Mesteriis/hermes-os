@@ -1,6 +1,7 @@
-use hermes_hub_backend::domains::graph::core::{GraphCount, GraphStore, GraphSummary};
-use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_graph_api::{GraphCount, GraphSummary, GraphSummaryQueryPort};
+use hermes_graph_postgres::GraphPostgresSummaryQuery;
+use hermes_hub_backend::platform::config::app_config::AppConfig;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::graph_projection::models::GraphProjectionReport;
 use hermes_hub_backend::workflows::graph_projection::service::GraphProjectionService;
 use serde::Serialize;
@@ -8,7 +9,7 @@ use thiserror::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    hermes_hub_backend::app::init_tracing();
+    hermes_hub_backend::app::router::init_tracing();
 
     let config = AppConfig::from_env()?;
     let database_url = config
@@ -23,7 +24,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let projection = GraphProjectionService::new(pool.clone())
         .project_from_v1()
         .await?;
-    let summary = GraphStore::new(pool).summary().await?;
+    let summary = GraphPostgresSummaryQuery::new(pool)
+        .summary()
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()))?;
 
     println!(
         "{}",

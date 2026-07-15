@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-use crate::domains::graph::core::RelationshipType;
+use crate::domains::graph::core::models::RelationshipType;
 
 /// Counts deterministic projection operations attempted during a V1 graph projection run.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]

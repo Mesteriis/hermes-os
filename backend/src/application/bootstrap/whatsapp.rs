@@ -10,7 +10,7 @@ use hermes_desktop_runtime::{
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
-use super::{ApplicationBootstrapContext, host_vault_is_unlocked, runtime_allows_processing};
+use super::{ApplicationBootstrapContext, runtime_allows_processing};
 
 static WHATSAPP_RUNTIME_EVENT_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));

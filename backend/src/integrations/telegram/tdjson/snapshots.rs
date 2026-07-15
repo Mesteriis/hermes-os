@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
-use crate::integrations::telegram::client::{TelegramChatKind, TelegramDeliveryState};
+use crate::integrations::telegram::client::models::chats::TelegramChatKind;
+use crate::integrations::telegram::client::models::messages::TelegramDeliveryState;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TelegramTdlibTopicSnapshot {

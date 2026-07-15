@@ -1,19 +1,19 @@
 mod body;
 mod encoded_words;
 mod encoding;
-mod errors;
+pub mod errors;
 mod headers;
-mod models;
+pub mod models;
 mod raw_payload;
 mod redaction;
 mod rfc822;
 mod text;
 
 use crate::domains::communications::sources::FixtureCommunicationSourceMessage;
-use crate::platform::communications::EmailSyncBatch;
+use hermes_communications_api::email_sync::EmailSyncBatch;
 
-pub use self::errors::EmailFixtureExportError;
-pub use self::models::{EmailFixtureExportOptions, EmailFixturePrivacyMode};
+use self::errors::EmailFixtureExportError;
+use self::models::{EmailFixtureExportOptions, EmailFixturePrivacyMode};
 use self::raw_payload::raw_rfc822_bytes;
 use self::redaction::redact_message;
 use self::rfc822::parse_rfc822_message;

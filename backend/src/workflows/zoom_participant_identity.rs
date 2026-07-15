@@ -4,7 +4,8 @@ use serde_json::Value;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::personas::identity::{PersonaIdentityError, PersonaIdentityReviewPort};
+use crate::domains::personas::identity::errors::PersonaIdentityError;
+use crate::domains::personas::identity::ports::PersonaIdentityReviewPort;
 use crate::platform::events::bus::zoom_event_types;
 use hermes_events_postgres::errors::EventStoreError;
 

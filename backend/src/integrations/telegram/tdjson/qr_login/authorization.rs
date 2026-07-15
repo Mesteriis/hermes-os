@@ -1,13 +1,16 @@
 use serde_json::{Value, json};
 
-use crate::integrations::telegram::client::{TelegramError, TelegramQrLoginStatus};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::qr_login::TelegramQrLoginStatus;
 
-use super::super::parsing::{authorization_state, tdlib_error_message};
-use super::super::qr_login_support::{
-    QR_POLL_AFTER_MS, fetch_authorized_user_identity, mark_pending_ready_status,
-    mark_pending_status, password_hint, qr_waiting_response, state_allows_qr_request,
-    upsert_pending_response,
+use super::super::parsing::events::{authorization_state, tdlib_error_message};
+use super::super::qr_login_support::authorization::{password_hint, state_allows_qr_request};
+use super::super::qr_login_support::constants::QR_POLL_AFTER_MS;
+use super::super::qr_login_support::identity::fetch_authorized_user_identity;
+use super::super::qr_login_support::pending::{
+    mark_pending_ready_status, mark_pending_status, upsert_pending_response,
 };
+use super::super::qr_login_support::responses::qr_waiting_response;
 use super::tdlib_commands::{close_tdlib_session, send_tdlib_parameters};
 use super::worker::handle_tdlib_setup_event;
 use super::worker_state::{QrLoginEventOutcome, QrLoginRuntimeState, QrLoginWorkerContext};

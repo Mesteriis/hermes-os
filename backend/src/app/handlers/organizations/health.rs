@@ -3,7 +3,8 @@ use axum::extract::{Path, State};
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::domains::organizations::health::{OrgHealthStore, OrgRisk, OrgRiskStore};
 use crate::domains::organizations::service::OrganizationCommandService;
 

@@ -1,11 +1,13 @@
 use super::super::*;
+use crate::app::handlers::communications::legal_export::{SendRequest, SendResponse};
 use crate::app::provider_runtime_handlers::whatsapp::messages::{
     post_whatsapp_command_forward, post_whatsapp_command_reply,
 };
-use crate::application::communication_provider_writes::{
+use crate::application::communication_provider_models::{
     CommunicationForwardRequest, CommunicationProviderMessageCommandResponse,
-    CommunicationReplyRequest, new_telegram_command_id,
+    CommunicationReplyRequest,
 };
+use crate::application::communication_provider_writes::new_telegram_command_id;
 use crate::domains::communications::command_service::CommunicationCommandService;
 use crate::integrations::whatsapp::runtime::contracts::{
     WhatsAppForwardRequest, WhatsAppProviderCommandResponse, WhatsAppReplyRequest,

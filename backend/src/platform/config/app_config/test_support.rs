@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::platform::config::ConfigError;
+use crate::platform::config::errors::ConfigError;
 
 use super::AppConfig;
 use super::env::apply_config_pair;
@@ -76,7 +76,7 @@ impl AppConfig {
     ) -> Self {
         self.telegram_api_id = Some(api_id);
         self.telegram_api_hash = Some(
-            crate::platform::secrets::ResolvedSecret::new(api_hash.as_ref())
+            crate::platform::secrets::models::ResolvedSecret::new(api_hash.as_ref())
                 .expect("test Telegram API hash must be valid"),
         );
         self

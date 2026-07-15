@@ -5,7 +5,7 @@ use sqlx::Row;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::domains::personas::core::link_persona_entity_in_transaction;
+use crate::domains::personas::core::evidence::link_persona_entity_in_transaction;
 use crate::domains::personas::enrichment::PERSONA_TRUST_SCORE_CHANGED_EVENT_TYPE;
 use crate::domains::personas::intelligence::CommunicationFingerprint;
 use hermes_events_postgres::errors::EventStoreError;

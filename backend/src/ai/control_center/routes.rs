@@ -1,4 +1,4 @@
-use crate::ai::core::AI_EMBEDDING_DIMENSION;
+use crate::ai::core::constants::AI_EMBEDDING_DIMENSION;
 
 use super::errors::AiControlCenterError;
 use super::evidence::capture_model_route_observation;

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use hermes_communications_api::accounts::CommunicationProviderKind;
-use hermes_hub_backend::platform::secrets::ResolvedSecret;
+use hermes_hub_backend::platform::secrets::models::ResolvedSecret;
 
 use crate::env::{first_env, optional_env, parse_bool, parse_port, parse_usize};
 use crate::errors::DevEmailSyncError;

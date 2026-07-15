@@ -1,3 +1,6 @@
+use crate::integrations::telegram::runtime::models::{
+    TelegramHistorySyncMode, TelegramHistorySyncRequest, TelegramHistorySyncResponse,
+};
 use serde_json::json;
 
 use super::*;

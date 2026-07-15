@@ -3,8 +3,9 @@ use hermes_backend_testkit::context::TestContext;
 use serde_json::json;
 
 use super::*;
-use crate::integrations::telegram::client::{
-    NewTelegramMessage, TelegramChatKind, TelegramDeliveryState,
+use crate::integrations::telegram::client::models::chats::TelegramChatKind;
+use crate::integrations::telegram::client::models::messages::{
+    NewTelegramMessage, TelegramDeliveryState,
 };
 
 async fn seed_runtime_account(pool: &sqlx::PgPool, account_id: &str, external: &str) {

@@ -1,10 +1,11 @@
 use chrono::{TimeZone, Utc};
 use hermes_backend_testkit::context::TestContext;
 use hermes_events_api::EventEnvelope;
-use hermes_hub_backend::domains::calendar::core::EventParticipantPort;
-use hermes_hub_backend::domains::calendar::events::{CalendarEventStore, NewCalendarEvent};
+use hermes_hub_backend::domains::calendar::events::event_store::CalendarEventStore;
+use hermes_hub_backend::domains::calendar::events::models::NewCalendarEvent;
+use hermes_hub_backend::domains::calendar::ports::EventParticipantPort;
 use hermes_hub_backend::platform::events::bus::yandex_telemost_event_types;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::yandex_telemost_calendar_matching::project_yandex_telemost_calendar_matching;
 use serde_json::json;
 

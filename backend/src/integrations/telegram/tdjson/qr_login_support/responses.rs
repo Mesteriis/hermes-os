@@ -1,5 +1,6 @@
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramQrLoginStatus, TelegramQrLoginStatusResponse,
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::qr_login::{
+    TelegramQrLoginStatus, TelegramQrLoginStatusResponse,
 };
 
 use super::constants::QR_POLL_AFTER_MS;

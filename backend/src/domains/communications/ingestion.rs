@@ -1,7 +1,7 @@
+use super::messages::errors::MessageProjectionError;
+use crate::domains::communications::messages::models::ProjectedMessage;
 use crate::domains::communications::messages::port::MessageProjectionPort;
-use crate::domains::communications::messages::{
-    MessageProjectionError, ProjectedMessage, WorkflowState,
-};
+use crate::domains::communications::messages::states::WorkflowState;
 
 const URGENT_WORDS: &[&str] = &[
     "urgent",
@@ -168,7 +168,7 @@ fn contains_any(value: &str, needles: &[&str]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domains::communications::messages::LocalMessageState;
+    use crate::domains::communications::messages::states::LocalMessageState;
     use chrono::Utc;
     use serde_json::json;
 

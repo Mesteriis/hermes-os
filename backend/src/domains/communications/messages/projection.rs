@@ -1,7 +1,7 @@
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
-use crate::domains::communications::storage::LocalCommunicationBlobStore;
-use crate::platform::communications::imap_mailbox_stream_id;
+use crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use crate::platform::communications::email_sync::imap_mailbox_stream_id;
 use crate::platform::communications::rfc822::models::ParsedCommunicationSourceMessage;
 use crate::platform::communications::rfc822::parser::parse_rfc822_message;
 use hermes_communications_api::evidence::StoredRawCommunicationRecord;
@@ -38,7 +38,7 @@ pub async fn project_raw_email_message(
         message_metadata: raw_email_message_metadata(raw),
     };
 
-    store.upsert_message(&message).await
+    store.upsert_email_message(&message).await
 }
 
 pub async fn project_raw_email_message_from_blob(
@@ -88,7 +88,7 @@ pub async fn project_parsed_raw_email_message(
         message_metadata: raw_email_message_metadata_from_parsed(raw, parsed),
     };
 
-    store.upsert_message(&message).await
+    store.upsert_email_message(&message).await
 }
 
 fn raw_email_message_metadata(raw: &StoredRawCommunicationRecord) -> Value {

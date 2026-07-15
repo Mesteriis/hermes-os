@@ -10,7 +10,7 @@ pub enum PersonaMemoryError {
     #[error(transparent)]
     Memory(#[from] MemoryEngineError),
     #[error(transparent)]
-    Timeline(#[from] crate::engines::timeline::TimelineEngineError),
+    Timeline(#[from] crate::engines::timeline::errors::TimelineEngineError),
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),
     #[error("fact not found")]

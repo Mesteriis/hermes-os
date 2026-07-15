@@ -1,9 +1,9 @@
 use thiserror::Error;
 
-use crate::ai::control_center::AiControlCenterError;
-use crate::domains::calendar::events::CalendarError;
-use crate::platform::secrets::SecretReferenceError;
-use crate::vault::HostVaultError;
+use crate::ai::control_center::errors::AiControlCenterError;
+use crate::domains::calendar::events::errors::CalendarError;
+use crate::platform::secrets::errors::SecretReferenceError;
+use crate::vault::errors::HostVaultError;
 use hermes_communications_postgres::errors::CommunicationIngestionError;
 
 #[derive(Debug, Error)]

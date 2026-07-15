@@ -3,10 +3,10 @@ use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Transaction};
 
 use super::errors::{DocumentImportError, DocumentImportWithProcessingError};
-use super::link_document_entity_in_transaction;
+use super::evidence::link_document_entity_in_transaction;
 use super::models::{ImportedDocument, ImportedDocumentWithProcessing, NewDocumentImport};
 use super::rows::row_to_imported_document;
-use crate::domains::documents::processing::DocumentProcessingStore;
+use crate::domains::documents::processing::store::DocumentProcessingStore;
 use chrono::Utc;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;

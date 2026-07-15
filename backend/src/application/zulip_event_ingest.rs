@@ -1,28 +1,34 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use chrono::{DateTime, Utc};
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
-use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, ProviderAccount, ProviderAccountLookupPort,
+    ProviderSecretBindingLookupPort,
+};
+use hermes_communications_api::evidence::{
+    CommunicationEvidencePort, CommunicationEvidencePortError, NewIngestionCheckpoint,
+};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use crate::domains::communications::credentials::ProviderCredentialReader;
 use crate::domains::signal_hub::store::SignalHubError;
-use crate::domains::signal_hub::zulip::dispatch_zulip_raw_signal;
-use hermes_communications_postgres::errors::CommunicationIngestionError;
+use crate::domains::signal_hub::zulip::PostgresZulipSignalDispatch;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 
-use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
-use hermes_communications_api::evidence::NewIngestionCheckpoint;
+use crate::platform::secrets::resolver::SecretResolver;
 use hermes_provider_orchestration::{
-    ProviderObservationOrchestrationError, record_provider_observation,
+    ProviderObservationOrchestrationError, record_and_dispatch_provider_observation,
 };
 use hermes_provider_zulip::client::{ZulipApiClient, ZulipClientConfig, ZulipClientError};
 use hermes_provider_zulip::event_mapper::{
     ZulipEventMappingContext, ZulipEventMappingError, map_zulip_event_to_observation,
 };
+use hermes_signal_hub_api::raw_signals::{ProviderRawSignalPort, RawSignalPortError};
 
 const ZULIP_EVENT_QUEUE_STREAM_ID: &str = "zulip:event_queue";
 const ZULIP_EVENT_TYPES: &[&str] = &["message", "reaction", "update_message", "delete_message"];
@@ -39,12 +45,20 @@ pub struct ZulipEventIngestReport {
 }
 
 pub struct ZulipEventIngestWorker<R> {
-    pool: PgPool,
-    provider_account_store: CommunicationProviderAccountStore,
-    provider_secret_binding_store: CommunicationProviderSecretBindingStore,
+    signal_dispatch: std::sync::Arc<dyn ProviderRawSignalPort>,
+    provider_account_store: std::sync::Arc<dyn ProviderAccountLookupPort>,
+    provider_secret_binding_store: std::sync::Arc<dyn ProviderSecretBindingLookupPort>,
     secret_store: SecretReferenceStore,
-    ingestion_store: CommunicationIngestionStore,
+    ingestion_store: std::sync::Arc<dyn CommunicationEvidencePort>,
     resolver: R,
+}
+
+pub struct ZulipEventIngestPorts {
+    pub signal_dispatch: std::sync::Arc<dyn ProviderRawSignalPort>,
+    pub provider_account_store: std::sync::Arc<dyn ProviderAccountLookupPort>,
+    pub provider_secret_binding_store: std::sync::Arc<dyn ProviderSecretBindingLookupPort>,
+    pub secret_store: SecretReferenceStore,
+    pub ingestion_store: std::sync::Arc<dyn CommunicationEvidencePort>,
 }
 
 impl<R> ZulipEventIngestWorker<R>
@@ -52,14 +66,27 @@ where
     R: SecretResolver,
 {
     pub fn new(pool: PgPool, resolver: R) -> Self {
-        Self {
-            provider_account_store: CommunicationProviderAccountStore::new(pool.clone()),
-            provider_secret_binding_store: CommunicationProviderSecretBindingStore::new(
+        let ports = ZulipEventIngestPorts {
+            signal_dispatch: std::sync::Arc::new(PostgresZulipSignalDispatch::new(pool.clone())),
+            provider_account_store: std::sync::Arc::new(CommunicationProviderAccountStore::new(
                 pool.clone(),
+            )),
+            provider_secret_binding_store: std::sync::Arc::new(
+                CommunicationProviderSecretBindingStore::new(pool.clone()),
             ),
             secret_store: SecretReferenceStore::new(pool.clone()),
-            ingestion_store: CommunicationIngestionStore::new(pool.clone()),
-            pool,
+            ingestion_store: std::sync::Arc::new(CommunicationIngestionStore::new(pool.clone())),
+        };
+        Self::with_ports(ports, resolver)
+    }
+
+    pub fn with_ports(ports: ZulipEventIngestPorts, resolver: R) -> Self {
+        Self {
+            signal_dispatch: ports.signal_dispatch,
+            provider_account_store: ports.provider_account_store,
+            provider_secret_binding_store: ports.provider_secret_binding_store,
+            secret_store: ports.secret_store,
+            ingestion_store: ports.ingestion_store,
             resolver,
         }
     }
@@ -158,19 +185,16 @@ where
 
             let mapping_context = ZulipEventMappingContext::new(&account.account_id, base_url, now)
                 .with_import_batch_id(format!("zulip-event-queue:{}", queue_state.queue_id));
-            let raw_record = record_provider_observation(
-                &self.ingestion_store,
+            if record_and_dispatch_provider_observation(
+                self.ingestion_store.as_ref(),
+                self.signal_dispatch.as_ref(),
                 map_zulip_event_to_observation(&event, &mapping_context)?,
             )
-            .await?;
-            report.raw_records_recorded += 1;
-
-            if dispatch_zulip_raw_signal(self.pool.clone(), &raw_record)
-                .await?
-                .is_some()
+            .await?
             {
                 report.accepted_signals += 1;
             }
+            report.raw_records_recorded += 1;
         }
 
         self.save_queue_state(&account.account_id, &queue_state)
@@ -366,6 +390,8 @@ pub enum ZulipEventIngestWorkerError {
         account_id: String,
         provider_kind: &'static str,
     },
+    #[error(transparent)]
+    AccountPort(#[from] hermes_communications_api::accounts::ProviderAccountPortError),
     #[error("Zulip provider account `{account_id}` has invalid `{field}` config")]
     InvalidAccountConfig {
         account_id: String,
@@ -387,7 +413,9 @@ pub enum ZulipEventIngestWorkerError {
     #[error("Zulip API response was invalid for account `{account_id}`")]
     InvalidProviderResponse { account_id: String },
     #[error(transparent)]
-    Communication(#[from] CommunicationIngestionError),
+    EvidencePort(#[from] CommunicationEvidencePortError),
+    #[error(transparent)]
+    SignalPort(#[from] RawSignalPortError),
     #[error(transparent)]
     ProviderObservation(#[from] ProviderObservationOrchestrationError),
     #[error(transparent)]

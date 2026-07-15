@@ -121,7 +121,7 @@ impl TelegramCapabilitiesResponse {
 
     fn build(config: &AppConfig, account: Option<&ProviderAccount>) -> Self {
         let app_creds = config.telegram_api_id().is_some() && config.telegram_api_hash().is_some();
-        let tdjson_ok = tdjson::runtime_available(config.tdjson_path());
+        let tdjson_ok = tdjson::client::runtime_available(config.tdjson_path());
         let qr_ready = app_creds && tdjson_ok;
         let bot_ok = false; // Bot API runtime not implemented per ADR-0091
         let account_scope = account.map(TelegramCapabilityAccountScope::from_account);

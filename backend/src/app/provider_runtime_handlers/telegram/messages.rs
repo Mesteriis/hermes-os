@@ -6,18 +6,10 @@ use serde_json::Value;
 
 use super::helpers::ensure_telegram_account_operation_allowed;
 use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
     ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
+    stores::{domain_stores::*, integration_stores::*},
 };
+use crate::app::error::types::ApiError;
 use crate::app::provider_runtime_handlers::telegram::chats::canonical_communication_conversation;
 use crate::app::provider_runtime_handlers::whatsapp::conversations::{
     WhatsAppConversationCommandApiRequest, post_whatsapp_conversation_archive,
@@ -29,30 +21,27 @@ use crate::app::provider_runtime_handlers::whatsapp::conversations::{
 use crate::app::provider_runtime_handlers::whatsapp::messages::{
     post_whatsapp_command_delete, post_whatsapp_command_edit, post_whatsapp_command_send_text,
 };
-use crate::app::{ApiError, AppState};
-use crate::application::communication_provider_writes::{
+use crate::app::state::AppState;
+use crate::application::communication_provider_models::{
     CommunicationConversationMessageRequest, CommunicationProviderMessageCommandResponse,
 };
-use crate::application::telegram_runtime;
+use crate::integrations::telegram::client::models::messages::{
+    NewTelegramMessage, TelegramMessageIngestResult,
+};
+
 use crate::integrations::telegram::client::models::messages::{
     TelegramDeleteRequest, TelegramEditRequest, TelegramForwardRequest, TelegramLifecycleResponse,
     TelegramManualSendRequest, TelegramManualSendResponse, TelegramMessageTombstoneListResponse,
     TelegramMessageVersionListResponse, TelegramPinRequest, TelegramReplyRequest,
     TelegramRestoreVisibilityRequest,
 };
-use crate::integrations::telegram::client::{NewTelegramMessage, TelegramMessageIngestResult};
 use crate::integrations::whatsapp::runtime::contracts::{
     WhatsAppDeleteRequest, WhatsAppEditRequest, WhatsAppProviderCommandResponse,
     WhatsAppTextSendRequest,
 };
 
-mod mark_read;
-mod reactions;
-
-pub(crate) use mark_read::post_telegram_message_mark_read;
-pub(crate) use reactions::{
-    delete_telegram_reaction, get_telegram_reactions, post_telegram_reaction,
-};
+pub(crate) mod mark_read;
+pub(crate) mod reactions;
 
 pub(crate) async fn post_telegram_fixture_message(
     State(state): State<AppState>,
@@ -731,7 +720,7 @@ pub(crate) async fn get_telegram_message_tombstones(
     Ok(Json(response))
 }
 
-use crate::integrations::telegram::client::models::messages::{
+use crate::integrations::telegram::client::models::message_references::{
     TelegramForwardChainResponse, TelegramReplyChainResponse,
 };
 

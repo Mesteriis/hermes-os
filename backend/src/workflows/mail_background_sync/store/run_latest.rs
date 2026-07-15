@@ -1,5 +1,5 @@
 use super::super::errors::MailSyncError;
-use super::super::models::MailSyncRunResponse;
+use super::super::models::runs::MailSyncRunResponse;
 use super::super::rows::row_to_run;
 use super::MailSyncStore;
 

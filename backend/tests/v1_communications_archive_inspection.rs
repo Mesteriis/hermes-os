@@ -10,19 +10,21 @@ use tower::ServiceExt;
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
+use hermes_hub_backend::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use hermes_hub_backend::domains::communications::storage::models::{
+    CommunicationAttachmentDisposition, NewCommunicationAttachment, NewCommunicationBlob,
 };
-use hermes_hub_backend::domains::communications::storage::{
-    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
-    CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachment,
-    NewCommunicationBlob,
+use hermes_hub_backend::domains::communications::storage::scanner::{
+    AttachmentSafetyScanReport, AttachmentSafetyScanStatus,
 };
+use hermes_hub_backend::domains::communications::storage::store::CommunicationStorageStore;
 
 use hermes_backend_testkit::context::TestContext;
 use hermes_hub_backend::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const T: &str = "v1comms-archive-inspection-test-token";
 

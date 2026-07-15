@@ -1,7 +1,7 @@
-use crate::domains::communications::messages::{MessageProjectionError, MessageProjectionStore};
-use crate::domains::communications::storage::{
-    CommunicationStorageError, CommunicationStorageStore,
-};
+use crate::domains::communications::messages::errors::MessageProjectionError;
+use crate::domains::communications::messages::store::MessageProjectionStore;
+use crate::domains::communications::storage::errors::CommunicationStorageError;
+use crate::domains::communications::storage::store::CommunicationStorageStore;
 
 #[derive(Debug, Clone)]
 pub struct CommunicationExport {

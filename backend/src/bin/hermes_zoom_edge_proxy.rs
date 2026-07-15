@@ -66,7 +66,7 @@ struct ErrorResponse {
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
-    hermes_hub_backend::app::init_tracing();
+    hermes_hub_backend::app::router::init_tracing();
     let flow_id = std::env::var("HERMES_FLOW_ID").unwrap_or_else(|_| "zoom-edge-proxy".to_owned());
     let runtime_span = tracing::info_span!("hermes_zoom_edge_proxy", flow_id = %flow_id);
 

@@ -27,7 +27,7 @@ pub(crate) async fn post_event_agenda(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
     Json(req): Json<SetAgendaRequest>,
-) -> Result<Json<crate::domains::calendar::core::EventAgenda>, ApiError> {
+) -> Result<Json<crate::domains::calendar::core::agendas::EventAgenda>, ApiError> {
     let requested_source = req.source.as_deref().unwrap_or("manual");
     let items = req.items;
     let pool = state

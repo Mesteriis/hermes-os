@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::ai::core::AI_EMBEDDING_DIMENSION;
+use crate::ai::core::constants::AI_EMBEDDING_DIMENSION;
 
 use super::models::{AiCapabilitySlot, AiProviderAccount, AiProviderPreset};
 use super::validation::CAPABILITY_SLOTS;

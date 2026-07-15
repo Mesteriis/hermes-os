@@ -3,18 +3,17 @@ use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Transaction};
 use thiserror::Error;
 
-use crate::domains::graph::core::{
-    GraphEvidenceSourceKind, GraphNodeKind, GraphReviewState, GraphStore, GraphStoreError,
-    NewGraphEdge, NewGraphEvidence, NewGraphNode, RelationshipType,
+use crate::domains::graph::core::models::{
+    GraphEvidenceSourceKind, GraphReviewState, NewGraphEdge, NewGraphEvidence, NewGraphNode,
+    RelationshipType,
 };
-use crate::domains::relationships::{
-    errors::RelationshipStoreError,
-    models::{
-        NewRelationship, NewRelationshipEvidence, Relationship, RelationshipEntityKind,
-        RelationshipReviewState,
-    },
-    store::RelationshipStore,
+use crate::domains::graph::ports::GraphProjectionPort;
+use crate::domains::relationships::models::{
+    NewRelationship, NewRelationshipEvidence, Relationship, RelationshipEntityKind,
+    RelationshipReviewState,
 };
+use crate::platform::graph::GraphNodeKind;
+use hermes_relationships_postgres::RelationshipPostgresQuery;
 
 /// Coordinates two bounded contexts in one PostgreSQL transaction. Relationship
 /// persistence remains owned by Relationships; Graph owns the materialized
@@ -47,12 +46,15 @@ impl RelationshipGraphCoordinator {
         relationship: &NewRelationship,
         evidence: &[NewRelationshipEvidence],
     ) -> Result<Relationship, RelationshipGraphCoordinatorError> {
-        let stored = RelationshipStore::upsert_with_evidence_in_transaction(
+        let stored = RelationshipPostgresQuery::upsert_in_transaction(
             transaction,
-            relationship,
-            evidence,
+            &to_api_relationship(relationship),
+            &evidence.iter().map(to_api_evidence).collect::<Vec<_>>(),
         )
-        .await?;
+        .await
+        .map_err(|error| RelationshipGraphCoordinatorError::RelationshipWrite(error.to_string()))?;
+        let stored = from_api_relationship(stored)
+            .map_err(RelationshipGraphCoordinatorError::RelationshipWrite)?;
         materialize_relationship_graph_in_transaction(transaction, &stored, evidence).await?;
         Ok(stored)
     }
@@ -65,14 +67,17 @@ impl RelationshipGraphCoordinator {
         metadata: Option<Value>,
     ) -> Result<Relationship, RelationshipGraphCoordinatorError> {
         let mut transaction = self.pool.begin().await?;
-        let relationship = RelationshipStore::set_review_state_in_transaction(
+        let relationship = RelationshipPostgresQuery::set_review_in_transaction(
             &mut transaction,
             relationship_id,
-            review_state,
+            review_state.as_str(),
             observation_id,
             metadata.clone(),
         )
-        .await?;
+        .await
+        .map_err(|error| RelationshipGraphCoordinatorError::RelationshipWrite(error.to_string()))?;
+        let relationship = from_api_relationship(relationship)
+            .map_err(RelationshipGraphCoordinatorError::RelationshipWrite)?;
         materialize_relationship_graph_review_in_transaction(
             &mut transaction,
             &relationship,
@@ -139,7 +144,7 @@ async fn materialize_relationship_graph_with_evidence_in_transaction(
     relationship: &Relationship,
     graph_evidence: &[NewGraphEvidence],
 ) -> Result<(), RelationshipGraphCoordinatorError> {
-    let source_node = GraphStore::upsert_node_in_transaction(
+    let source_node = GraphProjectionPort::upsert_node_in_transaction(
         transaction,
         &NewGraphNode::new(
             graph_node_kind(relationship.source_entity_kind),
@@ -152,7 +157,7 @@ async fn materialize_relationship_graph_with_evidence_in_transaction(
         })),
     )
     .await?;
-    let target_node = GraphStore::upsert_node_in_transaction(
+    let target_node = GraphProjectionPort::upsert_node_in_transaction(
         transaction,
         &NewGraphNode::new(
             graph_node_kind(relationship.target_entity_kind),
@@ -166,7 +171,7 @@ async fn materialize_relationship_graph_with_evidence_in_transaction(
     )
     .await?;
 
-    GraphStore::upsert_edge_with_evidence_in_transaction(
+    GraphProjectionPort::upsert_edge_with_evidence_in_transaction(
         transaction,
         &NewGraphEdge::new(
             source_node.node_id,
@@ -245,8 +250,116 @@ pub enum RelationshipGraphCoordinatorError {
     Sqlx(#[from] sqlx::Error),
 
     #[error(transparent)]
-    Relationship(#[from] RelationshipStoreError),
+    Graph(#[from] crate::domains::graph::ports::GraphProjectionPortError),
 
-    #[error(transparent)]
-    Graph(#[from] GraphStoreError),
+    #[error("relationship write failed: {0}")]
+    RelationshipWrite(String),
+}
+
+fn to_api_relationship(
+    relationship: &NewRelationship,
+) -> hermes_relationships_api::RelationshipUpsert {
+    hermes_relationships_api::RelationshipUpsert {
+        relationship_id: crate::domains::relationships::ids::relationship_id(
+            relationship.source_entity_kind,
+            &relationship.source_entity_id,
+            &relationship.relationship_type,
+            relationship.target_entity_kind,
+            &relationship.target_entity_id,
+        ),
+        source_entity_kind: api_entity_kind(relationship.source_entity_kind),
+        source_entity_id: relationship.source_entity_id.clone(),
+        target_entity_kind: api_entity_kind(relationship.target_entity_kind),
+        target_entity_id: relationship.target_entity_id.clone(),
+        relationship_type: relationship.relationship_type.clone(),
+        trust_score: relationship.trust_score,
+        strength_score: relationship.strength_score,
+        confidence: relationship.confidence,
+        review_state: api_review_state(relationship.review_state),
+        valid_from: relationship.valid_from,
+        valid_to: relationship.valid_to,
+        metadata: relationship.metadata.clone(),
+    }
+}
+
+fn to_api_evidence(
+    evidence: &NewRelationshipEvidence,
+) -> hermes_relationships_api::RelationshipEvidence {
+    hermes_relationships_api::RelationshipEvidence {
+        source_kind: match evidence.source_kind.as_str() {
+            "observation" => hermes_relationships_api::RelationshipEvidenceSourceKind::Observation,
+            "communication" => {
+                hermes_relationships_api::RelationshipEvidenceSourceKind::Communication
+            }
+            "document" => hermes_relationships_api::RelationshipEvidenceSourceKind::Document,
+            "event" => hermes_relationships_api::RelationshipEvidenceSourceKind::Event,
+            "memory" => hermes_relationships_api::RelationshipEvidenceSourceKind::Memory,
+            "knowledge" => hermes_relationships_api::RelationshipEvidenceSourceKind::Knowledge,
+            "decision" => hermes_relationships_api::RelationshipEvidenceSourceKind::Decision,
+            "obligation" => hermes_relationships_api::RelationshipEvidenceSourceKind::Obligation,
+            "task" => hermes_relationships_api::RelationshipEvidenceSourceKind::Task,
+            "project" => hermes_relationships_api::RelationshipEvidenceSourceKind::Project,
+            "organization" => {
+                hermes_relationships_api::RelationshipEvidenceSourceKind::Organization
+            }
+            _ => hermes_relationships_api::RelationshipEvidenceSourceKind::Persona,
+        },
+        source_id: evidence.source_id.clone(),
+        observation_id: evidence.observation_id.clone(),
+        excerpt: evidence.excerpt.clone(),
+        metadata: evidence.metadata.clone(),
+    }
+}
+
+fn api_entity_kind(
+    kind: RelationshipEntityKind,
+) -> hermes_relationships_api::RelationshipEntityKind {
+    match kind.as_str() {
+        "persona" => hermes_relationships_api::RelationshipEntityKind::Persona,
+        "organization" => hermes_relationships_api::RelationshipEntityKind::Organization,
+        "project" => hermes_relationships_api::RelationshipEntityKind::Project,
+        "communication" => hermes_relationships_api::RelationshipEntityKind::Communication,
+        "document" => hermes_relationships_api::RelationshipEntityKind::Document,
+        "task" => hermes_relationships_api::RelationshipEntityKind::Task,
+        "event" => hermes_relationships_api::RelationshipEntityKind::Event,
+        "decision" => hermes_relationships_api::RelationshipEntityKind::Decision,
+        "obligation" => hermes_relationships_api::RelationshipEntityKind::Obligation,
+        _ => hermes_relationships_api::RelationshipEntityKind::Knowledge,
+    }
+}
+
+fn api_review_state(
+    state: RelationshipReviewState,
+) -> hermes_relationships_api::RelationshipReviewState {
+    match state.as_str() {
+        "system_accepted" => hermes_relationships_api::RelationshipReviewState::SystemAccepted,
+        "user_confirmed" => hermes_relationships_api::RelationshipReviewState::UserConfirmed,
+        "user_rejected" => hermes_relationships_api::RelationshipReviewState::UserRejected,
+        _ => hermes_relationships_api::RelationshipReviewState::Suggested,
+    }
+}
+
+fn from_api_relationship(
+    relationship: hermes_relationships_api::RelationshipRead,
+) -> Result<Relationship, String> {
+    Ok(Relationship {
+        relationship_id: relationship.relationship_id,
+        source_entity_kind: RelationshipEntityKind::parse(relationship.source_entity_kind)
+            .map_err(|e| e.to_string())?,
+        source_entity_id: relationship.source_entity_id,
+        target_entity_kind: RelationshipEntityKind::parse(relationship.target_entity_kind)
+            .map_err(|e| e.to_string())?,
+        target_entity_id: relationship.target_entity_id,
+        relationship_type: relationship.relationship_type,
+        trust_score: relationship.trust_score,
+        strength_score: relationship.strength_score,
+        confidence: relationship.confidence,
+        review_state: RelationshipReviewState::parse(relationship.review_state)
+            .map_err(|e| e.to_string())?,
+        valid_from: relationship.valid_from,
+        valid_to: relationship.valid_to,
+        metadata: relationship.metadata,
+        created_at: relationship.created_at,
+        updated_at: relationship.updated_at,
+    })
 }

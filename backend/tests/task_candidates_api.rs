@@ -11,15 +11,15 @@ use sqlx::postgres::PgPool;
 use tower::ServiceExt;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::{build_router, build_router_with_database};
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
-};
-use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::domains::tasks::candidates::TaskCandidateStore;
+use hermes_hub_backend::app::router::{build_router, build_router_with_database};
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
+use hermes_hub_backend::domains::documents::core::models::NewDocumentImport;
+use hermes_hub_backend::domains::documents::core::store::DocumentImportStore;
+use hermes_hub_backend::domains::tasks::candidates::store::TaskCandidateStore;
 
-use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::config::app_config::AppConfig;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const LOCAL_API_TOKEN: &str = "task-candidates-api-test-token";
 

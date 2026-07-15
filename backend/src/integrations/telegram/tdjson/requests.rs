@@ -4,7 +4,8 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use serde_json::{Value, json};
 
-use crate::integrations::telegram::client::{TelegramError, TelegramQrLoginStartRequest};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::qr_login::TelegramQrLoginStartRequest;
 
 use super::identifiers::safe_path_segment;
 

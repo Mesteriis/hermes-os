@@ -73,7 +73,7 @@ pub(crate) async fn get_gmail_oauth_callback(
         Ok(result) => {
             let account = match provider_account_or_not_found(&state, &result.account_id).await {
                 Ok(account) => account,
-                Err(error) => {
+                Err(_error) => {
                     tracing::error!("Gmail OAuth callback account lookup failed");
                     return gmail_oauth_callback_error_page(
                         StatusCode::INTERNAL_SERVER_ERROR,
@@ -81,7 +81,7 @@ pub(crate) async fn get_gmail_oauth_callback(
                     );
                 }
             };
-            if let Err(error) =
+            if let Err(_error) =
                 sync_provider_account_signal_connection(&state, &account, Some(&result.secret_ref))
                     .await
             {

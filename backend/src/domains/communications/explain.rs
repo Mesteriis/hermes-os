@@ -1,4 +1,4 @@
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::domains::communications::messages::models::ProjectedMessage;
 
 pub struct WhyImportantContext {
     pub reasons: Vec<String>,
@@ -93,7 +93,7 @@ pub fn smart_cc_suggestions(message: &ProjectedMessage) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domains::communications::messages::{LocalMessageState, WorkflowState};
+    use crate::domains::communications::messages::states::{LocalMessageState, WorkflowState};
     use chrono::Utc;
 
     fn test_message(subject: &str, body: &str, score: Option<i16>) -> ProjectedMessage {

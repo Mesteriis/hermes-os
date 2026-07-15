@@ -7,14 +7,14 @@ use hermes_communications_postgres::provider_store::{
 };
 use hermes_events_api::EventLogQuery;
 use hermes_events_postgres::store::EventStore;
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
 use hermes_hub_backend::integrations::zoom::client::{
     models::{ZoomAccountSetupRequest, ZoomMeetingObservationRequest, ZoomParticipantSnapshot},
     store::ZoomStore,
 };
-use hermes_hub_backend::platform::calls::CallIntelligenceStore;
+use hermes_hub_backend::platform::calls::store::CallIntelligenceStore;
 use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::review_inbox::project_persona_identity_review_event;
 use hermes_hub_backend::workflows::zoom_participant_identity::project_zoom_participant_identity;
 use serde_json::json;
@@ -48,7 +48,7 @@ async fn zoom_participant_identity_candidates_flow_into_review_inbox() {
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
         Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
         Arc::new(
-            hermes_hub_backend::domains::communications::storage::CommunicationStorageStore::new(
+            hermes_hub_backend::domains::communications::storage::store::CommunicationStorageStore::new(
                 pool.clone(),
             ),
         ),

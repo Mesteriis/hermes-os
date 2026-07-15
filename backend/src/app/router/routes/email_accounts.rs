@@ -1,4 +1,14 @@
-use super::support::*;
+use crate::app::handlers::communications::account_management::*;
+use crate::app::handlers::communications::account_provider_resources::{
+    get_v1_email_account_provider_resources, put_v1_email_account_provider_resource_mapping,
+};
+use crate::app::handlers::communications::account_setup::{
+    gmail_oauth::{post_gmail_oauth_complete, post_gmail_oauth_start},
+    imap::post_imap_account_setup,
+};
+use crate::app::state::AppState;
+use axum::Router;
+use axum::routing::{delete, get, post, put};
 
 pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
     router

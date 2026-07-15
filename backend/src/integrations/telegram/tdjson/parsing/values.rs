@@ -1,7 +1,7 @@
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::Value;
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
 pub(super) fn tdlib_string_id(value: &Value, field: &'static str) -> Result<String, TelegramError> {
     value

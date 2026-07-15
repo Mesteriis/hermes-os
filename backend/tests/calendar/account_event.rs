@@ -1,7 +1,10 @@
 use chrono::{Duration, Utc};
 use hermes_hub_backend::domains::calendar::events::{
-    CalendarAccountStore, CalendarAccountUpdate, CalendarEventListQuery, CalendarEventStore,
-    CalendarEventUpdate, CalendarSourceStore, NewCalendarEvent,
+    account_store::CalendarAccountStore,
+    event_store::CalendarEventStore,
+    models::{CalendarAccountUpdate, CalendarEventUpdate, NewCalendarEvent},
+    queries::CalendarEventListQuery,
+    source_store::CalendarSourceStore,
 };
 
 use super::support::{live_pool, unique_suffix};

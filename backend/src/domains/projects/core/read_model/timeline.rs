@@ -2,7 +2,7 @@ use crate::engines::timeline::TimelineEngine;
 
 use super::super::errors::ProjectStoreError;
 use super::super::models::ProjectTimelineItem;
-use super::super::projection::reviewed_target_ids;
+use super::super::review_targets::reviewed_target_ids;
 use super::super::rows::row_to_timeline_item;
 use super::super::store::ProjectStore;
 

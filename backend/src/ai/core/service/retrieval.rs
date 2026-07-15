@@ -1,7 +1,7 @@
 use super::super::constants::{AI_EMBEDDING_DIMENSION, DEFAULT_RETRIEVAL_LIMIT};
 use super::super::errors::AiError;
 use super::super::helpers::merge_retrieval_results;
-use super::super::semantic::SemanticEmbeddingStore;
+use super::super::semantic::store::SemanticEmbeddingStore;
 use super::super::types::AiCitation;
 use super::core::AiService;
 

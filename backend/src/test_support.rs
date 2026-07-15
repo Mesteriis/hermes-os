@@ -6,9 +6,9 @@ use std::sync::Arc;
 use serde_json::Value;
 use sqlx::PgPool;
 
-use crate::domains::communications::messages::ProviderChannelMessageStore;
+use crate::domains::communications::messages::provider_channel_store::ProviderChannelMessageStore;
 use crate::domains::signal_hub::store::{SignalHubStore, SignalRuntimeStateUpdate};
-use crate::integrations::telegram::client::TelegramStore;
+use crate::integrations::telegram::client::store::TelegramStore;
 use crate::integrations::whatsapp::client::store::WhatsappWebStore;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
@@ -49,6 +49,11 @@ pub fn whatsapp_web_store(pool: &PgPool) -> WhatsappWebStore {
         Arc::new(communication_provider_account_store(pool)),
         Arc::new(communication_provider_secret_binding_store(pool)),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
+        Arc::new(
+            hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore::new(
+                pool.clone(),
+            ),
+        ),
     )
 }
 

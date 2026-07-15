@@ -8,7 +8,7 @@ pub(crate) struct CertsQuery {
 
 #[derive(Serialize)]
 pub(crate) struct CertsListResponse {
-    pub(super) items: Vec<crate::domains::communications::signatures::CertificateRecord>,
+    pub(super) items: Vec<crate::domains::communications::signatures::models::CertificateRecord>,
 }
 
 pub(crate) async fn get_v1_certs(
@@ -20,7 +20,7 @@ pub(crate) async fn get_v1_certs(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let store = crate::app::api_support::stores::domain_stores::app_store::<
-        crate::domains::communications::signatures::CertificateStore,
+        crate::domains::communications::signatures::store::CertificateStore,
     >(pool);
     Ok(Json(CertsListResponse {
         items: store.list().await?,
@@ -50,18 +50,18 @@ pub(crate) struct NewCertRequest {
 pub(crate) async fn post_v1_cert(
     State(state): State<AppState>,
     Json(req): Json<NewCertRequest>,
-) -> Result<Json<crate::domains::communications::signatures::CertificateRecord>, ApiError> {
+) -> Result<Json<crate::domains::communications::signatures::models::CertificateRecord>, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let store = crate::app::api_support::stores::domain_stores::app_store::<
-        crate::domains::communications::signatures::CertificateStore,
+        crate::domains::communications::signatures::store::CertificateStore,
     >(pool);
     Ok(Json(
         store
-            .upsert(&crate::domains::communications::signatures::NewCertificate {
+            .upsert(&crate::domains::communications::signatures::models::NewCertificate {
                 cert_id: req.cert_id,
                 owner_name: req.owner_name,
                 issuer: req.issuer,
@@ -72,26 +72,26 @@ pub(crate) async fn post_v1_cert(
                 cert_type: req
                     .cert_type
                     .as_deref()
-                    .and_then(crate::domains::communications::signatures::CertificateType::parse)
-                    .unwrap_or(crate::domains::communications::signatures::CertificateType::Unknown),
+                    .and_then(crate::domains::communications::signatures::certificate_type::CertificateType::parse)
+                    .unwrap_or(crate::domains::communications::signatures::certificate_type::CertificateType::Unknown),
                 provider: req
                     .provider
                     .as_deref()
-                    .and_then(crate::domains::communications::signatures::CertificateProvider::parse)
-                    .unwrap_or(crate::domains::communications::signatures::CertificateProvider::Other),
+                    .and_then(crate::domains::communications::signatures::provider::CertificateProvider::parse)
+                    .unwrap_or(crate::domains::communications::signatures::provider::CertificateProvider::Other),
                 storage_kind: req
                     .storage_kind
                     .as_deref()
-                    .and_then(crate::domains::communications::signatures::CertificateStorageKind::parse)
+                    .and_then(crate::domains::communications::signatures::storage_kind::CertificateStorageKind::parse)
                     .unwrap_or(
-                        crate::domains::communications::signatures::CertificateStorageKind::EncryptedVault,
+                        crate::domains::communications::signatures::storage_kind::CertificateStorageKind::EncryptedVault,
                     ),
                 storage_ref: req.storage_ref,
                 trust_status: req
                     .trust_status
                     .as_deref()
-                    .and_then(crate::domains::communications::signatures::TrustStatus::parse)
-                    .unwrap_or(crate::domains::communications::signatures::TrustStatus::Untrusted),
+                    .and_then(crate::domains::communications::signatures::trust::TrustStatus::parse)
+                    .unwrap_or(crate::domains::communications::signatures::trust::TrustStatus::Untrusted),
                 is_revoked: req.is_revoked.unwrap_or(false),
                 usage: req.usage.unwrap_or_default(),
                 linked_message_id: req.linked_message_id,
@@ -116,7 +116,7 @@ pub(crate) async fn get_v1_certs_expiring(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let store = crate::app::api_support::stores::domain_stores::app_store::<
-        crate::domains::communications::signatures::CertificateStore,
+        crate::domains::communications::signatures::store::CertificateStore,
     >(pool);
     Ok(Json(CertsListResponse {
         items: store.expiring_soon(query.days.unwrap_or(90)).await?,
@@ -126,14 +126,15 @@ pub(crate) async fn get_v1_certs_expiring(
 pub(crate) async fn get_v1_signature_check(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
-) -> Result<Json<crate::domains::communications::signatures::SignatureDetection>, ApiError> {
+) -> Result<Json<crate::domains::communications::signatures::detector::SignatureDetection>, ApiError>
+{
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
     Ok(Json(
-        crate::domains::communications::signatures::SignatureDetector::detect_in_message(
+        crate::domains::communications::signatures::detector::SignatureDetector::detect_in_message(
             &msg.body_text,
             "",
         ),

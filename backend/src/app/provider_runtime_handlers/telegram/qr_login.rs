@@ -5,18 +5,23 @@ use serde_json::{Value, json};
 
 use super::helpers::{telegram_api_hash_from_config, telegram_secret_store};
 use crate::app::api_support::stores::integration_stores::telegram_provider_runtime_service;
+use crate::app::error::types::ApiError;
 use crate::app::signal_hub_support::{
     provider_account_or_not_found, sync_provider_account_signal_connection,
 };
-use crate::app::{ApiError, AppState};
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramLiveAccountSetupRequest, TelegramQrLoginPasswordRequest,
-    TelegramQrLoginStartRequest, TelegramQrLoginStatus, TelegramQrLoginStatusResponse,
-    TelegramSecretVault,
+use crate::app::state::AppState;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::accounts::TelegramLiveAccountSetupRequest;
+use crate::integrations::telegram::client::models::qr_login::{
+    TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest, TelegramQrLoginStatus,
+    TelegramQrLoginStatusResponse,
 };
-use crate::integrations::telegram::tdjson::{
-    cancel_qr_login, start_qr_login, submit_qr_login_password, tdlib_database_directory,
+use crate::integrations::telegram::client::vault::TelegramSecretVault;
+use crate::integrations::telegram::tdjson::qr_login::commands::{
+    cancel_qr_login, submit_qr_login_password,
 };
+use crate::integrations::telegram::tdjson::qr_login::driver::start_qr_login;
+use crate::integrations::telegram::tdjson::requests::tdlib_database_directory;
 use hermes_communications_api::accounts::CommunicationProviderKind;
 
 pub(crate) async fn post_telegram_qr_login_start(

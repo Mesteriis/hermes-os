@@ -1,12 +1,16 @@
+use crate::platform::audit::store::ApiAuditLog;
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use serde_json::json;
 
-use super::models::{DecisionListQuery, DecisionListResponse, DecisionReviewApiRequest};
-use crate::app::{ApiError, AppState};
+use super::models::{DecisionListResponse, DecisionReviewApiRequest};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::application::review_transitions::DecisionReviewApplicationService;
-use crate::domains::decisions::{Decision, DecisionEntityKind, DecisionReviewState, DecisionStore};
-use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
+use crate::domains::decisions::models::decision::Decision;
+use crate::domains::decisions::models::states::DecisionReviewState;
+use crate::platform::audit::models::NewApiAuditRecord;
+use hermes_decisions_api::{DecisionListQuery, DecisionReadPort};
+use hermes_decisions_postgres::DecisionPostgresReadQuery;
 
 const DECISION_API_ACTOR_ID: &str = "hermes-frontend";
 const DEFAULT_DECISION_LIMIT: i64 = 50;
@@ -17,35 +21,20 @@ pub(crate) async fn get_v1_decisions(
     State(state): State<AppState>,
     Query(query): Query<DecisionListQuery>,
 ) -> Result<Json<DecisionListResponse>, ApiError> {
-    let limit = validate_limit(query.limit)?;
-    let store = decision_store(&state)?;
-    let items = match (
-        query.review_state.as_deref(),
-        query.entity_kind.as_deref(),
-        query.entity_id.as_deref(),
-    ) {
-        (Some(review_state), None, None) => {
-            let review_state = parse_review_state(review_state)?;
-            store.list_by_review_state(review_state, limit).await?
-        }
-        (None, Some(entity_kind), Some(entity_id)) => {
-            let entity_kind = parse_required_entity_kind(Some(entity_kind))?;
-            let entity_id = validate_required_query_value(Some(entity_id))?;
-            store
-                .list_for_entity(entity_kind, &entity_id, limit)
-                .await?
-        }
-        (Some(_), _, _) => {
-            return Err(ApiError::InvalidDecisionQuery(
-                "review_state cannot be combined with entity filters",
-            ));
-        }
-        (None, _, _) => {
-            return Err(ApiError::InvalidDecisionQuery(
-                "missing required decision query field",
-            ));
-        }
+    let query = hermes_decisions_api::DecisionListQuery {
+        limit: Some(validate_limit(query.limit)?),
+        entity_kind: query.entity_kind,
+        entity_id: query.entity_id,
+        review_state: query.review_state,
     };
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = DecisionReadPort::list(&DecisionPostgresReadQuery::new(pool), query)
+        .await
+        .map_err(|error| ApiError::FailedPrecondition(error.to_string()))?;
 
     Ok(Json(DecisionListResponse { items }))
 }
@@ -76,27 +65,12 @@ pub(crate) async fn put_v1_decision_review(
     Ok(Json(decision))
 }
 
-fn decision_store(state: &AppState) -> Result<DecisionStore, ApiError> {
-    let Some(pool) = state.database.pool() else {
-        return Err(ApiError::DatabaseNotConfigured);
-    };
-
-    Ok(crate::app::api_support::stores::domain_stores::app_store::<
-        DecisionStore,
-    >(pool.clone()))
-}
-
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
 
     Ok(ApiAuditLog::new(pool.clone()))
-}
-
-fn parse_required_entity_kind(value: Option<&str>) -> Result<DecisionEntityKind, ApiError> {
-    let value = validate_required_query_value(value)?;
-    DecisionEntityKind::parse(&value).map_err(ApiError::from)
 }
 
 fn parse_review_state(value: &str) -> Result<DecisionReviewState, ApiError> {

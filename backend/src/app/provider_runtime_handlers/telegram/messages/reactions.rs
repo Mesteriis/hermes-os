@@ -3,27 +3,16 @@ use axum::extract::{Path, Query, State};
 use chrono::Utc;
 use serde::Deserialize;
 
-use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
-};
+use crate::app::api_support::{messaging_integrations::*, stores::domain_stores::*};
+use crate::app::error::types::ApiError;
 use crate::app::provider_runtime_handlers::whatsapp::messages::{
     delete_whatsapp_command_react, post_whatsapp_command_react,
 };
-use crate::app::{ApiError, AppState};
+use crate::app::state::AppState;
 use crate::integrations::telegram::client::models::messages::{
     TelegramReactionListResponse, TelegramReactionRequest, TelegramReactionResponse,
 };
-use crate::integrations::telegram::client::telegram_self_provider_member_id;
+use crate::integrations::telegram::client::participants::telegram_self_provider_member_id;
 use crate::integrations::whatsapp::runtime::contracts::{
     WhatsAppProviderCommandResponse, WhatsAppReactionRequest,
 };

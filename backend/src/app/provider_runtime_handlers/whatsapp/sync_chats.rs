@@ -2,10 +2,11 @@
 
 use axum::Json;
 use axum::extract::State;
+use hermes_communications_api::conversations::ConversationReadPort;
 use serde_json::{Value, json};
-use sqlx::Row;
 
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::platform::events::bus::whatsapp_event_types;
 
@@ -133,43 +134,20 @@ async fn list_whatsapp_sync_chats(
         .pool()
         .expect("database pool configured")
         .clone();
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            conversation_id,
-            account_id,
-            channel_kind,
-            provider_conversation_id,
-            title,
-            metadata
-        FROM communication_conversations
-        WHERE channel_kind = 'whatsapp_web'
-          AND account_id = $1
-        ORDER BY COALESCE(last_message_at, updated_at) DESC, conversation_id ASC
-        LIMIT $2
-        "#,
-    )
-    .bind(account_id)
-    .bind(limit)
-    .fetch_all(&pool)
-    .await
-    .map_err(WhatsappWebError::from)?;
+    let rows = hermes_communications_postgres::conversations::ConversationReadStore::new(pool)
+        .list_conversations(Some(account_id), &["whatsapp_web"], None, limit)
+        .await
+        .map_err(|error| WhatsappWebError::InvalidRequest(error.to_string()))?;
 
     rows.into_iter()
         .map(|row| {
-            let metadata: Value = row.try_get("metadata").map_err(WhatsappWebError::from)?;
+            let metadata = row.metadata;
             Ok(WhatsAppChatSyncItem {
-                conversation_id: row
-                    .try_get("conversation_id")
-                    .map_err(WhatsappWebError::from)?,
-                account_id: row.try_get("account_id").map_err(WhatsappWebError::from)?,
-                channel_kind: row
-                    .try_get("channel_kind")
-                    .map_err(WhatsappWebError::from)?,
-                provider_chat_id: row
-                    .try_get("provider_conversation_id")
-                    .map_err(WhatsappWebError::from)?,
-                title: row.try_get("title").map_err(WhatsappWebError::from)?,
+                conversation_id: row.conversation_id,
+                account_id: row.account_id,
+                channel_kind: row.channel_kind,
+                provider_chat_id: row.provider_conversation_id,
+                title: row.title,
                 chat_kind: metadata
                     .get("chat_kind")
                     .and_then(Value::as_str)

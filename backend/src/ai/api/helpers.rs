@@ -1,7 +1,8 @@
 use axum::http::HeaderMap;
 
-use crate::ai::control_center::AiControlCenterStore;
-use crate::app::{ApiError, AppState};
+use crate::ai::control_center::store::AiControlCenterStore;
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 
 pub(super) fn ai_control_center_store(state: &AppState) -> Result<AiControlCenterStore, ApiError> {
     let Some(pool) = state.database.pool() else {

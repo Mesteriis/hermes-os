@@ -48,4 +48,7 @@ pub enum ObligationStoreError {
 
     #[error("unknown obligation risk state stored in database: {0}")]
     UnknownRiskState(String),
+
+    #[error("obligation API write failed: {0}")]
+    Write(String),
 }

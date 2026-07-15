@@ -1,9 +1,9 @@
-use chrono::{DateTime, TimeZone, Utc};
-use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
+use chrono::{DateTime, Utc};
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 
-use crate::integrations::telegram::client::models::TelegramChat;
-use crate::integrations::telegram::tdjson::{
+use crate::integrations::telegram::client::models::chats::TelegramChat;
+use crate::integrations::telegram::tdjson::parsing::events::{
     TelegramTdlibChatMarkedAsUnreadSnapshot, TelegramTdlibChatNotificationSettingsSnapshot,
     TelegramTdlibChatPositionSnapshot, TelegramTdlibChatUnreadSnapshot,
 };

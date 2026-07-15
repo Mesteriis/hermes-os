@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -457,6 +458,46 @@ pub trait ProviderSecretBindingLookupPort: Send + Sync {
                 + 'a,
         >,
     >;
+}
+
+impl<T> ProviderSecretBindingLookupPort for Arc<T>
+where
+    T: ProviderSecretBindingLookupPort + ?Sized,
+{
+    fn list_for_account<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Vec<ProviderAccountSecretBinding>,
+                        ProviderSecretBindingPortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        (**self).list_for_account(account_id)
+    }
+
+    fn get_for_account<'a>(
+        &'a self,
+        account_id: &'a str,
+        secret_purpose: ProviderAccountSecretPurpose,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Option<ProviderAccountSecretBinding>,
+                        ProviderSecretBindingPortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        (**self).get_for_account(account_id, secret_purpose)
+    }
 }
 
 pub trait ProviderSecretBindingCommandPort: ProviderSecretBindingLookupPort {

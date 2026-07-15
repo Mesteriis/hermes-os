@@ -13,27 +13,17 @@ use serde_json::{Value, json};
 use url::Url;
 use uuid::Uuid;
 
-use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
-};
+use crate::app::api_support::stores::{domain_stores::*, integration_stores::*};
+use crate::app::error::types::ApiError;
 use crate::app::signal_hub_support::{
     provider_account_or_not_found, sync_provider_account_signal_connection,
 };
-use crate::app::{ApiError, AppState};
+use crate::app::state::AppState;
 use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 
-use crate::platform::secrets::{NewSecretReference, SecretKind, SecretStoreKind};
-use crate::vault::{HostVaultError, SecretEntryContext, VaultMode};
+use crate::platform::secrets::models::{NewSecretReference, SecretKind, SecretStoreKind};
+use crate::vault::errors::HostVaultError;
+use crate::vault::models::{SecretEntryContext, VaultMode};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct ZulipAccountSetupRequest {

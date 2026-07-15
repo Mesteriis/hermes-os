@@ -1,9 +1,9 @@
 use url::form_urlencoded;
 
-use crate::app::ApiError;
-use crate::domains::communications::messages::{
-    MessageSearchMatchMode, MessageSearchQuery, parse_communication_message_search_query,
-};
+use crate::app::error::types::ApiError;
+use crate::domains::communications::messages::models::MessageSearchMatchMode;
+use crate::domains::communications::messages::models::MessageSearchQuery;
+use crate::domains::communications::messages::query_parser::parse_communication_message_search_query;
 
 #[derive(Debug)]
 pub(crate) struct CommunicationMessagesQuery {

@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramMessage, TelegramStore, derive_tdlib_reaction_summary_metadata,
-};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::messages::reaction_metadata::derive_tdlib_reaction_summary_metadata;
+use crate::integrations::telegram::client::models::messages::TelegramMessage;
+use crate::integrations::telegram::client::store::TelegramStore;
 use crate::integrations::telegram::tdjson::{
-    TelegramTdlibMessageContentSnapshot, TelegramTdlibMessageEditedSnapshot,
+    snapshots::TelegramTdlibMessageContentSnapshot, snapshots::TelegramTdlibMessageEditedSnapshot,
 };
 
 pub(super) async fn update_message_reaction_summary(

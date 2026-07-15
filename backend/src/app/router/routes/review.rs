@@ -1,4 +1,10 @@
-use super::support::*;
+use crate::app::handlers::consistency::*;
+use crate::app::handlers::relationships::handlers::*;
+use crate::app::handlers::review::*;
+use crate::app::handlers::{decisions::handlers::*, obligations::handlers::*};
+use crate::app::state::AppState;
+use axum::Router;
+use axum::routing::{get, post, put};
 
 pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
     router

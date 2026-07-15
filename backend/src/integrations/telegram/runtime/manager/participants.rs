@@ -1,14 +1,15 @@
 use chrono::Utc;
 use serde_json::{Value, json};
 
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::chats::{
+    NewTelegramChatParticipant, TelegramChat, TelegramChatMember,
+};
+use crate::integrations::telegram::client::participants::mark_absent_members_from_exhaustive_roster;
 use crate::integrations::telegram::client::participants::{
     inactive_roster_membership_state, reconcile_join_commands_from_provider_roster_with_source,
     reconcile_leave_commands_from_exhaustive_absence,
     reconcile_leave_commands_from_provider_roster_with_source, telegram_self_provider_member_id,
-};
-use crate::integrations::telegram::client::{
-    NewTelegramChatParticipant, TelegramChat, TelegramChatMember, TelegramError,
-    mark_absent_members_from_exhaustive_roster,
 };
 
 use super::super::participant_commands::{
@@ -30,7 +31,7 @@ impl TelegramRuntimeManager {
         telegram_chat_id: &str,
     ) -> Result<Vec<TelegramChatMember>, TelegramError>
     where
-        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+        S: crate::platform::secrets::resolver::SecretResolver + Sync + ?Sized,
     {
         let chat = context
             .telegram_store
@@ -147,12 +148,14 @@ async fn sync_provider_roster_snapshots<S>(
     context: TelegramMemberSyncContext<'_, S>,
     chat: &TelegramChat,
     external_account_id: &str,
-    snapshots: Vec<crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot>,
+    snapshots: Vec<
+        crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot,
+    >,
     observed_via: &str,
     roster_is_exhaustive: bool,
 ) -> Result<Vec<TelegramChatMember>, TelegramError>
 where
-    S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+    S: crate::platform::secrets::resolver::SecretResolver + Sync + ?Sized,
 {
     let mut items = Vec::with_capacity(snapshots.len());
     for snapshot in snapshots {
@@ -346,7 +349,7 @@ async fn reconcile_self_membership_from_provider_roster<S>(
     roster_is_exhaustive: bool,
 ) -> Result<(), TelegramError>
 where
-    S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+    S: crate::platform::secrets::resolver::SecretResolver + Sync + ?Sized,
 {
     if let Some(provider_member_id) = telegram_self_provider_member_id(external_account_id) {
         let commands = if let Some(self_member) = items
@@ -407,15 +410,17 @@ where
 }
 
 fn supergroup_roster_is_exhaustive(
-    snapshots: &[crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot],
+    snapshots: &[crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot],
 ) -> bool {
     snapshots.len() < TELEGRAM_MEMBER_SYNC_TARGET_LIMIT as usize
 }
 
 fn merge_supergroup_member_snapshots(
-    recent: Vec<crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot>,
-    administrators: Vec<crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot>,
-) -> Vec<crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot> {
+    recent: Vec<crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot>,
+    administrators: Vec<
+        crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot,
+    >,
+) -> Vec<crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot> {
     let mut merged = recent;
     let mut indexes = merged
         .iter()
@@ -445,7 +450,7 @@ mod tests {
         TELEGRAM_MEMBER_SYNC_TARGET_LIMIT, build_private_chat_participant,
         merge_supergroup_member_snapshots, supergroup_roster_is_exhaustive, tdlib_private_user_id,
     };
-    use crate::integrations::telegram::client::TelegramChat;
+    use crate::integrations::telegram::client::models::chats::TelegramChat;
     use chrono::Utc;
     use serde_json::json;
 
@@ -504,8 +509,8 @@ mod tests {
         let at_limit = vec![json!({}); TELEGRAM_MEMBER_SYNC_TARGET_LIMIT as usize];
         let under_limit = under_limit
             .into_iter()
-            .map(
-                |raw| crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot {
+            .map(|raw| {
+                crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot {
                     provider_member_id: "user:1".to_owned(),
                     display_name: None,
                     username: None,
@@ -515,14 +520,14 @@ mod tests {
                     is_owner: false,
                     permissions: json!({}),
                     raw,
-                },
-            )
+                }
+            })
             .collect::<Vec<_>>();
         let at_limit = at_limit
             .into_iter()
             .enumerate()
             .map(|(index, raw)| {
-                crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot {
+                crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot {
                     provider_member_id: format!("user:{index}"),
                     display_name: None,
                     username: None,
@@ -543,7 +548,7 @@ mod tests {
     #[test]
     fn merge_supergroup_member_snapshots_prefers_administrator_snapshot() {
         let recent = vec![
-            crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot {
+            crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot {
                 provider_member_id: "user:1".to_owned(),
                 display_name: Some("Owner User".to_owned()),
                 username: None,
@@ -554,7 +559,7 @@ mod tests {
                 permissions: json!({"source": "recent"}),
                 raw: json!({"@type": "chatMember"}),
             },
-            crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot {
+            crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot {
                 provider_member_id: "user:2".to_owned(),
                 display_name: Some("Recent User".to_owned()),
                 username: None,
@@ -567,7 +572,7 @@ mod tests {
             },
         ];
         let administrators = vec![
-            crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot {
+            crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot {
                 provider_member_id: "user:1".to_owned(),
                 display_name: Some("Owner User".to_owned()),
                 username: None,
@@ -578,7 +583,7 @@ mod tests {
                 permissions: json!({"source": "administrators"}),
                 raw: json!({"@type": "chatMember"}),
             },
-            crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot {
+            crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot {
                 provider_member_id: "user:3".to_owned(),
                 display_name: Some("Admin Only".to_owned()),
                 username: None,

@@ -22,7 +22,11 @@ impl RuntimeLifecycleStore {
         update: &RuntimeLifecycleUpdate,
     ) -> Result<(), RuntimeLifecyclePortError> {
         validate_update(update)?;
-        let mut transaction = self.pool.begin().await.map_err(RuntimeLifecyclePortError::new)?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(RuntimeLifecyclePortError::new)?;
         let source_exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM signal_sources WHERE code = $1)",
         )

@@ -1,5 +1,6 @@
+use super::AttachmentIntelligenceService;
 use super::file_kinds::{is_archive_type, is_executable_type};
-use super::*;
+use super::models::{AttachmentCategory, AttachmentIntelligenceInput, RiskLevel};
 
 fn test_attachment(filename: &str, content_type: &str, size: i64) -> AttachmentIntelligenceInput {
     AttachmentIntelligenceInput {

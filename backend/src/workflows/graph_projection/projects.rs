@@ -3,12 +3,11 @@ use std::collections::BTreeSet;
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
 
-use crate::domains::graph::core::{
-    GraphNodeKind, GraphProjectionPort, NewGraphEdge, NewGraphNode, RelationshipType, node_id,
-};
-use crate::domains::projects::core::{
-    ProjectMatchedDocument, ProjectMatchedMessage, ProjectProjectionSource,
-};
+use crate::domains::graph::core::models::{NewGraphEdge, NewGraphNode, RelationshipType};
+use crate::domains::graph::ports::GraphProjectionPort;
+use crate::platform::graph::GraphNodeKind;
+use crate::platform::graph::node_id;
+use hermes_projects_api::{ProjectMatchedDocument, ProjectMatchedMessage, ProjectProjectionSource};
 
 use super::errors::GraphProjectionError;
 use super::evidence::{project_document_evidence, project_message_evidence};

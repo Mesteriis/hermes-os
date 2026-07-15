@@ -2,7 +2,9 @@ use sqlx::Row;
 use sqlx::postgres::PgRow;
 
 use super::errors::DecisionStoreError;
-use super::models::{Decision, DecisionEntityKind, DecisionReviewState, DecisionStatus};
+use super::models::decision::Decision;
+use super::models::entity_kind::DecisionEntityKind;
+use super::models::states::{DecisionReviewState, DecisionStatus};
 
 pub(super) fn row_to_decision(row: PgRow) -> Result<Decision, DecisionStoreError> {
     let decided_by_entity_kind = row

@@ -4,7 +4,8 @@ use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 
-use super::{OrgCoreError, link_entity_in_transaction};
+use super::errors::OrgCoreError;
+use super::evidence::link_entity_in_transaction;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OrgPersonaLink {
@@ -127,8 +128,8 @@ impl OrgPersonaLinkStore {
         &self,
         org_id: &str,
         persona_id: &str,
-        message_id: &str,
-        observation_id: &str,
+        _message_id: &str,
+        _observation_id: &str,
     ) -> Result<(OrgPersonaLink, bool), OrgCoreError> {
         let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(

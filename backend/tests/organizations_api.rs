@@ -8,10 +8,10 @@ use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
 
-use hermes_hub_backend::app::{build_router, build_router_with_database};
+use hermes_hub_backend::app::router::{build_router, build_router_with_database};
 use hermes_hub_backend::domains::organizations::enrichment::OrgEnrichmentStore;
-use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::config::app_config::AppConfig;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const T: &str = "orgs-test-token";
 

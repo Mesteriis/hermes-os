@@ -1,7 +1,7 @@
 use crate::domains::communications::messages::port::MessageProjectionPort;
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::domains::communications::messages::models::ProjectedMessage;
 
 use super::errors::EmailSyncPipelineError;
 

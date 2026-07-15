@@ -8,14 +8,15 @@ use serde_json::Value;
 
 use crate::app::api_support::{
     messaging_integrations::*,
-    stores::{domain_stores::*, integration_stores::*, settings_vault::*},
+    stores::{domain_stores::*, integration_stores::*},
     whatsapp_capabilities::*,
 };
+use crate::app::error::types::ApiError;
 use crate::app::signal_hub_support::{
     provider_account_or_not_found, remove_provider_account_signal_connection,
     sync_provider_account_signal_connection, sync_whatsapp_runtime_signal_connection,
 };
-use crate::app::{ApiError, AppState};
+use crate::app::state::AppState;
 use crate::integrations::whatsapp::client::models::{
     WhatsappLiveAccountSetupRequest, WhatsappWebAccountSetupResponse,
 };

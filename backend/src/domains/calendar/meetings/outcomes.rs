@@ -1,13 +1,14 @@
 use chrono::{DateTime, Utc};
-use serde_json::{Value, json};
+use serde_json::Value;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Transaction};
 
 use crate::domains::calendar::evidence::link_calendar_entity_in_transaction;
 
+use super::errors::MeetingsError;
+use super::models::MeetingOutcome;
 use super::rows::{MEETING_OUTCOME_COLUMNS, row_to_meeting_outcome};
-use super::{MeetingOutcome, MeetingsError};
 
 #[derive(Clone)]
 pub struct MeetingOutcomeStore {

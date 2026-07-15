@@ -1,10 +1,12 @@
 use sqlx::Row;
 use sqlx::postgres::PgRow;
 
-use super::{
-    CertificateError, CertificateProvider, CertificateRecord, CertificateStorageKind,
-    CertificateType, TrustStatus,
-};
+use super::certificate_type::CertificateType;
+use super::errors::CertificateError;
+use super::models::CertificateRecord;
+use super::provider::CertificateProvider;
+use super::storage_kind::CertificateStorageKind;
+use super::trust::TrustStatus;
 
 pub(super) const CERTIFICATE_COLUMNS: &str = "cert_id,owner_name,issuer,serial_number,fingerprint_sha256,valid_from,valid_until,cert_type,provider,storage_kind,storage_ref,trust_status,is_revoked,usage,linked_message_id,metadata,created_at,updated_at";
 

@@ -9,10 +9,11 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::app::router::build_router_with_database;
 
-use hermes_hub_backend::platform::settings::{ApplicationSettingsStore, SettingValueKind};
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::settings::models::SettingValueKind;
+use hermes_hub_backend::platform::settings::store::ApplicationSettingsStore;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const LOCAL_API_TOKEN: &str = "settings-api-test-token";
 

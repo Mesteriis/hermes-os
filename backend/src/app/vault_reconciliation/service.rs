@@ -1,16 +1,17 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_communications_api::accounts::NewProviderAccount;
 use hermes_communications_api::accounts::NewProviderAccountSecretBinding;
 use std::collections::HashMap;
 
 use sqlx::postgres::PgPool;
 
-use crate::ai::control_center::AiControlCenterStore;
-use crate::domains::calendar::events::CalendarAccountStore;
+use crate::ai::control_center::store::AiControlCenterStore;
+use crate::domains::calendar::events::account_store::CalendarAccountStore;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
 
-use crate::platform::secrets::{NewSecretReference, SecretReferenceStore};
+use crate::platform::secrets::models::NewSecretReference;
 use crate::vault::HostVault;
 
 use super::ai_provider_recovery::RecoverableAiProviderSecret;

@@ -2,7 +2,7 @@ use axum::http::StatusCode;
 use serde_json::json;
 use tower::ServiceExt;
 
-use hermes_hub_backend::app::build_router;
+use hermes_hub_backend::app::router::build_router;
 
 use super::support::{config_with_api_token, get_request, json_body};
 

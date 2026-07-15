@@ -1,8 +1,9 @@
 use axum::Json;
 use axum::extract::{Path, State};
 
-use crate::app::{ApiError, AppState};
-use crate::application::communication_provider_writes::{
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::application::communication_provider_models::{
     TelegramMessageMarkReadRequest, TelegramMessageMarkReadResponse,
 };
 

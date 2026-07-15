@@ -2,9 +2,9 @@ use thiserror::Error;
 
 use crate::ai::hub::AiHubError;
 use crate::domains::communications::ai_state::CommunicationAiStateError;
-use crate::domains::communications::messages::MessageProjectionError;
+use crate::domains::communications::messages::errors::MessageProjectionError;
 use crate::domains::communications::spam_reputation::SenderReputationError;
-use crate::domains::review::ReviewInboxError;
+use crate::domains::review::errors::ReviewInboxError;
 use crate::domains::signal_hub::store::SignalHubError;
 use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 

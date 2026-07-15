@@ -1,17 +1,18 @@
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::messages::reaction_metadata::derive_tdlib_chosen_reaction_emojis;
 use crate::integrations::telegram::client::participants::{
     reconcile_participant_commands_from_message_evidence, tdlib_self_membership_lifecycle,
 };
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramStore, derive_tdlib_chosen_reaction_emojis,
-    reconcile_reaction_commands_from_provider_reactions,
-};
+use crate::integrations::telegram::client::reactions::reconcile_reaction_commands_from_provider_reactions;
+use crate::integrations::telegram::client::store::TelegramStore;
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_communications_api::accounts::ProviderAccountLookupPort;
 use hermes_communications_api::accounts::{ProviderAccount, ProviderSecretBindingLookupPort};
 
-use crate::platform::config::AppConfig;
-use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
+use crate::platform::config::app_config::AppConfig;
+use crate::platform::secrets::resolver::SecretResolver;
 
-use super::super::actor::oldest_tdlib_message_id;
+use super::super::actor::support::oldest_tdlib_message_id;
 use super::super::commands::request_actor_history;
 use super::super::models::{
     TelegramHistorySyncMode, TelegramHistorySyncRequest, TelegramHistorySyncResponse,

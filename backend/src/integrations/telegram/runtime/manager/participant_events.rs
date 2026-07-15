@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
-use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 
-use crate::integrations::telegram::client::TelegramChatMember;
+use crate::integrations::telegram::client::models::chats::TelegramChatMember;
 use crate::platform::events::bus::telegram_event_types;
 use hermes_events_postgres::store::EventStore;
 

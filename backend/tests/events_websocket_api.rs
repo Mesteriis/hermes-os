@@ -11,9 +11,9 @@ use tokio::time::timeout;
 use tower::ServiceExt;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::platform::config::app_config::AppConfig;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const LOCAL_API_TOKEN: &str = "events-websocket-test-token";
 

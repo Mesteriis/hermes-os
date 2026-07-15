@@ -2,8 +2,8 @@ use std::sync::mpsc::{self, Sender};
 
 use tokio::task;
 
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::telegram::tdjson::TelegramTdlibChatMemberSnapshot;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot;
 
 use super::TDJSON_COMMAND_TIMEOUT;
 use super::state::TelegramRuntimeCommand;

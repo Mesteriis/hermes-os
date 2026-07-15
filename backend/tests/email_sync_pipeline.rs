@@ -1,6 +1,7 @@
 use hermes_backend_testkit::context::TestContext;
 use hermes_backend_testkit::factories::persona::PersonaFactory;
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::email_sync::{EmailSyncBatch, FetchedCommunicationSourceMessage};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
@@ -10,11 +11,8 @@ use sqlx::Row;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::storage::port::LocalBlobPort;
-use hermes_hub_backend::platform::communications::{
-    EmailSyncBatch, FetchedCommunicationSourceMessage,
-};
 
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::email_sync_pipeline::service::project_email_sync_batch_with_mail_blobs;
 
 #[tokio::test]

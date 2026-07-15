@@ -1,16 +1,18 @@
 use chrono::{Duration, Utc};
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::domains::calendar::events::{CalendarEventStore, NewCalendarEvent};
-use hermes_hub_backend::domains::calendar::meetings::MeetingNoteStore;
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
+use hermes_hub_backend::domains::calendar::events::{
+    event_store::CalendarEventStore, models::NewCalendarEvent,
+};
+use hermes_hub_backend::domains::calendar::meetings::notes::MeetingNoteStore;
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
 use hermes_hub_backend::engines::consistency::{
     models::{ContradictionSeverity, ContradictionSourceKind},
     store::ContradictionObservationStore,
 };
 use hermes_hub_backend::platform::calls::{
-    CallDirection, CallIntelligenceStore, CallState, NewCallTranscript, NewTelegramCall,
-    TranscriptStatus,
+    models::{CallDirection, CallState, NewCallTranscript, NewTelegramCall, TranscriptStatus},
+    store::CallIntelligenceStore,
 };
 
 use serde_json::json;

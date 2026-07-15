@@ -1,9 +1,10 @@
 use hermes_hub_backend::domains::calendar::brain::CalendarBrainService;
 use hermes_hub_backend::domains::calendar::core::{
-    EventAgendaStore, EventChecklistStore, EventContextPackStore, EventParticipantStore,
-    EventRelationStore,
+    agendas::EventAgendaStore, checklists::EventChecklistStore,
+    context_packs::EventContextPackStore, participants::EventParticipantStore,
+    relations::EventRelationStore,
 };
-use hermes_hub_backend::domains::calendar::events::CalendarEventStore;
+use hermes_hub_backend::domains::calendar::events::event_store::CalendarEventStore;
 use hermes_hub_backend::domains::calendar::health::CalendarWatchtowerService;
 use hermes_hub_backend::domains::calendar::intelligence::CalendarIntelligenceService;
 use hermes_hub_backend::domains::calendar::rules::CalendarRuleStore;

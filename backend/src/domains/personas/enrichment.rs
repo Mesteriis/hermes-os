@@ -1,13 +1,9 @@
 mod commands;
-mod errors;
+pub mod errors;
 mod materialization;
-mod models;
+pub mod models;
 mod queries;
 mod rows;
-mod store;
-
-pub use errors::PersonaEnrichmentError;
-pub use models::EnrichedPersona;
-pub use store::PersonaEnrichmentStore;
+pub mod store;
 
 pub const PERSONA_TRUST_SCORE_CHANGED_EVENT_TYPE: &str = "persona.enrichment.trust_score_changed";

@@ -4,7 +4,7 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 
 use super::errors::CalendarCoreError;
-use super::link_calendar_entity;
+use super::evidence::link_calendar_entity;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EventParticipant {

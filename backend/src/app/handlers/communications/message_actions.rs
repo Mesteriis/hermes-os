@@ -1,3 +1,4 @@
+use super::finance_analytics::models::{ImportantToggleResponse, PinToggleResponse};
 use super::*;
 use crate::domains::communications::command_service::CommunicationCommandService;
 

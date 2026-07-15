@@ -6,8 +6,8 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::platform::storage::database::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, get_request_with_token, ingest_fixture_telegram_message, json_body,
     json_post_request_with_actor, unique_suffix,

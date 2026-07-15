@@ -5,14 +5,17 @@ use chrono::Utc;
 use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 
-use crate::app::{ApiError, AppState};
-use crate::domains::communications::messages::MessageProjectionStore;
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::domains::communications::messages::store::MessageProjectionStore;
 use hermes_events_postgres::store::EventStore;
 
-use super::actions::{
-    archive_response, create_document_response, create_event_response, create_persona_response,
-    create_task_response, link_document_response, reply_response,
-};
+use super::actions::archive::archive_response;
+use super::actions::calendar::create_event_response;
+use super::actions::documents::{create_document_response, link_document_response};
+use super::actions::personas::create_persona_response;
+use super::actions::reply::reply_response;
+use super::actions::tasks::create_task_response;
 use super::constants::WORKFLOW_EVENT_TYPE;
 use super::models::{WorkflowActionKind, WorkflowActionRequest, WorkflowActionResponse};
 use super::response::response_from_event;

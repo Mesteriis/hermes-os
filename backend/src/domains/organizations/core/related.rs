@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 
-use super::OrgCoreError;
+use super::errors::OrgCoreError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RelatedOrganization {

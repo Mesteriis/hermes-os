@@ -8,11 +8,15 @@ pub(crate) use hermes_hub_backend::domains::communications::credentials::{
     ProviderCredentialError, ProviderCredentialReader,
 };
 
-pub(crate) use hermes_hub_backend::platform::secrets::{
-    InMemorySecretResolver, NewSecretReference, SecretKind, SecretReferenceStore,
-    SecretResolutionError, SecretResolver, SecretStoreKind,
+pub(crate) use hermes_hub_backend::platform::secrets::errors::SecretResolutionError;
+pub(crate) use hermes_hub_backend::platform::secrets::models::{
+    NewSecretReference, SecretKind, SecretStoreKind,
 };
-pub(crate) use hermes_hub_backend::platform::storage::Database;
+pub(crate) use hermes_hub_backend::platform::secrets::resolver::{
+    InMemorySecretResolver, SecretResolver,
+};
+pub(crate) use hermes_hub_backend::platform::secrets::store::SecretReferenceStore;
+pub(crate) use hermes_hub_backend::platform::storage::database::Database;
 pub(crate) use serde_json::json;
 
 pub(crate) async fn test_database_url(test_name: &str) -> Option<String> {

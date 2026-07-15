@@ -1,23 +1,27 @@
 use super::super::*;
 use super::database::database_pool;
+use crate::platform::calls::store::CallIntelligenceStore;
+use crate::platform::secrets::store::SecretReferenceStore;
 use std::sync::Arc;
 
 use crate::app::api_support::stores::domain_stores::{api_audit_log, event_store};
 
-use crate::application::provider_runtime_services::{
-    TelegramProviderRuntimeApplicationService, WhatsAppProviderRuntimeRef,
-    WhatsappProviderRuntimeApplicationService, YandexTelemostProviderRuntimeApplicationService,
-    ZoomProviderRuntimeApplicationService,
+use crate::application::provider_runtime_factories::{
     telegram_provider_runtime_service as build_telegram_provider_runtime_service,
     telegram_provider_runtime_store, whatsapp_provider_runtime,
     whatsapp_provider_runtime_service as build_whatsapp_provider_runtime_service,
     yandex_telemost_provider_runtime_service as build_yandex_telemost_provider_runtime_service,
     zoom_provider_runtime_service as build_zoom_provider_runtime_service,
 };
+use crate::application::provider_runtime_services::{
+    TelegramProviderRuntimeApplicationService, WhatsAppProviderRuntimeRef,
+    WhatsappProviderRuntimeApplicationService, YandexTelemostProviderRuntimeApplicationService,
+    ZoomProviderRuntimeApplicationService,
+};
 
 fn build_telegram_provider_store(
     state: &AppState,
-) -> Result<crate::integrations::telegram::client::TelegramStore, ApiError> {
+) -> Result<crate::integrations::telegram::client::store::TelegramStore, ApiError> {
     Ok(telegram_provider_runtime_store(database_pool(state)?))
 }
 
@@ -90,6 +94,9 @@ pub(crate) fn telegram_message_write_service(
     Ok(
         crate::application::communication_provider_writes::TelegramMessageWriteApplicationService::new(
             build_telegram_provider_store(state)?,
+            Arc::new(hermes_communications_postgres::canonical::CanonicalMessageReadStore::new(
+                database_pool(state)?,
+            )),
             api_audit_log(state)?,
             event_store(state)?,
             state.event_bus.clone(),
@@ -100,13 +107,15 @@ pub(crate) fn telegram_message_write_service(
 pub(crate) fn telegram_fixture_ingest_service(
     state: &AppState,
 ) -> Result<
-    crate::application::communication_fixture_ingest::TelegramFixtureIngestApplicationService,
+    crate::application::telegram_fixture_ingest::TelegramFixtureIngestApplicationService,
     ApiError,
 > {
     Ok(
-        crate::application::communication_fixture_ingest::TelegramFixtureIngestApplicationService::new(
+        crate::application::telegram_fixture_ingest::TelegramFixtureIngestApplicationService::new(
             database_pool(state)?,
-            build_telegram_provider_store(state)?,
+            crate::integrations::telegram::client::fixture_port::TelegramFixturePort::new(
+                build_telegram_provider_store(state)?,
+            ),
             event_store(state)?,
             state.event_bus.clone(),
         ),

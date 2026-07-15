@@ -2,8 +2,9 @@ use sqlx::postgres::PgPool;
 
 use crate::domains::calendar::evidence::link_calendar_entity;
 
+use super::errors::MeetingsError;
+use super::models::MeetingNote;
 use super::rows::{MEETING_NOTE_COLUMNS, row_to_meeting_note};
-use super::{MeetingNote, MeetingsError};
 
 #[derive(Clone)]
 pub struct MeetingNoteStore {

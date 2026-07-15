@@ -52,7 +52,7 @@ async fn resolve_ai_slot_model(
     store: &AiControlCenterStore,
     settings: &AiRuntimeSettings,
     slot: &str,
-) -> Result<crate::ai::core::AiModelRouteTarget, AiControlCenterError> {
+) -> Result<crate::ai::core::types::AiModelRouteTarget, AiControlCenterError> {
     let Some(route) = store.route_for_slot(slot).await? else {
         return Err(AiControlCenterError::InvalidRequest(format!(
             "route_not_configured:{slot}: use Hub route settings"
@@ -74,7 +74,7 @@ async fn resolve_ai_slot_model(
         .ensure_model_ready_for_private_context(&route.provider_id, &route.model_key)
         .await?;
 
-    Ok(crate::ai::core::AiModelRouteTarget {
+    Ok(crate::ai::core::types::AiModelRouteTarget {
         capability_slot: slot.to_owned(),
         provider_id: route.provider_id,
         model_key: route.model_key,

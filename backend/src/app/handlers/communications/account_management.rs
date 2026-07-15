@@ -1,14 +1,19 @@
+use super::account_support::*;
 use super::*;
 use crate::app::signal_hub_support::{
     remove_provider_account_signal_connection, sync_provider_account_signal_connection,
     sync_provider_account_signal_connection_with_status,
 };
 use crate::domains::communications::sensitive_forwarding::{
-    NewSensitiveForwardingPolicy, SensitiveForwardingError, SensitiveForwardingStore,
+    SensitiveForwardingError, SensitiveForwardingPgStore,
 };
-use hermes_communications_api::accounts::{
-    CommunicationProviderKind, NewProviderAccount, ProviderAccount,
+use crate::platform::secrets::store::SecretReferenceStore;
+use crate::workflows::mail_background_sync::models::{
+    progress::MailSyncTrigger, settings::MailSyncSettingsUpdate,
 };
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
+use hermes_communications_api::content_egress::AccountContentEgressPermissions;
+use hermes_communications_api::sensitive_forwarding::NewSensitiveForwardingPolicy;
 
 pub(crate) async fn get_v1_email_accounts(
     State(state): State<AppState>,
@@ -214,7 +219,12 @@ pub(crate) async fn delete_v1_email_account(
         CommunicationProviderAccountStore,
     >(pool.clone());
     let usage = store.usage(&account.account_id).await?;
-    if account_has_host_vault_secret_refs(&pool, &account.account_id).await? {
+    let binding_store = hermes_communications_postgres::provider_store::
+        CommunicationProviderSecretBindingStore::new(pool.clone());
+    if binding_store
+        .account_has_host_vault_secret_refs(&account.account_id)
+        .await?
+    {
         require_unlocked_host_vault(&state)?;
     }
 
@@ -236,37 +246,19 @@ pub(crate) async fn delete_v1_email_account(
     }))
 }
 
-async fn account_has_host_vault_secret_refs(
-    pool: &sqlx::postgres::PgPool,
-    account_id: &str,
-) -> Result<bool, CommunicationIngestionError> {
-    let count: i64 = sqlx::query_scalar(
-        r#"
-        SELECT count(*)
-        FROM communication_provider_account_secret_refs refs
-        JOIN secret_references secrets ON secrets.secret_ref = refs.secret_ref
-        WHERE refs.account_id = $1
-          AND secrets.store_kind = 'host_vault'
-        "#,
-    )
-    .bind(account_id.trim())
-    .fetch_one(pool)
-    .await?;
-
-    Ok(count > 0)
-}
-
 async fn delete_unbound_host_vault_secrets(
     state: &AppState,
     pool: &sqlx::postgres::PgPool,
     secret_refs: &[String],
 ) -> Result<(Vec<String>, Vec<String>), ApiError> {
     let secret_store = SecretReferenceStore::new(pool.clone());
+    let binding_store = hermes_communications_postgres::provider_store::
+        CommunicationProviderSecretBindingStore::new(pool.clone());
     let mut vault_deleted_secret_refs = Vec::new();
     let mut retained_secret_refs = Vec::new();
 
     for secret_ref in secret_refs {
-        if provider_secret_ref_still_bound(pool, secret_ref).await? {
+        if binding_store.is_secret_ref_bound(secret_ref).await? {
             retained_secret_refs.push(secret_ref.clone());
             continue;
         }
@@ -311,24 +303,6 @@ async fn delete_unbound_host_vault_secrets(
     }
 
     Ok((vault_deleted_secret_refs, retained_secret_refs))
-}
-
-async fn provider_secret_ref_still_bound(
-    pool: &sqlx::postgres::PgPool,
-    secret_ref: &str,
-) -> Result<bool, CommunicationIngestionError> {
-    let count: i64 = sqlx::query_scalar(
-        r#"
-        SELECT count(*)
-        FROM communication_provider_account_secret_refs
-        WHERE secret_ref = $1
-        "#,
-    )
-    .bind(secret_ref.trim())
-    .fetch_one(pool)
-    .await?;
-
-    Ok(count > 0)
 }
 
 pub(crate) async fn get_v1_email_account_sync_status(
@@ -391,7 +365,7 @@ pub(crate) async fn get_v1_email_account_content_egress_settings(
     Path(account_id): Path<String>,
 ) -> Result<Json<MailContentEgressSettings>, ApiError> {
     let account = email_account_or_not_found(&state, &account_id).await?;
-    let permissions = crate::domains::communications::sensitive_forwarding::AccountContentEgressPermissions::from_account_config(&account.config);
+    let permissions = AccountContentEgressPermissions::from_account_config(&account.config);
     Ok(Json(MailContentEgressSettings {
         body: permissions.body,
         attachments: permissions.attachments,
@@ -405,7 +379,7 @@ pub(crate) async fn put_v1_email_account_content_egress_settings(
     Json(request): Json<MailContentEgressSettingsPatch>,
 ) -> Result<Json<MailContentEgressSettings>, ApiError> {
     let account = email_account_or_not_found(&state, &account_id).await?;
-    let current = crate::domains::communications::sensitive_forwarding::AccountContentEgressPermissions::from_account_config(&account.config);
+    let current = AccountContentEgressPermissions::from_account_config(&account.config);
     let next = MailContentEgressSettings {
         body: request.body.unwrap_or(current.body),
         attachments: request.attachments.unwrap_or(current.attachments),
@@ -497,13 +471,13 @@ pub(crate) async fn delete_v1_mail_sensitive_forwarding_policy(
     }))
 }
 
-fn sensitive_forwarding_store(state: &AppState) -> Result<SensitiveForwardingStore, ApiError> {
+fn sensitive_forwarding_store(state: &AppState) -> Result<SensitiveForwardingPgStore, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    Ok(SensitiveForwardingStore::new(pool))
+    Ok(SensitiveForwardingPgStore::new(pool))
 }
 
 fn sensitive_forwarding_api_error(error: SensitiveForwardingError) -> ApiError {

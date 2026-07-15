@@ -4,7 +4,8 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use serde::{Deserialize, Serialize};
 
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 
 const MAX_EML_IMPORT_BYTES: usize = 20 * 1024 * 1024;
 
@@ -127,9 +128,9 @@ fn eml_import_service(
         hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
             pool.clone(),
         ),
-        crate::domains::communications::messages::MessageProjectionStore::new(pool.clone()),
-        crate::domains::communications::storage::CommunicationStorageStore::new(pool),
-        crate::domains::communications::storage::LocalCommunicationBlobStore::new(
+        crate::domains::communications::messages::store::MessageProjectionStore::new(pool.clone()),
+        crate::domains::communications::storage::store::CommunicationStorageStore::new(pool),
+        crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore::new(
             crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT,
         ),
     ))

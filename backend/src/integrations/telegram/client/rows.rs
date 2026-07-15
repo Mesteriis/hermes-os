@@ -1,13 +1,14 @@
 use sqlx::Row;
 use sqlx::postgres::PgRow;
 
-use crate::platform::communications::ProviderChannelMessage;
+use hermes_communications_api::provider_messages::ProviderChannelMessage;
 
 use super::errors::TelegramError;
+use super::models::chats::TelegramChat;
+use super::models::messages::TelegramMessage;
 use super::models::messages::{
     TelegramMessageTombstone, TelegramMessageVersion, TelegramProviderWriteCommand,
 };
-use super::models::{TelegramChat, TelegramMessage};
 
 pub(super) fn row_to_telegram_chat(row: PgRow) -> Result<TelegramChat, TelegramError> {
     Ok(TelegramChat {
@@ -123,6 +124,7 @@ pub(crate) fn row_to_telegram_provider_write_command(
         status: row.try_get("status")?,
         retry_count: row.try_get("retry_count")?,
         max_retries: row.try_get("max_retries")?,
+        lease_epoch: row.try_get("lease_epoch")?,
         last_error: row.try_get("last_error")?,
         result_payload: row.try_get("result_payload")?,
         audit_metadata: row.try_get("audit_metadata")?,
@@ -170,7 +172,7 @@ pub(super) fn row_to_telegram_reaction(row: PgRow) -> Result<TelegramReaction, T
 
 // --- Reply/Forward rows ---
 
-use super::models::messages::{TelegramForwardRef, TelegramReplyRef};
+use super::models::message_references::{TelegramForwardRef, TelegramReplyRef};
 
 pub(super) fn row_to_telegram_reply_ref(row: PgRow) -> Result<TelegramReplyRef, TelegramError> {
     Ok(TelegramReplyRef {

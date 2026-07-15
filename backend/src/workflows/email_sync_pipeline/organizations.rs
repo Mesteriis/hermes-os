@@ -1,9 +1,9 @@
 use sqlx::postgres::PgPool;
 
 use crate::application::relationship_graph::RelationshipGraphCoordinator;
-use crate::domains::communications::messages::ProjectedMessage;
-use crate::domains::organizations::api::OrganizationCommandPort;
-use crate::domains::organizations::core::{OrgPersonaLink, OrganizationPersonaLinkPort};
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::organizations::core::persona_links::OrgPersonaLink;
+use crate::domains::organizations::ports::{OrganizationCommandPort, OrganizationPersonaLinkPort};
 use crate::domains::relationships::models::{
     NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
     RelationshipEvidenceSourceKind, RelationshipReviewState,

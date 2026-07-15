@@ -10,12 +10,16 @@ use tokio::net::TcpListener;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
-use crate::app::{AccountSetupState, AppError, AppState};
-use crate::integrations::telegram::runtime::TelegramRuntimeManager;
-use crate::platform::config::AppConfig;
+use crate::app::error::types::AppError;
+use crate::app::state::AccountSetupState;
+use crate::app::state::AppState;
+use crate::integrations::telegram::runtime::manager::TelegramRuntimeManager;
+use crate::platform::config::app_config::AppConfig;
 use crate::platform::events::bus::InMemoryEventBus;
-use crate::platform::storage::{Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus};
-use crate::vault::{HostVault, HostVaultConfig};
+use crate::platform::storage::database::Database;
+use crate::platform::storage::models;
+use crate::vault::HostVault;
+use crate::vault::models::HostVaultConfig;
 
 mod routes;
 
@@ -42,7 +46,6 @@ pub(crate) fn compose_application(config: AppConfig, database: Database) -> Appl
         account_setup: AccountSetupState::default(),
         telegram_runtime: TelegramRuntimeManager::default(),
         event_bus: InMemoryEventBus::new(),
-        runtime_lease: None,
     };
     let bootstrap = crate::application::bootstrap::ApplicationBootstrapContext {
         pool: state.database.pool().cloned(),
@@ -69,18 +72,6 @@ pub fn build_router(config: AppConfig) -> Router {
 
 pub fn build_router_with_database(config: AppConfig, database: Database) -> Router {
     build_router_from_state(compose_application(config, database).state)
-}
-
-/// Builds an HTTP router and explicitly starts the current background runtime.
-///
-/// Normal router construction is intentionally side-effect free. Test scenarios
-/// that assert worker behavior must opt into this composition entry point.
-pub fn build_router_with_database_and_runtime(config: AppConfig, database: Database) -> Router {
-    let components = compose_application(config, database);
-    let runtime = crate::app::runtime::start_application_runtime(&components);
-    let mut state = components.state;
-    state.runtime_lease = Some(runtime.lease());
-    build_router_from_state(state)
 }
 
 pub(crate) fn build_router_from_state(state: AppState) -> Router {
@@ -120,8 +111,8 @@ pub(crate) struct ReadinessResponse {
 
 #[derive(Serialize)]
 pub(crate) struct ReadinessChecks {
-    database: DatabaseReadiness,
-    migrations: MigrationReadiness,
+    database: models::DatabaseReadiness,
+    migrations: models::MigrationReadiness,
 }
 
 pub async fn run(config: AppConfig) -> Result<(), AppError> {
@@ -217,8 +208,8 @@ pub(crate) async fn healthz(State(state): State<AppState>) -> Json<HealthRespons
 pub(crate) async fn readyz(State(state): State<AppState>) -> (StatusCode, Json<ReadinessResponse>) {
     let database = state.database.readiness().await;
     let migrations = state.database.migration_readiness().await;
-    let is_ready =
-        database.status() == ReadinessStatus::Ok && migrations.status() == ReadinessStatus::Ok;
+    let is_ready = database.status() == models::ReadinessStatus::Ok
+        && migrations.status() == models::ReadinessStatus::Ok;
 
     let status_code = if is_ready {
         StatusCode::OK

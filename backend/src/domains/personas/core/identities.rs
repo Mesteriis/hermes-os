@@ -6,7 +6,7 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 
 use super::errors::PersonaCoreError;
-use super::link_persona_entity;
+use super::evidence::link_persona_entity;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonaIdentity {

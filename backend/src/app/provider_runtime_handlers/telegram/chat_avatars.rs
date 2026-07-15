@@ -6,24 +6,14 @@ use axum::response::Response;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
-};
-use crate::app::{ApiError, AppState};
+use crate::app::api_support::stores::{domain_stores::*, integration_stores::*};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::application::telegram_runtime;
-use crate::domains::communications::storage::NewCommunicationBlob;
-use crate::integrations::telegram::client::{TelegramError, TelegramLocalChatAvatarUpdate};
-use crate::integrations::telegram::runtime::TelegramMediaDownloadRequest;
+use crate::domains::communications::storage::models::NewCommunicationBlob;
+use crate::integrations::telegram::client::chat_state::TelegramLocalChatAvatarUpdate;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::runtime::models::TelegramMediaDownloadRequest;
 
 const MAX_CHAT_AVATAR_BYTES: usize = 8 * 1024 * 1024;
 

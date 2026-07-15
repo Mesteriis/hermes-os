@@ -337,7 +337,7 @@ impl SignalHubControlService {
         &self,
         control_event_type: &str,
         policy: &SignalPolicy,
-        source: Option<&SignalSource>,
+        _source: Option<&SignalSource>,
         connection: Option<&SignalConnection>,
         cleared_count: u64,
     ) -> Result<(), SignalHubError> {

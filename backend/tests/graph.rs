@@ -3,9 +3,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
 use hermes_hub_backend::domains::graph::core::{
-    GraphEvidenceSourceKind, GraphNodeKind, GraphReviewState, GraphStore, GraphStoreError,
-    NewGraphEdge, NewGraphEvidence, NewGraphNode, RelationshipType, edge_id, evidence_id,
+    errors::GraphStoreError,
+    ids::{edge_id, evidence_id},
+    models::{
+        GraphEvidenceSourceKind, GraphReviewState, NewGraphEdge, NewGraphEvidence, NewGraphNode,
+        RelationshipType,
+    },
+    store::GraphStore,
 };
+use hermes_hub_backend::platform::graph::GraphNodeKind;
 use serde_json::{Value, json};
 use sqlx::Row;
 

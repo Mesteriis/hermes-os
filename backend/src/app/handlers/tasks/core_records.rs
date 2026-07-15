@@ -3,14 +3,18 @@ use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::application::task_relationship::TaskRelationshipApplicationService;
 use crate::domains::tasks::command_service::TaskCommandService;
-use crate::domains::tasks::core::{
-    ExternalTaskIdentity, ExternalTaskIdentityStore, TaskChecklist, TaskChecklistStore,
-    TaskContextPack, TaskContextPackStore, TaskEvidence, TaskEvidenceStore, TaskRelation,
-    TaskRelationStore, TaskSubtask, TaskSubtaskStore,
+use crate::domains::tasks::core::checklists::{TaskChecklist, TaskChecklistStore};
+use crate::domains::tasks::core::context_packs::{TaskContextPack, TaskContextPackStore};
+use crate::domains::tasks::core::evidence::{TaskEvidence, TaskEvidenceStore};
+use crate::domains::tasks::core::external_identities::{
+    ExternalTaskIdentity, ExternalTaskIdentityStore,
 };
+use crate::domains::tasks::core::relations::{TaskRelation, TaskRelationStore};
+use crate::domains::tasks::core::subtasks::{TaskSubtask, TaskSubtaskStore};
 
 use super::support::database_pool;
 

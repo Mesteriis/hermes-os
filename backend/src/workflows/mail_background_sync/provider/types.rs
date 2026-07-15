@@ -3,7 +3,7 @@ use serde_json::Value;
 use hermes_communications_api::accounts::ProviderAccount;
 use hermes_communications_api::evidence::CommunicationEvidencePort;
 
-use super::super::models::MailSyncSettings;
+use super::super::models::settings::MailSyncSettings;
 use super::super::store::MailSyncStatePort;
 
 pub(in crate::workflows::mail_background_sync) struct ProviderSyncContext<'a> {

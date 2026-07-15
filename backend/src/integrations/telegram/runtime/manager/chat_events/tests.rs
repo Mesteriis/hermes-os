@@ -7,13 +7,15 @@ use super::{
     publish_chat_position_event, publish_chat_unread_event,
 };
 use crate::integrations::telegram::client::commands::insert_command;
-use crate::integrations::telegram::client::models::{
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::chats::TelegramChat;
+use crate::integrations::telegram::client::models::chats::{
     NewTelegramChat, TelegramChatKind, TelegramSyncState,
 };
-use crate::integrations::telegram::client::{TelegramChat, TelegramError};
 use crate::integrations::telegram::tdjson::{
-    TelegramTdlibChatFolderSnapshot, TelegramTdlibChatNotificationSettingsSnapshot,
-    TelegramTdlibChatPositionSnapshot, TelegramTdlibChatUnreadSnapshot,
+    parsing::events::TelegramTdlibChatNotificationSettingsSnapshot,
+    parsing::events::TelegramTdlibChatPositionSnapshot,
+    parsing::events::TelegramTdlibChatUnreadSnapshot, snapshots::TelegramTdlibChatFolderSnapshot,
 };
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;

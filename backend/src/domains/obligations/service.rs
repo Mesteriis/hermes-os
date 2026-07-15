@@ -7,7 +7,10 @@ use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::errors::ObservationStoreError;
 use hermes_observations_postgres::store::ObservationStore;
 
-use super::{Obligation, ObligationReviewState, ObligationStore, ObligationStoreError};
+use super::errors::ObligationStoreError;
+use super::models::read_model::Obligation;
+use super::models::states::ObligationReviewState;
+use super::ports::ObligationReviewPort;
 
 #[derive(Clone)]
 pub struct ObligationCommandService {
@@ -45,14 +48,15 @@ impl ObligationCommandService {
             )
             .await?;
 
-        let obligation = ObligationStore::new(self.pool.clone())
+        let obligation = ObligationReviewPort::new(self.pool.clone())
             .set_review_state_with_observation(
                 obligation_id,
                 review_state,
                 Some(&observation.observation_id),
                 None,
             )
-            .await?;
+            .await
+            .map_err(|error| ObligationCommandServiceError::Obligation(error))?;
 
         Ok(obligation)
     }

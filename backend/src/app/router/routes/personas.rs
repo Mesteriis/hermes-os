@@ -1,4 +1,16 @@
-use super::support::*;
+use crate::app::handlers::personas::{
+    contexts::*,
+    health::*,
+    history::*,
+    identity::*,
+    intelligence::*,
+    investigator::*,
+    memory::*,
+    profile::{actions::*, owner::*, personas::*, search::*},
+};
+use crate::app::state::AppState;
+use axum::Router;
+use axum::routing::{delete, get, post, put};
 
 pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
     router

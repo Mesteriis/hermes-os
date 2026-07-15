@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, QueryBuilder, Row};
 
 use super::MessageProjectionStore;
-use crate::domains::communications::messages::append_message_search_filter;
 use crate::domains::communications::messages::errors::MessageProjectionError;
 use crate::domains::communications::messages::models::{
     MessageSearchMatchMode, MessageSearchQuery, ProjectedMessage, ProjectedMessagePage,
@@ -14,6 +13,7 @@ use crate::domains::communications::messages::models::{
 use crate::domains::communications::messages::rows::{
     row_to_projected_message, row_to_projected_message_summary,
 };
+use crate::domains::communications::messages::search::append_message_search_filter;
 use crate::domains::communications::messages::states::{LocalMessageState, WorkflowState};
 use crate::domains::communications::messages::validation::{validate_limit, validate_non_empty};
 

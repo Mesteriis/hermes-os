@@ -2,7 +2,9 @@ use sqlx::Row;
 use sqlx::postgres::PgRow;
 
 use super::errors::MailSyncError;
-use super::models::{MailSyncDueAccount, MailSyncRun, MailSyncSettings, MailSyncStatus};
+use super::models::runs::MailSyncRun;
+use super::models::settings::{MailSyncDueAccount, MailSyncSettings};
+use super::models::status::MailSyncStatus;
 
 pub(super) fn row_to_settings(row: PgRow) -> Result<MailSyncSettings, MailSyncError> {
     Ok(MailSyncSettings {

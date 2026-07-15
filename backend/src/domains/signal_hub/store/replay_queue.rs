@@ -1,9 +1,9 @@
 use super::validation::{
     parse_optional_uuid, truncate_redacted_error, validate_non_empty, validate_object,
 };
-use super::{
-    PausedSignalEvent, SignalHubError, SignalHubStore, SignalReplayRequest,
-    SignalReplayRequestCreate, event_type_pattern_matches,
+use super::{PausedSignalEvent, SignalHubError, SignalHubStore, event_type_pattern_matches};
+use crate::domains::signal_hub::replay_contracts::{
+    SignalReplayRequest, SignalReplayRequestCreate,
 };
 use chrono::{DateTime, Utc};
 use serde_json::Value;

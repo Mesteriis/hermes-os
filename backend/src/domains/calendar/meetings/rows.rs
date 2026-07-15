@@ -1,7 +1,8 @@
 use sqlx::Row;
 use sqlx::postgres::PgRow;
 
-use super::{EventRecording, EventTranscript, MeetingNote, MeetingOutcome, MeetingsError};
+use super::errors::MeetingsError;
+use super::models::{EventRecording, EventTranscript, MeetingNote, MeetingOutcome};
 
 pub(super) const MEETING_NOTE_COLUMNS: &str =
     "id::text, event_id, content, format, source, linked_note_id, created_at, updated_at";

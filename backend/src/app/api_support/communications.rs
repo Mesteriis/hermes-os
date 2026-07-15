@@ -1,5 +1,6 @@
 use super::*;
 use crate::app::api_support::stores::domain_stores::communication_blob_store;
+use crate::domains::communications::messages::models::ProjectedMessageSummary;
 use crate::platform::formatting::text_preview;
 
 #[derive(Serialize)]
@@ -115,19 +116,6 @@ pub(crate) struct CommunicationMessageDetailItem {
 impl CommunicationMessageDetailItem {
     pub(crate) fn from_message(message: ProjectedMessage, body_html: Option<String>) -> Self {
         let message_metadata = message.message_metadata.clone();
-        Self::from_message_with_metadata_and_read_sync_status(
-            message,
-            body_html,
-            message_metadata,
-            "synced",
-        )
-    }
-
-    pub(crate) fn from_message_with_metadata(
-        message: ProjectedMessage,
-        body_html: Option<String>,
-        message_metadata: Value,
-    ) -> Self {
         Self::from_message_with_metadata_and_read_sync_status(
             message,
             body_html,

@@ -105,11 +105,11 @@ pub(crate) struct PersonaIdentityReviewApiResponse {
     pub(crate) event_id: String,
 }
 
-impl From<crate::domains::personas::identity::PersonaIdentityReviewCommandResult>
+impl From<crate::domains::personas::identity::models::PersonaIdentityReviewCommandResult>
     for PersonaIdentityReviewApiResponse
 {
     fn from(
-        result: crate::domains::personas::identity::PersonaIdentityReviewCommandResult,
+        result: crate::domains::personas::identity::models::PersonaIdentityReviewCommandResult,
     ) -> Self {
         Self {
             identity_candidate_id: result.identity_candidate_id,
@@ -197,10 +197,12 @@ pub(crate) struct TaskCandidateReviewApiResponse {
     pub(crate) event_id: String,
 }
 
-impl From<crate::domains::tasks::candidates::TaskCandidateReviewCommandResult>
+impl From<crate::domains::tasks::candidates::models::TaskCandidateReviewCommandResult>
     for TaskCandidateReviewApiResponse
 {
-    fn from(result: crate::domains::tasks::candidates::TaskCandidateReviewCommandResult) -> Self {
+    fn from(
+        result: crate::domains::tasks::candidates::models::TaskCandidateReviewCommandResult,
+    ) -> Self {
         Self {
             task_candidate_id: result.task_candidate_id,
             review_state: result.review_state.as_str().to_owned(),
@@ -249,11 +251,11 @@ pub(crate) struct ProjectLinkReviewApiResponse {
     pub(crate) event_id: String,
 }
 
-impl From<crate::domains::projects::link_reviews::ProjectLinkReviewCommandResult>
+impl From<crate::domains::projects::link_reviews::models::ProjectLinkReviewCommandResult>
     for ProjectLinkReviewApiResponse
 {
     fn from(
-        result: crate::domains::projects::link_reviews::ProjectLinkReviewCommandResult,
+        result: crate::domains::projects::link_reviews::models::ProjectLinkReviewCommandResult,
     ) -> Self {
         Self {
             project_id: result.project_id,

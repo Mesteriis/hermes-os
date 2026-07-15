@@ -94,7 +94,6 @@ fn parts(error: ApiError) -> ErrorParts {
         | ApiError::CommunicationIngestion(_)
         | ApiError::CommunicationStorage(_)
         | ApiError::InvalidCommunicationQuery(_)
-        | ApiError::EmailAccountDeleteConflict
         | ApiError::ProviderWriteConfirmationRequired
         | ApiError::CommunicationMessageNotFound
         | ApiError::AccountSetup(_)

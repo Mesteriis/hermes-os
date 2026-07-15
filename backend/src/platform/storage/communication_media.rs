@@ -1,12 +1,12 @@
 use std::future::Future;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path};
 use std::pin::Pin;
 
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use super::StorageError;
+use super::errors::StorageError;
 
 const LOCAL_FS_STORAGE_KIND: &str = "local_fs";
 const SHA256_PREFIX: &str = "sha256:";

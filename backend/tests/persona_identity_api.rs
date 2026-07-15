@@ -10,11 +10,11 @@ use tower::ServiceExt;
 
 use hermes_events_postgres::consumers::EventConsumerConfig;
 use hermes_events_postgres::consumers::EventConsumerRunner;
-use hermes_hub_backend::app::{build_router, build_router_with_database};
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
-use hermes_hub_backend::domains::personas::identity::PersonaIdentityReviewStore;
-use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::app::router::{build_router, build_router_with_database};
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
+use hermes_hub_backend::domains::personas::identity::store::PersonaIdentityReviewStore;
+use hermes_hub_backend::platform::config::app_config::AppConfig;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::review_inbox::{
     PERSONA_IDENTITY_REVIEW_INBOX_CONSUMER, project_persona_identity_review_event,
 };

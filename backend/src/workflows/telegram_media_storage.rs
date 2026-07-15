@@ -5,9 +5,11 @@ use serde_json::Value;
 use sqlx::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::storage::{
-    AttachmentSafetyScanRequest, AttachmentSafetyScanner, CommunicationAttachmentDisposition,
-    HeuristicAttachmentSafetyScanner, NewCommunicationAttachment, NewCommunicationBlob,
+use crate::domains::communications::storage::models::{
+    CommunicationAttachmentDisposition, NewCommunicationAttachment, NewCommunicationBlob,
+};
+use crate::domains::communications::storage::scanner::{
+    AttachmentSafetyScanRequest, AttachmentSafetyScanner, HeuristicAttachmentSafetyScanner,
 };
 use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 

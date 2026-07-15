@@ -2,8 +2,8 @@ use sqlx::postgres::PgPool;
 
 use super::errors::DocumentProcessingError;
 use super::models::{
-    DocumentArtifactKind, DocumentProcessingArtifact, DocumentProcessingJob,
-    DocumentProcessingRecord, DocumentProcessingStep,
+    DocumentProcessingArtifact, DocumentProcessingJob, DocumentProcessingRecord,
+    DocumentProcessingStep,
 };
 use super::rows::{try_row_to_artifact, try_row_to_job};
 use super::validation::{validate_non_empty, validate_optional_limit};

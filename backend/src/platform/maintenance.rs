@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
-use crate::platform::config::AppConfig;
-use crate::platform::storage::Database;
+use crate::platform::config::app_config::AppConfig;
+use crate::platform::storage::database::Database;
 
 const DEV_LOG_ROOT: &str = ".local/dev-logs";
 const BACKUPS_ROOT: &str = "backups";

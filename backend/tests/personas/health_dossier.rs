@@ -1,9 +1,11 @@
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
 use hermes_hub_backend::domains::personas::expertise::PersonaExpertiseStore;
 use hermes_hub_backend::domains::personas::health::PersonaHealthStore;
-use hermes_hub_backend::domains::personas::investigator::PersonaInvestigator;
-use hermes_hub_backend::domains::personas::memory::{PersonaFactStore, PersonaPreferenceStore};
-use hermes_hub_backend::domains::personas::trust::PersonaRiskStore;
+use hermes_hub_backend::domains::personas::investigator::service::PersonaInvestigator;
+use hermes_hub_backend::domains::personas::memory::{
+    facts::PersonaFactStore, preferences::PersonaPreferenceStore,
+};
+use hermes_hub_backend::domains::personas::trust::risks::PersonaRiskStore;
 
 use super::support::{live_personas_pool, unique_suffix};
 

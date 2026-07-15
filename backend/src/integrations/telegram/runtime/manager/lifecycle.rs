@@ -1,9 +1,10 @@
 use chrono::Utc;
 
-use crate::integrations::telegram::client::TelegramError;
-use crate::platform::config::AppConfig;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::platform::config::app_config::AppConfig;
 
-use super::super::actor::{optional_telegram_session_key, spawn_tdlib_actor};
+use super::super::actor::session::optional_telegram_session_key;
+use super::super::actor::spawn::spawn_tdlib_actor;
 use super::super::models::{
     TelegramRuntimeRestartRequest, TelegramRuntimeStartRequest, TelegramRuntimeStatus,
     TelegramRuntimeStopRequest,
@@ -37,7 +38,7 @@ impl TelegramRuntimeManager {
         request: &TelegramRuntimeStartRequest,
     ) -> Result<TelegramRuntimeStatus, TelegramError>
     where
-        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+        S: crate::platform::secrets::resolver::SecretResolver + Sync + ?Sized,
     {
         request.validate()?;
         let account =
@@ -129,7 +130,7 @@ impl TelegramRuntimeManager {
         request: &TelegramRuntimeRestartRequest,
     ) -> Result<TelegramRuntimeStatus, TelegramError>
     where
-        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+        S: crate::platform::secrets::resolver::SecretResolver + Sync + ?Sized,
     {
         request.validate()?;
         self.stop_account(&request.account_id)?;

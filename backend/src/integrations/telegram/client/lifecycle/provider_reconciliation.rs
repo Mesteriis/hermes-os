@@ -2,10 +2,10 @@ use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
 
-use crate::integrations::telegram::client::errors::TelegramError;
-use crate::integrations::telegram::client::lifecycle::{
+use crate::integrations::telegram::client::commands::{
     mark_command_mismatch, mark_command_reconciled,
 };
+use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
 use crate::integrations::telegram::client::rows::row_to_telegram_provider_write_command;
 

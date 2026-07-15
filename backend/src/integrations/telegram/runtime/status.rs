@@ -1,12 +1,11 @@
 use chrono::Utc;
 use hermes_communications_api::accounts::ProviderAccountLookupPort;
 use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
-use serde_json::Value;
 
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::telegram::tdjson::TdJsonLibrary;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::tdjson::client::TdJsonLibrary;
 
-use crate::platform::config::AppConfig;
+use crate::platform::config::app_config::AppConfig;
 
 use super::models::TelegramRuntimeStatus;
 use super::state::{TelegramRuntimeActorState, TelegramRuntimeState};

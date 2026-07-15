@@ -6,7 +6,7 @@ mod yandex_telemost;
 mod zoom;
 
 use crate::engines::automation::errors::AutomationError;
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
 use crate::integrations::zoom::client::errors::ZoomError;

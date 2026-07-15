@@ -1,4 +1,5 @@
-use crate::integrations::telegram::client::{TelegramError, ensure_telegram_account_active};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::identifiers::ensure_telegram_account_active;
 use hermes_communications_api::accounts::ProviderAccount;
 use hermes_communications_api::accounts::ProviderAccountLookupPort;
 

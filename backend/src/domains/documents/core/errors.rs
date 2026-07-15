@@ -33,5 +33,5 @@ pub enum DocumentImportWithProcessingError {
     DocumentImport(#[from] DocumentImportError),
 
     #[error(transparent)]
-    Processing(#[from] crate::domains::documents::processing::DocumentProcessingError),
+    Processing(#[from] crate::domains::documents::processing::errors::DocumentProcessingError),
 }

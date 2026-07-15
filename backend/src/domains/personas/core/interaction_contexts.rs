@@ -7,7 +7,7 @@ use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Transaction};
 
 use super::errors::PersonaCoreError;
-use super::link_persona_entity_in_transaction;
+use super::evidence::link_persona_entity_in_transaction;
 use super::preferences::{
     delete_interaction_preferences_in_transaction,
     materialize_interaction_preferences_in_transaction,

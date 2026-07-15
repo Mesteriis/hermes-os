@@ -1,8 +1,9 @@
 use hermes_communications_api::evidence::CommunicationEvidencePortError;
 
-use crate::platform::communications::ProviderCommunicationMessagePortError;
-use crate::platform::secrets::{DatabaseEncryptedVaultError, SecretReferenceError};
-use crate::vault::HostVaultError;
+use crate::platform::communications::errors::ProviderCommunicationMessagePortError;
+use crate::platform::secrets::database_vault::DatabaseEncryptedVaultError;
+use crate::platform::secrets::errors::SecretReferenceError;
+use crate::vault::errors::HostVaultError;
 use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, thiserror::Error)]

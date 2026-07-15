@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 
 use super::super::errors::MailSyncError;
-use super::super::models::MailSyncDueAccount;
+use super::super::models::settings::MailSyncDueAccount;
 use super::super::rows::row_to_due_account;
 use super::super::{DEFAULT_MAIL_SYNC_BATCH_SIZE, DEFAULT_MAIL_SYNC_POLL_INTERVAL_SECONDS};
 use super::MailSyncStore;

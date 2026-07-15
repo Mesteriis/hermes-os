@@ -1,5 +1,5 @@
-use crate::app::ApiError;
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::app::error::types::ApiError;
+use crate::domains::communications::messages::models::ProjectedMessage;
 use hermes_events_api::EventEnvelope;
 
 use super::models::{

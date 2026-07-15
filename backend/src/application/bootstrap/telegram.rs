@@ -11,8 +11,9 @@ use sqlx::postgres::PgPool;
 use tokio_util::sync::CancellationToken;
 
 use super::{ApplicationBootstrapContext, runtime_allows_processing};
-use crate::integrations::telegram::runtime::TelegramRuntimeManager;
-use crate::platform::config::AppConfig;
+use crate::integrations::telegram::runtime::manager::TelegramRuntimeManager;
+use crate::integrations::telegram::runtime::manager::command_executor::execute_queued_commands;
+use crate::platform::config::app_config::AppConfig;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::vault::HostVault;
 
@@ -46,7 +47,7 @@ fn telegram_command_executor_task(context: ApplicationBootstrapContext) -> Optio
     let runtime_pool = pool.clone();
     let runtime = context.telegram_runtime;
     let event_bus = context.event_bus;
-    let telegram_store = crate::integrations::telegram::client::TelegramStore::new(
+    let telegram_store = crate::integrations::telegram::client::store::TelegramStore::new(
         pool.clone(),
         Arc::new(
             hermes_communications_postgres::provider_store::CommunicationProviderAccountStore::new(
@@ -59,7 +60,7 @@ fn telegram_command_executor_task(context: ApplicationBootstrapContext) -> Optio
             ),
         ),
         Arc::new(
-            crate::domains::communications::messages::ProviderChannelMessageStore::new(
+            crate::domains::communications::messages::provider_channel_store::ProviderChannelMessageStore::new(
                 pool.clone(),
             ),
         ),
@@ -102,13 +103,7 @@ fn telegram_command_executor_task(context: ApplicationBootstrapContext) -> Optio
                 {
                     continue;
                 }
-                crate::integrations::telegram::runtime::execute_queued_commands(
-                    &telegram_store,
-                    &runtime,
-                    &event_bus,
-                    10,
-                )
-                .await;
+                execute_queued_commands(&telegram_store, &runtime, &event_bus, 10).await;
             }
         }) as RuntimeTaskFuture
     });
@@ -272,10 +267,10 @@ pub(super) async fn reconcile_runtime_once(
                     pool.clone(),
                 ),
             telegram_store:
-                crate::application::provider_runtime_services::telegram_provider_runtime_store(
+                crate::application::provider_runtime_factories::telegram_provider_runtime_store(
                     pool.clone(),
                 ),
-            secret_store: crate::platform::secrets::SecretReferenceStore::new(pool.clone()),
+            secret_store: crate::platform::secrets::store::SecretReferenceStore::new(pool.clone()),
         },
         crate::application::telegram_runtime::TelegramRuntimeUseCaseRuntime {
             secret_resolver: vault,
@@ -316,7 +311,7 @@ pub(super) async fn reconcile_runtime_once(
             let _ = runtime.stop_account(account_id);
             match crate::application::telegram_runtime::start_runtime(
                 &runtime_context,
-                &crate::integrations::telegram::runtime::TelegramRuntimeStartRequest {
+                &crate::integrations::telegram::runtime::models::TelegramRuntimeStartRequest {
                     account_id: account_id.clone(),
                 },
             )
@@ -346,7 +341,7 @@ pub(super) async fn reconcile_runtime_once(
 
         match crate::application::telegram_runtime::sync_chats(
             &runtime_context,
-            &crate::integrations::telegram::runtime::TelegramChatSyncRequest {
+            &crate::integrations::telegram::runtime::models::TelegramChatSyncRequest {
                 account_id: account_id.clone(),
                 limit: Some(TELEGRAM_RUNTIME_CHAT_SYNC_LIMIT),
             },

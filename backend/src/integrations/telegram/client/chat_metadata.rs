@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::integrations::telegram::tdjson::TelegramTdlibChatSnapshot;
+use crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatSnapshot;
 
 pub(super) fn tdlib_chat_projection_metadata(
     snapshot: &TelegramTdlibChatSnapshot,
@@ -357,7 +357,7 @@ fn tdlib_chat_positions_metadata(raw: &Value) -> Option<Value> {
 mod tests {
     use super::*;
 
-    use crate::integrations::telegram::client::TelegramChatKind;
+    use crate::integrations::telegram::client::models::chats::TelegramChatKind;
 
     #[test]
     fn tdlib_chat_projection_metadata_preserves_supergroup_identity() {

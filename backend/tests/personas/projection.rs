@@ -1,6 +1,6 @@
 use hermes_hub_backend::domains::personas::api::{
-    PersonaProjectionError, PersonaProjectionStore, PersonaType,
-    upsert_personas_from_message_participants,
+    errors::PersonaProjectionError, models::PersonaType,
+    participants::upsert_personas_from_message_participants, store::PersonaProjectionStore,
 };
 use hermes_hub_backend::domains::personas::command_service::{
     PersonaCommandService, ProviderAddressBookEntryPersonaCommand,

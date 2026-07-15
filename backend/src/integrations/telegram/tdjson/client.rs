@@ -5,7 +5,7 @@ use std::path::Path;
 use libloading::Library;
 use serde_json::Value;
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
 use super::library_paths::tdjson_library_candidates;
 

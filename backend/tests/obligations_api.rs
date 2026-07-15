@@ -8,12 +8,13 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use tower::ServiceExt;
 
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::obligations::{
-    NewObligation, NewObligationEvidence, Obligation, ObligationEntityKind,
-    ObligationEvidenceSourceKind, ObligationReviewState, ObligationStore,
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::obligations::models::{
+    entity_kind::ObligationEntityKind, evidence::NewObligationEvidence, obligation::NewObligation,
+    read_model::Obligation, source_kind::ObligationEvidenceSourceKind,
+    states::ObligationReviewState,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const LOCAL_API_TOKEN: &str = "obligations-api-test-token";
 
@@ -290,3 +291,4 @@ fn path_segment(value: &str) -> String {
     }
     encoded
 }
+use hermes_hub_backend::domains::obligations::store::ObligationStore;

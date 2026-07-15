@@ -15,7 +15,9 @@ pub enum ProjectStoreError {
     NoKeywords,
 
     #[error(transparent)]
-    ProjectLinkReview(#[from] crate::domains::projects::link_reviews::ProjectLinkReviewError),
+    ProjectLinkReview(
+        #[from] crate::domains::projects::link_reviews::errors::ProjectLinkReviewError,
+    ),
 
     #[error("project limit must be positive")]
     InvalidLimit,

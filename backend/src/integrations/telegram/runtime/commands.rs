@@ -2,10 +2,12 @@ use std::sync::mpsc::{self, Sender};
 
 use tokio::task;
 
-use crate::integrations::telegram::client::{TelegramError, TelegramManualSendRequest};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::messages::TelegramManualSendRequest;
 use crate::integrations::telegram::tdjson::{
-    TelegramTdlibChatFolderSnapshot, TelegramTdlibChatSnapshot, TelegramTdlibFileSnapshot,
-    TelegramTdlibMessageSnapshot, TelegramTdlibTopicSnapshot,
+    snapshots::TelegramTdlibChatFolderSnapshot, snapshots::TelegramTdlibChatSnapshot,
+    snapshots::TelegramTdlibFileSnapshot, snapshots::TelegramTdlibMessageSnapshot,
+    snapshots::TelegramTdlibTopicSnapshot,
 };
 
 use super::TDJSON_COMMAND_TIMEOUT;

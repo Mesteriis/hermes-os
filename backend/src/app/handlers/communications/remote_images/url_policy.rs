@@ -2,7 +2,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use reqwest::Url;
 
-use crate::app::ApiError;
+use crate::app::error::types::ApiError;
 
 const MAX_REMOTE_IMAGE_URL_BYTES: usize = 4096;
 

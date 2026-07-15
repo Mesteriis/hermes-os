@@ -59,8 +59,9 @@ fn mail_background_sync_task(context: ApplicationBootstrapContext) -> Option<Run
         let pool = pool.clone();
         let vault = vault.clone();
         Box::pin(async move {
-            let store = crate::workflows::mail_background_sync::MailSyncStore::new(pool.clone());
-            let service = crate::workflows::mail_background_sync::MailBackgroundSyncService::new(
+            let store =
+                crate::workflows::mail_background_sync::store::MailSyncStore::new(pool.clone());
+            let service = crate::workflows::mail_background_sync::service::MailBackgroundSyncService::new(
             pool.clone(),
             vault.clone(),
             crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT,
@@ -294,7 +295,7 @@ fn mail_outbox_delivery_task(context: ApplicationBootstrapContext) -> Option<Run
                     pool.clone(),
                 );
                 let sender =
-                    crate::domains::communications::outbox::CommunicationOutboxEmailSender::new(
+                    crate::domains::communications::outbox::provider_sender::CommunicationOutboxEmailSender::new(
                         pool.clone(),
                         vault.clone(),
                         crate::integrations::mail::send::smtp_outbox_transport(),
@@ -303,7 +304,7 @@ fn mail_outbox_delivery_task(context: ApplicationBootstrapContext) -> Option<Run
                             vault.clone(),
                         ),
                     );
-                let worker = crate::domains::communications::outbox::EmailOutboxDeliveryWorker::new(
+                let worker = crate::domains::communications::outbox::delivery::EmailOutboxDeliveryWorker::new(
                     store, sender,
                 );
                 match worker.deliver_due(Utc::now(), 25).await {
@@ -429,13 +430,17 @@ fn mail_ai_pipeline_task(context: ApplicationBootstrapContext) -> Option<Runtime
                     }
                     None => (None, false),
                 };
-                let target_language = super::mail_ai::mail_ai_target_language(&pool).await;
+                let owner_query =
+                    crate::application::persona_owner_query::PostgresPersonaOwnerQuery::new(
+                        pool.clone(),
+                    );
+                let target_language = super::mail_ai::mail_ai_target_language(&owner_query).await;
                 let service = crate::workflows::email_intelligence::pipeline::MailAiPipelineService::new(
                     pool.clone(),
                     hub,
                     target_language,
                     std::sync::Arc::new(
-                        crate::domains::communications::sensitive_forwarding::SensitiveForwardingStore::new(
+                        crate::domains::communications::sensitive_forwarding::SensitiveForwardingPgStore::new(
                             pool.clone(),
                         ),
                     ),

@@ -1,11 +1,12 @@
 use serde_json::Value;
 
-use crate::platform::communications::GmailHistoryFetchRequest;
+use hermes_communications_api::mail_resources::GmailHistoryFetchRequest;
 
 use super::super::super::errors::ProviderSyncError;
-use super::super::super::models::{MailSyncPhase, ProgressMode, ProgressUpdate};
+use super::super::super::models::progress::{MailSyncPhase, ProgressMode, ProgressUpdate};
 use super::super::super::service::MailBackgroundSyncService;
-use super::super::{ProviderSyncContext, ProviderSyncSummary};
+use super::super::summary::ProviderSyncSummary;
+use super::super::types::ProviderSyncContext;
 
 impl MailBackgroundSyncService {
     pub(in crate::workflows::mail_background_sync::provider::gmail) async fn sync_gmail_history_pages(

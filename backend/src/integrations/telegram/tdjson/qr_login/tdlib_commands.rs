@@ -3,10 +3,11 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 
 use serde_json::json;
 
-use crate::integrations::telegram::client::{TelegramError, TelegramQrLoginStartRequest};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::qr_login::TelegramQrLoginStartRequest;
 
 use super::super::client::TdJsonClient;
-use super::super::qr_login_support::{DrainedQrLoginCommand, TelegramQrLoginCommand};
+use super::super::qr_login_support::types::{DrainedQrLoginCommand, TelegramQrLoginCommand};
 use super::super::requests::set_tdlib_parameters_request;
 
 pub(super) fn drain_qr_login_commands(

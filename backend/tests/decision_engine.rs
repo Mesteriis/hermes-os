@@ -1,8 +1,7 @@
-use hermes_hub_backend::domains::decisions::{
-    DecisionCandidateKind, DecisionEngine, DecisionEngineError, DecisionExtractionInput,
-};
-use hermes_hub_backend::domains::decisions::{
-    DecisionEntityKind, DecisionEvidenceSourceKind, DecisionReviewState,
+use hermes_hub_backend::domains::decisions::extraction::engine::DecisionEngine;
+use hermes_hub_backend::domains::decisions::extraction::errors::DecisionEngineError;
+use hermes_hub_backend::domains::decisions::extraction::models::{
+    DecisionCandidateKind, DecisionExtractionInput,
 };
 use serde_json::json;
 
@@ -110,3 +109,6 @@ fn decision_engine_rejects_empty_source_evidence_before_detection() {
 
     assert!(matches!(error, DecisionEngineError::EmptyField("text")));
 }
+use hermes_hub_backend::domains::decisions::models::entity_kind::DecisionEntityKind;
+use hermes_hub_backend::domains::decisions::models::source_kind::DecisionEvidenceSourceKind;
+use hermes_hub_backend::domains::decisions::models::states::DecisionReviewState;

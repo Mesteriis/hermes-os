@@ -1,6 +1,6 @@
 use super::super::DEFAULT_MAIL_SYNC_BATCH_SIZE;
 use super::super::errors::MailSyncError;
-use super::super::models::MailSyncStatus;
+use super::super::models::status::MailSyncStatus;
 use super::super::rows::row_to_status;
 use super::MailSyncStore;
 

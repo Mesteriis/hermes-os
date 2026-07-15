@@ -4,28 +4,21 @@ use serde::Deserialize;
 
 use super::helpers::{AUDIT_ACTOR_ID, telegram_api_hash_from_config, telegram_secret_store};
 use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
     ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
+    stores::{domain_stores::*, integration_stores::*},
 };
+use crate::app::error::types::ApiError;
 use crate::app::signal_hub_support::{
     provider_account_or_not_found, remove_provider_account_signal_connection,
     sync_provider_account_signal_connection, sync_provider_account_signal_connection_with_status,
 };
-use crate::app::{ApiError, AppState};
-use crate::integrations::telegram::client::{
+use crate::app::state::AppState;
+use crate::integrations::telegram::client::models::accounts::{
     TelegramAccountLifecycleResponse, TelegramAccountListResponse, TelegramAccountSetupRequest,
-    TelegramAccountSetupResponse, TelegramLiveAccountSetupRequest, TelegramSecretVault,
+    TelegramAccountSetupResponse, TelegramLiveAccountSetupRequest,
 };
-use crate::platform::audit::NewApiAuditRecord;
+use crate::integrations::telegram::client::vault::TelegramSecretVault;
+use crate::platform::audit::models::NewApiAuditRecord;
 
 pub(crate) async fn post_telegram_fixture_account(
     State(state): State<AppState>,

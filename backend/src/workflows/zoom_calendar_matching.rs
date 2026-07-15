@@ -4,8 +4,10 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::calendar::core::{CalendarCoreError, EventRelationPort};
-use crate::domains::calendar::events::{CalendarError, CalendarEventQueryPort};
+use crate::domains::calendar::core::errors::CalendarCoreError;
+use crate::domains::calendar::events::errors::CalendarError;
+use crate::domains::calendar::ports::CalendarEventQueryPort;
+use crate::domains::calendar::ports::EventRelationPort;
 use crate::platform::events::bus::zoom_event_types;
 use hermes_events_postgres::errors::EventStoreError;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};

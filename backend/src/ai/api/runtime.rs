@@ -5,26 +5,18 @@ use chrono::Utc;
 use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 
-use crate::ai::core::{
-    AI_EMBEDDING_DIMENSION, AI_PROMPT_TEMPLATE_VERSION, AiAgentListResponse, AiAgentRun,
-    AiAnswerRequest, AiHubRequestAcceptedResponse, AiMeetingPrepRequest, AiRunStore,
-    AiStatusResponse, AiTaskCandidateRefreshRequest, NewAiRun, event_id_from_command,
-    run_id_from_command, text_preview, v3_agents,
+use crate::ai::core::agents::{AiAgentListResponse, v3_agents};
+use crate::ai::core::constants::AI_EMBEDDING_DIMENSION;
+use crate::ai::core::constants::AI_PROMPT_TEMPLATE_VERSION;
+use crate::ai::core::helpers::{event_id_from_command, run_id_from_command, text_preview};
+use crate::ai::core::runs::{AiAgentRun, AiRunStore, NewAiRun};
+use crate::ai::core::types::{
+    AiAnswerRequest, AiHubRequestAcceptedResponse, AiMeetingPrepRequest, AiStatusResponse,
+    AiTaskCandidateRefreshRequest,
 };
-use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
-};
-use crate::app::{ApiError, AppState};
+use crate::app::api_support::{review_lists::*, stores::ai_runtime::*};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::application::ai_signal_dispatch::dispatch_ai_runtime_signal;
 use hermes_events_postgres::store::EventStore;
 pub(crate) async fn get_ai_status(
@@ -77,7 +69,7 @@ pub(crate) async fn get_ai_agents(
             let persona = persona_attribution
                 .upsert_ai_agent_persona(item.agent_id, item.display_name)
                 .await
-                .map_err(crate::ai::core::AiError::from)?;
+                .map_err(crate::ai::core::errors::AiError::from)?;
             item.persona_id = Some(persona.persona_id);
             item.persona_type = Some(persona.persona_type);
             item.persona_email = Some(persona.persona_email);
@@ -573,8 +565,8 @@ async fn record_ai_request_initialization_failure(
     let settings = ai_runtime_settings(state).await?;
     let run_store = AiRunStore::new(pool.clone());
     let runtime_name = match settings.provider {
-        crate::platform::config::AiRuntimeProvider::Ollama => "ollama",
-        crate::platform::config::AiRuntimeProvider::OmniRoute => "omniroute",
+        crate::platform::config::ai::AiRuntimeProvider::Ollama => "ollama",
+        crate::platform::config::ai::AiRuntimeProvider::OmniRoute => "omniroute",
     };
 
     run_store

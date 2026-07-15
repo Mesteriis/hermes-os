@@ -1,31 +1,38 @@
 use chrono::Utc;
-use hermes_events_api::EventEnvelope;
 use serde_json::json;
 use sqlx::Transaction;
 use sqlx::postgres::{PgPool, Postgres};
 use thiserror::Error;
 
-use crate::domains::decisions::{Decision, DecisionReviewState, DecisionStore, DecisionStoreError};
-use crate::domains::obligations::{
-    NewObligation, NewObligationEvidence, Obligation, ObligationEntityKind, ObligationReviewState,
-    ObligationStore, ObligationStoreError,
-};
+use crate::domains::decisions::errors::DecisionStoreError;
+use crate::domains::decisions::models::decision::Decision;
+use crate::domains::decisions::models::states::DecisionReviewState;
+use crate::domains::decisions::ports::DecisionReviewPort;
+use crate::domains::obligations::errors::ObligationStoreError;
+use crate::domains::obligations::models::entity_kind::ObligationEntityKind;
+use crate::domains::obligations::models::evidence::NewObligationEvidence;
+use crate::domains::obligations::models::obligation::NewObligation;
+use crate::domains::obligations::models::read_model::Obligation;
+use crate::domains::obligations::ports::ObligationReviewPort;
 use crate::domains::relationships::models::{Relationship, RelationshipReviewState};
 use crate::domains::tasks::candidates::constants::{
     OBLIGATION_CANDIDATE_METADATA_KEY, TASK_CANDIDATE_KIND_OBLIGATION_TASK,
 };
+use crate::domains::tasks::candidates::errors::TaskCandidateError;
 use crate::domains::tasks::candidates::ids::task_id_from_candidate;
 use crate::domains::tasks::candidates::models::StoredCandidateRow;
-use crate::domains::tasks::candidates::{
-    TaskCandidateError, TaskCandidateReviewCommand, TaskCandidateReviewCommandResult,
-    TaskCandidateReviewState, TaskCandidateStore,
+use crate::domains::tasks::candidates::models::{
+    TaskCandidateReviewCommand, TaskCandidateReviewCommandResult, TaskCandidateReviewState,
 };
-use crate::domains::tasks::core::{ObligationTaskLinkStore, TaskCoreError};
+use crate::domains::tasks::candidates::store::TaskCandidateStore;
+use crate::domains::tasks::core::errors::TaskCoreError;
+use crate::domains::tasks::core::obligation_links::ObligationTaskLinkStore;
 use crate::engines::obligation::models::ObligationCandidate;
 use crate::workflows::review_mirror::{
-    ReviewMirrorError, sync_decision_review_state_with_observation,
-    sync_obligation_review_state_with_observation, sync_relationship_review_state_with_observation,
-    sync_task_candidate_review_state_in_transaction,
+    ReviewMirrorError, decision::sync_decision_review_state_with_observation,
+    obligation::sync_obligation_review_state_with_observation,
+    relationship::sync_relationship_review_state_with_observation,
+    task::sync_task_candidate_review_state_in_transaction,
 };
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::errors::ObservationStoreError;
@@ -69,7 +76,7 @@ impl DecisionReviewApplicationService {
             )
             .await?;
 
-        let decision = DecisionStore::new(self.pool.clone())
+        let decision = DecisionReviewPort::new(self.pool.clone())
             .set_review_state_with_observation(
                 decision_id,
                 review_state,
@@ -140,7 +147,7 @@ impl ObligationReviewApplicationService {
             )
             .await?;
 
-        let obligation = ObligationStore::new(self.pool.clone())
+        let obligation = ObligationReviewPort::new(self.pool.clone())
             .set_review_state_with_observation(
                 obligation_id,
                 review_state,
@@ -429,7 +436,7 @@ async fn sync_obligation_candidate_in_transaction(
                 .quote(obligation_candidate.quote.clone())
                 .confidence(obligation_candidate.confidence)
                 .metadata(json!({ "task_candidate_id": task_candidate_id }))];
-            let stored = ObligationStore::upsert_with_evidence_in_transaction(
+            let stored = ObligationReviewPort::upsert_with_evidence_in_transaction(
                 transaction,
                 &obligation,
                 &evidence,
@@ -443,26 +450,19 @@ async fn sync_obligation_candidate_in_transaction(
             .await?;
         }
         TaskCandidateReviewState::Suggested | TaskCandidateReviewState::UserRejected => {
-            let linked_obligation_ids = sqlx::query_scalar::<_, String>(
-                r#"
-                SELECT link.obligation_id
-                FROM obligation_task_links link
-                JOIN tasks task ON task.task_id = link.task_id
-                WHERE task.task_candidate_id = $1
-                  AND link.link_kind = 'fulfillment_task'
-                ORDER BY link.obligation_id
-                "#,
-            )
-            .bind(task_candidate_id)
-            .fetch_all(&mut **transaction)
-            .await?;
+            let linked_obligation_ids =
+                ObligationTaskLinkStore::obligation_ids_for_candidate_in_transaction(
+                    transaction,
+                    task_candidate_id,
+                )
+                .await?;
             let obligation_review_state = match review_state {
                 TaskCandidateReviewState::Suggested => ObligationReviewState::Suggested,
                 TaskCandidateReviewState::UserRejected => ObligationReviewState::UserRejected,
                 TaskCandidateReviewState::UserConfirmed => unreachable!(),
             };
             for obligation_id in linked_obligation_ids {
-                ObligationStore::set_review_state_in_transaction(
+                ObligationReviewPort::set_review_state_in_transaction(
                     transaction,
                     &obligation_id,
                     obligation_review_state,
@@ -530,3 +530,4 @@ fn map_obligation_entity_kind(
         }
     }
 }
+use crate::domains::obligations::models::states::ObligationReviewState;

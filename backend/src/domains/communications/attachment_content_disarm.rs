@@ -1,15 +1,15 @@
 use chrono::Utc;
-use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::storage::{
-    CommunicationStorageError, CommunicationStorageStore, LocalCommunicationBlobStore,
-    NewCommunicationBlob,
-};
-use crate::platform::communications::{
+use crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use crate::domains::communications::storage::errors::CommunicationStorageError;
+use crate::domains::communications::storage::models::NewCommunicationBlob;
+use crate::domains::communications::storage::store::CommunicationStorageStore;
+use crate::platform::communications::attachment_text::{
     AttachmentTextExtractionError, RichAttachmentExtractionKind, disarm_rich_attachment,
     rich_attachment_extraction_kind, rich_attachment_extractor_address,
 };

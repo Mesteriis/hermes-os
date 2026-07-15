@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 
 use super::errors::TelegramError;
-use super::models::messages::{
+use super::models::message_references::{
     TelegramForwardChainResponse, TelegramForwardRef, TelegramMessageReferenceSummary,
     TelegramReplyChainResponse, TelegramReplyRef,
 };

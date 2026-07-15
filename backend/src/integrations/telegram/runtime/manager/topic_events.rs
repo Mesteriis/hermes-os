@@ -1,15 +1,15 @@
 use chrono::{DateTime, Utc};
-use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use sqlx::PgPool;
 
-use crate::integrations::telegram::client::lifecycle::mark_command_reconciled;
+use crate::integrations::telegram::client::commands::mark_command_reconciled;
+use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
 use crate::integrations::telegram::client::models::topics::{NewTelegramTopic, TelegramTopic};
-use crate::integrations::telegram::client::{TelegramError, TelegramStore};
-use crate::integrations::telegram::tdjson::{
-    TelegramTdlibTopicSnapshot, TelegramTdlibTopicUpdateSnapshot,
-};
+use crate::integrations::telegram::client::store::TelegramStore;
+use crate::integrations::telegram::tdjson::parsing::events::TelegramTdlibTopicUpdateSnapshot;
+use crate::integrations::telegram::tdjson::snapshots::TelegramTdlibTopicSnapshot;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
 use hermes_events_postgres::store::EventStore;
@@ -234,8 +234,8 @@ mod tests {
     use sqlx::Row;
 
     use super::*;
-    use crate::integrations::telegram::client::lifecycle::insert_command;
-    use crate::integrations::telegram::client::models::{
+    use crate::integrations::telegram::client::commands::insert_command;
+    use crate::integrations::telegram::client::models::chats::{
         NewTelegramChat, TelegramChatKind, TelegramSyncState,
     };
 

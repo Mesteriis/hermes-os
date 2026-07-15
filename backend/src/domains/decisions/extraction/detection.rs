@@ -2,7 +2,7 @@ use super::models::{
     DecisionCandidate, DecisionCandidateKind, DecisionExtractionInput,
     DecisionImpactedEntityCandidate,
 };
-use crate::domains::decisions::DecisionReviewState;
+use crate::domains::decisions::models::states::DecisionReviewState;
 
 pub fn detect_decision(
     input: &DecisionExtractionInput,

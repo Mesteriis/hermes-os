@@ -1,11 +1,12 @@
 use std::collections::BTreeSet;
 
 use super::models::DossierSectionItem;
-use crate::domains::personas::enrichment::EnrichedPersona;
+use crate::domains::personas::enrichment::models::EnrichedPersona;
 use crate::domains::personas::expertise::PersonaExpertise;
-use crate::domains::personas::memory::{
-    PersonaFact, PersonaMemoryCard, PersonaPreference, RelationshipEvent,
-};
+use crate::domains::personas::memory::cards::PersonaMemoryCard;
+use crate::domains::personas::memory::facts::PersonaFact;
+use crate::domains::personas::memory::preferences::PersonaPreference;
+use crate::domains::personas::memory::relationship_events::RelationshipEvent;
 
 pub(super) fn fact_section(facts: &[PersonaFact], fact_type: &str) -> Vec<DossierSectionItem> {
     facts

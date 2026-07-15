@@ -1,7 +1,9 @@
+use crate::platform::settings::store::ApplicationSettingsStore;
 use serde_json::{Map, Value, json};
 use sqlx::postgres::PgPool;
 
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::domains::signal_hub::connections::SignalHubConnectionService;
 use crate::domains::signal_hub::health::SignalHubHealthService;
 use crate::domains::signal_hub::store::{
@@ -13,8 +15,9 @@ use crate::integrations::ollama::client::config::OllamaClientConfig;
 use crate::integrations::omniroute::client::OmniRouteClient;
 use crate::integrations::omniroute::client::config::OmniRouteClientConfig;
 use crate::integrations::whatsapp::runtime::contracts::WhatsAppRuntimeStatus;
-use crate::platform::config::{AiRuntimeProvider, AppConfig};
-use crate::platform::settings::{AiRuntimeSettings, ApplicationSettingsStore};
+use crate::platform::config::ai::AiRuntimeProvider;
+use crate::platform::config::app_config::AppConfig;
+use crate::platform::settings::ai_runtime::AiRuntimeSettings;
 use hermes_communications_api::accounts::CommunicationProviderKind;
 use hermes_communications_api::accounts::ProviderAccount;
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;

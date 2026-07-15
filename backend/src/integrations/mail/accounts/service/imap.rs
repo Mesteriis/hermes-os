@@ -3,7 +3,7 @@ use hermes_communications_api::accounts::{
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
 
-use crate::platform::secrets::NewSecretReference;
+use crate::platform::secrets::models::NewSecretReference;
 
 use super::super::errors::EmailAccountSetupError;
 use super::super::helpers::{imap_secret_ref, smtp_secret_ref};

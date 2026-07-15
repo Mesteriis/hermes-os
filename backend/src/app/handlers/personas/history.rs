@@ -1,4 +1,18 @@
-use super::support::*;
+use axum::Json;
+use axum::extract::{Path, Query, RawQuery, State};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, header};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::app::api_support::{
+    query_parsing::personas::*, review_commands::*, stores::domain_stores::*,
+};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::domains::personas::analytics::PersonaAnalyticsService;
+use crate::domains::personas::export::{ExportFormat, PersonaExportService};
+use crate::platform::audit::models::NewApiAuditRecord;
 // ── Persona Analytics ───────────────────────────────────────────────────────
 
 pub(crate) async fn get_persona_analytics(
@@ -65,7 +79,7 @@ pub(crate) async fn get_persona_export_handler(
 
 #[derive(Serialize)]
 pub(crate) struct PersonaSnapshotsResponse {
-    items: Vec<crate::domains::personas::memory::PersonaSnapshot>,
+    items: Vec<crate::domains::personas::memory::snapshots::PersonaSnapshot>,
 }
 
 pub(crate) async fn get_persona_snapshots(
@@ -78,7 +92,7 @@ pub(crate) async fn get_persona_snapshots(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let items = crate::app::api_support::stores::domain_stores::app_store::<
-        crate::domains::personas::memory::PersonaSnapshotStore,
+        crate::domains::personas::memory::snapshots::PersonaSnapshotStore,
     >(pool)
     .list(&persona_id)
     .await
@@ -109,7 +123,7 @@ pub(crate) async fn get_persona_history_diff(
         .map_err(|_| ApiError::InvalidCommunicationQuery("invalid to date"))?
         .with_timezone(&Utc);
     let diff = crate::app::api_support::stores::domain_stores::app_store::<
-        crate::domains::personas::memory::PersonaSnapshotStore,
+        crate::domains::personas::memory::snapshots::PersonaSnapshotStore,
     >(pool)
     .history_diff(&persona_id, from_date, to_date)
     .await

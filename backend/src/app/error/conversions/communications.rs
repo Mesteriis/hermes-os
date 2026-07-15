@@ -1,7 +1,7 @@
 use super::super::types::ApiError;
 use crate::domains::communications::command_service::CommunicationCommandServiceError;
-use crate::domains::communications::messages::MessageProjectionError;
-use crate::domains::communications::storage::CommunicationStorageError;
+use crate::domains::communications::messages::errors::MessageProjectionError;
+use crate::domains::communications::storage::errors::CommunicationStorageError;
 use crate::integrations::mail::accounts::errors::EmailAccountSetupError;
 use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
 use hermes_communications_postgres::errors::CommunicationIngestionError;
@@ -386,8 +386,8 @@ impl From<crate::domains::communications::export::CommunicationExportError> for 
     }
 }
 
-impl From<crate::platform::communications::EmailSendError> for ApiError {
-    fn from(error: crate::platform::communications::EmailSendError) -> Self {
+impl From<hermes_communications_api::email::EmailSendError> for ApiError {
+    fn from(error: hermes_communications_api::email::EmailSendError) -> Self {
         tracing::error!(error = %error, "email send failed");
         ApiError::InvalidCommunicationQuery("email send failed")
     }
@@ -400,8 +400,8 @@ impl From<crate::integrations::mail::imap_write::ImapWriteError> for ApiError {
     }
 }
 
-impl From<crate::domains::communications::signatures::CertificateError> for ApiError {
-    fn from(error: crate::domains::communications::signatures::CertificateError) -> Self {
+impl From<crate::domains::communications::signatures::errors::CertificateError> for ApiError {
+    fn from(error: crate::domains::communications::signatures::errors::CertificateError) -> Self {
         tracing::error!(error = %error, "certificate operation failed");
         ApiError::InvalidCommunicationQuery("certificate operation failed")
     }

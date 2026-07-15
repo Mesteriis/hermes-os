@@ -4,12 +4,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::Utc;
 use hermes_events_api::NewEventEnvelope;
 use hermes_events_postgres::store::EventStore;
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
 use hermes_hub_backend::domains::personas::identity::{
-    PersonaIdentityError, PersonaIdentityReviewCommand, PersonaIdentityReviewState,
-    PersonaIdentityReviewStore,
+    errors::PersonaIdentityError,
+    models::{PersonaIdentityReviewCommand, PersonaIdentityReviewState},
+    store::PersonaIdentityReviewStore,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 

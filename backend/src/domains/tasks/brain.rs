@@ -4,8 +4,8 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::tasks::core::TaskContextPackStore;
-use crate::domains::tasks::core::TaskCoreError;
+use crate::domains::tasks::core::context_packs::TaskContextPackStore;
+use crate::domains::tasks::core::errors::TaskCoreError;
 
 pub struct TaskBrainService;
 

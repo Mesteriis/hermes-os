@@ -1,10 +1,11 @@
 use chrono::{Duration, Utc};
 use hermes_hub_backend::domains::calendar::core::{
-    ContextPackInput, EventAgendaStore, EventChecklistStore, EventContextPackStore,
-    EventParticipantStore, EventRelationStore,
+    agendas::EventAgendaStore, checklists::EventChecklistStore, context_packs::ContextPackInput,
+    context_packs::EventContextPackStore, participants::EventParticipantStore,
+    relations::EventRelationStore,
 };
 use hermes_hub_backend::domains::calendar::events::{
-    CalendarAccountStore, CalendarEventStore, NewCalendarEvent,
+    account_store::CalendarAccountStore, event_store::CalendarEventStore, models::NewCalendarEvent,
 };
 use serde_json::json;
 

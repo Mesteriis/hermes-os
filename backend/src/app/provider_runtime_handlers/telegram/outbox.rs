@@ -6,7 +6,8 @@ use serde_json::json;
 
 use super::helpers::publish_telegram_event;
 use crate::app::api_support::stores::integration_stores::telegram_provider_runtime_service;
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
 
 use crate::platform::events::bus::telegram_event_types;

@@ -1,5 +1,6 @@
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::telegram::tdjson::{self, TdJsonClient, TelegramTdlibTopicSnapshot};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::tdjson::client::TdJsonClient;
+use crate::integrations::telegram::tdjson::{self, snapshots::TelegramTdlibTopicSnapshot};
 use hermes_provider_telegram::tdlib::topics;
 
 use super::super::TDJSON_COMMAND_TIMEOUT;
@@ -14,10 +15,10 @@ pub(super) fn actor_get_forum_topics(
     let extra = format!("hermes-forum-topics-{provider_chat_id}");
     client.send_json(&topics::get_forum_topics(chat_id, limit, &extra))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
-    tdjson::parse_tdlib_topic_list(&response)
+    tdjson::parsing::topics::parse_tdlib_topic_list(&response)
 }
 
 pub(super) fn actor_create_forum_topic(
@@ -33,10 +34,10 @@ pub(super) fn actor_create_forum_topic(
             .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?,
     )?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
-    tdjson::parse_tdlib_created_forum_topic(&response)
+    tdjson::parsing::topics::parse_tdlib_created_forum_topic(&response)
 }
 
 pub(super) fn actor_toggle_forum_topic_closed(
@@ -55,7 +56,7 @@ pub(super) fn actor_toggle_forum_topic_closed(
         &extra,
     ))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
     Ok(())

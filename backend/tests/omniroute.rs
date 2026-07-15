@@ -6,7 +6,7 @@ use axum::{Json, Router};
 use hermes_hub_backend::integrations::omniroute::client::{
     OmniRouteClient, config::OmniRouteClientConfig, error::OmniRouteError,
 };
-use hermes_hub_backend::platform::secrets::ResolvedSecret;
+use hermes_hub_backend::platform::secrets::models::ResolvedSecret;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 

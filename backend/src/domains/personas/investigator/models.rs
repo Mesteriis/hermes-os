@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::errors::InvestigatorError;
-use crate::domains::personas::enrichment::EnrichedPersona;
-use crate::domains::personas::memory::{PersonaFact, PersonaMemoryCard, RelationshipEvent};
+use crate::domains::personas::enrichment::models::EnrichedPersona;
+use crate::domains::personas::memory::cards::PersonaMemoryCard;
+use crate::domains::personas::memory::facts::PersonaFact;
+use crate::domains::personas::memory::relationship_events::RelationshipEvent;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct DossierSectionItem {

@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 
-use crate::domains::documents::processing::DocumentProcessingError;
+use crate::domains::documents::processing::errors::DocumentProcessingError;
 
 use super::ErrorParts;
 

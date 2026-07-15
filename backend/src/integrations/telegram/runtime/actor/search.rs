@@ -1,5 +1,6 @@
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::telegram::tdjson::{self, TdJsonClient, TelegramTdlibMessageSnapshot};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::tdjson::client::TdJsonClient;
+use crate::integrations::telegram::tdjson::{self, snapshots::TelegramTdlibMessageSnapshot};
 use hermes_provider_telegram::tdlib::chats::{search_chat_messages, search_messages};
 
 use super::super::TDJSON_COMMAND_TIMEOUT;
@@ -13,10 +14,10 @@ pub(super) fn actor_search_messages(
     let extra = format!("hermes-search-{}", uuid_extra(query));
     client.send_json(&search_messages(query, limit, &extra))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
-    tdjson::parse_tdlib_message_list(&response)
+    tdjson::parsing::messages::parse_tdlib_message_list(&response)
 }
 
 pub(super) fn actor_search_chat_messages(
@@ -29,10 +30,10 @@ pub(super) fn actor_search_chat_messages(
     let extra = format!("hermes-search-chat-{chat_id}-{}", uuid_extra(query));
     client.send_json(&search_chat_messages(chat_id, query, limit, &extra))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
-    tdjson::parse_tdlib_message_list(&response)
+    tdjson::parsing::messages::parse_tdlib_message_list(&response)
 }
 
 fn uuid_extra(query: &str) -> String {

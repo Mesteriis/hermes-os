@@ -8,16 +8,19 @@ use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::archive_inspection::{
     ArchiveEntryInspection, ArchiveInspectionReport, cached_archive_inspection_report,
 };
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
+use hermes_hub_backend::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use hermes_hub_backend::domains::communications::storage::errors::CommunicationStorageError;
+use hermes_hub_backend::domains::communications::storage::models::{
+    CommunicationAttachmentDisposition, NewCommunicationAttachment, NewCommunicationBlob,
 };
-use hermes_hub_backend::domains::communications::storage::{
-    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
-    CommunicationStorageError, CommunicationStorageStore, LocalCommunicationBlobStore,
-    NewCommunicationAttachment, NewCommunicationBlob,
+use hermes_hub_backend::domains::communications::storage::scanner::{
+    AttachmentSafetyScanReport, AttachmentSafetyScanStatus,
 };
+use hermes_hub_backend::domains::communications::storage::store::CommunicationStorageStore;
 
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use serde_json::json;
 
 #[tokio::test]

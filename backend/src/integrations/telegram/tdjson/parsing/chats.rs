@@ -1,6 +1,7 @@
 use serde_json::Value;
 
-use crate::integrations::telegram::client::{TelegramChatKind, TelegramError};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::chats::TelegramChatKind;
 
 use super::values::{tdlib_i64_value, tdlib_string_id, tdlib_unix_datetime_value};
 use crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatSnapshot;

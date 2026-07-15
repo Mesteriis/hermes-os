@@ -1,5 +1,6 @@
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::telegram::tdjson::{self, TdJsonClient};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::tdjson::client::TdJsonClient;
+use crate::integrations::telegram::tdjson::{self};
 use hermes_provider_telegram::tdlib::{chats, messages};
 
 use super::super::TDJSON_COMMAND_TIMEOUT;
@@ -20,7 +21,7 @@ pub(super) fn actor_edit_message(
             .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?,
     )?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
     Ok(())
@@ -43,7 +44,7 @@ pub(super) fn actor_delete_message(
         &extra,
     ))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
     Ok(())
@@ -67,7 +68,7 @@ pub(super) fn actor_set_reaction(
     };
     client.send_json(&request)?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
     Ok(())
@@ -90,7 +91,7 @@ pub(super) fn actor_pin_message(
     };
     client.send_json(&request)?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
     Ok(())
@@ -108,7 +109,7 @@ pub(super) fn actor_toggle_chat_unread(
         let extra = format!("hermes-chat-unread-{}", command_id.trim());
         client.send_json(&chats::toggle_marked_as_unread(chat_id, true, &extra))?;
         let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-        if let Some(message) = tdjson::tdlib_error_message(&response) {
+        if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
             return Err(TelegramError::TdlibRuntime(message));
         }
         return Ok(());
@@ -124,7 +125,7 @@ pub(super) fn actor_toggle_chat_unread(
             &extra,
         ))?;
         let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-        if let Some(message) = tdjson::tdlib_error_message(&response) {
+        if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
             return Err(TelegramError::TdlibRuntime(message));
         }
         return Ok(());
@@ -133,7 +134,7 @@ pub(super) fn actor_toggle_chat_unread(
     let extra = format!("hermes-chat-read-toggle-{}", command_id.trim());
     client.send_json(&chats::toggle_marked_as_unread(chat_id, false, &extra))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
     Ok(())
@@ -149,7 +150,7 @@ pub(super) fn actor_toggle_chat_archive(
     let extra = format!("hermes-chat-archive-{}", command_id.trim());
     client.send_json(&chats::add_chat_to_list(chat_id, archived, &extra))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
     Ok(())
@@ -165,7 +166,7 @@ pub(super) fn actor_toggle_chat_mute(
     let extra = format!("hermes-chat-mute-{}", command_id.trim());
     client.send_json(&chats::set_chat_mute(chat_id, muted, &extra))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
     Ok(())
@@ -185,7 +186,7 @@ pub(super) fn actor_add_chat_to_folder(
         &extra,
     ))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
     Ok(())
@@ -201,19 +202,21 @@ pub(super) fn actor_remove_chat_from_folder(
     let get_extra = format!("hermes-chat-folder-remove-get-{}", command_id.trim());
     client.send_json(&chats::get_chat_folder(provider_folder_id, &get_extra))?;
     let folder_response = receive_tdlib_extra(client, &get_extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&folder_response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&folder_response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
 
     let edit_extra = format!("hermes-chat-folder-remove-{}", command_id.trim());
-    client.send_json(&tdjson::tdlib_edit_chat_folder_remove_chat_request(
-        provider_folder_id,
-        chat_id,
-        &folder_response,
-        &edit_extra,
-    )?)?;
+    client.send_json(
+        &tdjson::folder_requests::tdlib_edit_chat_folder_remove_chat_request(
+            provider_folder_id,
+            chat_id,
+            &folder_response,
+            &edit_extra,
+        )?,
+    )?;
     let response = receive_tdlib_extra(client, &edit_extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
     Ok(())
@@ -228,7 +231,7 @@ pub(super) fn actor_join_chat(
     let extra = format!("hermes-chat-join-{}", command_id.trim());
     client.send_json(&chats::join_chat(chat_id, &extra))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
     Ok(())
@@ -243,7 +246,7 @@ pub(super) fn actor_leave_chat(
     let extra = format!("hermes-chat-leave-{}", command_id.trim());
     client.send_json(&chats::leave_chat(chat_id, &extra))?;
     let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
     Ok(())

@@ -1,13 +1,12 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_communications_api::accounts::CommunicationProviderKind;
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use serde_json::{Value, json};
 
-use crate::platform::secrets::{SecretKind, SecretReferenceStore};
+use crate::platform::secrets::models::SecretKind;
 
 use super::super::errors::TelegramError;
-use super::super::models::{
-    TelegramAccountSetupResponse, TelegramCredentialBinding, TelegramLiveAccountSetupRequest,
-};
+use super::super::models::accounts::{TelegramCredentialBinding, TelegramLiveAccountSetupRequest};
 use super::super::store::TelegramStore;
 use super::super::validation::required_optional_value;
 use super::super::vault::{TelegramCredentialWrite, TelegramSecretVault};

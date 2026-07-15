@@ -2,7 +2,8 @@ use axum::Json;
 use axum::extract::{Path, State};
 use serde_json::Value;
 
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::domains::organizations::investigator::OrganizationInvestigator;
 
 use super::support::database_pool;

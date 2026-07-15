@@ -45,6 +45,23 @@ pub struct EventDeadLetterAnnotation {
 }
 
 impl EventStore {
+    pub async fn first_trace_id_for_subject(
+        &self,
+        subject_key: &str,
+        subject_value: &str,
+    ) -> Result<Option<String>, EventStoreError> {
+        validate_non_empty("subject_key", subject_key)?;
+        validate_non_empty("subject_value", subject_value)?;
+        sqlx::query_scalar(
+            "SELECT COALESCE(correlation_id, event_id) FROM event_log WHERE subject ->> $1 = $2 ORDER BY position ASC LIMIT 1",
+        )
+        .bind(subject_key.trim())
+        .bind(subject_value.trim())
+        .fetch_optional(self.pool())
+        .await
+        .map_err(EventStoreError::from)
+    }
+
     pub async fn list_by_correlation_id(
         &self,
         correlation_id: &str,

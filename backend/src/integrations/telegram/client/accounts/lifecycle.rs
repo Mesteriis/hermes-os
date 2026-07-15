@@ -2,13 +2,11 @@ use chrono::Utc;
 use hermes_communications_api::accounts::ProviderAccountMutationOrigin;
 use serde_json::json;
 
-use hermes_observations_api::models::ObservationOriginKind;
-
 use super::super::errors::TelegramError;
 use super::super::identifiers::{
     telegram_account_from_provider_account, telegram_account_lifecycle_state,
 };
-use super::super::models::TelegramAccount;
+use super::super::models::accounts::TelegramAccount;
 use super::super::store::TelegramStore;
 use super::super::validation::validate_object;
 use super::super::{TELEGRAM_ACCOUNT_LOGGED_OUT, TELEGRAM_ACCOUNT_REMOVED};

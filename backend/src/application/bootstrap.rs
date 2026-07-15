@@ -1,9 +1,10 @@
 use sqlx::postgres::PgPool;
 
-use crate::integrations::telegram::runtime::TelegramRuntimeManager;
-use crate::platform::config::AppConfig;
+use crate::integrations::telegram::runtime::manager::TelegramRuntimeManager;
+use crate::platform::config::app_config::AppConfig;
 use crate::platform::events::bus::InMemoryEventBus;
-use crate::vault::{HostVault, VaultMode};
+use crate::vault::HostVault;
+use crate::vault::models::VaultMode;
 
 pub(crate) mod core;
 pub(crate) mod mail;

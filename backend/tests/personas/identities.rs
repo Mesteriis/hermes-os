@@ -1,5 +1,5 @@
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
-use hermes_hub_backend::domains::personas::core::PersonaIdentityStore;
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
+use hermes_hub_backend::domains::personas::core::identities::PersonaIdentityStore;
 
 use super::support::{live_personas_pool, unique_suffix};
 

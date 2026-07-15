@@ -10,16 +10,16 @@ use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::application::review_transitions::{
     TaskCandidateReviewApplicationError, TaskCandidateReviewApplicationService,
 };
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
-};
-use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::domains::tasks::candidates::{
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
+use hermes_hub_backend::domains::documents::core::models::NewDocumentImport;
+use hermes_hub_backend::domains::documents::core::store::DocumentImportStore;
+use hermes_hub_backend::domains::tasks::candidates::models::{
     TaskCandidateReviewCommand, TaskCandidateReviewCommandResult, TaskCandidateReviewState,
-    TaskCandidateStore,
 };
+use hermes_hub_backend::domains::tasks::candidates::store::TaskCandidateStore;
 
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 

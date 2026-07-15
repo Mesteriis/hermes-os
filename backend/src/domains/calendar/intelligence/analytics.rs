@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 
-use super::{BackToBackGroup, CalendarIntelligenceService};
+use super::CalendarIntelligenceService;
+use super::models::BackToBackGroup;
 
 impl CalendarIntelligenceService {
     pub fn categorize_time(event_type: &str, title: &str) -> String {

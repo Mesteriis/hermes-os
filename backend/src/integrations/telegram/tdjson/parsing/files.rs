@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
 use super::values::tdlib_i64_value;
 use crate::integrations::telegram::tdjson::snapshots::TelegramTdlibFileSnapshot;

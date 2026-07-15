@@ -2,8 +2,11 @@ use std::sync::Arc;
 
 use sqlx::postgres::PgPool;
 
-use crate::platform::config::AppConfig;
-use crate::platform::settings::AiRuntimeSettings;
+use crate::ai::control_center::errors::AiControlCenterError;
+use crate::ai::control_center::models::AiProviderAccount;
+use crate::ai::control_center::store::AiControlCenterStore;
+use crate::platform::config::app_config::AppConfig;
+use crate::platform::settings::ai_runtime::AiRuntimeSettings;
 use crate::vault::HostVault;
 
 pub(super) async fn mail_ai_hub_optional(
@@ -11,17 +14,18 @@ pub(super) async fn mail_ai_hub_optional(
     config: &AppConfig,
     vault: &HostVault,
 ) -> Option<(crate::ai::hub::SharedAiHub, bool)> {
-    let settings = match crate::platform::settings::ApplicationSettingsStore::new(pool.clone())
-        .ai_runtime_settings(config)
-        .await
-    {
-        Ok(settings) => settings,
-        Err(error) => {
-            tracing::warn!(error = %error, "mail AI pipeline settings lookup failed");
-            AiRuntimeSettings::from_config(config)
-        }
-    };
-    let store = crate::ai::control_center::AiControlCenterStore::new(pool.clone());
+    let settings =
+        match crate::platform::settings::store::ApplicationSettingsStore::new(pool.clone())
+            .ai_runtime_settings(config)
+            .await
+        {
+            Ok(settings) => settings,
+            Err(error) => {
+                tracing::warn!(error = %error, "mail AI pipeline settings lookup failed");
+                AiRuntimeSettings::from_config(config)
+            }
+        };
+    let store = AiControlCenterStore::new(pool.clone());
     let model_routing = match resolve_mail_ai_model_routing(&store).await {
         Ok(routing) => routing,
         Err(error) => {
@@ -72,12 +76,12 @@ pub(super) async fn mail_ai_hub_optional(
 }
 
 async fn resolve_mail_ai_model_routing(
-    store: &crate::ai::control_center::AiControlCenterStore,
-) -> Result<crate::ai::core::AiModelRouting, crate::ai::control_center::AiControlCenterError> {
+    store: &AiControlCenterStore,
+) -> Result<crate::ai::core::types::AiModelRouting, AiControlCenterError> {
     let mail_intelligence = resolve_mail_ai_slot_model(store, "mail_intelligence").await?;
     let mail_model_key = mail_intelligence.model_key.clone();
 
-    Ok(crate::ai::core::AiModelRouting {
+    Ok(crate::ai::core::types::AiModelRouting {
         default_chat: mail_model_key.clone(),
         reasoning: mail_model_key.clone(),
         summarization: mail_model_key.clone(),
@@ -91,36 +95,32 @@ async fn resolve_mail_ai_model_routing(
 }
 
 async fn resolve_mail_ai_slot_model(
-    store: &crate::ai::control_center::AiControlCenterStore,
+    store: &AiControlCenterStore,
     slot: &str,
-) -> Result<crate::ai::core::AiModelRouteTarget, crate::ai::control_center::AiControlCenterError> {
+) -> Result<crate::ai::core::types::AiModelRouteTarget, AiControlCenterError> {
     let Some(route) = store.route_for_slot(slot).await? else {
-        return Err(
-            crate::ai::control_center::AiControlCenterError::InvalidRequest(format!(
-                "route_not_configured:{slot}: use Hub route settings"
-            )),
-        );
+        return Err(AiControlCenterError::InvalidRequest(format!(
+            "route_not_configured:{slot}: use Hub route settings"
+        )));
     };
-    let Some(provider) = store.provider(&route.provider_id).await? else {
-        return Err(
-            crate::ai::control_center::AiControlCenterError::InvalidRequest(format!(
-                "route_provider_missing:{}",
-                route.provider_id
-            )),
-        );
+    let Some(_provider) = store.provider(&route.provider_id).await? else {
+        return Err(AiControlCenterError::InvalidRequest(format!(
+            "route_provider_missing:{}",
+            route.provider_id
+        )));
     };
     store
         .ensure_model_ready_for_private_context(&route.provider_id, &route.model_key)
         .await?;
 
-    Ok(crate::ai::core::AiModelRouteTarget {
+    Ok(crate::ai::core::types::AiModelRouteTarget {
         capability_slot: slot.to_owned(),
         provider_id: route.provider_id,
         model_key: route.model_key,
     })
 }
 
-fn mail_ai_route_provider_id(routing: &crate::ai::core::AiModelRouting) -> Option<&str> {
+fn mail_ai_route_provider_id(routing: &crate::ai::core::types::AiModelRouting) -> Option<&str> {
     routing
         .targets
         .iter()
@@ -130,11 +130,11 @@ fn mail_ai_route_provider_id(routing: &crate::ai::core::AiModelRouting) -> Optio
 
 async fn mail_ai_runtime_client(
     pool: &PgPool,
-    store: &crate::ai::control_center::AiControlCenterStore,
+    store: &AiControlCenterStore,
     vault: &HostVault,
     settings: &AiRuntimeSettings,
-    provider: &crate::ai::control_center::AiProviderAccount,
-    routing: &crate::ai::core::AiModelRouting,
+    provider: &AiProviderAccount,
+    routing: &crate::ai::core::types::AiModelRouting,
 ) -> Result<crate::integrations::ai_runtime::AiRuntimeClient, MailAiRuntimeBuildError> {
     match (
         provider.provider_kind.as_str(),
@@ -181,24 +181,22 @@ async fn mail_ai_runtime_client(
 
 async fn mail_ai_provider_api_key(
     pool: &PgPool,
-    store: &crate::ai::control_center::AiControlCenterStore,
+    store: &AiControlCenterStore,
     vault: &HostVault,
     provider_id: &str,
-) -> Result<crate::platform::secrets::ResolvedSecret, MailAiRuntimeBuildError> {
+) -> Result<crate::platform::secrets::models::ResolvedSecret, MailAiRuntimeBuildError> {
     let secret_ref = store
         .api_key_secret_ref(provider_id)
         .await?
         .ok_or_else(|| MailAiRuntimeBuildError::MissingApiKey(provider_id.to_owned()))?;
-    let reference = crate::platform::secrets::SecretReferenceStore::new(pool.clone())
+    let reference = crate::platform::secrets::store::SecretReferenceStore::new(pool.clone())
         .secret_reference(&secret_ref)
         .await?
         .ok_or_else(|| MailAiRuntimeBuildError::MissingSecretReference(secret_ref.clone()))?;
     Ok(vault.resolve_host_secret(&reference)?)
 }
 
-fn mail_ai_provider_base_url(
-    provider: &crate::ai::control_center::AiProviderAccount,
-) -> Option<String> {
+fn mail_ai_provider_base_url(provider: &AiProviderAccount) -> Option<String> {
     provider
         .config
         .get("base_url")
@@ -226,33 +224,22 @@ enum MailAiRuntimeBuildError {
     MissingSecretReference(String),
 
     #[error(transparent)]
-    ControlCenter(#[from] crate::ai::control_center::AiControlCenterError),
+    ControlCenter(#[from] AiControlCenterError),
 
     #[error(transparent)]
-    SecretReference(#[from] crate::platform::secrets::SecretReferenceError),
+    SecretReference(#[from] crate::platform::secrets::errors::SecretReferenceError),
 
     #[error(transparent)]
-    SecretResolution(#[from] crate::platform::secrets::SecretResolutionError),
+    SecretResolution(#[from] crate::platform::secrets::errors::SecretResolutionError),
 
     #[error(transparent)]
     Runtime(#[from] crate::integrations::ai_runtime::AiRuntimeError),
 }
 
-pub(super) async fn mail_ai_target_language(pool: &PgPool) -> String {
-    let language = sqlx::query_scalar::<_, String>(
-        r#"
-        SELECT language
-        FROM personas
-        WHERE is_self = true
-          AND language IS NOT NULL
-          AND length(trim(language)) > 0
-        ORDER BY updated_at DESC
-        LIMIT 1
-        "#,
-    )
-    .fetch_optional(pool)
-    .await;
-
+pub(super) async fn mail_ai_target_language(
+    owner_query: &dyn hermes_personas_api::PersonaOwnerQuery,
+) -> String {
+    let language = owner_query.owner_language().await;
     let Ok(language) = language else {
         return "ru".to_owned();
     };

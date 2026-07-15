@@ -1,10 +1,10 @@
 use std::path::Path;
 use std::sync::mpsc::Sender;
 
-use crate::integrations::telegram::client::TelegramQrLoginStartRequest;
+use crate::integrations::telegram::client::models::qr_login::TelegramQrLoginStartRequest;
 
 use super::super::client::TdJsonClient;
-use super::super::qr_login_support::{
+use super::super::qr_login_support::types::{
     PendingQrLoginMap, QrLoginWorkerCompletion, TelegramQrLoginCommand,
 };
 

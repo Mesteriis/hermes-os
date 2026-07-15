@@ -5,13 +5,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
+use hermes_hub_backend::domains::documents::core::{
+    models::NewDocumentImport, store::DocumentImportStore,
 };
-use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
-use hermes_hub_backend::domains::projects::core::{ProjectStore, project_graph_node_id};
-use hermes_hub_backend::domains::projects::link_reviews::ProjectLinkReviewStore;
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
+use hermes_hub_backend::domains::projects::core::{
+    ids::project_graph_node_id, store::ProjectStore,
+};
+use hermes_hub_backend::domains::projects::link_reviews::store::ProjectLinkReviewStore;
 
 use hermes_hub_backend::workflows::graph_projection::service::GraphProjectionService;
 use serde_json::json;

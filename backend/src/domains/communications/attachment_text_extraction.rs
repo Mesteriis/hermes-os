@@ -1,15 +1,15 @@
 use chrono::Utc;
-use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::storage::{
-    CommunicationStorageError, CommunicationStorageStore, LocalCommunicationBlobStore,
-    NewCommunicationBlob,
-};
-use crate::platform::communications::{
+use crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use crate::domains::communications::storage::errors::CommunicationStorageError;
+use crate::domains::communications::storage::models::NewCommunicationBlob;
+use crate::domains::communications::storage::store::CommunicationStorageStore;
+use crate::platform::communications::attachment_text::{
     AttachmentTextExtractionError, extract_local_attachment_text, extract_rich_attachment_text,
     is_locally_extractable_text_type, rich_attachment_extraction_kind,
     rich_attachment_extractor_address,
@@ -176,8 +176,8 @@ impl AttachmentTextExtractionService {
         if matches!(
             rich_kind,
             Some(
-                crate::platform::communications::RichAttachmentExtractionKind::Pdf
-                    | crate::platform::communications::RichAttachmentExtractionKind::Docx
+                crate::platform::communications::attachment_text::RichAttachmentExtractionKind::Pdf
+                    | crate::platform::communications::attachment_text::RichAttachmentExtractionKind::Docx
             )
         )
             && let Err(error) = crate::domains::communications::attachment_safe_preview::AttachmentSafePreviewService::new(
@@ -196,8 +196,8 @@ impl AttachmentTextExtractionService {
         if matches!(
             rich_kind,
             Some(
-                crate::platform::communications::RichAttachmentExtractionKind::Pdf
-                    | crate::platform::communications::RichAttachmentExtractionKind::Docx
+                crate::platform::communications::attachment_text::RichAttachmentExtractionKind::Pdf
+                    | crate::platform::communications::attachment_text::RichAttachmentExtractionKind::Docx
             )
         )
             && let Err(error) = crate::domains::communications::attachment_content_disarm::AttachmentContentDisarmService::new(

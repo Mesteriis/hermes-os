@@ -37,3 +37,5 @@ fn cert_types_roundtrip() {
         assert_eq!(CertificateType::parse(cert_type.as_str()), Some(cert_type));
     }
 }
+use super::certificate_type::CertificateType;
+use super::detector::SignatureDetector;

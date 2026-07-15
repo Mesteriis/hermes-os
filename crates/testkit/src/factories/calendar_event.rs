@@ -1,5 +1,7 @@
 use chrono::{Duration, Utc};
-use hermes_hub_backend::domains::calendar::events::{CalendarEventStore, NewCalendarEvent};
+use hermes_hub_backend::domains::calendar::events::errors::CalendarError;
+use hermes_hub_backend::domains::calendar::events::event_store::CalendarEventStore;
+use hermes_hub_backend::domains::calendar::events::models::{CalendarEvent, NewCalendarEvent};
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
@@ -43,12 +45,7 @@ impl<'a> CalendarEventFactory<'a> {
         self
     }
 
-    pub async fn create(
-        self,
-    ) -> Result<
-        hermes_hub_backend::domains::calendar::events::CalendarEvent,
-        hermes_hub_backend::domains::calendar::events::CalendarError,
-    > {
+    pub async fn create(self) -> Result<CalendarEvent, CalendarError> {
         let store = CalendarEventStore::new(self.pool.clone());
         let end_at = self.start_at + Duration::minutes(self.duration_minutes);
         let new_event = NewCalendarEvent {

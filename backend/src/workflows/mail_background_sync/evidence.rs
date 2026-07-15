@@ -6,7 +6,7 @@ use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;
 
 use super::errors::MailSyncError;
-use super::models::MailSyncRun;
+use super::models::runs::MailSyncRun;
 use crate::domains::communications::evidence::link_mail_entity_in_transaction;
 
 pub(super) async fn capture_mail_sync_run_observation(

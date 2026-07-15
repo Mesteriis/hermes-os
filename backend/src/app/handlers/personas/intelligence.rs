@@ -1,4 +1,14 @@
-use super::support::*;
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::domains::personas::enrichment_engine::EnrichmentResultStore;
+use crate::domains::personas::expertise::PersonaExpertiseStore;
+use crate::domains::personas::trust::promises::PersonaPromiseStore;
+use crate::domains::personas::trust::risks::PersonaRiskStore;
 // ── Persona Enrichment ─────────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -104,7 +114,7 @@ pub(crate) async fn get_persona_expertise_search(
 
 #[derive(Serialize)]
 pub(crate) struct PersonaPromisesResponse {
-    items: Vec<crate::domains::personas::trust::PersonaPromise>,
+    items: Vec<crate::domains::personas::trust::models::PersonaPromise>,
 }
 
 pub(crate) async fn get_persona_promises(
@@ -128,7 +138,7 @@ pub(crate) async fn get_persona_promises(
 
 #[derive(Serialize)]
 pub(crate) struct PersonaRisksResponse {
-    items: Vec<crate::domains::personas::trust::PersonaRisk>,
+    items: Vec<crate::domains::personas::trust::models::PersonaRisk>,
 }
 
 pub(crate) async fn get_persona_risks(

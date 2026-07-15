@@ -49,6 +49,31 @@ pub trait RawSignalRuntimeQueryPort: Send + Sync {
     fn allows_processing<'a>(&'a self) -> RawSignalPortFuture<'a, bool>;
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderRawSignalInput {
+    pub raw_record_id: String,
+    pub observation_id: String,
+    pub account_id: String,
+    pub record_kind: String,
+    pub provider_record_id: String,
+    pub source_fingerprint: String,
+    pub import_batch_id: String,
+    pub occurred_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub captured_at: chrono::DateTime<chrono::Utc>,
+    pub payload: serde_json::Value,
+    pub provenance: serde_json::Value,
+}
+
+pub type ProviderRawSignalPortFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Option<EventEnvelope>, RawSignalPortError>> + Send + 'a>>;
+
+pub trait ProviderRawSignalPort: Send + Sync {
+    fn dispatch_provider_record<'a>(
+        &'a self,
+        record: &'a ProviderRawSignalInput,
+    ) -> ProviderRawSignalPortFuture<'a>;
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RawSignalPersistenceErrorKind {
     Storage,

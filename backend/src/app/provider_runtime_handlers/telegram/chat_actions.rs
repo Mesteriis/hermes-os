@@ -7,25 +7,15 @@ use serde_json::json;
 use super::helpers::{
     AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed, publish_telegram_event,
 };
-use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
-};
-use crate::app::{ApiError, AppState};
-use crate::integrations::telegram::client::{TelegramChat, lifecycle};
-use crate::platform::audit::NewApiAuditRecord;
+use crate::app::api_support::stores::{domain_stores::*, integration_stores::*};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::integrations::telegram::client::commands;
+use crate::integrations::telegram::client::models::chats::TelegramChat;
+use crate::platform::audit::models::NewApiAuditRecord;
 
 use crate::platform::events::bus::telegram_event_types;
-use crate::platform::settings::ApplicationSettingsStore;
+use crate::platform::settings::store::ApplicationSettingsStore;
 
 const TELEGRAM_READ_RECEIPT_REPORTS_ENABLED_SETTING_KEY: &str =
     "communications.telegram.read_receipt_reports_enabled";
@@ -360,7 +350,7 @@ pub(crate) async fn record_chat_lifecycle_command_with_payload(
     audit_metadata: serde_json::Value,
 ) -> Result<String, ApiError> {
     let service = telegram_provider_runtime_service(state)?;
-    let command_id = lifecycle::new_command_id();
+    let command_id = commands::new_command_id();
     let target_subject = telegram_chat_id.unwrap_or(request.provider_chat_id.trim());
     let target_ref = if let Some(telegram_chat_id) = telegram_chat_id {
         json!({

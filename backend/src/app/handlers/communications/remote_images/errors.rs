@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::app::ApiError;
+use crate::app::error::types::ApiError;
 
 #[derive(Debug, Error)]
 pub(super) enum RemoteImageFetchError {

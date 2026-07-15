@@ -9,11 +9,11 @@ use sqlx::{Postgres, Row, Transaction};
 use hermes_events_postgres::store::EventStore;
 
 use super::errors::ReviewInboxError;
-use super::evidence::materialize_review_transition_link_in_transaction;
 use super::models::{
     NewReviewItem, NewReviewItemEvidence, ReviewItem, ReviewItemKind, ReviewItemStatus,
     ReviewPromotionTarget, validate_non_empty, validate_review_item_with_evidence,
 };
+use hermes_observations_postgres::review_links::materialize_review_transition_link_in_transaction;
 
 #[derive(Clone)]
 pub struct ReviewInboxStore {

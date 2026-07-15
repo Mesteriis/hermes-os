@@ -1,14 +1,15 @@
+use crate::platform::audit::store::ApiAuditLog;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::engines::consistency::{
     models::{ContradictionObservation, ContradictionReviewState},
     store::ContradictionObservationStore,
 };
-use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
+use crate::platform::audit::models::NewApiAuditRecord;
 use crate::workflows::consistency_review::ContradictionReviewService;
 
 const CONTRADICTION_API_ACTOR_ID: &str = "hermes-frontend";

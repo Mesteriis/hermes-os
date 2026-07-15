@@ -6,8 +6,9 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::calendar::meetings::{EventRecordingPort, EventTranscriptPort};
-use crate::domains::documents::core::{DocumentImportPort, NewDocumentImport};
+use crate::domains::calendar::ports::{EventRecordingPort, EventTranscriptPort};
+use crate::domains::documents::core::models::NewDocumentImport;
+use crate::domains::documents::ports::DocumentImportPort;
 use crate::platform::realtime_conversation::events::REALTIME_CONVERSATION_TRANSCRIPT_COMPLETED;
 use crate::platform::realtime_conversation::models::CallBundleManifest;
 use hermes_events_postgres::errors::EventStoreError;
@@ -29,13 +30,13 @@ pub enum RealtimeConversationTranscriptProjectionError {
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
-    DocumentImport(#[from] crate::domains::documents::core::DocumentImportError),
+    DocumentImport(#[from] crate::domains::documents::core::errors::DocumentImportError),
 
     #[error(transparent)]
     Observation(#[from] hermes_observations_postgres::errors::ObservationStoreError),
 
     #[error(transparent)]
-    Meetings(#[from] crate::domains::calendar::meetings::MeetingsError),
+    Meetings(#[from] crate::domains::calendar::meetings::errors::MeetingsError),
 
     #[error("event payload is missing required field {0}")]
     MissingPayloadField(&'static str),

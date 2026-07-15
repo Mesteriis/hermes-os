@@ -1,10 +1,9 @@
 // Unverified SPF/DKIM/DMARC header assertion parsing without DNS or crypto verification.
 use serde::Serialize;
 
-use crate::domains::communications::messages::{
-    MessageProjectionError, parse_raw_email_message_from_blob,
-};
-use crate::domains::communications::storage::LocalCommunicationBlobStore;
+use crate::domains::communications::messages::errors::MessageProjectionError;
+use crate::domains::communications::messages::projection::parse_raw_email_message_from_blob;
+use crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
 use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 

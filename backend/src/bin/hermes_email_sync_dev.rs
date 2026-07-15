@@ -23,7 +23,7 @@ use runner::run_dev_email_sync;
 
 #[tokio::main]
 async fn main() -> Result<(), DevEmailSyncError> {
-    hermes_hub_backend::app::init_tracing();
+    hermes_hub_backend::app::router::init_tracing();
 
     let config = DevEmailSyncConfig::from_env()?;
     let report = run_dev_email_sync(config).await?;

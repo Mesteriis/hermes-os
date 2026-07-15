@@ -1,11 +1,12 @@
 use sqlx::Row;
 
-use crate::domains::decisions::{
-    DecisionEngine, DecisionExtractionInput, DecisionExtractionResult,
+use crate::domains::decisions::extraction::engine::DecisionEngine;
+use crate::domains::decisions::extraction::models::{
+    DecisionExtractionInput, DecisionExtractionResult,
 };
 
 use super::errors::DecisionStoreError;
-use super::models::DecisionEntityKind;
+use super::models::entity_kind::DecisionEntityKind;
 use super::store::DecisionStore;
 use super::validation::{preserve_existing_review_state, validate_refresh_limit};
 

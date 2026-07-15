@@ -1,8 +1,10 @@
 use hermes_communications_api::accounts::CommunicationProviderKind;
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 
-use crate::platform::secrets::{DatabaseEncryptedSecretVault, SecretKind, SecretStoreKind};
-use crate::vault::{HostVault, SecretEntryContext};
+use crate::platform::secrets::database_vault::DatabaseEncryptedSecretVault;
+use crate::platform::secrets::models::{SecretKind, SecretStoreKind};
+use crate::vault::HostVault;
+use crate::vault::models::SecretEntryContext;
 
 use super::errors::TelegramError;
 

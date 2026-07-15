@@ -1,5 +1,6 @@
 use hermes_communications_api::accounts::ProviderAccountCommandPort;
 use hermes_communications_api::accounts::ProviderSecretBindingCommandPort;
+use hermes_communications_api::commands::ProviderCommandMirrorPort;
 use std::sync::Arc;
 
 use serde_json::{Value, json};
@@ -13,12 +14,14 @@ pub(crate) fn build_runtime(
     provider_account_store: Arc<dyn ProviderAccountCommandPort>,
     provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
     provider_channel_message_store: Arc<dyn ProviderChannelMessageLookupPort>,
+    provider_command_mirror: Arc<dyn ProviderCommandMirrorPort>,
 ) -> Arc<dyn WhatsAppProviderRuntime> {
     Arc::new(WhatsappWebStore::new(
         pool,
         provider_account_store,
         provider_secret_binding_store,
         provider_channel_message_store,
+        provider_command_mirror,
     ))
 }
 

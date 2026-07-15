@@ -1,13 +1,11 @@
-use std::sync::Arc;
-
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramQrLoginPasswordRequest, TelegramQrLoginStatus,
-    TelegramQrLoginStatusResponse,
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::qr_login::{
+    TelegramQrLoginPasswordRequest, TelegramQrLoginStatus, TelegramQrLoginStatusResponse,
 };
 
-use super::super::qr_login_support::{
-    PendingQrLoginMap, QR_POLL_AFTER_MS, TelegramQrLoginCommand, wait_for_worker_completion,
-};
+use super::super::qr_login_support::completion::wait_for_worker_completion;
+use super::super::qr_login_support::constants::QR_POLL_AFTER_MS;
+use super::super::qr_login_support::types::{PendingQrLoginMap, TelegramQrLoginCommand};
 
 pub(crate) fn submit_qr_login_password(
     pending_logins: PendingQrLoginMap,

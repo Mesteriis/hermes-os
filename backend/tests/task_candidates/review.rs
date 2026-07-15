@@ -1,5 +1,5 @@
 use hermes_hub_backend::application::review_transitions::TaskCandidateReviewApplicationService;
-use hermes_hub_backend::domains::tasks::candidates::{
+use hermes_hub_backend::domains::tasks::candidates::models::{
     TaskCandidateReviewCommand, TaskCandidateReviewState,
 };
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};

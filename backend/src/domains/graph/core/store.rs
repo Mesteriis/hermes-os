@@ -2,10 +2,11 @@ use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Transaction};
 
 use super::errors::GraphStoreError;
-use super::ids::{edge_id, evidence_id, node_id};
+use super::ids::{edge_id, evidence_id};
 use super::models::{GraphEdge, GraphNode, NewGraphEdge, NewGraphEvidence, NewGraphNode};
 use super::row_mapping::{row_to_edge, row_to_node};
 use super::validation::validate_edge_with_evidence;
+use crate::platform::graph::node_id;
 
 #[derive(Clone)]
 pub struct GraphStore {

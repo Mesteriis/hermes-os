@@ -1,7 +1,7 @@
 use hermes_backend_testkit::context::TestContext;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 

@@ -1,5 +1,6 @@
-use crate::platform::communications::{EmailProviderSyncErrorKind, EmailSyncPlanError};
-use crate::vault::HostVaultError;
+use crate::platform::communications::email_sync::EmailSyncPlanError;
+use crate::vault::errors::HostVaultError;
+use hermes_communications_api::mail_resources::EmailProviderSyncErrorKind;
 
 use super::super::errors::ProviderSyncError;
 

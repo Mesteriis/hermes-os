@@ -4,7 +4,8 @@ use serde_json::json;
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
-use super::{TaskCoreError, materialize_task_entity_link_in_transaction};
+use super::errors::TaskCoreError;
+use super::observation_links::materialize_task_entity_link_in_transaction;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TaskRelation {

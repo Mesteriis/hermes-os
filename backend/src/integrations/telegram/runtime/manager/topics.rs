@@ -1,5 +1,5 @@
+use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::telegram::client::models::topics::NewTelegramTopic;
-use crate::integrations::telegram::client::{TelegramError, TelegramStore};
 
 use super::super::commands::request_actor_get_forum_topics;
 use super::super::status::account_runtime_kind;
@@ -25,7 +25,7 @@ impl TelegramRuntimeManager {
         telegram_chat_id: &str,
     ) -> Result<usize, TelegramError>
     where
-        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+        S: crate::platform::secrets::resolver::SecretResolver + Sync + ?Sized,
     {
         let chat = context
             .telegram_store

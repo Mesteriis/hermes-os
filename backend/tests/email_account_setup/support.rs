@@ -15,9 +15,12 @@ use tower::ServiceExt;
 
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
-use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretStoreKind};
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::domains::calendar::events::account_store::CalendarAccountStore;
+use hermes_hub_backend::domains::calendar::events::models::CalendarAccount;
+use hermes_hub_backend::platform::secrets::models::SecretReference;
+use hermes_hub_backend::platform::secrets::models::{SecretKind, SecretStoreKind};
+use hermes_hub_backend::platform::secrets::store::SecretReferenceStore;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::vault::HostVault;
 
 pub const LOCAL_API_TOKEN: &str = "account-setup-test-token";
@@ -268,12 +271,10 @@ pub async fn live_setup_context(
     Some((database, communication_store, secret_store, unique_suffix()))
 }
 
-pub fn secret_reference(
-    secret_ref: &str,
-) -> hermes_hub_backend::platform::secrets::SecretReference {
+pub fn secret_reference(secret_ref: &str) -> SecretReference {
     let now = chrono::Utc::now();
 
-    hermes_hub_backend::platform::secrets::SecretReference {
+    SecretReference {
         secret_ref: secret_ref.to_owned(),
         secret_kind: SecretKind::OauthToken,
         store_kind: SecretStoreKind::DatabaseEncryptedVault,
@@ -367,7 +368,7 @@ pub async fn wait_for_provider_account(
 pub async fn wait_for_secret_reference(
     secret_store: &SecretReferenceStore,
     secret_ref: &str,
-) -> hermes_hub_backend::platform::secrets::SecretReference {
+) -> SecretReference {
     for _ in 0..50 {
         if let Some(reference) = secret_store
             .secret_reference(secret_ref)
@@ -404,7 +405,7 @@ pub async fn wait_for_provider_account_secret_binding(
 pub async fn wait_for_calendar_account(
     calendar_store: &CalendarAccountStore,
     account_id: &str,
-) -> hermes_hub_backend::domains::calendar::events::CalendarAccount {
+) -> CalendarAccount {
     for _ in 0..50 {
         if let Some(account) = calendar_store
             .get(account_id)

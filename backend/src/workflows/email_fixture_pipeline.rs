@@ -1,7 +1,5 @@
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
-use hermes_communications_api::accounts::{
-    ProviderAccount, ProviderAccountCommandPort, ProviderAccountPortError,
-};
+use hermes_communications_api::accounts::{ProviderAccountCommandPort, ProviderAccountPortError};
 use hermes_communications_api::evidence::{
     CommunicationEvidencePortError, CommunicationRawEvidenceCommandPort,
 };
@@ -13,16 +11,17 @@ use thiserror::Error;
 use crate::domains::communications::import::{
     FixtureEmailImportError, FixtureEmailImportRequest, import_fixture_email_messages_with_records,
 };
-use crate::domains::communications::messages::{
-    CommunicationSignalProjectionError, MessageProjectionError,
-    project_accepted_signal_if_runtime_allows,
+use crate::domains::communications::messages::errors::MessageProjectionError;
+use crate::domains::communications::messages::provider_observation_projection::{
+    CommunicationSignalProjectionError, project_accepted_signal_if_runtime_allows,
 };
-use crate::domains::graph::core::{GraphProjectionPort, GraphProjectionPortError, GraphSummary};
-use crate::domains::personas::api::{
-    PersonaProjectionError, PersonaProjectionPort, upsert_personas_from_message_participants,
-};
+use crate::domains::graph::ports::{GraphProjectionPort, GraphProjectionPortError};
+use crate::domains::personas::api::errors::PersonaProjectionError;
+use crate::domains::personas::api::participants::upsert_personas_from_message_participants;
+use crate::domains::personas::ports::PersonaProjectionPort;
 use crate::domains::signal_hub::mail::dispatch_mail_raw_signal;
 use crate::domains::signal_hub::store::SignalHubError;
+use hermes_graph_api::GraphSummary;
 
 use crate::workflows::graph_projection::errors::GraphProjectionError;
 use crate::workflows::graph_projection::models::GraphProjectionReport;

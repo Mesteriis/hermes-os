@@ -1,6 +1,6 @@
 use serde_json::json;
 use sqlx::postgres::PgPool;
-use sqlx::{Postgres, Row, Transaction};
+use sqlx::{Postgres, Transaction};
 
 use super::super::errors::ConsistencyError;
 use super::super::evidence::link_consistency_entity_in_transaction;

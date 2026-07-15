@@ -178,7 +178,7 @@ impl WhatsappCapabilitiesResponse {
         };
         let lifecycle_state = scope.lifecycle_state.as_str();
         let runtime_kind = scope.runtime_kind.as_str();
-        let provider_shape = scope.provider_shape.as_str();
+        let _provider_shape = scope.provider_shape.as_str();
 
         for capability in &mut self.capabilities {
             match capability.capability.as_str() {

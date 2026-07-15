@@ -1,3 +1,8 @@
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::chats::TelegramChatKind;
+use crate::integrations::telegram::client::models::messages::{
+    NewTelegramMessage, TelegramDeliveryState,
+};
 use chrono::Utc;
 
 use super::validation::{validate_chat_list_limit, validate_message_list_limit};

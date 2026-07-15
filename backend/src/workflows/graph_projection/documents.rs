@@ -1,6 +1,7 @@
 use serde_json::json;
 
-use crate::domains::graph::core::{GraphNodeKind, NewGraphNode};
+use crate::domains::graph::core::models::NewGraphNode;
+use crate::platform::graph::GraphNodeKind;
 
 use super::errors::GraphProjectionError;
 use super::models::{DocumentRow, GraphProjectionReport};

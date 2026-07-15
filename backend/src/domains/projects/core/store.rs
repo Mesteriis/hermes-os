@@ -1,3 +1,4 @@
+use hermes_projects_api::ProjectWritePort;
 use sqlx::postgres::PgPool;
 
 use super::constants::{DEFAULT_PROJECT_LIMIT, PROJECT_DETAIL_ITEM_LIMIT};
@@ -18,81 +19,36 @@ impl ProjectStore {
     }
 
     pub async fn upsert_project(&self, project: &NewProject) -> Result<Project, ProjectStoreError> {
-        let project = project.validate()?;
-        let mut transaction = self.pool.begin().await?;
-
-        let row = sqlx::query(
-            r#"
-            INSERT INTO projects (
-                project_id,
-                name,
-                kind,
-                status,
-                description,
-                owner_display_name,
-                progress_percent,
-                start_date,
-                target_date
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            ON CONFLICT (project_id)
-            DO UPDATE SET
-                name = EXCLUDED.name,
-                kind = EXCLUDED.kind,
-                status = EXCLUDED.status,
-                description = EXCLUDED.description,
-                owner_display_name = EXCLUDED.owner_display_name,
-                progress_percent = EXCLUDED.progress_percent,
-                start_date = EXCLUDED.start_date,
-                target_date = EXCLUDED.target_date,
-                updated_at = now()
-            RETURNING
-                project_id,
-                name,
-                kind,
-                status,
-                description,
-                owner_display_name,
-                progress_percent,
-                start_date,
-                target_date,
-                created_at,
-                updated_at
-            "#,
-        )
-        .bind(&project.project_id)
-        .bind(&project.name)
-        .bind(&project.kind)
-        .bind(&project.status)
-        .bind(&project.description)
-        .bind(&project.owner_display_name)
-        .bind(project.progress_percent)
-        .bind(project.start_date)
-        .bind(project.target_date)
-        .fetch_one(&mut *transaction)
-        .await?;
-
-        sqlx::query("DELETE FROM project_keywords WHERE project_id = $1")
-            .bind(&project.project_id)
-            .execute(&mut *transaction)
-            .await?;
-
-        for keyword in &project.keywords {
-            sqlx::query(
-                r#"
-                INSERT INTO project_keywords (project_id, keyword)
-                VALUES ($1, $2)
-                ON CONFLICT (project_id, keyword) DO NOTHING
-                "#,
-            )
-            .bind(&project.project_id)
-            .bind(keyword)
-            .execute(&mut *transaction)
-            .await?;
-        }
-
-        transaction.commit().await?;
-        row_to_project(row)
+        let value = hermes_projects_postgres::ProjectPostgresReadQuery::new(self.pool.clone())
+            .upsert(&hermes_projects_api::ProjectUpsert {
+                project_id: project.project_id.clone(),
+                name: project.name.clone(),
+                kind: project.kind.clone(),
+                status: project.status.clone(),
+                description: project.description.clone(),
+                owner_display_name: project.owner_display_name.clone(),
+                progress_percent: project.progress_percent,
+                start_date: project.start_date,
+                target_date: project.target_date,
+                keywords: project.keywords.clone(),
+            })
+            .await
+            .map_err(|error| {
+                ProjectStoreError::Sqlx(sqlx::Error::Protocol(error.to_string().into()))
+            })?;
+        Ok(Project {
+            project_id: value.project_id,
+            name: value.name,
+            kind: value.kind,
+            status: value.status,
+            description: value.description,
+            owner_display_name: value.owner_display_name,
+            progress_percent: value.progress_percent,
+            start_date: value.start_date,
+            target_date: value.target_date,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        })
     }
 
     pub async fn list_projects(

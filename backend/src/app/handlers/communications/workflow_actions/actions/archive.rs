@@ -1,10 +1,10 @@
 use sqlx::{Postgres, Transaction};
 
-use crate::app::ApiError;
+use crate::app::error::types::ApiError;
 use crate::domains::communications::command_service::CommunicationCommandService;
-use crate::domains::communications::messages::{
-    MessageProjectionStore, ProjectedMessage, WorkflowState,
-};
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::communications::messages::states::WorkflowState;
+use crate::domains::communications::messages::store::MessageProjectionStore;
 
 use super::super::models::{
     WorkflowActionRequest, WorkflowActionResponse, WorkflowActionStatus, WorkflowActionTarget,

@@ -10,7 +10,7 @@ pub(crate) async fn post_calendar_event_reschedule(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
     Json(req): Json<RescheduleRequest>,
-) -> Result<Json<crate::domains::calendar::events::CalendarEvent>, ApiError> {
+) -> Result<Json<crate::domains::calendar::events::models::CalendarEvent>, ApiError> {
     let pool = state
         .database
         .pool()

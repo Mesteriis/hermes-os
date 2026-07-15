@@ -1,15 +1,10 @@
-mod errors;
+pub mod errors;
 mod evaluation;
-mod mode;
-mod models;
+pub mod mode;
+pub mod models;
 mod rows;
-mod store;
+pub mod store;
 mod validation;
 
 #[cfg(test)]
 mod tests;
-
-pub use errors::EmailRuleError;
-pub use mode::RuleMode;
-pub use models::{EmailRule, NewEmailRule, RuleAction, RuleMatchResult};
-pub use store::EmailRuleStore;

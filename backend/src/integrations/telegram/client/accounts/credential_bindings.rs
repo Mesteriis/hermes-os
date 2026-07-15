@@ -1,9 +1,10 @@
-use crate::platform::secrets::{NewSecretReference, SecretReferenceStore};
+use crate::platform::secrets::models::NewSecretReference;
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_communications_api::accounts::NewProviderAccountSecretBinding;
 
 use super::super::errors::TelegramError;
 use super::super::identifiers::telegram_secret_ref;
-use super::super::models::TelegramCredentialBinding;
+use super::super::models::accounts::TelegramCredentialBinding;
 use super::super::store::TelegramStore;
 use super::super::vault::{TelegramCredentialWrite, TelegramSecretVault};
 

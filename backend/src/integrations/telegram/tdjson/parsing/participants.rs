@@ -1,6 +1,6 @@
 use serde_json::{Map, Value, json};
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSnapshot;
 
 pub(crate) fn parse_tdlib_chat_member_list(

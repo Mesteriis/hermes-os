@@ -1,4 +1,11 @@
-use super::support::*;
+use crate::app::error::types::ApiError;
+use crate::domains::personas::analytics::AnalyticsError;
+use crate::domains::personas::enrichment_engine::EnrichmentEngineError;
+use crate::domains::personas::expertise::PersonaExpertiseError;
+use crate::domains::personas::export::ExportError;
+use crate::domains::personas::health::PersonaHealthError;
+use crate::domains::personas::investigator::errors::InvestigatorError;
+use crate::domains::personas::trust::errors::PersonaTrustError;
 
 impl From<EnrichmentEngineError> for ApiError {
     fn from(error: EnrichmentEngineError) -> Self {

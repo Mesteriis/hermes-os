@@ -3,8 +3,8 @@ use axum::http::{HeaderValue, Request, StatusCode};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use hermes_hub_backend::app::build_router;
-use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::app::router::build_router;
+use hermes_hub_backend::platform::config::app_config::AppConfig;
 
 const LOCAL_API_SECRET: &str = "hard-v1-routes-test-secret";
 

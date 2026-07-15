@@ -5,12 +5,12 @@ use hermes_communications_api::accounts::{CommunicationProviderKind, NewProvider
 use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::messages::{
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::communications::messages::provider_observation_projection::{
     COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, project_accepted_signal_if_runtime_allows,
 };
 use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
-use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
+use hermes_hub_backend::platform::settings::store::ApplicationSettingsStore;
 
 use hermes_backend_testkit::app::{TestApp, delete, get, patch_json, post_json};
 use hermes_backend_testkit::composition::router_for_context;

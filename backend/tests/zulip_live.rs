@@ -32,22 +32,24 @@ use hermes_hub_backend::application::zulip_attachment_download::ZulipAttachmentD
 use hermes_hub_backend::application::zulip_command_executor::ZulipCommandWorker;
 use hermes_hub_backend::application::zulip_event_ingest::ZulipEventIngestWorker;
 use hermes_hub_backend::application::zulip_provider_observation_reconciliation::reconcile_zulip_provider_observation_event;
-use hermes_hub_backend::domains::communications::messages::{
-    ProjectedMessage, consume_accepted_signal_event,
+use hermes_hub_backend::domains::communications::messages::models::ProjectedMessage;
+use hermes_hub_backend::domains::communications::messages::provider_observation_projection::consume_accepted_signal_event;
+use hermes_hub_backend::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use hermes_hub_backend::domains::communications::storage::models::{
+    ImportedCommunicationAttachment, NewCommunicationAttachmentImport, NewCommunicationBlob,
 };
-use hermes_hub_backend::domains::communications::storage::{
-    CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachmentImport,
-    NewCommunicationBlob,
-};
+use hermes_hub_backend::domains::communications::storage::store::CommunicationStorageStore;
 use hermes_hub_backend::domains::signal_hub::store::SignalHubStore;
 use hermes_hub_backend::domains::signal_hub::zulip::dispatch_zulip_raw_signal;
 use hermes_provider_orchestration::observation_to_raw_communication_record;
 
 use hermes_hub_backend::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
-use hermes_hub_backend::platform::secrets::{
-    InMemorySecretResolver, NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
+use hermes_hub_backend::platform::secrets::models::{
+    NewSecretReference, SecretKind, SecretStoreKind,
 };
+use hermes_hub_backend::platform::secrets::resolver::InMemorySecretResolver;
+use hermes_hub_backend::platform::secrets::store::SecretReferenceStore;
 use hermes_hub_backend::workflows::review_inbox::refresh_message_task_candidates_into_review;
 use hermes_provider_zulip::client::{
     ZulipApiClient, ZulipClientConfig, ZulipReactionRequest, ZulipUpdateMessageRequest,
@@ -680,7 +682,7 @@ impl LiveHermesTrace {
     async fn store_worker_upload_attachment(
         &self,
         attachment_id: &str,
-    ) -> hermes_hub_backend::domains::communications::storage::ImportedCommunicationAttachment {
+    ) -> ImportedCommunicationAttachment {
         let blob_store = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
         let local_blob = blob_store
             .put_blob(b"zulip live worker attachment bytes")

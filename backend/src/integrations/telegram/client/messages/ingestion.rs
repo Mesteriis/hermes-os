@@ -5,9 +5,8 @@ use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use super::super::TELEGRAM_MESSAGE_RECORD_KIND;
 use super::super::errors::TelegramError;
 use super::super::identifiers::{stable_hash, telegram_raw_record_id};
-use super::super::models::{
-    NewTelegramChat, NewTelegramMessage, TelegramObservedMessage, TelegramSyncState,
-};
+use super::super::models::chats::{NewTelegramChat, TelegramSyncState};
+use super::super::models::messages::{NewTelegramMessage, TelegramObservedMessage};
 use super::super::store::TelegramStore;
 use super::message_metadata::{
     derive_mention_metadata, derive_tdlib_attachment_metadata, derive_tdlib_media_album_metadata,

@@ -11,25 +11,30 @@ use hermes_communications_postgres::provider_store::{
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_events_api::EventLogQuery;
 use hermes_events_postgres::store::EventStore;
-use hermes_hub_backend::domains::communications::messages::{
-    ProviderChannelMessageStore, consume_accepted_signal_event, project_provider_observation_event,
+use hermes_hub_backend::domains::communications::messages::provider_channel_store::ProviderChannelMessageStore;
+use hermes_hub_backend::domains::communications::messages::provider_observation_projection::{
+    consume_accepted_signal_event, project_provider_observation_event,
 };
 use hermes_hub_backend::domains::signal_hub::service::process_signal_hub_raw_event;
 use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
-use hermes_hub_backend::integrations::telegram::client::lifecycle::{
-    self, reconcile_delete_commands_from_provider_state,
-    reconcile_edit_commands_from_provider_state,
-    reconcile_message_pin_commands_from_provider_state, record_provider_delete_observation,
-    record_provider_edit_observation,
+use hermes_hub_backend::integrations::telegram::client::commands;
+use hermes_hub_backend::integrations::telegram::client::lifecycle::message_versions::record_provider_edit_observation;
+use hermes_hub_backend::integrations::telegram::client::lifecycle::provider_reconciliation::{
+    reconcile_delete_commands_from_provider_state, reconcile_edit_commands_from_provider_state,
+    reconcile_message_pin_commands_from_provider_state,
 };
-use hermes_hub_backend::integrations::telegram::client::{
-    NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramMessage, TelegramStore,
+use hermes_hub_backend::integrations::telegram::client::lifecycle::tombstones;
+use hermes_hub_backend::integrations::telegram::client::lifecycle::tombstones::record_provider_delete_observation;
+use hermes_hub_backend::integrations::telegram::client::models::chats::TelegramChatKind;
+use hermes_hub_backend::integrations::telegram::client::models::messages::{
+    NewTelegramMessage, TelegramDeliveryState, TelegramMessage,
 };
+use hermes_hub_backend::integrations::telegram::client::store::TelegramStore;
 
 use hermes_backend_testkit::context::TestContext;
+use hermes_communications_api::provider_messages::ProviderMessageObservationEvent;
 use hermes_hub_backend::platform::communications::{
-    EventStoreProviderMessageObservationEventPort, ProviderMessageObservationEvent,
-    ProviderMessageObservationEventPort,
+    EventStoreProviderMessageObservationEventPort, ProviderMessageObservationEventPort,
 };
 
 #[tokio::test]
@@ -60,7 +65,7 @@ async fn telegram_provider_delete_observation_is_idempotent_and_reconciles_delet
     )
     .await;
 
-    lifecycle::insert_command(
+    commands::insert_command(
         &pool,
         "tcmd_delete_observed",
         &account_id,
@@ -124,7 +129,7 @@ async fn telegram_provider_delete_observation_is_idempotent_and_reconciles_delet
     assert_eq!(reconciled[0].status, "completed");
     assert_eq!(reconciled[0].reconciliation_status, "observed");
 
-    let tombstones = lifecycle::list_tombstones(&pool, &message.message_id)
+    let tombstones = tombstones::list_tombstones(&pool, &message.message_id)
         .await
         .expect("list tombstones");
     assert_eq!(tombstones.len(), 1);
@@ -186,7 +191,7 @@ async fn telegram_provider_edit_observation_is_idempotent_and_reconciles_edit_co
     )
     .await;
 
-    lifecycle::insert_command(
+    commands::insert_command(
         &pool,
         "tcmd_edit_observed",
         &account_id,
@@ -309,7 +314,7 @@ async fn telegram_provider_edit_observation_marks_mismatched_edit_command_failed
         .await
         .expect("ingest fixture message");
 
-    lifecycle::insert_command(
+    commands::insert_command(
         &pool,
         "tcmd_edit_mismatch",
         &account_id,
@@ -389,7 +394,7 @@ async fn telegram_provider_pin_state_reconciles_message_pin_command() {
         .await
         .expect("ingest fixture message");
 
-    lifecycle::insert_command(
+    commands::insert_command(
         &pool,
         "tcmd_pin_observed",
         &account_id,
@@ -456,7 +461,7 @@ async fn telegram_provider_pin_state_marks_mismatched_unpin_command_failed() {
         .await
         .expect("ingest fixture message");
 
-    lifecycle::insert_command(
+    commands::insert_command(
         &pool,
         "tcmd_unpin_mismatch",
         &account_id,

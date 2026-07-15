@@ -3,9 +3,9 @@ use crate::domains::communications::storage::port::{CommunicationAttachmentPort,
 use sqlx::postgres::PgPool;
 
 use crate::domains::communications::ingestion::analyze_ingested_message;
-use crate::domains::communications::messages::{
-    ProjectedMessage, parse_raw_email_message_from_blob, project_accepted_signal_if_runtime_allows,
-};
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::communications::messages::projection::parse_raw_email_message_from_blob;
+use crate::domains::communications::messages::provider_observation_projection::project_accepted_signal_if_runtime_allows;
 use crate::domains::signal_hub::mail::dispatch_mail_raw_signal;
 use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 

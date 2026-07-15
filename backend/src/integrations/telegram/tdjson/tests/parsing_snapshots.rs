@@ -2,29 +2,30 @@ use serde_json::json;
 
 #[test]
 fn parses_tdlib_file_snapshot_from_download_file_response() {
-    let file = super::super::parse_tdlib_file_snapshot(&json!({
-        "@type": "file",
-        "id": 42,
-        "size": 2048,
-        "expected_size": 4096,
-        "local": {
-            "@type": "localFile",
-            "path": "docker/data/telegram/account/files/document.pdf",
-            "can_be_downloaded": true,
-            "is_downloading_active": false,
-            "is_downloading_completed": true,
-            "downloaded_size": 2048
-        },
-        "remote": {
-            "@type": "remoteFile",
-            "id": "remote-file-id",
-            "unique_id": "remote-unique-id",
-            "is_uploading_active": false,
-            "is_uploading_completed": false,
-            "uploaded_size": 0
-        }
-    }))
-    .expect("file snapshot");
+    let file =
+        crate::integrations::telegram::tdjson::parsing::files::parse_tdlib_file_snapshot(&json!({
+            "@type": "file",
+            "id": 42,
+            "size": 2048,
+            "expected_size": 4096,
+            "local": {
+                "@type": "localFile",
+                "path": "docker/data/telegram/account/files/document.pdf",
+                "can_be_downloaded": true,
+                "is_downloading_active": false,
+                "is_downloading_completed": true,
+                "downloaded_size": 2048
+            },
+            "remote": {
+                "@type": "remoteFile",
+                "id": "remote-file-id",
+                "unique_id": "remote-unique-id",
+                "is_uploading_active": false,
+                "is_uploading_completed": false,
+                "uploaded_size": 0
+            }
+        }))
+        .expect("file snapshot");
 
     assert_eq!(file.file_id, 42);
     assert_eq!(file.size_bytes, Some(2048));
@@ -41,23 +42,24 @@ fn parses_tdlib_file_snapshot_from_download_file_response() {
 
 #[test]
 fn parses_tdlib_chat_snapshot_from_chat_object() {
-    let chat = super::super::parse_tdlib_chat_snapshot(&json!({
-        "@type": "chat",
-        "id": 123456789,
-        "type": {
-            "@type": "chatTypeSupergroup",
-            "supergroup_id": 555,
-            "is_channel": true
-        },
-        "title": "Release Channel",
-        "last_message": {
-            "@type": "message",
-            "id": 42,
-            "date": 1781352000
-        },
-        "metadata": {"ignored": true}
-    }))
-    .expect("chat snapshot");
+    let chat =
+        crate::integrations::telegram::tdjson::parsing::chats::parse_tdlib_chat_snapshot(&json!({
+            "@type": "chat",
+            "id": 123456789,
+            "type": {
+                "@type": "chatTypeSupergroup",
+                "supergroup_id": 555,
+                "is_channel": true
+            },
+            "title": "Release Channel",
+            "last_message": {
+                "@type": "message",
+                "id": 42,
+                "date": 1781352000
+            },
+            "metadata": {"ignored": true}
+        }))
+        .expect("chat snapshot");
 
     assert_eq!(chat.provider_chat_id, "123456789");
     assert_eq!(chat.chat_kind.as_str(), "channel");
@@ -72,35 +74,38 @@ fn parses_tdlib_chat_snapshot_from_chat_object() {
 
 #[test]
 fn parses_tdlib_chat_members_with_roles_and_permissions() {
-    let members = super::super::parse_tdlib_chat_member_list(&json!({
-        "@type": "chatMembers",
-        "total_count": 2,
-        "members": [
-            {
-                "@type": "chatMember",
-                "member_id": {"@type": "messageSenderUser", "user_id": 42},
-                "status": {
-                    "@type": "chatMemberStatusCreator",
-                    "is_member": true,
-                    "custom_title": "Owner"
-                }
-            },
-            {
-                "@type": "chatMember",
-                "member_id": {"@type": "messageSenderUser", "user_id": 43},
-                "status": {
-                    "@type": "chatMemberStatusAdministrator",
-                    "can_be_edited": false,
-                    "rights": {
-                        "@type": "chatAdministratorRights",
-                        "can_invite_users": true,
-                        "can_delete_messages": true
+    let members =
+        crate::integrations::telegram::tdjson::parsing::participants::parse_tdlib_chat_member_list(
+            &json!({
+                "@type": "chatMembers",
+                "total_count": 2,
+                "members": [
+                    {
+                        "@type": "chatMember",
+                        "member_id": {"@type": "messageSenderUser", "user_id": 42},
+                        "status": {
+                            "@type": "chatMemberStatusCreator",
+                            "is_member": true,
+                            "custom_title": "Owner"
+                        }
+                    },
+                    {
+                        "@type": "chatMember",
+                        "member_id": {"@type": "messageSenderUser", "user_id": 43},
+                        "status": {
+                            "@type": "chatMemberStatusAdministrator",
+                            "can_be_edited": false,
+                            "rights": {
+                                "@type": "chatAdministratorRights",
+                                "can_invite_users": true,
+                                "can_delete_messages": true
+                            }
+                        }
                     }
-                }
-            }
-        ]
-    }))
-    .expect("chat member list");
+                ]
+            }),
+        )
+        .expect("chat member list");
 
     assert_eq!(members.len(), 2);
     assert_eq!(members[0].provider_member_id, "user:42");
@@ -117,7 +122,7 @@ fn parses_tdlib_chat_members_with_roles_and_permissions() {
 
 #[test]
 fn parses_tdlib_basic_group_full_info_members() {
-    let members = super::super::parse_tdlib_basic_group_member_list(&json!({
+    let members = crate::integrations::telegram::tdjson::parsing::participants::parse_tdlib_basic_group_member_list(&json!({
         "@type": "basicGroupFullInfo",
         "creator_user_id": 42,
         "members": [
@@ -151,19 +156,22 @@ fn parses_tdlib_basic_group_full_info_members() {
 
 #[test]
 fn parses_tdlib_typing_update_from_user_chat_action() {
-    let typing = super::super::parse_tdlib_typing_snapshot(&json!({
-        "@type": "updateUserChatAction",
-        "chat_id": -1001234567890_i64,
-        "message_thread_id": 42,
-        "sender_id": {
-            "@type": "messageSenderUser",
-            "user_id": 777
-        },
-        "action": {
-            "@type": "chatActionTyping"
-        }
-    }))
-    .expect("typing snapshot");
+    let typing =
+        crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_typing_snapshot(
+            &json!({
+                "@type": "updateUserChatAction",
+                "chat_id": -1001234567890_i64,
+                "message_thread_id": 42,
+                "sender_id": {
+                    "@type": "messageSenderUser",
+                    "user_id": 777
+                },
+                "action": {
+                    "@type": "chatActionTyping"
+                }
+            }),
+        )
+        .expect("typing snapshot");
 
     assert_eq!(typing.provider_chat_id, "-1001234567890");
     assert_eq!(typing.provider_thread_id.as_deref(), Some("42"));
@@ -174,18 +182,21 @@ fn parses_tdlib_typing_update_from_user_chat_action() {
 
 #[test]
 fn parses_tdlib_typing_cancel_as_inactive() {
-    let typing = super::super::parse_tdlib_typing_snapshot(&json!({
-        "@type": "updateUserChatAction",
-        "chat_id": -1001234567890_i64,
-        "sender_id": {
-            "@type": "messageSenderChat",
-            "chat_id": -1009876543210_i64
-        },
-        "action": {
-            "@type": "chatActionCancel"
-        }
-    }))
-    .expect("typing snapshot");
+    let typing =
+        crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_typing_snapshot(
+            &json!({
+                "@type": "updateUserChatAction",
+                "chat_id": -1001234567890_i64,
+                "sender_id": {
+                    "@type": "messageSenderChat",
+                    "chat_id": -1009876543210_i64
+                },
+                "action": {
+                    "@type": "chatActionCancel"
+                }
+            }),
+        )
+        .expect("typing snapshot");
 
     assert_eq!(typing.sender_id, "chat:-1009876543210");
     assert_eq!(typing.provider_thread_id, None);
@@ -195,23 +206,26 @@ fn parses_tdlib_typing_cancel_as_inactive() {
 
 #[test]
 fn parses_tdlib_topic_update_from_forum_topic_info() {
-    let update = super::super::parse_tdlib_topic_update_snapshot(&json!({
-        "@type": "updateForumTopicInfo",
-        "chat_id": -1001234567890_i64,
-        "info": {
-            "@type": "forumTopicInfo",
-            "message_thread_id": 42,
-            "name": "Release notes",
-            "icon": {
-                "@type": "forumTopicIcon",
-                "custom_emoji_id": "5368324170671202286"
-            },
-            "is_pinned": true,
-            "is_closed": false
-        }
-    }))
-    .expect("parse result")
-    .expect("topic update");
+    let update =
+        crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_topic_update_snapshot(
+            &json!({
+                "@type": "updateForumTopicInfo",
+                "chat_id": -1001234567890_i64,
+                "info": {
+                    "@type": "forumTopicInfo",
+                    "message_thread_id": 42,
+                    "name": "Release notes",
+                    "icon": {
+                        "@type": "forumTopicIcon",
+                        "custom_emoji_id": "5368324170671202286"
+                    },
+                    "is_pinned": true,
+                    "is_closed": false
+                }
+            }),
+        )
+        .expect("parse result")
+        .expect("topic update");
 
     assert_eq!(update.provider_chat_id, "-1001234567890");
     assert_eq!(update.topic.provider_topic_id, 42);
@@ -228,14 +242,17 @@ fn parses_tdlib_topic_update_from_forum_topic_info() {
 
 #[test]
 fn parses_tdlib_chat_read_inbox_update() {
-    let update = super::super::parse_tdlib_chat_unread_snapshot(&json!({
-        "@type": "updateChatReadInbox",
-        "chat_id": -1001234567890_i64,
-        "last_read_inbox_message_id": 777,
-        "unread_count": 3
-    }))
-    .expect("parse result")
-    .expect("unread update");
+    let update =
+        crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_chat_unread_snapshot(
+            &json!({
+                "@type": "updateChatReadInbox",
+                "chat_id": -1001234567890_i64,
+                "last_read_inbox_message_id": 777,
+                "unread_count": 3
+            }),
+        )
+        .expect("parse result")
+        .expect("unread update");
 
     assert_eq!(update.provider_chat_id, "-1001234567890");
     assert_eq!(update.unread_count, Some(3));
@@ -246,13 +263,16 @@ fn parses_tdlib_chat_read_inbox_update() {
 
 #[test]
 fn parses_tdlib_unread_mention_count_update() {
-    let update = super::super::parse_tdlib_chat_unread_snapshot(&json!({
-        "@type": "updateChatUnreadMentionCount",
-        "chat_id": -1001234567890_i64,
-        "unread_mention_count": 2
-    }))
-    .expect("parse result")
-    .expect("unread mention update");
+    let update =
+        crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_chat_unread_snapshot(
+            &json!({
+                "@type": "updateChatUnreadMentionCount",
+                "chat_id": -1001234567890_i64,
+                "unread_mention_count": 2
+            }),
+        )
+        .expect("parse result")
+        .expect("unread mention update");
 
     assert_eq!(update.provider_chat_id, "-1001234567890");
     assert_eq!(update.unread_count, None);
@@ -263,7 +283,7 @@ fn parses_tdlib_unread_mention_count_update() {
 
 #[test]
 fn parses_tdlib_marked_as_unread_update() {
-    let update = super::super::parse_tdlib_chat_marked_as_unread_snapshot(&json!({
+    let update = crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_chat_marked_as_unread_snapshot(&json!({
         "@type": "updateChatIsMarkedAsUnread",
         "chat_id": -1001234567890_i64,
         "is_marked_as_unread": true
@@ -278,7 +298,7 @@ fn parses_tdlib_marked_as_unread_update() {
 
 #[test]
 fn parses_tdlib_chat_notification_settings_update() {
-    let update = super::super::parse_tdlib_chat_notification_settings_snapshot(&json!({
+    let update = crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_chat_notification_settings_snapshot(&json!({
         "@type": "updateChatNotificationSettings",
         "chat_id": -1001234567890_i64,
         "notification_settings": {
@@ -298,21 +318,24 @@ fn parses_tdlib_chat_notification_settings_update() {
 
 #[test]
 fn parses_tdlib_chat_position_update() {
-    let update = super::super::parse_tdlib_chat_position_snapshot(&json!({
-        "@type": "updateChatPosition",
-        "chat_id": -1001234567890_i64,
-        "position": {
-            "@type": "chatPosition",
-            "list": {
-                "@type": "chatListArchive"
-            },
-            "order": 42,
-            "is_pinned": false,
-            "source": null
-        }
-    }))
-    .expect("parse result")
-    .expect("chat position update");
+    let update =
+        crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_chat_position_snapshot(
+            &json!({
+                "@type": "updateChatPosition",
+                "chat_id": -1001234567890_i64,
+                "position": {
+                    "@type": "chatPosition",
+                    "list": {
+                        "@type": "chatListArchive"
+                    },
+                    "order": 42,
+                    "is_pinned": false,
+                    "source": null
+                }
+            }),
+        )
+        .expect("parse result")
+        .expect("chat position update");
 
     assert_eq!(update.provider_chat_id, "-1001234567890");
     assert_eq!(update.list_kind, "archive");
@@ -324,39 +347,45 @@ fn parses_tdlib_chat_position_update() {
 
 #[test]
 fn ignores_tdlib_chat_position_with_unknown_list_type() {
-    let update = super::super::parse_tdlib_chat_position_snapshot(&json!({
-        "@type": "updateChatPosition",
-        "chat_id": -1001234567890_i64,
-        "position": {
-            "@type": "chatPosition",
-            "list": { "@type": "chatListFilter" },
-            "order": 42,
-            "is_pinned": false
-        }
-    }))
-    .expect("parse result");
+    let update =
+        crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_chat_position_snapshot(
+            &json!({
+                "@type": "updateChatPosition",
+                "chat_id": -1001234567890_i64,
+                "position": {
+                    "@type": "chatPosition",
+                    "list": { "@type": "chatListFilter" },
+                    "order": 42,
+                    "is_pinned": false
+                }
+            }),
+        )
+        .expect("parse result");
 
     assert!(update.is_none());
 }
 
 #[test]
 fn ignores_incomplete_tdlib_chat_position_update() {
-    let update = super::super::parse_tdlib_chat_position_snapshot(&json!({
-        "@type": "updateChatPosition",
-        "chat_id": -1001234567890_i64,
-        "position": {
-            "@type": "chatPosition",
-            "list": { "@type": "chatListMain" }
-        }
-    }))
-    .expect("parse result");
+    let update =
+        crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_chat_position_snapshot(
+            &json!({
+                "@type": "updateChatPosition",
+                "chat_id": -1001234567890_i64,
+                "position": {
+                    "@type": "chatPosition",
+                    "list": { "@type": "chatListMain" }
+                }
+            }),
+        )
+        .expect("parse result");
 
     assert!(update.is_none());
 }
 
 #[test]
 fn parses_tdlib_chat_removed_from_list_snapshot() {
-    let update = super::super::parse_tdlib_chat_removed_from_list_snapshot(&json!({
+    let update = crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_chat_removed_from_list_snapshot(&json!({
         "@type": "updateChatRemovedFromList",
         "chat_id": -1001234567890_i64,
         "chat_list": {
@@ -376,21 +405,24 @@ fn parses_tdlib_chat_removed_from_list_snapshot() {
 
 #[test]
 fn parses_tdlib_chat_folder_snapshot() {
-    let snapshot = super::super::parse_tdlib_chat_folder_snapshot(&json!({
-        "@type": "chatFolder",
-        "id": 7,
-        "name": {
-            "@type": "chatFolderName",
-            "text": "Projects"
-        },
-        "icon": {
-            "@type": "chatFolderIcon",
-            "name": "Custom"
-        },
-        "color_id": 3
-    }))
-    .expect("parse result")
-    .expect("chat folder snapshot");
+    let snapshot =
+        crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_chat_folder_snapshot(
+            &json!({
+                "@type": "chatFolder",
+                "id": 7,
+                "name": {
+                    "@type": "chatFolderName",
+                    "text": "Projects"
+                },
+                "icon": {
+                    "@type": "chatFolderIcon",
+                    "name": "Custom"
+                },
+                "color_id": 3
+            }),
+        )
+        .expect("parse result")
+        .expect("chat folder snapshot");
 
     assert_eq!(snapshot.provider_folder_id, 7);
     assert_eq!(snapshot.title, "Projects");
@@ -400,7 +432,7 @@ fn parses_tdlib_chat_folder_snapshot() {
 
 #[test]
 fn parses_tdlib_chat_folders_update() {
-    let snapshot = super::super::parse_tdlib_chat_folders_update_snapshot(&json!({
+    let snapshot = crate::integrations::telegram::tdjson::parsing::events::parse_tdlib_chat_folders_update_snapshot(&json!({
         "@type": "updateChatFolders",
         "chat_folders": [{
             "@type": "chatFolder",
@@ -426,26 +458,29 @@ fn parses_tdlib_chat_folders_update() {
 
 #[test]
 fn parses_tdlib_text_message_snapshot_from_message_object() {
-    let message = super::super::parse_tdlib_message_snapshot(&json!({
-        "@type": "message",
-        "id": 777,
-        "chat_id": 123456789,
-        "sender_id": {
-            "@type": "messageSenderUser",
-            "user_id": 999
-        },
-        "date": 1781352060,
-        "is_outgoing": false,
-        "content": {
-            "@type": "messageText",
-            "text": {
-                "@type": "formattedText",
-                "text": "Incoming TDLib text",
-                "entities": []
-            }
-        }
-    }))
-    .expect("message snapshot");
+    let message =
+        crate::integrations::telegram::tdjson::parsing::messages::parse_tdlib_message_snapshot(
+            &json!({
+                "@type": "message",
+                "id": 777,
+                "chat_id": 123456789,
+                "sender_id": {
+                    "@type": "messageSenderUser",
+                    "user_id": 999
+                },
+                "date": 1781352060,
+                "is_outgoing": false,
+                "content": {
+                    "@type": "messageText",
+                    "text": {
+                        "@type": "formattedText",
+                        "text": "Incoming TDLib text",
+                        "entities": []
+                    }
+                }
+            }),
+        )
+        .expect("message snapshot");
 
     assert_eq!(message.provider_chat_id, "123456789");
     assert_eq!(message.provider_message_id, "777");
@@ -462,25 +497,28 @@ fn parses_tdlib_text_message_snapshot_from_message_object() {
 
 #[test]
 fn parses_tdlib_media_message_without_caption_as_empty_text() {
-    let message = super::super::parse_tdlib_message_snapshot(&json!({
-        "@type": "message",
-        "id": 778,
-        "chat_id": 123456789,
-        "sender_id": {
-            "@type": "messageSenderUser",
-            "user_id": 999
-        },
-        "date": 1781352061,
-        "is_outgoing": false,
-        "content": {
-            "@type": "messagePhoto",
-            "photo": {
-                "@type": "photo",
-                "sizes": []
-            }
-        }
-    }))
-    .expect("media message snapshot");
+    let message =
+        crate::integrations::telegram::tdjson::parsing::messages::parse_tdlib_message_snapshot(
+            &json!({
+                "@type": "message",
+                "id": 778,
+                "chat_id": 123456789,
+                "sender_id": {
+                    "@type": "messageSenderUser",
+                    "user_id": 999
+                },
+                "date": 1781352061,
+                "is_outgoing": false,
+                "content": {
+                    "@type": "messagePhoto",
+                    "photo": {
+                        "@type": "photo",
+                        "sizes": []
+                    }
+                }
+            }),
+        )
+        .expect("media message snapshot");
 
     assert_eq!(message.provider_message_id, "778");
     assert_eq!(message.text, "");
@@ -489,14 +527,14 @@ fn parses_tdlib_media_message_without_caption_as_empty_text() {
 
 #[test]
 fn recognizes_tdlib_bootstrap_error_events() {
-    assert!(super::super::is_tdlib_parameters_not_specified_error(
+    assert!(crate::integrations::telegram::tdjson::parsing::events::is_tdlib_parameters_not_specified_error(
         &json!({
             "@type": "error",
             "code": 400,
             "message": "Parameters aren't specified"
         })
     ));
-    assert!(super::super::is_tdlib_database_encryption_key_needed_error(
+    assert!(crate::integrations::telegram::tdjson::parsing::events::is_tdlib_database_encryption_key_needed_error(
         &json!({
             "@type": "error",
             "code": 400,
@@ -507,7 +545,7 @@ fn recognizes_tdlib_bootstrap_error_events() {
 
 #[test]
 fn parses_tdlib_user_identity_for_qr_account_defaults() {
-    let identity = super::super::parse_tdlib_user_identity(&json!({
+    let identity = crate::integrations::telegram::tdjson::qr_login_support::identity::parse_tdlib_user_identity(&json!({
         "@type": "user",
         "id": 123456789,
         "usernames": {

@@ -148,7 +148,7 @@ pub(crate) async fn post_v1_translate_attachment(
         .await?
         .ok_or(ApiError::NotFound)?;
     if attachment.attachment.scan_status
-        != crate::domains::communications::storage::AttachmentSafetyScanStatus::Clean
+        != crate::domains::communications::storage::scanner::AttachmentSafetyScanStatus::Clean
     {
         return Err(ApiError::InvalidCommunicationQuery(
             "attachment translation requires a clean scan verdict",
@@ -165,7 +165,7 @@ pub(crate) async fn post_v1_translate_attachment(
         .clone();
     let source_text = crate::domains::communications::attachment_text_extraction::AttachmentTextExtractionService::new(
         pool,
-        crate::domains::communications::storage::LocalCommunicationBlobStore::new(
+        crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore::new(
             crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT,
         ),
     )

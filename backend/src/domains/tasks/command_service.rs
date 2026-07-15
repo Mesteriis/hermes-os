@@ -2,7 +2,6 @@ use chrono::Utc;
 use serde::Serialize;
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
-use sqlx::{Postgres, Transaction};
 use thiserror::Error;
 
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
@@ -10,10 +9,12 @@ use hermes_observations_postgres::errors::ObservationStoreError;
 use hermes_observations_postgres::store::ObservationStore;
 
 use super::api::{NewTask, Task, TaskError, TaskStore, TaskUpdate};
-use super::core::{
-    TaskChecklist, TaskChecklistStore, TaskCoreError, TaskEvidence, TaskEvidenceStore,
-    TaskRelationStore, TaskSubtask, TaskSubtaskStore,
-};
+use super::core::checklists::{TaskChecklist, TaskChecklistStore};
+use super::core::context_packs::TaskContextPackStore;
+use super::core::errors::TaskCoreError;
+use super::core::evidence::{TaskEvidence, TaskEvidenceStore};
+use super::core::relations::TaskRelationStore;
+use super::core::subtasks::{TaskSubtask, TaskSubtaskStore};
 use super::intelligence::TaskIntelligenceService;
 
 #[derive(Clone)]
@@ -167,7 +168,7 @@ impl TaskCommandService {
             .get(task_id)
             .await?
             .ok_or(TaskError::NotFound)?;
-        let has_ctx = super::core::TaskContextPackStore::new(self.pool.clone())
+        let has_ctx = TaskContextPackStore::new(self.pool.clone())
             .get(task_id)
             .await
             .map(|c| c.is_some())

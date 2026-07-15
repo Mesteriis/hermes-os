@@ -1,4 +1,4 @@
-use crate::domains::calendar::events::CalendarAccountStore;
+use crate::domains::calendar::events::account_store::CalendarAccountStore;
 use hermes_communications_api::accounts::CommunicationProviderKind;
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 

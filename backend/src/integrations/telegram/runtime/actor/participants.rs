@@ -1,5 +1,6 @@
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::telegram::tdjson::{self, TdJsonClient, TelegramTdlibChatMemberSnapshot};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::tdjson::client::TdJsonClient;
+use crate::integrations::telegram::tdjson::{self, snapshots::TelegramTdlibChatMemberSnapshot};
 use hermes_provider_telegram::tdlib::chats::{
     get_basic_group, get_basic_group_full_info, get_supergroup_administrators,
     get_supergroup_members,
@@ -56,10 +57,10 @@ fn actor_get_supergroup_members_with_filter(
         let extra = format!("hermes-supergroup-members-{filter_name}-{supergroup_id}-{offset}");
         client.send_json(&request_builder(supergroup_id, offset, page_limit, &extra))?;
         let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
-        if let Some(message) = tdjson::tdlib_error_message(&response) {
+        if let Some(message) = tdjson::parsing::events::tdlib_error_message(&response) {
             return Err(TelegramError::TdlibRuntime(message));
         }
-        let page_items = tdjson::parse_tdlib_chat_member_list(&response)?;
+        let page_items = tdjson::parsing::participants::parse_tdlib_chat_member_list(&response)?;
         if page_items.is_empty() {
             break;
         }
@@ -85,16 +86,16 @@ pub(super) fn actor_get_basic_group_members(
     let group_extra = format!("hermes-basic-group-{basic_group_id}");
     client.send_json(&get_basic_group(basic_group_id, &group_extra))?;
     let group_response = receive_tdlib_extra(client, &group_extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&group_response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&group_response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
 
     let full_info_extra = format!("hermes-basic-group-full-info-{basic_group_id}");
     client.send_json(&get_basic_group_full_info(basic_group_id, &full_info_extra))?;
     let full_info_response = receive_tdlib_extra(client, &full_info_extra, TDJSON_COMMAND_TIMEOUT)?;
-    if let Some(message) = tdjson::tdlib_error_message(&full_info_response) {
+    if let Some(message) = tdjson::parsing::events::tdlib_error_message(&full_info_response) {
         return Err(TelegramError::TdlibRuntime(message));
     }
 
-    tdjson::parse_tdlib_basic_group_member_list(&full_info_response)
+    tdjson::parsing::participants::parse_tdlib_basic_group_member_list(&full_info_response)
 }

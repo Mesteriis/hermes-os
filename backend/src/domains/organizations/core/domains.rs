@@ -5,7 +5,7 @@ use sqlx::Transaction;
 use sqlx::postgres::PgPool;
 use sqlx::postgres::Postgres;
 
-use super::OrgCoreError;
+use super::errors::OrgCoreError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OrganizationDomain {

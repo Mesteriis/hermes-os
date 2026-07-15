@@ -7,10 +7,12 @@ use sqlx::postgres::Postgres;
 use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
-use super::core::{
-    OrgCoreError, OrgDomainStore, OrgIdentityStore, link_email_domain_projection_in_transaction,
-    link_organization_in_transaction,
+use super::core::domains::OrgDomainStore;
+use super::core::errors::OrgCoreError;
+use super::core::evidence::{
+    link_email_domain_projection_in_transaction, link_organization_in_transaction,
 };
+use super::core::identity::OrgIdentityStore;
 use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -439,8 +441,6 @@ impl OrganizationStore {
         Ok(())
     }
 }
-
-pub type OrganizationCommandPort = OrganizationStore;
 
 impl OrganizationStore {
     async fn link_email_domain_projection_evidence(

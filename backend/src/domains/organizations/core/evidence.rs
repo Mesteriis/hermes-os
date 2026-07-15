@@ -4,7 +4,7 @@ use sqlx::postgres::Postgres;
 
 use hermes_observations_postgres::review_links::link_domain_entity_in_transaction;
 
-use super::OrgCoreError;
+use super::errors::OrgCoreError;
 
 pub(crate) async fn link_organization_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,

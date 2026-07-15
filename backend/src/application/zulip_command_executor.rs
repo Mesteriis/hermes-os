@@ -1,18 +1,27 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use chrono::{DateTime, Utc};
+use hermes_blob_api::BlobReadPort;
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
+use hermes_communications_api::attachments::CommunicationAttachmentLookupPort;
 use hermes_communications_api::commands::{
     CommunicationProviderCommand, ProviderCommandQueuePort, ProviderCommandQueuePortError,
 };
+use hermes_provider_api::{CredentialLease, ProviderId};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::credentials::ProviderCredentialReader;
-use crate::domains::communications::storage::{
-    CommunicationStorageError, CommunicationStorageStore, ImportedCommunicationAttachment,
-    LocalCommunicationBlobStore, StoredCommunicationBlob,
+use crate::application::communications_attachment_lookup::{
+    LocalBlobReadAdapter, PostgresCommunicationAttachmentLookup,
 };
+use crate::domains::communications::credentials::ProviderCredentialReader;
+use crate::domains::communications::storage::errors::CommunicationStorageError;
+use crate::domains::communications::storage::models::{
+    ImportedCommunicationAttachment, StoredCommunicationBlob,
+};
+use crate::domains::communications::storage::port::CommunicationAttachmentPort;
+use crate::domains::communications::storage::store::CommunicationStorageStore;
 use hermes_communications_postgres::errors::CommunicationIngestionError;
 use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 use hermes_communications_postgres::provider_store::{
@@ -20,11 +29,15 @@ use hermes_communications_postgres::provider_store::{
 };
 
 use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
-use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
+use crate::platform::secrets::resolver::SecretResolver;
+use hermes_provider_orchestration::{
+    communication_command_to_provider_envelope, execute_provider_command,
+};
 use hermes_provider_zulip::client::{ZulipApiClient, ZulipClientConfig};
 use hermes_provider_zulip::command_execution::{
     ZulipCommandExecutionError, ZulipExecutableCommand, ZulipPreparedUpload, execute_zulip_command,
 };
+use hermes_provider_zulip::runtime::{ZulipInProcessRuntime, ZulipRuntimeConfig};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ZulipCommandExecutionReport {
@@ -43,6 +56,8 @@ pub struct ZulipCommandWorker<R, Q = CommunicationProviderCommandStore> {
     secret_store: SecretReferenceStore,
     command_queue: Q,
     resolver: R,
+    attachment_lookup: std::sync::Arc<dyn CommunicationAttachmentLookupPort>,
+    blob_reader: std::sync::Arc<LocalBlobReadAdapter>,
 }
 
 impl<R> ZulipCommandWorker<R, CommunicationProviderCommandStore>
@@ -72,6 +87,12 @@ where
             secret_store: SecretReferenceStore::new(pool.clone()),
             command_queue,
             resolver,
+            attachment_lookup: std::sync::Arc::new(PostgresCommunicationAttachmentLookup::new(
+                CommunicationAttachmentPort::new(pool),
+            )),
+            blob_reader: std::sync::Arc::new(LocalBlobReadAdapter::new(
+                DEFAULT_MAIL_SYNC_BLOB_ROOT,
+            )),
         }
     }
 }
@@ -146,6 +167,17 @@ where
                 field: "base_url",
             })?,
         );
+        let runtime = ZulipInProcessRuntime::new(
+            ZulipRuntimeConfig::new(
+                account.account_id.clone(),
+                base_url,
+                account.external_account_id.clone(),
+            )
+            .map_err(|_| ZulipCommandWorkerError::InvalidAccountConfig {
+                account_id: account.account_id.clone(),
+                field: "base_url",
+            })?,
+        );
         let claimed = self
             .command_queue
             .claim_due(&account.account_id, "zulip", now, limit)
@@ -156,17 +188,90 @@ where
         };
 
         for command in claimed {
+            if !command_requires_upload(&command.command_kind) {
+                let issued_at = Utc::now();
+                let deadline = issued_at + chrono::Duration::minutes(5);
+                let envelope = communication_command_to_provider_envelope(
+                    &command,
+                    ProviderId::parse("zulip").expect("static provider id is valid"),
+                    issued_at,
+                    deadline,
+                    0,
+                )
+                .map_err(|_| ZulipCommandWorkerError::InvalidCommand {
+                    command_id: command.command_id.clone(),
+                });
+                let lease = CredentialLease::new(
+                    "zulip",
+                    account.account_id.clone(),
+                    "api_key",
+                    0,
+                    issued_at,
+                    deadline,
+                    credential.secret.expose_for_runtime().as_bytes(),
+                )
+                .map_err(|_| ZulipCommandWorkerError::CredentialUnavailable {
+                    account_id: account.account_id.clone(),
+                });
+                match (envelope, lease) {
+                    (Ok(envelope), Ok(lease)) => {
+                        match execute_provider_command(&runtime, &envelope, lease).await {
+                            Ok(result) => {
+                                self.command_queue
+                                    .mark_completed_at_epoch(
+                                        &command.command_id,
+                                        "zulip",
+                                        Utc::now(),
+                                        result.payload,
+                                        command.lease_epoch,
+                                    )
+                                    .await?;
+                                report.completed += 1;
+                            }
+                            Err(error) => {
+                                let error_code = error.code.clone();
+                                self.command_queue
+                                    .mark_failed_at_epoch(
+                                        &command.command_id,
+                                        "zulip",
+                                        Utc::now(),
+                                        error_code.as_str(),
+                                        json!({"error": error_code}),
+                                        command.lease_epoch,
+                                    )
+                                    .await?;
+                                report.retrying += 1;
+                            }
+                        }
+                    }
+                    (Err(error), _) | (_, Err(error)) => {
+                        self.command_queue
+                            .mark_failed_at_epoch(
+                                &command.command_id,
+                                "zulip",
+                                Utc::now(),
+                                &error.to_string(),
+                                json!({"error": "invalid_provider_command"}),
+                                command.lease_epoch,
+                            )
+                            .await?;
+                        report.retrying += 1;
+                    }
+                }
+                continue;
+            }
             let executable = match self.executable_command(&command).await {
                 Ok(executable) => executable,
                 Err(error) => {
                     let updated = self
                         .command_queue
-                        .mark_failed(
+                        .mark_failed_at_epoch(
                             &command.command_id,
                             "zulip",
                             Utc::now(),
                             &error.to_string(),
                             failure_result_payload(&error),
+                            command.lease_epoch,
                         )
                         .await?;
                     if let Some(updated) = updated {
@@ -181,11 +286,12 @@ where
             match execute_zulip_command(&client, &executable).await {
                 Ok(outcome) => {
                     self.command_queue
-                        .mark_completed(
+                        .mark_completed_at_epoch(
                             &command.command_id,
                             "zulip",
                             Utc::now(),
                             outcome.result_payload,
+                            command.lease_epoch,
                         )
                         .await?;
                     report.completed += 1;
@@ -193,12 +299,13 @@ where
                 Err(error) => {
                     let updated = self
                         .command_queue
-                        .mark_failed(
+                        .mark_failed_at_epoch(
                             &command.command_id,
                             "zulip",
                             Utc::now(),
                             &error.to_string(),
                             failure_result_payload(&error),
+                            command.lease_epoch,
                         )
                         .await?;
                     if let Some(updated) = updated {
@@ -250,7 +357,8 @@ where
         command: &CommunicationProviderCommand,
     ) -> Result<ZulipPreparedUpload, ZulipCommandExecutionError> {
         let storage = CommunicationStorageStore::new(self.pool.clone());
-        let resolved = resolve_upload_blob(command, &storage).await?;
+        let resolved =
+            resolve_upload_blob(command, &storage, self.attachment_lookup.as_ref()).await?;
         if resolved.storage_kind != "local_fs" {
             return Err(invalid_command(
                 command,
@@ -264,12 +372,20 @@ where
             ));
         }
 
-        let bytes = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT)
-            .read_blob(&resolved.storage_path)
+        let blob_ref = self
+            .blob_reader
+            .issue(
+                resolved.blob_id.clone(),
+                command.account_id.clone(),
+                resolved.storage_path.clone(),
+                Utc::now() + chrono::Duration::minutes(5),
+            )
+            .map_err(|_| invalid_command(command, "invalid blob capability"))?;
+        let bytes = self
+            .blob_reader
+            .read_bounded(&blob_ref, 25 * 1024 * 1024)
             .await
-            .map_err(|error| {
-                invalid_command_owned(command, format!("failed to read blob: {error}"))
-            })?;
+            .map_err(|_| invalid_command(command, "blob capability read failed"))?;
 
         Ok(ZulipPreparedUpload {
             filename: resolved
@@ -339,8 +455,33 @@ struct ResolvedUploadBlob {
 async fn resolve_upload_blob(
     command: &CommunicationProviderCommand,
     storage: &CommunicationStorageStore,
+    attachment_lookup: &dyn CommunicationAttachmentLookupPort,
 ) -> Result<ResolvedUploadBlob, ZulipCommandExecutionError> {
     if let Some(attachment_id) = optional_payload_string(command, "attachment_id") {
+        let reference = attachment_lookup
+            .lookup_by_id(&attachment_id)
+            .await
+            .map_err(|error| invalid_command_owned(command, error.to_string()))?
+            .ok_or_else(|| {
+                invalid_command_owned(
+                    command,
+                    format!("attachment import `{attachment_id}` was not found"),
+                )
+            })?;
+        if reference
+            .account_id
+            .as_deref()
+            .is_some_and(|id| id != command.account_id)
+            || reference
+                .channel_kind
+                .as_deref()
+                .is_some_and(|kind| kind != "zulip")
+        {
+            return Err(invalid_command(
+                command,
+                "attachment import is outside the Zulip account scope",
+            ));
+        }
         let imported = storage
             .imported_attachment_by_id(&attachment_id)
             .await
@@ -483,6 +624,8 @@ pub enum ZulipCommandWorkerError {
     },
     #[error("Zulip API credential is unavailable for account `{account_id}`")]
     CredentialUnavailable { account_id: String },
+    #[error("Zulip command `{command_id}` is invalid")]
+    InvalidCommand { command_id: String },
     #[error(transparent)]
     Communication(#[from] CommunicationIngestionError),
     #[error(transparent)]

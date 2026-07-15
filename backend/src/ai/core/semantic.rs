@@ -1,6 +1,6 @@
 mod embeddings;
 mod indexing;
-mod models;
+pub mod models;
 mod rows;
 mod search;
 mod source_documents;
@@ -9,10 +9,4 @@ mod source_personas;
 mod source_projects;
 mod source_tasks;
 mod sources;
-mod store;
-
-pub use models::{
-    NewSemanticEmbedding, SemanticEmbedding, SemanticIndexReport, SemanticSearchResult,
-    SemanticSourceKind,
-};
-pub use store::SemanticEmbeddingStore;
+pub mod store;

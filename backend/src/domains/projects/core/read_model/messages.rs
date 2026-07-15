@@ -1,6 +1,6 @@
 use super::super::errors::ProjectStoreError;
 use super::super::models::ProjectMessageSummary;
-use super::super::projection::reviewed_target_ids;
+use super::super::review_targets::reviewed_target_ids;
 use super::super::rows::row_to_project_message;
 use super::super::store::ProjectStore;
 

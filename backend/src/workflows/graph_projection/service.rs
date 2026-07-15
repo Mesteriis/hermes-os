@@ -1,7 +1,7 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::graph::core::GraphProjectionPort;
-use crate::domains::projects::core::ProjectCommandPort;
+use crate::domains::graph::ports::GraphProjectionPort;
+use crate::domains::projects::ports::ProjectCommandPort;
 
 use super::errors::GraphProjectionError;
 use super::models::GraphProjectionReport;

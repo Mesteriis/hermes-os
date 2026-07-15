@@ -5,16 +5,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{TimeZone, Utc};
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
-};
-use hermes_hub_backend::domains::decisions::{
-    DecisionEntityKind, DecisionEvidenceSourceKind, DecisionReviewState, DecisionStatus,
-    DecisionStore, DecisionStoreError, NewDecision, NewDecisionEvidence, NewDecisionImpactedEntity,
-};
-use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
+use hermes_hub_backend::domains::decisions::errors::DecisionStoreError;
+use hermes_hub_backend::domains::decisions::models::decision::NewDecision;
+use hermes_hub_backend::domains::decisions::models::states::DecisionStatus;
+use hermes_hub_backend::domains::documents::core::models::NewDocumentImport;
+use hermes_hub_backend::domains::documents::core::store::DocumentImportStore;
 
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::graph_projection::service::GraphProjectionService;
 use serde_json::{Value, json};
 use sqlx::Row;
@@ -685,3 +684,9 @@ fn unique_suffix() -> u128 {
         .expect("system clock after unix epoch")
         .as_nanos()
 }
+use hermes_hub_backend::domains::decisions::models::entity_kind::DecisionEntityKind;
+use hermes_hub_backend::domains::decisions::models::evidence::NewDecisionEvidence;
+use hermes_hub_backend::domains::decisions::models::impacted_entity::NewDecisionImpactedEntity;
+use hermes_hub_backend::domains::decisions::models::source_kind::DecisionEvidenceSourceKind;
+use hermes_hub_backend::domains::decisions::models::states::DecisionReviewState;
+use hermes_hub_backend::domains::decisions::store::DecisionStore;

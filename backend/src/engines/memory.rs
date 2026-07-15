@@ -12,9 +12,8 @@ use chrono::{DateTime, Utc};
 
 use errors::MemoryEngineError;
 use models::{
-    CrossDomainMemoryContextPack, MemoryCardDraft, MemoryContextItem, MemoryContextPack,
-    MemoryContextSource, MemoryCrossDomainContextItem, MemoryEntityRef, MemoryFactDraft,
-    MemoryFactState, MemoryGap, MemoryStaleCandidate,
+    CrossDomainMemoryContextPack, MemoryCardDraft, MemoryContextPack, MemoryContextSource,
+    MemoryEntityRef, MemoryFactDraft, MemoryFactState, MemoryGap, MemoryStaleCandidate,
 };
 
 pub struct MemoryEngine;

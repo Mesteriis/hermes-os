@@ -1,13 +1,14 @@
 use crate::domains::communications::storage::port::LocalBlobPort;
-use crate::platform::communications::EmailSyncBatch;
 use crate::workflows::email_sync_pipeline::service::project_email_sync_batch_with_mail_blobs;
 use crate::workflows::graph_projection::service::GraphProjectionService;
+use hermes_communications_api::email_sync::EmailSyncBatch;
 
 use super::super::errors::ProviderSyncError;
-use super::super::models::{MailSyncPhase, MailSyncSettings, ProgressMode, ProgressUpdate};
+use super::super::models::progress::{MailSyncPhase, ProgressMode, ProgressUpdate};
+use super::super::models::settings::MailSyncSettings;
 use super::super::service::MailBackgroundSyncService;
 use super::super::store::MailSyncStatePort;
-use super::ProviderSyncSummary;
+use super::summary::ProviderSyncSummary;
 
 impl MailBackgroundSyncService {
     pub(in crate::workflows::mail_background_sync::provider) async fn project_batch(

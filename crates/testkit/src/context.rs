@@ -3,8 +3,8 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::vault::{TestVault, new_test_vault};
-use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::config::app_config::AppConfig;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_test_session::containers::nats::NatsContainer;
 use hermes_test_session::containers::pgbouncer::PgbouncerContainer;
 use hermes_test_session::containers::postgres::PostgresContainer;
@@ -35,9 +35,8 @@ pub struct TestContext {
     _postgres: PostgresContainer,
     pgbouncer: Option<PgbouncerContainer>,
     nats_container: Mutex<Option<NatsContainer>>,
-    db_name: String,
     vault: TestVault,
-    pool: PgPool,
+    database_handle: hermes_test_session::TestDatabase,
 }
 
 impl TestContext {
@@ -56,27 +55,29 @@ impl TestContext {
         let pgbouncer = PgbouncerContainer::start_for_current_session().await;
         let pool = create_database(&container, pgbouncer.as_ref(), &db_name).await;
         let vault = new_test_vault();
+        let connection_string = match pgbouncer.as_ref() {
+            Some(pgbouncer) => pgbouncer.connection_string(&db_name),
+            None => direct_connection_string(container.host_port(), &db_name),
+        };
 
         Self {
             _postgres: container,
             pgbouncer,
             nats_container: Mutex::new(None),
-            db_name,
             vault,
-            pool,
+            database_handle: hermes_test_session::TestDatabase::new(pool, connection_string),
         }
     }
 
     /// The connection pool to the isolated test database.
     pub fn pool(&self) -> &PgPool {
-        &self.pool
+        self.database_handle.pool()
     }
 
     /// The full connection string for this test database.
     pub fn connection_string(&self) -> String {
         match &self.pgbouncer {
-            Some(pgbouncer) => pgbouncer.connection_string(&self.db_name),
-            None => direct_connection_string(self._postgres.host_port(), &self.db_name),
+            _ => self.database_handle.connection_string().to_owned(),
         }
     }
 
@@ -126,7 +127,7 @@ impl TestContext {
 
     /// Database runtime wrapper backed by this context's migrated pool.
     pub fn database(&self) -> Database {
-        Database::from_test_pool(self.pool.clone(), self.connection_string())
+        Database::from_test_pool(self.database_handle.clone_pool(), self.connection_string())
     }
 }
 
@@ -148,10 +149,10 @@ async fn create_database(
         None => direct_connection_string(container.host_port(), db_name),
     };
     let pool = connect_with_retry(&database_url, "new test database").await;
-    hermes_hub_backend::platform::events::migrations::run_migrations(&pool)
+    hermes_test_session::run_migrations(&pool)
         .await
         .expect("failed to run migrations");
-    hermes_hub_backend::platform::settings::ApplicationSettingsStore::new(pool.clone())
+    hermes_hub_backend::platform::settings::store::ApplicationSettingsStore::new(pool.clone())
         .repair_declared_settings()
         .await
         .expect("failed to repair application settings");

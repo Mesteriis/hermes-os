@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use super::super::errors::ProjectStoreError;
 use super::super::ids::project_graph_node_id;
 use super::super::models::ProjectStats;
-use super::super::projection::reviewed_target_ids;
+use super::super::review_targets::reviewed_target_ids;
 use super::super::store::ProjectStore;
 
 impl ProjectStore {

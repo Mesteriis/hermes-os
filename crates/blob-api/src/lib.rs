@@ -1,4 +1,6 @@
 use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -34,6 +36,27 @@ impl BlobRef {
     pub fn is_expired_at(&self, at: DateTime<Utc>) -> bool {
         at >= self.expires_at
     }
+}
+
+pub type BlobReadFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Vec<u8>, BlobReadError>> + Send + 'a>>;
+
+/// Capability-scoped blob read boundary. Implementations decide where bytes
+/// live; callers never receive arbitrary filesystem access.
+pub trait BlobReadPort: Send + Sync {
+    fn read_bounded<'a>(&'a self, reference: &'a BlobRef, max_bytes: usize) -> BlobReadFuture<'a>;
+}
+
+#[derive(Debug, Error, Eq, PartialEq)]
+pub enum BlobReadError {
+    #[error("blob capability is expired")]
+    Expired,
+    #[error("blob capability account mismatch")]
+    AccountMismatch,
+    #[error("blob is unavailable")]
+    Unavailable,
+    #[error("blob exceeds the configured size limit")]
+    TooLarge,
 }
 
 impl fmt::Debug for BlobRef {

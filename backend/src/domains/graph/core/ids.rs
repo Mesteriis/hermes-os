@@ -1,5 +1,3 @@
-pub use crate::platform::graph::node_id;
-
 use super::models::{GraphEvidenceSourceKind, RelationshipType};
 
 pub fn edge_id(

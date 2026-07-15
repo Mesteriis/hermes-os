@@ -3,7 +3,7 @@ use serde_json::json;
 use hermes_communications_api::accounts::NewProviderAccount;
 
 use super::super::errors::TelegramError;
-use super::super::models::{TelegramAccountSetupRequest, TelegramAccountSetupResponse};
+use super::super::models::accounts::{TelegramAccountSetupRequest, TelegramAccountSetupResponse};
 use super::super::store::TelegramStore;
 
 impl TelegramStore {

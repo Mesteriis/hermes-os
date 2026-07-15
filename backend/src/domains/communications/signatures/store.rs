@@ -1,7 +1,8 @@
 use sqlx::postgres::PgPool;
 
+use super::errors::CertificateError;
+use super::models::{CertificateRecord, NewCertificate};
 use super::rows::{CERTIFICATE_COLUMNS, row_to_cert};
-use super::{CertificateError, CertificateRecord, NewCertificate};
 
 #[derive(Clone)]
 pub struct CertificateStore {

@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::platform::secrets::{SecretKind, SecretStoreKind};
+use crate::platform::secrets::models::{SecretKind, SecretStoreKind};
 use hermes_communications_api::accounts::CommunicationProviderKind;
 
 use super::constants::{

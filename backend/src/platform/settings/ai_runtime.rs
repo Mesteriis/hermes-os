@@ -1,4 +1,5 @@
-use crate::platform::config::{AiRuntimeProvider, AppConfig};
+use crate::platform::config::ai::AiRuntimeProvider;
+use crate::platform::config::app_config::AppConfig;
 
 use super::models::ApplicationSetting;
 

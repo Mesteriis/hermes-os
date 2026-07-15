@@ -3,7 +3,8 @@ use hermes_communications_api::accounts::{CommunicationProviderKind, NewProvider
 use serde_json::json;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::integrations::telegram::client::lifecycle;
+use hermes_hub_backend::integrations::telegram::client::commands;
+use hermes_hub_backend::integrations::telegram::client::commands::queries;
 
 use hermes_backend_testkit::context::TestContext;
 
@@ -16,7 +17,7 @@ async fn telegram_outbox_claims_due_command_and_unlocks_while_awaiting_provider(
 
     insert_edit_command(&pool, &account_id, command_id).await;
 
-    let claimed = lifecycle::claim_due_commands_for_execution(&pool, &account_id, Utc::now(), 10)
+    let claimed = commands::claim_due_commands_for_execution(&pool, &account_id, Utc::now(), 10)
         .await
         .expect("claim due commands");
 
@@ -29,7 +30,7 @@ async fn telegram_outbox_claims_due_command_and_unlocks_while_awaiting_provider(
     assert_eq!(command.locked_by.as_deref(), Some("telegram-outbox-worker"));
     assert_eq!(command.reconciliation_status, "awaiting_provider");
 
-    lifecycle::mark_command_awaiting_provider(
+    commands::mark_command_awaiting_provider(
         &pool,
         command_id,
         Utc::now(),
@@ -38,7 +39,7 @@ async fn telegram_outbox_claims_due_command_and_unlocks_while_awaiting_provider(
     .await
     .expect("mark awaiting provider");
 
-    let stored = lifecycle::list_commands(&pool, &account_id, 10)
+    let stored = queries::list_commands(&pool, &account_id, 10)
         .await
         .expect("list commands")
         .into_iter()
@@ -59,7 +60,7 @@ async fn telegram_outbox_recovers_stale_locked_execution_for_retry() {
     let command_id = "tcmd_stale_retry";
 
     insert_edit_command(&pool, &account_id, command_id).await;
-    let claimed = lifecycle::claim_due_commands_for_execution(&pool, &account_id, Utc::now(), 10)
+    let claimed = commands::claim_due_commands_for_execution(&pool, &account_id, Utc::now(), 10)
         .await
         .expect("claim due commands");
     assert_eq!(claimed.len(), 1);
@@ -78,7 +79,7 @@ async fn telegram_outbox_recovers_stale_locked_execution_for_retry() {
     .await
     .expect("backdate lock");
 
-    let recovered = lifecycle::recover_stale_executing_commands(
+    let recovered = commands::recover_stale_executing_commands(
         &pool,
         Utc::now(),
         Utc::now() - Duration::minutes(2),
@@ -102,7 +103,7 @@ async fn telegram_outbox_dead_letter_can_be_manually_retried() {
     let command_id = "tcmd_manual_retry";
 
     insert_edit_command(&pool, &account_id, command_id).await;
-    lifecycle::dead_letter_command(
+    commands::dead_letter_command(
         &pool,
         command_id,
         Utc::now(),
@@ -111,7 +112,7 @@ async fn telegram_outbox_dead_letter_can_be_manually_retried() {
     .await
     .expect("dead letter command");
 
-    let dead_lettered = lifecycle::list_commands(&pool, &account_id, 10)
+    let dead_lettered = queries::list_commands(&pool, &account_id, 10)
         .await
         .expect("list commands")
         .into_iter()
@@ -120,7 +121,7 @@ async fn telegram_outbox_dead_letter_can_be_manually_retried() {
     assert_eq!(dead_lettered.status, "dead_letter");
     assert!(dead_lettered.dead_lettered_at.is_some());
 
-    let retried = lifecycle::manual_retry_command(&pool, command_id, Utc::now())
+    let retried = commands::manual_retry_command(&pool, command_id, Utc::now())
         .await
         .expect("manual retry")
         .expect("eligible command");
@@ -150,7 +151,7 @@ async fn create_telegram_account(pool: &sqlx::PgPool, suffix: &str) -> String {
 }
 
 async fn insert_edit_command(pool: &sqlx::PgPool, account_id: &str, command_id: &str) {
-    lifecycle::insert_command(
+    commands::insert_command(
         pool,
         command_id,
         account_id,

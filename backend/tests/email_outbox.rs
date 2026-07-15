@@ -4,23 +4,27 @@ use hermes_communications_api::accounts::{CommunicationProviderKind, NewProvider
 use hermes_communications_api::accounts::{
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
+use hermes_communications_api::email::{EmailSendError, OutgoingEmail, SendResult, SmtpConfig};
 use serde_json::json;
 use sqlx::Row;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
+use hermes_hub_backend::domains::communications::outbox::delivery::{
+    EmailOutboxDeliveryWorker, OutboxDeliveryError, OutboxEmailSender, OutboxRetryPolicy,
+    OutboxSendReceipt,
+};
+use hermes_hub_backend::domains::communications::outbox::smtp_sender::SmtpOutboxEmailSender;
 use hermes_hub_backend::domains::communications::outbox::{
     CommunicationOutboxItem, CommunicationOutboxStatus, CommunicationOutboxStore,
-    EmailOutboxDeliveryWorker, NewCommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender,
-    OutboxRetryPolicy, OutboxSendReceipt, SmtpOutboxEmailSender, SmtpTransport,
+    NewCommunicationOutboxItem,
 };
-use hermes_hub_backend::platform::communications::{
-    EmailSendError, OutgoingEmail, SendResult, SmtpConfig,
-};
+use hermes_hub_backend::platform::communications::SmtpTransport;
 
-use hermes_hub_backend::platform::secrets::{
-    InMemorySecretResolver, NewSecretReference, ResolvedSecret, SecretKind, SecretReferenceStore,
-    SecretStoreKind,
+use hermes_hub_backend::platform::secrets::models::{
+    NewSecretReference, ResolvedSecret, SecretKind, SecretStoreKind,
 };
+use hermes_hub_backend::platform::secrets::resolver::InMemorySecretResolver;
+use hermes_hub_backend::platform::secrets::store::SecretReferenceStore;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};

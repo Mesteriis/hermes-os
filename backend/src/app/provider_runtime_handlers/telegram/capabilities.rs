@@ -1,20 +1,9 @@
 use axum::Json;
 use axum::extract::{Path, State};
 
-use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
-};
-use crate::app::{ApiError, AppState};
+use crate::app::api_support::{stores::integration_stores::*, telegram_capabilities::*};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 
 pub(crate) async fn get_telegram_capabilities(
     State(state): State<AppState>,

@@ -6,7 +6,7 @@ use super::errors::InvestigatorError;
 use super::meeting_prep;
 use super::models::{DossierReviewState, DossierSnapshot, MeetingPrep, PersonaDossier};
 use super::snapshots;
-use crate::domains::personas::core::link_persona_entity;
+use crate::domains::personas::core::evidence::link_persona_entity;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::review_links::materialize_review_transition_link;
 use hermes_observations_postgres::store::ObservationStore;

@@ -1,4 +1,4 @@
-use crate::platform::secrets::ResolvedSecret;
+use crate::platform::secrets::models::ResolvedSecret;
 
 #[derive(Clone)]
 pub struct OmniRouteClientConfig {

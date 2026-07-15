@@ -1,5 +1,7 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
+use hermes_communications_api::email::{OutgoingEmail, SmtpConfig};
 use std::future::Future;
 use std::pin::Pin;
 
@@ -13,14 +15,13 @@ use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
 
-use crate::platform::communications::{OutgoingEmail, SmtpConfig, SmtpTransport};
-use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
+use crate::platform::communications::SmtpTransport;
+use crate::platform::secrets::resolver::SecretResolver;
 
+use super::CommunicationOutboxItem;
 use super::attachments::load_sendable_attachments;
-use super::{
-    CommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt,
-    rfc822_message_id_for_outbox,
-};
+use super::delivery::{OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt};
+use super::rfc822_message_id_for_outbox;
 
 const ICLOUD_SMTP_HOST: &str = "smtp.mail.me.com";
 const ICLOUD_SMTP_PORT: u16 = 587;

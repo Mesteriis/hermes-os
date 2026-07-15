@@ -3,7 +3,7 @@ use chrono::Utc;
 use super::super::errors::MailSyncError;
 use super::super::events::sync_run_progress_event;
 use super::super::evidence::capture_mail_sync_run_observation;
-use super::super::models::ProgressUpdate;
+use super::super::models::progress::ProgressUpdate;
 use super::super::rows::row_to_run;
 use super::MailSyncStore;
 use hermes_events_postgres::store::EventStore;

@@ -1,8 +1,5 @@
 use crate::support::*;
-use hermes_hub_backend::domains::decisions::{
-    DecisionEvidenceSourceKind, DecisionReviewState, DecisionStore, NewDecision,
-    NewDecisionEvidence,
-};
+use hermes_hub_backend::domains::decisions::models::decision::NewDecision;
 use sqlx::Row;
 
 #[tokio::test]
@@ -669,3 +666,8 @@ async fn task_subtask_manual_create_path_captures_observation_against_postgres()
     .expect("observation link count");
     assert_eq!(link_count, 1);
 }
+use hermes_hub_backend::domains::decisions::models::{
+    evidence::NewDecisionEvidence, source_kind::DecisionEvidenceSourceKind,
+    states::DecisionReviewState,
+};
+use hermes_hub_backend::domains::decisions::store::DecisionStore;

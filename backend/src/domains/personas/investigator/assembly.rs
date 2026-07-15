@@ -7,11 +7,12 @@ use super::sections::{
     ai_observation_section, communication_pattern_section, dossier_source_refs, expertise_section,
     fact_section,
 };
-use crate::domains::personas::enrichment::PersonaEnrichmentStore;
+use crate::domains::personas::enrichment::store::PersonaEnrichmentStore;
 use crate::domains::personas::expertise::PersonaExpertiseStore;
-use crate::domains::personas::memory::{
-    PersonaFactStore, PersonaMemoryCardStore, PersonaPreferenceStore, RelationshipEventStore,
-};
+use crate::domains::personas::memory::cards::PersonaMemoryCardStore;
+use crate::domains::personas::memory::facts::PersonaFactStore;
+use crate::domains::personas::memory::preferences::PersonaPreferenceStore;
+use crate::domains::personas::memory::relationship_events::RelationshipEventStore;
 
 pub(super) async fn assemble_dossier(
     pool: &PgPool,

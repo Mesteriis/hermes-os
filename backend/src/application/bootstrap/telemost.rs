@@ -209,7 +209,7 @@ async fn run_yandex_telemost_retention_cleanup_once(
     event_bus: &InMemoryEventBus,
 ) -> Result<YandexTelemostRetentionCleanupSchedulerResult, String> {
     let service =
-        crate::application::provider_runtime_services::yandex_telemost_provider_runtime_service(
+        crate::application::provider_runtime_factories::yandex_telemost_provider_runtime_service(
             pool.clone(),
             event_bus.clone(),
         );

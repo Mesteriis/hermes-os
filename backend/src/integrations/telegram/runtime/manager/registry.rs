@@ -1,6 +1,6 @@
 use std::sync::mpsc::Sender;
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
 use super::super::state::{
     TelegramRuntimeActorHandle, TelegramRuntimeActorState, TelegramRuntimeCommand,

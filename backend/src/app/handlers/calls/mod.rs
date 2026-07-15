@@ -1,3 +1,1 @@
-mod handlers;
-
-pub(crate) use handlers::*;
+pub(crate) mod handlers;

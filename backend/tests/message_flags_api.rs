@@ -10,13 +10,12 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, NewProjectedMessage,
-};
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::communications::messages::models::NewProjectedMessage;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const TOKEN: &str = "message-flags-api-test-token";
 

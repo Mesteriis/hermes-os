@@ -6,7 +6,8 @@ use sqlx::Transaction;
 use sqlx::postgres::PgPool;
 use sqlx::postgres::Postgres;
 
-use super::{OrgCoreError, link_entity_in_transaction};
+use super::errors::OrgCoreError;
+use super::evidence::link_entity_in_transaction;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OrgDepartment {

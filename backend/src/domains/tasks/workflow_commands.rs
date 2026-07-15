@@ -2,7 +2,8 @@ use sqlx::Transaction;
 use sqlx::postgres::{PgPool, Postgres};
 
 use super::api::{NewTask, Task, TaskError, TaskStore};
-use super::core::{ObligationTaskLinkStore, TaskCoreError};
+use super::core::errors::TaskCoreError;
+use super::core::obligation_links::ObligationTaskLinkStore;
 
 #[derive(Clone)]
 pub struct TaskWorkflowCommands {

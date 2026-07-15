@@ -1,6 +1,6 @@
 use url::form_urlencoded;
 
-use crate::app::ApiError;
+use crate::app::error::types::ApiError;
 
 pub(crate) struct GraphNeighborhoodQuery {
     pub(crate) node_id: Option<String>,

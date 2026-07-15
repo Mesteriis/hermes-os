@@ -3,22 +3,24 @@ use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use sqlx::PgPool;
 
-use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
-use crate::integrations::telegram::client::models::{TelegramChat, TelegramChatGroupFilter};
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramProviderChatPositionUpdate, TelegramStore,
-    reconcile_archive_commands_from_provider_state,
+use crate::integrations::telegram::client::chat_state::{
+    TelegramProviderChatPositionUpdate, reconcile_archive_commands_from_provider_state,
     reconcile_folder_add_commands_from_provider_state,
     reconcile_folder_remove_commands_from_provider_state,
     reconcile_mark_read_commands_from_provider_state,
     reconcile_marked_as_unread_commands_from_provider_state,
     reconcile_mute_commands_from_provider_state, reconcile_pin_commands_from_provider_state,
 };
-use crate::integrations::telegram::tdjson::{
-    TelegramTdlibChatFolderSnapshot, TelegramTdlibChatMarkedAsUnreadSnapshot,
-    TelegramTdlibChatNotificationSettingsSnapshot, TelegramTdlibChatPositionSnapshot,
-    TelegramTdlibChatRemovedFromListSnapshot, TelegramTdlibChatUnreadSnapshot,
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::chats::{TelegramChat, TelegramChatGroupFilter};
+use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
+use crate::integrations::telegram::client::store::TelegramStore;
+use crate::integrations::telegram::tdjson::parsing::events::{
+    TelegramTdlibChatMarkedAsUnreadSnapshot, TelegramTdlibChatNotificationSettingsSnapshot,
+    TelegramTdlibChatPositionSnapshot, TelegramTdlibChatRemovedFromListSnapshot,
+    TelegramTdlibChatUnreadSnapshot,
 };
+use crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatFolderSnapshot;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
 use hermes_events_postgres::store::EventStore;

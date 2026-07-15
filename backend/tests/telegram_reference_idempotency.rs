@@ -6,9 +6,9 @@ use serde_json::json;
 use tower::ServiceExt;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::integrations::telegram::client::lifecycle;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::integrations::telegram::client::references;
+use hermes_hub_backend::platform::storage::database::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, json_body, json_post_request_with_actor, unique_suffix,
 };
@@ -78,7 +78,7 @@ async fn telegram_reference_inserts_return_existing_rows_on_conflict() {
     .await;
 
     let pool = ctx.pool();
-    let first_reply = lifecycle::insert_reply_ref(
+    let first_reply = references::insert_reply_ref(
         pool,
         &reply_message_id,
         &root_message_id,
@@ -90,7 +90,7 @@ async fn telegram_reference_inserts_return_existing_rows_on_conflict() {
     )
     .await
     .expect("first reply ref");
-    let second_reply = lifecycle::insert_reply_ref(
+    let second_reply = references::insert_reply_ref(
         pool,
         &reply_message_id,
         &root_message_id,
@@ -107,7 +107,7 @@ async fn telegram_reference_inserts_return_existing_rows_on_conflict() {
     let forward_date = chrono::DateTime::parse_from_rfc3339("2026-06-05T11:00:00Z")
         .expect("timestamp")
         .with_timezone(&Utc);
-    let first_forward = lifecycle::insert_forward_ref(
+    let first_forward = references::insert_forward_ref(
         pool,
         &forward_message_id,
         &account_id,
@@ -121,7 +121,7 @@ async fn telegram_reference_inserts_return_existing_rows_on_conflict() {
     )
     .await
     .expect("first forward ref");
-    let second_forward = lifecycle::insert_forward_ref(
+    let second_forward = references::insert_forward_ref(
         pool,
         &forward_message_id,
         &account_id,

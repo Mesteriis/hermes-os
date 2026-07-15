@@ -1,7 +1,7 @@
 use thiserror::Error;
 
-use crate::domains::personas::enrichment::PersonaEnrichmentError;
-use crate::domains::personas::memory::PersonaMemoryError;
+use crate::domains::personas::enrichment::errors::PersonaEnrichmentError;
+use crate::domains::personas::memory::errors::PersonaMemoryError;
 use hermes_events_postgres::errors::EventStoreError;
 use hermes_observations_postgres::errors::ObservationStoreError;
 
@@ -14,7 +14,7 @@ pub enum InvestigatorError {
     #[error(transparent)]
     Memory(#[from] crate::engines::memory::errors::MemoryEngineError),
     #[error(transparent)]
-    Timeline(#[from] crate::engines::timeline::TimelineEngineError),
+    Timeline(#[from] crate::engines::timeline::errors::TimelineEngineError),
     #[error(transparent)]
     Trust(#[from] crate::engines::trust::errors::TrustEngineError),
     #[error(transparent)]

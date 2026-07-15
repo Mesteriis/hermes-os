@@ -47,4 +47,24 @@ impl ObligationTaskLinkStore {
         .await?;
         Ok(())
     }
+
+    pub async fn obligation_ids_for_candidate_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        task_candidate_id: &str,
+    ) -> Result<Vec<String>, TaskCoreError> {
+        sqlx::query_scalar(
+            r#"
+            SELECT link.obligation_id
+            FROM obligation_task_links link
+            JOIN tasks task ON task.task_id = link.task_id
+            WHERE task.task_candidate_id = $1
+              AND link.link_kind = 'fulfillment_task'
+            ORDER BY link.obligation_id
+            "#,
+        )
+        .bind(task_candidate_id)
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(Into::into)
+    }
 }

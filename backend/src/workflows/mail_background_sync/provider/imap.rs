@@ -1,15 +1,14 @@
-use hermes_communications_api::evidence::IngestionCheckpointQueryPort;
 use serde_json::Value;
 
-use crate::platform::communications::{
-    IMAP_ALL_MAILBOXES, ImapMailboxListRequest, ImapMessageFetchRequest, imap_mailbox_stream_id,
-};
+use crate::platform::communications::email_sync::{IMAP_ALL_MAILBOXES, imap_mailbox_stream_id};
+use hermes_communications_api::mail_resources::{ImapMailboxListRequest, ImapMessageFetchRequest};
 
 use super::super::errors::ProviderSyncError;
-use super::super::models::{MailSyncPhase, ProgressMode, ProgressUpdate};
+use super::super::models::progress::{MailSyncPhase, ProgressMode, ProgressUpdate};
 use super::super::service::MailBackgroundSyncService;
+use super::summary::ProviderSyncSummary;
 use super::types::ImapAccountConfig;
-use super::{ProviderSyncContext, ProviderSyncSummary};
+use super::types::ProviderSyncContext;
 
 impl MailBackgroundSyncService {
     pub(in crate::workflows::mail_background_sync::provider) async fn sync_imap(

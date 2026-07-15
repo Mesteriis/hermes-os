@@ -3,9 +3,9 @@ use serde_json::Value;
 use sqlx::postgres::Postgres;
 use sqlx::{PgPool, Transaction};
 
-use crate::app::ApiError;
+use crate::app::error::types::ApiError;
 use crate::domains::tasks::api::{NewTask, Task};
-use crate::domains::tasks::core::materialize_task_observation_link_in_transaction;
+use crate::domains::tasks::core::observation_links::materialize_task_observation_link_in_transaction;
 use crate::domains::tasks::workflow_commands::TaskWorkflowCommands;
 
 pub(crate) struct WorkflowTaskCreateInput {

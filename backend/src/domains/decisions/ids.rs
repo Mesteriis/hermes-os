@@ -1,4 +1,6 @@
-use super::models::{DecisionEntityKind, DecisionEvidenceSourceKind, NewDecision};
+use super::models::decision::NewDecision;
+use super::models::entity_kind::DecisionEntityKind;
+use super::models::source_kind::DecisionEvidenceSourceKind;
 
 pub fn decision_id(decision: &NewDecision) -> String {
     let title = normalize_text(&decision.title);

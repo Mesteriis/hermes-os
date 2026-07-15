@@ -1,20 +1,21 @@
-use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
+use hermes_communications_api::accounts::ProviderAccount;
 mod gmail;
 mod imap;
 mod projection;
-mod summary;
-mod types;
+pub(super) mod summary;
+pub(super) mod types;
 
-use crate::platform::communications::{
-    EmailSyncAdapterConfig, GmailResourceDiscoveryRequest, ImapMailboxListRequest,
+use hermes_communications_api::email_sync::EmailSyncAdapterConfig;
+use hermes_communications_api::mail_resources::{
+    GmailResourceDiscoveryRequest, ImapMailboxListRequest,
 };
 
 use super::errors::ProviderSyncError;
 use super::service::MailBackgroundSyncService;
 
-pub(super) use self::summary::ProviderSyncSummary;
+use self::summary::ProviderSyncSummary;
 use self::types::ImapAccountConfig;
-pub(super) use self::types::ProviderSyncContext;
+use self::types::ProviderSyncContext;
 
 enum MailProviderResourceDiscoveryRequest {
     Gmail(GmailResourceDiscoveryRequest),
@@ -112,7 +113,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::platform::communications::EmailSyncAdapterConfig;
+    use hermes_communications_api::email_sync::EmailSyncAdapterConfig;
 
     fn account(
         provider_kind: CommunicationProviderKind,

@@ -6,8 +6,8 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const T: &str = "v1comms-template-test-token";
 

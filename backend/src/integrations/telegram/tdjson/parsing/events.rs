@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::telegram::tdjson::snapshots::TelegramTdlibTopicSnapshot;
 
 use super::topics::parse_forum_topic_info;
@@ -65,7 +65,8 @@ pub(crate) struct TelegramTdlibTypingSnapshot {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TelegramTdlibChatFoldersUpdateSnapshot {
-    pub(crate) folders: Vec<crate::integrations::telegram::tdjson::TelegramTdlibChatFolderSnapshot>,
+    pub(crate) folders:
+        Vec<crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatFolderSnapshot>,
     pub(crate) source_event: String,
 }
 
@@ -324,7 +325,7 @@ pub(crate) fn parse_tdlib_chat_position_snapshot(
 pub(crate) fn parse_tdlib_chat_folder_snapshot(
     event: &Value,
 ) -> Result<
-    Option<crate::integrations::telegram::tdjson::TelegramTdlibChatFolderSnapshot>,
+    Option<crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatFolderSnapshot>,
     TelegramError,
 > {
     if event.get("@type").and_then(Value::as_str) != Some("chatFolder") {
@@ -339,7 +340,7 @@ pub(crate) fn parse_tdlib_chat_folder_snapshot(
         .ok_or_else(|| TelegramError::TdlibRuntime("chatFolder missing `name.text`".to_owned()))?;
 
     Ok(Some(
-        crate::integrations::telegram::tdjson::TelegramTdlibChatFolderSnapshot {
+        crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatFolderSnapshot {
             provider_folder_id,
             title,
             icon_name: tdlib_chat_folder_icon_name(event.get("icon")),
@@ -408,7 +409,7 @@ pub(crate) fn parse_tdlib_chat_folders_update_snapshot(
             TelegramError::TdlibRuntime("updateChatFolders folder missing `name.text`".to_owned())
         })?;
         snapshots.push(
-            crate::integrations::telegram::tdjson::TelegramTdlibChatFolderSnapshot {
+            crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatFolderSnapshot {
                 provider_folder_id,
                 title,
                 icon_name: tdlib_chat_folder_icon_name(folder.get("icon")),

@@ -1,7 +1,7 @@
 use serde_json::Value;
 use sqlx::postgres::PgPool;
 
-use crate::platform::config::AppConfig;
+use crate::platform::config::app_config::AppConfig;
 
 use super::ai_runtime::{AiRuntimeSettings, runtime_settings_from_values};
 use super::definitions::{declared_application_settings, declared_setting, declared_setting_keys};

@@ -1,8 +1,10 @@
 use super::super::*;
+use hermes_calendar_api::{CalendarEventListQuery, CalendarEventReadPort};
+use hermes_calendar_postgres::CalendarPostgresReadQuery;
 
 #[derive(Serialize)]
 pub(crate) struct CalendarEventsResponse {
-    items: Vec<crate::domains::calendar::events::CalendarEvent>,
+    items: Vec<hermes_calendar_api::CalendarEventRead>,
 }
 
 #[derive(Deserialize)]
@@ -34,17 +36,16 @@ pub(crate) async fn get_calendar_events(
         event_type: query.event_type,
         limit: query.limit,
     };
-    let items =
-        crate::app::api_support::stores::domain_stores::app_store::<CalendarEventStore>(pool)
-            .list(&list_query)
-            .await?;
+    let items = CalendarEventReadPort::list(&CalendarPostgresReadQuery::new(pool), list_query)
+        .await
+        .map_err(|error| ApiError::FailedPrecondition(error.to_string()))?;
     Ok(Json(CalendarEventsResponse { items }))
 }
 
 pub(crate) async fn post_calendar_event(
     State(state): State<AppState>,
     Json(req): Json<NewCalendarEvent>,
-) -> Result<Json<crate::domains::calendar::events::CalendarEvent>, ApiError> {
+) -> Result<Json<crate::domains::calendar::events::models::CalendarEvent>, ApiError> {
     let pool = state
         .database
         .pool()
@@ -60,7 +61,7 @@ pub(crate) async fn post_calendar_event(
 pub(crate) async fn get_calendar_event(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
-) -> Result<Json<crate::domains::calendar::events::CalendarEvent>, ApiError> {
+) -> Result<Json<crate::domains::calendar::events::models::CalendarEvent>, ApiError> {
     let pool = state
         .database
         .pool()
@@ -77,7 +78,7 @@ pub(crate) async fn put_calendar_event(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
     Json(update): Json<CalendarEventUpdate>,
-) -> Result<Json<crate::domains::calendar::events::CalendarEvent>, ApiError> {
+) -> Result<Json<crate::domains::calendar::events::models::CalendarEvent>, ApiError> {
     let pool = state
         .database
         .pool()

@@ -179,7 +179,7 @@ fn default_live_device_name(provider_shape: &str, request_value: Option<String>)
 }
 
 fn default_live_local_state_path(
-    provider_shape: &str,
+    _provider_shape: &str,
     account_id: &str,
     request_value: Option<String>,
 ) -> String {

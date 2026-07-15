@@ -1,7 +1,7 @@
 use thiserror::Error;
 
-use crate::platform::secrets::SecretReferenceError;
-use crate::vault::HostVaultError;
+use crate::platform::secrets::errors::SecretReferenceError;
+use crate::vault::errors::HostVaultError;
 use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, Error)]

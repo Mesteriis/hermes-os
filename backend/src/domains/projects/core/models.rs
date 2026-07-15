@@ -1,12 +1,5 @@
-use std::collections::BTreeSet;
-
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
-
-use crate::domains::projects::link_reviews::ProjectLinkReviewState;
-
-use super::errors::ProjectStoreError;
-use super::validation::validate_non_empty;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NewProject {
@@ -49,58 +42,6 @@ impl NewProject {
         self.progress_percent = progress_percent;
         self
     }
-
-    pub(super) fn validate(&self) -> Result<ValidatedProject, ProjectStoreError> {
-        let project_id = validate_non_empty("project_id", &self.project_id)?;
-        let name = validate_non_empty("name", &self.name)?;
-        let kind = validate_non_empty("kind", &self.kind)?;
-        let status = validate_non_empty("status", &self.status)?;
-        let description = validate_non_empty("description", &self.description)?;
-        let owner_display_name =
-            validate_non_empty("owner_display_name", &self.owner_display_name)?;
-        if !(0..=100).contains(&self.progress_percent) {
-            return Err(ProjectStoreError::InvalidProgress(self.progress_percent));
-        }
-
-        let mut seen = BTreeSet::new();
-        let mut keywords = Vec::new();
-        for keyword in &self.keywords {
-            let keyword = validate_non_empty("keyword", keyword)?;
-            if seen.insert(keyword.to_ascii_lowercase()) {
-                keywords.push(keyword);
-            }
-        }
-        if keywords.is_empty() {
-            return Err(ProjectStoreError::NoKeywords);
-        }
-
-        Ok(ValidatedProject {
-            project_id,
-            name,
-            kind,
-            status,
-            description,
-            owner_display_name,
-            progress_percent: self.progress_percent,
-            start_date: self.start_date,
-            target_date: self.target_date,
-            keywords,
-        })
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct ValidatedProject {
-    pub(super) project_id: String,
-    pub(super) name: String,
-    pub(super) kind: String,
-    pub(super) status: String,
-    pub(super) description: String,
-    pub(super) owner_display_name: String,
-    pub(super) progress_percent: i32,
-    pub(super) start_date: Option<NaiveDate>,
-    pub(super) target_date: Option<NaiveDate>,
-    pub(super) keywords: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -189,36 +130,4 @@ pub struct ProjectDocumentSummary {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ProjectListResponse {
     pub items: Vec<ProjectSummary>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ProjectProjectionSource {
-    pub project: Project,
-    pub keywords: Vec<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ProjectMatchedMessage {
-    pub message_id: String,
-    pub raw_record_id: String,
-    pub observation_id: String,
-    pub account_id: String,
-    pub provider_record_id: String,
-    pub subject: String,
-    pub sender: String,
-    pub recipients: Vec<String>,
-    pub occurred_at: Option<DateTime<Utc>>,
-    pub projected_at: DateTime<Utc>,
-    pub review_state: ProjectLinkReviewState,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ProjectMatchedDocument {
-    pub document_id: String,
-    pub document_kind: String,
-    pub title: String,
-    pub observation_id: String,
-    pub source_fingerprint: String,
-    pub imported_at: DateTime<Utc>,
-    pub review_state: ProjectLinkReviewState,
 }

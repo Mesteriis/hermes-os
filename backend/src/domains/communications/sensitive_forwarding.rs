@@ -1,8 +1,10 @@
 use chrono::{DateTime, NaiveTime, Utc};
-use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
-use hermes_communications_api::evidence::NewRawCommunicationRecord;
+use hermes_communications_api::content_egress::AccountContentEgressPermissions;
+use hermes_communications_api::sensitive_forwarding::{
+    NewSensitiveForwardingPolicy, SensitiveForwardingDispatchReport, SensitiveForwardingRequest,
+    SensitiveForwardingSuppression, StoredSensitiveForwardingPolicy,
+};
 use hermes_events_api::NewEventEnvelope;
-use serde::Serialize;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Row, Transaction};
@@ -10,8 +12,8 @@ use std::future::Future;
 use std::pin::Pin;
 use thiserror::Error;
 
-use crate::domains::communications::messages::MessageProjectionError;
-use crate::domains::communications::messages::MessageProjectionStore;
+use crate::domains::communications::messages::errors::MessageProjectionError;
+use crate::domains::communications::messages::store::MessageProjectionStore;
 use crate::domains::communications::outbox::{
     CommunicationOutboxError, CommunicationOutboxItem, CommunicationOutboxStatus,
     NewCommunicationOutboxItem, enqueue_in_transaction,
@@ -20,146 +22,10 @@ use hermes_events_postgres::errors::EventStoreError;
 use hermes_events_postgres::store::EventStore;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NewSensitiveForwardingPolicy {
-    pub policy_id: String,
-    pub source_account_id: String,
-    pub delivery_account_id: String,
-    pub name: String,
-    pub enabled: bool,
-    pub include_message_body: bool,
-    pub include_attachments: bool,
-    pub fixed_recipients: Vec<String>,
-    pub minimum_severity: String,
-    pub subject_template: String,
-    pub body_template: String,
-    pub max_sends_per_hour: i32,
-    pub quiet_hours: Value,
-    pub expires_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct StoredSensitiveForwardingPolicy {
-    pub policy_id: String,
-    pub source_account_id: String,
-    pub delivery_account_id: String,
-    pub name: String,
-    pub enabled: bool,
-    pub include_message_body: bool,
-    pub include_attachments: bool,
-    pub fixed_recipients: Vec<String>,
-    pub minimum_severity: String,
-    pub subject_template: String,
-    pub body_template: String,
-    pub max_sends_per_hour: i32,
-    pub quiet_hours: Value,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub updated_at: DateTime<Utc>,
-}
-
-impl NewSensitiveForwardingPolicy {
-    pub fn validate(&self) -> Result<(), SensitiveForwardingError> {
-        for value in [
-            &self.policy_id,
-            &self.source_account_id,
-            &self.delivery_account_id,
-            &self.name,
-            &self.subject_template,
-            &self.body_template,
-        ] {
-            if value.trim().is_empty() {
-                return Err(SensitiveForwardingError::Invalid);
-            }
-        }
-        if self.fixed_recipients.is_empty()
-            || self
-                .fixed_recipients
-                .iter()
-                .any(|recipient| !is_valid_recipient(recipient))
-            || severity_rank(&self.minimum_severity).is_none()
-            || self.max_sends_per_hour <= 0
-        {
-            return Err(SensitiveForwardingError::Invalid);
-        }
-        parse_quiet_hours(&self.quiet_hours)?;
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SensitiveForwardingRequest {
-    pub dispatch_id: String,
-    pub policy_id: String,
-    pub source_account_id: String,
-    pub message_id: String,
-    pub severity: String,
-    pub has_unsafe_attachments: bool,
-}
-
-impl SensitiveForwardingRequest {
-    fn validate(&self) -> Result<(), SensitiveForwardingError> {
-        if [
-            &self.dispatch_id,
-            &self.policy_id,
-            &self.source_account_id,
-            &self.message_id,
-        ]
-        .iter()
-        .any(|value| value.trim().is_empty())
-            || severity_rank(&self.severity).is_none()
-        {
-            return Err(SensitiveForwardingError::Invalid);
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SensitiveForwardingOutcome {
     Queued(Box<CommunicationOutboxItem>),
     AlreadyDispatched,
     Suppressed(SensitiveForwardingSuppression),
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct SensitiveForwardingDispatchReport {
-    pub queued: usize,
-    pub already_dispatched: usize,
-    pub suppressed: usize,
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct AccountContentEgressPermissions {
-    pub body: bool,
-    pub attachments: bool,
-    pub extracted_text: bool,
-}
-
-impl AccountContentEgressPermissions {
-    pub fn from_account_config(config: &Value) -> Self {
-        let Some(egress) = config.get("content_egress").and_then(Value::as_object) else {
-            return Self::default();
-        };
-        Self {
-            body: egress.get("body").and_then(Value::as_bool).unwrap_or(false),
-            attachments: egress
-                .get("attachments")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
-            extracted_text: egress
-                .get("extracted_text")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SensitiveForwardingSuppression {
-    Disabled,
-    Expired,
-    BelowMinimumSeverity,
-    QuietHours,
-    RateLimited,
 }
 
 #[derive(Clone, Debug)]
@@ -221,7 +87,7 @@ struct QuietHours {
 }
 
 #[derive(Clone)]
-pub struct SensitiveForwardingStore {
+pub struct SensitiveForwardingPgStore {
     pool: PgPool,
 }
 
@@ -243,7 +109,7 @@ pub trait SensitiveForwardingCommandPort: Send + Sync {
     ) -> SensitiveForwardingPortFuture<'a, SensitiveForwardingDispatchReport>;
 }
 
-impl SensitiveForwardingStore {
+impl SensitiveForwardingPgStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -271,7 +137,7 @@ impl SensitiveForwardingStore {
         &self,
         policy: &NewSensitiveForwardingPolicy,
     ) -> Result<(), SensitiveForwardingError> {
-        policy.validate()?;
+        validate_sensitive_forwarding_policy(policy)?;
         sqlx::query(
             r#"
             INSERT INTO mail_sensitive_forwarding_policies (
@@ -384,7 +250,7 @@ impl SensitiveForwardingStore {
         request: &SensitiveForwardingRequest,
         now: DateTime<Utc>,
     ) -> Result<SensitiveForwardingOutcome, SensitiveForwardingError> {
-        request.validate()?;
+        validate_sensitive_forwarding_request(request)?;
         let mut transaction = self.pool.begin().await?;
         let policy = policy_for_update(&mut transaction, &request.policy_id).await?;
         if policy.source_account_id != request.source_account_id.trim() {
@@ -596,7 +462,7 @@ impl SensitiveForwardingStore {
     }
 }
 
-impl SensitiveForwardingCommandPort for SensitiveForwardingStore {
+impl SensitiveForwardingCommandPort for SensitiveForwardingPgStore {
     fn content_egress_permissions<'a>(
         &'a self,
         account_id: &'a str,
@@ -665,7 +531,7 @@ async fn policy_for_update(
         include_attachments: row.try_get("include_attachments")?,
         expires_at: row.try_get("expires_at")?,
     };
-    NewSensitiveForwardingPolicy {
+    validate_sensitive_forwarding_policy(&NewSensitiveForwardingPolicy {
         policy_id: policy.policy_id.clone(),
         source_account_id: policy.source_account_id.clone(),
         delivery_account_id: policy.delivery_account_id.clone(),
@@ -680,371 +546,8 @@ async fn policy_for_update(
         max_sends_per_hour: policy.max_sends_per_hour,
         quiet_hours: policy.quiet_hours.clone(),
         expires_at: policy.expires_at,
-    }
-    .validate()?;
+    })?;
     Ok(policy)
-}
-
-async fn plan_forwardable_attachments(
-    transaction: &mut Transaction<'_, sqlx::Postgres>,
-    message_id: &str,
-) -> Result<AttachmentForwardingPlan, SensitiveForwardingError> {
-    let rows = sqlx::query(
-        r#"
-        SELECT
-            attachment_id,
-            blob_id,
-            filename,
-            content_type,
-            size_bytes,
-            sha256,
-            scan_status,
-            scan_engine,
-            scan_checked_at,
-            scan_summary,
-            scan_metadata
-        FROM communication_attachments
-        WHERE message_id = $1
-        ORDER BY created_at ASC, attachment_id ASC
-        FOR UPDATE
-        "#,
-    )
-    .bind(message_id)
-    .fetch_all(&mut **transaction)
-    .await?;
-
-    let mut plan = AttachmentForwardingPlan::default();
-    let mut total_bytes = 0_i64;
-    for row in rows {
-        let scan_status: String = row.try_get("scan_status")?;
-        if scan_status != "clean" {
-            plan.unsafe_withheld += 1;
-            continue;
-        }
-        let size_bytes: i64 = row.try_get("size_bytes")?;
-        if plan.attachments.len() >= MAX_SENSITIVE_FORWARDING_ATTACHMENTS
-            || total_bytes.saturating_add(size_bytes) > MAX_SENSITIVE_FORWARDING_ATTACHMENT_BYTES
-        {
-            plan.delivery_limit_withheld += 1;
-            continue;
-        }
-        total_bytes = total_bytes.saturating_add(size_bytes);
-        plan.attachments.push(ForwardableAttachment {
-            attachment_id: row.try_get("attachment_id")?,
-            blob_id: row.try_get("blob_id")?,
-            filename: row.try_get("filename")?,
-            content_type: row.try_get("content_type")?,
-            size_bytes,
-            sha256: row.try_get("sha256")?,
-            scan_engine: row.try_get("scan_engine")?,
-            scan_checked_at: row.try_get("scan_checked_at")?,
-            scan_summary: row.try_get("scan_summary")?,
-            scan_metadata: row.try_get("scan_metadata")?,
-        });
-    }
-    Ok(plan)
-}
-
-async fn copy_forwardable_attachments_to_outbox(
-    transaction: &mut Transaction<'_, sqlx::Postgres>,
-    outbox_id: &str,
-    delivery_account_id: &str,
-    source_message_id: &str,
-    policy_id: &str,
-    plan: &AttachmentForwardingPlan,
-) -> Result<(), SensitiveForwardingError> {
-    for (sort_order, source) in plan.attachments.iter().enumerate() {
-        let attachment_id = format!(
-            "sensitive-forwarding-attachment:{outbox_id}:{}",
-            source.attachment_id
-        );
-        sqlx::query(
-            r#"
-            INSERT INTO communication_attachment_imports (
-                attachment_id,
-                account_id,
-                channel_kind,
-                blob_id,
-                filename,
-                content_type,
-                size_bytes,
-                sha256,
-                source_kind,
-                imported_by,
-                scan_status,
-                scan_engine,
-                scan_checked_at,
-                scan_summary,
-                scan_metadata,
-                metadata,
-                updated_at
-            )
-            VALUES (
-                $1, $2, 'mail', $3, $4, $5, $6, $7,
-                'sensitive_forwarding', 'hermes-mail-automation',
-                'clean', $8, $9, $10, $11, $12, now()
-            )
-            ON CONFLICT (attachment_id)
-            DO UPDATE SET
-                account_id = EXCLUDED.account_id,
-                channel_kind = EXCLUDED.channel_kind,
-                blob_id = EXCLUDED.blob_id,
-                filename = EXCLUDED.filename,
-                content_type = EXCLUDED.content_type,
-                size_bytes = EXCLUDED.size_bytes,
-                sha256 = EXCLUDED.sha256,
-                source_kind = EXCLUDED.source_kind,
-                imported_by = EXCLUDED.imported_by,
-                scan_status = EXCLUDED.scan_status,
-                scan_engine = EXCLUDED.scan_engine,
-                scan_checked_at = EXCLUDED.scan_checked_at,
-                scan_summary = EXCLUDED.scan_summary,
-                scan_metadata = EXCLUDED.scan_metadata,
-                metadata = EXCLUDED.metadata,
-                updated_at = now()
-            "#,
-        )
-        .bind(&attachment_id)
-        .bind(delivery_account_id)
-        .bind(&source.blob_id)
-        .bind(&source.filename)
-        .bind(&source.content_type)
-        .bind(source.size_bytes)
-        .bind(&source.sha256)
-        .bind(&source.scan_engine)
-        .bind(source.scan_checked_at)
-        .bind(&source.scan_summary)
-        .bind(&source.scan_metadata)
-        .bind(json!({
-            "automation": { "kind": "sensitive_forwarding", "policy_id": policy_id },
-            "source": {
-                "message_id": source_message_id,
-                "attachment_id": source.attachment_id,
-            },
-        }))
-        .execute(&mut **transaction)
-        .await?;
-        sqlx::query(
-            r#"
-            INSERT INTO communication_outbox_attachments (
-                outbox_id, attachment_id, disposition, content_id, sort_order
-            )
-            VALUES ($1, $2, 'attachment', NULL, $3)
-            ON CONFLICT (outbox_id, attachment_id) DO NOTHING
-            "#,
-        )
-        .bind(outbox_id)
-        .bind(&attachment_id)
-        .bind(i32::try_from(sort_order).map_err(|_| SensitiveForwardingError::Invalid)?)
-        .execute(&mut **transaction)
-        .await?;
-    }
-    Ok(())
-}
-
-fn stored_policy_from_row(
-    row: PgRow,
-) -> Result<StoredSensitiveForwardingPolicy, SensitiveForwardingError> {
-    let policy = StoredSensitiveForwardingPolicy {
-        policy_id: row.try_get("policy_id")?,
-        source_account_id: row.try_get("source_account_id")?,
-        delivery_account_id: row.try_get("delivery_account_id")?,
-        name: row.try_get("name")?,
-        enabled: row.try_get("enabled")?,
-        include_message_body: row.try_get("include_message_body")?,
-        include_attachments: row.try_get("include_attachments")?,
-        fixed_recipients: serde_json::from_value(row.try_get("fixed_recipients")?)?,
-        minimum_severity: row.try_get("minimum_severity")?,
-        subject_template: row.try_get("subject_template")?,
-        body_template: row.try_get("body_template")?,
-        max_sends_per_hour: row.try_get("max_sends_per_hour")?,
-        quiet_hours: row.try_get("quiet_hours")?,
-        expires_at: row.try_get("expires_at")?,
-        updated_at: row.try_get("updated_at")?,
-    };
-    NewSensitiveForwardingPolicy {
-        policy_id: policy.policy_id.clone(),
-        source_account_id: policy.source_account_id.clone(),
-        delivery_account_id: policy.delivery_account_id.clone(),
-        name: policy.name.clone(),
-        enabled: policy.enabled,
-        include_message_body: policy.include_message_body,
-        include_attachments: policy.include_attachments,
-        fixed_recipients: policy.fixed_recipients.clone(),
-        minimum_severity: policy.minimum_severity.clone(),
-        subject_template: policy.subject_template.clone(),
-        body_template: policy.body_template.clone(),
-        max_sends_per_hour: policy.max_sends_per_hour,
-        quiet_hours: policy.quiet_hours.clone(),
-        expires_at: policy.expires_at,
-    }
-    .validate()?;
-    Ok(policy)
-}
-
-fn policy_suppression(
-    policy: &SensitiveForwardingPolicy,
-    request: &SensitiveForwardingRequest,
-    now: DateTime<Utc>,
-) -> Result<Option<SensitiveForwardingSuppression>, SensitiveForwardingError> {
-    if !policy.enabled {
-        return Ok(Some(SensitiveForwardingSuppression::Disabled));
-    }
-    if policy
-        .expires_at
-        .is_some_and(|expires_at| expires_at <= now)
-    {
-        return Ok(Some(SensitiveForwardingSuppression::Expired));
-    }
-    if severity_rank(&request.severity) < severity_rank(&policy.minimum_severity) {
-        return Ok(Some(SensitiveForwardingSuppression::BelowMinimumSeverity));
-    }
-    if parse_quiet_hours(&policy.quiet_hours)?.is_some_and(|quiet_hours| quiet_hours.contains(now))
-    {
-        return Ok(Some(SensitiveForwardingSuppression::QuietHours));
-    }
-    Ok(None)
-}
-
-impl QuietHours {
-    fn contains(self, now: DateTime<Utc>) -> bool {
-        let time = now.time();
-        if self.start < self.end {
-            time >= self.start && time < self.end
-        } else {
-            time >= self.start || time < self.end
-        }
-    }
-}
-
-fn parse_quiet_hours(value: &Value) -> Result<Option<QuietHours>, SensitiveForwardingError> {
-    let Some(object) = value.as_object() else {
-        return Err(SensitiveForwardingError::Invalid);
-    };
-    if object.is_empty() {
-        return Ok(None);
-    }
-    if object
-        .get("timezone")
-        .and_then(Value::as_str)
-        .is_some_and(|timezone| timezone != "UTC")
-    {
-        return Err(SensitiveForwardingError::Invalid);
-    }
-    let start = object
-        .get("start")
-        .and_then(Value::as_str)
-        .and_then(parse_hhmm)
-        .ok_or(SensitiveForwardingError::Invalid)?;
-    let end = object
-        .get("end")
-        .and_then(Value::as_str)
-        .and_then(parse_hhmm)
-        .ok_or(SensitiveForwardingError::Invalid)?;
-    if start == end {
-        return Err(SensitiveForwardingError::Invalid);
-    }
-    Ok(Some(QuietHours { start, end }))
-}
-
-fn parse_hhmm(value: &str) -> Option<NaiveTime> {
-    NaiveTime::parse_from_str(value, "%H:%M").ok()
-}
-
-fn severity_rank(value: &str) -> Option<u8> {
-    match value.trim() {
-        "low" => Some(1),
-        "medium" => Some(2),
-        "high" => Some(3),
-        "critical" => Some(4),
-        _ => None,
-    }
-}
-
-fn is_valid_recipient(value: &str) -> bool {
-    let value = value.trim();
-    value.contains('@') && !value.contains(['\r', '\n', '\0'])
-}
-
-fn render_template(
-    template: &str,
-    request: &SensitiveForwardingRequest,
-    attachment_notice: &str,
-) -> String {
-    template
-        .replace("{{message_id}}", request.message_id.trim())
-        .replace("{{severity}}", request.severity.trim())
-        .replace("{{attachment_notice}}", attachment_notice)
-}
-
-fn render_notification_body(
-    template: &str,
-    request: &SensitiveForwardingRequest,
-    source_message: &crate::domains::communications::messages::ProjectedMessage,
-    body_transferred: bool,
-    attachment_transfer_permitted: bool,
-    attachment_plan: &AttachmentForwardingPlan,
-) -> String {
-    let attachment_notice =
-        attachment_notice(request, attachment_transfer_permitted, attachment_plan);
-    let mut body = render_template(template, request, &attachment_notice);
-    if body_transferred {
-        const MAX_FORWARDED_BODY_CHARS: usize = 200_000;
-        let source_body: String = source_message
-            .body_text
-            .chars()
-            .take(MAX_FORWARDED_BODY_CHARS)
-            .collect();
-        body.push_str("\n\n--- Forwarded message ---\nFrom: ");
-        body.push_str(&source_message.sender);
-        body.push_str("\nSubject: ");
-        body.push_str(&source_message.subject);
-        body.push_str("\n\n");
-        body.push_str(&source_body);
-        if source_message.body_text.chars().count() > MAX_FORWARDED_BODY_CHARS {
-            body.push_str("\n\n[Message body truncated by Hermes safety limit]");
-        }
-    }
-    body
-}
-
-fn attachment_notice(
-    request: &SensitiveForwardingRequest,
-    attachment_transfer_permitted: bool,
-    plan: &AttachmentForwardingPlan,
-) -> String {
-    if !attachment_transfer_permitted {
-        return if request.has_unsafe_attachments {
-            "Attachments were withheld because they are not safe to forward.".to_owned()
-        } else {
-            "Attachments are not included in this notification.".to_owned()
-        };
-    }
-
-    let mut parts = Vec::new();
-    if plan.copied_count() > 0 {
-        parts.push(format!(
-            "{} clean attachment(s) included.",
-            plan.copied_count()
-        ));
-    }
-    if plan.unsafe_withheld > 0 {
-        parts.push(format!(
-            "{} unsafe or unverified attachment(s) withheld.",
-            plan.unsafe_withheld
-        ));
-    }
-    if plan.delivery_limit_withheld > 0 {
-        parts.push(format!(
-            "{} clean attachment(s) withheld by delivery limits.",
-            plan.delivery_limit_withheld
-        ));
-    }
-    if parts.is_empty() {
-        "No source attachments were available for forwarding.".to_owned()
-    } else {
-        parts.join(" ")
-    }
 }
 
 fn sensitive_forwarding_queued_event(
@@ -1121,11 +624,12 @@ mod tests {
 
     use super::{
         AccountContentEgressPermissions, NewSensitiveForwardingPolicy, QuietHours,
-        SensitiveForwardingDispatchReport, SensitiveForwardingOutcome, SensitiveForwardingRequest,
-        SensitiveForwardingStore, SensitiveForwardingSuppression, parse_quiet_hours,
-        policy_suppression,
+        SensitiveForwardingDispatchReport, SensitiveForwardingOutcome, SensitiveForwardingPgStore,
+        SensitiveForwardingRequest, SensitiveForwardingSuppression, parse_quiet_hours,
+        policy_suppression, validate_sensitive_forwarding_policy,
     };
-    use crate::domains::communications::messages::{MessageProjectionStore, NewProjectedMessage};
+    use crate::domains::communications::messages::models::NewProjectedMessage;
+    use crate::domains::communications::messages::store::MessageProjectionStore;
     use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
     use hermes_communications_api::evidence::NewRawCommunicationRecord;
     use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
@@ -1152,16 +656,16 @@ mod tests {
 
     #[test]
     fn policy_requires_fixed_recipients_valid_severity_and_unambiguous_quiet_hours() {
-        assert!(policy().validate().is_ok());
+        assert!(validate_sensitive_forwarding_policy(&policy()).is_ok());
         let mut no_recipients = policy();
         no_recipients.fixed_recipients.clear();
-        assert!(no_recipients.validate().is_err());
+        assert!(validate_sensitive_forwarding_policy(&no_recipients).is_err());
         let mut invalid_severity = policy();
         invalid_severity.minimum_severity = "urgent".to_owned();
-        assert!(invalid_severity.validate().is_err());
+        assert!(validate_sensitive_forwarding_policy(&invalid_severity).is_err());
         let mut invalid_quiet_hours = policy();
         invalid_quiet_hours.quiet_hours = json!({ "start": "09:00", "end": "09:00" });
-        assert!(invalid_quiet_hours.validate().is_err());
+        assert!(validate_sensitive_forwarding_policy(&invalid_quiet_hours).is_err());
         assert!(parse_quiet_hours(&json!({ "start": "09:00", "end": "17:00" })).is_ok());
     }
 
@@ -1259,7 +763,7 @@ mod tests {
             .expect("raw source");
         let raw_record_id = raw.raw_record_id.clone();
         let message = MessageProjectionStore::new(pool.clone())
-            .upsert_message(&NewProjectedMessage {
+            .upsert_email_message(&NewProjectedMessage {
                 message_id: "ignored-by-canonicalization".to_owned(),
                 raw_record_id: raw_record_id.clone(),
                 account_id: "sensitive-source".to_owned(),
@@ -1346,7 +850,7 @@ mod tests {
             .await
             .expect("source attachment");
         }
-        let store = SensitiveForwardingStore::new(pool.clone());
+        let store = SensitiveForwardingPgStore::new(pool.clone());
         let mut configured_policy = policy();
         configured_policy.enabled = true;
         configured_policy.source_account_id = "sensitive-source".to_owned();
@@ -1562,7 +1066,7 @@ mod tests {
             .await
             .expect("raw source");
         let message = MessageProjectionStore::new(pool.clone())
-            .upsert_message(&NewProjectedMessage {
+            .upsert_email_message(&NewProjectedMessage {
                 message_id: "ignored-by-canonicalization".to_owned(),
                 raw_record_id: raw.raw_record_id,
                 account_id: "forward-source".to_owned(),
@@ -1580,7 +1084,7 @@ mod tests {
             })
             .await
             .expect("projected message");
-        let store = SensitiveForwardingStore::new(pool.clone());
+        let store = SensitiveForwardingPgStore::new(pool.clone());
         let mut configured_policy = policy();
         configured_policy.enabled = true;
         configured_policy.source_account_id = "forward-source".to_owned();
@@ -1614,3 +1118,7 @@ mod tests {
         );
     }
 }
+mod attachments;
+use attachments::*;
+mod policy;
+use policy::*;

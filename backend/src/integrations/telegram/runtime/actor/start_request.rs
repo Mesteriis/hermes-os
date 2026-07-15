@@ -1,7 +1,8 @@
 use serde_json::Value;
 
-use crate::integrations::telegram::client::{TelegramError, TelegramQrLoginStartRequest};
-use crate::platform::config::AppConfig;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::qr_login::TelegramQrLoginStartRequest;
+use crate::platform::config::app_config::AppConfig;
 use hermes_communications_api::accounts::ProviderAccount;
 
 pub(super) fn tdlib_start_request_from_account(

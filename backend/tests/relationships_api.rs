@@ -8,9 +8,8 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use tower::ServiceExt;
 
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::graph::core::{GraphNodeKind, node_id};
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
 use hermes_hub_backend::domains::relationships::{
     models::{
         NewRelationship, NewRelationshipEvidence, Relationship, RelationshipEvidenceSourceKind,
@@ -18,7 +17,8 @@ use hermes_hub_backend::domains::relationships::{
     },
     store::RelationshipStore,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::graph::{GraphNodeKind, node_id};
+use hermes_hub_backend::platform::storage::database::Database;
 
 const LOCAL_API_TOKEN: &str = "relationships-api-test-token";
 

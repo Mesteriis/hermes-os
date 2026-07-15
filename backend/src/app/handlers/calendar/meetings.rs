@@ -4,7 +4,7 @@ use super::*;
 
 #[derive(Serialize)]
 pub(crate) struct MeetingNotesResponse {
-    items: Vec<crate::domains::calendar::meetings::MeetingNote>,
+    items: Vec<crate::domains::calendar::meetings::models::MeetingNote>,
 }
 
 pub(crate) async fn get_meeting_notes(
@@ -34,7 +34,7 @@ pub(crate) async fn post_meeting_note(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
     Json(req): Json<NewNoteRequest>,
-) -> Result<Json<crate::domains::calendar::meetings::MeetingNote>, ApiError> {
+) -> Result<Json<crate::domains::calendar::meetings::models::MeetingNote>, ApiError> {
     let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = state
         .database
@@ -57,7 +57,7 @@ pub(crate) async fn post_meeting_note(
 
 #[derive(Serialize)]
 pub(crate) struct MeetingOutcomesResponse {
-    items: Vec<crate::domains::calendar::meetings::MeetingOutcome>,
+    items: Vec<crate::domains::calendar::meetings::models::MeetingOutcome>,
 }
 
 pub(crate) async fn get_meeting_outcomes(
@@ -90,7 +90,7 @@ pub(crate) async fn post_meeting_outcome(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
     Json(req): Json<NewOutcomeRequest>,
-) -> Result<Json<crate::domains::calendar::meetings::MeetingOutcome>, ApiError> {
+) -> Result<Json<crate::domains::calendar::meetings::models::MeetingOutcome>, ApiError> {
     let pool = state
         .database
         .pool()
@@ -150,7 +150,7 @@ pub(crate) async fn get_event_follow_up_status(
 
 #[derive(Serialize)]
 pub(crate) struct EventRecordingsResponse {
-    items: Vec<crate::domains::calendar::meetings::EventRecording>,
+    items: Vec<crate::domains::calendar::meetings::models::EventRecording>,
 }
 
 pub(crate) async fn get_event_recordings(
@@ -181,7 +181,7 @@ pub(crate) async fn post_event_recording(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
     Json(req): Json<NewRecordingRequest>,
-) -> Result<Json<crate::domains::calendar::meetings::EventRecording>, ApiError> {
+) -> Result<Json<crate::domains::calendar::meetings::models::EventRecording>, ApiError> {
     let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = state
         .database

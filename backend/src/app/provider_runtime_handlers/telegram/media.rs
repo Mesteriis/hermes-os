@@ -8,31 +8,20 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 
 use super::helpers::{AUDIT_ACTOR_ID, publish_telegram_event};
-use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
-};
-use crate::app::{ApiError, AppState};
+use crate::app::api_support::stores::{domain_stores::*, integration_stores::*};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::application::telegram_runtime;
-use crate::domains::communications::storage::AttachmentSafetyScanStatus;
+use crate::domains::communications::storage::scanner::AttachmentSafetyScanStatus;
+use crate::integrations::telegram::client::commands;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::identifiers::ensure_telegram_account_active;
+use crate::integrations::telegram::client::messages::attachments::TelegramAttachmentDownloadStateUpdate;
 use crate::integrations::telegram::client::models::messages::TelegramCommandKind;
-use crate::integrations::telegram::client::{
-    TelegramAttachmentDownloadStateUpdate, TelegramError, ensure_telegram_account_active, lifecycle,
-};
-use crate::integrations::telegram::runtime::{
+use crate::integrations::telegram::runtime::models::{
     TelegramMediaDownloadRequest, TelegramMediaDownloadResponse,
 };
-use crate::platform::audit::NewApiAuditRecord;
-use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
+use crate::platform::audit::models::NewApiAuditRecord;
 use hermes_provider_telegram::tdlib::types::TdlibMediaKind;
 
 use crate::platform::events::bus::telegram_event_types;
@@ -487,7 +476,7 @@ fn validate_media_upload_request(
         .map_err(|error| TelegramError::InvalidRequest(error.to_string()))?;
     let command_id = match request.command_id {
         Some(command_id) => required_string("command_id", &command_id)?,
-        None => lifecycle::new_command_id(),
+        None => commands::new_command_id(),
     };
     let attachment_id =
         optional_string("attachment_id", request.attachment_id)?.ok_or_else(|| {
@@ -513,7 +502,7 @@ fn validate_media_upload_request(
 }
 
 async fn resolve_upload_attachment(
-    mail_store: &crate::domains::communications::storage::CommunicationStorageStore,
+    mail_store: &crate::domains::communications::storage::store::CommunicationStorageStore,
     request: &ValidatedMediaUploadRequest,
 ) -> Result<UploadAttachmentRef, TelegramError> {
     if let Some(attachment_id) = request.attachment_id.as_deref() {

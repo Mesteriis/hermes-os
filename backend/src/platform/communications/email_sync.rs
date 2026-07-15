@@ -1,10 +1,11 @@
 use serde_json::Value;
 use thiserror::Error;
 
-use super::{
-    CommunicationProviderKind, EmailSyncAdapterConfig, EmailSyncPlan, ProviderAccount,
-    ProviderAccountSecretPurpose,
+use super::ProviderAccount;
+use hermes_communications_api::accounts::{
+    CommunicationProviderKind, ProviderAccountSecretPurpose,
 };
+use hermes_communications_api::email_sync::{EmailSyncAdapterConfig, EmailSyncPlan};
 
 const DEFAULT_IMAP_MAILBOX: &str = "INBOX";
 pub const IMAP_ALL_MAILBOXES: &str = "*";

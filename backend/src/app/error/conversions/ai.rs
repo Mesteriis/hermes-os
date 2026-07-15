@@ -1,6 +1,6 @@
 use super::super::types::ApiError;
-use crate::ai::control_center::AiControlCenterError;
-use crate::ai::core::AiError;
+use crate::ai::control_center::errors::AiControlCenterError;
+use crate::ai::core::errors::AiError;
 use crate::ai::hub::AiHubError;
 use crate::platform::ai_runtime::AiRuntimePortError;
 

@@ -1,10 +1,7 @@
-use crate::integrations::telegram::client::{TelegramError, TelegramStore};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::store::TelegramStore;
 
-use super::super::actor::oldest_tdlib_message_id;
-use super::super::commands::request_actor_history;
-use super::super::models::{
-    TelegramHistorySyncMode, TelegramHistorySyncRequest, TelegramHistorySyncResponse,
-};
+use super::super::models::{TelegramHistorySyncRequest, TelegramHistorySyncResponse};
 use super::super::status::account_runtime_kind;
 use super::account::load_active_account;
 use super::sync_history_tdlib::TdlibHistorySyncContext;
@@ -17,7 +14,7 @@ impl TelegramRuntimeManager {
         request: &TelegramHistorySyncRequest,
     ) -> Result<TelegramHistorySyncResponse, TelegramError>
     where
-        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+        S: crate::platform::secrets::resolver::SecretResolver + Sync + ?Sized,
     {
         request.validate()?;
         let account =

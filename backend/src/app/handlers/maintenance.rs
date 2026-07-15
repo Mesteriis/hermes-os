@@ -1,7 +1,8 @@
 use axum::Json;
 use axum::extract::{Path, State};
 
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::platform::maintenance::{
     MaintenanceActionRequest, MaintenanceActionResponse, MaintenanceError, MaintenanceOverview,
     build_maintenance_overview, run_maintenance_action,

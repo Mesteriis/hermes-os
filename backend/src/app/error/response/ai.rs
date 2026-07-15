@@ -1,8 +1,8 @@
 mod control_center;
 mod runtime;
 
-use crate::ai::control_center::AiControlCenterError;
-use crate::ai::core::AiError;
+use crate::ai::control_center::errors::AiControlCenterError;
+use crate::ai::core::errors::AiError;
 
 use super::ErrorParts;
 

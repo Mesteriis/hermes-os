@@ -9,7 +9,7 @@ use crate::domains::communications::messages::rows::row_to_projected_message;
 use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 
 impl MessageProjectionStore {
-    pub async fn upsert_message(
+    pub async fn upsert_email_message(
         &self,
         message: &NewProjectedMessage,
     ) -> Result<ProjectedMessage, MessageProjectionError> {
@@ -220,174 +220,6 @@ impl MessageProjectionStore {
         Ok(projected)
     }
 
-    pub async fn upsert_channel_message(
-        &self,
-        message: &NewProjectedMessage,
-    ) -> Result<ProjectedMessage, MessageProjectionError> {
-        self.upsert_channel_message_with_body_policy(message, false)
-            .await
-    }
-
-    pub async fn upsert_channel_message_allowing_empty_body_text(
-        &self,
-        message: &NewProjectedMessage,
-    ) -> Result<ProjectedMessage, MessageProjectionError> {
-        self.upsert_channel_message_with_body_policy(message, true)
-            .await
-    }
-
-    async fn upsert_channel_message_with_body_policy(
-        &self,
-        message: &NewProjectedMessage,
-        allow_empty_body_text: bool,
-    ) -> Result<ProjectedMessage, MessageProjectionError> {
-        message.validate_with_body_policy(allow_empty_body_text)?;
-
-        let row = sqlx::query(
-            r#"
-            INSERT INTO communication_messages (
-                message_id,
-                raw_record_id,
-                observation_id,
-                account_id,
-                provider_record_id,
-                subject,
-                sender,
-                recipients,
-                body_text,
-                occurred_at,
-                channel_kind,
-                conversation_id,
-                sender_display_name,
-                delivery_state,
-                message_metadata,
-                is_read,
-                read_changed_at,
-                read_origin
-            )
-            SELECT
-                $1,
-                raw_record_id,
-                observation_id,
-                account_id,
-                provider_record_id,
-                $5,
-                $6,
-                $7,
-                $8,
-                $9,
-                $10,
-                $11,
-                $12,
-                $13,
-                $14,
-                CASE
-                    WHEN COALESCE($14->'label_ids', '[]'::jsonb) ? 'UNREAD' THEN false
-                    WHEN jsonb_typeof($14->'label_ids') = 'array' THEN true
-                    ELSE COALESCE(($14->>'is_read')::boolean, false)
-                END,
-                now(),
-                'provider_observed'
-            FROM communication_raw_records
-            WHERE raw_record_id = $2
-              AND account_id = $3
-              AND provider_record_id = $4
-            ON CONFLICT (account_id, provider_record_id)
-            DO UPDATE SET
-                message_id = EXCLUDED.message_id,
-                raw_record_id = EXCLUDED.raw_record_id,
-                observation_id = EXCLUDED.observation_id,
-                subject = EXCLUDED.subject,
-                sender = EXCLUDED.sender,
-                recipients = EXCLUDED.recipients,
-                body_text = EXCLUDED.body_text,
-                occurred_at = EXCLUDED.occurred_at,
-                channel_kind = EXCLUDED.channel_kind,
-                conversation_id = EXCLUDED.conversation_id,
-                sender_display_name = EXCLUDED.sender_display_name,
-                delivery_state = EXCLUDED.delivery_state,
-                message_metadata = EXCLUDED.message_metadata,
-                is_read = CASE
-                    WHEN communication_messages.read_origin = 'local_user'
-                        THEN communication_messages.is_read
-                    ELSE EXCLUDED.is_read
-                END,
-                read_changed_at = CASE
-                    WHEN communication_messages.read_origin = 'local_user'
-                        THEN communication_messages.read_changed_at
-                    ELSE EXCLUDED.read_changed_at
-                END,
-                read_origin = CASE
-                    WHEN communication_messages.read_origin = 'local_user'
-                        THEN communication_messages.read_origin
-                    ELSE EXCLUDED.read_origin
-                END,
-                projected_at = now()
-            RETURNING
-                message_id,
-                raw_record_id,
-                observation_id,
-                account_id,
-                provider_record_id,
-                subject,
-                sender,
-                recipients,
-                body_text,
-                occurred_at,
-                projected_at,
-                channel_kind,
-                conversation_id,
-                sender_display_name,
-                delivery_state,
-                message_metadata,
-                workflow_state,
-                importance_score,
-                ai_category,
-                ai_summary,
-                ai_summary_generated_at,
-                (SELECT s.ai_state FROM communication_ai_states s WHERE s.message_id = communication_messages.message_id) AS ai_state,
-                local_state,
-                local_state_changed_at,
-                local_state_reason,
-                is_read,
-                read_changed_at,
-                read_origin
-            "#,
-        )
-        .bind(&message.message_id)
-        .bind(&message.raw_record_id)
-        .bind(&message.account_id)
-        .bind(&message.provider_record_id)
-        .bind(&message.subject)
-        .bind(&message.sender)
-        .bind(json!(message.recipients))
-        .bind(&message.body_text)
-        .bind(message.occurred_at)
-        .bind(&message.channel_kind)
-        .bind(message.conversation_id.as_deref())
-        .bind(message.sender_display_name.as_deref())
-        .bind(&message.delivery_state)
-        .bind(&message.message_metadata)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        let Some(row) = row else {
-            return Err(MessageProjectionError::RawRecordTupleMismatch {
-                raw_record_id: message.raw_record_id.clone(),
-                account_id: message.account_id.clone(),
-                provider_record_id: message.provider_record_id.clone(),
-            });
-        };
-
-        let projected = row_to_projected_message(row)?;
-        self.reconcile_observed_read_state(
-            &projected,
-            provider_read_state(&message.message_metadata),
-        )
-        .await?;
-        Ok(projected)
-    }
-
     async fn reconcile_observed_read_state(
         &self,
         message: &ProjectedMessage,
@@ -569,17 +401,11 @@ async fn reconcile_provider_folder_memberships_in_transaction(
 }
 
 fn provider_read_state(metadata: &Value) -> bool {
-    if let Some(labels) = metadata.get("label_ids").and_then(Value::as_array) {
-        return !labels.iter().any(|label| label.as_str() == Some("UNREAD"));
-    }
-    metadata
-        .get("is_read")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
+    hermes_communications_api::provider_state::observed_read_state(metadata)
 }
 
 fn provider_starred_state(metadata: &Value) -> Option<bool> {
-    metadata.get("starred").and_then(Value::as_bool)
+    hermes_communications_api::provider_state::observed_starred_state(metadata)
 }
 
 #[cfg(test)]

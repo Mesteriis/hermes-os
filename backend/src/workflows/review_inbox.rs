@@ -1,28 +1,30 @@
-use hermes_events_api::{EventEnvelope, StoredEventEnvelope};
+use hermes_events_api::StoredEventEnvelope;
 use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::messages::ProjectedMessage;
-use crate::domains::decisions::DecisionReviewPort;
-use crate::domains::obligations::ObligationReviewPort;
-use crate::domains::personas::identity::is_persona_identity_review_event_type;
-use crate::domains::personas::identity::{
-    PersonaIdentityCandidatePayload, PersonaIdentityError,
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::decisions::ports::DecisionReviewPort;
+use crate::domains::obligations::ports::ObligationReviewPortError;
+use crate::domains::personas::identity::constants::is_persona_identity_review_event_type;
+use crate::domains::personas::identity::errors::PersonaIdentityError;
+use crate::domains::personas::identity::models::PersonaIdentityCandidatePayload;
+use crate::domains::personas::identity::upsert::{
     is_persona_identity_candidate_detected_event_type, load_identity_candidate_payload,
     parse_persona_identity_candidate_kind, parse_persona_identity_review_state,
 };
-use crate::domains::review::{
-    NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxPort, ReviewItemKind,
-};
+use crate::domains::review::errors::ReviewInboxError;
+use crate::domains::review::models::{NewReviewItem, NewReviewItemEvidence, ReviewItemKind};
+use crate::domains::review::ports::ReviewInboxPort;
 use crate::domains::tasks::candidates::commands::TaskCandidateCommands;
 use crate::workflows::email_intelligence::models::{EmailKnowledgeCandidate, EmailSummaryContract};
 use crate::workflows::email_intelligence::service::EmailIntelligenceService;
 use crate::workflows::review_mirror::{
-    ReviewMirrorError, ensure_decision_review_item, ensure_obligation_review_item,
-    ensure_relationship_review_item, ensure_task_candidate_review_item,
+    ReviewMirrorError, decision::ensure_decision_review_item,
+    obligation::ensure_obligation_review_item, relationship::ensure_relationship_review_item,
     sync_identity_candidate_review_state_in_transaction, sync_identity_candidate_to_review,
+    task::ensure_task_candidate_review_item,
 };
 use hermes_events_postgres::errors::EventStoreError;
 
@@ -32,16 +34,16 @@ pub enum ReviewInboxWorkflowError {
     ReviewInbox(#[from] ReviewInboxError),
 
     #[error(transparent)]
-    Decision(#[from] crate::domains::decisions::DecisionReviewPortError),
+    Decision(#[from] crate::domains::decisions::ports::DecisionReviewPortError),
 
     #[error(transparent)]
-    Obligation(#[from] crate::domains::obligations::ObligationReviewPortError),
+    Obligation(#[from] ObligationReviewPortError),
 
     #[error(transparent)]
     Relationship(#[from] crate::domains::relationships::errors::RelationshipStoreError),
 
     #[error(transparent)]
-    TaskCandidate(#[from] crate::domains::tasks::candidates::TaskCandidateError),
+    TaskCandidate(#[from] crate::domains::tasks::candidates::errors::TaskCandidateError),
 
     #[error(transparent)]
     PersonaIdentity(#[from] PersonaIdentityError),
@@ -532,15 +534,17 @@ pub async fn sync_relationships_to_review_for_observations(
         let observation_id: String = row.try_get("observation_id")?;
         let _ = ensure_relationship_review_item(
             pool,
-            &relationship_id,
-            &relationship_type,
-            &source_entity_kind,
-            &source_entity_id,
-            &target_entity_kind,
-            &target_entity_id,
-            confidence,
-            summary.as_deref(),
-            &observation_id,
+            crate::workflows::review_mirror::relationship::RelationshipReviewInput {
+                relationship_id: &relationship_id,
+                relationship_type: &relationship_type,
+                source_entity_kind: &source_entity_kind,
+                source_entity_id: &source_entity_id,
+                target_entity_kind: &target_entity_kind,
+                target_entity_id: &target_entity_id,
+                confidence,
+                summary: summary.as_deref(),
+                observation_id: &observation_id,
+            },
         )
         .await?;
     }

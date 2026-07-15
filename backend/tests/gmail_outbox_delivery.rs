@@ -15,20 +15,23 @@ use tempfile::tempdir;
 use tower::ServiceExt;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::communications::outbox::delivery::EmailOutboxDeliveryWorker;
+use hermes_hub_backend::domains::communications::outbox::provider_sender::CommunicationOutboxEmailSender;
 use hermes_hub_backend::domains::communications::outbox::{
-    CommunicationOutboxEmailSender, CommunicationOutboxStatus, CommunicationOutboxStore,
-    EmailOutboxDeliveryWorker, NewCommunicationOutboxItem,
+    CommunicationOutboxStatus, CommunicationOutboxStore, NewCommunicationOutboxItem,
 };
 use hermes_hub_backend::integrations::mail::outbox::LiveGmailOutboxTransport;
 use hermes_hub_backend::integrations::mail::send::LiveSmtpTransport;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::platform::secrets::{
-    NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
+use hermes_hub_backend::platform::secrets::models::{
+    NewSecretReference, SecretKind, SecretStoreKind,
 };
-use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::vault::{HostVault, HostVaultConfig, SecretEntryContext};
+use hermes_hub_backend::platform::secrets::store::SecretReferenceStore;
+use hermes_hub_backend::platform::storage::database::Database;
+use hermes_hub_backend::vault::HostVault;
+use hermes_hub_backend::vault::models::{HostVaultConfig, SecretEntryContext};
 
 const LOCAL_API_TOKEN: &str = "gmail-outbox-delivery-test-token";
 

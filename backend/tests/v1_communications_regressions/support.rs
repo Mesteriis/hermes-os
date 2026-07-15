@@ -6,12 +6,11 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, header};
 use chrono::Utc;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
-};
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
 
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use serde_json::{Value, json};
 
 pub(crate) const T: &str = "v1comms-regression-test-token";

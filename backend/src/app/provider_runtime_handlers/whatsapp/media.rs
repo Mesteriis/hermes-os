@@ -6,9 +6,10 @@ use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use crate::app::api_support::stores::{domain_stores::*, integration_stores::*, settings_vault::*};
-use crate::app::{ApiError, AppState};
-use crate::domains::communications::storage::AttachmentSafetyScanStatus;
+use crate::app::api_support::stores::{domain_stores::*, integration_stores::*};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::domains::communications::storage::scanner::AttachmentSafetyScanStatus;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::whatsapp::runtime::contracts::{
     WhatsAppMediaDownloadRequest, WhatsAppMediaUploadRequest, WhatsAppProviderCommandResponse,
@@ -326,7 +327,7 @@ fn validate_whatsapp_media_download_request(
     })
 }
 async fn resolve_whatsapp_upload_attachment(
-    storage: &crate::domains::communications::storage::CommunicationStorageStore,
+    storage: &crate::domains::communications::storage::store::CommunicationStorageStore,
     request: &WhatsAppValidatedMediaUploadRequest,
 ) -> Result<UploadAttachmentRef, ApiError> {
     if let Some(attachment_id) = request.attachment_id.as_deref() {

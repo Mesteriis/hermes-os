@@ -1,9 +1,9 @@
-use hermes_hub_backend::domains::documents::core::NewDocumentImport;
-use hermes_hub_backend::domains::graph::core::{GraphNodeKind, node_id};
-use hermes_hub_backend::domains::projects::core::{NewProject, project_graph_node_id};
-use hermes_hub_backend::domains::projects::link_reviews::{
+use hermes_hub_backend::domains::documents::core::models::NewDocumentImport;
+use hermes_hub_backend::domains::projects::core::{ids::project_graph_node_id, models::NewProject};
+use hermes_hub_backend::domains::projects::link_reviews::models::{
     ProjectLinkReviewCommand, ProjectLinkReviewState, ProjectLinkTargetKind,
 };
+use hermes_hub_backend::platform::graph::{GraphNodeKind, node_id};
 
 use super::support::{
     ExpectedProjectEdge, assert_project_edge_with_evidence, cleanup_project_graph_fixture,

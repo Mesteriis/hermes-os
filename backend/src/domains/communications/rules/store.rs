@@ -1,6 +1,6 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::domains::communications::messages::models::ProjectedMessage;
 
 use super::errors::EmailRuleError;
 use super::evaluation::{evaluate_conditions, parse_actions};

@@ -1,15 +1,15 @@
 use chrono::Utc;
-use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::storage::{
-    CommunicationStorageError, CommunicationStorageStore, LocalCommunicationBlobStore,
-    NewCommunicationBlob,
-};
-use crate::platform::communications::{
+use crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use crate::domains::communications::storage::errors::CommunicationStorageError;
+use crate::domains::communications::storage::models::NewCommunicationBlob;
+use crate::domains::communications::storage::store::CommunicationStorageStore;
+use crate::platform::communications::attachment_text::{
     AttachmentTextExtractionError, RichAttachmentExtractionKind,
     render_rich_attachment_safe_preview, rich_attachment_extraction_kind,
     rich_attachment_extractor_address,
@@ -401,7 +401,7 @@ fn preview_renderer(
 #[cfg(test)]
 mod tests {
     use super::{DOCX_PREVIEW_RENDERER, PDF_PREVIEW_RENDERER, preview_renderer};
-    use crate::platform::communications::RichAttachmentExtractionKind;
+    use crate::platform::communications::attachment_text::RichAttachmentExtractionKind;
 
     #[test]
     fn accepts_only_pdf_and_docx_sandboxed_preview_renderers() {

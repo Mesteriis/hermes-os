@@ -9,7 +9,7 @@ use crate::domains::personas::api::rows::row_to_persona;
 use crate::domains::personas::api::validation::{
     normalize_email_address, persona_id_for_email, validate_display_name,
 };
-use crate::domains::personas::core::link_persona_entity_in_transaction;
+use crate::domains::personas::core::evidence::link_persona_entity_in_transaction;
 
 impl PersonaProjectionStore {
     pub async fn upsert_email_persona(

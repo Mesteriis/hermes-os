@@ -1,11 +1,11 @@
 use chrono::{DateTime, Utc};
-use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
+use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 use tokio::sync::mpsc::UnboundedReceiver;
 
-use crate::integrations::telegram::client::TelegramStore;
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
-use crate::integrations::telegram::tdjson::TelegramTdlibTypingSnapshot;
+use crate::integrations::telegram::client::store::TelegramStore;
+use crate::integrations::telegram::tdjson::parsing::events::TelegramTdlibTypingSnapshot;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
 use hermes_events_postgres::store::EventStore;
@@ -509,7 +509,7 @@ mod tests {
     use tokio::time::timeout;
 
     use super::*;
-    use crate::integrations::telegram::tdjson::TelegramTdlibMessageSnapshot;
+    use crate::integrations::telegram::tdjson::snapshots::TelegramTdlibMessageSnapshot;
 
     #[test]
     fn typing_changed_event_contains_sanitized_runtime_projection_payload() {
@@ -582,7 +582,7 @@ mod tests {
                 text: "skip while paused".to_owned(),
                 occurred_at: Utc::now(),
                 delivery_state:
-                    crate::integrations::telegram::client::TelegramDeliveryState::Received,
+                    crate::integrations::telegram::client::models::messages::TelegramDeliveryState::Received,
                 raw: json!({
                     "@type": "message",
                     "chat_id": "-100bridge-paused",

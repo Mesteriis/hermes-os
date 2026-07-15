@@ -1,9 +1,9 @@
 use sqlx::postgres::PgPool;
 
 use super::errors::CallError;
+use super::models::{CallTranscript, NewCallTranscript, NewTelegramCall, TelegramCall};
 use super::rows::{row_to_call, row_to_transcript};
 use super::validation::{validate_limit, validate_non_empty};
-use super::{CallTranscript, NewCallTranscript, NewTelegramCall, TelegramCall};
 
 #[derive(Clone)]
 pub struct CallIntelligenceStore {

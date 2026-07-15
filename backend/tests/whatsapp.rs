@@ -17,12 +17,14 @@ use tower::ServiceExt;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_events_api::EventLogQuery;
 use hermes_events_postgres::store::EventStore;
-use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::app::router::build_router_with_database;
 use hermes_hub_backend::engines::timeline::TimelineEngine;
 
-use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore};
-use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::vault::{EntropyEvent, HostVault, HostVaultConfig, SecretEntryContext};
+use hermes_hub_backend::platform::secrets::models::SecretKind;
+use hermes_hub_backend::platform::secrets::store::SecretReferenceStore;
+use hermes_hub_backend::platform::storage::database::Database;
+use hermes_hub_backend::vault::HostVault;
+use hermes_hub_backend::vault::models::{EntropyEvent, HostVaultConfig, SecretEntryContext};
 
 const LOCAL_API_TOKEN: &str = "whatsapp-api-test-secret";
 

@@ -1,3 +1,4 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_api::accounts::ProviderSecretBindingLookupPort;
 use std::future::Future;
@@ -17,14 +18,16 @@ use crate::integrations::mail::gmail::client::{
         ImapMailboxListOptions,
     },
 };
-use crate::platform::communications::{
-    DiscoveredMailProviderResource, EmailProviderSyncError, EmailProviderSyncPort, EmailSyncBatch,
+use crate::platform::secrets::models::ResolvedSecret;
+use crate::platform::secrets::resolver::SecretResolver;
+use crate::vault::HostVault;
+use hermes_communications_api::email_sync::EmailSyncBatch;
+use hermes_communications_api::mail_resources::{
+    DiscoveredMailProviderResource, EmailProviderSyncError, EmailProviderSyncPort,
     GmailHistoryFetchRequest, GmailMessageListFetchRequest, GmailResourceDiscoveryRequest,
     ImapIdleWaitOutcome, ImapIdleWaitRequest, ImapMailboxListRequest, ImapMessageFetchRequest,
     MailProviderResourceKind, MailProviderSemanticRole,
 };
-use crate::platform::secrets::{ResolvedSecret, SecretReferenceStore, SecretResolver};
-use crate::vault::HostVault;
 
 #[derive(Clone)]
 pub struct LiveEmailProviderSyncPort {

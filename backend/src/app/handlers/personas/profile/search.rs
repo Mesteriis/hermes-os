@@ -1,5 +1,10 @@
-use super::super::support::*;
+use axum::Json;
+use axum::extract::{Query, State};
+use serde::Deserialize;
+
 use super::models::EnrichedPersonaListResponse;
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 
 #[derive(Deserialize)]
 pub(crate) struct PersonaSearchQuery {
@@ -20,7 +25,7 @@ pub(crate) async fn get_persona_search(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let store = crate::app::api_support::stores::domain_stores::app_store::<
-        crate::domains::personas::enrichment::PersonaEnrichmentStore,
+        crate::domains::personas::enrichment::store::PersonaEnrichmentStore,
     >(pool);
     let items = store
         .search_personas(&query.q, query.limit.unwrap_or(20))

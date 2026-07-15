@@ -1,8 +1,8 @@
 use std::sync::mpsc::Sender;
 
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramQrLoginStartRequest, TelegramQrLoginStatus,
-    TelegramQrLoginStatusResponse,
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::qr_login::{
+    TelegramQrLoginStartRequest, TelegramQrLoginStatus, TelegramQrLoginStatusResponse,
 };
 
 use super::types::{

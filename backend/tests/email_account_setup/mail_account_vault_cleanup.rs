@@ -4,10 +4,10 @@ use tower::ServiceExt;
 
 use hermes_backend_testkit::context::TestContext;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::platform::secrets::SecretReferenceStore;
-use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::vault::{HostVault, HostVaultConfig};
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::platform::secrets::store::SecretReferenceStore;
+use hermes_hub_backend::platform::storage::database::Database;
+use hermes_hub_backend::vault::{HostVault, models::HostVaultConfig};
 
 use super::support::{
     LOCAL_API_TOKEN, delete_request_with_token, json_body, json_request_with_token_and_actor,

@@ -5,13 +5,15 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
 use chrono::{TimeZone, Utc};
 use hermes_events_postgres::store::EventStore;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::decisions::DecisionStore;
-use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::domains::obligations::ObligationStore;
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
-use hermes_hub_backend::domains::personas::identity::PersonaIdentityReviewStore;
-use hermes_hub_backend::domains::projects::core::ProjectStore;
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::decisions::store::DecisionStore;
+use hermes_hub_backend::domains::documents::core::{
+    models::NewDocumentImport, store::DocumentImportStore,
+};
+use hermes_hub_backend::domains::obligations::store::ObligationStore;
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
+use hermes_hub_backend::domains::personas::identity::store::PersonaIdentityReviewStore;
+use hermes_hub_backend::domains::projects::core::store::ProjectStore;
 use hermes_hub_backend::domains::relationships::{
     models::{
         NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
@@ -19,11 +21,14 @@ use hermes_hub_backend::domains::relationships::{
     store::RelationshipStore,
 };
 use hermes_hub_backend::domains::review::{
-    NewReviewItem, NewReviewItemEvidence, ReviewInboxStore, ReviewItemKind, ReviewItemStatus,
-    ReviewPromotionTarget,
+    models::{
+        NewReviewItem, NewReviewItemEvidence, ReviewItemKind, ReviewItemStatus,
+        ReviewPromotionTarget,
+    },
+    store::ReviewInboxStore,
 };
 use hermes_hub_backend::domains::tasks::api::TaskStore;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::review_inbox::project_persona_identity_review_event;
 use hermes_hub_backend::workflows::review_inbox::sync_decisions_to_review_for_observations;
 use hermes_hub_backend::workflows::review_inbox::sync_obligations_to_review_for_observations;
@@ -1163,14 +1168,14 @@ async fn decision_review_mirror_promotes_existing_decision_against_postgres() {
 
     let decision = DecisionStore::new(pool.clone())
         .upsert_with_evidence(
-            &hermes_hub_backend::domains::decisions::NewDecision::new(
+            &hermes_hub_backend::domains::decisions::models::decision::NewDecision::new(
                 format!("Buy mirrored NAS {suffix}"),
                 "local evidence matters",
                 0.83,
-                hermes_hub_backend::domains::decisions::DecisionReviewState::Suggested,
+                hermes_hub_backend::domains::decisions::models::states::DecisionReviewState::Suggested,
             ),
             &[
-                hermes_hub_backend::domains::decisions::NewDecisionEvidence::observation(
+                hermes_hub_backend::domains::decisions::models::evidence::NewDecisionEvidence::observation(
                     observation.observation_id.clone(),
                 )
                 .quote(format!(
@@ -1284,15 +1289,15 @@ async fn obligation_review_mirror_promotes_existing_obligation_against_postgres(
 
     let obligation = ObligationStore::new(pool.clone())
         .upsert_with_evidence(
-            &hermes_hub_backend::domains::obligations::NewObligation::new(
-                hermes_hub_backend::domains::obligations::ObligationEntityKind::Knowledge,
+            &hermes_hub_backend::domains::obligations::models::obligation::NewObligation::new(
+                hermes_hub_backend::domains::obligations::models::entity_kind::ObligationEntityKind::Knowledge,
                 format!("knowledge:v1:mirror:{suffix}"),
                 format!("Send NAS follow-up package {suffix}"),
                 0.82,
-                hermes_hub_backend::domains::obligations::ObligationReviewState::Suggested,
+                hermes_hub_backend::domains::obligations::models::states::ObligationReviewState::Suggested,
             ),
             &[
-                hermes_hub_backend::domains::obligations::NewObligationEvidence::observation(
+                hermes_hub_backend::domains::obligations::models::evidence::NewObligationEvidence::observation(
                     observation.observation_id.clone(),
                 )
                 .quote(format!(
@@ -1731,7 +1736,7 @@ async fn project_link_candidate_review_promotes_existing_candidate_against_postg
     let project_id = format!("project:v1:review-link:{suffix}");
     ProjectStore::new(pool.clone())
         .upsert_project(
-            &hermes_hub_backend::domains::projects::core::NewProject::active(
+            &hermes_hub_backend::domains::projects::core::models::NewProject::active(
                 &project_id,
                 format!("Review Link Project {suffix}"),
                 "Product Development",
@@ -2007,7 +2012,7 @@ async fn assert_materialized_target(
         "obligations" => {
             let obligations = ObligationStore::new(pool.clone())
                 .list_by_review_state(
-                    hermes_hub_backend::domains::obligations::ObligationReviewState::UserConfirmed,
+                    hermes_hub_backend::domains::obligations::models::states::ObligationReviewState::UserConfirmed,
                     100,
                 )
                 .await
@@ -2047,7 +2052,7 @@ async fn assert_materialized_target(
         "decisions" => {
             let decisions = DecisionStore::new(pool.clone())
                 .list_by_review_state(
-                    hermes_hub_backend::domains::decisions::DecisionReviewState::UserConfirmed,
+                    hermes_hub_backend::domains::decisions::models::states::DecisionReviewState::UserConfirmed,
                     100,
                 )
                 .await

@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, mpsc};
 
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramQrLoginPasswordRequest, TelegramQrLoginStatus,
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::qr_login::{
+    TelegramQrLoginPasswordRequest, TelegramQrLoginStatus,
 };
 
 #[test]
@@ -76,7 +77,7 @@ fn qr_password_submission_sends_command_to_pending_session() {
     let (command_tx, command_rx) = mpsc::channel();
     let pending = Arc::new(Mutex::new(HashMap::from([(
         "setup-id".to_owned(),
-        super::super::TelegramQrLoginSession {
+        super::super::qr_login_support::types::TelegramQrLoginSession {
             request: super::test_qr_login_request(),
             response: super::test_qr_login_response(TelegramQrLoginStatus::WaitingPassword),
             command_tx,
@@ -86,7 +87,7 @@ fn qr_password_submission_sends_command_to_pending_session() {
 
     let login_check_value = "tdlib-check-value".to_owned();
 
-    let response = super::super::submit_qr_login_password(
+    let response = super::super::qr_login::commands::submit_qr_login_password(
         pending,
         "setup-id",
         TelegramQrLoginPasswordRequest {
@@ -111,7 +112,7 @@ fn qr_password_submission_requires_waiting_password_status() {
     let (command_tx, command_rx) = mpsc::channel();
     let pending = Arc::new(Mutex::new(HashMap::from([(
         "setup-id".to_owned(),
-        super::super::TelegramQrLoginSession {
+        super::super::qr_login_support::types::TelegramQrLoginSession {
             request: super::test_qr_login_request(),
             response: super::test_qr_login_response(TelegramQrLoginStatus::WaitingQrScan),
             command_tx,
@@ -121,7 +122,7 @@ fn qr_password_submission_requires_waiting_password_status() {
 
     let login_check_value = "tdlib-check-value".to_owned();
 
-    let error = super::super::submit_qr_login_password(
+    let error = super::super::qr_login::commands::submit_qr_login_password(
         pending,
         "setup-id",
         TelegramQrLoginPasswordRequest {
@@ -141,7 +142,7 @@ fn qr_login_cancel_removes_pending_session_and_notifies_worker() {
     super::super::mark_worker_complete(&worker_completion);
     let pending = Arc::new(Mutex::new(HashMap::from([(
         "setup-id".to_owned(),
-        super::super::TelegramQrLoginSession {
+        super::super::qr_login_support::types::TelegramQrLoginSession {
             request: super::test_qr_login_request(),
             response: super::test_qr_login_response(TelegramQrLoginStatus::WaitingQrScan),
             command_tx,
@@ -149,7 +150,8 @@ fn qr_login_cancel_removes_pending_session_and_notifies_worker() {
         },
     )])));
 
-    super::super::cancel_qr_login(Arc::clone(&pending), "setup-id").expect("QR login cancelled");
+    super::super::qr_login::commands::cancel_qr_login(Arc::clone(&pending), "setup-id")
+        .expect("QR login cancelled");
 
     assert!(
         !pending
@@ -167,7 +169,7 @@ fn qr_login_cancel_removes_pending_session_and_notifies_worker() {
 fn qr_login_cancel_unknown_setup_returns_not_found() {
     let pending = Arc::new(Mutex::new(HashMap::new()));
 
-    let error = super::super::cancel_qr_login(pending, "missing-setup")
+    let error = super::super::qr_login::commands::cancel_qr_login(pending, "missing-setup")
         .expect_err("unknown QR setup must not be cancelled");
 
     assert!(matches!(error, TelegramError::QrLoginNotFound));
@@ -187,7 +189,7 @@ fn qr_login_start_cancels_existing_sessions_for_same_account() {
     let pending = Arc::new(Mutex::new(HashMap::from([
         (
             "setup-id".to_owned(),
-            super::super::TelegramQrLoginSession {
+            super::super::qr_login_support::types::TelegramQrLoginSession {
                 request: super::test_qr_login_request(),
                 response: super::test_qr_login_response(TelegramQrLoginStatus::WaitingQrScan),
                 command_tx: same_account_tx,
@@ -196,7 +198,7 @@ fn qr_login_start_cancels_existing_sessions_for_same_account() {
         ),
         (
             "other-setup-id".to_owned(),
-            super::super::TelegramQrLoginSession {
+            super::super::qr_login_support::types::TelegramQrLoginSession {
                 request: super::test_qr_login_request(),
                 response: other_response,
                 command_tx: other_account_tx,
@@ -205,8 +207,11 @@ fn qr_login_start_cancels_existing_sessions_for_same_account() {
         ),
     ])));
 
-    super::super::cancel_existing_qr_logins_for_account(&pending, "telegram-account")
-        .expect("same-account sessions cancelled");
+    super::super::qr_login::commands::cancel_existing_qr_logins_for_account(
+        &pending,
+        "telegram-account",
+    )
+    .expect("same-account sessions cancelled");
 
     let pending = pending.lock().expect("pending lock");
     assert!(!pending.contains_key("setup-id"));

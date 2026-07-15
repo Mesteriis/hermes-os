@@ -1,6 +1,6 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::domains::communications::messages::models::ProjectedMessage;
 use crate::workflows::review_inbox::{
     refresh_message_decisions_into_review, refresh_message_knowledge_candidates_into_review,
     refresh_message_task_candidates_into_review,

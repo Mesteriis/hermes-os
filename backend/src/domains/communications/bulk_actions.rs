@@ -1,4 +1,4 @@
-use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
+use hermes_events_api::NewEventEnvelope;
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 

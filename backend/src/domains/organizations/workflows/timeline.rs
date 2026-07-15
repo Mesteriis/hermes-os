@@ -4,7 +4,8 @@ use serde_json::Value;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 
-use crate::engines::timeline::{TimelineEngine, TimelineEventDraft};
+use crate::engines::timeline::TimelineEngine;
+use crate::engines::timeline::models::TimelineEventDraft;
 
 use super::errors::OrgWorkflowError;
 

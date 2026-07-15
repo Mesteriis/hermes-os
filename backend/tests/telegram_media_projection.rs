@@ -8,12 +8,12 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::communications::messages::consume_accepted_signal_event;
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::communications::messages::provider_observation_projection::consume_accepted_signal_event;
 use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, json_body, json_post_request_with_actor, unique_suffix,
 };

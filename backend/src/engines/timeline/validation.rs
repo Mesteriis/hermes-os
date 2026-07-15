@@ -1,4 +1,3 @@
-use hermes_events_api::EventEnvelope;
 use serde_json::Value;
 
 use super::errors::TimelineEngineError;

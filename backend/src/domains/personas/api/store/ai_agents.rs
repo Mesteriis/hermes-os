@@ -1,6 +1,6 @@
 use super::PersonaProjectionStore;
 use crate::domains::personas::api::errors::PersonaProjectionError;
-use crate::domains::personas::api::models::{Persona, PersonaType};
+use crate::domains::personas::api::models::Persona;
 use crate::domains::personas::api::rows::row_to_persona;
 use crate::domains::personas::api::validation::{
     ai_agent_email_address, ai_agent_persona_id, normalize_ai_agent_id, validate_display_name,

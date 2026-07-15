@@ -6,9 +6,8 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
-use crate::domains::communications::storage::{
-    AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
-};
+use crate::domains::communications::storage::models::CommunicationAttachmentDisposition;
+use crate::domains::communications::storage::scanner::AttachmentSafetyScanStatus;
 
 #[derive(Clone, Debug)]
 pub struct AttachmentSearchQuery<'a> {
@@ -304,7 +303,7 @@ pub enum AttachmentSearchError {
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]
     CommunicationStorage(
-        #[from] crate::domains::communications::storage::CommunicationStorageError,
+        #[from] crate::domains::communications::storage::errors::CommunicationStorageError,
     ),
     #[error("invalid attachment search cursor")]
     InvalidCursor,

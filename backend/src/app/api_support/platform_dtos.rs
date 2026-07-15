@@ -46,20 +46,6 @@ impl ApplicationAccountCredentialState {
             requires_reauthorization: true,
         }
     }
-
-    pub(crate) fn missing() -> Self {
-        Self {
-            status: "missing",
-            requires_reauthorization: false,
-        }
-    }
-
-    pub(crate) fn unavailable() -> Self {
-        Self {
-            status: "unavailable",
-            requires_reauthorization: false,
-        }
-    }
 }
 
 #[derive(Deserialize)]

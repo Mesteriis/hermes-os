@@ -3,9 +3,11 @@ use sqlx::postgres::PgRow;
 
 use super::errors::GraphStoreError;
 use super::models::{
-    GraphCount, GraphEdge, GraphEvidenceSourceKind, GraphEvidenceSummary, GraphNode, GraphNodeKind,
-    GraphReviewState, RelationshipType,
+    GraphEdge, GraphEvidenceSourceKind, GraphEvidenceSummary, GraphNode, GraphReviewState,
+    RelationshipType,
 };
+use crate::platform::graph::GraphNodeKind;
+use hermes_graph_api::GraphCount;
 
 pub(super) fn row_to_node(row: PgRow) -> Result<GraphNode, GraphStoreError> {
     Ok(GraphNode {

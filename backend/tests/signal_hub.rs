@@ -19,11 +19,11 @@ use hermes_events_postgres::cursors::ProjectionCursorStore;
 use hermes_events_postgres::errors::EventStoreError;
 use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::application::signal_hub_replay::SignalHubReplayService;
-use hermes_hub_backend::domains::communications::messages::{
+use hermes_hub_backend::domains::communications::messages::provider_observation_projection::{
     COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, consume_accepted_signal_event,
     project_accepted_signal_if_runtime_allows,
 };
-use hermes_hub_backend::domains::personas::core::PERSONA_ROLE_ASSIGNED_EVENT_TYPE;
+use hermes_hub_backend::domains::personas::core::roles::PERSONA_ROLE_ASSIGNED_EVENT_TYPE;
 use hermes_hub_backend::domains::signal_hub::connections::SignalHubConnectionService;
 use hermes_hub_backend::domains::signal_hub::controls::{
     SignalHubControlRequest, SignalHubControlService,
@@ -36,13 +36,13 @@ use hermes_hub_backend::domains::signal_hub::policies::{
     SignalPolicyDecision, SignalPolicyEvaluator,
 };
 use hermes_hub_backend::domains::signal_hub::profiles::SignalHubProfileService;
+use hermes_hub_backend::domains::signal_hub::replay_contracts::SignalReplayRequestCreate;
 use hermes_hub_backend::domains::signal_hub::service::{
     SIGNAL_HUB_RAW_SIGNAL_CONSUMER, SignalHubSignalService, SignalProcessingOutcome,
     process_signal_hub_raw_event,
 };
 use hermes_hub_backend::domains::signal_hub::store::{
-    SignalConnectionCreate, SignalHealthCheckRequest, SignalHubStore, SignalReplayRequestCreate,
-    SignalRuntimeStateUpdate,
+    SignalConnectionCreate, SignalHealthCheckRequest, SignalHubStore, SignalRuntimeStateUpdate,
 };
 use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
 use hermes_signal_hub_api::policies::{SignalPolicy, SignalPolicyMode, SignalPolicyScope};
@@ -51,7 +51,7 @@ use hermes_signal_hub_postgres::raw_signals::adapter::RawSignalStore;
 use hermes_signal_hub_postgres::runtime_lifecycle::RuntimeLifecycleStore;
 
 use hermes_hub_backend::platform::events::runtime::runtime_allows_processing;
-use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
+use hermes_hub_backend::platform::settings::store::ApplicationSettingsStore;
 use hermes_hub_backend::workflows::persona_derived_evidence::{
     PERSONA_DERIVED_EVIDENCE_CONSUMER, project_persona_derived_evidence_event,
 };

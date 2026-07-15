@@ -7,34 +7,42 @@ use thiserror::Error;
 use crate::application::relationship_graph::{
     RelationshipGraphCoordinator, RelationshipGraphCoordinatorError,
 };
-use crate::domains::decisions::{
-    DecisionReviewPort, DecisionReviewState, NewDecision, NewDecisionEvidence,
+use crate::domains::decisions::models::decision::NewDecision;
+use crate::domains::decisions::models::states::DecisionReviewState;
+use crate::domains::decisions::ports::DecisionReviewPort;
+use crate::domains::documents::core::errors::DocumentImportError;
+use crate::domains::documents::core::models::NewDocumentImport;
+use crate::domains::documents::ports::DocumentImportPort;
+use crate::domains::obligations::models::entity_kind::ObligationEntityKind;
+use crate::domains::obligations::models::evidence::NewObligationEvidence;
+use crate::domains::obligations::models::obligation::NewObligation;
+use crate::domains::obligations::models::states::ObligationReviewState;
+use crate::domains::obligations::ports::{ObligationReviewPort, ObligationReviewPortError};
+use crate::domains::organizations::api::OrganizationError;
+use crate::domains::organizations::ports::OrganizationCommandPort;
+use crate::domains::personas::api::errors::PersonaProjectionError;
+use crate::domains::personas::identity::models::{
+    PersonaIdentityReviewCommand, PersonaIdentityReviewState,
 };
-use crate::domains::documents::core::{DocumentImportError, DocumentImportPort, NewDocumentImport};
-use crate::domains::obligations::{
-    NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationReviewPort,
-    ObligationReviewState,
+use crate::domains::personas::identity::ports::PersonaIdentityReviewPort;
+use crate::domains::personas::ports::PersonaProjectionPort;
+use crate::domains::projects::core::models::NewProject;
+use crate::domains::projects::link_reviews::models::{
+    ProjectLinkReviewCommand, ProjectLinkReviewState, ProjectLinkTargetKind,
 };
-use crate::domains::organizations::api::{OrganizationCommandPort, OrganizationError};
-use crate::domains::personas::api::{PersonaProjectionError, PersonaProjectionPort};
-use crate::domains::personas::identity::{
-    PersonaIdentityReviewCommand, PersonaIdentityReviewPort, PersonaIdentityReviewState,
-};
-use crate::domains::projects::core::ProjectCommandPort;
-use crate::domains::projects::core::{NewProject, ProjectCommandPortError};
-use crate::domains::projects::link_reviews::{
-    ProjectLinkReviewCommand, ProjectLinkReviewPort, ProjectLinkReviewState, ProjectLinkTargetKind,
+use crate::domains::projects::ports::{
+    ProjectCommandPort, ProjectCommandPortError, ProjectLinkReviewPort,
 };
 use crate::domains::relationships::models::{
     NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
 };
-use crate::domains::review::{
-    ReviewInboxError, ReviewInboxPort, ReviewItem, ReviewItemEvidenceRecord, ReviewItemKind,
-    ReviewPromotionTarget,
-};
+use crate::domains::review::errors::ReviewInboxError;
+use crate::domains::review::models::{ReviewItem, ReviewItemKind, ReviewPromotionTarget};
+use crate::domains::review::ports::ReviewInboxPort;
+use crate::domains::review::store::ReviewItemEvidenceRecord;
 use crate::domains::tasks::api::{NewTask, TaskError};
 use crate::domains::tasks::command_service::{TaskCommandService, TaskCommandServiceError};
-use crate::domains::tasks::core::TaskCoreError;
+use crate::domains::tasks::core::errors::TaskCoreError;
 use crate::domains::tasks::workflow_commands::TaskWorkflowCommands;
 use hermes_observations_api::models::{NewObservation, Observation, ObservationOriginKind};
 use hermes_observations_postgres::errors::ObservationStoreError;
@@ -56,17 +64,19 @@ pub enum ReviewPromotionError {
     #[error(transparent)]
     DocumentImport(#[from] DocumentImportError),
     #[error(transparent)]
-    Decision(#[from] crate::domains::decisions::DecisionReviewPortError),
+    Decision(#[from] crate::domains::decisions::ports::DecisionReviewPortError),
     #[error(transparent)]
-    Obligation(#[from] crate::domains::obligations::ObligationReviewPortError),
+    Obligation(#[from] ObligationReviewPortError),
     #[error(transparent)]
     RelationshipGraph(#[from] RelationshipGraphCoordinatorError),
     #[error(transparent)]
-    PersonaIdentity(#[from] crate::domains::personas::identity::PersonaIdentityError),
+    PersonaIdentity(#[from] crate::domains::personas::identity::errors::PersonaIdentityError),
     #[error(transparent)]
     PersonaProjection(#[from] PersonaProjectionError),
     #[error(transparent)]
-    ProjectLinkReview(#[from] crate::domains::projects::link_reviews::ProjectLinkReviewError),
+    ProjectLinkReview(
+        #[from] crate::domains::projects::link_reviews::errors::ProjectLinkReviewError,
+    ),
     #[error(transparent)]
     ProjectCommandPort(#[from] ProjectCommandPortError),
     #[error(transparent)]
@@ -983,115 +993,5 @@ impl ReviewPromotionService {
     }
 }
 
-fn review_keywords(item: &ReviewItem) -> Vec<String> {
-    let mut keywords = vec![item.title.trim().to_owned()];
-    for word in item.summary.split_whitespace().take(3) {
-        let cleaned = word
-            .chars()
-            .filter(|character| character.is_ascii_alphanumeric())
-            .collect::<String>();
-        if !cleaned.is_empty() {
-            keywords.push(cleaned);
-        }
-    }
-    keywords.sort();
-    keywords.dedup();
-    keywords
-}
-
-fn choose_target_id(target: &ReviewPromotionTarget, prefix: &str, seed: &str) -> String {
-    let candidate = target.target_entity_id.trim();
-    if !candidate.is_empty() {
-        return candidate.to_owned();
-    }
-    format!("{prefix}:v1:{}", stable_short_hash(seed))
-}
-
-fn stable_short_hash(seed: &str) -> String {
-    let mut digest = Sha256::new();
-    digest.update(seed.as_bytes());
-    format!("{:x}", digest.finalize())[..16].to_owned()
-}
-
-fn knowledge_document_title(item: &ReviewItem) -> String {
-    let title = item.title.trim();
-    if title.ends_with(".md") {
-        title.to_owned()
-    } else {
-        format!("{title}.md")
-    }
-}
-
-fn primary_observation_id(evidence: &[ReviewItemEvidenceRecord]) -> Option<String> {
-    evidence
-        .iter()
-        .find(|record| record.evidence_role == "primary")
-        .or_else(|| evidence.first())
-        .map(|record| record.observation_id.clone())
-}
-
-fn metadata_string(metadata: &Value, key: &str) -> Option<String> {
-    metadata
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-}
-
-fn observation_excerpt(observation: &Observation) -> Option<String> {
-    for key in [
-        "quote",
-        "evidence",
-        "body",
-        "transcript",
-        "subject",
-        "title",
-        "extracted_text",
-    ] {
-        if let Some(value) = observation.payload.get(key).and_then(Value::as_str) {
-            let trimmed = value.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed.to_owned());
-            }
-        }
-    }
-
-    None
-}
-
-fn decision_evidence(evidence: &[ReviewItemEvidenceRecord]) -> Vec<NewDecisionEvidence> {
-    evidence
-        .iter()
-        .map(|record| {
-            NewDecisionEvidence::observation(record.observation_id.clone()).metadata(json!({
-                "evidence_role": record.evidence_role,
-                "review_metadata": record.metadata
-            }))
-        })
-        .collect()
-}
-
-fn obligation_evidence(evidence: &[ReviewItemEvidenceRecord]) -> Vec<NewObligationEvidence> {
-    evidence
-        .iter()
-        .map(|record| {
-            NewObligationEvidence::observation(record.observation_id.clone()).metadata(json!({
-                "evidence_role": record.evidence_role,
-                "review_metadata": record.metadata
-            }))
-        })
-        .collect()
-}
-
-fn relationship_evidence(evidence: &[ReviewItemEvidenceRecord]) -> Vec<NewRelationshipEvidence> {
-    evidence
-        .iter()
-        .map(|record| {
-            NewRelationshipEvidence::observation(record.observation_id.clone()).metadata(json!({
-                "evidence_role": record.evidence_role,
-                "review_metadata": record.metadata
-            }))
-        })
-        .collect()
-}
+mod helpers;
+use helpers::*;

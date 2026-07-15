@@ -1,7 +1,8 @@
 use sqlx::{Postgres, Transaction};
 
-use crate::domains::communications::messages::ProjectedMessage;
-use crate::domains::personas::api::{PersonaProjectionError, PersonaProjectionPort};
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::personas::api::errors::PersonaProjectionError;
+use crate::domains::personas::ports::PersonaProjectionPort;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;
 

@@ -6,15 +6,17 @@ use serde_json::{Map, Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::messages::MessageProjectionError;
-use crate::domains::communications::storage::{
-    AttachmentSafetyScanError, AttachmentSafetyScanRequest, AttachmentSafetyScanner,
-    CommunicationAttachmentDisposition, CommunicationStorageError,
-    HeuristicAttachmentSafetyScanner, NewCommunicationAttachment, NewCommunicationBlob,
+use crate::domains::communications::messages::errors::MessageProjectionError;
+use crate::domains::communications::storage::errors::AttachmentSafetyScanError;
+use crate::domains::communications::storage::errors::CommunicationStorageError;
+use crate::domains::communications::storage::models::{
+    CommunicationAttachmentDisposition, NewCommunicationAttachment, NewCommunicationBlob,
 };
-use crate::platform::communications::{
-    ProviderChannelMessageLookupPort, ProviderCommunicationMessagePortError,
+use crate::domains::communications::storage::scanner::{
+    AttachmentSafetyScanRequest, AttachmentSafetyScanner, HeuristicAttachmentSafetyScanner,
 };
+use crate::platform::communications::ProviderChannelMessageLookupPort;
+use crate::platform::communications::errors::ProviderCommunicationMessagePortError;
 
 const ZULIP_CHANNEL_KIND: &str = "zulip";
 const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";

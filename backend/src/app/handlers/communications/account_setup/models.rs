@@ -19,7 +19,7 @@ pub(crate) struct GmailOAuthStartApiRequest {
 impl GmailOAuthStartApiRequest {
     pub(super) fn into_setup_request(
         self,
-        config: &crate::platform::config::AppConfig,
+        config: &crate::platform::config::app_config::AppConfig,
     ) -> Result<GmailOAuthSetupRequest, EmailAccountSetupError> {
         let client_id = trimmed_optional(self.client_id)
             .or_else(|| config.google_oauth_client_id().map(str::to_owned))
@@ -188,7 +188,7 @@ pub(crate) struct EmailAccountSetupApiResponse {
     pub(super) account_id: String,
     pub(super) secret_ref: String,
     pub(super) secret_kind: SecretKind,
-    pub(super) store_kind: crate::platform::secrets::SecretStoreKind,
+    pub(super) store_kind: crate::platform::secrets::models::SecretStoreKind,
 }
 
 impl From<crate::integrations::mail::accounts::models::EmailAccountSetupResult>

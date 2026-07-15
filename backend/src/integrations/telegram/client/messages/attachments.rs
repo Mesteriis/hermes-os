@@ -1,9 +1,9 @@
 use chrono::Utc;
 
 use super::super::errors::TelegramError;
-use super::super::models::TelegramAttachmentAnchor;
 use super::super::observations::TelegramAttachmentDownloadObservation;
 use super::super::store::TelegramStore;
+use crate::integrations::telegram::client::models::messages::TelegramAttachmentAnchor;
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 

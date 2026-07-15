@@ -1,7 +1,6 @@
 use super::{categories::EmailCategory, models::EmailAnalysis, service::EmailIntelligenceService};
-use crate::domains::communications::messages::{
-    LocalMessageState, ProjectedMessage, WorkflowState,
-};
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::communications::messages::states::{LocalMessageState, WorkflowState};
 use chrono::Utc;
 use serde_json::json;
 

@@ -1,4 +1,4 @@
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::domains::communications::messages::models::ProjectedMessage;
 use crate::workflows::email_intelligence::models::{
     EmailKnowledgeCandidate, EmailSummaryContract, email_candidate_identifiers_email,
 };

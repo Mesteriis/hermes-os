@@ -7,6 +7,7 @@ rust-version = "1.89"
 license = "MIT"
 
 [dependencies]
+async-trait = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 hermes-communications-api = { path = "../communications-api" }
 hermes-events-api = { path = "../events-api" }

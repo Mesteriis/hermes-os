@@ -1,7 +1,8 @@
 use chrono::{TimeDelta, Utc};
 use serde_json::json;
 
-use crate::platform::secrets::{ResolvedSecret, SecretKind, SecretResolver};
+use crate::platform::secrets::models::{ResolvedSecret, SecretKind};
+use crate::platform::secrets::resolver::SecretResolver;
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 
 use super::super::errors::EmailAccountSetupError;

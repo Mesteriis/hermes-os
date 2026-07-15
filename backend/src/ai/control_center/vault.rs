@@ -1,10 +1,10 @@
+use crate::platform::secrets::store::SecretReferenceStore;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 
-use crate::platform::secrets::{
-    NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
-};
-use crate::vault::{HostVault, SecretEntryContext};
+use crate::platform::secrets::models::{NewSecretReference, SecretKind, SecretStoreKind};
+use crate::vault::HostVault;
+use crate::vault::models::SecretEntryContext;
 
 use super::errors::AiControlCenterError;
 use super::models::AiProviderAccount;

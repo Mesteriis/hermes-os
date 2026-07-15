@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Condvar, Mutex};
 
-use crate::integrations::telegram::client::{
+use crate::integrations::telegram::client::models::qr_login::{
     TelegramQrLoginStartRequest, TelegramQrLoginStatusResponse,
 };
 

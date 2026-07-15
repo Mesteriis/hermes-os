@@ -2,17 +2,18 @@ use std::collections::HashSet;
 
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
-use sqlx::{Postgres, Row, Transaction};
+use sqlx::{Postgres, Transaction};
 
 use super::errors::DecisionStoreError;
 use super::evidence::{
     link_decision_review_transition_in_transaction, link_decision_support_in_transaction,
 };
 use super::ids::{decision_id, evidence_id};
-use super::models::{
-    Decision, DecisionEntityKind, DecisionReviewState, NewDecision, NewDecisionEvidence,
-    NewDecisionImpactedEntity,
-};
+use super::models::decision::{Decision, NewDecision};
+use super::models::entity_kind::DecisionEntityKind;
+use super::models::evidence::NewDecisionEvidence;
+use super::models::impacted_entity::NewDecisionImpactedEntity;
+use super::models::states::DecisionReviewState;
 use super::row_mapping::row_to_decision;
 use super::validation::{validate_decision_with_evidence, validate_non_empty};
 

@@ -1,9 +1,10 @@
 use serde_json::Value;
 
-use crate::integrations::telegram::tdjson::TelegramTdlibMessageSnapshot;
+use crate::integrations::telegram::tdjson::snapshots::TelegramTdlibMessageSnapshot;
 
 use super::super::errors::TelegramError;
-use super::super::models::{NewTelegramMessage, TelegramChatKind, TelegramObservedMessage};
+use super::super::models::chats::TelegramChatKind;
+use super::super::models::messages::{NewTelegramMessage, TelegramObservedMessage};
 use super::super::store::TelegramStore;
 use super::message_metadata::derive_tdlib_attachment_metadata;
 use super::reaction_metadata::derive_tdlib_reaction_summary_metadata;

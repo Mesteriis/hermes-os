@@ -2,7 +2,8 @@ use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 
-use crate::vault::{HostVault, HostVaultManifestEntry, SecretEntryContext};
+use crate::vault::HostVault;
+use crate::vault::models::{HostVaultManifestEntry, SecretEntryContext};
 
 use super::errors::HostVaultReconciliationError;
 use super::provider_recovery::is_recoverable_provider_entry_kind;

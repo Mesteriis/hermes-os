@@ -1,6 +1,6 @@
 // §20-21: Task + Note extraction from email via LLM + heuristics
 use crate::ai::hub::{AiHubError, AiModelRoute, SharedAiHub};
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::domains::communications::messages::models::ProjectedMessage;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

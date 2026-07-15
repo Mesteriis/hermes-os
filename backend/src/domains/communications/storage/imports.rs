@@ -8,11 +8,12 @@ use super::rows::{row_to_imported_attachment, row_to_mail_blob};
 use super::store::CommunicationStorageStore;
 use super::validation::validate_non_empty;
 use crate::domains::communications::evidence::link_mail_entity_in_transaction;
-use crate::platform::storage::{
+use crate::platform::storage::communication_media::{
     ImportedAttachmentRecord, ImportedAttachmentRemovalResult, ImportedAttachmentStoragePort,
-    ImportedAttachmentUpsert, LocalBlobRecord, SafetyScanReport, SafetyScanStatus, StorageError,
+    ImportedAttachmentUpsert, LocalBlobRecord, SafetyScanReport, SafetyScanStatus,
     StoredBlobRecord,
 };
+use crate::platform::storage::errors::StorageError;
 use chrono::Utc;
 use hermes_events_api::NewEventEnvelope;
 use hermes_events_postgres::store::EventStore;

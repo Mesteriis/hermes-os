@@ -1,5 +1,7 @@
-use hermes_hub_backend::domains::personas::core::{
-    NewPersonaInteractionContext, PersonaIdentityStore, PersonaInteractionContextStore,
+use hermes_hub_backend::domains::personas::core::errors::PersonaCoreError;
+use hermes_hub_backend::domains::personas::core::identities::PersonaIdentityStore;
+use hermes_hub_backend::domains::personas::core::interaction_contexts::{
+    NewPersonaInteractionContext, PersonaInteractionContextStore,
 };
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
@@ -51,9 +53,7 @@ impl<'a> PersonaFactory<'a> {
     /// Create a persona record, email identity, and default interaction context.
     ///
     /// Returns the current schema's stable persona record identifier (`persona_id`).
-    pub async fn create(
-        self,
-    ) -> Result<String, hermes_hub_backend::domains::personas::core::PersonaCoreError> {
+    pub async fn create(self) -> Result<String, PersonaCoreError> {
         let identity_store = PersonaIdentityStore::new(self.pool.clone());
         let persona_store = PersonaInteractionContextStore::new(self.pool.clone());
 

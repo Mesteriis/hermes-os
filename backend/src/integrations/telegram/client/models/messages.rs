@@ -8,11 +8,6 @@ use super::super::validation::validate_non_empty;
 use super::chats::TelegramChatKind;
 use hermes_communications_api::evidence::NewRawCommunicationRecord;
 
-pub use super::message_references::{
-    TelegramForwardChainResponse, TelegramForwardRef, TelegramMessageReferenceSummary,
-    TelegramReplyChainResponse, TelegramReplyRef,
-};
-
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct NewTelegramMessage {
     pub account_id: String,
@@ -416,6 +411,7 @@ pub struct TelegramProviderWriteCommand {
     pub status: String,
     pub retry_count: i32,
     pub max_retries: i32,
+    pub lease_epoch: i64,
     pub last_error: Option<String>,
     pub result_payload: serde_json::Value,
     pub audit_metadata: serde_json::Value,

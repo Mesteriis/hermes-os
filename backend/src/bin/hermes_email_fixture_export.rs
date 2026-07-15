@@ -3,13 +3,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use hermes_communications_api::accounts::CommunicationProviderKind;
-use hermes_hub_backend::domains::communications::fixtures::export::{
-    EmailFixtureExportOptions, export_fixture_messages_from_sync_batch,
-};
+use hermes_hub_backend::domains::communications::fixtures::export::export_fixture_messages_from_sync_batch;
+use hermes_hub_backend::domains::communications::fixtures::export::models::EmailFixtureExportOptions;
 use hermes_hub_backend::integrations::mail::gmail::client::{
     imap::ImapNetworkClient, options::ImapFetchOptions,
 };
-use hermes_hub_backend::platform::secrets::ResolvedSecret;
+use hermes_hub_backend::platform::secrets::models::ResolvedSecret;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -21,7 +20,7 @@ const DEFAULT_OUTPUT_PATH: &str = "tmp/email-fixtures/icloud-inbox-redacted.json
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    hermes_hub_backend::app::init_tracing();
+    hermes_hub_backend::app::router::init_tracing();
 
     let config = LiveImapFixtureConfig::from_env()?;
     ensure_parent_dir(&config.output_path)?;

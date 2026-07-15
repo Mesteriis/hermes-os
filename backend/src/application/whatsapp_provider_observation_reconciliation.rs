@@ -50,7 +50,7 @@ pub(crate) async fn reconcile_whatsapp_provider_observation_event(
     }
 
     let runtime =
-        crate::application::provider_runtime_services::whatsapp_provider_runtime(pool.clone());
+        crate::application::provider_runtime_factories::whatsapp_provider_runtime(pool.clone());
     let commands = match event.event.event_type.as_str() {
         "signal.accepted.whatsapp.message" => {
             runtime

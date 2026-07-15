@@ -5,7 +5,7 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::domains::communications::messages::models::ProjectedMessage;
 
 const SCORE_INITIAL: i16 = 100;
 const SCORE_SPAM_PENALTY: i16 = 50;
@@ -16,8 +16,6 @@ const SUPPRESSION_TTL_DAYS: i64 = 30;
 pub struct SenderReputationStore {
     pool: PgPool,
 }
-
-pub type SenderReputationPort = SenderReputationStore;
 
 impl SenderReputationStore {
     pub fn new(pool: PgPool) -> Self {

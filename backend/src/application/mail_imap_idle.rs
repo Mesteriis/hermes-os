@@ -17,8 +17,8 @@ use crate::integrations::mail::sync_provider::LiveEmailProviderSyncPort;
 use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use crate::vault::HostVault;
 use crate::workflows::mail_background_sync::{
-    DEFAULT_GMAIL_API_BASE_URL, MailBackgroundSyncService, MailImapIdleOutcome, MailSyncStore,
-    MailSyncTrigger,
+    DEFAULT_GMAIL_API_BASE_URL, idle::MailImapIdleOutcome, models::progress::MailSyncTrigger,
+    service::MailBackgroundSyncService, store::MailSyncStore,
 };
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 use hermes_communications_postgres::provider_store::CommunicationProviderSecretBindingStore;

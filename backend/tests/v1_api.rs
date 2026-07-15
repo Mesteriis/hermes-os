@@ -9,17 +9,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::{build_router, build_router_with_database};
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
+use hermes_hub_backend::app::router::{build_router, build_router_with_database};
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
+use hermes_hub_backend::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use hermes_hub_backend::domains::communications::storage::models::{
+    CommunicationAttachmentDisposition, NewCommunicationAttachment, NewCommunicationBlob,
 };
-use hermes_hub_backend::domains::communications::storage::{
-    CommunicationAttachmentDisposition, CommunicationStorageStore, LocalCommunicationBlobStore,
-    NewCommunicationAttachment, NewCommunicationBlob,
-};
+use hermes_hub_backend::domains::communications::storage::store::CommunicationStorageStore;
 
-use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::config::app_config::AppConfig;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const LOCAL_API_TOKEN: &str = "test-token";
 

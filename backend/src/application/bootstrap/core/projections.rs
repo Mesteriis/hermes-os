@@ -71,7 +71,7 @@ fn communication_provider_observation_projection_task(
             let runner = hermes_events_postgres::consumers::EventConsumerRunner::new(
                 pool.clone(),
                 hermes_events_postgres::consumers::EventConsumerConfig::new(
-                    crate::domains::communications::messages::COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER,
+                    crate::domains::communications::messages::provider_observation_projection::COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER,
                 ),
             );
             let mut tick = tokio::time::interval(Duration::from_millis(
@@ -100,7 +100,7 @@ fn communication_provider_observation_projection_task(
                 let handler_pool = pool.clone();
                 if let Err(error) = runner
                     .process_next_batch(|event| {
-                        crate::domains::communications::messages::project_provider_observation_event(
+                        crate::domains::communications::messages::provider_observation_projection::project_provider_observation_event(
                             handler_pool.clone(),
                             event,
                         )

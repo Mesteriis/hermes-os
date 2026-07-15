@@ -9,14 +9,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, consume_accepted_signal_event, project_raw_email_message,
-};
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::provider_observation_projection::consume_accepted_signal_event;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
 use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
 use hermes_hub_backend::domains::signal_hub::whatsapp::dispatch_whatsapp_raw_signal;
 use hermes_hub_backend::domains::signal_hub::zulip::dispatch_zulip_raw_signal;
 
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_provider_orchestration::observation_to_raw_communication_record;
 use hermes_provider_zulip::event_mapper::{
     ZulipEventMappingContext, map_zulip_event_to_observation,

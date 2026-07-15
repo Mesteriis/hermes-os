@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::platform::secrets::SecretResolutionError;
+use crate::platform::secrets::errors::SecretResolutionError;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {

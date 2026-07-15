@@ -1,4 +1,18 @@
-use super::support::*;
+use crate::app::handlers::automation::*;
+use crate::app::handlers::calls::handlers::*;
+use crate::app::provider_runtime_handlers::{
+    telegram::{
+        accounts::*, capabilities::*, chat_actions::*, chat_avatars::*, chat_folder_actions::*,
+        chats::*, commands::*, media::*, messages::mark_read::*, messages::reactions::*,
+        messages::*, outbox::*, qr_login::*, raw::*, runtime::*, search::*, topics::*,
+    },
+    yandex_telemost::*,
+    zoom::*,
+    zulip::*,
+};
+use crate::app::state::AppState;
+use axum::Router;
+use axum::routing::{delete, get, post, put};
 
 mod whatsapp;
 

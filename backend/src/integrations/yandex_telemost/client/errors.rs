@@ -6,11 +6,9 @@ use thiserror::Error;
 
 use std::io;
 
-use crate::domains::review::ReviewInboxError;
-
-use crate::platform::secrets::{SecretReferenceError, SecretResolutionError};
-use crate::platform::settings::SettingsError;
-use crate::vault::HostVaultError;
+use crate::platform::secrets::errors::{SecretReferenceError, SecretResolutionError};
+use crate::platform::settings::errors::SettingsError;
+use crate::vault::errors::HostVaultError;
 use hermes_events_postgres::errors::EventStoreError;
 use hermes_observations_postgres::errors::ObservationStoreError;
 
@@ -51,9 +49,6 @@ pub enum YandexTelemostError {
 
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),
-
-    #[error(transparent)]
-    ReviewInbox(#[from] ReviewInboxError),
 
     #[error(transparent)]
     Settings(#[from] SettingsError),

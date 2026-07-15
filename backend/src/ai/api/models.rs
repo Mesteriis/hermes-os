@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::ai::control_center::{AiModelCatalogItem, AiPromptTemplate, AiProviderAccount};
+use crate::ai::control_center::models::{AiModelCatalogItem, AiPromptTemplate, AiProviderAccount};
 
 #[derive(Serialize)]
 pub(crate) struct AiProviderListResponse {

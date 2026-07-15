@@ -5,7 +5,7 @@ use chrono::Utc;
 use serde_json::json;
 
 use super::errors::MailSyncError;
-use super::models::MailSyncRun;
+use super::models::runs::MailSyncRun;
 
 const EVENT_TYPE_STARTED: &str = "mail.sync.started";
 const EVENT_TYPE_PROGRESS: &str = "mail.sync.progress";

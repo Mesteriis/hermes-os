@@ -4,9 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::Utc;
 use hermes_hub_backend::application::organization_persona_links::OrganizationPersonaLinkApplicationService;
 use hermes_hub_backend::application::relationship_graph::RelationshipGraphCoordinator;
-use hermes_hub_backend::domains::graph::core::{GraphNodeKind, node_id};
 use hermes_hub_backend::domains::organizations::api::OrganizationStore;
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
 use hermes_hub_backend::domains::relationships::{
     errors::RelationshipStoreError,
     models::{
@@ -15,7 +14,8 @@ use hermes_hub_backend::domains::relationships::{
     },
     store::RelationshipStore,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::graph::{GraphNodeKind, node_id};
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;
 use serde_json::{Value, json};

@@ -7,10 +7,10 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::app::router::build_router_with_database;
 use hermes_hub_backend::integrations::telegram::client::commands::insert_command;
 use hermes_hub_backend::integrations::telegram::client::participants::reconcile_join_commands_from_provider_roster_with_source;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const LOCAL_API_TOKEN: &str = "telegram-participant-reconcile-source-secret";
 

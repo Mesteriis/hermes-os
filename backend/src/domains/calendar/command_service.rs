@@ -3,20 +3,24 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::calendar::events::{CalendarAccountStore, CalendarSourceStore};
+use crate::domains::calendar::events::account_store::CalendarAccountStore;
+use crate::domains::calendar::events::source_store::CalendarSourceStore;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::errors::ObservationStoreError;
 use hermes_observations_postgres::store::ObservationStore;
 
-use super::core::{
-    CalendarCoreError, EventAgenda, EventAgendaStore, EventChecklist, EventChecklistStore,
-    EventParticipant, EventParticipantStore, EventRelation, EventRelationStore,
-};
-use super::events::{CalendarAccount, CalendarAccountUpdate, CalendarError, CalendarSource};
-use super::meetings::{
-    EventRecording, EventRecordingStore, MeetingNote, MeetingNoteStore, MeetingOutcome,
-    MeetingOutcomeStore, MeetingsError,
-};
+use super::core::agendas::{EventAgenda, EventAgendaStore};
+use super::core::checklists::{EventChecklist, EventChecklistStore};
+use super::core::errors::CalendarCoreError;
+use super::core::participants::{EventParticipant, EventParticipantStore};
+use super::core::relations::{EventRelation, EventRelationStore};
+use super::events::errors::CalendarError;
+use super::events::models::{CalendarAccount, CalendarAccountUpdate, CalendarSource};
+use super::meetings::errors::MeetingsError;
+use super::meetings::models::{EventRecording, MeetingNote, MeetingOutcome};
+use super::meetings::notes::MeetingNoteStore;
+use super::meetings::outcomes::MeetingOutcomeStore;
+use super::meetings::recordings::EventRecordingStore;
 use super::reminders::{CalendarReminder, CalendarReminderStore, ReminderError};
 use super::rules::{CalendarRule, CalendarRuleError, CalendarRuleStore, RuleUpdate};
 use super::scheduling::{

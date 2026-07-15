@@ -1,6 +1,6 @@
-use hermes_hub_backend::app::init_tracing;
-use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::app::router::init_tracing;
+use hermes_hub_backend::platform::config::app_config::AppConfig;
+use hermes_hub_backend::platform::storage::database::Database;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

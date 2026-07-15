@@ -14,9 +14,9 @@ use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::domains::communications::messages::MessageProjectionStore;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
 
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 pub async fn live_projection_context(
     _test_name: &str,

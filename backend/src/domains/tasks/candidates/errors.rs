@@ -1,7 +1,7 @@
 use hermes_events_api::EventEnvelopeError;
 use thiserror::Error;
 
-use crate::domains::tasks::core::TaskCoreError;
+use crate::domains::tasks::core::errors::TaskCoreError;
 use crate::engines::obligation::errors::ObligationEngineError;
 use hermes_events_postgres::errors::EventStoreError;
 use hermes_observations_postgres::errors::ObservationStoreError;

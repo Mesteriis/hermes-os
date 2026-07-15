@@ -1,21 +1,28 @@
 use chrono::Utc;
 use serde_json::json;
 
-use crate::integrations::telegram::client::lifecycle::{
+use crate::integrations::telegram::client::lifecycle::message_versions::record_provider_edit_observation;
+use crate::integrations::telegram::client::lifecycle::provider_reconciliation::{
     reconcile_delete_commands_from_provider_state, reconcile_edit_commands_from_provider_state,
-    reconcile_message_pin_commands_from_provider_state, record_provider_delete_observation,
-    record_provider_edit_observation,
+    reconcile_message_pin_commands_from_provider_state,
 };
-use crate::integrations::telegram::client::{
-    TelegramReactionMessageRef, TelegramStore, derive_tdlib_chosen_reaction_emojis,
-    derive_tdlib_provider_reactions, derive_tdlib_reaction_summary_metadata,
-    reconcile_reaction_commands_from_provider_reactions, sync_provider_reactions,
+use crate::integrations::telegram::client::lifecycle::tombstones::record_provider_delete_observation;
+use crate::integrations::telegram::client::messages::reaction_metadata::{
+    derive_tdlib_chosen_reaction_emojis, derive_tdlib_provider_reactions,
+    derive_tdlib_reaction_summary_metadata,
 };
+use crate::integrations::telegram::client::reactions::{
+    TelegramReactionMessageRef, reconcile_reaction_commands_from_provider_reactions,
+    sync_provider_reactions,
+};
+use crate::integrations::telegram::client::store::TelegramStore;
 use crate::integrations::telegram::tdjson::{
-    TelegramTdlibMessageContentSnapshot, TelegramTdlibMessageDeleteSnapshot,
-    TelegramTdlibMessageEditedSnapshot, TelegramTdlibMessageInteractionInfoSnapshot,
-    TelegramTdlibMessagePinnedSnapshot, TelegramTdlibMessageSendFailedSnapshot,
-    TelegramTdlibMessageSendSucceededSnapshot, TelegramTdlibMessageSnapshot,
+    snapshots::TelegramTdlibMessageContentSnapshot, snapshots::TelegramTdlibMessageDeleteSnapshot,
+    snapshots::TelegramTdlibMessageEditedSnapshot,
+    snapshots::TelegramTdlibMessageInteractionInfoSnapshot,
+    snapshots::TelegramTdlibMessagePinnedSnapshot,
+    snapshots::TelegramTdlibMessageSendFailedSnapshot,
+    snapshots::TelegramTdlibMessageSendSucceededSnapshot, snapshots::TelegramTdlibMessageSnapshot,
 };
 use crate::platform::events::bus::InMemoryEventBus;
 

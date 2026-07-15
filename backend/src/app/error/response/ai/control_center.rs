@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 
-use crate::ai::control_center::AiControlCenterError;
+use crate::ai::control_center::errors::AiControlCenterError;
 
 use super::super::ErrorParts;
 

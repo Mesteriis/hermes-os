@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 
-use crate::domains::personas::api::PersonaProjectionError;
+use crate::domains::personas::api::errors::PersonaProjectionError;
 
 use super::super::types::ApiError;
 use super::ErrorParts;

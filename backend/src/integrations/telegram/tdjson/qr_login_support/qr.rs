@@ -1,7 +1,7 @@
 use qrcode::QrCode;
 use qrcode::render::svg;
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
 pub(in crate::integrations::telegram::tdjson) fn render_qr_svg(
     link: &str,

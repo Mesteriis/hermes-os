@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::platform::settings::SettingsError;
+use crate::platform::settings::errors::SettingsError;
 use hermes_events_postgres::errors::EventStoreError;
 
 #[derive(Debug, Error)]

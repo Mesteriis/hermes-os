@@ -14,22 +14,25 @@ use hermes_events_postgres::consumers::EventConsumerRunner;
 use hermes_events_postgres::consumers::EventDeadLetterReviewState;
 use hermes_events_postgres::errors::EventStoreError;
 use hermes_events_postgres::store::EventStore;
-use hermes_hub_backend::domains::communications::messages::{
-    COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, ProviderChannelMessageStore,
-    consume_accepted_signal_event, project_provider_observation_event,
+use hermes_hub_backend::domains::communications::messages::provider_channel_store::ProviderChannelMessageStore;
+use hermes_hub_backend::domains::communications::messages::provider_observation_projection::{
+    COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, consume_accepted_signal_event,
+    project_provider_observation_event,
 };
 use hermes_hub_backend::domains::signal_hub::service::{
     SIGNAL_HUB_RAW_SIGNAL_CONSUMER, process_signal_hub_raw_event,
 };
 use hermes_hub_backend::domains::signal_hub::telegram::dispatch_telegram_raw_signal;
-use hermes_hub_backend::integrations::telegram::client::{
-    NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramStore,
+use hermes_hub_backend::integrations::telegram::client::models::chats::TelegramChatKind;
+use hermes_hub_backend::integrations::telegram::client::models::messages::{
+    NewTelegramMessage, TelegramDeliveryState, TelegramMessage,
 };
+use hermes_hub_backend::integrations::telegram::client::store::TelegramStore;
 
 use hermes_backend_testkit::context::TestContext;
+use hermes_communications_api::provider_messages::ProviderMessageObservationEvent;
 use hermes_hub_backend::platform::communications::{
-    EventStoreProviderMessageObservationEventPort, ProviderMessageObservationEvent,
-    ProviderMessageObservationEventPort,
+    EventStoreProviderMessageObservationEventPort, ProviderMessageObservationEventPort,
 };
 
 async fn live_context(_test_name: &str) -> Option<(TestContext, EventStore)> {
@@ -835,10 +838,7 @@ async fn provider_observation_fallback_idempotency_uses_payload_hash_against_pos
     assert_eq!(duplicate_position, None);
 }
 
-async fn create_projected_telegram_message(
-    pool: &sqlx::PgPool,
-    suffix: &str,
-) -> hermes_hub_backend::integrations::telegram::client::TelegramMessage {
+async fn create_projected_telegram_message(pool: &sqlx::PgPool, suffix: &str) -> TelegramMessage {
     let unique = unique_suffix();
     let account_id = format!("acct-{suffix}-{unique}");
     let account = NewProviderAccount::new(
@@ -908,14 +908,14 @@ async fn create_projected_telegram_message(
 
 async fn append_provider_observation(
     event_port: &EventStoreProviderMessageObservationEventPort,
-    message: &hermes_hub_backend::integrations::telegram::client::TelegramMessage,
+    message: &TelegramMessage,
     event_kind: &str,
     external_event_id: Option<&str>,
     observed_at: chrono::DateTime<Utc>,
     payload: &serde_json::Value,
 ) -> Result<
     Option<i64>,
-    hermes_hub_backend::platform::communications::ProviderCommunicationMessagePortError,
+    hermes_hub_backend::platform::communications::errors::ProviderCommunicationMessagePortError,
 > {
     event_port
         .append_provider_message_observation(ProviderMessageObservationEvent {

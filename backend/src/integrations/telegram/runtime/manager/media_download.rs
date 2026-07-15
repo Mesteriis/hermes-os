@@ -1,11 +1,11 @@
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
 use super::super::commands::request_actor_download_file;
 use super::super::models::{TelegramMediaDownloadRequest, TelegramMediaDownloadResponse};
 use super::super::status::account_runtime_kind;
 use super::account::load_active_account;
 use super::{TelegramMediaDownloadContext, TelegramRuntimeManager};
-use crate::platform::secrets::SecretResolver;
+use crate::platform::secrets::resolver::SecretResolver;
 
 impl TelegramRuntimeManager {
     pub(crate) async fn download_media<S: SecretResolver + Sync + ?Sized>(

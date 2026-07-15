@@ -1,5 +1,5 @@
 use super::*;
-use crate::domains::communications::messages::ProjectedMessagePageQuery;
+use crate::domains::communications::messages::models::ProjectedMessagePageQuery;
 use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 
 pub(crate) async fn get_v1_communication_messages(

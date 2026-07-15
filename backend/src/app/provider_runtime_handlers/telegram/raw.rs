@@ -4,9 +4,10 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::app::api_support::stores::domain_stores::communication_ingestion_store;
-use crate::app::{ApiError, AppState};
-use crate::domains::communications::messages::ProviderChannelMessageStore;
-use crate::integrations::telegram::client::TelegramError;
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::domains::communications::messages::provider_channel_store::ProviderChannelMessageStore;
+use crate::integrations::telegram::client::errors::TelegramError;
 use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 
 const COMMUNICATION_RAW_EVIDENCE_CHANNEL_KINDS: &[&str] =

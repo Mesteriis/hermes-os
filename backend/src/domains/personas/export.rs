@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::personas::investigator::{
-    InvestigatorError, PersonaDossier, PersonaInvestigator,
-};
+use crate::domains::personas::investigator::errors::InvestigatorError;
+use crate::domains::personas::investigator::models::PersonaDossier;
+use crate::domains::personas::investigator::service::PersonaInvestigator;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ExportFormat {

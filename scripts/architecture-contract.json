@@ -171,6 +171,10 @@
         "packages": ["hermes-provider-zulip", "hermes-provider-zoom", "hermes-provider-telemost", "hermes-provider-mail", "hermes-provider-telegram", "hermes-provider-whatsapp"],
         "forbidden_dependencies": ["hermes-hub-backend", "sqlx", "hermes-backend-testkit"]
       },
+      "connector_runtime": {
+        "packages": ["hermes-zulip-connector"],
+        "forbidden_dependencies": ["hermes-hub-backend", "sqlx", "hermes-backend-testkit", "hermes-communications-postgres"]
+      },
       "test_session": {
         "packages": ["hermes-test-session"],
         "forbidden_dependencies": ["hermes-hub-backend", "hermes-backend-testkit"]
@@ -184,7 +188,7 @@
         "forbidden_dependencies": []
       },
       "domain_api": {
-        "packages": ["hermes-communications-api", "hermes-signal-hub-api"],
+        "packages": ["hermes-communications-api", "hermes-signal-hub-api", "hermes-personas-api", "hermes-graph-api", "hermes-relationships-api", "hermes-decisions-api", "hermes-obligations-api", "hermes-calendar-api", "hermes-tasks-api", "hermes-projects-api"],
         "forbidden_dependencies": ["sqlx", "reqwest"]
       },
       "observation_api": {
@@ -192,7 +196,7 @@
         "forbidden_dependencies": ["sqlx", "reqwest"]
       },
       "persistence_adapter": {
-        "packages": ["hermes-observations-postgres", "hermes-communications-postgres", "hermes-signal-hub-postgres"],
+        "packages": ["hermes-observations-postgres", "hermes-communications-postgres", "hermes-signal-hub-postgres", "hermes-relationships-postgres", "hermes-graph-postgres", "hermes-personas-postgres", "hermes-decisions-postgres", "hermes-obligations-postgres", "hermes-calendar-postgres", "hermes-tasks-postgres", "hermes-projects-postgres"],
         "forbidden_dependencies": []
       },
       "application": {
@@ -214,14 +218,15 @@
       "blob_api": {"normal": [], "build": [], "dev": []},
       "contract_api": {"normal": [], "build": [], "dev": []},
       "provider_impl": {"normal": ["kernel", "provider_api"], "build": ["kernel", "provider_api"], "dev": ["kernel", "provider_api"]},
-      "composition": {"normal": ["kernel", "event_api", "event_postgres", "event_nats", "provider_api", "provider_impl", "domain_api", "observation_api", "persistence_adapter", "application", "runtime", "contract_api"], "build": ["kernel"], "dev": ["test_support"]},
+      "composition": {"normal": ["kernel", "event_api", "event_postgres", "event_nats", "provider_api", "provider_impl", "domain_api", "observation_api", "persistence_adapter", "application", "runtime", "contract_api", "blob_api"], "build": ["kernel"], "dev": ["test_support"]},
       "test_support": {"normal": ["composition", "kernel", "provider_api", "provider_impl", "domain_api", "observation_api", "persistence_adapter", "test_session"], "build": ["kernel"], "dev": ["composition", "kernel", "provider_api", "provider_impl", "domain_api", "observation_api", "persistence_adapter", "test_session"]},
       "test_session": {"normal": [], "build": [], "dev": []},
       "domain_api": {"normal": ["kernel", "event_api"], "build": ["kernel", "event_api"], "dev": ["kernel", "event_api"]},
       "observation_api": {"normal": ["kernel"], "build": ["kernel"], "dev": ["kernel"]},
       "persistence_adapter": {"normal": ["kernel", "event_api", "event_postgres", "domain_api", "observation_api", "persistence_adapter"], "build": ["kernel", "event_api", "event_postgres", "domain_api", "observation_api", "persistence_adapter"], "dev": ["kernel", "event_api", "event_postgres", "domain_api", "observation_api", "persistence_adapter"]},
       "application": {"normal": ["kernel", "domain_api", "provider_api"], "build": ["kernel"], "dev": ["test_support"]},
-      "runtime": {"normal": ["kernel", "provider_api", "domain_api", "application"], "build": ["kernel"], "dev": ["test_support"]}
+      "runtime": {"normal": ["kernel", "provider_api", "domain_api", "application"], "build": ["kernel"], "dev": ["test_support"]},
+      "connector_runtime": {"normal": ["kernel", "provider_api", "provider_impl"], "build": ["kernel"], "dev": ["test_support"]}
     }
   },
   "frontend": {

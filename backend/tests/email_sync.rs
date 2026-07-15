@@ -1,6 +1,7 @@
 use hermes_backend_testkit::context::TestContext;
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
+use hermes_communications_api::email_sync::EmailSyncAdapterConfig;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
@@ -9,11 +10,10 @@ use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::platform::communications::email_sync::{
     EmailSyncPlanError, plan_email_sync,
 };
-use hermes_hub_backend::platform::communications::{
-    EmailSyncAdapterConfig, IMAP_ALL_MAILBOXES, email_sync_plan_selects_all_imap_mailboxes,
-    email_sync_plan_stream_ids,
+use hermes_hub_backend::platform::communications::email_sync::{
+    IMAP_ALL_MAILBOXES, email_sync_plan_selects_all_imap_mailboxes, email_sync_plan_stream_ids,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 #[tokio::test]
 async fn email_sync_plan_selects_provider_specific_credentials_and_streams_against_postgres() {

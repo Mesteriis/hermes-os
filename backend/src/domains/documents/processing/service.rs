@@ -7,10 +7,9 @@ use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::errors::ObservationStoreError;
 use hermes_observations_postgres::store::ObservationStore;
 
-use super::{
-    DocumentProcessingError, DocumentProcessingRetryCommand, DocumentProcessingRetryCommandResult,
-    DocumentProcessingStore,
-};
+use super::errors::DocumentProcessingError;
+use super::models::{DocumentProcessingRetryCommand, DocumentProcessingRetryCommandResult};
+use super::store::DocumentProcessingStore;
 
 #[derive(Clone)]
 pub struct DocumentProcessingCommandService {

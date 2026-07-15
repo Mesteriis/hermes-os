@@ -5,7 +5,7 @@ use sqlx::{PgPool, Postgres, Transaction};
 use super::ids::new_tombstone_id;
 use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::telegram::client::evidence::link_telegram_entity_in_transaction;
-use crate::integrations::telegram::client::models::TelegramMessage;
+use crate::integrations::telegram::client::models::messages::TelegramMessage;
 use crate::integrations::telegram::client::models::messages::TelegramMessageTombstone;
 use crate::integrations::telegram::client::rows::row_to_telegram_message_tombstone;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};

@@ -19,7 +19,7 @@ pub struct OmniRouteClient {
     base_url: Url,
     chat_model: String,
     embed_model: String,
-    api_key: crate::platform::secrets::ResolvedSecret,
+    api_key: crate::platform::secrets::models::ResolvedSecret,
 }
 
 impl OmniRouteClient {

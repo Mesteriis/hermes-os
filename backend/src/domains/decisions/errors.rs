@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::domains::decisions::DecisionEngineError;
+use crate::domains::decisions::extraction::errors::DecisionEngineError;
 use hermes_observations_postgres::errors::ObservationStoreError;
 
 #[derive(Debug, Error)]
@@ -49,6 +49,9 @@ pub enum DecisionStoreError {
 
     #[error("unknown decision status stored in database: {0}")]
     UnknownStatus(String),
+
+    #[error("decision API write failed: {0}")]
+    Write(String),
 
     #[error("unknown decision review state stored in database: {0}")]
     UnknownReviewState(String),

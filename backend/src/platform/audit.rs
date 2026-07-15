@@ -1,17 +1,13 @@
 mod communication;
 mod constants;
 mod documents;
-mod errors;
+pub mod errors;
 mod events;
 mod helpers;
-mod models;
+pub mod models;
 mod reviews;
 mod settings;
-mod store;
+pub(crate) mod store;
 mod telegram;
 mod telegram_dialogs;
 mod telegram_participants;
-
-pub use errors::ApiAuditError;
-pub use models::{ApiAuditRecord, NewApiAuditRecord};
-pub use store::ApiAuditLog;

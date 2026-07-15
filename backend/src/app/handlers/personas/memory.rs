@@ -1,10 +1,22 @@
-use super::support::*;
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::domains::personas::memory::cards::PersonaMemoryCardStore;
+use crate::domains::personas::memory::facts::PersonaFactStore;
+use crate::domains::personas::memory::preferences::PersonaPreferenceStore;
+use crate::domains::personas::memory::relationship_events::{
+    NewRelationshipEvent, RelationshipEventStore,
+};
 
 // ── Persona Facts ───────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub(crate) struct PersonaFactsResponse {
-    items: Vec<crate::domains::personas::memory::PersonaFact>,
+    items: Vec<crate::domains::personas::memory::facts::PersonaFact>,
 }
 
 pub(crate) async fn get_persona_facts(
@@ -35,7 +47,7 @@ pub(crate) async fn post_persona_fact(
     State(state): State<AppState>,
     Path(persona_id): Path<String>,
     Json(req): Json<NewPersonaFactRequest>,
-) -> Result<Json<crate::domains::personas::memory::PersonaFact>, ApiError> {
+) -> Result<Json<crate::domains::personas::memory::facts::PersonaFact>, ApiError> {
     let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = state
         .database
@@ -59,7 +71,7 @@ pub(crate) async fn post_persona_fact(
 
 #[derive(Serialize)]
 pub(crate) struct PersonaMemoryCardsResponse {
-    items: Vec<crate::domains::personas::memory::PersonaMemoryCard>,
+    items: Vec<crate::domains::personas::memory::cards::PersonaMemoryCard>,
 }
 
 pub(crate) async fn get_persona_memory_cards(
@@ -91,7 +103,7 @@ pub(crate) async fn post_persona_memory_card(
     State(state): State<AppState>,
     Path(persona_id): Path<String>,
     Json(req): Json<NewPersonaMemoryCardRequest>,
-) -> Result<Json<crate::domains::personas::memory::PersonaMemoryCard>, ApiError> {
+) -> Result<Json<crate::domains::personas::memory::cards::PersonaMemoryCard>, ApiError> {
     let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = state
         .database
@@ -115,7 +127,7 @@ pub(crate) async fn post_persona_memory_card(
 
 #[derive(Serialize)]
 pub(crate) struct PersonaPreferencesResponse {
-    items: Vec<crate::domains::personas::memory::PersonaPreference>,
+    items: Vec<crate::domains::personas::memory::preferences::PersonaPreference>,
 }
 
 pub(crate) async fn get_persona_preferences(
@@ -146,7 +158,7 @@ pub(crate) async fn post_persona_preference(
     State(state): State<AppState>,
     Path(persona_id): Path<String>,
     Json(req): Json<NewPersonaPreferenceRequest>,
-) -> Result<Json<crate::domains::personas::memory::PersonaPreference>, ApiError> {
+) -> Result<Json<crate::domains::personas::memory::preferences::PersonaPreference>, ApiError> {
     let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = state
         .database
@@ -169,7 +181,7 @@ pub(crate) async fn post_persona_preference(
 
 #[derive(Serialize)]
 pub(crate) struct RelationshipTimelineResponse {
-    items: Vec<crate::domains::personas::memory::RelationshipEvent>,
+    items: Vec<crate::domains::personas::memory::relationship_events::RelationshipEvent>,
 }
 
 pub(crate) async fn get_persona_timeline(
@@ -199,7 +211,8 @@ pub(crate) async fn post_relationship_event(
     State(state): State<AppState>,
     Path(persona_id): Path<String>,
     Json(req): Json<NewRelationshipEventRequest>,
-) -> Result<Json<crate::domains::personas::memory::RelationshipEvent>, ApiError> {
+) -> Result<Json<crate::domains::personas::memory::relationship_events::RelationshipEvent>, ApiError>
+{
     let pool = state
         .database
         .pool()

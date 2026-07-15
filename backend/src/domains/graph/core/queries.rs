@@ -4,9 +4,10 @@ use chrono::{DateTime, Utc};
 
 use super::constants::{GRAPH_NEIGHBORHOOD_EDGE_LIMIT, GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT};
 use super::errors::GraphStoreError;
-use super::models::{GraphNeighborhood, GraphNode, GraphSummary};
+use super::models::{GraphNeighborhood, GraphNode};
 use super::row_mapping::{row_to_count, row_to_edge, row_to_evidence_summary, row_to_node};
 use super::store::GraphStore;
+use hermes_graph_api::GraphSummary;
 
 impl GraphStore {
     pub async fn summary(&self) -> Result<GraphSummary, GraphStoreError> {

@@ -10,17 +10,15 @@ use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
 
-use crate::platform::communications::{
-    GmailOutboxSendRequest, GmailOutboxTransport, SmtpTransport,
-};
-use crate::platform::secrets::SecretResolver;
+use crate::platform::communications::SmtpTransport;
+use crate::platform::secrets::resolver::SecretResolver;
+use hermes_communications_api::email::{GmailOutboxSendRequest, GmailOutboxTransport};
 
+use super::CommunicationOutboxItem;
 use super::attachments::load_sendable_attachments;
+use super::delivery::{OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt};
 use super::smtp_sender::SmtpOutboxEmailSender;
-use super::{
-    CommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt,
-    outgoing_email_from_outbox_item,
-};
+use super::smtp_sender::outgoing_email_from_outbox_item;
 
 #[derive(Clone)]
 pub struct CommunicationOutboxEmailSender<R, T, G> {

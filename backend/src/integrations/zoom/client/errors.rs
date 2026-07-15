@@ -6,10 +6,10 @@ use thiserror::Error;
 
 use crate::platform::calls::errors::CallError;
 
-use crate::platform::secrets::{SecretReferenceError, SecretResolutionError};
-use crate::platform::settings::SettingsError;
-use crate::platform::storage::StorageError;
-use crate::vault::HostVaultError;
+use crate::platform::secrets::errors::{SecretReferenceError, SecretResolutionError};
+use crate::platform::settings::errors::SettingsError;
+use crate::platform::storage::errors::StorageError;
+use crate::vault::errors::HostVaultError;
 use hermes_events_postgres::errors::EventStoreError;
 
 #[derive(Debug, Error)]

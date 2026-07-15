@@ -1,9 +1,4 @@
-use hermes_communications_api::accounts::{CommunicationProviderKind, NewProviderAccount};
-use hermes_communications_api::accounts::{
-    NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
-};
 use hermes_communications_api::commands::{CommunicationProviderCommand, ProviderCommandQueuePort};
-use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use std::collections::BTreeMap;
 
 use chrono::Utc;
@@ -89,7 +84,7 @@ where
                 && message.is_read != desired_is_read
             {
                 self.command_queue
-                    .mark_completed(
+                    .mark_completed_at_epoch(
                         &command.command_id,
                         "mail",
                         Utc::now(),
@@ -99,6 +94,7 @@ where
                             "superseded": true,
                             "current_is_read": message.is_read,
                         }),
+                        command.lease_epoch,
                     )
                     .await?;
                 report.completed += 1;
@@ -167,18 +163,19 @@ where
                 let batched = batch_size > 1;
                 for item in group {
                     self.command_queue
-                        .mark_completed(
+                        .mark_completed_at_epoch(
                             &item.command.command_id,
                             "mail",
                             Utc::now(),
                             json!({
-                                "provider_message_id": item.command.provider_message_id,
-                                "desired_is_read": item.desired_is_read,
-                                "command_kind": item.command.command_kind,
-                                "provider_operation": operation,
-                                "imap_batch": batched,
+                                    "provider_message_id": item.command.provider_message_id,
+                                    "desired_is_read": item.desired_is_read,
+                                    "command_kind": item.command.command_kind,
+                                    "provider_operation": operation,
+                                    "imap_batch": batched,
                                 "batch_size": batch_size,
                             }),
+                            item.command.lease_epoch,
                         )
                         .await?;
                     report.completed += 1;
@@ -245,6 +242,7 @@ fn imap_operation(mutation: EmailProviderMessageMutation<'_>) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use crate::platform::secrets::store::SecretReferenceStore;
     use std::io::{BufRead, BufReader, Write};
     use std::net::{SocketAddr, TcpListener, TcpStream};
     use std::sync::{Arc, Mutex};
@@ -255,9 +253,8 @@ mod tests {
     use tempfile::tempdir;
 
     use super::MailProviderCommandWorker;
-    use crate::domains::communications::messages::{
-        MessageProjectionStore, project_raw_email_message,
-    };
+    use crate::domains::communications::messages::projection::project_raw_email_message;
+    use crate::domains::communications::messages::store::MessageProjectionStore;
     use hermes_communications_api::accounts::{
         CommunicationProviderKind, NewProviderAccount, NewProviderAccountSecretBinding,
         ProviderAccountSecretPurpose,
@@ -270,10 +267,9 @@ mod tests {
     };
     use hermes_communications_postgres::store::CommunicationIngestionStore;
 
-    use crate::platform::secrets::{
-        NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
-    };
-    use crate::vault::{EntropyEvent, HostVault, HostVaultConfig, SecretEntryContext};
+    use crate::platform::secrets::models::{NewSecretReference, SecretKind, SecretStoreKind};
+    use crate::vault::HostVault;
+    use crate::vault::models::{EntropyEvent, HostVaultConfig, SecretEntryContext};
 
     #[tokio::test]
     async fn compatible_imap_commands_share_one_uid_store_and_complete_individually() {

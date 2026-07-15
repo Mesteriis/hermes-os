@@ -7,13 +7,18 @@ use tokio::time::{Duration, sleep};
 use tower::ServiceExt;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::calendar::events::account_store::CalendarAccountStore;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretResolver};
-use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::vault::{EntropyEvent, HostVault, HostVaultConfig, SecretEntryContext};
+use hermes_hub_backend::platform::secrets::{
+    models::SecretKind, resolver::SecretResolver, store::SecretReferenceStore,
+};
+use hermes_hub_backend::platform::storage::database::Database;
+use hermes_hub_backend::vault::{
+    HostVault,
+    models::{EntropyEvent, HostVaultConfig, SecretEntryContext},
+};
 
 use super::support::{
     LOCAL_API_TOKEN, json_body, json_request_with_token_and_actor, unlock_test_vault,

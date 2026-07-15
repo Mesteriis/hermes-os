@@ -1,8 +1,10 @@
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::communications::storage::models::{
+    CommunicationAttachmentDisposition, NewCommunicationAttachment, NewCommunicationBlob,
+};
 use crate::domains::communications::storage::port::{CommunicationAttachmentPort, LocalBlobPort};
-use crate::domains::communications::storage::{
-    AttachmentSafetyScanRequest, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
-    NewCommunicationAttachment, NewCommunicationBlob, scan_attachment_with_configured_clamav,
+use crate::domains::communications::storage::scanner::{
+    AttachmentSafetyScanRequest, AttachmentSafetyScanStatus, scan_attachment_with_configured_clamav,
 };
 use crate::platform::communications::rfc822::models::{
     ParsedEmailAttachment, ParsedEmailAttachmentDisposition,

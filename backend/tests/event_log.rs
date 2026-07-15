@@ -9,7 +9,7 @@ use hermes_events_postgres::consumers::EventConsumerStore;
 use hermes_events_postgres::cursors::ProjectionCursorStore;
 use hermes_events_postgres::store::EventStore;
 use hermes_hub_backend::platform::events::trace_context::TraceContext;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 #[test]
 fn new_event_envelope_rejects_empty_event_type() {

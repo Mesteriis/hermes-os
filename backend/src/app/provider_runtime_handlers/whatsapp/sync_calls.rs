@@ -2,7 +2,8 @@ use axum::Json;
 use axum::extract::State;
 use serde_json::json;
 
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::platform::events::bus::whatsapp_event_types;
 
 use super::{

@@ -7,7 +7,7 @@ use hermes_observations_postgres::review_links::{
     link_domain_entity_in_transaction, materialize_review_transition_link_in_transaction,
 };
 
-use super::models::DecisionReviewState;
+use super::models::states::DecisionReviewState;
 
 pub(crate) async fn link_decision_support_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,

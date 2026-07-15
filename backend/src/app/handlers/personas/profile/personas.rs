@@ -1,5 +1,13 @@
-use super::super::support::*;
-use super::models::{PersonaListResponse, PersonaReadModel, persona_read_model};
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use serde::Deserialize;
+
+use super::models::{PersonaListResponse, PersonaReadModel, persona_read_model_from_api};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::application::persona_owner_query::PostgresPersonaOwnerQuery;
+use hermes_personas_api::{PersonaReadPort, PersonaUpdateCommand, PersonaWritePort};
+use hermes_personas_postgres::PersonaPostgresReadQuery;
 #[derive(Deserialize)]
 pub(crate) struct PersonaListQuery {
     limit: Option<i64>,
@@ -25,14 +33,13 @@ pub(crate) async fn get_personas(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store =
-        crate::app::api_support::stores::domain_stores::app_store::<PersonaProjectionStore>(pool);
+    let store = PersonaPostgresReadQuery::new(pool);
     let items = store
-        .list_personas(query.limit.unwrap_or(50))
+        .list(query.limit.unwrap_or(50))
         .await?
         .into_iter()
-        .map(persona_read_model)
-        .collect();
+        .map(persona_read_model_from_api)
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(Json(PersonaListResponse { items }))
 }
 
@@ -45,10 +52,9 @@ pub(crate) async fn get_persona(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store =
-        crate::app::api_support::stores::domain_stores::app_store::<PersonaProjectionStore>(pool);
-    match store.get_persona(&persona_id).await? {
-        Some(persona) => Ok(Json(persona_read_model(persona))),
+    let store = PersonaPostgresReadQuery::new(pool);
+    match store.get(&persona_id).await? {
+        Some(persona) => Ok(Json(persona_read_model_from_api(persona)?)),
         None => Err(ApiError::PersonaIdentityNotFound),
     }
 }
@@ -73,8 +79,13 @@ pub(crate) async fn put_persona(
         .identity
         .as_ref()
         .and_then(|identity| identity.display_name.as_deref());
-    let persona = crate::domains::personas::command_service::PersonaCommandService::new(pool)
-        .update_persona_manual(&persona_id, display_name, req.is_self == Some(true))
+    let store = PostgresPersonaOwnerQuery::new(pool);
+    let persona = store
+        .update(PersonaUpdateCommand {
+            persona_id,
+            display_name: display_name.map(ToOwned::to_owned),
+            assign_owner: req.is_self == Some(true),
+        })
         .await?;
-    Ok(Json(persona_read_model(persona)))
+    Ok(Json(persona_read_model_from_api(persona)?))
 }

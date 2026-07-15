@@ -1,17 +1,22 @@
-use crate::domains::communications::messages::{
-    MessageProjectionError, MessageProjectionStore, ProjectedMessage,
-    project_parsed_raw_email_message,
+use crate::domains::communications::messages::errors::MessageProjectionError;
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::communications::messages::projection::project_parsed_raw_email_message;
+use crate::domains::communications::messages::store::MessageProjectionStore;
+use crate::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use crate::domains::communications::storage::errors::{
+    AttachmentSafetyScanError, CommunicationStorageError,
 };
-use crate::domains::communications::storage::{
-    AttachmentSafetyScanError, AttachmentSafetyScanRequest, AttachmentSafetyScanner,
-    CommunicationAttachmentDisposition, CommunicationStorageError, CommunicationStorageStore,
-    HeuristicAttachmentSafetyScanner, LocalCommunicationBlobStore, NewCommunicationAttachment,
-    NewCommunicationBlob,
+use crate::domains::communications::storage::models::{
+    CommunicationAttachmentDisposition, NewCommunicationAttachment, NewCommunicationBlob,
 };
+use crate::domains::communications::storage::scanner::{
+    AttachmentSafetyScanRequest, AttachmentSafetyScanner, HeuristicAttachmentSafetyScanner,
+};
+use crate::domains::communications::storage::store::CommunicationStorageStore;
+use crate::platform::communications::mbox::{MboxParseError, split_mbox_messages};
 use crate::platform::communications::rfc822::errors::EmailRfc822ParseError;
 use crate::platform::communications::rfc822::models::ParsedEmailAttachmentDisposition;
 use crate::platform::communications::rfc822::parser::parse_rfc822_message;
-use crate::platform::communications::{MboxParseError, split_mbox_messages};
 use hermes_communications_api::evidence::NewRawCommunicationRecord;
 use hermes_communications_api::evidence::StoredRawCommunicationRecord;
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;

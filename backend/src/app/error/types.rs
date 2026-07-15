@@ -1,35 +1,33 @@
 use hermes_events_api::EventEnvelopeError;
 use std::io;
 
-use crate::ai::control_center::AiControlCenterError;
-use crate::ai::core::AiError;
-use crate::domains::calendar::events::CalendarError;
-use crate::domains::communications::messages::MessageProjectionError;
-use crate::domains::communications::storage::CommunicationStorageError;
-use crate::domains::decisions::DecisionStoreError;
-use crate::domains::documents::processing::DocumentProcessingError;
-use crate::domains::obligations::ObligationStoreError;
-use crate::domains::organizations::api::OrganizationError;
-use crate::domains::personas::api::PersonaProjectionError;
-use crate::domains::personas::identity::PersonaIdentityError;
-use crate::domains::projects::core::ProjectStoreError;
-use crate::domains::projects::link_reviews::ProjectLinkReviewError;
+use crate::ai::control_center::errors::AiControlCenterError;
+use crate::ai::core::errors::AiError;
+use crate::domains::communications::messages::errors::MessageProjectionError;
+use crate::domains::communications::storage::errors::CommunicationStorageError;
+use crate::domains::decisions::errors::DecisionStoreError;
+use crate::domains::documents::processing::errors::DocumentProcessingError;
+use crate::domains::obligations::errors::ObligationStoreError;
+use crate::domains::personas::api::errors::PersonaProjectionError;
+use crate::domains::personas::identity::errors::PersonaIdentityError;
+use crate::domains::projects::core::errors::ProjectStoreError;
+use crate::domains::projects::link_reviews::errors::ProjectLinkReviewError;
 use crate::domains::relationships::errors::RelationshipStoreError;
-use crate::domains::review::ReviewInboxError;
+use crate::domains::review::errors::ReviewInboxError;
 use crate::domains::signal_hub::store::SignalHubError;
-use crate::domains::tasks::candidates::TaskCandidateError;
+use crate::domains::tasks::candidates::errors::TaskCandidateError;
 use crate::engines::automation::errors::AutomationError;
 use crate::engines::consistency::errors::ConsistencyError;
 use crate::integrations::mail::accounts::errors::EmailAccountSetupError;
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
 use crate::integrations::zoom::client::errors::ZoomError;
-use crate::platform::audit::ApiAuditError;
+use crate::platform::audit::errors::ApiAuditError;
 use crate::platform::calls::errors::CallError;
-use crate::platform::settings::SettingsError;
-use crate::platform::storage::StorageError;
-use crate::vault::HostVaultError;
+use crate::platform::settings::errors::SettingsError;
+use crate::platform::storage::errors::StorageError;
+use crate::vault::errors::HostVaultError;
 use crate::workflows::review_promotion::ReviewPromotionError;
 use hermes_communications_postgres::errors::CommunicationIngestionError;
 use hermes_events_postgres::errors::EventStoreError;
@@ -40,7 +38,7 @@ pub enum ApiError {
     InvalidEnvelope(EventEnvelopeError),
     Audit(ApiAuditError),
     Store(EventStoreError),
-    Graph(crate::domains::graph::core::GraphStoreError),
+    Graph(crate::domains::graph::core::errors::GraphStoreError),
     InvalidGraphQuery(&'static str),
     InvalidPersonaQuery(&'static str),
     Projects(ProjectStoreError),
@@ -97,7 +95,6 @@ pub enum ApiError {
     CommunicationIngestion(CommunicationIngestionError),
     CommunicationStorage(CommunicationStorageError),
     InvalidCommunicationQuery(&'static str),
-    EmailAccountDeleteConflict,
     ProviderWriteConfirmationRequired,
     CommunicationMessageNotFound,
     SecretVaultNotConfigured,

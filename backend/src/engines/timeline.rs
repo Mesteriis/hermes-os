@@ -1,8 +1,8 @@
 use hermes_events_api::StoredEventEnvelope;
 mod analysis;
 mod cross_domain;
-mod errors;
-mod models;
+pub mod errors;
+pub mod models;
 mod policy;
 mod projection;
 mod replay;
@@ -14,10 +14,10 @@ use chrono::{DateTime, Utc};
 use hermes_events_postgres::cursors::ProjectionCursorStore;
 use hermes_events_postgres::store::EventStore;
 
-pub use errors::{TimelineEngineError, TimelineProjectionError};
-pub use models::{
-    TimelineChange, TimelineChangeDiff, TimelineEntry, TimelineEventDraft, TimelineGap,
-    TimelinePeriodSummary, TimelineProjectionRun, TimelineRecencySignal, TimelineReplay,
+use self::errors::{TimelineEngineError, TimelineProjectionError};
+use self::models::{
+    TimelineChangeDiff, TimelineEntry, TimelineEventDraft, TimelineGap, TimelinePeriodSummary,
+    TimelineProjectionRun, TimelineRecencySignal, TimelineReplay,
 };
 
 pub struct TimelineEngine;

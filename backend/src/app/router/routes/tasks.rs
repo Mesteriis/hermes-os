@@ -1,4 +1,9 @@
-use super::support::*;
+use crate::app::handlers::tasks::{
+    candidates::*, core_records::*, health::*, intelligence::*, items::*, providers::*, rules::*,
+};
+use crate::app::state::AppState;
+use axum::Router;
+use axum::routing::{delete, get, post, put};
 
 pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
     router

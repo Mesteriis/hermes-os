@@ -8,7 +8,7 @@ use reqwest::Client;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use crate::platform::secrets::{SecretKind, SecretReference, SecretStoreKind};
+use crate::platform::secrets::models::{SecretKind, SecretReference, SecretStoreKind};
 use hermes_communications_api::accounts::CommunicationProviderKind;
 
 pub(super) fn http_client() -> Client {

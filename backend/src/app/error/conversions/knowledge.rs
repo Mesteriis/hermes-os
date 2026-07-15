@@ -4,21 +4,23 @@ use crate::application::review_transitions::{
     DecisionReviewApplicationError, ObligationReviewApplicationError,
     RelationshipReviewApplicationError, TaskCandidateReviewApplicationError,
 };
-use crate::domains::decisions::{DecisionCommandServiceError, DecisionStoreError};
-use crate::domains::obligations::{ObligationCommandServiceError, ObligationStoreError};
-use crate::domains::projects::core::ProjectStoreError;
-use crate::domains::projects::link_reviews::{
-    ProjectLinkReviewError, ProjectLinkReviewServiceError,
-};
+use crate::domains::decisions::errors::DecisionStoreError;
+use crate::domains::decisions::service::DecisionCommandServiceError;
+use crate::domains::obligations::errors::ObligationStoreError;
+use crate::domains::obligations::service::ObligationCommandServiceError;
+use crate::domains::projects::core::errors::ProjectStoreError;
+use crate::domains::projects::link_reviews::errors::ProjectLinkReviewError;
+use crate::domains::projects::link_reviews::service::ProjectLinkReviewServiceError;
 use crate::domains::relationships::errors::RelationshipStoreError;
-use crate::domains::review::{ReviewInboxError, ReviewInboxServiceError};
-use crate::domains::tasks::candidates::TaskCandidateError;
+use crate::domains::review::errors::ReviewInboxError;
+use crate::domains::review::service::ReviewInboxServiceError;
+use crate::domains::tasks::candidates::errors::TaskCandidateError;
 use crate::engines::consistency::errors::ConsistencyError;
 use crate::workflows::consistency_review::ContradictionReviewServiceError;
 use crate::workflows::review_promotion::ReviewPromotionError;
 
-impl From<crate::domains::graph::core::GraphStoreError> for ApiError {
-    fn from(error: crate::domains::graph::core::GraphStoreError) -> Self {
+impl From<crate::domains::graph::core::errors::GraphStoreError> for ApiError {
+    fn from(error: crate::domains::graph::core::errors::GraphStoreError) -> Self {
         Self::Graph(error)
     }
 }
@@ -29,8 +31,10 @@ impl From<RelationshipGraphCoordinatorError> for ApiError {
             RelationshipGraphCoordinatorError::Sqlx(inner) => {
                 Self::from(RelationshipStoreError::Sqlx(inner))
             }
-            RelationshipGraphCoordinatorError::Relationship(inner) => Self::from(inner),
-            RelationshipGraphCoordinatorError::Graph(inner) => Self::from(inner),
+            RelationshipGraphCoordinatorError::Graph(inner) => Self::from(inner.into_inner()),
+            RelationshipGraphCoordinatorError::RelationshipWrite(message) => {
+                Self::FailedPrecondition(message)
+            }
         }
     }
 }
@@ -311,8 +315,8 @@ impl From<ReviewPromotionError> for ApiError {
             ReviewPromotionError::DocumentImport(inner) => {
                 Self::ReviewPromotion(ReviewPromotionError::DocumentImport(inner))
             }
-            ReviewPromotionError::Decision(inner) => Self::from(inner),
-            ReviewPromotionError::Obligation(inner) => Self::from(inner),
+            ReviewPromotionError::Decision(inner) => Self::from(inner.into_inner()),
+            ReviewPromotionError::Obligation(inner) => Self::from(inner.into_inner()),
             ReviewPromotionError::RelationshipGraph(inner) => Self::from(inner),
             ReviewPromotionError::PersonaIdentity(inner) => Self::from(inner),
             ReviewPromotionError::PersonaProjection(_) => {

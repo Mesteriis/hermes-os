@@ -1,4 +1,4 @@
-use hermes_events_api::{EventEnvelopeError, NewEventEnvelope};
+use hermes_events_api::NewEventEnvelope;
 use std::path::Path;
 
 use serde_json::json;

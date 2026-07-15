@@ -1,8 +1,8 @@
 use hermes_communications_postgres::errors::CommunicationIngestionError;
 use hermes_hub_backend::integrations::mail::gmail::client::errors::EmailProviderNetworkError;
-use hermes_hub_backend::platform::config::ConfigError;
-use hermes_hub_backend::platform::secrets::SecretResolutionError;
-use hermes_hub_backend::platform::storage::StorageError;
+use hermes_hub_backend::platform::config::errors::ConfigError;
+use hermes_hub_backend::platform::secrets::errors::SecretResolutionError;
+use hermes_hub_backend::platform::storage::errors::StorageError;
 use hermes_hub_backend::workflows::email_sync_pipeline::errors::EmailSyncPipelineError;
 use thiserror::Error;
 

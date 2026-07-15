@@ -1,8 +1,9 @@
 use sqlx::{Postgres, Transaction};
 
-use crate::app::ApiError;
-use crate::domains::communications::messages::ProjectedMessage;
-use crate::domains::documents::core::{DocumentImportStore, NewDocumentImport};
+use crate::app::error::types::ApiError;
+use crate::domains::communications::messages::models::ProjectedMessage;
+use crate::domains::documents::core::models::NewDocumentImport;
+use crate::domains::documents::core::store::DocumentImportStore;
 
 use super::super::models::{
     WorkflowActionRequest, WorkflowActionResponse, WorkflowActionStatus, WorkflowActionTarget,

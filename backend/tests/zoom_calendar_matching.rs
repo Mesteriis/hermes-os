@@ -7,15 +7,16 @@ use hermes_communications_postgres::provider_store::{
 };
 use hermes_events_api::EventLogQuery;
 use hermes_events_postgres::store::EventStore;
-use hermes_hub_backend::domains::calendar::core::EventRelationStore;
-use hermes_hub_backend::domains::calendar::events::{CalendarEventStore, NewCalendarEvent};
+use hermes_hub_backend::domains::calendar::core::relations::EventRelationStore;
+use hermes_hub_backend::domains::calendar::events::event_store::CalendarEventStore;
+use hermes_hub_backend::domains::calendar::events::models::NewCalendarEvent;
 use hermes_hub_backend::integrations::zoom::client::{
     models::{ZoomAccountSetupRequest, ZoomMeetingObservationRequest},
     store::ZoomStore,
 };
-use hermes_hub_backend::platform::calls::CallIntelligenceStore;
+use hermes_hub_backend::platform::calls::store::CallIntelligenceStore;
 use hermes_hub_backend::platform::events::bus::InMemoryEventBus;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::zoom_calendar_matching::{
     ZOOM_CALENDAR_RELATION_TYPE, project_zoom_calendar_matching,
 };
@@ -52,7 +53,7 @@ async fn zoom_meeting_events_match_calendar_events_into_call_relations() {
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
         Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
         Arc::new(
-            hermes_hub_backend::domains::communications::storage::CommunicationStorageStore::new(
+            hermes_hub_backend::domains::communications::storage::store::CommunicationStorageStore::new(
                 pool.clone(),
             ),
         ),

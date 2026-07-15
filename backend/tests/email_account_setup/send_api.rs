@@ -6,10 +6,10 @@ use tempfile::tempdir;
 use tower::ServiceExt;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::app::router::build_router_with_database;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 use super::support::{
     LOCAL_API_TOKEN, MockSmtpServer, json_body, json_request_with_token_and_actor,

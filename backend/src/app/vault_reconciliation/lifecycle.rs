@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
-use crate::app::AppState;
-use crate::vault::VaultMode;
+use crate::app::state::AppState;
+use crate::vault::models::VaultMode;
 use hermes_desktop_runtime::{
-    RuntimeExitPolicy, RuntimeTaskClass, RuntimeTaskError, RuntimeTaskFactory, RuntimeTaskFuture,
-    RuntimeTaskSpec,
+    RuntimeExitPolicy, RuntimeTaskClass, RuntimeTaskFactory, RuntimeTaskFuture, RuntimeTaskSpec,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -47,7 +46,7 @@ pub(crate) fn host_vault_manifest_reconciliation_task(state: &AppState) -> Optio
     ))
 }
 
-pub(crate) fn spawn_host_vault_manifest_reconciliation(state: &AppState) {
+pub(crate) async fn reconcile_host_vault_manifest_now(state: &AppState) {
     if state.config.database_url().is_none() {
         return;
     }
@@ -62,14 +61,7 @@ pub(crate) fn spawn_host_vault_manifest_reconciliation(state: &AppState) {
         return;
     };
     let vault = state.vault.clone();
-    let Ok(handle) = tokio::runtime::Handle::try_current() else {
-        tracing::warn!("host vault reconciliation skipped: no Tokio runtime");
-        return;
-    };
-
-    handle.spawn(async move {
-        report_reconciliation_result(reconcile_host_vault_manifest(pool, vault).await);
-    });
+    report_reconciliation_result(reconcile_host_vault_manifest(pool, vault).await);
 }
 
 fn report_reconciliation_result(

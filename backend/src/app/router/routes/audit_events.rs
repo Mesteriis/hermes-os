@@ -1,4 +1,7 @@
-use super::support::*;
+use crate::app::handlers::events::handlers::*;
+use crate::app::state::AppState;
+use axum::Router;
+use axum::routing::get;
 
 pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
     router

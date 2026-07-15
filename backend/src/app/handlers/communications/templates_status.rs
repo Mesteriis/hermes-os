@@ -1,5 +1,5 @@
 use super::*;
-use crate::app::vault_reconciliation::lifecycle::spawn_host_vault_manifest_reconciliation;
+use crate::app::vault_reconciliation::lifecycle::reconcile_host_vault_manifest_now;
 use crate::domains::communications::templates::{
     CommunicationMergePreviewRow, CommunicationTemplateStore, NewCommunicationTemplate,
 };
@@ -189,12 +189,6 @@ pub(crate) async fn post_v1_rich_template_mail_merge_preview(
     })?))
 }
 
-#[derive(Deserialize)]
-pub(crate) struct PersonaListQuery {
-    pub(super) favorites_only: Option<bool>,
-    pub(super) limit: Option<i64>,
-}
-
 pub(crate) async fn get_v1_status(
     State(state): State<AppState>,
 ) -> Result<Json<V1StatusResponse>, ApiError> {
@@ -217,7 +211,7 @@ pub(crate) async fn get_v1_status(
 
 pub(crate) async fn get_v1_vault_status(
     State(state): State<AppState>,
-) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
+) -> Result<Json<crate::vault::models::VaultStatus>, ApiError> {
     Ok(Json(state.vault.status()?))
 }
 
@@ -229,29 +223,29 @@ pub(crate) struct VaultEntropyBatchRequest {
 pub(crate) async fn post_v1_vault_collect_entropy(
     State(state): State<AppState>,
     Json(request): Json<VaultEntropyBatchRequest>,
-) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
+) -> Result<Json<crate::vault::models::VaultStatus>, ApiError> {
     Ok(Json(state.vault.collect_entropy(request.events)?))
 }
 
 pub(crate) async fn post_v1_vault_create(
     State(state): State<AppState>,
-) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
+) -> Result<Json<crate::vault::models::VaultStatus>, ApiError> {
     let status = state.vault.create()?;
-    spawn_host_vault_manifest_reconciliation(&state);
+    reconcile_host_vault_manifest_now(&state).await;
     Ok(Json(status))
 }
 
 pub(crate) async fn post_v1_vault_unlock(
     State(state): State<AppState>,
-) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
+) -> Result<Json<crate::vault::models::VaultStatus>, ApiError> {
     let status = state.vault.unlock()?;
-    spawn_host_vault_manifest_reconciliation(&state);
+    reconcile_host_vault_manifest_now(&state).await;
     Ok(Json(status))
 }
 
 pub(crate) async fn post_v1_vault_recovery_export(
     State(state): State<AppState>,
-) -> Result<Json<crate::vault::RecoveryExportResponse>, ApiError> {
+) -> Result<Json<crate::vault::models::RecoveryExportResponse>, ApiError> {
     Ok(Json(state.vault.export_recovery()?))
 }
 
@@ -263,8 +257,8 @@ pub(crate) struct VaultRecoveryImportRequest {
 pub(crate) async fn post_v1_vault_recovery_import(
     State(state): State<AppState>,
     Json(request): Json<VaultRecoveryImportRequest>,
-) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
+) -> Result<Json<crate::vault::models::VaultStatus>, ApiError> {
     let status = state.vault.import_recovery(&request.recovery_phrase)?;
-    spawn_host_vault_manifest_reconciliation(&state);
+    reconcile_host_vault_manifest_now(&state).await;
     Ok(Json(status))
 }

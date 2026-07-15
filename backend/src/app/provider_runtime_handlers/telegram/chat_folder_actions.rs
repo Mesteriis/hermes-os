@@ -7,22 +7,11 @@ use super::chat_actions::{
     record_chat_lifecycle_command_with_payload,
 };
 use super::helpers::{AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed};
-use crate::app::api_support::{
-    automation_calls::*,
-    communications::*,
-    ensure_fixture_routes_enabled,
-    messaging_integrations::*,
-    platform_dtos::*,
-    query_parsing::{communication::*, documents::*, graph::*, personas::*, projects::*, tasks::*},
-    review_commands::*,
-    review_lists::*,
-    stores::{ai_runtime::*, domain_stores::*, integration_stores::*, settings_vault::*},
-    telegram_capabilities::*,
-    whatsapp_capabilities::*,
-};
-use crate::app::{ApiError, AppState};
-use crate::integrations::telegram::client::TelegramError;
-use crate::platform::audit::NewApiAuditRecord;
+use crate::app::api_support::stores::{domain_stores::*, integration_stores::*};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::platform::audit::models::NewApiAuditRecord;
 
 #[derive(serde::Deserialize)]
 pub(crate) struct TelegramChatFolderReassignRequest {

@@ -11,23 +11,21 @@ use hermes_events_api::NewEventEnvelope;
 use hermes_events_postgres::consumers::EventConsumerConfig;
 use hermes_events_postgres::consumers::EventConsumerRunner;
 use hermes_events_postgres::store::EventStore;
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
-};
-use hermes_hub_backend::domains::decisions::{
-    DecisionEntityKind, DecisionReviewState, DecisionStore,
-};
-use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};
-use hermes_hub_backend::domains::projects::link_reviews::{
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
+use hermes_hub_backend::domains::projects::core::models::NewProject;
+use hermes_hub_backend::domains::projects::core::store::ProjectStore;
+use hermes_hub_backend::domains::projects::link_reviews::models::{
     ProjectLinkReviewCommand, ProjectLinkReviewCommandResult, ProjectLinkReviewState,
-    ProjectLinkReviewStore, ProjectLinkTargetKind,
+    ProjectLinkTargetKind,
 };
+use hermes_hub_backend::domains::projects::link_reviews::store::ProjectLinkReviewStore;
 use hermes_hub_backend::domains::relationships::{
     models::{RelationshipEntityKind, RelationshipReviewState},
     store::RelationshipStore,
 };
 
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_hub_backend::workflows::project_link_review_effects::{
     PROJECT_LINK_REVIEW_EFFECTS_CONSUMER, project_link_review_effect_event,
 };
@@ -688,3 +686,6 @@ fn unique_suffix() -> u128 {
         .expect("system clock after unix epoch")
         .as_nanos()
 }
+use hermes_hub_backend::domains::decisions::models::entity_kind::DecisionEntityKind;
+use hermes_hub_backend::domains::decisions::models::states::DecisionReviewState;
+use hermes_hub_backend::domains::decisions::store::DecisionStore;

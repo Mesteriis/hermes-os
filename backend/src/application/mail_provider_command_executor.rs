@@ -1,6 +1,4 @@
-use hermes_communications_api::accounts::{
-    CommunicationProviderKind, NewProviderAccount, ProviderAccount,
-};
+use hermes_communications_api::accounts::{CommunicationProviderKind, ProviderAccount};
 use hermes_communications_api::commands::{
     CommunicationProviderCommand, ProviderCommandQueuePort, ProviderCommandQueuePortError,
 };
@@ -11,15 +9,18 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::messages::{MessageProjectionError, MessageProjectionStore};
+use crate::domains::communications::messages::errors::MessageProjectionError;
+use crate::domains::communications::messages::store::MessageProjectionStore;
 use crate::domains::communications::provider_resources::{
-    MailProviderResourceError, MailProviderResourceKind, MailProviderResourceStore,
-    MailProviderSemanticRole,
+    MailProviderResourceError, MailProviderResourceStore,
 };
 use crate::integrations::mail::read_state::{
     EmailProviderMessageMutation, EmailReadStateError, LiveEmailReadStateService,
 };
 use crate::vault::HostVault;
+use hermes_communications_api::mail_resources::{
+    MailProviderResourceKind, MailProviderSemanticRole,
+};
 use hermes_communications_postgres::errors::CommunicationIngestionError;
 use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
 use hermes_communications_postgres::provider_store::{
@@ -146,7 +147,7 @@ where
         error: &str,
     ) -> Result<(), ProviderCommandQueuePortError> {
         self.command_queue
-            .mark_terminal_failed(
+            .mark_terminal_failed_at_epoch(
                 &command.command_id,
                 "mail",
                 Utc::now(),
@@ -156,6 +157,7 @@ where
                     "command_kind": command.command_kind,
                     "retryable": false,
                 }),
+                command.lease_epoch,
             )
             .await?;
         Ok(())
@@ -175,22 +177,24 @@ where
         });
         let updated = if retryable {
             self.command_queue
-                .mark_failed(
+                .mark_failed_at_epoch(
                     &command.command_id,
                     "mail",
                     Utc::now(),
                     &error.to_string(),
                     result_payload,
+                    command.lease_epoch,
                 )
                 .await?
         } else {
             self.command_queue
-                .mark_terminal_failed(
+                .mark_terminal_failed_at_epoch(
                     &command.command_id,
                     "mail",
                     Utc::now(),
                     &error.to_string(),
                     result_payload,
+                    command.lease_epoch,
                 )
                 .await?
         };
@@ -379,8 +383,7 @@ mod tests {
         MailProviderCommandWorker, mutation_for_command, resolve_provider_command_payload,
     };
     use crate::domains::communications::provider_resources::{
-        MailProviderResourceKind, MailProviderResourceStore, MailProviderSemanticRole,
-        NewMailProviderResource,
+        MailProviderResourceStore, NewMailProviderResource,
     };
     use crate::integrations::mail::read_state::{
         EmailProviderMessageMutation, EmailReadStateError,
@@ -389,10 +392,14 @@ mod tests {
         CommunicationProviderKind, NewProviderAccount, ProviderAccount,
     };
     use hermes_communications_api::commands::NewCommunicationProviderCommand;
+    use hermes_communications_api::mail_resources::{
+        MailProviderResourceKind, MailProviderSemanticRole,
+    };
     use hermes_communications_postgres::provider_commands::CommunicationProviderCommandStore;
     use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 
-    use crate::vault::{HostVault, HostVaultConfig};
+    use crate::vault::HostVault;
+    use crate::vault::models::HostVaultConfig;
 
     fn provider_account(
         provider_kind: CommunicationProviderKind,

@@ -1,4 +1,5 @@
-use super::models::{NewObligation, ObligationEntityKind, ObligationEvidenceSourceKind};
+use super::models::entity_kind::ObligationEntityKind;
+use super::models::obligation::NewObligation;
 
 pub fn obligation_id(obligation: &NewObligation) -> String {
     let beneficiary_kind = obligation
@@ -20,22 +21,6 @@ pub fn obligation_id(obligation: &NewObligation) -> String {
         beneficiary_id,
         statement.len(),
         statement
-    )
-}
-
-pub fn evidence_id(
-    obligation_id: &str,
-    source_kind: ObligationEvidenceSourceKind,
-    source_id: &str,
-) -> String {
-    format!(
-        "obligation:evidence:v1:{}:{}:{}:{}:{}:{}",
-        obligation_id.len(),
-        obligation_id,
-        source_kind.as_str().len(),
-        source_kind.as_str(),
-        source_id.len(),
-        source_id
     )
 }
 

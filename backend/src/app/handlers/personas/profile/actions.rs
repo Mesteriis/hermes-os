@@ -1,4 +1,10 @@
-use super::super::support::*;
+use axum::Json;
+use axum::extract::{Path, State};
+use serde::Deserialize;
+use serde_json::{Value, json};
+
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 
 pub(crate) async fn post_persona_fingerprint(
     State(state): State<AppState>,
@@ -10,7 +16,7 @@ pub(crate) async fn post_persona_fingerprint(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let messages = crate::app::api_support::stores::domain_stores::app_store::<
-        crate::domains::communications::messages::MessageProjectionStore,
+        crate::domains::communications::messages::store::MessageProjectionStore,
     >(pool.clone())
     .recent_messages(50)
     .await?;
@@ -63,7 +69,7 @@ pub(crate) async fn put_persona_address_book_membership(
     State(state): State<AppState>,
     Path(persona_id): Path<String>,
     Json(req): Json<PersonaAddressBookMembershipRequest>,
-) -> Result<Json<crate::domains::personas::api::Persona>, ApiError> {
+) -> Result<Json<crate::domains::personas::api::models::Persona>, ApiError> {
     let pool = state
         .database
         .pool()

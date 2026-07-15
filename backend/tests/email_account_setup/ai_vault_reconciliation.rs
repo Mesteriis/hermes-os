@@ -4,11 +4,15 @@ use tokio::time::{Duration, sleep};
 use tower::ServiceExt;
 
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::ai::control_center::{AiControlCenterStore, AiProviderAccount};
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretResolver};
-use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::vault::{HostVault, HostVaultConfig};
+use hermes_hub_backend::ai::control_center::{
+    models::AiProviderAccount, store::AiControlCenterStore,
+};
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::platform::secrets::{
+    models::SecretKind, resolver::SecretResolver, store::SecretReferenceStore,
+};
+use hermes_hub_backend::platform::storage::database::Database;
+use hermes_hub_backend::vault::{HostVault, models::HostVaultConfig};
 
 use super::support::{
     LOCAL_API_TOKEN, json_body, json_request_with_token_and_actor, unlock_test_vault,

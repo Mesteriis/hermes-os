@@ -8,22 +8,28 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::ai::control_center::{
-    AiControlCenterError, AiControlCenterStore, AiHubUsageStatsResponse,
-    AiModelAvailabilityUpdateRequest, AiModelCatalogItem, AiModelDownloadRequest, AiModelRoute,
-    AiModelRouteUpdateRequest, AiPromptActivateRequest, AiPromptCreateRequest, AiPromptEvalRun,
-    AiPromptTemplate, AiPromptTestRequest, AiPromptVersion, AiPromptVersionCreateRequest,
-    AiProviderAccount, AiProviderAuthPendingGrant, AiProviderAuthStartRequest,
-    AiProviderAuthStartResponse, AiProviderAuthStatusResponse, AiProviderCommandKind,
-    AiProviderCommandResponse, AiProviderConsentRequest, AiProviderCreateRequest,
-    AiProviderPatchRequest, AiSettingsOverviewResponse, connect_pending_ai_provider_auth,
-    start_local_provider_auth, store_api_key_in_host_vault,
+use crate::ai::control_center::errors::AiControlCenterError;
+use crate::ai::control_center::models::{
+    AiHubUsageStatsResponse, AiModelAvailabilityUpdateRequest, AiModelCatalogItem,
+    AiModelDownloadRequest, AiModelRoute, AiModelRouteUpdateRequest, AiPromptActivateRequest,
+    AiPromptCreateRequest, AiPromptEvalRun, AiPromptTemplate, AiPromptTestRequest, AiPromptVersion,
+    AiPromptVersionCreateRequest, AiProviderAccount, AiProviderAuthPendingGrant,
+    AiProviderAuthStartRequest, AiProviderAuthStartResponse, AiProviderAuthStatusResponse,
+    AiProviderCommandKind, AiProviderCommandResponse, AiProviderConsentRequest,
+    AiProviderCreateRequest, AiProviderPatchRequest, AiSettingsOverviewResponse,
 };
+use crate::ai::control_center::provider_auth::{
+    connect_pending_ai_provider_auth, start_local_provider_auth,
+};
+use crate::ai::control_center::store::AiControlCenterStore;
+use crate::ai::control_center::vault::store_api_key_in_host_vault;
 use crate::app::api_support::formatting::html_escape;
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::integrations::ollama::client::OllamaClient;
 use crate::integrations::ollama::client::config::OllamaClientConfig;
-use crate::vault::{HostVaultError, VaultMode};
+use crate::vault::errors::HostVaultError;
+use crate::vault::models::VaultMode;
 use hermes_events_postgres::store::EventStore;
 
 use super::helpers::{ai_control_center_store, request_actor_id};

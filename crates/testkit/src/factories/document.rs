@@ -1,4 +1,6 @@
-use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
+use hermes_hub_backend::domains::documents::core::errors::DocumentImportError;
+use hermes_hub_backend::domains::documents::core::models::{ImportedDocument, NewDocumentImport};
+use hermes_hub_backend::domains::documents::core::store::DocumentImportStore;
 use sha2::{Digest, Sha256};
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
@@ -35,12 +37,7 @@ impl<'a> DocumentFactory<'a> {
         self
     }
 
-    pub async fn create(
-        self,
-    ) -> Result<
-        hermes_hub_backend::domains::documents::core::ImportedDocument,
-        hermes_hub_backend::domains::documents::core::DocumentImportError,
-    > {
+    pub async fn create(self) -> Result<ImportedDocument, DocumentImportError> {
         let store = DocumentImportStore::new(self.pool.clone());
         let fingerprint = format!("{:x}", Sha256::digest(self.text.as_bytes()));
         let new_doc = NewDocumentImport {

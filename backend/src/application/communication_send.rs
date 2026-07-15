@@ -5,22 +5,22 @@ use thiserror::Error;
 use crate::domains::communications::command_service::{
     CommunicationCommandService, CommunicationCommandServiceError, CommunicationOutboxSendCommand,
 };
-use crate::platform::audit::ApiAuditError;
-use crate::platform::audit::NewApiAuditRecord;
-use crate::platform::communications::OutgoingEmail;
+use crate::platform::audit::errors::ApiAuditError;
+use crate::platform::audit::models::NewApiAuditRecord;
+use hermes_communications_api::email::OutgoingEmail;
 use hermes_communications_postgres::errors::CommunicationIngestionError;
 use hermes_communications_postgres::provider_store::CommunicationProviderAccountStore;
 
 #[derive(Clone)]
 pub(crate) struct CommunicationSendDependencies {
     pool: sqlx::postgres::PgPool,
-    audit_log: crate::platform::audit::ApiAuditLog,
+    audit_log: crate::platform::audit::store::ApiAuditLog,
 }
 
 impl CommunicationSendDependencies {
     pub(crate) fn new(
         pool: sqlx::postgres::PgPool,
-        audit_log: crate::platform::audit::ApiAuditLog,
+        audit_log: crate::platform::audit::store::ApiAuditLog,
     ) -> Self {
         Self { pool, audit_log }
     }

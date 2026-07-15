@@ -2,9 +2,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{
-    CertificateError, CertificateProvider, CertificateStorageKind, CertificateType, TrustStatus,
-};
+use super::certificate_type::CertificateType;
+use super::errors::CertificateError;
+use super::provider::CertificateProvider;
+use super::storage_kind::CertificateStorageKind;
+use super::trust::TrustStatus;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CertificateRecord {

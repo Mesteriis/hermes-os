@@ -1,7 +1,7 @@
 use std::env;
 use std::path::PathBuf;
 
-use crate::vault::{default_dev_key_path, default_vault_home};
+use crate::vault::paths::{default_dev_key_path, default_vault_home};
 
 use super::super::ai::AiRuntimeProvider;
 use super::super::constants::{

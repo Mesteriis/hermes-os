@@ -1,9 +1,9 @@
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::telegram::tdjson;
-use crate::platform::config::AppConfig;
+use crate::platform::config::app_config::AppConfig;
 use hermes_communications_api::accounts::ProviderAccount;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -18,7 +18,7 @@ pub(in crate::integrations::telegram::runtime) fn spawn_tdlib_actor(
     session_encryption_key: Option<String>,
     runtime_event_tx: Option<UnboundedSender<TelegramRuntimeEvent>>,
 ) -> Result<Sender<TelegramRuntimeCommand>, TelegramError> {
-    if !tdjson::runtime_available(config.tdjson_path()) {
+    if !tdjson::client::runtime_available(config.tdjson_path()) {
         return Err(TelegramError::TdlibRuntimeUnavailable(
             "libtdjson is not available for Telegram live runtime".to_owned(),
         ));

@@ -1,4 +1,4 @@
-use crate::integrations::telegram::client::{
+use crate::integrations::telegram::client::models::qr_login::{
     TelegramQrLoginStartRequest, TelegramQrLoginStatus, TelegramQrLoginStatusResponse,
 };
 

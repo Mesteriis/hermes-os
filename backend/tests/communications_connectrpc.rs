@@ -7,17 +7,20 @@ use hermes_communications_postgres::store::CommunicationIngestionStore;
 use hermes_hub_backend::domains::communications::drafts::{
     CommunicationDraftStore, DraftStatus, NewCommunicationDraft,
 };
-use hermes_hub_backend::domains::communications::messages::{
-    MessageProjectionStore, project_raw_email_message,
-};
+use hermes_hub_backend::domains::communications::messages::projection::project_raw_email_message;
+use hermes_hub_backend::domains::communications::messages::store::MessageProjectionStore;
 use hermes_hub_backend::domains::communications::outbox::{
     CommunicationOutboxStatus, CommunicationOutboxStore, NewCommunicationOutboxItem,
 };
-use hermes_hub_backend::domains::communications::storage::{
-    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
-    CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachment,
+use hermes_hub_backend::domains::communications::storage::blob_store::LocalCommunicationBlobStore;
+use hermes_hub_backend::domains::communications::storage::models::{
+    CommunicationAttachmentDisposition, NewCommunicationAttachment,
     NewCommunicationAttachmentImport, NewCommunicationBlob,
 };
+use hermes_hub_backend::domains::communications::storage::scanner::{
+    AttachmentSafetyScanReport, AttachmentSafetyScanStatus,
+};
+use hermes_hub_backend::domains::communications::storage::store::CommunicationStorageStore;
 
 use hermes_backend_testkit::app::{TestApp, post_json};
 use hermes_backend_testkit::composition::router_for_context;

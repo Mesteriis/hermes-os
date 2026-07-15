@@ -7,15 +7,17 @@ use thiserror::Error;
 use crate::application::relationship_graph::{
     RelationshipGraphCoordinator, RelationshipGraphCoordinatorError,
 };
-use crate::domains::obligations::{
-    NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationReviewPort,
-    ObligationReviewState, ObligationStoreError,
-};
-use crate::domains::personas::core::{
-    PERSONA_ROLE_ASSIGNED_EVENT_TYPE, PERSONA_ROLE_REMOVED_EVENT_TYPE, persona_role_knowledge_id,
+use crate::domains::obligations::models::entity_kind::ObligationEntityKind;
+use crate::domains::obligations::models::evidence::NewObligationEvidence;
+use crate::domains::obligations::models::obligation::NewObligation;
+use crate::domains::obligations::models::states::ObligationReviewState;
+use crate::domains::obligations::ports::{ObligationReviewPort, ObligationReviewPortError};
+use crate::domains::personas::core::roles::persona_role_knowledge_id;
+use crate::domains::personas::core::roles::{
+    PERSONA_ROLE_ASSIGNED_EVENT_TYPE, PERSONA_ROLE_REMOVED_EVENT_TYPE,
 };
 use crate::domains::personas::enrichment::PERSONA_TRUST_SCORE_CHANGED_EVENT_TYPE;
-use crate::domains::personas::trust::PERSONA_PROMISE_CREATED_EVENT_TYPE;
+use crate::domains::personas::trust::promises::PERSONA_PROMISE_CREATED_EVENT_TYPE;
 use crate::domains::relationships::{
     ids::relationship_id,
     models::{
@@ -23,7 +25,9 @@ use crate::domains::relationships::{
     },
 };
 use crate::engines::trust::{engine::TrustEngine, errors::TrustEngineError};
-use crate::workflows::review_mirror::{ReviewMirrorError, ensure_relationship_review_item};
+use crate::workflows::review_mirror::{
+    ReviewMirrorError, relationship::ensure_relationship_review_item,
+};
 use hermes_events_postgres::errors::EventStoreError;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::errors::ObservationStoreError;
@@ -50,7 +54,7 @@ pub enum PersonaDerivedEvidenceWorkflowError {
     RelationshipGraph(#[from] RelationshipGraphCoordinatorError),
 
     #[error(transparent)]
-    Obligation(#[from] ObligationStoreError),
+    Obligation(#[from] ObligationReviewPortError),
 
     #[error(transparent)]
     ReviewMirror(#[from] ReviewMirrorError),
@@ -257,15 +261,17 @@ async fn materialize_trust_score(
         .await?;
     let _ = ensure_relationship_review_item(
         pool,
-        &relationship.relationship_id,
-        &relationship.relationship_type,
-        relationship.source_entity_kind.as_str(),
-        &relationship.source_entity_id,
-        relationship.target_entity_kind.as_str(),
-        &relationship.target_entity_id,
-        relationship.confidence,
-        Some("trust_score enrichment suggests a persona trust relationship"),
-        &observation.observation_id,
+        crate::workflows::review_mirror::relationship::RelationshipReviewInput {
+            relationship_id: &relationship.relationship_id,
+            relationship_type: &relationship.relationship_type,
+            source_entity_kind: relationship.source_entity_kind.as_str(),
+            source_entity_id: &relationship.source_entity_id,
+            target_entity_kind: relationship.target_entity_kind.as_str(),
+            target_entity_id: &relationship.target_entity_id,
+            confidence: relationship.confidence,
+            summary: Some("trust_score enrichment suggests a persona trust relationship"),
+            observation_id: &observation.observation_id,
+        },
     )
     .await?;
 

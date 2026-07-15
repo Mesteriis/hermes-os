@@ -1,5 +1,5 @@
 use hermes_hub_backend::integrations::mail::accounts::models::GmailOAuthSetupRequest;
-use hermes_hub_backend::platform::config::{AppConfig, GoogleOAuthClientType};
+use hermes_hub_backend::platform::config::{app_config::AppConfig, google::GoogleOAuthClientType};
 
 #[test]
 fn gmail_oauth_setup_defaults_to_mail_send_calendar_and_contacts_scopes() {

@@ -2,17 +2,20 @@ use std::sync::mpsc::Sender;
 
 use chrono::{DateTime, Utc};
 
-use crate::integrations::telegram::client::{TelegramError, TelegramManualSendRequest};
-use crate::integrations::telegram::tdjson::{
-    TelegramTdlibChatFolderSnapshot, TelegramTdlibChatMarkedAsUnreadSnapshot,
-    TelegramTdlibChatMemberSnapshot, TelegramTdlibChatNotificationSettingsSnapshot,
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::messages::TelegramManualSendRequest;
+use crate::integrations::telegram::tdjson::parsing::events::{
+    TelegramTdlibChatMarkedAsUnreadSnapshot, TelegramTdlibChatNotificationSettingsSnapshot,
     TelegramTdlibChatPositionSnapshot, TelegramTdlibChatRemovedFromListSnapshot,
-    TelegramTdlibChatSnapshot, TelegramTdlibChatUnreadSnapshot, TelegramTdlibFileSnapshot,
-    TelegramTdlibMessageContentSnapshot, TelegramTdlibMessageDeleteSnapshot,
-    TelegramTdlibMessageEditedSnapshot, TelegramTdlibMessageInteractionInfoSnapshot,
-    TelegramTdlibMessagePinnedSnapshot, TelegramTdlibMessageSendFailedSnapshot,
-    TelegramTdlibMessageSendSucceededSnapshot, TelegramTdlibMessageSnapshot,
-    TelegramTdlibTopicSnapshot, TelegramTdlibTopicUpdateSnapshot, TelegramTdlibTypingSnapshot,
+    TelegramTdlibChatUnreadSnapshot, TelegramTdlibTopicUpdateSnapshot, TelegramTdlibTypingSnapshot,
+};
+use crate::integrations::telegram::tdjson::snapshots::{
+    TelegramTdlibChatFolderSnapshot, TelegramTdlibChatMemberSnapshot, TelegramTdlibChatSnapshot,
+    TelegramTdlibFileSnapshot, TelegramTdlibMessageContentSnapshot,
+    TelegramTdlibMessageDeleteSnapshot, TelegramTdlibMessageEditedSnapshot,
+    TelegramTdlibMessageInteractionInfoSnapshot, TelegramTdlibMessagePinnedSnapshot,
+    TelegramTdlibMessageSendFailedSnapshot, TelegramTdlibMessageSendSucceededSnapshot,
+    TelegramTdlibMessageSnapshot, TelegramTdlibTopicSnapshot,
 };
 
 use super::models::{TelegramHistorySyncMode, TelegramMediaSendRequest};

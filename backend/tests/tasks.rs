@@ -3,31 +3,33 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{Duration, Utc};
 use hermes_hub_backend::application::task_relationship::TaskRelationshipApplicationService;
-use hermes_hub_backend::domains::decisions::{
-    DecisionEvidenceSourceKind, DecisionReviewState, DecisionStore, NewDecision,
-    NewDecisionEvidence,
+use hermes_hub_backend::domains::decisions::models::{
+    decision::NewDecision, evidence::NewDecisionEvidence, source_kind::DecisionEvidenceSourceKind,
+    states::DecisionReviewState,
 };
-use hermes_hub_backend::domains::obligations::{
-    NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationEvidenceSourceKind,
-    ObligationReviewState, ObligationStore,
+use hermes_hub_backend::domains::obligations::models::{
+    entity_kind::ObligationEntityKind, evidence::NewObligationEvidence, obligation::NewObligation,
+    source_kind::ObligationEvidenceSourceKind, states::ObligationReviewState,
 };
 use hermes_hub_backend::domains::relationships::{
     models::{RelationshipEntityKind, RelationshipEvidenceSourceKind, RelationshipReviewState},
     store::RelationshipStore,
 };
 use hermes_hub_backend::domains::review::{
-    NewReviewItem, NewReviewItemEvidence, ReviewInboxStore, ReviewItemKind,
+    models::{NewReviewItem, NewReviewItemEvidence, ReviewItemKind},
+    store::ReviewInboxStore,
 };
 use hermes_hub_backend::domains::tasks::api::{NewTask, TaskListQuery, TaskStore, TaskUpdate};
 use hermes_hub_backend::domains::tasks::brain::TaskBrainService;
 use hermes_hub_backend::domains::tasks::core::{
-    TaskChecklistStore, TaskContextPackStore, TaskEvidenceStore, TaskProviderStore,
-    TaskRelationStore, TaskSubtaskStore,
+    checklists::TaskChecklistStore, context_packs::TaskContextPackStore,
+    evidence::TaskEvidenceStore, provider_store::TaskProviderStore, relations::TaskRelationStore,
+    subtasks::TaskSubtaskStore,
 };
 use hermes_hub_backend::domains::tasks::health::TaskWatchtowerService;
 use hermes_hub_backend::domains::tasks::intelligence::TaskIntelligenceService;
 use hermes_hub_backend::domains::tasks::rules::{TaskRuleStore, TaskTemplateStore};
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;
 use serde_json::json;
@@ -1342,3 +1344,5 @@ async fn disconnected_task_stores() {
     let _ = TaskChecklistStore::new(pool.clone());
     let _ = TaskSubtaskStore::new(pool);
 }
+use hermes_hub_backend::domains::decisions::store::DecisionStore;
+use hermes_hub_backend::domains::obligations::store::ObligationStore;

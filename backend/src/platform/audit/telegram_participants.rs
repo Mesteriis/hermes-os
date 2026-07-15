@@ -43,7 +43,7 @@ impl NewApiAuditRecord {
 
 #[cfg(test)]
 mod tests {
-    use crate::platform::audit::NewApiAuditRecord;
+    use crate::platform::audit::models::NewApiAuditRecord;
 
     #[test]
     fn telegram_participants_sync_audit_preserves_capability_metadata() {

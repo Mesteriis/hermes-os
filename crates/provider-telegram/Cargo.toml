@@ -7,5 +7,6 @@ publish = false
 license = "MIT"
 
 [dependencies]
+hermes-provider-api = { path = "../provider-api" }
 serde_json = "1"
 thiserror = "2"

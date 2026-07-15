@@ -2,7 +2,7 @@ use super::super::*;
 
 #[derive(Serialize)]
 pub(crate) struct EventParticipantsResponse {
-    items: Vec<crate::domains::calendar::core::EventParticipant>,
+    items: Vec<crate::domains::calendar::core::participants::EventParticipant>,
 }
 
 pub(crate) async fn get_event_participants(
@@ -36,7 +36,7 @@ pub(crate) async fn post_event_participant(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
     Json(req): Json<NewParticipantRequest>,
-) -> Result<Json<crate::domains::calendar::core::EventParticipant>, ApiError> {
+) -> Result<Json<crate::domains::calendar::core::participants::EventParticipant>, ApiError> {
     let pool = state
         .database
         .pool()

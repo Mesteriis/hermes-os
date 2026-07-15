@@ -8,6 +8,7 @@ use sqlx::postgres::PgPool;
 
 use crate::domains::signal_hub::connections::SignalHubConnectionService;
 use crate::domains::signal_hub::store::{SignalHubError, SignalHubStore};
+use crate::integrations::whatsapp::client::store::WhatsappWebStore;
 use crate::integrations::whatsapp::runtime::contracts::WhatsAppRuntimeStatus;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
@@ -16,8 +17,9 @@ use hermes_communications_postgres::store::CommunicationIngestionStore;
 
 use hermes_events_postgres::store::EventStore;
 
-use crate::platform::secrets::SecretReferenceStore;
-use crate::vault::{HostVault, HostVaultError};
+use crate::platform::secrets::store::SecretReferenceStore;
+use crate::vault::HostVault;
+use crate::vault::errors::HostVaultError;
 
 pub(crate) const WHATSAPP_RUNTIME_EVENT_CONSUMER: &str = "whatsapp_runtime_event_projection";
 
@@ -78,7 +80,7 @@ pub(crate) async fn project_whatsapp_runtime_event(
     let binding_store = CommunicationProviderSecretBindingStore::new(pool.clone());
     let secret_store = SecretReferenceStore::new(pool.clone());
     let runtime =
-        crate::application::provider_runtime_services::whatsapp_provider_runtime(pool.clone());
+        crate::application::provider_runtime_factories::whatsapp_provider_runtime(pool.clone());
 
     let Some(current_account) = account_store
         .get(&raw_record.account_id)
@@ -269,22 +271,9 @@ async fn update_whatsapp_session_projection_state(
     link_state: &str,
     observed_at: DateTime<Utc>,
 ) -> Result<(), String> {
-    sqlx::query(
-        r#"
-        UPDATE whatsapp_web_sessions
-        SET link_state = $2,
-            last_sync_at = COALESCE($3, last_sync_at),
-            updated_at = now()
-        WHERE account_id = $1
-        "#,
-    )
-    .bind(account_id)
-    .bind(link_state)
-    .bind(observed_at)
-    .execute(pool)
-    .await
-    .map_err(|error| error.to_string())?;
-    Ok(())
+    WhatsappWebStore::update_projection_link_state(pool, account_id, link_state, observed_at)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 async fn clear_whatsapp_restorable_session(

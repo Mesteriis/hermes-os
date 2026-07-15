@@ -8,7 +8,8 @@ use serde_json::json;
 use crate::app::api_support::stores::integration_stores::{
     whatsapp_provider_runtime_service, whatsapp_secret_reference_store,
 };
-use crate::app::{ApiError, AppState};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
 use crate::integrations::whatsapp::runtime::contracts::{
     WhatsAppProviderCommandResponse, WhatsAppStatusPublishRequest,
 };

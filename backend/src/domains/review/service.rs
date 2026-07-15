@@ -3,7 +3,9 @@ use serde_json::json;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use super::{ReviewInboxError, ReviewInboxStore, ReviewItem, ReviewItemStatus};
+use super::errors::ReviewInboxError;
+use super::models::{ReviewItem, ReviewItemStatus};
+use super::store::ReviewInboxStore;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::errors::ObservationStoreError;
 use hermes_observations_postgres::store::ObservationStore;

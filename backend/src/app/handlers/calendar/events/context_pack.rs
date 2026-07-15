@@ -21,7 +21,7 @@ pub(crate) async fn post_event_context_pack(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
     Json(req): Json<ContextPackInput>,
-) -> Result<Json<crate::domains::calendar::core::EventContextPack>, ApiError> {
+) -> Result<Json<crate::domains::calendar::core::context_packs::EventContextPack>, ApiError> {
     let pool = state
         .database
         .pool()

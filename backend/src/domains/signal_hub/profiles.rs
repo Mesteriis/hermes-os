@@ -3,10 +3,10 @@ use hermes_events_api::NewEventEnvelope;
 use serde_json::json;
 
 use super::store::{
-    SignalHubError, SignalHubStore, SignalProfile, SignalProfileCreate, SignalProfilePolicy,
-    SignalProfileSummary, SignalProfileUpdate,
+    SignalHubError, SignalHubStore, SignalProfile, SignalProfileCreate, SignalProfileSummary,
+    SignalProfileUpdate,
 };
-use crate::platform::settings::ApplicationSettingsStore;
+use crate::platform::settings::store::ApplicationSettingsStore;
 use hermes_events_postgres::store::EventStore;
 
 const ACTIVE_PROFILE_SETTING_KEY: &str = "signal_hub.active_profile";

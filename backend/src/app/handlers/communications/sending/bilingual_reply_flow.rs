@@ -167,36 +167,6 @@ fn normalize_bilingual_reply_tone(value: &str) -> Result<String, ApiError> {
     ))
 }
 
-async fn bilingual_translation_step(
-    state: &AppState,
-    service: &crate::domains::communications::multilingual::MultilingualService,
-    text: &str,
-    target_language: &str,
-    message_id: &str,
-) -> Result<BilingualTranslationStep, ApiError> {
-    bilingual_translation_step_with_signal(
-        state,
-        service,
-        text,
-        target_language,
-        message_id,
-        AiSignalContext {
-            event_kind: "bilingual_reply_translation",
-            subject: json!({
-                "kind": "communication_message",
-                "source_code": "ai",
-                "message_id": message_id,
-                "operation": "bilingual_reply_translation",
-            }),
-            provenance: json!({
-                "source": "bilingual_reply_flow_translation",
-                "message_id": message_id,
-            }),
-        },
-    )
-    .await
-}
-
 async fn bilingual_translation_step_with_signal(
     state: &AppState,
     service: &crate::domains::communications::multilingual::MultilingualService,

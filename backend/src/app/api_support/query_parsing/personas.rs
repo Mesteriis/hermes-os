@@ -1,7 +1,7 @@
 use url::form_urlencoded;
 
-use crate::app::ApiError;
-use crate::domains::personas::identity::PersonaIdentityReviewState;
+use crate::app::error::types::ApiError;
+use crate::domains::personas::identity::models::PersonaIdentityReviewState;
 
 pub(crate) struct PersonaIdentityCandidatesQuery {
     pub(crate) limit: Option<i64>,

@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
+use hermes_hub_backend::platform::storage::database::Database;
 use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;

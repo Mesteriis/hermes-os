@@ -1,10 +1,12 @@
 use serde_json::json;
 use sqlx::{Postgres, Row, Transaction};
 
-use crate::domains::graph::core::{
-    GraphEvidenceSourceKind, GraphNodeKind, GraphProjectionPort, GraphReviewState, NewGraphEdge,
-    NewGraphEvidence, NewGraphNode, RelationshipType,
+use crate::domains::graph::core::models::{
+    GraphEvidenceSourceKind, GraphReviewState, NewGraphEdge, NewGraphEvidence, NewGraphNode,
+    RelationshipType,
 };
+use crate::domains::graph::ports::GraphProjectionPort;
+use crate::platform::graph::GraphNodeKind;
 
 use super::decisions::entity_graph_node_kind;
 use super::errors::GraphProjectionError;

@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::domains::communications::messages::models::ProjectedMessage;
 
 use super::models::RuleAction;
 

@@ -2,7 +2,7 @@ use super::*;
 
 #[derive(Serialize)]
 pub(crate) struct CalendarAccountsResponse {
-    items: Vec<crate::domains::calendar::events::CalendarAccount>,
+    items: Vec<crate::domains::calendar::events::models::CalendarAccount>,
 }
 
 #[derive(Deserialize)]
@@ -20,7 +20,7 @@ pub(crate) async fn get_calendar_accounts(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let items = crate::app::api_support::stores::domain_stores::app_store::<
-        crate::domains::calendar::events::CalendarAccountStore,
+        crate::domains::calendar::events::account_store::CalendarAccountStore,
     >(pool)
     .list(query.provider.as_deref())
     .await?;
@@ -37,7 +37,7 @@ pub(crate) struct NewCalendarAccountRequest {
 pub(crate) async fn post_calendar_account(
     State(state): State<AppState>,
     Json(req): Json<NewCalendarAccountRequest>,
-) -> Result<Json<crate::domains::calendar::events::CalendarAccount>, ApiError> {
+) -> Result<Json<crate::domains::calendar::events::models::CalendarAccount>, ApiError> {
     let pool = state
         .database
         .pool()
@@ -52,14 +52,14 @@ pub(crate) async fn post_calendar_account(
 pub(crate) async fn get_calendar_account(
     State(state): State<AppState>,
     Path(account_id): Path<String>,
-) -> Result<Json<crate::domains::calendar::events::CalendarAccount>, ApiError> {
+) -> Result<Json<crate::domains::calendar::events::models::CalendarAccount>, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     crate::app::api_support::stores::domain_stores::app_store::<
-        crate::domains::calendar::events::CalendarAccountStore,
+        crate::domains::calendar::events::account_store::CalendarAccountStore,
     >(pool)
     .get(&account_id)
     .await?
@@ -71,7 +71,7 @@ pub(crate) async fn put_calendar_account(
     State(state): State<AppState>,
     Path(account_id): Path<String>,
     Json(update): Json<CalendarAccountUpdate>,
-) -> Result<Json<crate::domains::calendar::events::CalendarAccount>, ApiError> {
+) -> Result<Json<crate::domains::calendar::events::models::CalendarAccount>, ApiError> {
     let pool = state
         .database
         .pool()
@@ -102,7 +102,7 @@ pub(crate) async fn delete_calendar_account(
 
 #[derive(Serialize)]
 pub(crate) struct CalendarSourcesResponse {
-    items: Vec<crate::domains::calendar::events::CalendarSource>,
+    items: Vec<crate::domains::calendar::events::models::CalendarSource>,
 }
 
 pub(crate) async fn get_calendar_sources(
@@ -115,7 +115,7 @@ pub(crate) async fn get_calendar_sources(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let items = crate::app::api_support::stores::domain_stores::app_store::<
-        crate::domains::calendar::events::CalendarSourceStore,
+        crate::domains::calendar::events::source_store::CalendarSourceStore,
     >(pool)
     .list_by_account(&account_id)
     .await?;
@@ -134,7 +134,7 @@ pub(crate) async fn post_calendar_source(
     State(state): State<AppState>,
     Path(account_id): Path<String>,
     Json(req): Json<NewCalendarSourceRequest>,
-) -> Result<Json<crate::domains::calendar::events::CalendarSource>, ApiError> {
+) -> Result<Json<crate::domains::calendar::events::models::CalendarSource>, ApiError> {
     let pool = state
         .database
         .pool()

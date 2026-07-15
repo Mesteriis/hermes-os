@@ -1,19 +1,25 @@
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::chats::TelegramChatMember;
 use crate::integrations::telegram::client::models::messages::{
     TelegramForwardRequest, TelegramManualSendRequest, TelegramManualSendResponse,
     TelegramReplyRequest,
 };
-use crate::integrations::telegram::client::{TelegramChatMember, TelegramError, TelegramStore};
-use crate::integrations::telegram::runtime::{
-    TelegramChatSyncRequest, TelegramChatSyncResponse, TelegramHistorySyncRequest,
-    TelegramHistorySyncResponse, TelegramMediaDownloadContext, TelegramMediaDownloadRequest,
-    TelegramMediaDownloadResponse, TelegramMemberSyncContext, TelegramProviderSearchRequest,
-    TelegramRuntimeEventBridgeContext, TelegramRuntimeManager, TelegramRuntimeOperationDeps,
-    TelegramRuntimeRestartRequest, TelegramRuntimeStartContext, TelegramRuntimeStartRequest,
-    TelegramRuntimeStatus, TelegramRuntimeStopRequest,
+use crate::integrations::telegram::client::store::TelegramStore;
+use crate::integrations::telegram::runtime::manager::realtime_events::TelegramRuntimeEventBridgeContext;
+use crate::integrations::telegram::runtime::manager::search::TelegramProviderSearchRequest;
+use crate::integrations::telegram::runtime::manager::{
+    TelegramMediaDownloadContext, TelegramMemberSyncContext, TelegramRuntimeManager,
+    TelegramRuntimeOperationDeps, TelegramRuntimeStartContext,
 };
-use crate::platform::config::AppConfig;
+use crate::integrations::telegram::runtime::models::{
+    TelegramChatSyncRequest, TelegramChatSyncResponse, TelegramHistorySyncRequest,
+    TelegramHistorySyncResponse, TelegramMediaDownloadRequest, TelegramMediaDownloadResponse,
+    TelegramRuntimeRestartRequest, TelegramRuntimeStartRequest, TelegramRuntimeStatus,
+    TelegramRuntimeStopRequest,
+};
+use crate::platform::config::app_config::AppConfig;
 use crate::platform::events::bus::InMemoryEventBus;
-use crate::platform::secrets::SecretReferenceStore;
+use crate::platform::secrets::store::SecretReferenceStore;
 use crate::vault::HostVault;
 use hermes_communications_postgres::provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,

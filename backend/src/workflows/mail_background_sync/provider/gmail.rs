@@ -5,7 +5,8 @@ use serde_json::Value;
 
 use super::super::errors::ProviderSyncError;
 use super::super::service::MailBackgroundSyncService;
-use super::{ProviderSyncContext, ProviderSyncSummary};
+use super::summary::ProviderSyncSummary;
+use super::types::ProviderSyncContext;
 
 impl MailBackgroundSyncService {
     pub(in crate::workflows::mail_background_sync::provider) async fn sync_gmail(

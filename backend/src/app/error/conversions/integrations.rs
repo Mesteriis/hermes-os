@@ -1,8 +1,8 @@
 use super::super::types::ApiError;
-use crate::application::communication_fixture_ingest::CommunicationFixtureIngestError;
-use crate::application::communication_provider_writes::TelegramMessageWriteError;
+use crate::application::communication_fixture_error::CommunicationFixtureIngestError;
+use crate::application::communication_provider_error::TelegramMessageWriteError;
 use crate::engines::automation::errors::AutomationError;
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::yandex_telemost::client::errors::YandexTelemostError;
 use crate::integrations::zoom::client::errors::ZoomError;

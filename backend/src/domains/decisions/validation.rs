@@ -4,9 +4,10 @@ use sqlx::postgres::PgPool;
 use super::constants::{MAX_REFRESH_LIMIT, MIN_REFRESH_LIMIT};
 use super::errors::DecisionStoreError;
 use super::ids::decision_id;
-use super::models::{
-    DecisionReviewState, NewDecision, NewDecisionEvidence, NewDecisionImpactedEntity,
-};
+use super::models::decision::NewDecision;
+use super::models::evidence::NewDecisionEvidence;
+use super::models::impacted_entity::NewDecisionImpactedEntity;
+use super::models::states::DecisionReviewState;
 
 pub(super) fn validate_decision_with_evidence(
     decision: &NewDecision,

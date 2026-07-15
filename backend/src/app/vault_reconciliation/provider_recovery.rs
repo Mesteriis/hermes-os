@@ -2,8 +2,8 @@ use hermes_communications_api::accounts::CommunicationProviderKind;
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use serde_json::Value;
 
-use crate::platform::secrets::{SecretKind, SecretStoreKind};
-use crate::vault::HostVaultManifestEntry;
+use crate::platform::secrets::models::{SecretKind, SecretStoreKind};
+use crate::vault::models::HostVaultManifestEntry;
 
 use super::metadata::{
     fallback_display_name, fallback_provider_account_config, metadata_string, non_empty,

@@ -5,10 +5,9 @@ use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
 use chrono::Utc;
 use rusqlite::{OptionalExtension, params};
 
-use crate::platform::secrets::{
-    ResolvedSecret, SecretReference, SecretResolutionError, SecretResolutionFuture, SecretResolver,
-    SecretStoreKind,
-};
+use crate::platform::secrets::errors::SecretResolutionError;
+use crate::platform::secrets::models::{ResolvedSecret, SecretReference, SecretStoreKind};
+use crate::platform::secrets::resolver::{SecretResolutionFuture, SecretResolver};
 
 use super::HostVault;
 use super::constants::VAULT_VERSION;

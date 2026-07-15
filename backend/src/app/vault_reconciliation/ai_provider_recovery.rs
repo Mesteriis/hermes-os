@@ -1,8 +1,8 @@
 use serde_json::Value;
 
-use crate::ai::control_center::AiProviderVaultRestore;
-use crate::platform::secrets::{SecretKind, SecretStoreKind};
-use crate::vault::HostVaultManifestEntry;
+use crate::ai::control_center::models::AiProviderVaultRestore;
+use crate::platform::secrets::models::{SecretKind, SecretStoreKind};
+use crate::vault::models::HostVaultManifestEntry;
 
 use super::metadata::{metadata_string, non_empty};
 

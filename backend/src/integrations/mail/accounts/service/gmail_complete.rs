@@ -3,7 +3,7 @@ use hermes_communications_api::accounts::{
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
 
-use crate::platform::secrets::{NewSecretReference, SecretKind};
+use crate::platform::secrets::models::{NewSecretReference, SecretKind};
 
 use super::super::errors::EmailAccountSetupError;
 use super::super::helpers::{expires_at, oauth_secret_ref};

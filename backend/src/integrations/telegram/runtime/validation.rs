@@ -1,4 +1,4 @@
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
 
 pub(super) fn validate_non_empty(
     field: &'static str,

@@ -13,10 +13,11 @@ mod review;
 mod settings;
 mod signal_hub;
 mod status_vault;
-mod support;
 mod tasks;
 
-use support::*;
+use crate::app::guard;
+use crate::app::state::AppState;
+use axum::{Router, middleware};
 
 pub(super) fn protected_routes(api_secret: String) -> Router<AppState> {
     let routes = Router::<AppState>::new();

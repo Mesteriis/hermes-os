@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 
 use super::TELEGRAM_ACCOUNT_ACTIVE;
 use super::errors::TelegramError;
-use super::models::TelegramAccount;
+use super::models::accounts::TelegramAccount;
 
 pub(crate) fn telegram_chat_id(account_id: &str, provider_chat_id: &str) -> String {
     format!(

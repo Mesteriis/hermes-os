@@ -1,11 +1,12 @@
-use hermes_communications_api::accounts::{ProviderAccount, ProviderAccountPortError};
+use hermes_communications_api::accounts::ProviderAccountPortError;
 use hermes_communications_api::evidence::CommunicationEvidencePortError;
 use hermes_events_api::EventEnvelopeError;
 use thiserror::Error;
 
-use crate::platform::communications::{EmailProviderSyncError, EmailSyncPlanError};
+use crate::platform::communications::email_sync::EmailSyncPlanError;
 use crate::workflows::email_sync_pipeline::errors::EmailSyncPipelineError;
 use crate::workflows::graph_projection::errors::GraphProjectionError;
+use hermes_communications_api::mail_resources::EmailProviderSyncError;
 use hermes_events_postgres::errors::EventStoreError;
 use hermes_observations_postgres::errors::ObservationStoreError;
 

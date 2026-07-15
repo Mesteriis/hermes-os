@@ -2,7 +2,7 @@ use super::super::*;
 use crate::domains::communications::command_service::{
     CommunicationAttachmentImportCommand, CommunicationCommandService,
 };
-use crate::domains::communications::storage::ImportedCommunicationAttachment;
+use crate::domains::communications::storage::models::ImportedCommunicationAttachment;
 
 #[derive(Deserialize)]
 pub(crate) struct CommunicationAttachmentImportRequest {

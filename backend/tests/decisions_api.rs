@@ -9,12 +9,16 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use tower::ServiceExt;
 
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::decisions::{
-    Decision, DecisionEntityKind, DecisionEvidenceSourceKind, DecisionReviewState, DecisionStore,
-    NewDecision, NewDecisionEvidence, NewDecisionImpactedEntity,
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::decisions::models::{
+    decision::{Decision, NewDecision},
+    entity_kind::DecisionEntityKind,
+    evidence::NewDecisionEvidence,
+    impacted_entity::NewDecisionImpactedEntity,
+    source_kind::DecisionEvidenceSourceKind,
+    states::DecisionReviewState,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 const LOCAL_API_TOKEN: &str = "decisions-api-test-token";
 
@@ -299,3 +303,4 @@ fn path_segment(value: &str) -> String {
     }
     encoded
 }
+use hermes_hub_backend::domains::decisions::store::DecisionStore;

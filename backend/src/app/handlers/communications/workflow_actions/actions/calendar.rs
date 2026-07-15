@@ -1,8 +1,9 @@
 use sqlx::{Postgres, Transaction};
 
-use crate::app::ApiError;
-use crate::domains::calendar::events::{CalendarEventStore, NewCalendarEvent};
-use crate::domains::communications::messages::ProjectedMessage;
+use crate::app::error::types::ApiError;
+use crate::domains::calendar::events::event_store::CalendarEventStore;
+use crate::domains::calendar::events::models::NewCalendarEvent;
+use crate::domains::communications::messages::models::ProjectedMessage;
 
 use super::super::models::{
     WorkflowActionRequest, WorkflowActionResponse, WorkflowActionStatus, WorkflowActionTarget,

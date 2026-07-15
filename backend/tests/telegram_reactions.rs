@@ -3,8 +3,9 @@ use hermes_communications_api::accounts::{CommunicationProviderKind, NewProvider
 use serde_json::json;
 
 use hermes_communications_postgres::store::CommunicationIngestionStore;
-use hermes_hub_backend::integrations::telegram::client::lifecycle;
-use hermes_hub_backend::integrations::telegram::client::reconcile_reaction_commands_from_provider_reactions;
+use hermes_hub_backend::integrations::telegram::client::commands;
+use hermes_hub_backend::integrations::telegram::client::commands::queries;
+use hermes_hub_backend::integrations::telegram::client::reactions::reconcile_reaction_commands_from_provider_reactions;
 
 use hermes_backend_testkit::context::TestContext;
 
@@ -82,7 +83,7 @@ async fn telegram_provider_reactions_reconcile_react_and_unreact_commands() {
                 && command.reconciliation_status == "mismatch")
     );
 
-    let commands = lifecycle::list_commands(&pool, &account_id, 10)
+    let commands = queries::list_commands(&pool, &account_id, 10)
         .await
         .expect("list commands");
     let pending = commands
@@ -130,7 +131,7 @@ async fn insert_reaction_command(
     provider_message_id: &str,
     reaction_emoji: &str,
 ) {
-    lifecycle::insert_command(
+    commands::insert_command(
         pool,
         command_id,
         account_id,

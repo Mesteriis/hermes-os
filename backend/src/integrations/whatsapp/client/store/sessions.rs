@@ -63,6 +63,21 @@ async fn capture_whatsapp_session_observation(
 }
 
 impl WhatsappWebStore {
+    pub async fn update_projection_link_state(
+        pool: &sqlx::PgPool,
+        account_id: &str,
+        link_state: &str,
+        observed_at: DateTime<Utc>,
+    ) -> Result<(), WhatsappWebError> {
+        sqlx::query("UPDATE whatsapp_web_sessions SET link_state = $2, last_sync_at = COALESCE($3, last_sync_at), updated_at = now() WHERE account_id = $1")
+            .bind(account_id)
+            .bind(link_state)
+            .bind(observed_at)
+            .execute(pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn upsert_session(
         &self,
         session: &NewWhatsappWebSession,

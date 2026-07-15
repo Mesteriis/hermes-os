@@ -7,8 +7,8 @@ use super::chat_reconciliation::{
     expected_mute_state_for_command_kind, expected_pin_state_for_command_kind,
     reconcile_dialog_boolean_commands_from_provider_state,
 };
+use super::commands::mark_command_reconciled;
 use super::errors::TelegramError;
-use super::lifecycle::mark_command_reconciled;
 use super::models::messages::TelegramProviderWriteCommand;
 use super::rows::row_to_telegram_provider_write_command;
 

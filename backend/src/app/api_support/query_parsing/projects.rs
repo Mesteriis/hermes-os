@@ -1,8 +1,10 @@
 use serde::Deserialize;
 use url::form_urlencoded;
 
-use crate::app::ApiError;
-use crate::domains::projects::link_reviews::{ProjectLinkReviewState, ProjectLinkTargetKind};
+use crate::app::error::types::ApiError;
+use crate::domains::projects::link_reviews::models::{
+    ProjectLinkReviewState, ProjectLinkTargetKind,
+};
 
 #[derive(Deserialize)]
 pub(crate) struct ProjectLinkCandidatesQuery {

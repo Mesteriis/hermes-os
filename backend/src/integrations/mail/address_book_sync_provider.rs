@@ -2,6 +2,10 @@ use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_api::accounts::{
     CommunicationProviderKind, ProviderSecretBindingLookupPort,
 };
+use hermes_communications_api::address_book::{
+    AddressBookProviderBatch, AddressBookProviderEntry, AddressBookProviderFetchRequest,
+    AddressBookProviderSyncError, AddressBookProviderSyncPort, AddressBookProviderUpsertRequest,
+};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -14,11 +18,7 @@ use crate::integrations::mail::gmail::client::{
 };
 use crate::integrations::mail::icloud_carddav::IcloudCardDavClient;
 use crate::integrations::mail::sync_provider::read_provider_secret;
-use crate::platform::communications::{
-    AddressBookProviderBatch, AddressBookProviderEntry, AddressBookProviderFetchRequest,
-    AddressBookProviderSyncError, AddressBookProviderSyncPort, AddressBookProviderUpsertRequest,
-};
-use crate::platform::secrets::SecretReferenceStore;
+use crate::platform::secrets::store::SecretReferenceStore;
 use crate::vault::HostVault;
 
 #[derive(Clone)]
@@ -47,7 +47,8 @@ impl LiveAddressBookProviderSyncPort {
     async fn gmail_access_token(
         &self,
         account_id: &str,
-    ) -> Result<crate::platform::secrets::ResolvedSecret, AddressBookProviderSyncError> {
+    ) -> Result<crate::platform::secrets::models::ResolvedSecret, AddressBookProviderSyncError>
+    {
         let binding = self
             .provider_secret_binding_store
             .get_for_account(account_id, ProviderAccountSecretPurpose::OauthToken)

@@ -1,9 +1,24 @@
 use super::super::types::ApiError;
-use crate::domains::personas::api::PersonaProjectionError;
+use crate::domains::personas::api::errors::PersonaProjectionError;
 use crate::domains::personas::command_service::PersonaCommandServiceError;
-use crate::domains::personas::core::PersonaCoreError;
-use crate::domains::personas::identity::PersonaIdentityError;
-use crate::domains::personas::memory::PersonaMemoryError;
+use crate::domains::personas::core::errors::PersonaCoreError;
+use crate::domains::personas::identity::errors::PersonaIdentityError;
+use crate::domains::personas::memory::errors::PersonaMemoryError;
+use hermes_personas_api::{PersonaQueryError, PersonaWriteError};
+
+impl From<PersonaQueryError> for ApiError {
+    fn from(error: PersonaQueryError) -> Self {
+        tracing::error!(error = %error, "persona read port failed");
+        Self::InvalidCommunicationQuery("persona read failed")
+    }
+}
+
+impl From<PersonaWriteError> for ApiError {
+    fn from(error: PersonaWriteError) -> Self {
+        tracing::error!(error = %error, "persona write port failed");
+        Self::InvalidCommunicationQuery("persona write failed")
+    }
+}
 
 impl From<PersonaIdentityError> for ApiError {
     fn from(error: PersonaIdentityError) -> Self {
@@ -33,10 +48,10 @@ impl From<PersonaProjectionError> for ApiError {
     }
 }
 
-impl From<crate::domains::personas::enrichment::PersonaEnrichmentError> for ApiError {
-    fn from(error: crate::domains::personas::enrichment::PersonaEnrichmentError) -> Self {
+impl From<crate::domains::personas::enrichment::errors::PersonaEnrichmentError> for ApiError {
+    fn from(error: crate::domains::personas::enrichment::errors::PersonaEnrichmentError) -> Self {
         match error {
-            crate::domains::personas::enrichment::PersonaEnrichmentError::NotFound => {
+            crate::domains::personas::enrichment::errors::PersonaEnrichmentError::NotFound => {
                 ApiError::PersonaIdentityNotFound
             }
             _ => {

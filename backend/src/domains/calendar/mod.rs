@@ -6,6 +6,7 @@ pub(crate) mod evidence;
 pub mod health;
 pub mod intelligence;
 pub mod meetings;
+pub mod ports;
 pub mod reminders;
 pub mod rules;
 pub mod scheduling;

@@ -5,9 +5,19 @@ use super::PersonaProjectionStore;
 use crate::domains::personas::api::errors::PersonaProjectionError;
 use crate::domains::personas::api::models::Persona;
 use crate::domains::personas::api::rows::row_to_persona;
-use crate::domains::personas::core::link_persona_entity_in_transaction;
+use crate::domains::personas::core::evidence::link_persona_entity_in_transaction;
 
 impl PersonaProjectionStore {
+    pub async fn owner_language(&self) -> Result<Option<String>, PersonaProjectionError> {
+        sqlx::query_scalar::<_, String>(
+            "SELECT language FROM personas WHERE is_self = true AND language IS NOT NULL AND length(trim(language)) > 0 ORDER BY updated_at DESC LIMIT 1",
+        )
+        .fetch_optional(self.pool())
+        .await
+        .map(|language| language.map(|value| value.trim().to_ascii_lowercase()))
+        .map_err(Into::into)
+    }
+
     pub async fn owner_persona(&self) -> Result<Option<Persona>, PersonaProjectionError> {
         let row = sqlx::query(
             r#"

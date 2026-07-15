@@ -9,7 +9,7 @@ use super::support::{
     LOCAL_API_TOKEN, build_cal_app, delete_request_with_token, get_request_with_token, json_body,
     post_request_with_token, put_request_with_token, unique_suffix, urlencoding_percent_encode,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 
 async fn get_calendar_endpoint_returns_non_server_error(path: &str) {
     let test_context = TestContext::new().await;

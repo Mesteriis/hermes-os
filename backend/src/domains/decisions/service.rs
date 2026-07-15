@@ -1,5 +1,5 @@
 use chrono::Utc;
-use serde_json::{Value, json};
+use serde_json::json;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
@@ -7,7 +7,10 @@ use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::errors::ObservationStoreError;
 use hermes_observations_postgres::store::ObservationStore;
 
-use super::{Decision, DecisionReviewState, DecisionStore, DecisionStoreError};
+use super::errors::DecisionStoreError;
+use super::models::decision::Decision;
+use super::models::states::DecisionReviewState;
+use super::ports::DecisionReviewPort;
 
 #[derive(Clone)]
 pub struct DecisionCommandService {
@@ -45,7 +48,7 @@ impl DecisionCommandService {
             )
             .await?;
 
-        let decision = DecisionStore::new(self.pool.clone())
+        let decision = DecisionReviewPort::new(self.pool.clone())
             .set_review_state_with_observation(
                 decision_id,
                 review_state,

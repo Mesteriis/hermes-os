@@ -2,8 +2,9 @@ use chrono::Utc;
 
 use super::super::errors::TelegramError;
 use super::super::identifiers::{telegram_account_runtime, telegram_text_preview_hash};
-use super::super::models::{
-    NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramManualSendRequest,
+use super::super::models::chats::TelegramChatKind;
+use super::super::models::messages::{
+    NewTelegramMessage, TelegramDeliveryState, TelegramManualSendRequest,
     TelegramManualSendResponse,
 };
 use super::super::store::TelegramStore;

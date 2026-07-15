@@ -3,9 +3,10 @@ use hermes_events_api::NewEventEnvelope;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
-use crate::integrations::telegram::client::lifecycle;
+use crate::integrations::telegram::client::commands;
+use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
-use crate::integrations::telegram::client::{TelegramError, TelegramStore};
+use crate::integrations::telegram::client::store::TelegramStore;
 use crate::platform::events::bus::InMemoryEventBus;
 use crate::platform::events::bus::telegram_event_types;
 use hermes_events_postgres::store::EventStore;
@@ -35,7 +36,7 @@ pub async fn execute_queued_commands(
     let pool = telegram_store.pool();
     let now = Utc::now();
     let stale_before = now - Duration::seconds(STALE_EXECUTION_LOCK_SECONDS);
-    match lifecycle::recover_stale_executing_commands(pool, now, stale_before).await {
+    match commands::recover_stale_executing_commands(pool, now, stale_before).await {
         Ok(commands) => {
             for command in commands {
                 let status = command.status.clone();
@@ -84,7 +85,7 @@ async fn execute_account_commands(
     let pool = telegram_store.pool();
     let now = Utc::now();
     let commands =
-        match lifecycle::claim_due_commands_for_execution(pool, account_id, now, limit).await {
+        match commands::claim_due_commands_for_execution(pool, account_id, now, limit).await {
             Ok(commands) => commands,
             Err(error) => {
                 tracing::warn!(
@@ -189,7 +190,7 @@ async fn handle_dispatch_result(
                 "raw_record_id": projection.raw_record_id.clone(),
                 "message_id": projection.message_id.clone(),
             });
-            if let Err(error) = lifecycle::mark_command_reconciled(
+            if let Err(error) = commands::mark_command_reconciled(
                 pool,
                 &command.command_id,
                 now,
@@ -286,7 +287,7 @@ async fn handle_dispatch_result(
                 "title": topic.title,
                 "is_closed": topic.is_closed,
             });
-            if let Err(error) = lifecycle::mark_command_reconciled(
+            if let Err(error) = commands::mark_command_reconciled(
                 pool,
                 &command.command_id,
                 now,
@@ -334,7 +335,7 @@ async fn handle_dispatch_result(
             .await;
         }
         Ok(DispatchOutcome::AwaitingProvider) => {
-            if let Err(error) = lifecycle::mark_command_awaiting_provider(
+            if let Err(error) = commands::mark_command_awaiting_provider(
                 pool,
                 &command.command_id,
                 now,
@@ -370,7 +371,7 @@ async fn handle_command_error(
     );
     if is_dead_letter_error(&error) || command.retry_count >= command.max_retries {
         if let Err(update_error) =
-            lifecycle::dead_letter_command(pool, &command.command_id, now, &error.to_string()).await
+            commands::dead_letter_command(pool, &command.command_id, now, &error.to_string()).await
         {
             tracing::warn!(
                 error = %update_error,
@@ -398,7 +399,7 @@ async fn handle_command_error(
         }
     } else {
         let next_attempt_at = next_attempt_at(now, command.retry_count);
-        if let Err(update_error) = lifecycle::schedule_command_retry(
+        if let Err(update_error) = commands::schedule_command_retry(
             pool,
             &command.command_id,
             now,

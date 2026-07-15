@@ -3,15 +3,18 @@ use axum::extract::{Path, Query, State};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::app::{ApiError, AppState};
-use crate::domains::tasks::api::{NewTask, Task, TaskListQuery, TaskStore, TaskUpdate};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::domains::tasks::api::{NewTask, Task, TaskUpdate};
 use crate::domains::tasks::command_service::TaskCommandService;
 
 use super::support::database_pool;
+use hermes_tasks_api::{TaskListQuery, TaskReadPort};
+use hermes_tasks_postgres::TaskPostgresReadQuery;
 
 #[derive(Serialize)]
 pub(crate) struct TaskRecordsResponse {
-    items: Vec<Task>,
+    items: Vec<hermes_tasks_api::TaskRead>,
 }
 
 #[derive(Deserialize)]
@@ -27,14 +30,17 @@ pub(crate) async fn get_tasks(
     Query(q): Query<TaskListQueryParams>,
 ) -> Result<Json<TaskRecordsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = crate::app::api_support::stores::domain_stores::app_store::<TaskStore>(pool)
-        .list(&TaskListQuery {
+    let items = TaskReadPort::list(
+        &TaskPostgresReadQuery::new(pool),
+        TaskListQuery {
             status: q.status,
             project_id: q.project_id,
             source_type: q.source_type,
             limit: q.limit,
-        })
-        .await?;
+        },
+    )
+    .await
+    .map_err(|error| ApiError::FailedPrecondition(error.to_string()))?;
     Ok(Json(TaskRecordsResponse { items }))
 }
 
@@ -52,11 +58,11 @@ pub(crate) async fn post_task(
 pub(crate) async fn get_task(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
-) -> Result<Json<Task>, ApiError> {
+) -> Result<Json<hermes_tasks_api::TaskRead>, ApiError> {
     let pool = database_pool(&state)?;
-    crate::app::api_support::stores::domain_stores::app_store::<TaskStore>(pool)
-        .get(&task_id)
-        .await?
+    TaskReadPort::get(&TaskPostgresReadQuery::new(pool), &task_id)
+        .await
+        .map_err(|error| ApiError::FailedPrecondition(error.to_string()))?
         .map(Json)
         .ok_or(ApiError::NotFound)
 }

@@ -7,4 +7,5 @@ publish = false
 license = "MIT"
 
 [dependencies]
+hermes-provider-api = { path = "../provider-api" }
 sha2 = "0.10"

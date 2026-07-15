@@ -1,10 +1,10 @@
 //! WhatsApp WebView companion routes composed without router-wide handler facades.
 
 use axum::Router;
-use axum::routing::{delete, get, post};
+use axum::routing::{get, post};
 
-use crate::app::AppState;
 use crate::app::provider_runtime_handlers::whatsapp;
+use crate::app::state::AppState;
 
 pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
     router

@@ -5,11 +5,11 @@ use sqlx::postgres::PgPool;
 
 use crate::integrations::mail::accounts::service::EmailAccountSetupService;
 use crate::integrations::mail::gmail::client::gmail_api::GmailApiClient;
-use crate::platform::communications::{
+use crate::platform::secrets::store::SecretReferenceStore;
+use crate::vault::HostVault;
+use hermes_communications_api::email::{
     EmailSendError, GmailOutboxSendRequest, GmailOutboxTransport, SendResult,
 };
-use crate::platform::secrets::SecretReferenceStore;
-use crate::vault::HostVault;
 
 #[derive(Clone)]
 pub struct LiveGmailOutboxTransport {

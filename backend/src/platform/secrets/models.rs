@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 
 use super::errors::{SecretReferenceError, SecretResolutionError};
 use super::validation::{validate_non_empty, validate_object};
+use hermes_communications_api::accounts::ProviderAccountSecretBinding;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -104,6 +105,13 @@ pub struct SecretReference {
     pub metadata: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderCredential {
+    pub binding: ProviderAccountSecretBinding,
+    pub reference: SecretReference,
+    pub secret: ResolvedSecret,
 }
 
 #[derive(Clone, Eq, PartialEq)]

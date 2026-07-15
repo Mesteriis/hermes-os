@@ -5,7 +5,7 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 
 use super::errors::PersonaMemoryError;
-use crate::domains::personas::core::link_persona_entity;
+use crate::domains::personas::core::evidence::link_persona_entity;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonaMemoryCard {

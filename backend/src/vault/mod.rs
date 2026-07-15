@@ -1,26 +1,21 @@
 mod constants;
 mod crypto;
-mod errors;
+pub mod errors;
 mod files;
 mod key_store;
 mod lifecycle;
 mod manifest;
-mod models;
-mod paths;
+pub mod models;
+pub mod paths;
 mod recovery;
 mod secrets;
 mod storage;
 
+use models::EntropyEvent;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-pub use errors::HostVaultError;
 use models::HostVaultState;
-pub use models::{
-    EntropyEvent, HostVaultConfig, HostVaultManifestEntry, RecoveryExportResponse,
-    SecretEntryContext, VaultMode, VaultStatus,
-};
-pub use paths::{default_dev_key_path, default_vault_home};
 
 #[derive(Clone)]
 pub struct HostVault {

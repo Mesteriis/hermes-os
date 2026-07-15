@@ -2,8 +2,9 @@ use axum::Json;
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 
-use crate::app::{ApiError, AppState};
-use crate::domains::tasks::core::{TaskProviderAccount, TaskProviderStore};
+use crate::app::error::types::ApiError;
+use crate::app::state::AppState;
+use crate::domains::tasks::core::providers::TaskProviderAccount;
 
 use super::support::database_pool;
 
@@ -17,7 +18,7 @@ pub(crate) async fn get_task_providers(
 ) -> Result<Json<TaskProvidersResponse>, ApiError> {
     let pool = database_pool(&state)?;
     let items = crate::app::api_support::stores::domain_stores::app_store::<
-        crate::domains::tasks::core::TaskProviderStore,
+        crate::domains::tasks::core::provider_store::TaskProviderStore,
     >(pool)
     .list()
     .await
@@ -37,7 +38,7 @@ pub(crate) async fn post_task_provider(
 ) -> Result<Json<TaskProviderAccount>, ApiError> {
     let pool = database_pool(&state)?;
     let provider = crate::app::api_support::stores::domain_stores::app_store::<
-        crate::domains::tasks::core::TaskProviderStore,
+        crate::domains::tasks::core::provider_store::TaskProviderStore,
     >(pool)
     .create(&req.provider, &req.account_name)
     .await

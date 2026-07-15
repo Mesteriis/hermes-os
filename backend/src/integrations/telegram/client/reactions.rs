@@ -4,9 +4,9 @@ use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, Transaction};
 
 use super::commands::insert_command;
+use super::commands::{mark_command_mismatch, mark_command_reconciled};
 use super::errors::TelegramError;
 use super::evidence::link_telegram_entity_in_transaction;
-use super::lifecycle::{mark_command_mismatch, mark_command_reconciled};
 use super::messages::reaction_metadata::TdlibProviderReaction;
 use super::models::messages::{
     TelegramCommandKind, TelegramProviderWriteCommand, TelegramReaction, TelegramReactionGroup,

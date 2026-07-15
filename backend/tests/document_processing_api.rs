@@ -6,10 +6,14 @@ use axum::http::{Request, StatusCode, header};
 use chrono::Utc;
 use hermes_events_api::NewEventEnvelope;
 use hermes_events_postgres::store::EventStore;
-use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::domains::documents::processing::DocumentProcessingStore;
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::app::router::build_router_with_database;
+use hermes_hub_backend::domains::documents::core::{
+    models::NewDocumentImport, store::DocumentImportStore,
+};
+use hermes_hub_backend::domains::documents::processing::{
+    models::DocumentProcessingStep, store::DocumentProcessingStore,
+};
+use hermes_hub_backend::platform::storage::database::Database;
 use serde_json::Value;
 use sqlx::query_scalar;
 use tower::ServiceExt;
@@ -18,7 +22,7 @@ const LOCAL_API_TOKEN: &str = "document-processing-api-test-token";
 
 #[tokio::test]
 async fn get_document_processing_jobs_rejects_missing_local_api_secret() {
-    let app = hermes_hub_backend::app::build_router(
+    let app = hermes_hub_backend::app::router::build_router(
         hermes_backend_testkit::app::config_with_secret(LOCAL_API_TOKEN),
     );
 
@@ -182,9 +186,7 @@ async fn post_document_processing_job_retry_requeues_failed_job() {
         .expect("enqueue jobs");
     let extract_job = jobs
         .iter()
-        .find(|job| {
-            job.step == hermes_hub_backend::domains::documents::processing::DocumentProcessingStep::ExtractText
-        })
+        .find(|job| job.step == DocumentProcessingStep::ExtractText)
         .expect("extract text job");
 
     sqlx::query(
@@ -325,9 +327,7 @@ async fn post_document_processing_job_retry_rejects_non_failed_job_with_stable_b
         .expect("enqueue jobs");
     let extract_job = jobs
         .iter()
-        .find(|job| {
-            job.step == hermes_hub_backend::domains::documents::processing::DocumentProcessingStep::ExtractText
-        })
+        .find(|job| job.step == DocumentProcessingStep::ExtractText)
         .expect("extract text job");
 
     let app = build_router_with_database(
@@ -523,14 +523,10 @@ async fn create_failed_extract_text_job(
     job_id
 }
 
-fn step_name(
-    step: &hermes_hub_backend::domains::documents::processing::DocumentProcessingStep,
-) -> &'static str {
+fn step_name(step: &DocumentProcessingStep) -> &'static str {
     match step {
-        hermes_hub_backend::domains::documents::processing::DocumentProcessingStep::ExtractText => {
-            "extract_text"
-        }
-        hermes_hub_backend::domains::documents::processing::DocumentProcessingStep::Ocr => "ocr",
+        DocumentProcessingStep::ExtractText => "extract_text",
+        DocumentProcessingStep::Ocr => "ocr",
     }
 }
 

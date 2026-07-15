@@ -1,7 +1,8 @@
 use chrono::Utc;
 use serde_json::Value;
 
-use crate::integrations::telegram::client::{TelegramDeliveryState, TelegramError};
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::models::messages::TelegramDeliveryState;
 
 use super::message_parts::{tdlib_message_sender, tdlib_message_text};
 use super::values::{tdlib_string_id, tdlib_unix_datetime_value};

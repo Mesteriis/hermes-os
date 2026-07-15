@@ -1,4 +1,22 @@
-use super::support::*;
+use crate::app::handlers::calendar::{
+    accounts::*,
+    analytics::*,
+    brain::*,
+    events::{
+        agenda::*, checklist::*, context_pack::*, crud::*, participants::*, relations::*, status::*,
+    },
+    health::*,
+    intelligence::*,
+    meetings::*,
+    reminders::*,
+    rules::*,
+    scheduling::*,
+    search::*,
+    sync::*,
+};
+use crate::app::state::AppState;
+use axum::Router;
+use axum::routing::{get, post, put};
 
 pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
     router

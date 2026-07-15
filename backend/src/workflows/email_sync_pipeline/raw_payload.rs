@@ -2,7 +2,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE, URL_SAFE_NO_PAD};
 use serde_json::{Value, json};
 
-use crate::domains::communications::storage::StoredCommunicationBlob;
+use crate::domains::communications::storage::models::StoredCommunicationBlob;
 use hermes_communications_api::accounts::CommunicationProviderKind;
 
 use super::errors::EmailSyncRecordError;

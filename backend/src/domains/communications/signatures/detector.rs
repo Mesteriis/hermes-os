@@ -1,7 +1,8 @@
 use chrono::Utc;
 use serde::Serialize;
 
-use super::{CertificateRecord, CertificateType};
+use super::certificate_type::CertificateType;
+use super::models::CertificateRecord;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct SignatureDetection {

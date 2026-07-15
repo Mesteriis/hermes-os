@@ -1,9 +1,11 @@
 use chrono::{DateTime, TimeDelta, Utc};
 
-use crate::vault::{HostVault, HostVaultError, VaultMode};
+use crate::vault::HostVault;
+use crate::vault::errors::HostVaultError;
+use crate::vault::models::VaultMode;
 
 use super::errors::MailSyncError;
-use super::models::MailSyncSettings;
+use super::models::settings::MailSyncSettings;
 use super::{MAX_BATCH_SIZE, MAX_POLL_INTERVAL_SECONDS, MIN_POLL_INTERVAL_SECONDS};
 
 pub(super) fn require_unlocked_vault(vault: &HostVault) -> Result<(), HostVaultError> {

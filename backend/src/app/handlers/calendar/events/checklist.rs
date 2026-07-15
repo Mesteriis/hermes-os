@@ -27,7 +27,7 @@ pub(crate) async fn post_event_checklist(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
     Json(req): Json<SetChecklistRequest>,
-) -> Result<Json<crate::domains::calendar::core::EventChecklist>, ApiError> {
+) -> Result<Json<crate::domains::calendar::core::checklists::EventChecklist>, ApiError> {
     let requested_source = req.source.as_deref().unwrap_or("manual");
     let items = req.items;
     let pool = state

@@ -4,11 +4,12 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode};
 use chrono::{TimeZone, Utc};
 use hermes_backend_testkit::context::TestContext;
-use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::app::router::build_router_with_database;
 use hermes_hub_backend::domains::review::{
-    NewReviewItem, NewReviewItemEvidence, ReviewInboxStore, ReviewItemKind, ReviewItemStatus,
+    models::{NewReviewItem, NewReviewItemEvidence, ReviewItemKind, ReviewItemStatus},
+    store::ReviewInboxStore,
 };
-use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::platform::storage::database::Database;
 use hermes_observations_api::models::{NewObservation, ObservationOriginKind};
 use hermes_observations_postgres::store::ObservationStore;
 use serde_json::json;

@@ -10,7 +10,7 @@ use hermes_events_postgres::errors::EventStoreError;
 use hermes_events_postgres::store::EventStore;
 
 use super::errors::PersonaCoreError;
-use super::link_persona_entity_in_transaction;
+use super::evidence::link_persona_entity_in_transaction;
 
 pub const PERSONA_ROLE_ASSIGNED_EVENT_TYPE: &str = "persona.role.assigned";
 pub const PERSONA_ROLE_REMOVED_EVENT_TYPE: &str = "persona.role.removed";

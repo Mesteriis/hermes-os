@@ -1,7 +1,6 @@
 use hermes_events_api::EventEnvelope;
 use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
-use sqlx::{Postgres, Row, Transaction};
 
 use hermes_events_postgres::store::EventStore;
 use hermes_observations_postgres::review_links::materialize_review_transition_link_in_transaction;
@@ -11,7 +10,7 @@ use super::errors::ProjectLinkReviewError;
 use super::events::ReviewEvent;
 use super::models::{
     ProjectLinkReview, ProjectLinkReviewCommand, ProjectLinkReviewCommandResult,
-    ProjectLinkReviewState, ProjectLinkTargetKind, ProjectReviewedTarget, ReviewEventApplication,
+    ProjectLinkTargetKind, ProjectReviewedTarget, ReviewEventApplication,
 };
 use super::rows::{row_to_project_link_review, row_to_project_reviewed_target};
 use super::validation::validate_non_empty;

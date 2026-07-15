@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::platform::secrets::ResolvedSecret;
+use crate::platform::secrets::models::ResolvedSecret;
 
 use super::errors::ConfigError;
 use super::parsing::required_trimmed;

@@ -1,4 +1,4 @@
-use hermes_hub_backend::domains::personas::api::PersonaProjectionStore;
+use hermes_hub_backend::domains::personas::api::store::PersonaProjectionStore;
 use hermes_hub_backend::engines::consistency::{
     models::{ContradictionSeverity, ContradictionSourceKind},
     store::ContradictionObservationStore,

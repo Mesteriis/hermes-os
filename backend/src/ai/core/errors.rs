@@ -1,4 +1,3 @@
-use hermes_events_api::EventEnvelopeError;
 use thiserror::Error;
 
 use crate::ai::hub::AiHubError;
@@ -6,7 +5,7 @@ use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 use hermes_events_postgres::errors::EventStoreError;
 use hermes_observations_postgres::errors::ObservationStoreError;
 
-use super::service::AiPersonaAttributionError;
+use super::service::attribution_port::AiPersonaAttributionError;
 
 #[derive(Debug, Error)]
 pub enum AiError {

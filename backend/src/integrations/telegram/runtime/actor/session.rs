@@ -1,8 +1,9 @@
-use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::platform::secrets::store::SecretReferenceStore;
 use hermes_communications_api::accounts::ProviderAccountSecretPurpose;
 use hermes_communications_api::accounts::ProviderSecretBindingLookupPort;
 
-use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
+use crate::platform::secrets::resolver::SecretResolver;
 
 pub(in crate::integrations::telegram::runtime) async fn optional_telegram_session_key(
     binding_store: &dyn ProviderSecretBindingLookupPort,

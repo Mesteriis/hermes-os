@@ -2,7 +2,7 @@ use hermes_communications_api::accounts::ProviderAccountCommandPort;
 use hermes_communications_api::accounts::ProviderSecretBindingCommandPort;
 use std::sync::Arc;
 
-use crate::platform::secrets::SecretReferenceStore;
+use crate::platform::secrets::store::SecretReferenceStore;
 use sqlx::postgres::PgPool;
 
 use super::super::errors::EmailAccountSetupError;

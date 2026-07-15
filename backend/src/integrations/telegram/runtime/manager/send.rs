@@ -1,6 +1,8 @@
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramForwardRequest, TelegramManualSendRequest, TelegramManualSendResponse,
-    TelegramReplyRequest, telegram_text_preview_hash,
+use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::identifiers::telegram_text_preview_hash;
+use crate::integrations::telegram::client::models::messages::{
+    TelegramForwardRequest, TelegramManualSendRequest, TelegramManualSendResponse,
+    TelegramReplyRequest,
 };
 
 use super::super::commands::{request_actor_forward, request_actor_reply, request_actor_send};
@@ -15,7 +17,7 @@ impl TelegramRuntimeManager {
         request: &TelegramManualSendRequest,
     ) -> Result<TelegramManualSendResponse, TelegramError>
     where
-        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+        S: crate::platform::secrets::resolver::SecretResolver + Sync + ?Sized,
     {
         request.validate()?;
         let account =
@@ -71,7 +73,7 @@ impl TelegramRuntimeManager {
         request: &TelegramReplyRequest,
     ) -> Result<TelegramManualSendResponse, TelegramError>
     where
-        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+        S: crate::platform::secrets::resolver::SecretResolver + Sync + ?Sized,
     {
         request.validate()?;
         let account =
@@ -136,7 +138,7 @@ impl TelegramRuntimeManager {
         request: &TelegramForwardRequest,
     ) -> Result<TelegramManualSendResponse, TelegramError>
     where
-        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+        S: crate::platform::secrets::resolver::SecretResolver + Sync + ?Sized,
     {
         request.validate()?;
         let account =

@@ -1,6 +1,6 @@
 use sqlx::{Postgres, QueryBuilder};
 
-use super::models::{MessageSearchMatchMode, MessageSearchQuery};
+use super::models::MessageSearchQuery;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MessageSearchField {
