@@ -1,3 +1,12 @@
 [workspace]
-members = []
+members = [
+  "src/platform/events",
+  "src/platform/runtime_protocol",
+  "src/api/gateway/contracts",
+  "src/kernel/control_store/contract",
+  "src/kernel/control_store/sqlite",
+  "src/kernel",
+  "development/runtime",
+  "tests/support/kernel-recovery",
+]
 resolver = "2"

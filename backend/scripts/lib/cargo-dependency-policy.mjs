@@ -10,13 +10,13 @@ function isAllowedSameOwnerDependency(source, target) {
     case 'persistence':
       return ['implementation', 'persistence'].includes(target.surface);
     case 'runtime':
-      return ['implementation', 'persistence', 'runtime'].includes(target.surface);
+      return ['implementation', 'persistence'].includes(target.surface);
     default:
       return false;
   }
 }
 
-function isAllowedDependency(policy, source, target) {
+function isAllowedDependency(policy, source, target, targetPackageName) {
   if (source.role === target.role && source.owner === target.owner) {
     return isAllowedSameOwnerDependency(source, target);
   }
@@ -28,7 +28,7 @@ function isAllowedDependency(policy, source, target) {
     case 'integration':
       return ['platform', 'engine'].includes(target.role)
         || (target.role === 'domain'
-          && policy.dependencies.integrationDomainContractOwners.includes(target.owner));
+          && policy.dependencies.integrationDomainContractPackages.includes(targetPackageName));
     case 'workflow':
       return ['domain', 'integration', 'platform', 'engine', 'api'].includes(target.role);
     case 'engine':
@@ -36,7 +36,7 @@ function isAllowedDependency(policy, source, target) {
     case 'platform':
       return target.role === 'platform';
     case 'api':
-      return ['domain', 'integration', 'workflow', 'platform', 'engine'].includes(target.role);
+      return target.role === 'platform';
     case 'core':
       return ['platform', 'api'].includes(target.role);
     case 'test':
@@ -55,16 +55,119 @@ export function validateDependencyEdges(policy, packages, descriptors) {
     const isTelemetryImplementation = source.role === 'platform'
       && source.owner === policy.telemetry.owner
       && source.surface !== 'contract';
+    const isEventsProtocol = pkg.name === policy.events.protocolPackage;
+    const isRuntimeProtocol = pkg.name === policy.runtimeProtocol.protocolPackage;
+    const isVaultContract = [
+      policy.vault.protocolPackage,
+      policy.vault.keyProviderPackage,
+    ].includes(pkg.name);
+    const sourceIsVaultOwner = source.role === policy.vault.role
+      && source.owner === policy.vault.owner;
+    const isStorageProtocol = pkg.name === policy.storage.protocolPackage;
+    const sourceIsStorageOwner = source.role === policy.storage.role
+      && source.owner === policy.storage.owner;
 
     for (const dependency of list(pkg.dependencies)) {
       const kind = dependency.kind ?? 'normal';
       const target = descriptors.get(dependency.name);
 
-      if (policy.storage.clientDependencies.includes(dependency.name) && source.surface !== 'persistence') {
+      const isSqliteClient = policy.storage.sqliteClientDependencies.includes(dependency.name);
+      const isPostgresClient = policy.storage.postgresClientDependencies.includes(dependency.name);
+
+      if (isSqliteClient && !policy.storage.sqlitePackages.includes(pkg.name)) {
+        violations.push(violation(
+          'sqlite_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          `${dependency.name} is reserved for the exact private SQLite/SQLCipher packages`,
+        ));
+      } else if (isPostgresClient && (!policy.storage.allowedPostgresClientDependencies
+        .includes(dependency.name)
+        || source.surface !== 'persistence'
+        || (sourceIsStorageOwner && pkg.name !== policy.storage.postgresPackage))) {
         violations.push(violation(
           'storage_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
-          `${dependency.name} is allowed only in a persistence surface`,
+          `${dependency.name} is allowed only in an owner persistence surface and the exact Storage PostgreSQL adapter`,
+        ));
+      }
+
+      if (policy.storage.astParserDependencies.includes(dependency.name)
+        && pkg.name !== policy.storage.migrationsPackage) {
+        violations.push(violation(
+          'storage_ast_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          `${dependency.name} is reserved for the exact Storage migration admission package`,
+        ));
+      }
+
+      if (isStorageProtocol
+        && policy.storage.forbiddenProtocolDependencies.includes(dependency.name)) {
+        violations.push(violation(
+          'storage_protocol_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          `Storage protocol cannot depend on ${dependency.name}`,
+        ));
+      }
+
+      if (sourceIsStorageOwner
+        && !isStorageProtocol
+        && policy.storage.forbiddenOwnerDependencies.includes(dependency.name)) {
+        violations.push(violation(
+          'storage_owner_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          `Storage owner packages cannot depend on broker client ${dependency.name}`,
+        ));
+      }
+
+      if (isEventsProtocol && policy.events.forbiddenDependencies.includes(dependency.name)) {
+        violations.push(violation(
+          'events_protocol_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          `canonical events protocol cannot depend on ${dependency.name}`,
+        ));
+      }
+
+      if (isRuntimeProtocol
+        && policy.runtimeProtocol.forbiddenDependencies.includes(dependency.name)) {
+        violations.push(violation(
+          'runtime_protocol_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          `canonical runtime protocol cannot depend on ${dependency.name}`,
+        ));
+      }
+
+      if (isVaultContract
+        && policy.vault.forbiddenProtocolDependencies.includes(dependency.name)) {
+        violations.push(violation(
+          'vault_protocol_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          `Vault contract packages cannot depend on ${dependency.name}`,
+        ));
+      }
+
+      if (sourceIsVaultOwner
+        && !isVaultContract
+        && policy.vault.forbiddenOwnerDependencies.includes(dependency.name)) {
+        violations.push(violation(
+          'vault_owner_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          `Vault owner packages cannot depend on broker or PostgreSQL client ${dependency.name}`,
+        ));
+      }
+
+      if (!target && dependency.name.startsWith('hermes-vault-')) {
+        violations.push(violation(
+          'vault_private_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'Vault dependencies must resolve to an exact ADR-0223 workspace package',
+        ));
+      }
+
+      if (!target && dependency.name.startsWith('hermes-storage-')) {
+        violations.push(violation(
+          'storage_private_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'Storage dependencies must resolve to an exact ADR-0224 workspace package',
         ));
       }
 
@@ -79,12 +182,131 @@ export function validateDependencyEdges(policy, packages, descriptors) {
         continue;
       }
 
+      // Dedicated test-support packages exercise real production adapters and
+      // runtimes. They never participate in the production dependency graph.
+      if (source.role === 'test') continue;
+
       if (source.role !== 'test' && target.role === 'test') {
         if (kind === 'dev') continue;
         violations.push(violation(
           'production_test_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
           'production packages may use test support only as a dev dependency',
+        ));
+        continue;
+      }
+
+      const sourceIsModule = policy.compileIsolation.moduleRoles.includes(source.role);
+      const targetIsModule = policy.compileIsolation.moduleRoles.includes(target.role);
+      const targetIsVaultOwner = target.role === policy.vault.role
+        && target.owner === policy.vault.owner;
+      const targetIsStorageOwner = target.role === policy.storage.role
+        && target.owner === policy.storage.owner;
+
+      if (!sourceIsVaultOwner
+        && source.role !== 'test'
+        && targetIsVaultOwner
+        && dependency.name !== policy.vault.protocolPackage) {
+        violations.push(violation(
+          'vault_private_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'production packages outside Vault may depend only on the public Vault protocol',
+        ));
+        continue;
+      }
+
+      if (sourceIsVaultOwner
+        && (target.role === 'core' || target.role === 'api' || targetIsModule)) {
+        violations.push(violation(
+          'vault_owner_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'Vault owner packages cannot depend on Kernel, Gateway or module packages',
+        ));
+        continue;
+      }
+
+      if (!sourceIsStorageOwner
+        && source.role !== 'test'
+        && targetIsStorageOwner
+        && dependency.name !== policy.storage.protocolPackage) {
+        violations.push(violation(
+          'storage_private_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'production packages outside Storage may depend only on the public Storage protocol',
+        ));
+        continue;
+      }
+
+      if (sourceIsStorageOwner
+        && (target.role === 'core' || target.role === 'api' || targetIsModule)) {
+        violations.push(violation(
+          'storage_owner_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'Storage owner packages cannot depend on Kernel, Gateway or module packages',
+        ));
+        continue;
+      }
+
+      if (sourceIsModule && target.role === 'core') {
+        violations.push(violation(
+          'kernel_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'modules depend on runtime protocols, never on the Kernel implementation',
+        ));
+        continue;
+      }
+
+      if (source.role === 'core' && targetIsModule) {
+        violations.push(violation(
+          'kernel_module_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'Kernel discovers modules through protocols and cannot compile owner-specific packages',
+        ));
+        continue;
+      }
+
+      if (source.role === 'api' && targetIsModule) {
+        violations.push(violation(
+          'gateway_module_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'Gateway protocol cannot compile owner-specific packages',
+        ));
+        continue;
+      }
+
+      if (policy.compileIsolation.forbidSameOwnerRuntimeDependencies
+        && source.role === target.role
+        && source.owner === target.owner
+        && source.surface === 'runtime'
+        && target.surface === 'runtime') {
+        violations.push(violation(
+          'runtime_aggregation_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'a runtime composes its implementation and adapters, not another runtime',
+        ));
+        continue;
+      }
+
+      if (policy.compileIsolation.forbidCrossOwnerPersistenceDependencies
+        && source.owner !== target.owner
+        && source.surface === 'persistence'
+        && target.surface === 'persistence') {
+        violations.push(violation(
+          'cross_owner_persistence_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'persistence adapters cannot depend on another owner persistence adapter',
+        ));
+        continue;
+      }
+
+      if (source.role === 'integration'
+        && target.role === 'domain'
+        && target.surface === 'contract'
+        && !policy.dependencies.integrationDomainContractPackages.includes(dependency.name)) {
+        violations.push(violation(
+          'integration_domain_contract_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'integrations may publish domain-neutral evidence only through an explicitly allowed ingress package',
         ));
         continue;
       }
@@ -98,7 +320,7 @@ export function validateDependencyEdges(policy, packages, descriptors) {
         continue;
       }
 
-      if (!isAllowedDependency(policy, source, target)) {
+      if (!isAllowedDependency(policy, source, target, dependency.name)) {
         violations.push(violation(
           'forbidden_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,

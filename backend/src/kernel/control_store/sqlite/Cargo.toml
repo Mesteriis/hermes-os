@@ -1,0 +1,17 @@
+[package]
+name = "hermes-kernel-control-store-sqlite"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "core"
+owner = "kernel"
+surface = "persistence"
+
+[dependencies]
+hermes-kernel-control-store = { path = "../contract" }
+rusqlite = { version = "=0.40.1", default-features = false, features = ["backup", "bundled"] }
+sha2 = { version = "=0.11.0", default-features = false }

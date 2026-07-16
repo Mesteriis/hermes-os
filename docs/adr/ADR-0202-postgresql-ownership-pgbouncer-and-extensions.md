@@ -7,8 +7,13 @@
 Зависит от:
 
 - [ADR-0200: Модульная модель и изоляция runtime](ADR-0200-clean-room-module-model-and-runtime-isolation.md);
-- [ADR-0201: Взаимодействие ядра и модулей через IPC и NATS](ADR-0201-core-module-communication-and-nats.md).
+- [ADR-0201: Взаимодействие ядра и модулей через IPC и NATS](ADR-0201-core-module-communication-and-nats.md);
 - [ADR-0203: Управление локальной инфраструктурой и восстановление](ADR-0203-managed-infrastructure-supervision-and-recovery.md).
+
+Уточняется:
+
+- [ADR-0224: Storage Control Plane, owner-scoped PostgreSQL и lifecycle migrations](ADR-0224-storage-control-plane-owner-scoped-postgresql-and-migration-lifecycle.md);
+- [ADR-0225: Первый recovery-only Kernel slice и фазовые ворота](ADR-0225-first-production-recovery-only-kernel-slice-and-phase-gates.md).
 
 ## Контекст
 
@@ -21,7 +26,8 @@ connections.
 Количество отдельных процессов делает прямые connection pools каждого модуля
 опасными: сумма локальных pools способна превысить `max_connections` даже при
 малой фактической нагрузке. Поэтому connection pooling и per-module quotas
-являются частью первой production topology, а не последующей оптимизацией.
+являются частью первого `storage_control_v1`/durable-owner slice, а не
+recovery-only Kernel и не последующей оптимизацией.
 
 ## Решение
 
@@ -31,24 +37,27 @@ PostgreSQL является первым и обязательным storage dri
 Domain и application contracts не содержат `PgPool`, SQLx types, PostgreSQL
 error codes или dialect-specific DTO.
 
-PostgreSQL-специфичный код разрешён только в storage/bootstrap runtime и
-module-owned persistence adapters.
+PostgreSQL-специфичный код разрешён только в `hermes-storage-postgres` и
+module-owned persistence adapters. Kernel, public storage protocol и SQL-free
+Storage Control orchestration не содержат SQL client или schema introspection.
 
-Используется одна physical database. Отдельная schema на модуль не требуется.
-Ownership обеспечивается PostgreSQL roles, grants, RLS для shared technical
-tables и executable ownership registry.
+Используется одна physical database с фиксированными platform-created schemas
+ADR-0224. Отдельная schema на модуль запрещена. Ownership обеспечивается
+owner-prefixed objects, PostgreSQL roles/grants и executable storage registry;
+RLS остаётся defense in depth, а не authority для cross-owner доступа.
 
 ### Владение таблицами
 
 - Каждая business table имеет ровно один owner module.
-- Owner фиксируется в module storage manifest и проверяется guard.
+- Owner фиксируется в admitted `StorageBundleV1`, immutable storage ledger и
+  проверяется guard.
 - Названия business tables имеют стабильный owner prefix.
 - Domain runtime не читает и не изменяет таблицы другого модуля.
 - Foreign keys разрешены внутри одного owner module.
 - Cross-module foreign keys запрещены; ссылки между модулями представлены
   typed IDs, events и workflow state.
-- Shared technical tables допустимы только для platform concerns: event log,
-  outbox, inbox, migrations, runtime leases и audit metadata.
+- Shared technical tables допустимы только для exact platform owners: events,
+  storage, scheduler и audit. Generic `platform` owner запрещён.
 
 Raw SQL вне owner persistence adapter запрещён.
 
@@ -59,8 +68,10 @@ Raw SQL вне owner persistence adapter запрещён.
 - privileged bootstrap/admin role — создаёт database, extensions и base roles;
 - migration coordinator role — выполняет versioned migrations через owner
   roles;
-- `<module>_owner` — `NOLOGIN`, владеет tables, sequences и functions модуля;
-- `<module>_runtime` — `LOGIN`, `NOINHERIT`, имеет только runtime DML grants;
+- owner DDL role — stable `NOLOGIN`, владеет tables, sequences и functions
+  одного durable owner;
+- runtime principal — generation-scoped `LOGIN`, `NOINHERIT` для exact
+  `registration_id + runtime_generation`, имеет только admitted DML grants;
 - event relay role — работает только с event log, outbox и delivery metadata;
 - read-only observability role — получает только безопасные statistics и
   health queries.
@@ -79,14 +90,19 @@ module tables.
 
 ### Shared technical tables
 
-Shared outbox/inbox/event tables принадлежат platform owner. Module runtime
-получает только необходимые operations и ограничивается по `module_id` через
-role-aware policy. Для таких tables применяется `FORCE ROW LEVEL SECURITY`, а
-runtime role не является table owner.
+Shared outbox/inbox/event tables принадлежат exact owner `events`. Module
+runtime не получает raw `SELECT`/`INSERT`/`UPDATE`/`DELETE` grants на них.
+Вместо этого он получает `EXECUTE` только на admitted versioned
+transaction-local functions, например
+`hermes_platform.events_append_outbox_v1`. Function выводит caller из
+аутентифицированного generation-scoped runtime principal, сверяет current
+registration/runtime/storage/grant/role generations, проверяет owner, bounded
+metadata, payload size и hash и не декодирует business payload.
 
-Policy не основывается на произвольном session variable. Identity выводится из
-аутентифицированной PostgreSQL role, чтобы transaction pooling не переносил
-module identity между клиентами.
+Для таких tables применяется `FORCE ROW LEVEL SECURITY` как defense in depth,
+но authority задают exact function contract, grants и caller mapping. Policy
+не основывается на произвольном session variable, чтобы transaction pooling не
+переносил module identity между клиентами.
 
 Event relay имеет отдельную явно ограниченную role. Его расширенный доступ не
 передаётся domain или integration runtime.
@@ -102,31 +118,38 @@ Event relay имеет отдельную явно ограниченную role
   ожидание NATS или user input.
 - Connection возвращается в pool сразу после commit/rollback.
 
-Supervisor subsystem Kernel управляет process lifecycle storage, а storage
-bootstrap/runtime управляет role provisioning, migration ordering, connection
-budgets и observability. Ни один из них не является универсальным SQL proxy и
-не содержит domain queries.
+Supervisor subsystem Kernel управляет только OS lifecycle PostgreSQL,
+PgBouncer и `hermes-storage-runtime`. Storage Control проверяет cluster,
+выдаёт typed attestation/readiness и управляет role provisioning, migration
+ordering, connection budgets и observability. Kernel не выполняет SQL
+introspection; ни Kernel, ни Storage Control не являются универсальным SQL
+proxy и не содержат domain queries.
 
 ### Migrations
 
-Каждый owner module поставляет versioned migration bundle для собственных
-objects. Migration coordinator:
+Каждый owner module поставляет immutable binary `StorageBundleV1` для
+собственных objects. Exact digest pin-ится admitted distribution/managed
+binding; running module не передаёт migration SQL. Storage Control:
 
 1. получает global migration lock через direct administrative connection;
-2. проверяет manifest и ownership conflicts;
+2. проверяет exact bundle digest, PostgreSQL AST, owner namespace и ownership
+   conflicts;
 3. применяет migration под соответствующей owner role;
-4. фиксирует checksum и version;
+4. фиксирует immutable step checksum, bundle digest и revision в canonical
+   storage ledger;
 5. выполняет privilege audit;
 6. только после этого разрешает запуск runtime.
 
-Module runtime не выполняет migrations и не получает direct PostgreSQL admin
-connection. Изменение extension set выполняется storage bootstrap, а не module
-migration.
+Module runtime и Kernel не выполняют migrations и не получают direct
+PostgreSQL admin connection. Изменение extension set выполняет Storage Control,
+а не module migration. V1 разрешает только transactional additive owner-local
+changes и forward-only recovery по ADR-0224.
 
 ### PgBouncer
 
-PgBouncer обязателен с первого walking skeleton. Все normal runtime
-connections идут через PgBouncer в `transaction` pooling mode.
+PgBouncer обязателен с первого `storage_control_v1` walking skeleton. В
+`kernel_recovery_only_v1` он запрещён ADR-0225. После открытия storage gate все
+normal runtime connections идут через PgBouncer в `transaction` pooling mode.
 
 Direct PostgreSQL connections разрешены только для:
 
@@ -205,7 +228,9 @@ Migration coordinator и другие session-affine administrative operations
   application role запрещена.
 - Предпочтительна SCRAM-SHA-256 authentication.
 - Credentials не хранятся в repository, argv или logs.
-- Core передаёт runtime только его PgBouncer endpoint и scoped credential.
+- Storage Control выдаёт runtime typed `StorageBindingV1` с generation-scoped
+  PgBouncer alias. Secret доставляется отдельно только через scoped Vault
+  `CredentialLeaseV1` ADR-0223/ADR-0224; Kernel не получает plaintext.
 - Health различает отказ PgBouncer, отказ PostgreSQL и исчерпание конкретного
   module pool.
 
@@ -224,7 +249,7 @@ embedding ownership, privacy policy и benchmark.
 
 Extension устанавливает только bootstrap role. Module persistence adapter
 может использовать extension только если capability объявлена в storage
-manifest.
+storage ownership declaration.
 
 ### Search ownership
 
@@ -254,8 +279,10 @@ tokens и raw blob bytes не индексируются.
 маскирует отказ storage. Core переводит storage-dependent capabilities в
 degraded state и не запускает бесконечные reconnect loops.
 
-Backup включает PostgreSQL state и отдельно проверяет восстановление role/grant
-model. NATS JetStream не заменяет backup canonical database.
+Backup включает PostgreSQL state и отдельно проверяет восстановление
+role/grant model и storage ledger в disposable cluster. Restore повышает
+storage generation и выполняет полный session fencing ADR-0224. NATS
+JetStream не заменяет backup canonical database.
 
 ## Отклонённые варианты
 
@@ -317,14 +344,18 @@ Integration environment с первого среза запускает чере
 - module role может CRUD только собственные tables;
 - попытка читать или изменять чужую table отклоняется;
 - runtime role не может DDL, `SET ROLE` или обойти RLS;
-- shared outbox/inbox policy изолирует строки по module identity;
+- shared outbox/inbox недоступен raw DML, а versioned technical function
+  проверяет generation-scoped caller и сохраняет exact bytes;
 - state mutation и outbox append атомарны;
 - NATS outage не теряет committed outbox;
 - PgBouncer transaction pooling переживает смену backend connection;
 - session-dependent operation fails in test и запрещена guard;
 - исчерпание pool одного module role не блокирует другой role;
 - суммарный connection budget не превышает PostgreSQL limit;
-- migration использует direct admin path, а runtime — только PgBouncer;
+- migration использует direct admin path и admitted `StorageBundleV1`, а
+  runtime — только generation-scoped PgBouncer binding;
+- revoke/role epoch/storage generation завершают old PgBouncer aliases и
+  PostgreSQL sessions до выдачи нового binding;
 - extensions присутствуют и доступны только разрешённым adapters;
 - fresh database bootstrap воспроизводит roles, grants, RLS, extensions и
   schema без legacy migrations.

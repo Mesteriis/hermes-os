@@ -1,0 +1,63 @@
+name: hermes-platform-development
+
+# development_full_platform_v1 only. This contour intentionally uses local
+# unauthenticated development services; never reuse its volumes or endpoints
+# for a release deployment.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: hermes_development
+      POSTGRES_USER: hermes_development
+      POSTGRES_HOST_AUTH_METHOD: trust
+    command:
+      - postgres
+      - -c
+      - listen_addresses=*
+    ports:
+      - 127.0.0.1:35432:5432
+    volumes:
+      - hermes-development-postgres:/var/lib/postgresql/data
+    networks:
+      - platform
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hermes_development -d hermes_development"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/var/lib/hermes", "-m", "8222"]
+    ports:
+      - 127.0.0.1:34222:4222
+      - 127.0.0.1:38222:8222
+    volumes:
+      - hermes-development-nats:/var/lib/hermes
+    networks:
+      - platform
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8222/healthz >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+
+networks:
+  platform:
+    internal: true
+
+volumes:
+  hermes-development-postgres:
+  hermes-development-nats:

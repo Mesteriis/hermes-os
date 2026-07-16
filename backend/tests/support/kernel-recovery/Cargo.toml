@@ -1,0 +1,18 @@
+[package]
+name = "hermes-kernel-recovery-testkit"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.hermes]
+role = "test"
+owner = "test"
+surface = "test_support"
+
+[dev-dependencies]
+hermes-events-protocol = { path = "../../../src/platform/events" }
+hermes-gateway-protocol = { path = "../../../src/api/gateway/contracts" }
+hermes-kernel-control-store = { path = "../../../src/kernel/control_store/contract" }
+hermes-kernel-control-store-sqlite = { path = "../../../src/kernel/control_store/sqlite" }
+hermes-runtime-protocol = { path = "../../../src/platform/runtime_protocol" }
+prost = "=0.14.4"
+prost-types = "=0.14.4"

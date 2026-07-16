@@ -12,6 +12,10 @@
 - [ADR-0207: Канонический реестр бизнес-доменов Hermes](ADR-0207-canonical-business-domain-registry.md);
 - [ADR-0208: Allowlist разработки доменов и запрет проекций](ADR-0208-domain-development-allowlist-and-projection-freeze.md).
 
+Уточняется:
+
+- [ADR-0225: Первый recovery-only Kernel slice и фазовые ворота](ADR-0225-first-production-recovery-only-kernel-slice-and-phase-gates.md).
+
 Этот ADR фиксирует физическое размещение packages, source, migrations,
 backend-инструментов и tests. Он не меняет ownership и dependency direction
 предыдущих решений.
@@ -134,7 +138,10 @@ Kernel является package `hermes-kernel`:
 
 ```text
 backend/src/kernel/
-├── Cargo.toml
+├── Cargo.toml                         # hermes-kernel runtime/composition
+├── control_store/
+│   ├── contract/                     # hermes-kernel-control-store
+│   └── sqlite/                       # hermes-kernel-control-store-sqlite
 └── src/
     ├── main.rs
     ├── boot/
@@ -149,7 +156,9 @@ backend/src/kernel/
 
 `event_hub` и `telemetry_control` являются внутренними responsibilities
 `hermes-kernel`, а не отдельными packages. Kernel tree не содержит domain,
-provider или workflow business logic.
+provider или workflow business logic. Control Store packages отделены только
+потому, что port и SQLite adapter имеют разные dependency/изменение причины;
+они остаются private owner `kernel` и не являются module API.
 
 ### Platform capabilities
 
@@ -351,8 +360,9 @@ Layout migration выполнена одним законченным срезо
 6. linters переключены на production/test roots настоящего ADR;
 7. documentation links и command entrypoints обновлены;
 8. ставшие пустыми root-level backend directories и команды удалены;
-9. первый production package разрешено создавать только после зелёного
-   architecture gate и принятия его owner contracts.
+9. ADR-0225 разрешил только exact six-package recovery-only set после зелёного
+   architecture gate; любой другой production package остаётся закрыт phase
+   gate и owner contract.
 
 Dual layout и compatibility symlink запрещены: после среза существует только
 новое каноническое расположение.

@@ -173,7 +173,7 @@ state других owners.
 До признания решения реализованным должны существовать:
 
 - executable inventory с ровно перечисленными domain `module_id`;
-- отдельные manifest, contract package, runtime identity и PostgreSQL role для
+- отдельные `ModuleDescriptorV1`, contract package, runtime identity и PostgreSQL role для
   каждого реализованного домена;
 - dependency guard, запрещающий domain-to-domain implementation imports;
 - storage guard, запрещающий cross-domain SQL и foreign keys;

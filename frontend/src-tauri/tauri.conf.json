@@ -25,10 +25,9 @@
     "active": true,
     "targets": "all",
     "externalBin": [
-      "binaries/hermes-hub-backend"
+      "binaries/hermes-kernel"
     ],
     "resources": {
-      "resources/google-oauth/": "google-oauth",
       "resources/tdlib/": "tdlib"
     },
     "icon": [

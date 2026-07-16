@@ -39,6 +39,11 @@ function containsInlineRustTest(content) {
   return /^\s*#\s*\[\s*cfg(?:_attr)?\s*\([^\]]*\btest\b[^\]]*\)\s*\]/mu.test(content);
 }
 
+function sourceLineCount(content) {
+  if (content.length === 0) return 0;
+  return content.split(/\r?\n/u).length;
+}
+
 export function validateSourceEntries(policy, entries) {
   const violations = [];
   const blockedDomains = new Set(policy.domains.blocked);
@@ -48,6 +53,7 @@ export function validateSourceEntries(policy, entries) {
   const ownerPathMarkers = new Set(policy.source.ownerPathMarkers);
   const forbiddenTestDirectories = new Set(policy.tests?.forbiddenProductionDirectories ?? []);
   const forbiddenTestFilePatterns = policy.tests?.forbiddenProductionFilePatterns ?? [];
+  const maxProductionSourceLines = policy.source.maxProductionSourceLines;
   const emitted = new Set();
 
   function emit(code, location, message) {
@@ -62,6 +68,15 @@ export function validateSourceEntries(policy, entries) {
         'source_symlink',
         entry.path,
         'production source symlinks are forbidden by ADR-0211',
+      );
+    }
+
+    if (typeof entry.content === 'string'
+      && sourceLineCount(entry.content) > maxProductionSourceLines) {
+      emit(
+        'production_source_too_large',
+        entry.path,
+        `production source exceeds ${maxProductionSourceLines} lines; split by responsibility`,
       );
     }
 

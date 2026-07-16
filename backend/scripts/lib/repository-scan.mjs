@@ -48,14 +48,24 @@ export async function collectEntriesFromRoots(
       throw new Error(`source root escapes repository: ${absolutePath}`);
     }
     if (stats.isSymbolicLink()) {
-      entries.push({ path: relativePath, content: '', isSymbolicLink: true });
+      entries.push({
+        path: relativePath,
+        content: '',
+        isDirectory: false,
+        isSymbolicLink: true,
+      });
       return;
     }
 
     if (stats.isDirectory()) {
       const name = absolutePath.split(sep).at(-1);
       if (includeDirectory && ignored.has(name)) return;
-      if (includeDirectory) entries.push({ path: relativePath, content: '' });
+      if (includeDirectory) entries.push({
+        path: relativePath,
+        content: '',
+        isDirectory: true,
+        isSymbolicLink: false,
+      });
       const children = await readdir(absolutePath);
       children.sort();
       for (const child of children) await walk(join(absolutePath, child), true);
@@ -65,7 +75,12 @@ export async function collectEntriesFromRoots(
     const content = readableExtensions.has(extname(absolutePath).toLowerCase())
       ? await readFile(absolutePath, 'utf8')
       : '';
-    entries.push({ path: relativePath, content });
+    entries.push({
+      path: relativePath,
+      content,
+      isDirectory: false,
+      isSymbolicLink: false,
+    });
   }
 
   for (const sourceRoot of configuredRoots) {

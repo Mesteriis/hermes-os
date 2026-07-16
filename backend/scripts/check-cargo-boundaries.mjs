@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  validateCurrentImplementationInventory,
+  validateCurrentImplementationSourceCoverage,
   validateCargoMetadata,
   validateWorkspaceManifestCoverage,
   validateWorkspacePackageRoots,
@@ -16,6 +18,7 @@ import {
 } from './lib/cargo-workspace.mjs';
 import { loadPolicy, validatePolicy } from './lib/policy-schema.mjs';
 import {
+  collectEntriesFromRoots,
   collectSourceEntries,
   collectTestSupportEntries,
 } from './lib/repository-scan.mjs';
@@ -35,10 +38,19 @@ if (policyViolations.length > 0) {
   const cargoMetadata = await readCargoMetadata(repositoryRoot);
   const sourceEntries = await collectSourceEntries(repositoryRoot, policy);
   const testSupportEntries = await collectTestSupportEntries(repositoryRoot, policy);
+  const developmentEntries = await collectEntriesFromRoots(
+    repositoryRoot,
+    [policy.implementation.developmentProfile.workspaceRoot],
+    policy.source.ignoredDirectories,
+    policy.source.contentExtensions,
+  );
   const productionManifests = sourceEntries
     .map(({ path }) => path)
     .filter((path) => path.endsWith('/Cargo.toml'));
   const testManifests = testSupportEntries
+    .map(({ path }) => path)
+    .filter((path) => path.endsWith('/Cargo.toml'));
+  const developmentManifests = developmentEntries
     .map(({ path }) => path)
     .filter((path) => path.endsWith('/Cargo.toml'));
   const workspaceManifests = cargoMetadata === null
@@ -47,17 +59,31 @@ if (policyViolations.length > 0) {
   const coverageViolations = validateWorkspaceManifestCoverage(
     productionManifests,
     testManifests,
+    developmentManifests,
     workspaceManifests,
   );
+  const packageRoots = cargoMetadata === null
+    ? []
+    : workspacePackageRoots(cargoMetadata, repositoryRoot, policy.cargo.metadataKey);
   const rootViolations = cargoMetadata === null
     ? []
     : validateWorkspacePackageRoots(
       policy,
-      workspacePackageRoots(cargoMetadata, repositoryRoot, policy.cargo.metadataKey),
+      packageRoots,
       new Set(productionManifests),
       new Set(testManifests),
+      new Set(developmentManifests),
     );
-  const workspaceViolations = [...coverageViolations, ...rootViolations];
+  const sourceCoverageViolations = validateCurrentImplementationSourceCoverage(
+    policy,
+    sourceEntries,
+    packageRoots,
+  );
+  const workspaceViolations = [
+    ...coverageViolations,
+    ...rootViolations,
+    ...sourceCoverageViolations,
+  ];
 
   if (workspaceViolations.length > 0) {
     console.error(`cargo-boundaries-check: failed (${workspaceViolations.length} violations)`);
@@ -73,6 +99,7 @@ if (policyViolations.length > 0) {
       policy.cargo.metadataKey,
     );
     const violations = [
+      ...validateCurrentImplementationInventory(policy, cargoMetadata),
       ...validateCargoMetadata(policy, cargoMetadata),
       ...validateStorageEntries(policy, storageEntries),
     ];

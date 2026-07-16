@@ -1,23 +1,10 @@
-# Google OAuth Desktop Client Resource
+# Retired legacy OAuth bundle resource
 
-This directory is packaged into the Tauri bundle as `$RESOURCES/google-oauth/`.
+Clean-room Tauri builds never package this directory and never forward OAuth
+configuration to `hermes-kernel`. Provider-specific OAuth provisioning belongs
+to a future owner/integration boundary after the Vault and Gateway contracts
+are implemented.
 
-Release builds must place the Google OAuth Desktop app JSON at:
-
-- `client_secret.json`
-
-Use:
-
-```sh
-make google-oauth-resource
-make frontend-tauri-build
-```
-
-`make google-oauth-resource` copies the JSON from
-`HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH` in `docker/.env`, or from
-`HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_SOURCE` when set in the shell.
-
-The generated `client_secret.json` is ignored by Git. It is intentionally a
-bundle artifact, not a source-controlled credential file. Packaged builds pass
-the bundled file path to the backend sidecar as
-`HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH`.
+`client_secret.json` remains ignored so an existing local provisioning file is
+not accidentally committed. It is not an allowed Tauri bundle resource or
+Kernel environment input.

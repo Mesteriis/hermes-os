@@ -1,5 +1,9 @@
 import { validateDependencyEdges } from './cargo-dependency-policy.mjs';
 import { inspectWorkspacePackages } from './cargo-package-policy.mjs';
+export {
+  validateCurrentImplementationInventory,
+  validateCurrentImplementationSourceCoverage,
+} from './current-implementation-inventory.mjs';
 import { violation } from './validation-diagnostics.mjs';
 
 export function validateCargoMetadata(policy, cargoMetadata) {
@@ -13,10 +17,11 @@ export function validateCargoMetadata(policy, cargoMetadata) {
 export function validateWorkspaceManifestCoverage(
   productionManifests,
   testManifests,
+  developmentManifests,
   workspaceManifests,
 ) {
   const registered = new Set(workspaceManifests);
-  const scoped = new Set([...productionManifests, ...testManifests]);
+  const scoped = new Set([...productionManifests, ...testManifests, ...developmentManifests]);
   const orphanProductionManifests = productionManifests
     .filter((manifest) => !registered.has(manifest))
     .map((manifest) => violation(
@@ -31,6 +36,13 @@ export function validateWorkspaceManifestCoverage(
       manifest,
       'test-support Cargo package must be a member of the clean-room workspace',
     ));
+  const orphanDevelopmentManifests = developmentManifests
+    .filter((manifest) => !registered.has(manifest))
+    .map((manifest) => violation(
+      'orphan_cargo_manifest',
+      manifest,
+      'development Cargo package must be a member of the clean-room workspace',
+    ));
   const unscopedPackages = workspaceManifests
     .filter((manifest) => !scoped.has(manifest))
     .map((manifest) => violation(
@@ -38,7 +50,12 @@ export function validateWorkspaceManifestCoverage(
       manifest,
       'clean-room workspace package must live under a configured production source root',
     ));
-  return [...orphanProductionManifests, ...orphanTestManifests, ...unscopedPackages];
+  return [
+    ...orphanProductionManifests,
+    ...orphanTestManifests,
+    ...orphanDevelopmentManifests,
+    ...unscopedPackages,
+  ];
 }
 
 export function validateWorkspacePackageRoots(
@@ -46,6 +63,7 @@ export function validateWorkspacePackageRoots(
   workspacePackages,
   productionManifests,
   testManifests,
+  developmentManifests,
 ) {
   const violations = [];
   for (const pkg of workspacePackages) {
@@ -61,6 +79,13 @@ export function validateWorkspacePackageRoots(
         'production_package_in_test_root',
         pkg.manifest,
         'only role=test packages may live under the test-only workspace root',
+      ));
+    }
+    if (developmentManifests.has(pkg.manifest) && pkg.role !== 'development') {
+      violations.push(violation(
+        'production_package_in_development_root',
+        pkg.manifest,
+        'only role=development packages may live in the explicit development runtime root',
       ));
     }
   }

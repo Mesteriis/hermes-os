@@ -1,0 +1,21 @@
+[package]
+name = "hermes-gateway-protocol"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "api"
+owner = "gateway"
+surface = "contract"
+
+[dependencies]
+hermes-runtime-protocol = { path = "../../../platform/runtime_protocol" }
+prost = "=0.14.4"
+prost-types = "=0.14.4"
+
+[build-dependencies]
+prost-build = "=0.14.4"
+protoc-bin-vendored = "=3.2.0"

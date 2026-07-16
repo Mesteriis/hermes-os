@@ -1,7 +1,7 @@
 # Документация Hermes clean-room
 
 Статус: проектирование; production backend runtime отсутствует
-Дата: 2026-07-15
+Дата: 2026-07-16
 
 В этой директории находится только документация новой clean-room системы.
 Документы предыдущего backend перенесены в
@@ -23,20 +23,41 @@
 - [ADR-0209: Kernel Event Hub и контроль подписок](adr/ADR-0209-kernel-event-hub-and-subscription-control-plane.md)
 - [ADR-0210: Telemetry Hub и локальная диагностика](adr/ADR-0210-telemetry-hub-and-local-diagnostics.md)
 - [ADR-0211: Backend workspace и физическая структура исходного кода](adr/ADR-0211-backend-workspace-and-source-layout.md)
+- [ADR-0212: Топология Cargo packages и изоляция пересборки модулей](adr/ADR-0212-crate-topology-and-compile-isolation.md)
+- [ADR-0213: Конституция кода, ownership и автономность модулей](adr/ADR-0213-code-ownership-and-module-autonomy.md)
+- [ADR-0214: Durable Job Platform, Scheduler и горячее изменение заданий](adr/ADR-0214-durable-job-platform-scheduler-and-runtime-reconfiguration.md)
+- [ADR-0215: Открытая регистрация модулей и capability grants](adr/ADR-0215-open-module-registration-and-capability-grants.md)
+- [ADR-0216: Private Kernel Control Store на SQLite](adr/ADR-0216-private-kernel-control-store-with-sqlite.md)
+- [ADR-0217: Нулевой внешний bootstrap Kernel](adr/ADR-0217-zero-external-dependency-kernel-bootstrap.md)
+- [ADR-0218: Owner/device identity, enrollment и offline recovery](adr/ADR-0218-owner-device-identity-enrollment-and-offline-recovery.md)
+- [ADR-0219: Целостность managed modules, distribution manifest и explicit updates](adr/ADR-0219-managed-module-distribution-integrity-and-explicit-updates.md)
+- [ADR-0220: Канонический durable envelope и эволюция контрактов](adr/ADR-0220-canonical-durable-envelope-and-contract-evolution.md)
+- [ADR-0221: ModuleDescriptorV1 и capability-level lifecycle](adr/ADR-0221-module-descriptor-and-capability-lifecycle-contract.md)
+- [ADR-0222: Kernel Settings Registry и supervised reconfiguration](adr/ADR-0222-kernel-settings-registry-and-supervised-reconfiguration.md)
+- [ADR-0223: Encrypted SQLite Vault и scoped credential leases](adr/ADR-0223-encrypted-sqlite-vault-and-scoped-credential-leases.md)
+- [ADR-0224: Storage Control Plane, owner-scoped PostgreSQL и lifecycle migrations](adr/ADR-0224-storage-control-plane-owner-scoped-postgresql-and-migration-lifecycle.md)
+- [ADR-0225: Первый production slice — recovery-only Kernel и фазовые ворота](adr/ADR-0225-first-production-recovery-only-kernel-slice-and-phase-gates.md)
+- [ADR-0226: Контекст для AI только через use-case workflows](adr/ADR-0226-ai-context-acquisition-through-use-case-workflows.md)
 
 ## Канонические summaries
 
 - [Architecture overview](architecture/architecture-overview.md)
 - [Component communication contract](architecture/component-communication.md)
+- [Storage Control Plane](architecture/storage-control-plane.md)
+- [Vault and credential leases](architecture/vault-and-credential-leases.md)
 - [Process/container topology](architecture/container-diagram.md)
 - [Executable architecture policy](../backend/architecture/README.md)
 
 ## Что ещё не определено
 
-Активных подробных product, domain, provider, workflow, AI, vault, UI, testing,
-deployment и operations specifications пока нет. Они должны появляться заново
-после обсуждения соответствующей границы и не могут восстанавливаться из legacy
-documentation как действующий contract.
+Активных подробных product, provider, UI, testing, deployment и operations
+specifications пока нет. Общая module settings model зафиксирована ADR-0222,
+Vault boundary — ADR-0223, Storage Control и migration lifecycle — ADR-0224,
+первый recovery-only production slice — ADR-0225, а cross-owner AI context
+boundary — ADR-0226. Конкретные owner contracts, schemas и migration bundles
+ещё не определены. Остальные specifications должны
+появляться заново после обсуждения соответствующей границы и не могут
+восстанавливаться из legacy documentation как действующий contract.
 
 Принятый ADR сам по себе не означает, что решение реализовано. Фактическое
 состояние указывается внутри каждого ADR и меняется только после executable

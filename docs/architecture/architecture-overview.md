@@ -1,7 +1,7 @@
 # Architecture Overview
 
 Статус: clean-room target, реализация не начата
-Дата: 2026-07-15
+Дата: 2026-07-16
 
 ## Architectural Thesis
 
@@ -29,6 +29,22 @@ Active architecture policy:
 - [ADR-0209: Kernel Event Hub and subscription control plane](../adr/ADR-0209-kernel-event-hub-and-subscription-control-plane.md).
 - [ADR-0210: Telemetry Hub and local diagnostics](../adr/ADR-0210-telemetry-hub-and-local-diagnostics.md).
 - [ADR-0211: backend workspace and source layout](../adr/ADR-0211-backend-workspace-and-source-layout.md).
+- [ADR-0212: Cargo package topology and compile isolation](../adr/ADR-0212-crate-topology-and-compile-isolation.md).
+- [ADR-0213: code ownership and module autonomy](../adr/ADR-0213-code-ownership-and-module-autonomy.md).
+- [ADR-0214: durable Job Platform and Scheduler](../adr/ADR-0214-durable-job-platform-scheduler-and-runtime-reconfiguration.md).
+- [ADR-0215: open module registration and capability grants](../adr/ADR-0215-open-module-registration-and-capability-grants.md).
+- [ADR-0216: private SQLite Kernel Control Store](../adr/ADR-0216-private-kernel-control-store-with-sqlite.md).
+- [ADR-0217: zero external dependency Kernel bootstrap](../adr/ADR-0217-zero-external-dependency-kernel-bootstrap.md).
+- [ADR-0218: owner/device identity and offline recovery](../adr/ADR-0218-owner-device-identity-enrollment-and-offline-recovery.md).
+- [ADR-0219: managed module distribution integrity and explicit updates](../adr/ADR-0219-managed-module-distribution-integrity-and-explicit-updates.md).
+- [ADR-0220: canonical durable envelope and contract evolution](../adr/ADR-0220-canonical-durable-envelope-and-contract-evolution.md).
+- [ADR-0221: ModuleDescriptorV1 and capability lifecycle](../adr/ADR-0221-module-descriptor-and-capability-lifecycle-contract.md).
+- [ADR-0222: Kernel Settings Registry and supervised reconfiguration](../adr/ADR-0222-kernel-settings-registry-and-supervised-reconfiguration.md).
+- [ADR-0223: encrypted SQLite Vault and scoped credential leases](../adr/ADR-0223-encrypted-sqlite-vault-and-scoped-credential-leases.md).
+- [ADR-0224: Storage Control Plane and owner-scoped PostgreSQL](../adr/ADR-0224-storage-control-plane-owner-scoped-postgresql-and-migration-lifecycle.md).
+- [ADR-0225: first production recovery-only Kernel slice and phase gates](../adr/ADR-0225-first-production-recovery-only-kernel-slice-and-phase-gates.md).
+- [ADR-0226: AI context through use-case workflows](../adr/ADR-0226-ai-context-acquisition-through-use-case-workflows.md).
+- [ADR-0227: deployment profiles and server bootstrap pairing](../adr/ADR-0227-deployment-profiles-and-server-bootstrap-pairing.md).
 - [Executable architecture policy](../../backend/architecture/README.md).
 
 Архивные ADR описывают предыдущую implementation и не являются policy новой
@@ -45,15 +61,138 @@ production packages находятся под `backend/src`, backend tooling и 
 policy, scripts, Cargo workspace и backend test suites запрещены executable
 layout guard.
 
+ADR-0212 отделяет compile isolation от process isolation. Kernel и Gateway не
+линкуют owner-specific packages; каждый domain/integration runtime собирает
+только packages своего владельца. Integration видит из business domains только
+точный `hermes-communications-ingress`, поэтому изменение implementation Mail,
+Telegram, Zulip или будущей integration не пересобирает Communications, Kernel
+или другие providers. WhatsApp implementation остаётся в hidden host WebView и
+не получает backend runtime package.
+
+ADR-0213 задаёт code-level constitution: одна единица имеет одного owner, одну
+ответственность и одну причину изменения. Module обязан независимо собираться,
+тестироваться и проходить lifecycle/failure evidence; infrastructure доступна
+только через явные platform capabilities. Line count остаётся review signal, а
+не заменой анализа responsibility.
+
+ADR-0214 вводит единый technical Job Platform для integrations, domains, AI,
+workflows и platform maintenance. Scheduler владеет временем и revisioned
+schedules; Job Executor, checkpoint и business/operational result принадлежат
+module-владельцу. Kernel только supervises Scheduler, а Event Hub остаётся
+control plane NATS topology.
+
+ADR-0215 отделяет discovery от trust. Любой локальный process может создать
+bounded `pending` registration, но до approval не получает data-plane rights.
+Effective GrantSet является пересечением requested capabilities, owner-approved grants
+и hard Kernel policy. Kernel гарантирует restart только для `managed` runtime;
+`external` runtime он авторизует, наблюдает и fences, но не запускает.
+
+ADR-0216 разрывает circular boot dependency: registrations, grant epochs,
+settings desired/effective revisions и desired infrastructure state принадлежат
+private SQLite Control Store Kernel.
+Kernel и minimal local recovery surface запускаются без PostgreSQL, PgBouncer,
+NATS, Vault и modules. Store не содержит business data/secrets и изолирован за
+отдельным core-owned port и persistence adapter.
+
+ADR-0217 делает boot source детерминированным: обязательного configuration file
+нет, default data directory выбирается через OS-standard location, а
+`--data-dir` является единственным explicit override. Исправная SQLite не
+входит в unconditional boot root; без неё доступен только restricted local
+recovery, а managed infrastructure и data plane заблокированы.
+
+ADR-0218 отделяет owner authority от OS UID и module identity. Каждое
+first-party device имеет отдельную non-exportable ES256 keypair; private key
+остаётся в platform signer, public/revocation state — в Control Store. При
+недоверенном store online доступны только status/validate/export, а
+restore/reset выполняются offline под exclusive lock.
+
+ADR-0219 отделяет открытую registration от managed-launch integrity. Unsigned
+local process может стать `pending` и после approval работать как `external`,
+но любой `managed` launch требует exact-byte `ManagedLaunchBinding`: signed
+distribution entry для bundled component либо fresh owner-approved digest pin.
+Kernel проверяет binding перед каждым spawn/restart, никогда не скачивает и не
+устанавливает code и не выполняет automatic rollback.
+
+ADR-0220 фиксирует один `DurableEnvelopeV1` в
+`hermes-events-protocol`: five-kind `oneof`, catalog-bound opaque Protobuf
+payload, independent envelope/owner versions и byte-for-byte outbox-to-NATS
+delivery. Result является только terminal, durable Ack отделён от JetStream
+ACK, dead letter — отдельная sanitized technical record, а client SSE использует
+другой gateway protocol.
+
+ADR-0221 фиксирует `ModuleDescriptorV1` в `hermes-runtime-protocol` и разделяет
+distribution inventory, runtime declaration, effective GrantSet и observed
+state. Capability является единицей approval/readiness/revoke, а dependencies
+ссылаются на contracts/capabilities, но не на implementation identity.
+
+ADR-0222 вводит exclusive Kernel Settings Registry. Modules объявляют typed
+schema и semantic validation, Kernel хранит desired/effective revisions,
+проверяет optimistic concurrency и выполняет hot apply либо supervised restart.
+Secrets, business/runtime state, cursors и Scheduler records исключены.
+
+ADR-0223 выделяет `platform/vault` в отдельный verified managed process. Kernel
+supervises lifecycle, вычисляет grants и маршрутизирует только HPKE ciphertext;
+root keys и credential plaintext в Kernel не попадают. Vault использует
+SQLCipher плюс record-level AEAD и выдаёт process-bound leases, fenced runtime
+generation и grant epoch. Большие/high-churn provider session stores остаются у
+integration owner.
+
+ADR-0224 выделяет `platform/storage` в отдельный managed control plane. Kernel
+Supervisor управляет PostgreSQL, PgBouncer и Storage Control lifecycle, но не
+реализует SQL. Module runtimes выполняют business SQL напрямую через PgBouncer;
+Storage Control владеет bootstrap, roles/grants/budgets, migration admission и
+readiness, но не находится на business data path. Runtime database credentials
+принадлежат Vault.
+
+ADR-0225 разделяет полный target и текущую реализацию. Первый разрешённый graph
+состоит ровно из шести recovery-only foundation packages, активирует в Kernel
+только `supervisor` и локальный `core_gateway`, не использует внешние services и
+не может достичь `ready`. Module control plane, managed launch, NATS, Blob,
+public Clock, Scheduler, public client gateway, whole-instance backup и первый
+owner остаются закрытыми phase gates.
+
+ADR-0226 не даёт AI стать superdomain. Cross-owner AI use case принадлежит
+explicit workflow: он читает public owner contracts, формирует bounded
+distinct generated request с common `AiContextReceiptV1` и concrete use-case
+context и передаёт его AI. AI не получает cross-owner SQL или query access, а
+global fragment union и generic/durable Context projection запрещены.
+
 ## Top-Level Shape
+
+Диаграмма ниже показывает целевую систему после открытия всех фазовых ворот.
+Она не является текущим runtime graph. Сейчас разрешён только recovery-only
+Kernel с private Control Store и local IPC; все стрелки к managed services и
+owner runtimes остаются design target.
 
 ```mermaid
 flowchart TB
     Desktop["Vue/Tauri desktop client"] --> Gateway["Core Gateway"]
     Android["Planned Android client"] --> Gateway
-    Gateway --> Router["Identity and capability router"]
+    Gateway --> Router["Module Registry and capability router"]
+    Gateway --> Settings["Kernel Settings Registry"]
+    ControlStore["Private Kernel SQLite control store"] --> Router
+    ControlStore --> Settings
+    ControlStore --> Supervisor["Kernel runtime and infrastructure supervisor"]
+    Settings --> Domains
+    Settings --> Workflows
+    Settings --> Integrations
+    Settings --> Vault["Managed Vault runtime"]
+    Supervisor --> Domains
+    Supervisor --> Workflows
+    Supervisor --> Integrations
+    Supervisor --> Scheduler
+    Supervisor --> PgBouncer
+    Supervisor --> PostgreSQL
+    Supervisor --> StorageControl["Managed Storage Control"]
+    Supervisor --> NATS
+    Supervisor --> Collector
+    Supervisor --> Vault
+    Router <-->|"authorized HPKE ciphertext"| Vault
+    Vault --> VaultStore["SQLCipher store and platform key adapter"]
     EventHub["Kernel Event Hub"] -. "catalog / subscriptions / health" .-> NATS
     TelemetryControl["Kernel Telemetry control"] --> Collector["Telemetry Collector"]
+    Scheduler["Scheduler runtime"] --> NATS
+    Scheduler --> PgBouncer
     Router --> Domains["Isolated domain runtimes"]
     Router --> Workflows["Isolated workflow runtimes"]
     Router --> Integrations["Bundled integration plugins"]
@@ -67,9 +206,12 @@ flowchart TB
     Workflows --> PgBouncer
     Integrations --> PgBouncer
     PgBouncer --> PostgreSQL["PostgreSQL"]
+    StorageControl -. "bootstrap / roles / migrations / readiness" .-> PostgreSQL
+    StorageControl -. "aliases / budgets / drain" .-> PgBouncer
     Domains -. "logs / metrics / traces" .-> Collector
     Workflows -. "logs / metrics / traces" .-> Collector
     Integrations -. "logs / metrics / traces" .-> Collector
+    Scheduler -. "logs / metrics / traces" .-> Collector
 ```
 
 Подробная process/container topology находится в
@@ -84,7 +226,8 @@ flowchart TB
 - ConnectRPC обслуживает queries, requests и commands.
 - Один replayable SSE stream на active client process обслуживает realtime.
 - HTTP вне ConnectRPC используется только для blobs, OAuth, health и SSE.
-- Tauri/Android host bridges дают только OS capabilities и bootstrap.
+- Tauri/Android host bridges дают только OS capabilities, bootstrap и typed
+  `DeviceSigner`; private device keys не доступны UI или Kernel.
 - Paired Android использует защищённый HTTP/2 baseline и preferred HTTP/3 over
   QUIC после conformance проверки; 0-RTT запрещён.
 
@@ -98,21 +241,37 @@ Kernel содержит только technical composition:
 - boot/recovery state machine;
 - Core Gateway;
 - client/session identity;
-- module registry и manifest validation;
+- module registry и validation self-declared runtime descriptors;
+- Settings Registry, schema catalog, desired/effective revisions и supervised
+  configuration application;
+- managed-launch verifier для signed distribution entries и owner-pinned exact
+  executable bytes;
 - startup dependency graph;
 - capability router;
 - runtime/infrastructure supervisor;
+- Vault authorization context, generation fencing и ciphertext routing без
+  credential plaintext;
 - Event Hub catalog, subscription reconciliation и delivery health;
 - Telemetry Hub identity, redaction, quotas и diagnostics control surface;
 - public error translation и sanitized health;
 - client-safe realtime projection;
-- technical bootstrap, listener и resource-budget configuration.
+- deterministic pre-store bootstrap boundary.
+
+Module settings доступны только после trustworthy Control Store и не становятся
+скрытыми pre-store bootstrap inputs. Module владеет schema/meaning, но не читает
+Control Store и не мержит settings другого owner. Kernel не интерпретирует
+business semantics values.
 
 Kernel не принимает business decisions, не читает module-owned tables и не
 преобразует provider payload в domain semantics. Он достигает
 `recovery_only` без PostgreSQL, PgBouncer, NATS, vault и modules. Отказ
 необязательного runtime переводит Kernel в `degraded`, а не останавливает
 здоровые capabilities.
+
+Kernel не является package manager: download/install/update выполняет Tauri
+host updater или OS package manager. External runtime остаётся вне process
+control Kernel. Integrity failure managed component даёт `blocked_integrity`
+без выбора другого executable, lifecycle fallback или automatic rollback.
 
 ## Contract Layer
 
@@ -174,12 +333,19 @@ Telegram, WhatsApp и Zulip являются integrations. Graph, Timeline, Sear
 Context являются derived projections или engine capabilities. Полные ownership
 правила зафиксированы в ADR-0207.
 
-### Current Implementation Allowlist
+### Development Allowlist and Current Production Inventory
 
-Реализация разрешена только для Communications, Contacts, Organizations,
-Tasks, Calendar, Documents и AI. Relationships, Projects, Obligations,
-Decisions, Knowledge и Review остаются зарегистрированными, но
-заблокированными.
+Product development allowlist разрешает проектирование Communications,
+Contacts, Organizations, Tasks, Calendar, Documents и AI. Relationships,
+Projects, Obligations, Decisions, Knowledge и Review остаются
+зарегистрированными, но заблокированными.
+
+Этот allowlist не является фактическим package inventory. В текущем
+`kernel_recovery_only_v1` owner inventory для domains, integrations, workflows
+и engines пуст. Разрешены только `hermes-events-protocol`,
+`hermes-runtime-protocol`, `hermes-gateway-protocol`, Control Store port/SQLite
+adapter и `hermes-kernel`. Первый owner требует отдельного `first_owner_v1`
+gate.
 
 Все product projections, включая Graph, Timeline, Search и Context,
 заблокированы. Допустимы только canonical state владельца, обычные database
@@ -189,8 +355,10 @@ indexes, несохраняемая request-time composition и provider operati
 ## Communication
 
 Синхронные module queries/requests идут через capability router и versioned
-local IPC. Durable commands, events, observations и results идут через
-PostgreSQL outbox/inbox и NATS JetStream.
+local IPC. Durable commands, events, observations, terminal results и durable
+Ack messages идут через PostgreSQL outbox/inbox и NATS JetStream. Producer
+сохраняет один canonical `DurableEnvelopeV1` byte buffer, relay публикует exact
+bytes, consumer сверяет `message_id` + hash до mutation.
 
 Inbound provider flow:
 
@@ -211,13 +379,35 @@ Source domain event → workflow → target domain command → target domain eve
 Direct domain-to-domain import, cross-module SQL и module-to-module socket
 запрещены.
 
+Cross-owner AI context следует отдельному application flow:
+
+```text
+owner event / user command
+        ↓
+use-case workflow → explicit owner queries
+        ↓
+distinct typed request + AiContextReceiptV1 → AI candidate/result
+        ↓
+workflow policy → target-domain command или review
+```
+
+AI runtime не вызывает owners напрямую и не читает их storage. Concrete request
+является request/run-scoped, common receipt фиксирует source revisions,
+completeness, privacy и egress policy, и ни один из них не является новой
+Context projection.
+
 ### Event Hub
 
-Kernel Event Hub строит catalog publishers/subscribers из проверенных
-manifests, согласует NATS streams, consumers и permissions и отслеживает
-readiness, lag, retry и DLQ. Он не читает payload и отсутствует на normal
+Kernel Event Hub строит catalog publishers/subscribers из authorized runtime
+descriptors и hard policy, согласует NATS streams, consumers и permissions и
+отслеживает readiness, lag, retry и DLQ. Event Hub не устанавливает executable
+trust: managed runtime попадает в actual catalog только после ADR-0219 launch
+verification. Он не читает payload и отсутствует на normal
 publisher-to-consumer data path. При отказе NATS declared topology остаётся
 доступна для diagnostics, а observed state помечается unavailable.
+Catalog связывает owner/name/major/revision с exact descriptor SHA-256,
+publishers/subscribers, kind и limits; incompatible required consumer блокирует
+producer cutover.
 
 ## Telemetry
 
@@ -232,21 +422,77 @@ Collector failure переводит telemetry capability в `degraded`, но н
 
 ## Storage
 
-PostgreSQL является canonical durable store. Каждый module использует отдельную
-role/grants и собственное namespace через PgBouncer. Cross-module tables и
-foreign keys запрещены. NATS является delivery/replay transport, а не заменой
-canonical storage.
+Kernel Supervisor управляет тремя отдельными managed capabilities:
+PostgreSQL, PgBouncer и Storage Control. Storage Control bootstrap-ит и
+reconciles cluster, roles/grants/budgets, immutable owner migration bundles и
+readiness. Он не проксирует и не декодирует business SQL. Module runtime
+получает `StorageBindingV1` и scoped Vault credential lease, после чего работает
+напрямую по пути `module → PgBouncer → PostgreSQL`.
 
-Private bodies, documents, media и secrets передаются только через разрешённые
-storage/blob/vault boundaries. NATS и client realtime envelopes содержат
+PostgreSQL является canonical relational store для module-owned business и
+operational state. Один cluster и одна database используют fixed schemas
+`hermes_data`, `hermes_platform` и `hermes_extensions`; owner objects имеют
+собственные prefixes, roles/grants и fully-qualified SQL. Cross-owner business
+SQL, tables и foreign keys запрещены. NATS является delivery/replay transport,
+а не заменой canonical owner storage.
+
+PgBouncer работает как bounded pool/queue boundary, но не является единственной
+security или budget boundary. PostgreSQL role limits, grants, timeouts и
+revocation sessions обязательны независимо от pooler. До появления OS-level
+socket/network sandbox и process conformance tests target `PgBouncer-only` нельзя
+считать доказательством того, что same-UID process физически не попробует direct
+PostgreSQL endpoint.
+
+Kernel Control Store, Vault credentials, blobs и telemetry имеют отдельные
+owners и не делают PostgreSQL универсальным хранилищем. Private bodies,
+documents и media проходят только через разрешённые owner/blob boundaries, а
+secret material — только через Vault. NATS и client realtime envelopes содержат
 bounded metadata и opaque references.
+
+Полный package, binding, migration и failure contract описан в
+[Storage Control Plane](storage-control-plane.md). Решение принято, но
+production Storage packages, managed binaries и PostgreSQL/PgBouncer integration
+suite ещё не реализованы.
+
+## Vault и credential leases
+
+Vault является отдельным managed OS process и не входит в Kernel, integration
+или domain failure/compromise boundary. Он запускается только после trustworthy
+Control Store и не является условием достижения `recovery_only`. Failure Vault
+блокирует только capabilities, которым нужны credentials.
+
+```text
+module Vault purpose request
+∩ owner-approved GrantSet
+∩ hard Kernel/Vault policy
+∩ current runtime session/generation
+        ↓
+process-bound CredentialLeaseV1
+```
+
+Kernel authorizes и routes sealed HPKE frames, но не decrypt-ит их. Vault
+повторно проверяет purpose, audience, runtime generation и grant epoch до чтения
+credential payload. Lock, restart, restore, revoke или stale epoch инвалидируют
+leases; persistent encrypted credential records при process restart не
+удаляются.
+
+Vault хранит bounded passwords, API/client secrets, OAuth refresh credentials,
+небольшие session credential blobs и wrapping keys. Он не хранит settings,
+business state, outbox/inbox/jobs, large/high-churn provider session databases
+или hidden WhatsApp WebView cookies/storage. Полный contract, limits, key
+hierarchy и recovery policy описаны в
+[Vault and credential leases](vault-and-credential-leases.md).
+
+Решение принято, но production Vault runtime, SQLCipher store, platform key
+adapter и conformance tests ещё не реализованы.
 
 ## Durable и Derived State
 
-В текущей реализации durable owner state ограничен семью разрешёнными доменами,
-их module outbox/inbox и provider operational state integration owners.
-Relationships, Projects, Obligations, Decisions, Knowledge и Review не имеют
-production state до разблокировки.
+В текущем `kernel_recovery_only_v1` durable business owner state отсутствует:
+domains, integrations, workflows и engines имеют пустой production inventory.
+После открытия `first_owner_v1` development allowlist ограничивает первые
+domain owners семью именами ADR-0208; остальные domains и все derived
+projections остаются заблокированы.
 
 Следующие категории derived rebuildable state архитектурно распознаны, но
 полностью заблокированы ADR-0208:
@@ -272,7 +518,9 @@ Stable contracts должны позволять заменить:
 - database implementation за storage capability boundary;
 - provider SDK/runtime;
 - LLM, embedding, vector и search implementations;
-- blob/vault implementations.
+- blob implementation;
+- Vault implementation только через отдельное изменение ADR-0223.
+- Storage implementation/topology только через отдельное изменение ADR-0224.
 
 Replaceability не означает одновременную поддержку нескольких implementations
-или silent runtime fallback.
+или silent runtime fallback. В V1 разрешён только bundled managed Vault.

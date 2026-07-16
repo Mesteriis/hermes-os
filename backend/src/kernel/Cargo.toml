@@ -1,0 +1,27 @@
+[package]
+name = "hermes-kernel"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "hermes-kernel"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "core"
+owner = "kernel"
+surface = "runtime"
+components = ["supervisor", "core_gateway"]
+
+[dependencies]
+clap = { version = "=4.6.2", default-features = false, features = ["derive", "error-context", "help", "std", "usage"] }
+directories = "=6.0.0"
+getrandom = { version = "=0.4.3", default-features = false }
+hermes-gateway-protocol = { path = "../api/gateway/contracts" }
+hermes-kernel-control-store = { path = "control_store/contract" }
+hermes-kernel-control-store-sqlite = { path = "control_store/sqlite" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+p256 = { version = "=0.14.0", default-features = false, features = ["ecdsa"] }
+prost = "=0.14.4"
+sha2 = { version = "=0.11.0", default-features = false }
+signal-hook = "=0.3.18"

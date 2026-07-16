@@ -14,16 +14,18 @@ export async function readCargoMetadata(repositoryRoot) {
     throw error;
   }
 
-  const { stdout } = await execFileAsync(
-    'cargo',
-    ['metadata', '--manifest-path', manifestPath, '--format-version', '1', '--no-deps'],
-    {
-      cwd: repositoryRoot,
-      encoding: 'utf8',
-      maxBuffer: 32 * 1024 * 1024,
-    },
-  );
-  return JSON.parse(stdout);
+  const options = {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+  };
+  const baseArguments = ['metadata', '--manifest-path', manifestPath, '--format-version', '1'];
+  const probe = await execFileAsync('cargo', [...baseArguments, '--no-deps'], options);
+  const shallowMetadata = JSON.parse(probe.stdout);
+  if (shallowMetadata.workspace_members.length === 0) return shallowMetadata;
+
+  const resolved = await execFileAsync('cargo', baseArguments, options);
+  return JSON.parse(resolved.stdout);
 }
 
 function normalize(path) {
@@ -43,7 +45,9 @@ export function workspacePackageRoots(cargoMetadata, repositoryRoot, metadataKey
   return cargoMetadata.packages
     .filter(({ id }) => workspaceIds.has(id))
     .map((pkg) => ({
+      name: pkg.name,
       manifest: normalize(relative(repositoryRoot, pkg.manifest_path)),
+      root: normalize(relative(repositoryRoot, dirname(pkg.manifest_path))),
       role: pkg.metadata?.[metadataKey]?.role ?? null,
     }))
     .sort((left, right) => left.manifest.localeCompare(right.manifest));
@@ -69,6 +73,7 @@ export function associateSqlWithWorkspace(sourceEntries, cargoMetadata, reposito
       return {
         ...entry,
         packageName: ownerPackage?.name ?? null,
+        role: ownerPackage?.descriptor.role ?? null,
         owner: ownerPackage?.descriptor.owner ?? null,
         surface: ownerPackage?.descriptor.surface ?? null,
       };

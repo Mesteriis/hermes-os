@@ -407,7 +407,7 @@ fn runtime_bridge_runtime_event_payload(
 
 fn dispatch_runtime_bridge_runtime_event(payload: Value) -> Result<u16, String> {
     let url = local_backend_runtime_bridge_url(RUNTIME_EVENTS_BRIDGE_PATH)?;
-    let secret = crate::local_api_secret();
+    let secret = crate::legacy_companion_secret()?;
     let config = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(5)))
         .build();
