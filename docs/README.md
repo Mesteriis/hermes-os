@@ -1,6 +1,6 @@
 # Документация Hermes clean-room
 
-Статус: проектирование; production backend runtime отсутствует
+Статус: clean-room foundation реализован; business/data plane ещё закрыты
 Дата: 2026-07-16
 
 В этой директории находится только документация новой clean-room системы.
@@ -38,6 +38,7 @@
 - [ADR-0224: Storage Control Plane, owner-scoped PostgreSQL и lifecycle migrations](adr/ADR-0224-storage-control-plane-owner-scoped-postgresql-and-migration-lifecycle.md)
 - [ADR-0225: Первый production slice — recovery-only Kernel и фазовые ворота](adr/ADR-0225-first-production-recovery-only-kernel-slice-and-phase-gates.md)
 - [ADR-0226: Контекст для AI только через use-case workflows](adr/ADR-0226-ai-context-acquisition-through-use-case-workflows.md)
+- [ADR-0229: Platform Clock contract и deterministic conformance](adr/ADR-0229-platform-clock-contract-and-deterministic-conformance.md)
 
 ## Канонические summaries
 
@@ -53,7 +54,8 @@
 Активных подробных product, provider, UI, testing, deployment и operations
 specifications пока нет. Общая module settings model зафиксирована ADR-0222,
 Vault boundary — ADR-0223, Storage Control и migration lifecycle — ADR-0224,
-первый recovery-only production slice — ADR-0225, а cross-owner AI context
+первый recovery-only production slice — ADR-0225, Clock boundary — ADR-0229,
+а cross-owner AI context
 boundary — ADR-0226. Конкретные owner contracts, schemas и migration bundles
 ещё не определены. Остальные specifications должны
 появляться заново после обсуждения соответствующей границы и не могут

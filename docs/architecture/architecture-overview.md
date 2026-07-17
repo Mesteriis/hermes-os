@@ -144,12 +144,12 @@ Storage Control владеет bootstrap, roles/grants/budgets, migration admiss
 readiness, но не находится на business data path. Runtime database credentials
 принадлежат Vault.
 
-ADR-0225 разделяет полный target и текущую реализацию. Первый разрешённый graph
-состоит ровно из шести recovery-only foundation packages, активирует в Kernel
-только `supervisor` и локальный `core_gateway`, не использует внешние services и
-не может достичь `ready`. Module control plane, managed launch, NATS, Blob,
-public Clock, Scheduler, public client gateway, whole-instance backup и первый
-owner остаются закрытыми phase gates.
+ADR-0225 разделяет полный target и текущую реализацию. Six-package recovery
+baseline теперь дополнен private module control plane, managed-launch trust и
+five-package `vault_v1` и two-package `clock_v1`. Control Store работает через один bounded
+SQLite actor и внешний crash-safe recovery fence. NATS, Blob,
+Scheduler, public client gateway, whole-instance backup и первый
+owner остаются закрытыми phase gates; Kernel не может достичь `ready`.
 
 ADR-0226 не даёт AI стать superdomain. Cross-owner AI use case принадлежит
 explicit workflow: он читает public owner contracts, формирует bounded
@@ -160,9 +160,9 @@ global fragment union и generic/durable Context projection запрещены.
 ## Top-Level Shape
 
 Диаграмма ниже показывает целевую систему после открытия всех фазовых ворот.
-Она не является текущим runtime graph. Сейчас разрешён только recovery-only
-Kernel с private Control Store и local IPC; все стрелки к managed services и
-owner runtimes остаются design target.
+Она не является текущим runtime graph. Сейчас разрешены private Kernel control
+IPC и Vault service gate; все стрелки к data
+plane и owner runtimes остаются design target.
 
 ```mermaid
 flowchart TB
@@ -451,8 +451,8 @@ bounded metadata и opaque references.
 
 Полный package, binding, migration и failure contract описан в
 [Storage Control Plane](storage-control-plane.md). Решение принято, но
-production Storage packages, managed binaries и PostgreSQL/PgBouncer integration
-suite ещё не реализованы.
+реализован только foundation package/Protobuf/AST-admission контур; managed
+binaries и PostgreSQL/PgBouncer integration suite ещё не реализованы.
 
 ## Vault и credential leases
 
@@ -483,7 +483,7 @@ business state, outbox/inbox/jobs, large/high-churn provider session databases
 hierarchy и recovery policy описаны в
 [Vault and credential leases](vault-and-credential-leases.md).
 
-Решение принято, но production Vault runtime, SQLCipher store, platform key
+Решение принято, но production Vault runtime, SQLCipher store, file-key
 adapter и conformance tests ещё не реализованы.
 
 ## Durable и Derived State

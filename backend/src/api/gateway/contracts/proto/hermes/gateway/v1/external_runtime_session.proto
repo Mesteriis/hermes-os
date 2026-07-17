@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package hermes.gateway.v1;
+
+import "hermes/runtime/v1/vault_runtime.proto";
+
+// Private local proof and capability-session protocol for an external runtime.
+message BeginExternalRuntimeSessionRequestV1 {
+  string registration_id = 1;
+  string runtime_id = 2;
+  uint64 runtime_generation = 3;
+  bytes distribution_artifact_sha256 = 4;
+}
+message BeginExternalRuntimeSessionResponseV1 {
+  string challenge_id = 1;
+  bytes challenge_bytes = 2;
+  string kernel_instance_id = 3;
+  uint64 grant_epoch = 4;
+  uint64 expires_at_unix_millis = 5;
+}
+message CompleteExternalRuntimeSessionRequestV1 {
+  string challenge_id = 1;
+  bytes signature_raw = 2;
+}
+message CompleteExternalRuntimeSessionResponseV1 {
+  string session_id = 1;
+  uint64 grant_epoch = 2;
+  uint64 expires_at_unix_millis = 3;
+}
+message AuthorizeExternalRuntimeCapabilityRequestV1 {
+  string session_id = 1;
+  string capability_id = 2;
+}
+message AuthorizeExternalRuntimeCapabilityResponseV1 { uint64 grant_epoch = 1; }
+message SubmitRuntimeSettingsSchemaRequestV1 { string session_id = 1; bytes descriptor_bytes = 2; bytes schema_bytes = 3; }
+message SubmitRuntimeSettingsSchemaResponseV1 { string registration_id = 1; uint32 schema_major = 2; uint32 schema_revision = 3; }
+message AcknowledgeRuntimeSettingsLifecycleRequestV1 { string session_id = 1; uint64 revision = 2; string acknowledgement = 3; string reason_code = 4; }
+message AcknowledgeRuntimeSettingsLifecycleResponseV1 { string registration_id = 1; uint64 revision = 2; }
+message RouteVaultCiphertextRequestV1 {
+  string session_id = 1;
+  hermes.runtime.v1.VaultCiphertextRouteV1 route = 2;
+}
+message RouteVaultCiphertextResponseV1 {
+  hermes.runtime.v1.VaultCiphertextResponseV1 response = 1;
+}
+message ExternalRuntimeSessionRequestV1 {
+  oneof operation {
+    BeginExternalRuntimeSessionRequestV1 begin = 1;
+    CompleteExternalRuntimeSessionRequestV1 complete = 2;
+    AuthorizeExternalRuntimeCapabilityRequestV1 authorize_capability = 3;
+    SubmitRuntimeSettingsSchemaRequestV1 submit_settings_schema = 4;
+    AcknowledgeRuntimeSettingsLifecycleRequestV1 acknowledge_settings_lifecycle = 5;
+    RouteVaultCiphertextRequestV1 route_vault_ciphertext = 6;
+  }
+}
+message ExternalRuntimeSessionResponseV1 {
+  oneof result {
+    BeginExternalRuntimeSessionResponseV1 begin = 1;
+    CompleteExternalRuntimeSessionResponseV1 complete = 2;
+    AuthorizeExternalRuntimeCapabilityResponseV1 authorize_capability = 3;
+    SubmitRuntimeSettingsSchemaResponseV1 submit_settings_schema = 4;
+    AcknowledgeRuntimeSettingsLifecycleResponseV1 acknowledge_settings_lifecycle = 5;
+    RouteVaultCiphertextResponseV1 route_vault_ciphertext = 6;
+  }
+  string error_code = 15;
+}

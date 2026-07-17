@@ -4,9 +4,9 @@
 Дата: 2026-07-15
 Состояние реализации: offline Control Store anchor/export/restore/reset fencing
 и public initial-owner record реализованы в `kernel_recovery_only_v1`.
-`development_full_platform_v1` имеет explicit software ES256 enrollment с
-Kernel-side proof verification и atomic first claim. Production device signer,
-inherited-FD ceremony и platform key adapters ещё не созданы.
+Текущий file-backed ES256 adapter имеет explicit key generation, Kernel-side
+proof verification и atomic first claim без development mode. Inherited-FD
+ceremony и host integration ещё не созданы.
 
 Зависит от:
 
@@ -124,10 +124,9 @@ Wire representation:
 - protocol version и algorithm enum проверяются до cryptographic operation;
 - malformed, non-canonical и unsupported inputs отклоняются fail closed.
 
-P-256 выбран как общий hardware-backed baseline Apple Secure Enclave и Android
-Keystore. Apple поддерживает Secure Enclave signing на NIST P-256, а Android
-KeyMint/Keystore поддерживает ECDSA P-256 и SHA-256. Ed25519 не является общим
-baseline для поддерживаемых Android generations.
+P-256 выбран как фиксированный v1 wire suite для file-backed adapter и будущих
+replaceable adapters. Ed25519 не входит в первую версию протокола, чтобы не
+расширять число key-suite и verification paths.
 
 Kernel зависит от узкого verifier port, а clients — от `DeviceSigner` host
 port. Конкретный Rust crypto backend не является wire contract. Для первого
@@ -136,30 +135,30 @@ recovery-only slice ADR-0225 разрешает exact `p256` verifier, `getrando
 platform conformance vectors. Самописная криптография запрещена; замена backend
 не меняет wire suite, но требует отдельного policy/security evidence.
 
-### Private key остаётся в platform signer
+### Private key остаётся в replaceable signer adapter
 
-Private key генерируется и используется только host/platform adapter:
-
-- macOS desktop — Secure Enclave P-256 с Keychain access control;
-- Android — AndroidKeyStore P-256, hardware-backed TEE/StrongBox когда
-  доступно;
-- другие desktop/headless platforms требуют отдельного validated signer
-  adapter до объявления поддержки.
+Первая реализация — `FileDeviceSigner`: owner-private regular file `0600` в
+owner-private data directory. Adapter генерирует ES256 key, возвращает только
+public SEC1 key и fixed-width signature, а Kernel работает исключительно через
+узкий `DeviceSigner` port. Другой adapter можно добавить позже без изменения
+wire contract или Kernel authorization logic.
 
 Vue/WebView, Kernel, modules и provider runtimes не получают private key bytes.
 Tauri/Android host bridge может обслуживать только typed identity signing
 operation, а не произвольное «подпиши эти bytes».
 
-Для enrollment, device management и recovery-sensitive owner operations host
-обязан запросить platform user presence. Отмена либо failure local
-authentication отклоняет operation. Наблюдаемый `software`, `TEE`,
-`SecureEnclave` или `StrongBox` assurance записывается для диагностики, но
-не выдаёт дополнительные права без Kernel policy.
+File adapter не даёт non-exportability или отдельной user-presence ceremony.
+Это осознанный риск первого релиза: доступ к private key file
+эквивалентен owner device signing authority. Key file нельзя синхронизировать,
+передавать в logs, backups или provider storage. Будущий adapter может добавить
+дополнительную protection, но не меняет authorisation semantics сам по себе.
 
-Cross-platform password/credential stores вроде `keyring-rs` не считаются
-универсальным non-exportable asymmetric signer. Software-key fallback,
-Windows profile и recovery-key backup требуют отдельного решения. Linux TPM2 и
-FIDO2/WebAuthn profile определён ADR-0227, но ещё не реализован.
+Локальная privileged CLI mutation с baseline adapter создаёт fresh
+domain-separated proof, привязанный к instance, owner/device identity, Kernel
+generation и digest конкретной operation. Kernel сверяет signer public key с
+Control Store перед mutation. Этот process-local proof не является transport
+session и не открывает remote owner authorization; Gateway session conformance
+остаётся отдельным условием `module_control_plane_v1`.
 
 ### Challenge-response и sessions
 
@@ -251,10 +250,9 @@ enrollment выполняется только local interactive offline `init` 
 - при остановленном Kernel;
 - с explicit `--data-dir`;
 - под exclusive lock;
-- через validated platform `DeviceSigner`;
+- через configured `DeviceSigner` adapter;
 - с явным подтверждением владельца.
 
-Если platform signer не поддержан, headless owner enrollment fail closed.
 Remote first enrollment запрещена.
 
 ### Online recovery при trustworthy Control Store
@@ -315,9 +313,9 @@ Automatic reset, automatic fallback и non-interactive destructive flag перв
 
 ### Android device
 
-Android создаёт отдельную non-exportable P-256 key в Android Keystore и никогда
+Android использует отдельный owner-private `FileDeviceSigner` key file и никогда
 не получает desktop key или shared owner token. Pairing требует уже
-authenticated owner device, одноразовый challenge и явное подтверждение.
+authenticated owner device и одноразовый challenge.
 
 Каждый Android device имеет независимые public key, capabilities, sessions,
 replay cursors, audit и revoke. Точные pairing UX, QR/deep-link transport,
@@ -367,20 +365,19 @@ private key текущего device.
 
 ### Ed25519 как v1 baseline
 
-Отклонено: он не является общим hardware-backed baseline Apple Secure Enclave
-и поддерживаемых Android generations.
+Отклонено: это добавило бы второй key suite и отдельный verification path без
+необходимости для первого file-adapter release.
 
 ## Проверка решения
 
 До изменения `Состояние реализации` обязательны:
 
-- Apple Secure Enclave и Android Keystore P-256 sign → Kernel verify
-  conformance tests;
+- file-backed `DeviceSigner` P-256 sign → Kernel verify conformance tests;
 - malformed public key/signature, unsupported algorithm и wrong lengths;
 - duplicate, expired, wrong-purpose и stale-generation challenge;
 - revoked/suspended device и stale session epoch;
 - authentication без требуемой authorization capability;
-- user-presence cancel/timeout и platform key invalidation;
+- file permission, symlink and key-file replacement rejection;
 - initial enrollment только через inherited FD на pristine instance;
 - existing/anchor-only/corrupt store отклоняет bootstrap enrollment;
 - crash между anchor, SQLite create и owner/device transaction;

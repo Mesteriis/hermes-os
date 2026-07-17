@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package hermes.storage.v1;
+
+// Immutable owner-local migration artifact. Its SHA-256 is bound externally
+// by signed distribution metadata or an explicit owner pin.
+message StorageBundleV1 {
+  uint32 major = 1;
+  uint32 revision = 2;
+  string bundle_id = 3;
+  string owner_id = 4;
+  repeated StorageMigrationStepV1 steps = 5;
+}
+
+message StorageMigrationStepV1 {
+  uint32 revision = 1;
+  string migration_id = 2;
+  bytes forward_sql_utf8 = 3;
+  bytes sha256 = 4;
+}
+
+message StorageEffectiveBudgetsV1 {
+  uint32 max_connections = 1;
+  uint32 statement_timeout_millis = 2;
+}
+
+// A credential-free connection binding. The lease itself is issued separately
+// by Vault and must be fenced against every generation carried here.
+message StorageBindingV1 {
+  string storage_instance_id = 1;
+  uint64 storage_generation = 2;
+  string database_id = 3;
+  string owner = 4;
+  string registration_id = 5;
+  string runtime_instance_id = 6;
+  uint64 runtime_generation = 7;
+  uint64 grant_epoch = 8;
+  uint64 role_epoch = 9;
+  string runtime_principal = 10;
+  string pool_alias = 11;
+  StorageEffectiveBudgetsV1 effective_budgets = 12;
+  uint64 credential_lease_revision = 13;
+  uint64 storage_bundle_revision = 14;
+  bytes storage_bundle_digest = 15;
+}

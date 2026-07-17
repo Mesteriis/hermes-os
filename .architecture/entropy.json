@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "scope": "backend-wide-source-layout",
+  "scores": {
+    "architecture": {"score": 76, "why": ["Cargo packages follow Kernel, platform and API ownership.", "Several Kernel and development runtime root directories still encode responsibility in file prefixes."]},
+    "entropy": {"score": 68, "why": ["Most high-churn areas are already split by responsibility.", "Development runtime and three Kernel namespaces are still flat enough to slow navigation."]},
+    "coupling": {"score": 81, "why": ["Public crate roots are explicit and platform protocol is separate from Kernel implementation.", "The approved moves are private-module moves with no new dependency edges."]},
+    "cohesion": {"score": 73, "why": ["Control Store and Vault use named responsibility directories.", "Identity, module control and runtime lifecycle files require prefixes instead of namespaces."]},
+    "layer_integrity": {"score": 87, "why": ["Kernel, API and platform packages are separate Cargo owners.", "This pass changes only filesystem module grouping."]},
+    "public_api_stability": {"score": 90, "why": ["All proposed Kernel and development moves are private.", "Events retains its public crate-root export explicitly."]},
+    "naming_quality": {"score": 66, "why": ["Existing folders use meaningful ownership names.", "Flat names such as registration_ipc and child_supervisor indicate missing navigation namespaces."]},
+    "dependency_health": {"score": 84, "why": ["No new crates or dependencies are proposed.", "Module import rewrites are declared explicitly in the plan."]},
+    "package_complexity": {"score": 75, "why": ["Vault and Control Store are already decomposed.", "Kernel source still needs three local namespace cuts and the development operator needs four."]}
+  }
+}

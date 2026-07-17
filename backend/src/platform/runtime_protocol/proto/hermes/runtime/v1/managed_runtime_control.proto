@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package hermes.runtime.v1;
+
+// One-shot inherited private control channel for a Kernel-managed runtime.
+message DescribeManagedRuntimeRequestV1 {
+  bytes descriptor_bytes = 1;
+  bytes settings_schema_bytes = 2;
+}
+message DescribeManagedRuntimeResponseV1 {
+  string registration_id = 1;
+  uint64 runtime_generation = 2;
+  uint64 grant_epoch = 3;
+}
+message ManagedRuntimeControlRequestV1 {
+  oneof operation {
+    DescribeManagedRuntimeRequestV1 describe = 1;
+  }
+}
+message ManagedRuntimeControlResponseV1 {
+  oneof result {
+    DescribeManagedRuntimeResponseV1 describe = 1;
+  }
+  string error_code = 15;
+}

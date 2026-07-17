@@ -8,7 +8,7 @@ const PHASE_GATE_KEYS = [
   'requiredDecisionFields',
 ];
 
-const NOT_AUTHORIZED = [
+const ALL_GATES = [
   'server_bootstrap_pairing_v1',
   'module_control_plane_v1',
   'managed_launch_trust_v1',
@@ -23,6 +23,15 @@ const NOT_AUTHORIZED = [
   'whole_instance_backup_v1',
   'first_owner_v1',
 ];
+
+const NOT_AUTHORIZED = ALL_GATES.filter((gate) => ![
+  'module_control_plane_v1',
+  'server_bootstrap_pairing_v1',
+  'managed_launch_trust_v1',
+  'vault_v1',
+  'telemetry_v1',
+  'clock_v1',
+].includes(gate));
 
 const REQUIRES = {
   server_bootstrap_pairing_v1: [],
@@ -102,7 +111,7 @@ const REQUIRED_DECISION_FIELDS = {
     'manifest_schema_digest',
     'detached_signature_suite',
     'verification_key_pin_and_rotation',
-    'release_signing_evidence',
+    'file_release_authority_conformance',
     'toctou_safe_spawn_adapter',
   ],
   vault_v1: [
@@ -207,8 +216,8 @@ function isExactOrderedStringList(value, expected) {
 }
 
 function isExactRequires(requires) {
-  return hasExactKeys(requires, NOT_AUTHORIZED)
-    && NOT_AUTHORIZED.every((gate) => isExactOrderedStringList(
+  return hasExactKeys(requires, ALL_GATES)
+    && ALL_GATES.every((gate) => isExactOrderedStringList(
       requires[gate],
       REQUIRES[gate],
     ));
@@ -228,8 +237,8 @@ function isExactConditionalRequires(conditionalRequires) {
 }
 
 function isAcyclicGateGraph(requires, conditionalRequires) {
-  const gates = new Set(NOT_AUTHORIZED);
-  const edges = new Map(NOT_AUTHORIZED.map((gate) => [
+  const gates = new Set(ALL_GATES);
+  const edges = new Map(ALL_GATES.map((gate) => [
     gate,
     [
       ...Object.keys(conditionalRequires?.[gate] ?? {}),
@@ -252,7 +261,7 @@ function isAcyclicGateGraph(requires, conditionalRequires) {
     return true;
   }
 
-  return NOT_AUTHORIZED.every(visit);
+  return ALL_GATES.every(visit);
 }
 
 export function validatePhaseGatePolicy(policy) {
@@ -264,8 +273,8 @@ export function validatePhaseGatePolicy(policy) {
     && isExactRequires(phaseGates.requires)
     && isExactConditionalRequires(phaseGates.conditionalRequires)
     && isAcyclicGateGraph(phaseGates.requires, phaseGates.conditionalRequires)
-    && hasExactKeys(decisionFields, NOT_AUTHORIZED)
-    && NOT_AUTHORIZED.every((gate) => (
+    && hasExactKeys(decisionFields, ALL_GATES)
+    && ALL_GATES.every((gate) => (
       isExactOrderedStringList(decisionFields[gate], REQUIRED_DECISION_FIELDS[gate])
     ));
 

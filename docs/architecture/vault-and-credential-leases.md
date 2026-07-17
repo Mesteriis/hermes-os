@@ -1,7 +1,7 @@
 # Vault и scoped credential leases
 
 Статус решения: Принято
-Состояние реализации: Не реализовано
+Состояние реализации: `vault_v1` открыт для file-backed baseline
 Дата: 2026-07-16
 
 Каноническое решение находится в
@@ -36,7 +36,7 @@ Kernel supervisor
     ↓ verify / start / quiesce / drain / stop / bounded restart
 hermes-vault-runtime
     ├─ hermes-vault-store-sqlcipher
-    └─ hermes-vault-keychain-macos
+    └─ hermes-vault-key-provider-file
             ↓ sealed CredentialLeaseV1 through capability routing
 authorized module runtime
 ```
@@ -48,7 +48,7 @@ Kernel:
 - маршрутизирует только versioned HPKE ciphertext frames;
 - видит sanitized state, generation и blocker code;
 - не получает root/record keys или credential plaintext;
-- не линкует Vault runtime, SQLCipher, crypto или Keychain implementation.
+- не линкует Vault runtime, SQLCipher, crypto или file-key implementation.
 
 Vault runtime:
 
@@ -191,8 +191,8 @@ WhatsApp использует OS-managed per-account WebView profile. Больш
 
 `VaultRootKey` является случайным 32-byte key. Он wrapped независимыми slots:
 
-- platform slot использует device-only, non-synchronizable macOS Data Protection
-  Keychain key;
+- platform slot использует отдельный owner-private regular file `0600` через
+  `FileWrappingKeyAdapter`;
 - recovery slot использует независимый `RecoveryKeyV1`, который владелец хранит
   вне Hermes;
 - Owner/device signing key не используется для Vault encryption или wrapping.
@@ -207,8 +207,8 @@ integrity/version checks и создания новой runtime generation capab
 Backup создаётся только unlocked Vault после fresh owner proof, bounded quiesce
 и проверки полученного encrypted package. Restore выполняется только offline
 при остановленных Kernel и Vault, explicit data directory, exclusive lock,
-interactive confirmation и Recovery Key. Wrong key, corruption или platform key
-loss никогда не создают empty Vault и не перезаписывают working key slot.
+interactive confirmation и Recovery Key. Wrong key, corruption или missing
+file key никогда не создают empty Vault и не перезаписывают working key slot.
 
 ## Failure и privacy behavior
 
@@ -232,21 +232,80 @@ hermes-vault-protocol
 hermes-vault-key-provider
 hermes-vault-runtime
 hermes-vault-store-sqlcipher
-hermes-vault-keychain-macos
+hermes-vault-key-provider-file
 ```
 
 Kernel и modules могут зависеть только от public protocol там, где это разрешено
 architecture policy. `hermes-vault-key-provider` является private adapter port
-Vault owner. Runtime/store/keychain packages не попадают в Kernel или module
+Vault owner. Runtime/store/file-key packages не попадают в Kernel или module
 compile graphs.
 
 ## Состояние реализации
 
-На 2026-07-16 не существуют production `hermes-vault-*` packages,
-`VaultTransportSessionV1`, SQLCipher schema/migrations, macOS key adapter,
-backup/recovery tooling или conformance tests. Legacy `HostVault` используется
-только как evidence и не является implementation template или compatible data
-format.
+На 2026-07-16 существует `vault_v1`: пять canonical
+`hermes-vault-*` packages, file-backed wrapping-key adapter, authenticated
+single platform `vault.anchor` slot, SQLCipher metadata schema и conformance
+для private paths/reopen/wrong key/tamper. Store имеет single-epoch
+XChaCha20-Poly1305 record envelope, который связывает credential с exact
+scope/revision через AAD. Public `VaultTransportSessionV1` переносит opaque HPKE
+frame вместе с binding; private runtime replay guard принимает только current
+generation и `ToVault` direction, а request ID закрепляет только после HPKE
+authentication. Это не открывает public secret socket. Runtime protocol теперь фиксирует
+bounded `VaultCiphertextRouteV1`, а Kernel сверяет opaque route с exact external
+runtime identity, generation и grant epoch; inherited managed-runtime channel
+сохраняется после descriptor handshake и relays только bounded opaque frames.
+Owner-private IPC уже принимает proof-bound bind и explicit start только для
+designated Vault artifact из current verified signed release.
+Kernel сохраняет platform-process binding/launch fence без owner module
+registration, stage-ит exact verified descriptor/settings bytes в private
+одноразовые files и запускает `serve-inherited`; files удаляются с managed
+child. Public `vault.sock` остаётся status-only. Explicit recovery slot и его
+atomic rotation существуют. `RecoveryKeyV1` имеет only one-time checked English
+24-word BIP-39 entropy representation and never persists a mnemonic or seed.
+Offline root-key rotation creates a staged SQLCipher copy, rewraps record
+envelopes and reserves exact DB/anchor digests before the paired install. The
+persistence adapter can create and verify an offline classified encrypted
+snapshot (`vault.db`, `vault.anchor`, authenticated manifest) without a
+recovery mnemonic or plaintext credential material. It can restore only into a
+new empty private contour after recovery-key verification and binds a new file
+adapter slot; existing-contour replacement belongs to whole-instance recovery.
+Private external
+runtime IPC accepts a route only after proof-backed session, current external
+attestation, owner-approved `vault.lease.resolve`, matching grant epoch and
+active Vault launch generation; response must match request ID, operation digest
+and that generation. Runtime содержит
+private `VaultService`, который перед record decrypt потребляет memory-only
+bounded lease и требует exact scope/revision; explicit audience revoke и
+generation advance инвалидируют unresolved leases. Он исполняется только через
+inherited Kernel relay, а отдельный Vault IPC route не открыт.
+TTL, one-time command, audience/grant epoch and generation invalidation и HPKE
+X25519 sender types доступны только из public Vault protocol, а receiver private
+key остаётся в Vault runtime. Session содержит fixed-major `ResolveLease`,
+`StoreLease` и `ReplaceLease` command codecs, которые держат lease ID внутри HPKE plaintext и
+сверяют digest exact command с opaque binding. Private executor исполняет эти
+commands через audience из authenticated binding и scope-only Store lookup,
+one-time create либо adjacent-revision replacement без record enumeration. Он
+получает Kernel authorization evidence только через inherited route, который
+до relay сверяет current external session, owner-approved capability, runtime
+generation и grant epoch; самостоятельный Vault IPC route не открывается.
+До отдельных lifecycle contracts runtime выдаёт lease только для реализованных
+`Resolve`, `Create` и `ReplaceCas`; `Retire`, `Delete` и
+`IssueSessionStoreKey` fail-close при issuance.
+Request binding также содержит ephemeral response-recipient X25519 public key
+в AAD; private Vault runtime шифрует результат в отдельный `FromVault` frame.
+Поэтому Kernel relay никогда не получает credential plaintext и не может
+подменить recipient key без authentication failure.
+`hermes-vault-runtime serve` сейчас предоставляет только private 0600 Unix-socket
+status с ephemeral HPKE public key и generation; secret frames проходят только
+через inherited Kernel relay после указанной authorization. Legacy `HostVault`
+используется только как evidence и не является implementation template или
+compatible data format.
+
+Store foundation уже поддерживает one-time create с unique scope/revision и
+последовательную замену revision: prior record проходит authenticated verification,
+затем его удаление и новая запись commit-ятся одной actor transaction. Полный
+root-key rotation и public lifecycle
+по-прежнему не реализованы.
 
 Статус может измениться только после executable dependency guards и targeted
 process, crypto, storage, crash, lease, recovery и secret-leak tests из

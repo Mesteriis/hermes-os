@@ -16,7 +16,7 @@ const IMPLEMENTATION_KEYS = [
   'exitGates',
 ];
 
-const PRODUCTION_PACKAGES = [
+const RECOVERY_PRODUCTION_PACKAGES = [
   { name: 'hermes-events-protocol', role: 'platform', owner: 'events', surface: 'contract' },
   { name: 'hermes-runtime-protocol', role: 'platform', owner: 'runtime_protocol', surface: 'contract' },
   { name: 'hermes-gateway-protocol', role: 'api', owner: 'gateway', surface: 'contract' },
@@ -25,7 +25,38 @@ const PRODUCTION_PACKAGES = [
   { name: 'hermes-kernel', role: 'core', owner: 'kernel', surface: 'runtime' },
 ];
 
-const WORKSPACE_DEPENDENCY_ALLOWLIST = {
+const VAULT_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...RECOVERY_PRODUCTION_PACKAGES,
+  { name: 'hermes-vault-protocol', role: 'platform', owner: 'vault', surface: 'contract' },
+  { name: 'hermes-vault-key-provider', role: 'platform', owner: 'vault', surface: 'contract' },
+  { name: 'hermes-vault-key-provider-file', role: 'platform', owner: 'vault', surface: 'implementation' },
+  { name: 'hermes-vault-store-sqlcipher', role: 'platform', owner: 'vault', surface: 'persistence' },
+  { name: 'hermes-vault-runtime', role: 'platform', owner: 'vault', surface: 'runtime' },
+];
+
+const CLOCK_PRODUCTION_PACKAGES = [
+  ...VAULT_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-clock-protocol', role: 'platform', owner: 'clock', surface: 'contract' },
+  { name: 'hermes-clock-runtime', role: 'platform', owner: 'clock', surface: 'implementation' },
+];
+
+const TELEMETRY_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...CLOCK_PRODUCTION_PACKAGES,
+  { name: 'hermes-telemetry-protocol', role: 'platform', owner: 'telemetry', surface: 'contract' },
+  { name: 'hermes-telemetry-collector', role: 'platform', owner: 'telemetry', surface: 'runtime' },
+];
+
+const STORAGE_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...TELEMETRY_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-storage-protocol', role: 'platform', owner: 'storage', surface: 'contract' },
+  { name: 'hermes-storage-control', role: 'platform', owner: 'storage', surface: 'implementation' },
+  { name: 'hermes-storage-runtime', role: 'platform', owner: 'storage', surface: 'runtime' },
+  { name: 'hermes-storage-postgres', role: 'platform', owner: 'storage', surface: 'persistence' },
+  { name: 'hermes-storage-pgbouncer', role: 'platform', owner: 'storage', surface: 'implementation' },
+  { name: 'hermes-storage-migrations', role: 'platform', owner: 'storage', surface: 'implementation' },
+];
+
+const RECOVERY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   'hermes-events-protocol': [],
   'hermes-runtime-protocol': [],
   'hermes-gateway-protocol': [
@@ -40,6 +71,62 @@ const WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-kernel-control-store', kind: 'normal' },
     { name: 'hermes-kernel-control-store-sqlite', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+};
+
+const VAULT_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...RECOVERY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-vault-protocol': [],
+  'hermes-vault-key-provider': [],
+  'hermes-vault-key-provider-file': [
+    { name: 'hermes-vault-key-provider', kind: 'normal' },
+  ],
+  'hermes-vault-store-sqlcipher': [
+    { name: 'hermes-vault-key-provider', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+  ],
+  'hermes-vault-runtime': [
+    { name: 'hermes-vault-key-provider', kind: 'normal' },
+    { name: 'hermes-vault-key-provider-file', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+    { name: 'hermes-vault-store-sqlcipher', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+};
+
+const CLOCK_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...VAULT_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-clock-protocol': [],
+  'hermes-clock-runtime': [
+    { name: 'hermes-clock-protocol', kind: 'normal' },
+  ],
+};
+
+const TELEMETRY_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...CLOCK_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-telemetry-protocol': [],
+  'hermes-telemetry-collector': [
+    { name: 'hermes-telemetry-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+};
+
+const STORAGE_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...TELEMETRY_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-storage-protocol': [],
+  'hermes-storage-control': [{ name: 'hermes-storage-protocol', kind: 'normal' }],
+  'hermes-storage-runtime': [
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-control', kind: 'normal' },
+    { name: 'hermes-storage-postgres', kind: 'normal' },
+    { name: 'hermes-storage-pgbouncer', kind: 'normal' },
+    { name: 'hermes-storage-migrations', kind: 'normal' },
+  ],
+  'hermes-storage-postgres': [{ name: 'hermes-storage-control', kind: 'normal' }],
+  'hermes-storage-pgbouncer': [{ name: 'hermes-storage-control', kind: 'normal' }],
+  'hermes-storage-migrations': [
+    { name: 'hermes-storage-control', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
 };
 
@@ -58,7 +145,7 @@ const PROTOCOL_THIRD_PARTY_DEPENDENCIES = [
   },
 ];
 
-const THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+const RECOVERY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-events-protocol': PROTOCOL_THIRD_PARTY_DEPENDENCIES,
   'hermes-runtime-protocol': PROTOCOL_THIRD_PARTY_DEPENDENCIES,
   'hermes-gateway-protocol': PROTOCOL_THIRD_PARTY_DEPENDENCIES,
@@ -85,7 +172,16 @@ const THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
       name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [],
     },
     {
+      name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [],
+    },
+    {
       name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [],
+    },
+    {
+      name: 'rcgen', kind: 'normal', source: 'crates_io', version: '=0.13.2', defaultFeatures: true, features: [],
+    },
+    {
+      name: 'rustls', kind: 'normal', source: 'crates_io', version: '=0.23.37', defaultFeatures: false, features: ['ring', 'std'],
     },
     {
       name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [],
@@ -93,6 +189,68 @@ const THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     {
       name: 'signal-hook', kind: 'normal', source: 'crates_io', version: '=0.3.18', defaultFeatures: true, features: [],
     },
+  ],
+};
+
+const VAULT_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...RECOVERY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-vault-protocol': [
+    { name: 'hpke', kind: 'normal', source: 'crates_io', version: '=0.14.0', defaultFeatures: false, features: ['alloc', 'chacha', 'getrandom', 'x25519'] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-vault-key-provider': [],
+  'hermes-vault-key-provider-file': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+  ],
+  'hermes-vault-store-sqlcipher': [
+    { name: 'bip39', kind: 'normal', source: 'crates_io', version: '=2.2.2', defaultFeatures: false, features: ['std'] },
+    { name: 'chacha20poly1305', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: ['alloc', 'zeroize'] },
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'hkdf', kind: 'normal', source: 'crates_io', version: '=0.13.0', defaultFeatures: true, features: [] },
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'rusqlite', kind: 'normal', source: 'crates_io', version: '=0.40.1', defaultFeatures: false, features: ['backup', 'bundled-sqlcipher'] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-vault-runtime': [
+    { name: 'clap', kind: 'normal', source: 'crates_io', version: '=4.6.2', defaultFeatures: false, features: ['derive', 'error-context', 'help', 'std', 'usage'] },
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'hpke', kind: 'normal', source: 'crates_io', version: '=0.14.0', defaultFeatures: false, features: ['alloc', 'chacha', 'getrandom', 'x25519'] },
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'p256', kind: 'normal', source: 'crates_io', version: '=0.14.0', defaultFeatures: false, features: ['ecdsa'] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+};
+
+const CLOCK_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...VAULT_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-clock-protocol': [],
+  'hermes-clock-runtime': [],
+};
+
+const TELEMETRY_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...CLOCK_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-telemetry-protocol': [],
+  'hermes-telemetry-collector': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+  ],
+};
+
+const STORAGE_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...TELEMETRY_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-storage-protocol': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-storage-control': [], 'hermes-storage-runtime': [],
+  'hermes-storage-postgres': [], 'hermes-storage-pgbouncer': [],
+  'hermes-storage-migrations': [
+    { name: 'pg_query', kind: 'normal', source: 'crates_io', version: '=6.1.1', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -113,9 +271,20 @@ const FORBIDDEN_DEPENDENCIES = [
   'awc',
 ];
 
-const FORBIDDEN_DEPENDENCY_PREFIXES = [
+const RECOVERY_FORBIDDEN_DEPENDENCY_PREFIXES = [
   'hermes-vault-',
   'hermes-storage-',
+  'hermes-integration-',
+  'hermes-provider-',
+];
+
+const VAULT_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES = [
+  'hermes-storage-',
+  'hermes-integration-',
+  'hermes-provider-',
+];
+
+const STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES = [
   'hermes-integration-',
   'hermes-provider-',
 ];
@@ -170,6 +339,57 @@ const KERNEL_PROFILE = {
   offlineOperations: ['control_store_restore', 'control_store_reset'],
   externalServices: [],
   managedChildren: [],
+  networkListenerEnabled: false,
+  moduleRegistrationEnabled: false,
+  managedLaunchEnabled: false,
+};
+
+const MODULE_CONTROL_PROFILE = {
+  maximumState: 'module_control_plane',
+  allowedStates: ['cold_start', 'bootstrap', 'recovery_only', 'module_control_plane', 'quiescing', 'draining', 'stopped', 'fatal'],
+  forbiddenStates: ['infrastructure_starting', 'modules_starting', 'ready', 'degraded'],
+  activeComponents: ['supervisor', 'module_registry', 'capability_router', 'core_gateway', 'settings_registry'],
+  transport: 'local_ipc_only',
+  onlineOperations: ['status', 'control_store_validate', 'control_store_export', 'shutdown', 'module_registration', 'owner_control', 'external_runtime_session'],
+  bootstrapOperations: ['initial_owner_enrollment_inherited_fd'],
+  offlineOperations: ['control_store_restore', 'control_store_reset'],
+  externalServices: [],
+  managedChildren: [],
+  networkListenerEnabled: false,
+  moduleRegistrationEnabled: true,
+  managedLaunchEnabled: false,
+};
+
+const SERVER_BOOTSTRAP_PAIRING_PROFILE = {
+  maximumState: 'module_control_plane',
+  allowedStates: ['cold_start', 'bootstrap', 'recovery_only', 'module_control_plane', 'quiescing', 'draining', 'stopped', 'fatal'],
+  forbiddenStates: ['infrastructure_starting', 'modules_starting', 'ready', 'degraded'],
+  activeComponents: ['supervisor', 'module_registry', 'capability_router', 'core_gateway', 'settings_registry'],
+  transport: 'local_ipc_and_one_shot_bootstrap_tls',
+  onlineOperations: ['status', 'control_store_validate', 'control_store_export', 'shutdown', 'module_registration', 'owner_control', 'external_runtime_session'],
+  bootstrapOperations: ['initial_owner_enrollment_inherited_fd', 'server_bootstrap_pairing'],
+  offlineOperations: ['control_store_restore', 'control_store_reset'],
+  externalServices: [],
+  managedChildren: [],
+  networkListenerEnabled: true,
+  moduleRegistrationEnabled: true,
+  managedLaunchEnabled: false,
+};
+
+const MANAGED_LAUNCH_TRUST_PROFILE = {
+  maximumState: 'module_control_plane',
+  allowedStates: ['cold_start', 'bootstrap', 'recovery_only', 'module_control_plane', 'quiescing', 'draining', 'stopped', 'fatal'],
+  forbiddenStates: ['infrastructure_starting', 'modules_starting', 'ready', 'degraded'],
+  activeComponents: ['supervisor', 'module_registry', 'capability_router', 'core_gateway', 'settings_registry'],
+  transport: 'local_ipc_and_one_shot_bootstrap_tls',
+  onlineOperations: ['status', 'control_store_validate', 'control_store_export', 'shutdown', 'module_registration', 'owner_control', 'external_runtime_session'],
+  bootstrapOperations: ['initial_owner_enrollment_inherited_fd', 'server_bootstrap_pairing'],
+  offlineOperations: ['control_store_restore', 'control_store_reset'],
+  externalServices: [],
+  managedChildren: ['bundled_native_module_runtime'],
+  networkListenerEnabled: true,
+  moduleRegistrationEnabled: true,
+  managedLaunchEnabled: true,
 };
 
 const CLOCK_KEYS = ['wallTime', 'elapsedTime', 'testTime', 'moduleCapabilityEnabled'];
@@ -181,6 +401,9 @@ const EXIT_GATES = [
   'missing_or_invalid_store_recovery_only',
   'local_ipc_status_validate_export_shutdown',
   'pristine_inherited_fd_owner_enrollment',
+  'server_bootstrap_pairing_tls_conformance',
+  'file_release_authority_conformance',
+  'managed_launch_toctou_conformance',
   'online_mutations_fail_closed',
   'exclusive_data_directory_lock',
   'bounded_shutdown',
@@ -217,17 +440,19 @@ function hasExactKeys(value, expectedKeys) {
 }
 
 function isExactOrderedStringList(value, expected) {
-  return Array.isArray(value)
+  return Array.isArray(expected)
+    && Array.isArray(value)
     && value.length === expected.length
     && duplicates(value).length === 0
     && value.every((entry, index) => entry === expected[index]);
 }
 
-function isExactPackageInventory(packages) {
-  return Array.isArray(packages)
-    && packages.length === PRODUCTION_PACKAGES.length
+function isExactPackageInventory(packages, expectedPackages) {
+  return Array.isArray(expectedPackages)
+    && Array.isArray(packages)
+    && packages.length === expectedPackages.length
     && packages.every((entry, index) => {
-      const expected = PRODUCTION_PACKAGES[index];
+      const expected = expectedPackages[index];
       return hasExactKeys(entry, ['name', 'role', 'owner', 'surface'])
         && entry.name === expected.name
         && entry.role === expected.role
@@ -249,17 +474,19 @@ function isEmptyOwnerInventory(inventory) {
       .every((ownerClass) => Array.isArray(inventory[ownerClass]) && inventory[ownerClass].length === 0);
 }
 
-function isExactWorkspaceDependencyAllowlist(allowlist) {
-  const packageNames = PRODUCTION_PACKAGES.map(({ name }) => name);
+function isExactWorkspaceDependencyAllowlist(allowlist, expectedPackages, expectedAllowlist) {
+  if (!Array.isArray(expectedPackages) || !expectedAllowlist) return false;
+  const packageNames = expectedPackages.map(({ name }) => name);
   return hasExactKeys(allowlist, packageNames)
     && packageNames.every((packageName) => isExactDependencyList(
       allowlist[packageName],
-      WORKSPACE_DEPENDENCY_ALLOWLIST[packageName],
+      expectedAllowlist[packageName],
     ));
 }
 
 function isExactDependencyList(actual, expected) {
-  return Array.isArray(actual)
+  return Array.isArray(expected)
+    && Array.isArray(actual)
     && actual.length === expected.length
     && actual.every((entry, index) => {
       const expectedEntry = expected[index];
@@ -272,29 +499,103 @@ function isExactDependencyList(actual, expected) {
     });
 }
 
-function isExactThirdPartyDependencyAllowlist(allowlist) {
-  const packageNames = PRODUCTION_PACKAGES.map(({ name }) => name);
+function isExactThirdPartyDependencyAllowlist(allowlist, expectedPackages, expectedAllowlist) {
+  if (!Array.isArray(expectedPackages) || !expectedAllowlist) return false;
+  const packageNames = expectedPackages.map(({ name }) => name);
   return hasExactKeys(allowlist, packageNames)
     && packageNames.every((packageName) => isExactDependencyList(
       allowlist[packageName],
-      THIRD_PARTY_DEPENDENCY_ALLOWLIST[packageName],
+      expectedAllowlist[packageName],
     ));
 }
 
-function isExactTargetPolicy(targetPolicy) {
-  const packageNames = PRODUCTION_PACKAGES.map(({ name }) => name);
+function isExactTargetPolicy(targetPolicy, expectedPackages) {
+  if (!Array.isArray(expectedPackages)) return false;
+  const packageNames = expectedPackages.map(({ name }) => name);
   if (!hasExactKeys(targetPolicy, packageNames)) return false;
   return packageNames.every((packageName) => {
     const target = targetPolicy[packageName];
+    const packageDescriptor = expectedPackages.find(({ name }) => name === packageName);
     const protocolPackage = [
       'hermes-events-protocol',
       'hermes-runtime-protocol',
       'hermes-gateway-protocol',
+      'hermes-storage-protocol',
     ].includes(packageName);
     return hasExactKeys(target, ['primaryKind', 'customBuildAllowed'])
-      && target.primaryKind === (packageName === 'hermes-kernel' ? 'bin' : 'lib')
+      && target.primaryKind === (packageDescriptor?.surface === 'runtime' ? 'bin' : 'lib')
       && target.customBuildAllowed === protocolPackage;
   });
+}
+
+function expectedSlice(currentSlice) {
+  if (currentSlice === 'kernel_recovery_only_v1') {
+    return {
+      profile: KERNEL_PROFILE,
+      packages: RECOVERY_PRODUCTION_PACKAGES,
+      workspaceDependencies: RECOVERY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: RECOVERY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: RECOVERY_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'module_control_plane_v1') {
+    return {
+      profile: MODULE_CONTROL_PROFILE,
+      packages: RECOVERY_PRODUCTION_PACKAGES,
+      workspaceDependencies: RECOVERY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: RECOVERY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: RECOVERY_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'server_bootstrap_pairing_v1') {
+    return {
+      profile: SERVER_BOOTSTRAP_PAIRING_PROFILE,
+      packages: RECOVERY_PRODUCTION_PACKAGES,
+      workspaceDependencies: RECOVERY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: RECOVERY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: RECOVERY_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'managed_launch_trust_v1') {
+    return {
+      profile: MANAGED_LAUNCH_TRUST_PROFILE,
+      packages: RECOVERY_PRODUCTION_PACKAGES,
+      workspaceDependencies: RECOVERY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: RECOVERY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: RECOVERY_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'vault_foundation_v1' || currentSlice === 'vault_v1') {
+    return {
+      profile: MANAGED_LAUNCH_TRUST_PROFILE,
+      packages: VAULT_FOUNDATION_PRODUCTION_PACKAGES,
+      workspaceDependencies: VAULT_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: VAULT_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: VAULT_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'clock_v1') {
+    return {
+      profile: MANAGED_LAUNCH_TRUST_PROFILE,
+      packages: CLOCK_PRODUCTION_PACKAGES,
+      workspaceDependencies: CLOCK_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: CLOCK_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: VAULT_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'telemetry_foundation_v1') {
+    return {
+      profile: MANAGED_LAUNCH_TRUST_PROFILE,
+      packages: TELEMETRY_FOUNDATION_PRODUCTION_PACKAGES,
+      workspaceDependencies: TELEMETRY_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: TELEMETRY_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: VAULT_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'storage_foundation_v1') {
+    return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: STORAGE_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: STORAGE_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: STORAGE_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  return null;
 }
 
 function isExactDevelopmentProfile(profile) {
@@ -302,10 +603,10 @@ function isExactDevelopmentProfile(profile) {
     && profile.id === 'development_full_platform_v1'
     && profile.purpose === 'full_local_platform_development_with_simulated_trust'
     && profile.workspaceRoot === 'development/runtime'
-    && profile.package === 'hermes-development-platform-runtime'
+    && profile.package === 'hermes-development-kernel-operator'
     && profile.selection === 'explicit_development_invocation_only'
-    && profile.deviceProof === 'software_es256_development_only'
-    && profile.privateKeyStorage === 'development_local_filesystem'
+    && profile.deviceProof === 'file_adapter_es256'
+    && profile.privateKeyStorage === 'owner_private_file_adapter'
     && profile.persistentSecretsAllowed === true
     && profile.productDataAllowed === true
     && profile.networkListenerEnabled === true
@@ -330,23 +631,25 @@ function isExactClock(clock) {
     && clock.moduleCapabilityEnabled === false;
 }
 
-function isExactKernelProfile(profile, constitutionalComponents) {
-  return hasExactKeys(profile, KERNEL_PROFILE_KEYS)
-    && profile.maximumState === KERNEL_PROFILE.maximumState
-    && isExactOrderedStringList(profile.allowedStates, KERNEL_PROFILE.allowedStates)
-    && isExactOrderedStringList(profile.forbiddenStates, KERNEL_PROFILE.forbiddenStates)
-    && isExactOrderedStringList(profile.activeComponents, KERNEL_PROFILE.activeComponents)
+function isExactKernelProfile(profile, constitutionalComponents, expected) {
+  return expected !== null
+    && expected !== undefined
+    && hasExactKeys(profile, KERNEL_PROFILE_KEYS)
+    && profile.maximumState === expected.maximumState
+    && isExactOrderedStringList(profile.allowedStates, expected.allowedStates)
+    && isExactOrderedStringList(profile.forbiddenStates, expected.forbiddenStates)
+    && isExactOrderedStringList(profile.activeComponents, expected.activeComponents)
     && profile.activeComponents.every((component) => constitutionalComponents.includes(component))
-    && profile.transport === KERNEL_PROFILE.transport
-    && isExactOrderedStringList(profile.onlineOperations, KERNEL_PROFILE.onlineOperations)
-    && isExactOrderedStringList(profile.bootstrapOperations, KERNEL_PROFILE.bootstrapOperations)
-    && isExactOrderedStringList(profile.offlineOperations, KERNEL_PROFILE.offlineOperations)
-    && isExactOrderedStringList(profile.externalServices, KERNEL_PROFILE.externalServices)
-    && isExactOrderedStringList(profile.managedChildren, KERNEL_PROFILE.managedChildren)
+    && profile.transport === expected.transport
+    && isExactOrderedStringList(profile.onlineOperations, expected.onlineOperations)
+    && isExactOrderedStringList(profile.bootstrapOperations, expected.bootstrapOperations)
+    && isExactOrderedStringList(profile.offlineOperations, expected.offlineOperations)
+    && isExactOrderedStringList(profile.externalServices, expected.externalServices)
+    && isExactOrderedStringList(profile.managedChildren, expected.managedChildren)
     && profile.publicGatewayEnabled === false
-    && profile.networkListenerEnabled === false
-    && profile.moduleRegistrationEnabled === false
-    && profile.managedLaunchEnabled === false
+    && profile.networkListenerEnabled === expected.networkListenerEnabled
+    && profile.moduleRegistrationEnabled === expected.moduleRegistrationEnabled
+    && profile.managedLaunchEnabled === expected.managedLaunchEnabled
     && profile.natsDataPlaneEnabled === false
     && profile.businessDataPlaneEnabled === false
     && profile.wholeInstanceBackupEnabled === false
@@ -355,35 +658,48 @@ function isExactKernelProfile(profile, constitutionalComponents) {
 
 export function validateImplementationSlicePolicy(policy) {
   const implementation = policy?.implementation;
-  const valid = hasExactKeys(implementation, IMPLEMENTATION_KEYS)
-    && implementation.currentSlice === 'kernel_recovery_only_v1'
-    && implementation.productionPackageMode === 'exact_allowlist'
-    && isExactPackageInventory(implementation.productionPackages)
-    && isExactWorkspaceDependencyAllowlist(implementation.workspaceDependencyAllowlist)
-    && isExactThirdPartyDependencyAllowlist(
-      implementation.thirdPartyDependencyAllowlist,
-    )
-    && isExactOrderedStringList(
-      implementation.forbiddenDependencies,
+  const slice = expectedSlice(implementation?.currentSlice);
+  const checks = {
+    implementation_keys: hasExactKeys(implementation, IMPLEMENTATION_KEYS),
+    supported_slice: slice !== null,
+    package_mode: implementation?.productionPackageMode === 'exact_allowlist',
+    package_inventory: isExactPackageInventory(implementation?.productionPackages, slice?.packages),
+    workspace_dependencies: isExactWorkspaceDependencyAllowlist(
+      implementation?.workspaceDependencyAllowlist,
+      slice?.packages,
+      slice?.workspaceDependencies,
+    ),
+    third_party_dependencies: isExactThirdPartyDependencyAllowlist(
+      implementation?.thirdPartyDependencyAllowlist,
+      slice?.packages,
+      slice?.thirdPartyDependencies,
+    ),
+    forbidden_dependencies: isExactOrderedStringList(
+      implementation?.forbiddenDependencies,
       FORBIDDEN_DEPENDENCIES,
-    )
-    && isExactOrderedStringList(
-      implementation.forbiddenDependencyPrefixes,
-      FORBIDDEN_DEPENDENCY_PREFIXES,
-    )
-    && implementation.cargoFeaturesEnabled === false
-    && isExactTargetPolicy(implementation.targetPolicy)
-    && isExactDevelopmentProfile(implementation.developmentProfile)
-    && isEmptyOwnerInventory(implementation.ownerInventory)
-    && isExactKernelProfile(
-      implementation.kernelProfile,
+    ),
+    forbidden_dependency_prefixes: isExactOrderedStringList(
+      implementation?.forbiddenDependencyPrefixes,
+      slice?.forbiddenDependencyPrefixes,
+    ),
+    cargo_features: implementation?.cargoFeaturesEnabled === false,
+    target_policy: isExactTargetPolicy(implementation?.targetPolicy, slice?.packages),
+    development_profile: isExactDevelopmentProfile(implementation?.developmentProfile),
+    owner_inventory: isEmptyOwnerInventory(implementation?.ownerInventory),
+    kernel_profile: isExactKernelProfile(
+      implementation?.kernelProfile,
       list(policy?.kernel?.constitutionalComponents),
-    )
-    && isExactOrderedStringList(implementation.exitGates, EXIT_GATES);
+      slice?.profile,
+    ),
+    exit_gates: isExactOrderedStringList(implementation?.exitGates, EXIT_GATES),
+  };
+  const invalidChecks = Object.entries(checks)
+    .filter(([, valid]) => !valid)
+    .map(([name]) => name);
 
-  return valid ? [] : [violation(
+  return invalidChecks.length === 0 ? [] : [violation(
     'implementation_slice_policy',
     'implementation',
-    'current implementation must remain the exact recovery-only Kernel slice authorized by ADR-0225',
+    `current implementation must remain the exact authorized Kernel slice; invalid=${invalidChecks.join(',')}`,
   )];
 }

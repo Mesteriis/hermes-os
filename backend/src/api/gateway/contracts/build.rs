@@ -8,8 +8,13 @@ fn main() {
     config.extern_path(".hermes.runtime.v1", "::hermes_runtime_protocol::v1");
     config
         .compile_protos(
-            &["proto/hermes/gateway/v1/recovery.proto"],
+            &[
+                "proto/hermes/gateway/v1/recovery.proto",
+                "proto/hermes/gateway/v1/owner_control.proto",
+                "proto/hermes/gateway/v1/module_registration.proto",
+                "proto/hermes/gateway/v1/external_runtime_session.proto",
+            ],
             &["proto", "../../../platform/runtime_protocol/proto"],
         )
-        .expect("gateway recovery protocol must compile");
+        .expect("gateway protocol must compile");
 }

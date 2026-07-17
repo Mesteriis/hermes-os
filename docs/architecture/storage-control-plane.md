@@ -1,6 +1,6 @@
 # Storage Control Plane
 
-Статус: каноническое summary принятого решения; runtime не реализован
+Статус: foundation package/Protobuf/AST-admission реализованы; runtime gate закрыт
 Дата: 2026-07-16
 
 Полный нормативный contract находится в
@@ -119,6 +119,9 @@ roles/grants и Testcontainers PostgreSQL/PgBouncer tests.
 
 ## Implementation status
 
-Сейчас существует только архитектурный contract и статическая policy.
-Production packages, Protobuf contracts, managed binaries, migration AST
-admission и Testcontainers integration suite ещё должны быть реализованы.
+Сейчас реализованы six-package foundation, `StorageBundleV1` Protobuf,
+structural bundle validation и fail-closed AST admission для owner-local
+`CREATE TABLE` / `ALTER TABLE … ADD COLUMN`. Managed adapters, Vault lease
+delivery, ledger, role/grant reconciliation, distribution trust execution и
+PostgreSQL/PgBouncer integration suite ещё должны быть реализованы. Поэтому
+`storage_control_v1` остаётся закрытым.

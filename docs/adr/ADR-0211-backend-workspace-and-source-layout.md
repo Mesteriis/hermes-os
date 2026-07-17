@@ -143,22 +143,51 @@ backend/src/kernel/
 │   ├── contract/                     # hermes-kernel-control-store
 │   └── sqlite/                       # hermes-kernel-control-store-sqlite
 └── src/
-    ├── main.rs
-    ├── boot/
-    ├── supervisor/
-    ├── module_registry/
-    ├── capability_router/
-    ├── gateway/
-    ├── event_hub/
-    ├── telemetry_control/
-    └── recovery/
+    ├── main.rs                       # composition root only
+    ├── cli/                          # production command syntax
+    ├── control_store/                # boot lifecycle and offline control
+    ├── distribution/                 # signed artifact trust and staging
+    ├── identity/
+    │   ├── device/
+    │   ├── enrollment/
+    │   ├── owner/
+    │   ├── owner_control/
+    │   └── server_pairing/
+    ├── infrastructure/               # paths and private filesystem boundary
+    ├── modules/
+    │   ├── capability/
+    │   ├── registration/
+    │   └── settings/
+    ├── platform/                     # macOS and Vault bindings
+    ├── recovery/                     # private recovery IPC and fences
+    └── runtime/
+        ├── external/
+        ├── lifecycle/
+        └── managed/
 ```
 
-`event_hub` и `telemetry_control` являются внутренними responsibilities
-`hermes-kernel`, а не отдельными packages. Kernel tree не содержит domain,
-provider или workflow business logic. Control Store packages отделены только
-потому, что port и SQLite adapter имеют разные dependency/изменение причины;
-они остаются private owner `kernel` и не являются module API.
+`main.rs`, `lib.rs` и `build.rs` остаются маленькими composition roots; плоский
+набор файлов с префиксами не заменяет namespace directory. Каждая вложенная
+директория Kernel обозначает одного владельца ответственности. Kernel tree не
+содержит domain, provider или workflow business logic. Control Store packages
+отделены только потому, что port и SQLite adapter имеют разные
+dependency/изменение причины; они остаются private owner `kernel` и не являются
+module API.
+
+### Семантическая навигация во всём backend
+
+Это правило относится ко всем Cargo packages backend, а не только к Kernel.
+Непосредственно в `<package>/src/` могут находиться только `lib.rs` и/или
+`main.rs` как composition root. Любой другой Rust source file размещается в
+именованной папке ответственности: например `cli/`, `model/`, `time/`,
+`providers/`, `tests/recovery/` или `tests/service/`.
+
+Не создаются flat-файлы с package-префиксами вроде `vault_backup.rs` или
+`telemetry_retention.rs`, если namespace уже задаётся каталогом владельца.
+Небольшой versioned Protobuf directory является исключением: его файлы образуют
+один wire-contract и остаются вместе до появления самостоятельного protocol
+owner. Исполняемый architecture test проверяет source roots всех production,
+development и test-support Cargo packages.
 
 ### Platform capabilities
 
@@ -360,9 +389,9 @@ Layout migration выполнена одним законченным срезо
 6. linters переключены на production/test roots настоящего ADR;
 7. documentation links и command entrypoints обновлены;
 8. ставшие пустыми root-level backend directories и команды удалены;
-9. ADR-0225 разрешил только exact six-package recovery-only set после зелёного
-   architecture gate; любой другой production package остаётся закрыт phase
-   gate и owner contract.
+9. ADR-0225 разрешил exact six-package recovery-only set, а после отдельного
+   evidence — exact `vault_v1` package cut; любой другой production
+   package остаётся закрыт phase gate и owner contract.
 
 Dual layout и compatibility symlink запрещены: после среза существует только
 новое каноническое расположение.

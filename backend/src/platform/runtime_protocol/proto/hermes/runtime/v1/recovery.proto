@@ -42,7 +42,10 @@ message SettingsSchemaRefV1 { uint32 major = 1; uint32 revision = 2; uint64 arti
 message LifecycleSupportV1 { repeated LifecycleOperationV1 operations = 1; uint32 default_deadline_millis = 2; }
 message ProvidedSurfaceV1 { ProvidedSurfaceKindV1 kind = 1; ContractReferenceV1 contract = 2; }
 message StorageNamespaceRequestV1 { string owner_id = 1; uint32 connection_budget = 2; uint32 timeout_millis = 3; }
-message VaultPurposeRequestV1 { string purpose_id = 1; uint32 requested_lease_ttl_seconds = 2; }
+enum VaultSecretClassV1 { VAULT_SECRET_CLASS_V1_UNSPECIFIED = 0; VAULT_SECRET_CLASS_V1_PROVIDER_CREDENTIAL = 1; VAULT_SECRET_CLASS_V1_OAUTH_REFRESH_CREDENTIAL = 2; VAULT_SECRET_CLASS_V1_SESSION_CREDENTIAL_BLOB = 3; VAULT_SECRET_CLASS_V1_PLATFORM_CREDENTIAL = 4; VAULT_SECRET_CLASS_V1_SESSION_STORE_KEY = 5; }
+enum VaultActionV1 { VAULT_ACTION_V1_UNSPECIFIED = 0; VAULT_ACTION_V1_RESOLVE = 1; VAULT_ACTION_V1_CREATE = 2; VAULT_ACTION_V1_REPLACE_CAS = 3; VAULT_ACTION_V1_RETIRE = 4; VAULT_ACTION_V1_DELETE = 5; VAULT_ACTION_V1_ISSUE_SESSION_STORE_KEY = 6; }
+enum VaultTargetScopeV1 { VAULT_TARGET_SCOPE_V1_UNSPECIFIED = 0; VAULT_TARGET_SCOPE_V1_CONFIGURATION_INSTANCE = 1; }
+message VaultPurposeRequestV1 { string purpose_id = 1; uint32 requested_lease_ttl_seconds = 2; repeated VaultSecretClassV1 allowed_secret_classes = 3; repeated VaultActionV1 actions = 4; VaultTargetScopeV1 target_scope = 5; }
 message BlobQuotaRequestV1 { uint64 max_bytes = 1; }
 message ClockTimerRequestV1 { bool requires_wall_clock = 1; }
 message SchedulerJobRequestV1 { ContractReferenceV1 job_kind = 1; }

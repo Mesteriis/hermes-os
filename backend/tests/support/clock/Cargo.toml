@@ -1,0 +1,13 @@
+[package]
+name = "hermes-clock-testkit"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.hermes]
+role = "test"
+owner = "test"
+surface = "test_support"
+
+[dev-dependencies]
+hermes-clock-protocol = { path = "../../../src/platform/clock/protocol" }
+hermes-clock-runtime = { path = "../../../src/platform/clock/runtime" }

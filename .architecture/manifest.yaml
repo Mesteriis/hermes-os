@@ -1,0 +1,26 @@
+version: 2
+kind: architecture-manifest
+repository_hash:
+  algorithm: architecture-normalizer-repo-fingerprint-v1
+  value: sha256:a6144543b6a926f6a728fe5badcf05230f942968a587191e6fb791b8d557c292
+  file_count: 6082
+generated_at: null
+languages: [rust, javascript]
+policies:
+  - path: .architecture/policies/rust.yaml
+    status: approved
+    policy_version: hermes-rust-srp-v1
+artifacts:
+  - {path: .architecture/analysis.md, kind: analysis, sha256: "sha256:db0316c93c41103ba3e8a78f14b66adb344eb9115fb20c2b10aa7dbb4d675738"}
+  - {path: .architecture/compatibility-plan.yaml, kind: compatibility-plan, sha256: "sha256:c90e832e8340ba2eeb5251703e46b0e696505da2534596bdefa3cdf832021fbd"}
+  - {path: .architecture/dependency-graph.graphml, kind: dependency-graph, sha256: "sha256:f8d4ad7b17b8986ab4f0c24477c0e2baa0f5db6eafa97b43a225c4d6d154c844"}
+  - {path: .architecture/entropy.json, kind: entropy, sha256: "sha256:624a209931d21656279edf876eb380d127e74be45d2d171bf211097948089d7c"}
+  - {path: .architecture/exports-plan.yaml, kind: exports-plan, sha256: "sha256:e784cd8796763fe05217bb5573d3946cef13275f56a05eb92a16f09f77e75417"}
+  - {path: .architecture/imports-plan.yaml, kind: imports-plan, sha256: "sha256:26baf1c2164c3225f40c4a5a3d371c8c78ff2a153804eab93e6db3d134feb533"}
+  - {path: .architecture/move-plan.yaml, kind: move-plan, sha256: "sha256:243a72850966900aad2fad73e89e72c8c678690c5c3ee1a94eb5d7ae5e7161f4"}
+  - {path: .architecture/package-layout.graphml, kind: package-layout, sha256: "sha256:cedcd9715f1094cd8bf7d5495d729e915dde1387aa5a5212bca587370959c209"}
+  - {path: .architecture/rename-plan.yaml, kind: rename-plan, sha256: "sha256:479b67d0a2ea75759d9c9072b7a5519741d83e3ee6798b14ecb1f2c6d5df90aa"}
+  - {path: .architecture/risk-report.yaml, kind: risk-report, sha256: "sha256:83f7f3a4bb693fc9e2c0ac2038a2fdd71ab17deea81481845bbc1bd97feb7774"}
+  - {path: .architecture/split-plan.yaml, kind: split-plan, sha256: "sha256:a97ff60070967bfb1b9655171b1e30b825eb0b7c00e1bdc0e88a9753715b728b"}
+  - {path: .architecture/validation-plan.yaml, kind: validation-plan, sha256: "sha256:662276ba4597a46106af3ab15dbce1f08633cf75aa392fbb4e926ae18ba08b01"}
+  - {path: .architecture/validation-results.yaml, kind: validation-results, sha256: "sha256:86100cd3dda1891a8c2d6aa3f1c2ed6adbce42eba5525f36ff2219c63aada02e"}

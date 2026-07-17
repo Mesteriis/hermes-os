@@ -1,0 +1,15 @@
+[package]
+name = "hermes-clock-runtime"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "platform"
+owner = "clock"
+surface = "implementation"
+
+[dependencies]
+hermes-clock-protocol = { path = "../protocol" }

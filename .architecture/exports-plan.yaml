@@ -1,0 +1,19 @@
+version: 2
+kind: exports-plan
+actions:
+  - id: EXPORT-0001
+    status: done
+    path: backend/src/kernel/control_store/contract/src/lib.rs
+    export: focused Control Store port traits and value types
+    source: backend/src/kernel/control_store/contract/src/ports/
+    rationale: Preserve one explicit crate surface while splitting responsibilities.
+    evidence: [{type: public-api, path: backend/src/kernel/control_store/contract/src/lib.rs, detail: narrow ports plus atomic ModuleGrantSnapshot value type}]
+    rollback: Restore definitions to lib.rs.
+  - id: EXPORT-0002
+    status: approved
+    path: backend/src/platform/events/src/lib.rs
+    export: current DurableEnvelopeV1 validation surface
+    source: backend/src/platform/events/src/validation/envelope.rs
+    rationale: Retain the event crate public API while placing implementation in a semantic validation namespace.
+    evidence: [{type: public-api, path: backend/src/platform/events/src/lib.rs, detail: event protocol validators are re-exported by lib.rs}]
+    rollback: Restore the validator file to the crate root.

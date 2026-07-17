@@ -1,0 +1,377 @@
+use std::os::unix::fs::PermissionsExt;
+
+use hermes_vault_key_provider::WrappingKeyProvider;
+use hermes_vault_key_provider_file::FileWrappingKeyProvider;
+use hermes_vault_protocol::{
+    LeaseAudienceV1, SecretClassV1, VaultActionV1, VaultLeaseIssueRequestV1, VaultPurposeRequestV1,
+    VaultTransportCommandV1,
+};
+use hermes_vault_store_sqlcipher::{SecretRecordScope, VaultStore};
+use tempfile::TempDir;
+
+use crate::service::runtime::{VaultService, VaultServiceError};
+
+#[test]
+fn resolves_only_a_lease_bound_to_the_exact_secret_scope() {
+    let temporary = TempDir::new().expect("temporary Vault directory");
+    std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
+        .expect("private temporary Vault directory");
+    let store = initialize_store(&temporary);
+    let purpose = credential_purpose();
+    let scope = SecretRecordScope::new(
+        "mail".to_owned(),
+        &purpose,
+        SecretClassV1::ProviderCredential,
+        1,
+    )
+    .expect("record scope");
+    let record_id = store
+        .store_secret(&scope, b"service-credential-marker")
+        .expect("store secret");
+    let audience = LeaseAudienceV1::new(
+        "registration-mail".to_owned(),
+        "runtime-mail-1".to_owned(),
+        7,
+    )
+    .expect("typed audience");
+    let mut service = VaultService::new(store, 3).expect("Vault service");
+
+    let matching = service
+        .issue_lease(lease_request(purpose.clone(), audience.clone(), 1), 100)
+        .expect("matching lease");
+    assert_eq!(
+        service
+            .resolve_once(matching.lease_id(), &audience, &record_id, &scope, 101)
+            .expect("matching scope resolves")
+            .as_slice(),
+        b"service-credential-marker"
+    );
+
+    let mismatched = service
+        .issue_lease(lease_request(purpose, audience.clone(), 2), 110)
+        .expect("new lease");
+    assert_eq!(
+        service.resolve_once(mismatched.lease_id(), &audience, &record_id, &scope, 111),
+        Err(VaultServiceError::LeaseScopeMismatch)
+    );
+}
+
+#[test]
+fn revoke_and_generation_advance_invalidate_unresolved_service_leases() {
+    let temporary = TempDir::new().expect("temporary Vault directory");
+    std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
+        .expect("private temporary Vault directory");
+    let store = initialize_store(&temporary);
+    let purpose = credential_purpose();
+    let scope = SecretRecordScope::new(
+        "mail".to_owned(),
+        &purpose,
+        SecretClassV1::ProviderCredential,
+        1,
+    )
+    .expect("record scope");
+    let record_id = store
+        .store_secret(&scope, b"service-credential-marker")
+        .expect("store secret");
+    let audience = LeaseAudienceV1::new(
+        "registration-mail".to_owned(),
+        "runtime-mail-1".to_owned(),
+        7,
+    )
+    .expect("typed audience");
+    let mut service = VaultService::new(store, 3).expect("Vault service");
+
+    let revoked = service
+        .issue_lease(lease_request(purpose.clone(), audience.clone(), 1), 100)
+        .expect("lease before revoke");
+    service.revoke_audience(&audience);
+    assert_lease_is_invalidated(
+        &mut service,
+        revoked.lease_id(),
+        &audience,
+        &record_id,
+        &scope,
+    );
+
+    let stale_generation = service
+        .issue_lease(lease_request(purpose, audience.clone(), 1), 110)
+        .expect("lease before generation advance");
+    service
+        .advance_runtime_generation(4)
+        .expect("next runtime generation");
+    assert_eq!(service.runtime_generation(), 4);
+    assert_lease_is_invalidated(
+        &mut service,
+        stale_generation.lease_id(),
+        &audience,
+        &record_id,
+        &scope,
+    );
+}
+
+#[test]
+fn resolve_rejects_a_lease_without_the_resolve_action() {
+    let temporary = TempDir::new().expect("temporary Vault directory");
+    std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
+        .expect("private temporary Vault directory");
+    let store = initialize_store(&temporary);
+    let purpose = VaultPurposeRequestV1::new(
+        "mail.credential".to_owned(),
+        "account-a".to_owned(),
+        vec![SecretClassV1::ProviderCredential],
+        vec![VaultActionV1::Create],
+        60,
+    )
+    .expect("create-only purpose");
+    let scope = SecretRecordScope::new(
+        "mail".to_owned(),
+        &purpose,
+        SecretClassV1::ProviderCredential,
+        1,
+    )
+    .expect("record scope");
+    let record_id = store
+        .store_secret(&scope, b"service-credential-marker")
+        .expect("store secret");
+    let audience = LeaseAudienceV1::new(
+        "registration-mail".to_owned(),
+        "runtime-mail-1".to_owned(),
+        7,
+    )
+    .expect("typed audience");
+    let mut service = VaultService::new(store, 3).expect("Vault service");
+    let lease = service
+        .issue_lease(lease_request(purpose, audience.clone(), 1), 100)
+        .expect("create-only lease");
+
+    assert_eq!(
+        service.resolve_once(lease.lease_id(), &audience, &record_id, &scope, 101),
+        Err(VaultServiceError::LeaseActionDenied)
+    );
+}
+
+#[test]
+fn lease_issuance_rejects_declared_actions_without_an_executable_lifecycle() {
+    let temporary = TempDir::new().expect("temporary Vault directory");
+    std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
+        .expect("private temporary Vault directory");
+    let store = initialize_store(&temporary);
+    let purpose = VaultPurposeRequestV1::new(
+        "mail.credential".to_owned(),
+        "account-a".to_owned(),
+        vec![SecretClassV1::ProviderCredential],
+        vec![VaultActionV1::Delete],
+        60,
+    )
+    .expect("typed unsupported purpose");
+    let audience = LeaseAudienceV1::new(
+        "registration-mail".to_owned(),
+        "runtime-mail-1".to_owned(),
+        7,
+    )
+    .expect("typed audience");
+    let mut service = VaultService::new(store, 3).expect("Vault service");
+
+    assert_eq!(
+        service.issue_lease(lease_request(purpose, audience, 1), 100),
+        Err(VaultServiceError::UnsupportedLeaseAction)
+    );
+}
+
+#[test]
+fn replace_cas_requires_a_one_time_replace_lease_for_the_next_revision() {
+    let mut fixture = replacement_fixture();
+    let lease = fixture
+        .service
+        .issue_lease(
+            lease_request(replace_purpose(), fixture.audience.clone(), 2),
+            100,
+        )
+        .expect("replace lease");
+
+    let replacement = fixture
+        .service
+        .replace_once(
+            lease.lease_id(),
+            &fixture.audience,
+            &fixture.prior_record,
+            &fixture.prior_scope,
+            &fixture.next_scope,
+            b"credential-revision-two",
+            101,
+        )
+        .expect("replacement");
+    let resolve_lease = fixture
+        .service
+        .issue_lease(
+            lease_request(credential_purpose(), fixture.audience.clone(), 2),
+            102,
+        )
+        .expect("resolve lease");
+    assert_eq!(
+        fixture
+            .service
+            .resolve_once(
+                resolve_lease.lease_id(),
+                &fixture.audience,
+                &replacement,
+                &fixture.next_scope,
+                103,
+            )
+            .expect("replacement resolution")
+            .as_slice(),
+        b"credential-revision-two"
+    );
+}
+
+#[test]
+fn resolve_command_uses_the_lease_scope_without_a_vault_record_identifier() {
+    let temporary = TempDir::new().expect("temporary Vault directory");
+    std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
+        .expect("private temporary Vault directory");
+    let store = initialize_store(&temporary);
+    let purpose = credential_purpose();
+    let scope = SecretRecordScope::new(
+        "mail".to_owned(),
+        &purpose,
+        SecretClassV1::ProviderCredential,
+        1,
+    )
+    .expect("record scope");
+    store
+        .store_secret(&scope, b"service-credential-marker")
+        .expect("store secret");
+    let audience = LeaseAudienceV1::new(
+        "registration-mail".to_owned(),
+        "runtime-mail-1".to_owned(),
+        7,
+    )
+    .expect("typed audience");
+    let mut service = VaultService::new(store, 3).expect("Vault service");
+    let lease = service
+        .issue_lease(lease_request(purpose, audience.clone(), 1), 100)
+        .expect("resolve lease");
+    let command = VaultTransportCommandV1::ResolveLease {
+        lease_id: lease.lease_id().clone(),
+        secret_class: SecretClassV1::ProviderCredential,
+    };
+
+    assert_eq!(
+        service
+            .execute_command_once(&command, &audience, 101)
+            .expect("resolve command")
+            .as_slice(),
+        b"service-credential-marker"
+    );
+}
+
+struct ReplacementFixture {
+    _temporary: TempDir,
+    service: VaultService,
+    audience: LeaseAudienceV1,
+    prior_record: hermes_vault_store_sqlcipher::SecretRecordId,
+    prior_scope: SecretRecordScope,
+    next_scope: SecretRecordScope,
+}
+
+fn replacement_fixture() -> ReplacementFixture {
+    let temporary = TempDir::new().expect("temporary Vault directory");
+    std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
+        .expect("private temporary Vault directory");
+    let store = initialize_store(&temporary);
+    let purpose = replace_purpose();
+    let prior_scope = SecretRecordScope::new(
+        "mail".to_owned(),
+        &purpose,
+        SecretClassV1::ProviderCredential,
+        1,
+    )
+    .expect("prior scope");
+    let prior_record = store
+        .store_secret(&prior_scope, b"credential-revision-one")
+        .expect("prior credential");
+    let next_scope = SecretRecordScope::new(
+        "mail".to_owned(),
+        &purpose,
+        SecretClassV1::ProviderCredential,
+        2,
+    )
+    .expect("next scope");
+    let audience = LeaseAudienceV1::new(
+        "registration-mail".to_owned(),
+        "runtime-mail-1".to_owned(),
+        7,
+    )
+    .expect("typed audience");
+    ReplacementFixture {
+        _temporary: temporary,
+        service: VaultService::new(store, 3).expect("Vault service"),
+        audience,
+        prior_record,
+        prior_scope,
+        next_scope,
+    }
+}
+
+fn initialize_store(temporary: &TempDir) -> VaultStore {
+    let provider = FileWrappingKeyProvider::new(&temporary.path().join("wrapping-key.bin"));
+    let key = provider.load_or_create().expect("file wrapping key");
+    VaultStore::initialize(
+        &temporary.path().join("vault.db"),
+        &temporary.path().join("vault.anchor"),
+        "vault-instance",
+        &key,
+    )
+    .expect("Vault store")
+}
+
+fn credential_purpose() -> VaultPurposeRequestV1 {
+    VaultPurposeRequestV1::new(
+        "mail.credential".to_owned(),
+        "account-a".to_owned(),
+        vec![SecretClassV1::ProviderCredential],
+        vec![VaultActionV1::Resolve, VaultActionV1::Create],
+        60,
+    )
+    .expect("typed purpose")
+}
+
+fn replace_purpose() -> VaultPurposeRequestV1 {
+    VaultPurposeRequestV1::new(
+        "mail.credential".to_owned(),
+        "account-a".to_owned(),
+        vec![SecretClassV1::ProviderCredential],
+        vec![VaultActionV1::ReplaceCas],
+        60,
+    )
+    .expect("replace purpose")
+}
+
+fn lease_request(
+    purpose: VaultPurposeRequestV1,
+    audience: LeaseAudienceV1,
+    secret_revision: u64,
+) -> VaultLeaseIssueRequestV1 {
+    VaultLeaseIssueRequestV1::new(
+        "vault-instance".to_owned(),
+        3,
+        secret_revision,
+        "mail".to_owned(),
+        purpose,
+        audience,
+    )
+    .expect("typed lease request")
+}
+
+fn assert_lease_is_invalidated(
+    service: &mut VaultService,
+    lease_id: &hermes_vault_protocol::LeaseIdV1,
+    audience: &LeaseAudienceV1,
+    record_id: &hermes_vault_store_sqlcipher::SecretRecordId,
+    scope: &SecretRecordScope,
+) {
+    assert!(matches!(
+        service.resolve_once(lease_id, audience, record_id, scope, 120),
+        Err(VaultServiceError::Lease(_))
+    ));
+}

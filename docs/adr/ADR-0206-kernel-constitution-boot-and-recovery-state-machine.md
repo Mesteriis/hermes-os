@@ -117,7 +117,7 @@ payload или implementation managed services.
 Vault является отдельным verified managed process владельца `platform/vault`
 по ADR-0223. Kernel supervisor управляет его lifecycle и маршрутизирует только
 versioned ciphertext frames с authorization/fencing context. Kernel не линкует
-`hermes-vault-runtime`, SQLCipher, crypto или Keychain adapters, не получает
+`hermes-vault-runtime`, SQLCipher, crypto или file-key adapters, не получает
 credential plaintext/keys и не хранит Vault anchor, key slots, secret bindings
 или leases в Control Store. Vault failure блокирует только capabilities с
 явной credential dependency; остальной recovery/control plane продолжает
@@ -412,6 +412,8 @@ Kernel до фиксации соответствующего contract.
 - Kernel storage readiness использует typed Storage Control attestation и не
   открывает SQL connection для schema/extension/role/grant introspection;
 - recovery health, diagnostics и audit не содержат secrets или private content;
+- после unclean exit stale private IPC path удаляется только если это Unix
+  socket текущего owner; symlink и regular file fail closed;
 - Event Hub остаётся вне normal event data path и не читает payload;
 - required subscription readiness подтверждается через Event Hub;
 - Telemetry Collector работает без PostgreSQL/NATS, а его crash переводит

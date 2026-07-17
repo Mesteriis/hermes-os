@@ -1,0 +1,15 @@
+[package]
+name = "hermes-storage-testkit"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.hermes]
+role = "test"
+owner = "test"
+surface = "test_support"
+
+[dev-dependencies]
+hermes-storage-control = { path = "../../../src/platform/storage/control" }
+hermes-storage-migrations = { path = "../../../src/platform/storage/migrations" }
+hermes-storage-protocol = { path = "../../../src/platform/storage/protocol" }
+sha2 = { version = "=0.11.0", default-features = false }

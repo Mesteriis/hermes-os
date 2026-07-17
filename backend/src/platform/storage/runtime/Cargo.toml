@@ -1,0 +1,18 @@
+[package]
+name = "hermes-storage-runtime"
+version = "0.1.0"
+edition = "2024"
+[[bin]]
+name = "hermes-storage-runtime"
+path = "src/main.rs"
+[package.metadata.hermes]
+role = "platform"
+owner = "storage"
+surface = "runtime"
+components = ["storage_control"]
+[dependencies]
+hermes-storage-protocol = { path = "../protocol" }
+hermes-storage-control = { path = "../control" }
+hermes-storage-postgres = { path = "../postgres" }
+hermes-storage-pgbouncer = { path = "../pgbouncer" }
+hermes-storage-migrations = { path = "../migrations" }

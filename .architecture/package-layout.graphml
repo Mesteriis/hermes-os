@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+  <graph id="backend-proposed-layout" edgedefault="directed">
+    <node id="backend-src"/>
+    <node id="api"/><node id="kernel"/><node id="platform"/><node id="development"/>
+    <node id="kernel-identity-device"/><node id="kernel-identity-enrollment"/><node id="kernel-identity-owner"/>
+    <node id="kernel-modules-capability"/><node id="kernel-modules-registration"/><node id="kernel-modules-settings"/>
+    <node id="kernel-runtime-managed"/><node id="kernel-runtime-external"/><node id="kernel-runtime-lifecycle"/>
+    <node id="development-cli"/><node id="development-identity"/><node id="development-pairing"/><node id="development-platform"/>
+    <edge id="e1" source="backend-src" target="api"/><edge id="e2" source="backend-src" target="kernel"/>
+    <edge id="e3" source="backend-src" target="platform"/><edge id="e4" source="backend-src" target="development"/>
+    <edge id="e5" source="kernel" target="kernel-identity-device"/><edge id="e6" source="kernel" target="kernel-identity-enrollment"/>
+    <edge id="e7" source="kernel" target="kernel-identity-owner"/><edge id="e8" source="kernel" target="kernel-modules-capability"/>
+    <edge id="e9" source="kernel" target="kernel-modules-registration"/><edge id="e10" source="kernel" target="kernel-modules-settings"/>
+    <edge id="e11" source="kernel" target="kernel-runtime-managed"/><edge id="e12" source="kernel" target="kernel-runtime-external"/>
+    <edge id="e13" source="kernel" target="kernel-runtime-lifecycle"/><edge id="e14" source="development" target="development-cli"/>
+    <edge id="e15" source="development" target="development-identity"/><edge id="e16" source="development" target="development-pairing"/>
+    <edge id="e17" source="development" target="development-platform"/>
+  </graph>
+</graphml>

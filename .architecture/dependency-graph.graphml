@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+  <graph id="backend-source-dependencies" edgedefault="directed">
+    <node id="backend-development-runtime"/><node id="backend-kernel"/>
+    <node id="backend-control-store-sqlite"/><node id="backend-events"/>
+    <node id="backend-runtime-protocol"/><node id="backend-vault"/>
+    <edge id="e1" source="backend-kernel" target="backend-control-store-sqlite"/>
+    <edge id="e2" source="backend-kernel" target="backend-runtime-protocol"/>
+    <edge id="e3" source="backend-kernel" target="backend-vault"/>
+    <edge id="e4" source="backend-development-runtime" target="backend-kernel"/>
+    <edge id="e5" source="backend-vault" target="backend-runtime-protocol"/>
+  </graph>
+</graphml>

@@ -1,0 +1,12 @@
+[package]
+name = "hermes-storage-postgres"
+version = "0.1.0"
+edition = "2024"
+[lib]
+path = "src/lib.rs"
+[package.metadata.hermes]
+role = "platform"
+owner = "storage"
+surface = "persistence"
+[dependencies]
+hermes-storage-control = { path = "../control" }

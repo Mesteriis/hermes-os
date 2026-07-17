@@ -1,0 +1,16 @@
+[package]
+name = "hermes-vault-protocol"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "platform"
+owner = "vault"
+surface = "contract"
+
+[dependencies]
+hpke = { version = "=0.14.0", default-features = false, features = ["alloc", "chacha", "getrandom", "x25519"] }
+sha2 = { version = "=0.11.0", default-features = false }

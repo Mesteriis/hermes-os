@@ -1,0 +1,106 @@
+//! Owns short-lived exact contract files passed to a verified managed process.
+
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::path::{Path, PathBuf};
+
+use getrandom::fill;
+
+pub struct StagedRuntimeContracts {
+    descriptor_path: PathBuf,
+    settings_schema_path: Option<PathBuf>,
+}
+
+impl StagedRuntimeContracts {
+    pub fn stage(
+        directory: &Path,
+        descriptor_bytes: &[u8],
+        settings_schema_bytes: Option<&[u8]>,
+    ) -> Result<Self, String> {
+        validate_directory(directory)?;
+        if descriptor_bytes.is_empty() {
+            return Err("managed runtime descriptor bytes are unavailable".to_owned());
+        }
+        let suffix = random_suffix()?;
+        let descriptor_path = directory.join(format!("descriptor-{suffix}.bin"));
+        write_private_file(&descriptor_path, descriptor_bytes)?;
+        let settings_schema_path = match settings_schema_bytes {
+            Some(bytes) if !bytes.is_empty() => {
+                let path = directory.join(format!("settings-{suffix}.bin"));
+                if let Err(error) = write_private_file(&path, bytes) {
+                    let _ = remove_private_file(&descriptor_path);
+                    return Err(error);
+                }
+                Some(path)
+            }
+            Some(_) => {
+                let _ = remove_private_file(&descriptor_path);
+                return Err("managed runtime settings schema bytes are invalid".to_owned());
+            }
+            None => None,
+        };
+        Ok(Self {
+            descriptor_path,
+            settings_schema_path,
+        })
+    }
+
+    #[must_use]
+    pub fn descriptor_path(&self) -> &Path {
+        &self.descriptor_path
+    }
+
+    #[must_use]
+    pub fn settings_schema_path(&self) -> Option<&Path> {
+        self.settings_schema_path.as_deref()
+    }
+
+    pub fn remove(self) -> Result<(), String> {
+        remove_private_file(&self.descriptor_path)?;
+        if let Some(path) = self.settings_schema_path {
+            remove_private_file(&path)?;
+        }
+        Ok(())
+    }
+}
+
+fn validate_directory(directory: &Path) -> Result<(), String> {
+    if !directory.is_absolute() {
+        return Err("managed runtime contract directory must be absolute".to_owned());
+    }
+    std::fs::create_dir_all(directory).map_err(|error| error.to_string())?;
+    let metadata = std::fs::symlink_metadata(directory).map_err(|error| error.to_string())?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err("managed runtime contract directory is invalid".to_owned());
+    }
+    std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))
+        .map_err(|error| error.to_string())
+}
+
+fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o400)
+        .open(path)
+        .map_err(|error| error.to_string())?;
+    file.write_all(bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|error| error.to_string())
+}
+
+fn remove_private_file(path: &Path) -> Result<(), String> {
+    let metadata = std::fs::symlink_metadata(path).map_err(|error| error.to_string())?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("managed runtime contract cleanup requires a regular file".to_owned());
+    }
+    std::fs::remove_file(path).map_err(|error| error.to_string())
+}
+
+fn random_suffix() -> Result<String, String> {
+    let mut random = [0_u8; 16];
+    fill(&mut random)
+        .map_err(|_| "managed runtime contract randomness is unavailable".to_owned())?;
+    Ok(random.iter().map(|byte| format!("{byte:02x}")).collect())
+}

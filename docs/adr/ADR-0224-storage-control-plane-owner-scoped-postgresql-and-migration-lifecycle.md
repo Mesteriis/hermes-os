@@ -2,8 +2,11 @@
 
 Статус: Принято
 Дата: 2026-07-16
-Состояние реализации: Не реализовано; production packages, Protobuf contracts,
-managed PostgreSQL/PgBouncer distribution и integration harness отсутствуют
+Состояние реализации: реализован foundation-контур из шести production packages,
+`StorageBundleV1` Protobuf и fail-closed AST admission для узкого additive DDL.
+Managed PostgreSQL/PgBouncer adapters, Vault credential leases, migration ledger,
+distribution trust execution и integration harness ещё отсутствуют; gate
+`storage_control_v1` остаётся закрытым.
 
 Уточняет:
 

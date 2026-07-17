@@ -2,8 +2,9 @@
 
 Статус: Принято
 Дата: 2026-07-15
-Состояние реализации: Dependency guard и self-tests реализованы; production
-packages ещё не созданы
+Состояние реализации: Dependency guard и self-tests реализованы. Созданы
+recovery/kernel packages и exact `vault_v1` five-package owner cut; owner
+modules и последующие platform packages остаются закрыты.
 
 Зависит от:
 
@@ -82,7 +83,7 @@ backend/src/platform/vault/protocol/      hermes-vault-protocol
 backend/src/platform/vault/key_provider/  hermes-vault-key-provider
 backend/src/platform/vault/runtime/       hermes-vault-runtime
 backend/src/platform/vault/store_sqlcipher/ hermes-vault-store-sqlcipher
-backend/src/platform/vault/keychain_macos/ hermes-vault-keychain-macos
+backend/src/platform/vault/key_provider_file/ hermes-vault-key-provider-file
 backend/src/platform/blob/protocol/       hermes-blob-protocol
 backend/src/api/gateway/contracts/        hermes-gateway-protocol
 backend/src/kernel/                       hermes-kernel
@@ -144,11 +145,11 @@ Vault topology является закрытой owner-local группой ADR-
 - `hermes-vault-key-provider` — внутренний adapter port владельца Vault;
 - `hermes-vault-runtime` — отдельный managed process composition;
 - `hermes-vault-store-sqlcipher` — encrypted SQLite schema/migrations adapter;
-- `hermes-vault-keychain-macos` — macOS platform-key adapter.
+- `hermes-vault-key-provider-file` — owner-private file wrapping-key adapter.
 
 Kernel, Gateway и modules не зависят от четырёх implementation packages. Vault
 runtime не зависит от PostgreSQL/NATS clients, provider SDK, integration/domain
-packages или Kernel implementation. Изменение store/keychain adapter может
+packages или Kernel implementation. Изменение store/file-key adapter может
 пересобрать только Vault runtime и его tests; изменение public Vault protocol
 осознанно инвалидирует его authorized consumers.
 
@@ -342,7 +343,7 @@ integration api + core + provider adapter + persistence ← integration runtime
 | Storage PostgreSQL/PgBouncer/migration adapter | `hermes-storage-runtime` и Storage tests |
 | `hermes-storage-control` | `hermes-storage-runtime` и Storage tests |
 | `hermes-storage-protocol` | authorized modules, Kernel и Storage runtime; contract review обязателен |
-| Vault store/keychain adapter | `hermes-vault-runtime` и Vault tests |
+| Vault store/file-key adapter | `hermes-vault-runtime` и Vault tests |
 | `hermes-vault-protocol` | Vault runtime и authorized protocol consumers; contract review обязателен |
 | `hermes-kernel` implementation | только Kernel tests и packaging |
 
@@ -415,10 +416,10 @@ compile graph и не выражает ownership.
 
 ## Критерии приёмки первого implementation slice
 
-ADR-0225 уже закрыл capability/ownership inventory первого slice: разрешён
-ровно exact six-package `kernel_recovery_only_v1` с пустым owner inventory.
-Эти packages ещё не созданы; любой следующий package остаётся запрещён до
-открытия соответствующего phase gate.
+ADR-0225 зафиксировал exact six-package `kernel_recovery_only_v1` с пустым
+owner inventory, а затем explicit `vault_v1` из пяти Vault packages. Любой
+следующий package остаётся запрещён до своего
+phase gate.
 
 Первый slice считается соответствующим этому ADR, когда:
 

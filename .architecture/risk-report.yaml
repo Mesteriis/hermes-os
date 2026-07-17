@@ -1,0 +1,40 @@
+version: 2
+kind: risk-report
+scope: backend-wide-source-layout
+risks:
+  - id: RISK-0006
+    severity: medium
+    area: development-operator-imports
+    description: The development operator has private sibling imports across artifact, control and runtime simulation modules.
+    mitigation: Move all related modules together, compose them through explicit mod.rs files and run the development operator lifecycle test.
+    related_actions: [MOVE-0030, MOVE-0031, MOVE-0032, MOVE-0033, MOVE-0034, MOVE-0035, MOVE-0036, MOVE-0037, MOVE-0038, MOVE-0039, MOVE-0040, IMPORT-0008]
+  - id: RISK-0001
+    severity: high
+    area: recovery
+    description: A layout-only change must not alter the crash-safe recovery protocol or its fences.
+    mitigation: No recovery source moves are proposed; run recovery testkit after every execution slice.
+    related_actions: []
+  - id: RISK-0002
+    severity: medium
+    area: module-imports
+    description: Rust module-path moves can break crate-local imports and test path fixtures.
+    mitigation: Execute explicit import actions, run cargo-based recovery and Vault suites, then run the architecture policy.
+    related_actions: [IMPORT-0002, IMPORT-0003, IMPORT-0004, IMPORT-0005, IMPORT-0006, IMPORT-0007]
+  - id: RISK-0003
+    severity: medium
+    area: public-api
+    description: The Events validator may have external crate consumers through the current crate-root API.
+    mitigation: Retain explicit crate-root exports; do not add a legacy module-path facade.
+    related_actions: [MOVE-0008, EXPORT-0002, COMPAT-0001]
+  - id: RISK-0004
+    severity: medium
+    area: dirty-worktree
+    description: The repository contains unrelated changes and untracked files.
+    mitigation: Touch only paths listed in approved actions and never reset or overwrite other paths.
+    related_actions: [MOVE-0003, MOVE-0004, MOVE-0005, MOVE-0006, MOVE-0007, MOVE-0008, MOVE-0009, MOVE-0010, MOVE-0011, MOVE-0012, MOVE-0013, MOVE-0014, MOVE-0015, MOVE-0016, MOVE-0017, MOVE-0018, MOVE-0019, MOVE-0020, MOVE-0021, MOVE-0022, MOVE-0023, MOVE-0024, MOVE-0025, MOVE-0026, MOVE-0027, MOVE-0028, MOVE-0029]
+  - id: RISK-0005
+    severity: low
+    area: graph-tooling
+    description: Codebase-memory graph tooling is unavailable in this session.
+    mitigation: GraphML contains only verified Cargo/package-level edges and the source analysis cites concrete modules.
+    related_actions: []

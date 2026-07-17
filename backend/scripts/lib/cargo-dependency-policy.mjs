@@ -66,6 +66,8 @@ export function validateDependencyEdges(policy, packages, descriptors) {
     const isStorageProtocol = pkg.name === policy.storage.protocolPackage;
     const sourceIsStorageOwner = source.role === policy.storage.role
       && source.owner === policy.storage.owner;
+    const isDevelopmentOperator = source.role === 'development'
+      && pkg.name === policy.implementation.developmentProfile.package;
 
     for (const dependency of list(pkg.dependencies)) {
       const kind = dependency.kind ?? 'normal';
@@ -73,8 +75,10 @@ export function validateDependencyEdges(policy, packages, descriptors) {
 
       const isSqliteClient = policy.storage.sqliteClientDependencies.includes(dependency.name);
       const isPostgresClient = policy.storage.postgresClientDependencies.includes(dependency.name);
+      const testSupportDevDependency = source.role === 'test' && kind === 'dev';
 
-      if (isSqliteClient && !policy.storage.sqlitePackages.includes(pkg.name)) {
+      if (isSqliteClient && !policy.storage.sqlitePackages.includes(pkg.name)
+        && !isDevelopmentOperator && !testSupportDevDependency) {
         violations.push(violation(
           'sqlite_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
@@ -286,6 +290,8 @@ export function validateDependencyEdges(policy, packages, descriptors) {
         ));
         continue;
       }
+
+      if (isDevelopmentOperator) continue;
 
       if (policy.compileIsolation.forbidCrossOwnerPersistenceDependencies
         && source.owner !== target.owner

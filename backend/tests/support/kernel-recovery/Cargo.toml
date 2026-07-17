@@ -9,10 +9,16 @@ owner = "test"
 surface = "test_support"
 
 [dev-dependencies]
+directories = "=6.0.0"
+getrandom = { version = "=0.4.3", default-features = false }
 hermes-events-protocol = { path = "../../../src/platform/events" }
 hermes-gateway-protocol = { path = "../../../src/api/gateway/contracts" }
 hermes-kernel-control-store = { path = "../../../src/kernel/control_store/contract" }
 hermes-kernel-control-store-sqlite = { path = "../../../src/kernel/control_store/sqlite" }
 hermes-runtime-protocol = { path = "../../../src/platform/runtime_protocol" }
+libc = "=0.2.186"
 prost = "=0.14.4"
 prost-types = "=0.14.4"
+p256 = { version = "=0.14.0", default-features = false, features = ["ecdsa"] }
+sha2 = { version = "=0.11.0", default-features = false }
+rusqlite = { version = "=0.40.1", default-features = false, features = ["bundled"] }

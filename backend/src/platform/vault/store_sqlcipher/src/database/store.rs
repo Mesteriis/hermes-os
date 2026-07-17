@@ -1,0 +1,379 @@
+//! Public Vault store facade and encrypted-database bootstrap validation.
+
+use std::fs;
+use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
+
+use hermes_vault_key_provider::WrappingKey;
+use rusqlite::Connection;
+use zeroize::Zeroizing;
+
+use crate::VaultRecoveryKeyV1;
+use crate::actor::VaultStoreHandle;
+use crate::database::connection::{configure, create_keyed_connection, open_keyed_connection};
+use crate::identity::anchor as vault_anchor;
+use crate::records::secret::{self as secret_record, SecretRecordId, SecretRecordScope};
+use crate::recovery::root_rotation;
+
+const SCHEMA_VERSION: i64 = 2;
+
+pub struct VaultStore {
+    path: PathBuf,
+    instance_id: String,
+    handle: VaultStoreHandle,
+}
+
+impl VaultStore {
+    pub fn initialize(
+        path: &Path,
+        anchor_path: &Path,
+        instance_id: &str,
+        wrapping_key: &WrappingKey,
+    ) -> Result<Self, VaultStoreError> {
+        let path = canonical_store_path(path)?;
+        validate_store_parent(&path)?;
+        validate_store_parent(anchor_path)?;
+        if path.exists() {
+            return Err(VaultStoreError::AlreadyInitialized);
+        }
+        let root = vault_anchor::create_anchor(anchor_path, instance_id, wrapping_key)
+            .map_err(|_| VaultStoreError::Anchor)?;
+        let result = initialize_database(&path, instance_id, &root);
+        if result.is_err() {
+            let _ = fs::remove_file(&path);
+            let _ = fs::remove_file(anchor_path);
+        }
+        result
+    }
+
+    pub fn open(
+        path: &Path,
+        anchor_path: &Path,
+        wrapping_key: &WrappingKey,
+    ) -> Result<Self, VaultStoreError> {
+        let path = canonical_store_path(path)?;
+        validate_store_parent(&path)?;
+        if root_rotation::rotation_pending(&path)? {
+            return Err(VaultStoreError::RootRotationPending);
+        }
+        let (instance_id, root) = vault_anchor::open_anchor(anchor_path, wrapping_key)
+            .map_err(|_| VaultStoreError::Anchor)?;
+        let sqlcipher_key = root
+            .derive_sqlcipher_key(&instance_id)
+            .map_err(|_| VaultStoreError::Anchor)?;
+        let record_key = root
+            .derive_record_key(&instance_id, secret_record::CURRENT_KEY_EPOCH)
+            .map_err(|_| VaultStoreError::Anchor)?;
+        let mut connection = open_keyed_connection(&path, &sqlcipher_key)?;
+        configure(&connection)?;
+        migrate_schema(&mut connection)?;
+        validate_metadata(&connection, &instance_id)?;
+        Self::from_connection(path, instance_id, connection, record_key)
+    }
+
+    pub fn open_with_recovery(
+        path: &Path,
+        anchor_path: &Path,
+        recovery_key: &VaultRecoveryKeyV1,
+    ) -> Result<Self, VaultStoreError> {
+        let path = canonical_store_path(path)?;
+        validate_store_parent(&path)?;
+        if root_rotation::rotation_pending(&path)? {
+            return Err(VaultStoreError::RootRotationPending);
+        }
+        let (instance_id, root) =
+            vault_anchor::open_anchor_with_recovery(anchor_path, recovery_key)
+                .map_err(|_| VaultStoreError::Anchor)?;
+        let sqlcipher_key = root
+            .derive_sqlcipher_key(&instance_id)
+            .map_err(|_| VaultStoreError::Anchor)?;
+        let record_key = root
+            .derive_record_key(&instance_id, secret_record::CURRENT_KEY_EPOCH)
+            .map_err(|_| VaultStoreError::Anchor)?;
+        let mut connection = open_keyed_connection(&path, &sqlcipher_key)?;
+        configure(&connection)?;
+        migrate_schema(&mut connection)?;
+        validate_metadata(&connection, &instance_id)?;
+        Self::from_connection(path, instance_id, connection, record_key)
+    }
+
+    pub fn add_recovery_slot(
+        anchor_path: &Path,
+        wrapping_key: &WrappingKey,
+        recovery_key: &VaultRecoveryKeyV1,
+    ) -> Result<(), VaultStoreError> {
+        vault_anchor::add_recovery_slot(anchor_path, wrapping_key, recovery_key)
+            .map_err(|_| VaultStoreError::Anchor)
+    }
+
+    pub fn rotate_recovery_slot(
+        anchor_path: &Path,
+        wrapping_key: &WrappingKey,
+        current_recovery_key: &VaultRecoveryKeyV1,
+        next_recovery_key: &VaultRecoveryKeyV1,
+    ) -> Result<(), VaultStoreError> {
+        vault_anchor::rotate_recovery_slot(
+            anchor_path,
+            wrapping_key,
+            current_recovery_key,
+            next_recovery_key,
+        )
+        .map_err(|_| VaultStoreError::Anchor)
+    }
+
+    pub fn rotate_root_offline(
+        path: &Path,
+        anchor_path: &Path,
+        wrapping_key: &WrappingKey,
+        recovery_key: Option<&VaultRecoveryKeyV1>,
+    ) -> Result<(), VaultStoreError> {
+        let path = canonical_store_path(path)?;
+        validate_store_parent(&path)?;
+        validate_store_parent(anchor_path)?;
+        let (instance_id, root) = vault_anchor::open_anchor(anchor_path, wrapping_key)
+            .map_err(|_| VaultStoreError::Anchor)?;
+        root_rotation::rotate(
+            &path,
+            anchor_path,
+            &instance_id,
+            &root,
+            wrapping_key,
+            recovery_key,
+        )
+    }
+
+    #[must_use]
+    pub fn instance_id(&self) -> &str {
+        &self.instance_id
+    }
+
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn store_secret(
+        &self,
+        scope: &SecretRecordScope,
+        payload: &[u8],
+    ) -> Result<SecretRecordId, VaultStoreError> {
+        self.handle.store_secret(scope, payload)
+    }
+
+    pub fn resolve_scoped_secret(
+        &self,
+        record_id: &SecretRecordId,
+        scope: &SecretRecordScope,
+    ) -> Result<Zeroizing<Vec<u8>>, VaultStoreError> {
+        self.handle.resolve_scoped_secret(record_id, scope)
+    }
+
+    pub fn resolve_current_secret(
+        &self,
+        scope: &SecretRecordScope,
+    ) -> Result<Zeroizing<Vec<u8>>, VaultStoreError> {
+        self.handle.resolve_current_secret(scope)
+    }
+
+    pub fn replace_secret(
+        &self,
+        prior_record_id: &SecretRecordId,
+        prior_scope: &SecretRecordScope,
+        next_scope: &SecretRecordScope,
+        payload: &[u8],
+    ) -> Result<SecretRecordId, VaultStoreError> {
+        self.handle
+            .replace_secret(prior_record_id, prior_scope, next_scope, payload)
+    }
+
+    fn from_connection(
+        path: PathBuf,
+        instance_id: String,
+        connection: Connection,
+        record_key: Zeroizing<[u8; 32]>,
+    ) -> Result<Self, VaultStoreError> {
+        let handle = VaultStoreHandle::start(connection, record_key)?;
+        Ok(Self {
+            path,
+            instance_id,
+            handle,
+        })
+    }
+}
+
+fn initialize_database(
+    path: &Path,
+    instance_id: &str,
+    root: &vault_anchor::VaultRootKey,
+) -> Result<VaultStore, VaultStoreError> {
+    let sqlcipher_key = root
+        .derive_sqlcipher_key(instance_id)
+        .map_err(|_| VaultStoreError::Anchor)?;
+    let record_key = root
+        .derive_record_key(instance_id, secret_record::CURRENT_KEY_EPOCH)
+        .map_err(|_| VaultStoreError::Anchor)?;
+    let connection = create_keyed_connection(path, &sqlcipher_key)?;
+    configure(&connection)?;
+    connection
+        .execute_batch(
+            "CREATE TABLE vault_metadata (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                schema_version INTEGER NOT NULL CHECK (schema_version = 2),
+                instance_id TEXT NOT NULL
+            ) STRICT;
+            CREATE TABLE vault_secret_records (
+                record_id BLOB PRIMARY KEY CHECK (length(record_id) = 16),
+                logical_owner_id TEXT NOT NULL,
+                configuration_instance_id TEXT NOT NULL,
+                purpose_id TEXT NOT NULL,
+                secret_class INTEGER NOT NULL,
+                secret_revision INTEGER NOT NULL CHECK (secret_revision > 0),
+                key_epoch INTEGER NOT NULL CHECK (key_epoch > 0),
+                nonce BLOB NOT NULL CHECK (length(nonce) = 24),
+                ciphertext BLOB NOT NULL CHECK (length(ciphertext) > 16)
+            ) STRICT;
+            CREATE UNIQUE INDEX vault_secret_records_scope_revision
+                ON vault_secret_records (
+                    logical_owner_id, configuration_instance_id, purpose_id,
+                    secret_class, secret_revision, key_epoch
+                );",
+        )
+        .map_err(VaultStoreError::Sqlite)?;
+    connection
+        .execute(
+            "INSERT INTO vault_metadata (singleton, schema_version, instance_id) VALUES (1, ?1, ?2)",
+            rusqlite::params![SCHEMA_VERSION, instance_id],
+        )
+        .map_err(VaultStoreError::Sqlite)?;
+    connection
+        .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+        .map_err(VaultStoreError::Sqlite)?;
+    VaultStore::from_connection(
+        path.to_owned(),
+        instance_id.to_owned(),
+        connection,
+        record_key,
+    )
+}
+
+fn validate_metadata(
+    connection: &Connection,
+    expected_instance_id: &str,
+) -> Result<(), VaultStoreError> {
+    let (version, actual_instance_id): (i64, String) = connection
+        .query_row(
+            "SELECT schema_version, instance_id FROM vault_metadata WHERE singleton = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(VaultStoreError::Sqlite)?;
+    if version != SCHEMA_VERSION {
+        return Err(VaultStoreError::UnsupportedSchema);
+    }
+    if actual_instance_id == expected_instance_id {
+        Ok(())
+    } else {
+        Err(VaultStoreError::Anchor)
+    }
+}
+
+fn migrate_schema(connection: &mut Connection) -> Result<(), VaultStoreError> {
+    let version: i64 = connection
+        .query_row(
+            "SELECT schema_version FROM vault_metadata WHERE singleton = 1",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(VaultStoreError::Sqlite)?;
+    match version {
+        SCHEMA_VERSION => Ok(()),
+        1 => migrate_v1_to_v2(connection),
+        _ => Err(VaultStoreError::UnsupportedSchema),
+    }
+}
+
+fn migrate_v1_to_v2(connection: &mut Connection) -> Result<(), VaultStoreError> {
+    let transaction = connection
+        .unchecked_transaction()
+        .map_err(VaultStoreError::Sqlite)?;
+    transaction
+        .execute_batch(
+            "CREATE TABLE vault_metadata_v2 (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                schema_version INTEGER NOT NULL CHECK (schema_version = 2),
+                instance_id TEXT NOT NULL
+             ) STRICT;
+             INSERT INTO vault_metadata_v2 (singleton, schema_version, instance_id)
+                SELECT singleton, 2, instance_id FROM vault_metadata;
+             DROP TABLE vault_metadata;
+             ALTER TABLE vault_metadata_v2 RENAME TO vault_metadata;
+             CREATE UNIQUE INDEX vault_secret_records_scope_revision
+                ON vault_secret_records (
+                    logical_owner_id, configuration_instance_id, purpose_id,
+                    secret_class, secret_revision, key_epoch
+                );",
+        )
+        .map_err(VaultStoreError::Sqlite)?;
+    transaction.commit().map_err(VaultStoreError::Sqlite)
+}
+
+pub(crate) fn validate_store_parent(path: &Path) -> Result<(), VaultStoreError> {
+    let parent = path.parent().ok_or(VaultStoreError::InsecurePath)?;
+    let metadata = fs::symlink_metadata(parent).map_err(|_| VaultStoreError::InsecurePath)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() || metadata.mode() & 0o077 != 0 {
+        return Err(VaultStoreError::InsecurePath);
+    }
+    if let Ok(metadata) = fs::symlink_metadata(path) {
+        if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.mode() & 0o077 != 0
+        {
+            return Err(VaultStoreError::InsecurePath);
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn canonical_store_path(path: &Path) -> Result<PathBuf, VaultStoreError> {
+    let parent = path.parent().ok_or(VaultStoreError::InsecurePath)?;
+    let name = path.file_name().ok_or(VaultStoreError::InsecurePath)?;
+    let parent = fs::canonicalize(parent).map_err(|_| VaultStoreError::InsecurePath)?;
+    Ok(parent.join(name))
+}
+
+#[derive(Debug)]
+pub enum VaultStoreError {
+    AlreadyInitialized,
+    InsecurePath,
+    Anchor,
+    Record(secret_record::SecretRecordError),
+    UnsupportedSchema,
+    RootRotationPending,
+    Backup,
+    QueueFull,
+    DeadlineExceeded,
+    ActorStopped,
+    AmbiguousScope,
+    Sqlite(rusqlite::Error),
+}
+
+impl std::fmt::Display for VaultStoreError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::AlreadyInitialized => "Vault store is already initialized",
+            Self::InsecurePath => "Vault store path is not private and regular",
+            Self::Anchor => "Vault root-key slot is unavailable or invalid",
+            Self::Record(_) => "Vault credential record is unavailable or invalid",
+            Self::UnsupportedSchema => "Vault store schema is unsupported",
+            Self::RootRotationPending => {
+                "Vault root-key rotation requires explicit offline recovery"
+            }
+            Self::Backup => "Vault backup is unavailable or invalid",
+            Self::QueueFull => "Vault store request queue is full",
+            Self::DeadlineExceeded => "Vault store operation deadline exceeded",
+            Self::ActorStopped => "Vault store actor is stopped",
+            Self::AmbiguousScope => "Vault credential scope is ambiguous",
+            Self::Sqlite(_) => "Vault encrypted store operation failed",
+        })
+    }
+}
+
+impl std::error::Error for VaultStoreError {}

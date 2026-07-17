@@ -2,9 +2,33 @@
 
 Статус: Принято
 Дата: 2026-07-15
-Состояние реализации: Не реализовано; signed `DistributionManifestV1`,
-managed-launch verifier, owner-pinned launch binding и update integration ещё
-не созданы
+Состояние реализации: `managed_launch_trust_v1` открыт на файловой release
+authority. Реализованы bounded wire contract и structural validation
+`DistributionManifestV1`, verifier raw signed bytes against explicit pinned
+P-256 release key, а также `ReleaseTrustRootV1`, содержащий только
+release-bound P-256 public keys. Private signing material не имеет пути в
+Kernel. Installed bundle проверяется по target triple, stable size/SHA-256 и
+без symlink traversal; Kernel создаёт private staged executable copy, а
+process adapter принимает только typed staged artifact, выполняет bounded
+timeout/retry и не наследует environment. SQLite Control Store хранит bundled
+binding и launch record, fenced by binding, Kernel/runtime generation и current
+grant epoch. Managed supervisor создаёт fresh inherited Unix FD на каждую
+попытку и требует exact `Describe` descriptor/settings bytes до допуска
+process; mismatched digest, module identity или stale fence fail closed.
+Production macOS owner-control принимает только artifact ID и bind/start-ит
+selected installed release через durable binding; client не передаёт path или
+digest. Release compiler выпускает `ReleaseTrustRootV1` и
+raw-byte-signed `DistributionManifestV1` из explicit local artifact input и
+owner-private P-256 release key; в trust root можно добавить строго
+упорядоченные P-256 public keys следующей release authority, private key
+material для rotation reject-ится.
+
+Apple Developer ID signing, notarization/stapling и Linux OCI Cosign preflight
+сохраняются как optional independent hardening. Они не являются условием
+file-backed gate и не заявлены как runtime evidence. Пока отдельная
+file-signed OCI binding не реализована, Linux containers остаются только
+`external`: Kernel их authenticate, health-check и fence-ит, но не получает
+Docker authority и не считает image tag/name/PID/container identity.
 
 Зависит от:
 
@@ -61,6 +85,13 @@ External module по-прежнему может:
 - стать `pending` без publisher signature и digest allowlist;
 - после owner approval работать в lifecycle mode `external` с ограниченным
   `GrantSet` и proof-of-possession своей registration identity.
+
+Первый production external-runtime proof обязан включать exact 32-byte digest
+observed distribution artifact вместе с registration ID, runtime ID/generation,
+Kernel instance ID, current grant epoch и one-shot challenge. Только после
+проверки owner-bound ES256 key Kernel создаёт external attestation. Это digest
+binding runtime session, а не publisher signature, OCI verification или
+managed-launch authority.
 
 Это не даёт ему права быть запущенным Kernel.
 
@@ -119,6 +150,11 @@ graph. Единственным runtime semantic declaration является ex
 `ModuleDescriptorV1` ADR-0221. `StorageBundleV1` содержит только admitted
 owner-local schema artifact ADR-0224 и не расширяет runtime grants. Settings
 values в distribution не попадают.
+
+В wire-contract `DistributionManifestArtifactV1` descriptor и optional settings
+schema имеют собственные relative path, bounded size и SHA-256 fields. Одного
+digest недостаточно: Kernel должен иметь однозначный bounded file target для
+проверки exact bytes до managed launch.
 
 Signature покрывает raw `DistributionManifestV1` bytes. Verifier не
 сериализует непроверенный document заново и не принимает remote includes,

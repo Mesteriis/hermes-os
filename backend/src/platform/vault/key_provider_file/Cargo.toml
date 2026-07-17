@@ -1,0 +1,17 @@
+[package]
+name = "hermes-vault-key-provider-file"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "platform"
+owner = "vault"
+surface = "implementation"
+
+[dependencies]
+getrandom = { version = "=0.4.3", default-features = false }
+hermes-vault-key-provider = { path = "../key_provider" }
+libc = "=0.2.186"

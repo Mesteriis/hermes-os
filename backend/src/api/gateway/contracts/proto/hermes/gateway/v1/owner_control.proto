@@ -1,0 +1,197 @@
+syntax = "proto3";
+
+package hermes.gateway.v1;
+
+// Private owner-control contract. It is framed over an owner-private Unix
+// socket; it is neither a public Gateway request nor a module registration
+// transport.
+message GetModuleRegistrationStatusRequestV1 {
+  string registration_id = 1;
+}
+
+message GetModuleRegistrationStatusResponseV1 {
+  string registration_id = 1;
+  string module_id = 2;
+  string owner_id = 3;
+  string registration_state = 4;
+  uint64 grant_epoch = 5;
+  uint32 effective_capability_count = 6;
+  string external_runtime_id = 7;
+  uint64 external_runtime_generation = 8;
+}
+
+message ApproveModuleRegistrationRequestV1 {
+  string registration_id = 1;
+  repeated string capability_id = 2;
+  string owner_session_id = 3;
+}
+
+message ApproveModuleRegistrationResponseV1 {
+  string registration_id = 1;
+  uint64 grant_epoch = 2;
+  uint32 effective_capability_count = 3;
+}
+
+message TransitionModuleRegistrationRequestV1 {
+  string registration_id = 1;
+  string target_state = 2;
+  string owner_session_id = 3;
+}
+
+message TransitionModuleRegistrationResponseV1 {
+  string registration_id = 1;
+  string registration_state = 2;
+  uint64 grant_epoch = 3;
+}
+
+message BeginOwnerControlSessionRequestV1 {}
+message BeginOwnerControlSessionResponseV1 {
+  string challenge_id = 1;
+  bytes challenge_bytes = 2;
+  string kernel_instance_id = 3;
+  string owner_id = 4;
+  string device_id = 5;
+  uint64 control_store_generation = 6;
+  uint64 expires_at_unix_millis = 7;
+}
+
+message CompleteOwnerControlSessionRequestV1 {
+  string challenge_id = 1;
+  bytes signature_raw = 2;
+}
+message CompleteOwnerControlSessionResponseV1 {
+  string owner_session_id = 1;
+  uint64 expires_at_unix_millis = 2;
+}
+
+message UpdateOperatorSettingsRequestV1 {
+  string registration_id = 1;
+  uint64 expected_revision = 2;
+  bytes snapshot_bytes = 3;
+  string owner_session_id = 4;
+}
+message UpdateOperatorSettingsResponseV1 {
+  string registration_id = 1;
+  uint64 desired_revision = 2;
+  string apply_state = 3;
+}
+
+message BindExternalRuntimeIdentityRequestV1 {
+  string registration_id = 1;
+  bytes public_key_sec1 = 2;
+  string owner_session_id = 3;
+}
+message BindExternalRuntimeIdentityResponseV1 {
+  string registration_id = 1;
+  uint64 grant_epoch = 2;
+}
+
+message BindBundledManagedReleaseRequestV1 {
+  string registration_id = 1;
+  string artifact_id = 2;
+  string owner_session_id = 3;
+}
+message BindBundledManagedReleaseResponseV1 {
+  string registration_id = 1;
+  uint64 binding_revision = 2;
+  string distribution_id = 3;
+  string artifact_id = 4;
+}
+
+message StartBundledManagedRuntimeRequestV1 {
+  string registration_id = 1;
+  string owner_session_id = 2;
+}
+message StartBundledManagedRuntimeResponseV1 {
+  string registration_id = 1;
+  uint64 runtime_generation = 2;
+  string launch_state = 3;
+}
+
+message BindPlatformVaultReleaseRequestV1 {
+  string owner_session_id = 1;
+}
+message BindPlatformVaultReleaseResponseV1 {
+  string process_id = 1;
+  uint64 binding_revision = 2;
+  string distribution_id = 3;
+  string artifact_id = 4;
+}
+
+message StartPlatformVaultRuntimeRequestV1 {
+  string owner_session_id = 1;
+}
+message StartPlatformVaultRuntimeResponseV1 {
+  string process_id = 1;
+  uint64 runtime_generation = 2;
+  string launch_state = 3;
+}
+
+message BindPlatformTelemetryReleaseRequestV1 {
+  string owner_session_id = 1;
+}
+message BindPlatformTelemetryReleaseResponseV1 {
+  string process_id = 1;
+  uint64 binding_revision = 2;
+  string distribution_id = 3;
+  string artifact_id = 4;
+}
+
+message StartPlatformTelemetryRuntimeRequestV1 {
+  string owner_session_id = 1;
+}
+message StartPlatformTelemetryRuntimeResponseV1 {
+  string process_id = 1;
+  uint64 runtime_generation = 2;
+  string launch_state = 3;
+}
+
+message GetPlatformTelemetryDiagnosticsRequestV1 {
+  string owner_session_id = 1;
+}
+message GetPlatformTelemetryDiagnosticsResponseV1 {
+  string process_id = 1;
+  uint32 segment_count = 2;
+  uint64 total_bytes = 3;
+}
+
+message OwnerControlRequestV1 {
+  oneof operation {
+    GetModuleRegistrationStatusRequestV1 get_module_registration_status = 1;
+    ApproveModuleRegistrationRequestV1 approve_module_registration = 2;
+    TransitionModuleRegistrationRequestV1 transition_module_registration = 3;
+    BeginOwnerControlSessionRequestV1 begin_owner_session = 4;
+    CompleteOwnerControlSessionRequestV1 complete_owner_session = 5;
+    UpdateOperatorSettingsRequestV1 update_operator_settings = 6;
+    BindExternalRuntimeIdentityRequestV1 bind_external_runtime_identity = 7;
+    BindBundledManagedReleaseRequestV1 bind_bundled_managed_release = 8;
+    StartBundledManagedRuntimeRequestV1 start_bundled_managed_runtime = 9;
+    BindPlatformVaultReleaseRequestV1 bind_platform_vault_release = 10;
+    StartPlatformVaultRuntimeRequestV1 start_platform_vault_runtime = 11;
+    BindPlatformTelemetryReleaseRequestV1 bind_platform_telemetry_release = 12;
+    StartPlatformTelemetryRuntimeRequestV1 start_platform_telemetry_runtime = 13;
+    GetPlatformTelemetryDiagnosticsRequestV1 get_platform_telemetry_diagnostics = 14;
+  }
+}
+
+message OwnerControlResponseV1 {
+  oneof result {
+    GetModuleRegistrationStatusResponseV1 get_module_registration_status = 1;
+    ApproveModuleRegistrationResponseV1 approve_module_registration = 2;
+    TransitionModuleRegistrationResponseV1 transition_module_registration = 3;
+    BeginOwnerControlSessionResponseV1 begin_owner_session = 4;
+    CompleteOwnerControlSessionResponseV1 complete_owner_session = 5;
+    UpdateOperatorSettingsResponseV1 update_operator_settings = 6;
+    BindExternalRuntimeIdentityResponseV1 bind_external_runtime_identity = 7;
+    BindBundledManagedReleaseResponseV1 bind_bundled_managed_release = 8;
+    StartBundledManagedRuntimeResponseV1 start_bundled_managed_runtime = 9;
+    BindPlatformVaultReleaseResponseV1 bind_platform_vault_release = 10;
+    StartPlatformVaultRuntimeResponseV1 start_platform_vault_runtime = 11;
+    BindPlatformTelemetryReleaseResponseV1 bind_platform_telemetry_release = 12;
+    StartPlatformTelemetryRuntimeResponseV1 start_platform_telemetry_runtime = 13;
+    GetPlatformTelemetryDiagnosticsResponseV1 get_platform_telemetry_diagnostics = 14;
+  }
+
+  // Sanitized stable code; details and private data remain local to Kernel.
+  string error_code = 15;
+}

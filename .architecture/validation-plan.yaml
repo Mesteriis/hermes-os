@@ -1,0 +1,25 @@
+version: 2
+kind: validation-plan
+scope: backend-wide-source-layout
+commands:
+  - {id: VAL-0008, status: done, command: node --test backend/tests/architecture/semantic-source-layout.test.mjs, reason: every Cargo package source root delegates behavior to a semantic namespace, required: true}
+  - {id: VAL-0007, status: approved, command: node --test backend/tests/lifecycle/development-module-operator-simulation.test.mjs, reason: development operator private module path regression, required: true}
+  - {id: VAL-0001, status: approved, command: make -C backend validate, reason: architecture, package and SRP policy, required: true}
+  - {id: VAL-0002, status: approved, command: make -C backend test-kernel-recovery, reason: Kernel and Control Store recovery conformance, required: true}
+  - {id: VAL-0003, status: approved, command: make -C backend test-vault, reason: Vault structural regression boundary, required: true}
+  - {id: VAL-0004, status: approved, command: make -C backend ci TARGET=aarch64-apple-darwin, reason: macOS target matrix, required: true}
+  - {id: VAL-0005, status: approved, command: make -C backend ci TARGET=x86_64-unknown-linux-gnu, reason: Linux target matrix in isolated container, required: true}
+  - {id: VAL-0006, status: approved, command: git diff --check, reason: patch integrity, required: true}
+public_api_checks:
+  - production Kernel help excludes development commands
+  - Events crate retains its documented crate-root validator exports
+architecture_checks:
+  - no production or test source file exceeds 500 lines
+  - no human-authored function exceeds 60 logical lines
+  - production Kernel does not compile the development operator
+  - moved files have semantic owner directories and no new prefix-named root modules
+runtime_checks:
+  - every trustworthy online IPC worker shares the one boot-created SQLite actor
+  - Vault SQLCipher record operations share one bounded actor connection under concurrent requests
+  - recovery fence reservation fails closed on a store mismatch
+  - production registration owner-control and external-runtime lifecycle tests use production IPC only

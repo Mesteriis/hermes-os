@@ -57,7 +57,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "kernel_recovery_only_v1",
+    "currentSlice": "storage_foundation_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -95,7 +95,67 @@
         "role": "core",
         "owner": "kernel",
         "surface": "runtime"
-      }
+      },
+      {
+        "name": "hermes-vault-protocol",
+        "role": "platform",
+        "owner": "vault",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-vault-key-provider",
+        "role": "platform",
+        "owner": "vault",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-vault-key-provider-file",
+        "role": "platform",
+        "owner": "vault",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-vault-store-sqlcipher",
+        "role": "platform",
+        "owner": "vault",
+        "surface": "persistence"
+      },
+      {
+        "name": "hermes-vault-runtime",
+        "role": "platform",
+        "owner": "vault",
+        "surface": "runtime"
+      },
+      {
+        "name": "hermes-clock-protocol",
+        "role": "platform",
+        "owner": "clock",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-clock-runtime",
+        "role": "platform",
+        "owner": "clock",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-telemetry-protocol",
+        "role": "platform",
+        "owner": "telemetry",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-telemetry-collector",
+        "role": "platform",
+        "owner": "telemetry",
+        "surface": "runtime"
+      },
+      {"name":"hermes-storage-protocol","role":"platform","owner":"storage","surface":"contract"},
+      {"name":"hermes-storage-control","role":"platform","owner":"storage","surface":"implementation"},
+      {"name":"hermes-storage-runtime","role":"platform","owner":"storage","surface":"runtime"},
+      {"name":"hermes-storage-postgres","role":"platform","owner":"storage","surface":"persistence"},
+      {"name":"hermes-storage-pgbouncer","role":"platform","owner":"storage","surface":"implementation"},
+      {"name":"hermes-storage-migrations","role":"platform","owner":"storage","surface":"implementation"}
     ],
     "workspaceDependencyAllowlist": {
       "hermes-events-protocol": [],
@@ -130,7 +190,71 @@
           "name": "hermes-runtime-protocol",
           "kind": "normal"
         }
-      ]
+      ],
+      "hermes-vault-protocol": [],
+      "hermes-vault-key-provider": [],
+      "hermes-vault-key-provider-file": [
+        {
+          "name": "hermes-vault-key-provider",
+          "kind": "normal"
+        }
+      ],
+      "hermes-vault-store-sqlcipher": [
+        {
+          "name": "hermes-vault-key-provider",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-vault-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-vault-runtime": [
+        {
+          "name": "hermes-vault-key-provider",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-vault-key-provider-file",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-vault-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-vault-store-sqlcipher",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-clock-protocol": [],
+      "hermes-clock-runtime": [
+        {
+          "name": "hermes-clock-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-telemetry-protocol": [],
+      "hermes-telemetry-collector": [
+        {
+          "name": "hermes-telemetry-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-storage-protocol": [],
+      "hermes-storage-control": [{"name":"hermes-storage-protocol","kind":"normal"}],
+      "hermes-storage-runtime": [{"name":"hermes-storage-protocol","kind":"normal"},{"name":"hermes-storage-control","kind":"normal"},{"name":"hermes-storage-postgres","kind":"normal"},{"name":"hermes-storage-pgbouncer","kind":"normal"},{"name":"hermes-storage-migrations","kind":"normal"}],
+      "hermes-storage-postgres": [{"name":"hermes-storage-control","kind":"normal"}],
+      "hermes-storage-pgbouncer": [{"name":"hermes-storage-control","kind":"normal"}],
+      "hermes-storage-migrations": [{"name":"hermes-storage-control","kind":"normal"},{"name":"hermes-storage-protocol","kind":"normal"}]
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-events-protocol": [
@@ -299,12 +423,39 @@
           "features": []
         },
         {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
           "name": "prost",
           "kind": "normal",
           "source": "crates_io",
           "version": "=0.14.4",
           "defaultFeatures": true,
           "features": []
+        },
+        {
+          "name": "rcgen",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.13.2",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "rustls",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.23.37",
+          "defaultFeatures": false,
+          "features": [
+            "ring",
+            "std"
+          ]
         },
         {
           "name": "sha2",
@@ -322,7 +473,221 @@
           "defaultFeatures": true,
           "features": []
         }
-      ]
+      ],
+      "hermes-vault-protocol": [
+        {
+          "name": "hpke",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.0",
+          "defaultFeatures": false,
+        "features": [
+          "alloc",
+          "chacha",
+          "getrandom",
+          "x25519"
+        ]
+      },
+      {
+        "name": "sha2",
+        "kind": "normal",
+        "source": "crates_io",
+        "version": "=0.11.0",
+        "defaultFeatures": false,
+        "features": []
+      }
+      ],
+      "hermes-vault-key-provider": [],
+      "hermes-vault-key-provider-file": [
+        {
+          "name": "getrandom",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.4.3",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-vault-store-sqlcipher": [
+        {
+          "name": "bip39",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=2.2.2",
+          "defaultFeatures": false,
+          "features": [
+            "std"
+          ]
+        },
+        {
+          "name": "chacha20poly1305",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": [
+            "alloc",
+            "zeroize"
+          ]
+        },
+        {
+          "name": "getrandom",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.4.3",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "hkdf",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.13.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "rusqlite",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.40.1",
+          "defaultFeatures": false,
+          "features": [
+            "backup",
+            "bundled-sqlcipher"
+          ]
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-vault-runtime": [
+        {
+          "name": "clap",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=4.6.2",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "error-context",
+            "help",
+            "std",
+            "usage"
+          ]
+        },
+        {
+          "name": "getrandom",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.4.3",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "hpke",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.0",
+          "defaultFeatures": false,
+          "features": [
+            "alloc",
+            "chacha",
+            "getrandom",
+            "x25519"
+          ]
+        },
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "p256",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.0",
+          "defaultFeatures": false,
+          "features": [
+            "ecdsa"
+          ]
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-clock-protocol": [],
+      "hermes-clock-runtime": [],
+      "hermes-telemetry-protocol": [],
+      "hermes-telemetry-collector": [
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-storage-protocol": [{"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},{"name":"sha2","kind":"normal","source":"crates_io","version":"=0.11.0","defaultFeatures":false,"features":[]},{"name":"prost-build","kind":"build","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},{"name":"protoc-bin-vendored","kind":"build","source":"crates_io","version":"=3.2.0","defaultFeatures":true,"features":[]}],
+      "hermes-storage-control": [],
+      "hermes-storage-runtime": [],
+      "hermes-storage-postgres": [],
+      "hermes-storage-pgbouncer": [],
+      "hermes-storage-migrations": [{"name":"pg_query","kind":"normal","source":"crates_io","version":"=6.1.1","defaultFeatures":true,"features":[]}]
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -341,8 +706,6 @@
       "awc"
     ],
     "forbiddenDependencyPrefixes": [
-      "hermes-vault-",
-      "hermes-storage-",
       "hermes-integration-",
       "hermes-provider-"
     ],
@@ -371,16 +734,58 @@
       "hermes-kernel": {
         "primaryKind": "bin",
         "customBuildAllowed": false
-      }
+      },
+      "hermes-vault-protocol": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-vault-key-provider": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-vault-key-provider-file": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-vault-store-sqlcipher": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-vault-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-clock-protocol": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-clock-runtime": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-telemetry-protocol": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-telemetry-collector": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-storage-protocol": { "primaryKind": "lib", "customBuildAllowed": true },
+      "hermes-storage-control": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-storage-runtime": { "primaryKind": "bin", "customBuildAllowed": false },
+      "hermes-storage-postgres": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-storage-pgbouncer": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-storage-migrations": { "primaryKind": "lib", "customBuildAllowed": false }
     },
     "developmentProfile": {
       "id": "development_full_platform_v1",
       "purpose": "full_local_platform_development_with_simulated_trust",
       "workspaceRoot": "development/runtime",
-      "package": "hermes-development-platform-runtime",
+      "package": "hermes-development-kernel-operator",
       "selection": "explicit_development_invocation_only",
-      "deviceProof": "software_es256_development_only",
-      "privateKeyStorage": "development_local_filesystem",
+      "deviceProof": "file_adapter_es256",
+      "privateKeyStorage": "owner_private_file_adapter",
       "persistentSecretsAllowed": true,
       "productDataAllowed": true,
       "networkListenerEnabled": true,
@@ -404,11 +809,12 @@
       "businessCapabilities": []
     },
     "kernelProfile": {
-      "maximumState": "recovery_only",
+      "maximumState": "module_control_plane",
       "allowedStates": [
         "cold_start",
         "bootstrap",
         "recovery_only",
+        "module_control_plane",
         "quiescing",
         "draining",
         "stopped",
@@ -422,28 +828,37 @@
       ],
       "activeComponents": [
         "supervisor",
-        "core_gateway"
+        "module_registry",
+        "capability_router",
+        "core_gateway",
+        "settings_registry"
       ],
-      "transport": "local_ipc_only",
+      "transport": "local_ipc_and_one_shot_bootstrap_tls",
       "onlineOperations": [
         "status",
         "control_store_validate",
         "control_store_export",
-        "shutdown"
+        "shutdown",
+        "module_registration",
+        "owner_control",
+        "external_runtime_session"
       ],
       "bootstrapOperations": [
-        "initial_owner_enrollment_inherited_fd"
+        "initial_owner_enrollment_inherited_fd",
+        "server_bootstrap_pairing"
       ],
       "offlineOperations": [
         "control_store_restore",
         "control_store_reset"
       ],
       "externalServices": [],
-      "managedChildren": [],
+      "managedChildren": [
+        "bundled_native_module_runtime"
+      ],
       "publicGatewayEnabled": false,
-      "networkListenerEnabled": false,
-      "moduleRegistrationEnabled": false,
-      "managedLaunchEnabled": false,
+      "networkListenerEnabled": true,
+      "moduleRegistrationEnabled": true,
+      "managedLaunchEnabled": true,
       "natsDataPlaneEnabled": false,
       "businessDataPlaneEnabled": false,
       "wholeInstanceBackupEnabled": false,
@@ -461,6 +876,9 @@
       "missing_or_invalid_store_recovery_only",
       "local_ipc_status_validate_export_shutdown",
       "pristine_inherited_fd_owner_enrollment",
+      "server_bootstrap_pairing_tls_conformance",
+      "file_release_authority_conformance",
+      "managed_launch_toctou_conformance",
       "online_mutations_fail_closed",
       "exclusive_data_directory_lock",
       "bounded_shutdown",
@@ -471,15 +889,9 @@
   "phaseGates": {
     "transitionAuthority": "adr_policy_and_executable_evidence",
     "notAuthorized": [
-      "server_bootstrap_pairing_v1",
-      "module_control_plane_v1",
-      "managed_launch_trust_v1",
-      "vault_v1",
-      "telemetry_v1",
       "storage_control_v1",
       "nats_data_plane_v1",
       "blob_v1",
-      "clock_v1",
       "scheduler_v1",
       "client_gateway_v1",
       "whole_instance_backup_v1",
@@ -574,7 +986,7 @@
         "manifest_schema_digest",
         "detached_signature_suite",
         "verification_key_pin_and_rotation",
-        "release_signing_evidence",
+        "file_release_authority_conformance",
         "toctou_safe_spawn_adapter"
       ],
       "vault_v1": [
@@ -1069,7 +1481,7 @@
     "runtimePackage": "hermes-vault-runtime",
     "storePackage": "hermes-vault-store-sqlcipher",
     "platformKeyAdapterPackages": [
-      "hermes-vault-keychain-macos"
+      "hermes-vault-key-provider-file"
     ],
     "runtimeComponent": "vault_service",
     "processBoundary": "separate_managed_process",
@@ -1077,16 +1489,15 @@
     "externalRegistrationEnabled": false,
     "alternativeTopologyEnabled": false,
     "storageFormat": "sqlcipher_full_database_plus_xchacha20poly1305_records",
-    "platformKeyStorage": "macos_data_protection_keychain_device_only_non_sync",
+    "platformKeyStorage": "owner_private_file_adapter",
     "recoveryModel": "independent_wrapped_root_key_offline_restore",
     "recoveryKeyEncoding": "bip39_24_word_entropy_only",
     "unlockModes": [
-      "platform_auto",
-      "owner_presence",
+      "file_adapter_auto",
       "manual_local",
       "recovery_offline"
     ],
-    "defaultUnlockMode": "platform_auto",
+    "defaultUnlockMode": "file_adapter_auto",
     "automaticInitializeOrRestoreEnabled": false,
     "transport": "hpke_ciphertext_over_capability_router",
     "transportScope": "authenticated_session_bound_local_ipc",
@@ -1233,7 +1644,21 @@
       ".sql",
       ".rs"
     ],
-    "maxProductionSourceLines": 800,
+    "maxProductionSourceLines": 500,
+    "maxFunctionLines": 60,
+    "srpRoots": [
+      "src",
+      "development",
+      "tests"
+    ],
+    "srpContentExtensions": [
+      ".rs",
+      ".mjs"
+    ],
+    "generatedPathSegments": [
+      "gen",
+      "generated"
+    ],
     "forbidSymlinks": true
   },
   "tests": {

@@ -2,8 +2,11 @@
 
 Статус: Принято
 Дата: 2026-07-15
-Состояние реализации: Не реализовано; production packages, SQLite schema,
-migrations и recovery tooling ещё не созданы
+Состояние реализации: Реализовано для foundation runtime. Production port и
+SQLite adapter, schema v1→v15, atomic migrations, single-writer actor,
+integrity/export и fenced offline restore/reset имеют executable evidence.
+Schema assertions cumulative: версия v15 обязана доказать все requirements
+v1…v15, а не только объекты последнего migration step.
 
 Зависит от:
 
@@ -158,14 +161,25 @@ blocking thread/actor, а не Tokio worker и не произвольным con
 
 Kernel обращается к actor только через bounded typed requests:
 
-- каждый request имеет deadline/cancellation behavior;
-- actor queue bounded;
+- facade `ControlStoreHandle` принимает узкие typed ports health/recovery,
+  owner identity, module registry, settings registry и runtime trust;
+- queue bounded ровно 64 requests;
+- normal deadline равен 2 секундам, maintenance deadline — 30 секундам;
+- backpressure/termination возвращают `QueueFull`, `DeadlineExceeded` или
+  `ActorStopped`;
 - mutation выполняется короткой явной transaction;
 - long-running integrity/backup operation не блокирует supervisor loop;
 - raw SQL и SQLite row types не пересекают adapter boundary.
 
-Read operations также идут через actor или immutable typed snapshot. Несколько
-Kernel components не открывают независимые writer connections.
+Read operations также идут через actor и составные snapshots читаются в одной
+transaction. В частности, `ModuleGrantSnapshot` возвращает registration и
+соответствующий grant set из одного read snapshot; capability authorization не
+склеивает результаты двух разных actor requests. Online
+registry/settings/runtime methods не открывают независимые connections;
+trustworthy online recovery export использует maintenance request того же
+boot-created actor. Отдельный offline adapter допустим только под exclusive
+instance lock для restore/reset и для recovery export, когда trustworthy online
+actor отсутствует.
 
 ### Что хранится
 
@@ -289,12 +303,18 @@ SQLite schema принадлежит `hermes-kernel-control-store-sqlite`, а н
 
 - schema имеет отдельную monotonic version;
 - migrations embedded в adapter и выполняются по порядку;
-- migration атомарна либо имеет explicit resumable phase protocol;
+- каждый `MigrationStep` выполняет DDL/data change и обновление
+  `schema_version` в одной explicit `BEGIN IMMEDIATE` transaction;
+- assertion после step проверяет base metadata и каждый накопленный schema
+  feature до объявленной версии;
 - неизвестная более новая schema version fails closed;
+- объявленная текущая версия с отсутствующим ранним table/column fails closed;
 - destructive automatic downgrade запрещён;
 - migration не импортирует legacy PostgreSQL или business data;
 - schema constraints проверяют states, revisions, uniqueness и references;
-- каждый migration имеет fresh-store и crash-injection tests.
+- executable suite останавливает update границу каждого source version
+  `1…14`, доказывает rollback DDL/version и затем migration до v15; отдельно
+  проверяются newer schema и partially incompatible v15.
 
 Control-store migration запускается до managed infrastructure. Ошибка оставляет
 Kernel в bounded recovery surface с blocker; она не запускает PostgreSQL/NATS
@@ -325,8 +345,16 @@ Kernel поддерживает versioned last-known-good backup/export:
 5. online разрешает только status/validate/export;
 6. требует остановить Kernel для explicit offline restore/reset под exclusive
    lock;
-7. после restore/reset повышает global generation и все affected epochs;
-8. только затем повторяет full reconciliation.
+7. до замены БД резервирует fixed binary `0600`
+   `.hermes-recovery-fence-v1` через temp file, file `fsync`, atomic rename и
+   directory `fsync`;
+8. вычисляет generation/identity/grant high-water как maximum внешнего fence,
+   trustworthy current store и backup плюс один;
+9. в staged transaction suspends registrations, назначает новый grant epoch и
+   удаляет external attestations, active sessions и managed launch records;
+10. после restore/reset mismatch reservation/store оставляет Kernel только в
+    `recovery_only`; retry создаёт следующую generation;
+11. только затем повторяет full reconciliation.
 
 Если нельзя безопасно открыть recovery surface или установить trustworthy
 generation, Kernel переходит в `fatal` по ADR-0206. PostgreSQL не используется

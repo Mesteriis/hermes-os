@@ -3,6 +3,15 @@ fn main() {
     unsafe {
         std::env::set_var("PROTOC", protoc);
     }
-    prost_build::compile_protos(&["proto/hermes/runtime/v1/recovery.proto"], &["proto"])
-        .expect("runtime recovery protocol must compile");
+    prost_build::compile_protos(
+        &[
+            "proto/hermes/runtime/v1/recovery.proto",
+            "proto/hermes/runtime/v1/deployment.proto",
+            "proto/hermes/runtime/v1/distribution.proto",
+            "proto/hermes/runtime/v1/vault_runtime.proto",
+            "proto/hermes/runtime/v1/managed_runtime_control.proto",
+        ],
+        &["proto"],
+    )
+    .expect("runtime recovery protocol must compile");
 }

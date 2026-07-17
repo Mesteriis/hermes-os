@@ -1,28 +1,30 @@
 # Container Diagram
 
-Статус: clean-room target, реализация не начата
+Статус: clean-room target; Kernel foundation реализован, platform data plane закрыт
 Дата: 2026-07-16
 
 ## Текущий разрешённый slice
 
-ADR-0225 разрешает только recovery-only Kernel; packages ещё не реализованы.
-Будущий первый runtime graph не содержит managed services или owner modules:
+Текущий runtime содержит private Kernel control plane и отдельный managed
+Vault, но не содержит data-plane services или owner modules:
 
 ```mermaid
 flowchart LR
     LocalClient["Private local recovery client"] -->|"typed local IPC"| Gateway["Core Gateway\nrecovery operations only"]
-    Bootstrap["Pristine inherited FD\ninitial owner enrollment"] --> Kernel
+    Bootstrap["File-backed ES256\ninitial owner enrollment"] --> Kernel
     subgraph KernelProcess["hermes-kernel process"]
         Gateway --> Kernel["Supervisor + recovery state machine"]
         Kernel --> Port["Kernel Control Store port"]
         Port --> SQLite["Private SQLite adapter"]
     end
-    Kernel -. "all phase gates closed" .-> Blocked["No PostgreSQL / PgBouncer / NATS / Vault / Blob / modules"]
+    Fence[".hermes-recovery-fence-v1"] --> SQLite
+    Kernel -. "later gates closed" .-> Blocked["No PostgreSQL / PgBouncer / NATS / Blob / owner modules"]
 ```
 
 `hermes-events-protocol`, `hermes-runtime-protocol` и
-`hermes-gateway-protocol` являются compile-time contracts, а не отдельными
-processes. Максимальное состояние Kernel — `recovery_only`.
+`hermes-gateway-protocol` и `hermes-clock-protocol` являются compile-time
+contracts, а не отдельными processes. `clock_v1` открыт без Clock process;
+data-plane gates остаются закрытыми.
 
 ## Целевая topology после открытия фазовых ворот
 
@@ -70,7 +72,7 @@ flowchart TB
         TelemetryCollector["Telemetry Collector\nbounded private local store"]
         Vault["Vault runtime\nsealed/unlocked + scoped leases"]
         VaultStore["SQLCipher Vault store\nencrypted metadata + credentials"]
-        VaultKey["macOS Keychain adapter\ndevice-only wrapping key"]
+        VaultKey["File wrapping-key adapter\nowner-private 0600 key"]
         Blob["Blob service"]
     end
 
@@ -159,7 +161,7 @@ flowchart TB
 | NATS JetStream | Byte-preserving `DurableEnvelopeV1` delivery, replay and fan-out; not schema or business truth |
 | Vault runtime | Separate verified managed process; authorization re-check, key lifecycle and process-bound credential leases without provider semantics |
 | SQLCipher Vault store | Encrypted bounded credential material and private metadata; not settings, business state or a generic session/blob store |
-| macOS Keychain adapter | Device-only platform wrapping key; Owner/device signing keys remain outside Vault |
+| File wrapping-key adapter | Owner-private wrapping key; Owner/device signing keys remain outside Vault |
 | Blob service | Opaque capability-based private content storage |
 
 Clients never connect directly to module runtimes or infrastructure. HTTP/3 is

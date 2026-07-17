@@ -17,6 +17,17 @@ function validManifest() {
         path: '/Applications/Hermes Hub.app/Contents/MacOS/hermes-kernel-aarch64-apple-darwin',
         sha256: digest,
       },
+      release_trust_root: {
+        path: '/Applications/Hermes Hub.app/Contents/Resources/hermes-kernel-release/hermes-release-trust-root.pb',
+        sha256: digest,
+      },
+      signed_distribution_manifest: {
+        path: '/Applications/Hermes Hub.app/Contents/Resources/hermes-kernel-release/hermes-signed-distribution-manifest.pb',
+        sha256: digest,
+      },
+      distribution_root: {
+        path: '/Applications/Hermes Hub.app/Contents/Resources/hermes-kernel-release/distribution',
+      },
     },
   };
 }
@@ -34,7 +45,29 @@ test('rejects non-macOS profiles, malformed Team IDs and missing Kernel digest',
   weakIdentity.signing.team_id = 'unverified';
   assert.ok(validateManifest(weakIdentity).some((error) => error.includes('team_id')));
 
+  const notAnAppBundle = validManifest();
+  notAnAppBundle.artifacts.tauri_bundle.path = '/Applications/Hermes Hub';
+  assert.ok(validateManifest(notAnAppBundle).some((error) => error.includes('tauri_bundle')));
+
   const noDigest = validManifest();
   delete noDigest.artifacts.kernel_sidecar.sha256;
   assert.ok(validateManifest(noDigest).some((error) => error.includes('sha256')));
+
+  const noTrustRoot = validManifest();
+  delete noTrustRoot.artifacts.release_trust_root;
+  assert.ok(validateManifest(noTrustRoot).some((error) => error.includes('release_trust_root')));
+
+  const noSignedManifest = validManifest();
+  delete noSignedManifest.artifacts.signed_distribution_manifest;
+  assert.ok(validateManifest(noSignedManifest).some((error) => error.includes('signed_distribution_manifest')));
+});
+
+test('rejects a release manifest that points a signed artifact outside its Tauri bundle', () => {
+  const detachedSidecar = validManifest();
+  detachedSidecar.artifacts.kernel_sidecar.path = '/opt/hermes/hermes-kernel-aarch64-apple-darwin';
+  assert.ok(validateManifest(detachedSidecar).some((error) => error.includes('kernel_sidecar')));
+
+  const wrongResourceRoot = validManifest();
+  wrongResourceRoot.artifacts.distribution_root.path = '/Applications/Hermes Hub.app/Contents/Resources/distribution';
+  assert.ok(validateManifest(wrongResourceRoot).some((error) => error.includes('distribution_root')));
 });

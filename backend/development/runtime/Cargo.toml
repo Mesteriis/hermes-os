@@ -1,10 +1,10 @@
 [package]
-name = "hermes-development-platform-runtime"
+name = "hermes-development-kernel-operator"
 version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "hermes-development-platform-runtime"
+name = "hermes-development-kernel-operator"
 path = "src/main.rs"
 
 [package.metadata.hermes]
@@ -12,3 +12,17 @@ role = "development"
 owner = "development"
 surface = "runtime"
 components = []
+
+[dependencies]
+clap = { version = "=4.6.2", default-features = false, features = ["derive", "error-context", "help", "std", "usage"] }
+directories = "=6.0.0"
+getrandom = "=0.4.3"
+hermes-kernel-control-store = { path = "../../src/kernel/control_store/contract" }
+hermes-kernel-control-store-sqlite = { path = "../../src/kernel/control_store/sqlite" }
+hermes-runtime-protocol = { path = "../../src/platform/runtime_protocol" }
+p256 = { version = "=0.14.0", default-features = false, features = ["ecdsa"] }
+prost = "=0.14.4"
+rcgen = "=0.13.2"
+rustls = { version = "=0.23.37", default-features = false, features = ["ring", "std"] }
+sha2 = "=0.11.0"
+libc = "=0.2.186"

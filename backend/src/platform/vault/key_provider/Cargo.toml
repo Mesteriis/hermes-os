@@ -1,0 +1,12 @@
+[package]
+name = "hermes-vault-key-provider"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "platform"
+owner = "vault"
+surface = "contract"

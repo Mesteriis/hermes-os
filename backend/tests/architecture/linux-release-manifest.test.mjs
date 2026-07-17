@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { validateManifest } from '../../scripts/verify-linux-release-manifest.mjs';
+import {
+  validateManifest,
+  validateManifestSignerTrust,
+} from '../../scripts/verify-linux-release-manifest.mjs';
 import { renderCompose } from '../../scripts/lib/linux-release-compose.mjs';
 import { renderSystemdUnit } from '../../scripts/lib/linux-release-systemd.mjs';
 
@@ -28,6 +31,17 @@ function validManifest() {
 
 test('accepts a digest-pinned Linux external-compose release manifest', () => {
   assert.deepEqual(validateManifest(validManifest()), []);
+  assert.deepEqual(validateManifestSignerTrust(validManifest(), {
+    certificateIdentity: 'https://release.example.invalid/hermes',
+    oidcIssuer: 'https://issuer.example.invalid',
+  }), []);
+});
+
+test('rejects a release manifest whose declared signer differs from explicit release trust', () => {
+  assert.ok(validateManifestSignerTrust(validManifest(), {
+    certificateIdentity: 'https://release.example.invalid/other',
+    oidcIssuer: 'https://issuer.example.invalid',
+  }).some((error) => error.includes('pinned release signer')));
 });
 
 test('rejects tags, Docker socket access and incomplete platform service manifests', () => {
@@ -46,6 +60,10 @@ test('rejects tags, Docker socket access and incomplete platform service manifes
   const unknownServiceContract = validManifest();
   unknownServiceContract.service_contract = 'image-default-healthcheck';
   assert.ok(validateManifest(unknownServiceContract).some((error) => error.includes('service_contract')));
+
+  const emptySigner = validManifest();
+  emptySigner.cosign.certificate_identity = '';
+  assert.ok(validateManifest(emptySigner).some((error) => error.includes('cosign')));
 });
 
 test('renders a private, digest-only Compose contour without secret values or Docker socket access', () => {

@@ -1,0 +1,111 @@
+version: 2
+kind: split-plan
+scope: backend-wide-source-layout
+actions:
+  - id: SPLIT-0009
+    status: done
+    source: backend/tests/support/telemetry/src/lib.rs
+    outputs:
+      - {path: backend/tests/support/telemetry/src/fixtures/mod.rs, symbols: [directory fixture namespace]}
+      - {path: backend/tests/support/telemetry/src/tests/mod.rs, symbols: [telemetry conformance test namespace]}
+    rationale: The test-kit root must only compose private fixture and behavior namespaces; diagnostics and retention remain independent test responsibilities.
+    evidence: [{type: file, path: backend/tests/support/telemetry/src/lib.rs, detail: flat test and fixture module declarations}]
+    rollback: Restore declarations to lib.rs and remove the namespace roots.
+  - id: SPLIT-0010
+    status: done
+    source: backend/tests/support/vault/src/lib.rs
+    outputs:
+      - {path: backend/tests/support/vault/src/tests/mod.rs, symbols: [Vault conformance test namespace]}
+      - {path: backend/tests/support/vault/src/tests/store/mod.rs, symbols: [store tests]}
+      - {path: backend/tests/support/vault/src/tests/recovery/mod.rs, symbols: [recovery tests]}
+      - {path: backend/tests/support/vault/src/tests/service/mod.rs, symbols: [service tests]}
+      - {path: backend/tests/support/vault/src/tests/transport/mod.rs, symbols: [transport tests]}
+      - {path: backend/tests/support/vault/src/tests/control/mod.rs, symbols: [control tests]}
+    rationale: The Vault test-kit root is a composition surface; test behavior must be grouped by the same storage, recovery, service, transport and control boundaries as production.
+    evidence: [{type: file, path: backend/tests/support/vault/src/lib.rs, detail: eight flat package-prefixed conformance modules}]
+    rollback: Restore declarations to lib.rs and remove the namespace roots.
+  - id: SPLIT-0001
+    status: done
+    source: backend/src/kernel/control_store/sqlite/src/lib.rs
+    outputs:
+      - {path: backend/src/kernel/control_store/sqlite/src/actor/handle.rs, symbols: [ControlStoreHandle]}
+      - {path: backend/src/kernel/control_store/sqlite/src/recovery/restore.rs, symbols: [restore_from]}
+      - {path: backend/src/kernel/control_store/sqlite/src/module_state/registry.rs, symbols: [module registration persistence]}
+    rationale: Separate actor ownership, recovery and module-state persistence.
+    evidence: [{type: file, path: backend/src/kernel/control_store/sqlite/src/lib.rs, detail: former monolithic adapter is split by storage responsibility}]
+    rollback: Restore the original module and remove split modules.
+  - id: SPLIT-0002
+    status: done
+    source: backend/src/kernel/src/main.rs
+    outputs:
+      - {path: backend/src/kernel/src/cli/mod.rs, symbols: [Cli, Command]}
+      - {path: backend/src/kernel/src/control_store/offline.rs, symbols: [offline recovery commands]}
+      - {path: backend/src/kernel/src/infrastructure/paths.rs, symbols: [canonical runtime and offline paths]}
+    rationale: Keep the production entrypoint as a composition root.
+    evidence: [{type: file, path: backend/src/kernel/src/main.rs, detail: runtime concerns are delegated to semantic namespaces}]
+    rollback: Restore the original entrypoint and remove split modules.
+  - id: SPLIT-0003
+    status: done
+    source: backend/tests/support/kernel-recovery/src/lib.rs
+    outputs:
+      - {path: backend/tests/support/kernel-recovery/src/tests/part_02.rs, symbols: [recovery tests]}
+      - {path: backend/tests/support/kernel-recovery/src/tests/part_03.rs, symbols: [registry tests]}
+      - {path: backend/tests/support/kernel-recovery/src/tests/part_04.rs, symbols: [managed runtime tests]}
+      - {path: backend/tests/support/kernel-recovery/src/tests/distribution_bundle_fixture.rs, symbols: [distribution fixture]}
+    rationale: Test responsibilities are independently reviewable and below the file-size limit.
+    evidence: [{type: file, path: backend/tests/support/kernel-recovery/src/lib.rs, detail: test harness delegates to focused test modules}]
+    rollback: Restore tests to lib.rs.
+  - id: SPLIT-0004
+    status: done
+    source: backend/tests/architecture/cargo-boundaries.test.mjs
+    outputs:
+      - {path: backend/tests/architecture/cargo-boundaries.test/part-01.test.mjs, symbols: [runtime and Vault boundaries]}
+      - {path: backend/tests/architecture/cargo-boundaries.test/part-02.test.mjs, symbols: [storage and owner boundaries]}
+      - {path: backend/tests/architecture/cargo-boundaries.test/part-03.test.mjs, symbols: [compile isolation boundaries]}
+    rationale: Architecture policies are split by owner.
+    evidence: [{type: test, path: backend/tests/architecture/cargo-boundaries.test.mjs, detail: parent test file loads focused suites}]
+    rollback: Restore the original test file.
+  - id: SPLIT-0005
+    status: done
+    source: backend/tests/lifecycle/kernel-recovery.test.mjs
+    outputs:
+      - {path: backend/tests/lifecycle/kernel-recovery.test/part-01.test.mjs, symbols: [bootstrap and filesystem tests]}
+      - {path: backend/tests/lifecycle/kernel-recovery.test/part-02.test.mjs, symbols: [recovery IPC and restore tests]}
+      - {path: backend/tests/lifecycle/kernel-recovery.test/part-03.test.mjs, symbols: [migration fixtures]}
+      - {path: backend/tests/lifecycle/kernel-recovery.test/part-04.test.mjs, symbols: [IPC framing and socket safety]}
+      - {path: backend/tests/lifecycle/kernel-recovery.test/part-05.test.mjs, symbols: [offline restore filesystem faults]}
+    rationale: Lifecycle tests are split by behavior.
+    evidence: [{type: test, path: backend/tests/lifecycle/kernel-recovery.test.mjs, detail: parent test file loads focused suites}]
+    rollback: Restore the original lifecycle test.
+  - id: SPLIT-0006
+    status: done
+    source: backend/src/platform/vault/store_sqlcipher/src/lib.rs
+    outputs:
+      - {path: backend/src/platform/vault/store_sqlcipher/src/actor/handle.rs, symbols: [VaultStoreHandle]}
+      - {path: backend/src/platform/vault/store_sqlcipher/src/database/connection.rs, symbols: [SQLCipher connection setup]}
+      - {path: backend/src/platform/vault/store_sqlcipher/src/database/store.rs, symbols: [VaultStore persistence facade]}
+      - {path: backend/src/platform/vault/store_sqlcipher/src/recovery/, symbols: [root rotation and offline backup recovery]}
+    rationale: SQLCipher storage responsibilities are isolated by actor, database, records, identity and recovery.
+    evidence: [{type: file, path: backend/src/platform/vault/store_sqlcipher/src/lib.rs, detail: crate root is now an explicit public surface}]
+    rollback: Restore the prior direct-connection implementation only after checking persisted data compatibility.
+  - id: SPLIT-0007
+    status: done
+    source: backend/src/platform/vault/runtime/src/transport.rs
+    outputs:
+      - {path: backend/src/platform/vault/protocol/src/transport/, symbols: [public ciphertext syntax]}
+      - {path: backend/src/platform/vault/runtime/src/transport/, symbols: [private key and route handling]}
+      - {path: backend/src/platform/vault/runtime/src/service/, symbols: [lease execution]}
+    rationale: Public protocol syntax, private HPKE handling and service authorization have separate owners.
+    evidence: [{type: file, path: backend/src/platform/vault/protocol/src/lib.rs, detail: public protocol contains no Vault receiver private key}]
+    rollback: Restore the prior transport layout before publishing a new public wire version.
+  - id: SPLIT-0008
+    status: done
+    source: backend/src/platform/runtime_protocol/src/lib.rs
+    outputs:
+      - {path: backend/src/platform/runtime_protocol/src/validation/deployment.rs, symbols: [deployment validators]}
+      - {path: backend/src/platform/runtime_protocol/src/validation/descriptor.rs, symbols: [descriptor validators]}
+      - {path: backend/src/platform/runtime_protocol/src/validation/distribution.rs, symbols: [distribution validators]}
+      - {path: backend/src/platform/runtime_protocol/src/validation/vault.rs, symbols: [Vault route validators]}
+    rationale: Versioned runtime contract validation is split by protocol responsibility.
+    evidence: [{type: file, path: backend/src/platform/runtime_protocol/src/validation/mod.rs, detail: validation root groups exact contract areas}]
+    rollback: Restore the former flat validator layout.

@@ -1,0 +1,8 @@
+mod binding;
+mod request;
+
+pub use binding::{
+    StorageBindingAccessV1, StorageBindingErrorV1, StorageBindingFencesV1,
+    StorageBindingIdentityV1, StorageBindingV1, StorageEffectiveBudgetsV1,
+};
+pub use request::{StorageAccessProfileV1, StorageNamespaceRequestV1, StorageRequestErrorV1};

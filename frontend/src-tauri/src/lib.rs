@@ -86,7 +86,11 @@ fn start_kernel_sidecar<R: Runtime>(
         return Ok(());
     }
 
-    let command = app.shell().sidecar("hermes-kernel")?.arg("serve");
+    let command = app
+        .shell()
+        .sidecar("hermes-kernel")?
+        .env_clear()
+        .arg("serve");
 
     let (mut events, child) = command.spawn()?;
     let pid = child.pid();

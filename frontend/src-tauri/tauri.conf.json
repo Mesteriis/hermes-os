@@ -28,7 +28,10 @@
       "binaries/hermes-kernel"
     ],
     "resources": {
-      "resources/tdlib/": "tdlib"
+      "resources/tdlib/": "tdlib",
+      "binaries/hermes-release-trust-root.pb": "hermes-kernel-release/hermes-release-trust-root.pb",
+      "binaries/hermes-signed-distribution-manifest.pb": "hermes-kernel-release/hermes-signed-distribution-manifest.pb",
+      "binaries/hermes-distribution/": "hermes-kernel-release/distribution/"
     },
     "icon": [
       "icons/32x32.png",

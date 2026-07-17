@@ -1,0 +1,75 @@
+version: 2
+kind: imports-plan
+actions:
+  - id: IMPORT-0009
+    status: done
+    path: backend/src/platform/telemetry/collector/src/main.rs
+    old_import: mod control;
+    new_import: mod control; with handshake, diagnostics, and framing private submodules
+    depends_on: [MOVE-0041]
+    evidence: [{type: import, path: backend/src/platform/telemetry/collector/src/cli.rs, detail: inherited launch consumes the handshake while transport consumes diagnostics through the control boundary}]
+    rollback: Restore the flat private control module declaration.
+  - id: IMPORT-0008
+    status: done
+    path: backend/development/runtime/src/kernel_operator/mod.rs
+    old_import: flat development-prefixed operator modules
+    new_import: artifact, capability, control, pairing, runtime and settings namespaces
+    depends_on: [MOVE-0030, MOVE-0031, MOVE-0032, MOVE-0033, MOVE-0034, MOVE-0035, MOVE-0036, MOVE-0037, MOVE-0038, MOVE-0039, MOVE-0040]
+    evidence: [{type: import, path: backend/development/runtime/src/kernel_operator/mod.rs, detail: composition boundary currently declares all prefixed files}]
+    rollback: Restore the flat private module declarations and imports.
+  - id: IMPORT-0001
+    status: done
+    path: backend/src/kernel/src/main.rs
+    old_import: development modules compiled by hermes-kernel
+    new_import: no development imports
+    depends_on: [MOVE-0001, MOVE-0002]
+    evidence: [{type: import, path: backend/src/kernel/src/main.rs, detail: production binary has no development operator module}]
+    rollback: Restore development imports.
+  - id: IMPORT-0002
+    status: approved
+    path: backend/development/runtime/src/main.rs
+    old_import: flat development runtime modules
+    new_import: cli, identity, pairing and platform semantic modules
+    depends_on: [MOVE-0003, MOVE-0004, MOVE-0005, MOVE-0006, MOVE-0007]
+    evidence: [{type: import, path: backend/development/runtime/src/main.rs, detail: composition root declares flat modules}]
+    rollback: Restore flat module declarations.
+  - id: IMPORT-0003
+    status: approved
+    path: backend/src/platform/events/src/lib.rs
+    old_import: crate::envelope_validation
+    new_import: crate::validation::envelope
+    depends_on: [MOVE-0008]
+    evidence: [{type: import, path: backend/src/platform/events/src/lib.rs, detail: event contract root owns validation export}]
+    rollback: Restore the former module declaration.
+  - id: IMPORT-0004
+    status: approved
+    path: backend/src/kernel/control_store/sqlite/src/lib.rs
+    old_import: crate::ports
+    new_import: crate::ports::adapter
+    depends_on: [MOVE-0009]
+    evidence: [{type: import, path: backend/src/kernel/control_store/sqlite/src/lib.rs, detail: crate root composes SQLite port adapters}]
+    rollback: Restore the former module declaration.
+  - id: IMPORT-0005
+    status: approved
+    path: backend/src/kernel/src/identity/mod.rs
+    old_import: flat device, enrollment and owner modules
+    new_import: device, enrollment and owner namespaces
+    depends_on: [MOVE-0010, MOVE-0011, MOVE-0012, MOVE-0013, MOVE-0014]
+    evidence: [{type: import, path: backend/src/kernel/src/identity/mod.rs, detail: identity module owns the affected private modules}]
+    rollback: Restore flat module declarations.
+  - id: IMPORT-0006
+    status: approved
+    path: backend/src/kernel/src/modules/mod.rs
+    old_import: flat capability registration and settings modules
+    new_import: capability registration and settings namespaces
+    depends_on: [MOVE-0015, MOVE-0016, MOVE-0017, MOVE-0018, MOVE-0019, MOVE-0020, MOVE-0021, MOVE-0022]
+    evidence: [{type: import, path: backend/src/kernel/src/modules/mod.rs, detail: module control plane composes the affected modules}]
+    rollback: Restore flat module declarations.
+  - id: IMPORT-0007
+    status: approved
+    path: backend/src/kernel/src/runtime/mod.rs
+    old_import: flat managed external and lifecycle runtime modules
+    new_import: managed external and lifecycle namespaces
+    depends_on: [MOVE-0023, MOVE-0024, MOVE-0025, MOVE-0026, MOVE-0027, MOVE-0028, MOVE-0029]
+    evidence: [{type: import, path: backend/src/kernel/src/runtime/mod.rs, detail: runtime root composes the affected modules}]
+    rollback: Restore flat module declarations.

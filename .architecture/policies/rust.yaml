@@ -1,0 +1,16 @@
+version: 1
+kind: srp-policy
+policy_version: hermes-rust-srp-v1
+scope:
+  roots: [backend/src, backend/development, backend/tests]
+  extensions: [.rs, .mjs]
+limits:
+  maximum_file_lines: 500
+  maximum_named_function_lines: 60
+exclusions:
+  generated_path_segments: [gen, generated]
+invariants:
+  - production entrypoints are composition roots only
+  - tests are split by responsibility without production compatibility facades
+  - public moves use explicit pub use only when the symbol remains a supported API
+executable_guard: backend/scripts/check-srp-policy.mjs

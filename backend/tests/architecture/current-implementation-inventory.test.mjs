@@ -25,6 +25,12 @@ function recoveryOnlyPackages() {
     if (descriptor.name === policy.kernel.package) {
       hermes.components = [...policy.implementation.kernelProfile.activeComponents];
     }
+    if (descriptor.name === policy.vault.runtimePackage) {
+      hermes.components = [policy.vault.runtimeComponent];
+    }
+    if (descriptor.name === policy.storage.runtimePackage) {
+      hermes.components = [policy.storage.runtimeComponent];
+    }
     const dependencies = policy.implementation.workspaceDependencyAllowlist[descriptor.name]
       .map(({ name, kind }) => dependency(name, kind));
     dependencies.push(
@@ -125,7 +131,7 @@ test('ignores a test-only workspace when enforcing the production slice', () => 
   assert.deepEqual(validateCargoMetadata(canonicalPolicyForTests(), metadata(packages)), []);
 });
 
-test('allows only the explicit development platform runtime outside production inventory', () => {
+test('allows only the explicit development Kernel operator outside production inventory', () => {
   const policy = canonicalPolicyForTests();
   const development = workspacePackage(policy.implementation.developmentProfile.package, {
     role: 'development',

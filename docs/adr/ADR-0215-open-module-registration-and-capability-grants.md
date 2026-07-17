@@ -2,11 +2,37 @@
 
 Статус: Принято
 Дата: 2026-07-15
-Состояние реализации: `development_full_platform_v1` имеет private Control
-Store registry record с persisted `pending/approved/suspended/revoked/
-blocked_incompatible` state, exact descriptor SHA-256 и per-registration grant
-epoch fencing. Registration IPC, descriptor admission, owner approval surface,
-effective GrantSet и production control plane ещё не созданы.
+Состояние реализации: private Control Store registry record имеет persisted
+`pending/approved/suspended/revoked/blocked_incompatible` state, exact
+descriptor SHA-256 и per-registration grant epoch fencing. Имеются private
+owner-control, registration и external-runtime IPC evidence surfaces в
+production Kernel: bounded `Hello`/`Begin`/single-use `Describe`/own-status
+handshake, descriptor admission и owner approval operations.
+Owner-control mutation проходит отдельный challenge/session proof enrolled
+file-backed ES256 device key: Kernel проверяет присланную signature и не
+открывает file signer вместо owner client. Session привязана к instance,
+Control Store generation и enrolled owner identity; reset или смена identity
+инвалидируют её.
+Capability-router authorizer проверяет requested/approved grant,
+hard Kernel policy и exact external runtime generation/current grant epoch.
+Owner может pin-нуть отдельный ES256 public key external
+runtime; новая binding revision повышает registration epoch и invalidates
+старую attestation.
+Private external-runtime-session socket принимает exact 32-byte distribution
+artifact SHA-256, выдаёт одноразовый 32-byte challenge и принимает только raw
+ES256 proof привязанного key. Первый успешный proof связывает registration,
+runtime identity/generation, current grant epoch и этот digest, после чего
+Kernel создаёт external attestation; заранее созданная development attestation
+не требуется. Повторный exact proof идемпотентен только для той же current
+attestation; stale generation, epoch или другой digest отклоняются. Kernel
+выдаёт short-lived session лишь после этой проверки;
+каждая capability request повторно сверяет registration/runtime generation и
+grant epoch. Это owner-isolated `0600` local production IPC; session является
+короткоживущим local bearer credential и не даёт PID, container name или Docker
+identity authority.
+Эти части проверяются lifecycle-тестами, но не открывают
+следующие platform/data-plane gates: public Gateway, Vault, Storage, NATS и
+business owner по-прежнему не реализованы.
 
 Зависит от:
 

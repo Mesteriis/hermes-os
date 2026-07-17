@@ -209,11 +209,10 @@ const VAULT_POLICY_KEYS = [
   'forbiddenOwnerDependencies',
 ];
 
-const VAULT_PLATFORM_KEY_ADAPTER_PACKAGES = ['hermes-vault-keychain-macos'];
+const VAULT_PLATFORM_KEY_ADAPTER_PACKAGES = ['hermes-vault-key-provider-file'];
 
 const VAULT_UNLOCK_MODES = [
-  'platform_auto',
-  'owner_presence',
+  'file_adapter_auto',
   'manual_local',
   'recovery_offline',
 ];
@@ -699,11 +698,11 @@ export function validatePolicy(policy) {
     || vault?.externalRegistrationEnabled !== false
     || vault?.alternativeTopologyEnabled !== false
     || vault?.storageFormat !== 'sqlcipher_full_database_plus_xchacha20poly1305_records'
-    || vault?.platformKeyStorage !== 'macos_data_protection_keychain_device_only_non_sync'
+    || vault?.platformKeyStorage !== 'owner_private_file_adapter'
     || vault?.recoveryModel !== 'independent_wrapped_root_key_offline_restore'
     || vault?.recoveryKeyEncoding !== 'bip39_24_word_entropy_only'
     || !isExactOrderedStringList(vault?.unlockModes, VAULT_UNLOCK_MODES)
-    || vault?.defaultUnlockMode !== 'platform_auto'
+    || vault?.defaultUnlockMode !== 'file_adapter_auto'
     || vault?.automaticInitializeOrRestoreEnabled !== false
     || vault?.transport !== 'hpke_ciphertext_over_capability_router'
     || vault?.transportScope !== 'authenticated_session_bound_local_ipc'
@@ -891,7 +890,11 @@ export function validatePolicy(policy) {
   }
   if (!list(policy?.source?.roots).length
     || !list(policy?.source?.contentExtensions).length
-    || policy?.source?.maxProductionSourceLines !== 800
+    || policy?.source?.maxProductionSourceLines !== 500
+    || policy?.source?.maxFunctionLines !== 60
+    || !isExactOrderedStringList(policy?.source?.srpRoots, ['src', 'development', 'tests'])
+    || !isExactOrderedStringList(policy?.source?.srpContentExtensions, ['.rs', '.mjs'])
+    || !isExactOrderedStringList(policy?.source?.generatedPathSegments, ['gen', 'generated'])
     || policy?.source?.forbidSymlinks !== true) {
     violations.push(violation(
       'source_policy',

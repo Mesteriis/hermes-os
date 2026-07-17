@@ -112,7 +112,7 @@ export function validateCurrentImplementationInventory(policy, cargoMetadata) {
       violations.push(violation(
         'development_runtime_inventory',
         `cargo:${pkg.name}`,
-        'development runtime must exactly match the explicit simulated-platform package descriptor',
+        'development operator must exactly match the explicit simulated-platform package descriptor',
       ));
     }
   }
@@ -133,7 +133,10 @@ export function validateCurrentImplementationInventory(policy, cargoMetadata) {
     if (!pkg) continue;
     const descriptor = pkg?.metadata?.[metadataKey];
     const isKernelRuntime = name === policy.kernel.package;
-    const expectedKeys = isKernelRuntime
+    const isVaultRuntime = name === policy.vault.runtimePackage;
+    const isTelemetryRuntime = descriptor?.components?.includes(policy.telemetry.collectorComponent);
+    const isStorageRuntime = name === policy.storage.runtimePackage;
+    const expectedKeys = isKernelRuntime || isVaultRuntime || isTelemetryRuntime || isStorageRuntime
       ? ['role', 'owner', 'surface', 'components']
       : ['role', 'owner', 'surface'];
     const metadataMatches = exactMetadataKeys(descriptor, expectedKeys)
@@ -145,7 +148,13 @@ export function validateCurrentImplementationInventory(policy, cargoMetadata) {
           descriptor.components,
           policy.implementation.kernelProfile.activeComponents,
         )
-        : list(descriptor.components).length === 0);
+        : isVaultRuntime
+          ? exactOrderedList(descriptor.components, [policy.vault.runtimeComponent])
+          : isTelemetryRuntime
+            ? exactOrderedList(descriptor.components, [policy.telemetry.collectorComponent])
+            : isStorageRuntime
+              ? exactOrderedList(descriptor.components, [policy.storage.runtimeComponent])
+            : list(descriptor.components).length === 0);
 
     if (!metadataMatches) {
       violations.push(violation(

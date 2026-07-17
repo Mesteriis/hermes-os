@@ -1,0 +1,544 @@
+version: 2
+kind: move-plan
+scope: backend-wide-source-layout
+actions:
+  - id: MOVE-0042
+    status: done
+    source: backend/src/kernel/src/cli.rs
+    destination: backend/src/kernel/src/cli/mod.rs
+    rationale: Production Kernel command syntax is a subsystem boundary; the package source root remains a composition root containing only main.rs.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: module, path: backend/src/kernel/src/main.rs, detail: main declares cli beside composition modules rather than keeping the CLI in a flat source root}]
+    rollback: Move the module back and restore the former module declaration.
+  - id: MOVE-0043
+    status: done
+    source: backend/src/platform/telemetry/collector/src/cli.rs
+    destination: backend/src/platform/telemetry/collector/src/cli/mod.rs
+    rationale: Telemetry Collector command syntax has a separate lifecycle from process composition and must not live at the package source root.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: module, path: backend/src/platform/telemetry/collector/src/main.rs, detail: main declares cli before starting the collector transport}]
+    rollback: Move the module back and restore the former module declaration.
+  - id: MOVE-0044
+    status: done
+    source: backend/tests/support/telemetry/src/diagnostics.rs
+    destination: backend/tests/support/telemetry/src/tests/diagnostics.rs
+    rationale: Telemetry diagnostics conformance is a test responsibility, not a test-kit root file.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: test, path: backend/tests/support/telemetry/src/diagnostics.rs, detail: exercises aggregate diagnostics privacy}]
+    rollback: Move the test module back and restore lib.rs declarations.
+  - id: MOVE-0045
+    status: done
+    source: backend/tests/support/telemetry/src/retention.rs
+    destination: backend/tests/support/telemetry/src/tests/retention.rs
+    rationale: Telemetry retention conformance belongs beside diagnostics test behavior.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: test, path: backend/tests/support/telemetry/src/retention.rs, detail: exercises segment retention and bounded storage}]
+    rollback: Move the test module back and restore lib.rs declarations.
+  - id: MOVE-0046
+    status: done
+    source: backend/tests/support/telemetry/src/fixture.rs
+    destination: backend/tests/support/telemetry/src/fixtures/directory.rs
+    rationale: Temporary test directory allocation is a reusable fixture boundary, not a flat test-kit root helper.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: import, path: backend/tests/support/telemetry/src/retention.rs, detail: retention test imports unique_directory fixture}]
+    rollback: Move the fixture back and restore its imports.
+  - id: MOVE-0047
+    status: done
+    source: backend/tests/support/vault/src/vault_store_actor.rs
+    destination: backend/tests/support/vault/src/tests/store/actor.rs
+    rationale: Vault actor conformance belongs to the test store namespace; the vault_ prefix carries no navigation value inside the Vault package.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: test, path: backend/tests/support/vault/src/vault_store_actor.rs, detail: validates the single-writer encrypted store actor}]
+    rollback: Move the test module back and restore lib.rs declarations.
+  - id: MOVE-0048
+    status: done
+    source: backend/tests/support/vault/src/vault_recovery_slot.rs
+    destination: backend/tests/support/vault/src/tests/recovery/slot.rs
+    rationale: Recovery-key slot behavior belongs in the recovery test namespace.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: test, path: backend/tests/support/vault/src/vault_recovery_slot.rs, detail: validates recovery slot authorization}]
+    rollback: Move the test module back and restore lib.rs declarations.
+  - id: MOVE-0049
+    status: done
+    source: backend/tests/support/vault/src/vault_backup.rs
+    destination: backend/tests/support/vault/src/tests/recovery/backup.rs
+    rationale: Vault backup and restore conformance belongs in the recovery test namespace.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: test, path: backend/tests/support/vault/src/vault_backup.rs, detail: validates backup and restore behavior}]
+    rollback: Move the test module back and restore lib.rs declarations.
+  - id: MOVE-0050
+    status: done
+    source: backend/tests/support/vault/src/vault_service.rs
+    destination: backend/tests/support/vault/src/tests/service/runtime.rs
+    rationale: Vault service runtime tests belong to the service test namespace.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: test, path: backend/tests/support/vault/src/vault_service.rs, detail: validates lease service lifecycle}]
+    rollback: Move the test module back and restore lib.rs declarations.
+  - id: MOVE-0051
+    status: done
+    source: backend/tests/support/vault/src/vault_secret_rotation.rs
+    destination: backend/tests/support/vault/src/tests/service/secret_rotation.rs
+    rationale: Secret rotation is service behavior and must be navigable with other service tests.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: test, path: backend/tests/support/vault/src/vault_secret_rotation.rs, detail: validates rotation fencing}]
+    rollback: Move the test module back and restore lib.rs declarations.
+  - id: MOVE-0052
+    status: done
+    source: backend/tests/support/vault/src/vault_session_execution.rs
+    destination: backend/tests/support/vault/src/tests/service/session_execution.rs
+    rationale: Session execution is a Vault service concern and should not retain a package prefix in a flat root.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: test, path: backend/tests/support/vault/src/vault_session_execution.rs, detail: validates session-bound lease execution}]
+    rollback: Move the test module back and restore lib.rs declarations.
+  - id: MOVE-0053
+    status: done
+    source: backend/tests/support/vault/src/vault_transport_contract.rs
+    destination: backend/tests/support/vault/src/tests/transport/contract.rs
+    rationale: Public Vault transport conformance belongs in a transport test namespace.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: test, path: backend/tests/support/vault/src/vault_transport_contract.rs, detail: validates ciphertext transport contract}]
+    rollback: Move the test module back and restore lib.rs declarations.
+  - id: MOVE-0054
+    status: done
+    source: backend/tests/support/vault/src/vault_inherited_control.rs
+    destination: backend/tests/support/vault/src/tests/control/inherited.rs
+    rationale: Inherited control-FD conformance belongs to a control test namespace.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: test, path: backend/tests/support/vault/src/vault_inherited_control.rs, detail: validates inherited control admission}]
+    rollback: Move the test module back and restore lib.rs declarations.
+  - id: MOVE-0055
+    status: done
+    source: backend/src/platform/clock/protocol/src/reading.rs
+    destination: backend/src/platform/clock/protocol/src/time/reading.rs
+    rationale: Clock readings and timezone rules are one time-contract namespace.
+    public_api: preserve
+    compatibility_actions: []
+    evidence: [{type: export, path: backend/src/platform/clock/protocol/src/lib.rs, detail: crate-root Clock contract exports remain stable through time module}]
+    rollback: Move the module back and restore crate-root declarations.
+  - id: MOVE-0056
+    status: done
+    source: backend/src/platform/clock/protocol/src/timezone.rs
+    destination: backend/src/platform/clock/protocol/src/time/timezone.rs
+    rationale: Timezone context is part of the same Clock time-contract namespace.
+    public_api: preserve
+    compatibility_actions: []
+    evidence: [{type: export, path: backend/src/platform/clock/protocol/src/lib.rs, detail: timezone public types remain crate-root exports}]
+    rollback: Move the module back and restore crate-root declarations.
+  - id: MOVE-0057
+    status: done
+    source: backend/src/platform/clock/runtime/src/deterministic.rs
+    destination: backend/src/platform/clock/runtime/src/providers/deterministic.rs
+    rationale: Deterministic and system clocks are implementation providers.
+    public_api: preserve
+    compatibility_actions: []
+    evidence: [{type: export, path: backend/src/platform/clock/runtime/src/lib.rs, detail: deterministic clock stays a crate-root export}]
+    rollback: Move the module back and restore crate-root declarations.
+  - id: MOVE-0058
+    status: done
+    source: backend/src/platform/clock/runtime/src/system.rs
+    destination: backend/src/platform/clock/runtime/src/providers/system.rs
+    rationale: System clock is an implementation provider, not a runtime-root concern.
+    public_api: preserve
+    compatibility_actions: []
+    evidence: [{type: export, path: backend/src/platform/clock/runtime/src/lib.rs, detail: system clock stays a crate-root export}]
+    rollback: Move the module back and restore crate-root declarations.
+  - id: MOVE-0059
+    status: done
+    source: backend/src/platform/telemetry/protocol/src/identity.rs
+    destination: backend/src/platform/telemetry/protocol/src/model/identity.rs
+    rationale: Telemetry identity and signal syntax share one protocol model namespace.
+    public_api: preserve
+    compatibility_actions: []
+    evidence: [{type: export, path: backend/src/platform/telemetry/protocol/src/lib.rs, detail: identity public types stay crate-root exports}]
+    rollback: Move the module back and restore crate-root declarations.
+  - id: MOVE-0060
+    status: done
+    source: backend/src/platform/telemetry/protocol/src/signal.rs
+    destination: backend/src/platform/telemetry/protocol/src/model/signal.rs
+    rationale: Telemetry signal syntax belongs with its source identity model.
+    public_api: preserve
+    compatibility_actions: []
+    evidence: [{type: export, path: backend/src/platform/telemetry/protocol/src/lib.rs, detail: signal public types stay crate-root exports}]
+    rollback: Move the module back and restore crate-root declarations.
+  - id: MOVE-0041
+    status: done
+    source: backend/src/platform/telemetry/collector/src/control.rs
+    destination: backend/src/platform/telemetry/collector/src/control/
+    rationale: The inherited managed-runtime handshake, aggregate diagnostics relay, and bounded framing have distinct reasons to change; the collector control boundary must expose them as named responsibilities.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/platform/telemetry/collector/src/control.rs, detail: describe, serve_diagnostics, read_frame, and write_frame currently combine admission, diagnostics, and framing}]
+    rollback: Restore control.rs and its private module declaration.
+  - id: MOVE-0030
+    status: done
+    source: backend/development/runtime/src/kernel_operator/development_artifact_digest.rs
+    destination: backend/development/runtime/src/kernel_operator/artifact/digest.rs
+    rationale: Artifact digest handling belongs to the artifact trust namespace; the development package already carries the environment qualifier.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: import, path: backend/development/runtime/src/kernel_operator/development_owner_pinned_preflight.rs, detail: artifact preflight consumes stable digest verification}]
+    rollback: Move the module back and restore its private module declaration.
+  - id: MOVE-0031
+    status: done
+    source: backend/development/runtime/src/kernel_operator/development_owner_pinned_artifact.rs
+    destination: backend/development/runtime/src/kernel_operator/artifact/owner_proof.rs
+    rationale: Owner proof generation is artifact admission behavior, not a development operator root responsibility.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: import, path: backend/development/runtime/src/kernel_operator/development_control_plane.rs, detail: control-plane commands validate the artifact owner proof}]
+    rollback: Move the module back and restore its private module declaration.
+  - id: MOVE-0032
+    status: done
+    source: backend/development/runtime/src/kernel_operator/development_owner_pinned_preflight.rs
+    destination: backend/development/runtime/src/kernel_operator/artifact/preflight.rs
+    rationale: Exact artifact preflight must be navigable beside digest and owner-proof logic.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/kernel_operator/development_owner_pinned_preflight.rs, detail: verify}]
+    rollback: Move the module back and restore its private module declaration.
+  - id: MOVE-0033
+    status: done
+    source: backend/development/runtime/src/kernel_operator/development_capability_router.rs
+    destination: backend/development/runtime/src/kernel_operator/capability/external.rs
+    rationale: External capability authorization belongs to a capability namespace, not an operator-root prefix file.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/kernel_operator/development_capability_router.rs, detail: run}]
+    rollback: Move the module back and restore its private module declaration.
+  - id: MOVE-0034
+    status: done
+    source: backend/development/runtime/src/kernel_operator/development_control_plane.rs
+    destination: backend/development/runtime/src/kernel_operator/control/plane.rs
+    rationale: Development Control Store orchestration is one control-plane adapter boundary.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/kernel_operator/development_control_plane.rs, detail: open_development_control_store}]
+    rollback: Move the module back and restore its private module declaration.
+  - id: MOVE-0035
+    status: done
+    source: backend/development/runtime/src/kernel_operator/development_external_runtime_identity.rs
+    destination: backend/development/runtime/src/kernel_operator/runtime/external_identity.rs
+    rationale: External runtime identity simulation is runtime behavior and belongs under the runtime owner.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/kernel_operator/development_external_runtime_identity.rs, detail: run}]
+    rollback: Move the module back and restore its private module declaration.
+  - id: MOVE-0036
+    status: done
+    source: backend/development/runtime/src/kernel_operator/development_pinned_child.rs
+    destination: backend/development/runtime/src/kernel_operator/runtime/pinned_child.rs
+    rationale: Pinned child execution is managed runtime simulation behavior.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/kernel_operator/development_pinned_child.rs, detail: run}]
+    rollback: Move the module back and restore its private module declaration.
+  - id: MOVE-0037
+    status: done
+    source: backend/development/runtime/src/kernel_operator/development_settings_apply_lifecycle.rs
+    destination: backend/development/runtime/src/kernel_operator/settings/application.rs
+    rationale: Settings acknowledgement belongs to the settings application boundary.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/kernel_operator/development_settings_apply_lifecycle.rs, detail: run}]
+    rollback: Move the module back and restore its private module declaration.
+  - id: MOVE-0038
+    status: done
+    source: backend/development/runtime/src/kernel_operator/development_settings_operator_mutation.rs
+    destination: backend/development/runtime/src/kernel_operator/settings/mutation.rs
+    rationale: Settings mutation belongs with settings schema and application behavior.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/kernel_operator/development_settings_operator_mutation.rs, detail: run}]
+    rollback: Move the module back and restore its private module declaration.
+  - id: MOVE-0039
+    status: done
+    source: backend/development/runtime/src/kernel_operator/development_settings_schema_admission.rs
+    destination: backend/development/runtime/src/kernel_operator/settings/schema.rs
+    rationale: Settings schema admission belongs to the settings boundary.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/kernel_operator/development_settings_schema_admission.rs, detail: run}]
+    rollback: Move the module back and restore its private module declaration.
+  - id: MOVE-0040
+    status: done
+    source: backend/development/runtime/src/kernel_operator/remote_pairing_receipt.rs
+    destination: backend/development/runtime/src/kernel_operator/pairing/receipt.rs
+    rationale: Pairing receipt formatting belongs to the pairing namespace.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/kernel_operator/remote_pairing_receipt.rs, detail: remote pairing receipt model}]
+    rollback: Move the module back and restore its private module declaration.
+  - id: MOVE-0001
+    status: done
+    source: backend/src/kernel/src/development_control_plane.rs
+    destination: backend/development/runtime/src/kernel_operator/development_control_plane.rs
+    rationale: Development-only operator behavior must not compile into the production Kernel.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: import, path: backend/src/kernel/src/main.rs, detail: production entrypoint excludes development dispatch}]
+    rollback: Move the module back and restore its imports.
+  - id: MOVE-0002
+    status: done
+    source: backend/src/kernel/src/development_artifact_digest.rs
+    destination: backend/development/runtime/src/kernel_operator/development_artifact_digest.rs
+    rationale: Development artifact fixture generation belongs to the development operator.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: import, path: backend/development/runtime/src/kernel_operator/mod.rs, detail: operator owns artifact fixture commands}]
+    rollback: Move the module back and restore its imports.
+  - id: MOVE-0003
+    status: approved
+    source: backend/development/runtime/src/file_device_signer.rs
+    destination: backend/development/runtime/src/identity/file_signer.rs
+    rationale: File signer implementation is device identity infrastructure, not an unqualified runtime root module.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/file_device_signer.rs, detail: FileDeviceSignerV1}]
+    rollback: Move the file back and restore the module declaration.
+  - id: MOVE-0004
+    status: approved
+    source: backend/development/runtime/src/pairing_state.rs
+    destination: backend/development/runtime/src/pairing/state.rs
+    rationale: Pairing persistence is one part of the pairing responsibility and must live beside its TLS material.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/pairing_state.rs, detail: RemotePairingStateStore}]
+    rollback: Move the file back and restore the module declaration.
+  - id: MOVE-0005
+    status: approved
+    source: backend/development/runtime/src/pairing_tls.rs
+    destination: backend/development/runtime/src/pairing/tls.rs
+    rationale: Ephemeral pairing TLS belongs to pairing, rather than a flat development runtime root.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/pairing_tls.rs, detail: PairingTlsMaterial}]
+    rollback: Move the file back and restore the module declaration.
+  - id: MOVE-0006
+    status: approved
+    source: backend/development/runtime/src/platform_commands.rs
+    destination: backend/development/runtime/src/platform/commands.rs
+    rationale: Platform simulation commands form their own adapter boundary.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/platform_commands.rs, detail: development platform command functions}]
+    rollback: Move the file back and restore the module declaration.
+  - id: MOVE-0007
+    status: approved
+    source: backend/development/runtime/src/operator_cli.rs
+    destination: backend/development/runtime/src/cli/operator.rs
+    rationale: Parsing and command syntax belong to a CLI boundary, not the development runtime root.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/development/runtime/src/operator_cli.rs, detail: DevelopmentOperatorCli}]
+    rollback: Move the file back and restore the module declaration.
+  - id: MOVE-0008
+    status: approved
+    source: backend/src/platform/events/src/envelope_validation.rs
+    destination: backend/src/platform/events/src/validation/envelope.rs
+    rationale: Envelope validation is a protocol validation concern and should have a named namespace before further event contracts are added.
+    public_api: preserve
+    compatibility_actions: [COMPAT-0001]
+    evidence: [{type: symbol, path: backend/src/platform/events/src/envelope_validation.rs, detail: DurableEnvelopeV1 validation functions}]
+    rollback: Move the file back and restore the explicit re-export.
+  - id: MOVE-0009
+    status: approved
+    source: backend/src/kernel/control_store/sqlite/src/ports.rs
+    destination: backend/src/kernel/control_store/sqlite/src/ports/adapter.rs
+    rationale: SQLite implementations of contract ports belong beneath a port-adapter namespace.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: import, path: backend/src/kernel/control_store/sqlite/src/lib.rs, detail: concrete port trait implementations}]
+    rollback: Move the file back and restore the module declaration.
+  - id: MOVE-0010
+    status: approved
+    source: backend/src/kernel/src/identity/device_key_generation.rs
+    destination: backend/src/kernel/src/identity/device/generation.rs
+    rationale: Device-key generation and signing are one device identity responsibility.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/identity/device_key_generation.rs, detail: file device key generation}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0011
+    status: approved
+    source: backend/src/kernel/src/identity/device_signer.rs
+    destination: backend/src/kernel/src/identity/device/signer.rs
+    rationale: Device signing belongs to the same device identity namespace as key generation.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/identity/device_signer.rs, detail: DeviceSigner}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0012
+    status: approved
+    source: backend/src/kernel/src/identity/initial_owner_enrollment.rs
+    destination: backend/src/kernel/src/identity/enrollment/initial.rs
+    rationale: Initial enrollment and its persisted record are one enrollment responsibility.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/identity/initial_owner_enrollment.rs, detail: InitialOwnerEnrollmentV1}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0013
+    status: approved
+    source: backend/src/kernel/src/identity/initial_owner_store.rs
+    destination: backend/src/kernel/src/identity/enrollment/store.rs
+    rationale: Enrollment persistence belongs with enrollment, not at the identity root.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/identity/initial_owner_store.rs, detail: initial owner record persistence}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0014
+    status: approved
+    source: backend/src/kernel/src/identity/owner_authorization.rs
+    destination: backend/src/kernel/src/identity/owner/authorization.rs
+    rationale: Owner authorization and owner control IPC are one owner authority boundary.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/identity/owner_authorization.rs, detail: owner proof authorization}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0015
+    status: approved
+    source: backend/src/kernel/src/modules/capability_policy.rs
+    destination: backend/src/kernel/src/modules/capability/policy.rs
+    rationale: Capability policy and routing are a single capability boundary.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/modules/capability_policy.rs, detail: capability grant policy}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0016
+    status: approved
+    source: backend/src/kernel/src/modules/capability_router.rs
+    destination: backend/src/kernel/src/modules/capability/router.rs
+    rationale: Routing must live with the capability policy it enforces.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/modules/capability_router.rs, detail: CapabilityRouter}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0017
+    status: approved
+    source: backend/src/kernel/src/modules/registration_ipc.rs
+    destination: backend/src/kernel/src/modules/registration/ipc.rs
+    rationale: Module registration IPC, session state and registry orchestration comprise one registration boundary.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/modules/registration_ipc.rs, detail: module registration request dispatch}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0018
+    status: approved
+    source: backend/src/kernel/src/modules/registration_sessions.rs
+    destination: backend/src/kernel/src/modules/registration/sessions.rs
+    rationale: Registration sessions must be navigable with registration IPC.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/modules/registration_sessions.rs, detail: registration session state}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0019
+    status: approved
+    source: backend/src/kernel/src/modules/registry.rs
+    destination: backend/src/kernel/src/modules/registration/registry.rs
+    rationale: Registry lifecycle is registration ownership, not a miscellaneous module root file.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/modules/registry.rs, detail: ModuleRegistry}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0020
+    status: approved
+    source: backend/src/kernel/src/modules/settings_apply.rs
+    destination: backend/src/kernel/src/modules/settings/application.rs
+    rationale: Applying desired settings belongs to the settings boundary.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/modules/settings_apply.rs, detail: settings application lifecycle}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0021
+    status: approved
+    source: backend/src/kernel/src/modules/settings_mutation.rs
+    destination: backend/src/kernel/src/modules/settings/mutation.rs
+    rationale: Settings mutation belongs with settings admission and application.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/modules/settings_mutation.rs, detail: settings mutation commands}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0022
+    status: approved
+    source: backend/src/kernel/src/modules/settings_schema.rs
+    destination: backend/src/kernel/src/modules/settings/schema.rs
+    rationale: Settings schema admission belongs to the settings boundary.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/modules/settings_schema.rs, detail: settings schema validation}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0023
+    status: approved
+    source: backend/src/kernel/src/runtime/child_execution.rs
+    destination: backend/src/kernel/src/runtime/managed/execution.rs
+    rationale: Managed child execution and supervision must be navigated as a unit.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/runtime/child_execution.rs, detail: managed child execution}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0024
+    status: approved
+    source: backend/src/kernel/src/runtime/child_supervisor.rs
+    destination: backend/src/kernel/src/runtime/managed/supervisor.rs
+    rationale: Managed-child supervision belongs to managed runtime lifecycle.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/runtime/child_supervisor.rs, detail: ManagedChildSupervisor}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0025
+    status: approved
+    source: backend/src/kernel/src/runtime/external_session_ipc.rs
+    destination: backend/src/kernel/src/runtime/external/ipc.rs
+    rationale: External runtime IPC and session records are an external runtime boundary.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/runtime/external_session_ipc.rs, detail: external runtime session IPC}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0026
+    status: approved
+    source: backend/src/kernel/src/runtime/external_sessions.rs
+    destination: backend/src/kernel/src/runtime/external/sessions.rs
+    rationale: External runtime session lifecycle belongs with its IPC adapter.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/runtime/external_sessions.rs, detail: ExternalRuntimeSessions}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0027
+    status: approved
+    source: backend/src/kernel/src/runtime/control.rs
+    destination: backend/src/kernel/src/runtime/lifecycle/control.rs
+    rationale: Runtime control, shutdown and top-level supervision form one lifecycle boundary.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/runtime/control.rs, detail: runtime control commands}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0028
+    status: approved
+    source: backend/src/kernel/src/runtime/shutdown.rs
+    destination: backend/src/kernel/src/runtime/lifecycle/shutdown.rs
+    rationale: Bounded shutdown belongs to runtime lifecycle.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/runtime/shutdown.rs, detail: bounded shutdown}]
+    rollback: Move the file back and restore module imports.
+  - id: MOVE-0029
+    status: approved
+    source: backend/src/kernel/src/runtime/supervisor.rs
+    destination: backend/src/kernel/src/runtime/lifecycle/supervisor.rs
+    rationale: Topology supervision belongs to runtime lifecycle.
+    public_api: internal
+    compatibility_actions: []
+    evidence: [{type: symbol, path: backend/src/kernel/src/runtime/supervisor.rs, detail: runtime supervisor}]
+    rollback: Move the file back and restore module imports.

@@ -149,11 +149,11 @@ export function vaultPackages({
       surface: 'persistence',
       ...overrides.store,
     }),
-    workspacePackage('hermes-vault-keychain-macos', {
+    workspacePackage('hermes-vault-key-provider-file', {
       role: 'platform',
       owner: 'vault',
       surface: 'implementation',
-      ...overrides.keychainMacos,
+      ...overrides.keyProviderFile,
     }),
   ];
 }
@@ -192,6 +192,24 @@ export function storagePackages({
       },
       controlDependencies,
     ),
+    ...storageRuntimePackages({
+      runtimeDependencies,
+      postgresDependencies,
+      pgbouncerDependencies,
+      migrationsDependencies,
+      overrides,
+    }),
+  ];
+}
+
+function storageRuntimePackages({
+  runtimeDependencies,
+  postgresDependencies,
+  pgbouncerDependencies,
+  migrationsDependencies,
+  overrides,
+}) {
+  return [
     workspacePackage(
       'hermes-storage-runtime',
       {
