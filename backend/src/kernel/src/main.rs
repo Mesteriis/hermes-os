@@ -1,3 +1,9 @@
+#![allow(dead_code)]
+
+// The recovery-only Kernel inventory compiles phase-gated owner and platform
+// paths before their admission gate opens. Semantic Clippy lints remain
+// mandatory; this only suppresses reachability noise at the binary root.
+
 use clap::Parser;
 
 mod cli;

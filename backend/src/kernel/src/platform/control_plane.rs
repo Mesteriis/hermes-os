@@ -46,16 +46,16 @@ pub fn serve(
         &managed_runtime_supervisor,
         browser_gateway.as_ref(),
     )?;
-    let (mut workers, receiver) = start_workers(
-        &store,
-        data_dir,
-        runtime_dir,
-        store_path,
-        &shutdown_requested,
-        &managed_runtime_supervisor,
+    let (mut workers, receiver) = start_workers(ControlPlaneWorkerInputV1 {
+        store,
+        data_dir: data_dir.to_path_buf(),
+        runtime_dir: runtime_dir.to_path_buf(),
+        store_path: store_path.to_path_buf(),
+        shutdown_requested: Arc::clone(&shutdown_requested),
+        managed_runtime_supervisor: managed_runtime_supervisor.clone(),
         browser_gateway,
         browser_pairing,
-    );
+    });
     let failure = supervise_workers(&receiver, &shutdown_requested);
     managed_runtime_supervisor.shutdown()?;
     join_workers(&mut workers, failure)
@@ -68,14 +68,14 @@ fn configure_runtime(
 ) -> Result<(), String> {
     managed_runtime_supervisor.configure_vault_route_handler(Arc::new(
         KernelManagedVaultRouteHandler::new(
-            Arc::clone(&store),
+            Arc::clone(store),
             data_dir,
             Arc::new(managed_runtime_supervisor.relay_port()),
         ),
     ))?;
     managed_runtime_supervisor.configure_event_credential_handler(Arc::new(
         EventCredentialHandlerV1::new(
-            Arc::clone(&store),
+            Arc::clone(store),
             EVENTS_AUTHORITY_REGISTRATION_ID.to_owned(),
             managed_runtime_supervisor.relay_port(),
         )?,
@@ -94,11 +94,11 @@ fn start_development_foundation(
         return Ok(());
     }
     crate::platform::development::start_local_foundation(supervisor, store, data_dir, runtime_dir)
-        .or_else(|error| match supervisor.shutdown() {
-            Ok(()) => Err(error),
-            Err(cleanup_error) => Err(format!(
+        .map_err(|error| match supervisor.shutdown() {
+            Ok(()) => error,
+            Err(cleanup_error) => format!(
                 "{error}; managed runtime cleanup after developer bootstrap failure also failed: {cleanup_error}"
-            )),
+            ),
         })
 }
 
@@ -116,88 +116,111 @@ fn browser_pairing(
         .map(|pairing| pairing.map(Arc::new))
 }
 
-fn start_workers(
-    store: &Arc<SqliteControlStore>,
-    data_dir: &Path,
-    runtime_dir: &Path,
-    store_path: &Path,
-    shutdown_requested: &Arc<AtomicBool>,
-    managed_runtime_supervisor: &ManagedRuntimeSupervisor,
+struct ControlPlaneWorkerInputV1 {
+    store: Arc<SqliteControlStore>,
+    data_dir: std::path::PathBuf,
+    runtime_dir: std::path::PathBuf,
+    store_path: std::path::PathBuf,
+    shutdown_requested: Arc<AtomicBool>,
+    managed_runtime_supervisor: ManagedRuntimeSupervisor,
     browser_gateway: Option<BrowserGatewayConfigurationV1>,
     browser_pairing: Option<Arc<BrowserPairingAdmissionV1>>,
+}
+
+fn start_workers(
+    input: ControlPlaneWorkerInputV1,
 ) -> (
     Vec<std::thread::JoinHandle<()>>,
     mpsc::Receiver<Result<(), String>>,
 ) {
+    let ControlPlaneWorkerInputV1 {
+        store,
+        data_dir,
+        runtime_dir,
+        store_path,
+        shutdown_requested,
+        managed_runtime_supervisor,
+        browser_gateway,
+        browser_pairing,
+    } = input;
     let (completed, receiver) = mpsc::channel();
     let mut workers = Vec::with_capacity(6);
-    let runtime_dir = runtime_dir.to_path_buf();
-    let data_dir = data_dir.to_path_buf();
-    let store_path = store_path.to_path_buf();
-    workers.extend(start_boot_workers(
-        &completed,
-        shutdown_requested,
-        store,
-        data_dir.clone(),
-        runtime_dir.clone(),
+    workers.extend(start_boot_workers(BootWorkerInputV1 {
+        completed: completed.clone(),
+        shutdown_requested: Arc::clone(&shutdown_requested),
+        store: Arc::clone(&store),
+        data_dir: data_dir.clone(),
+        runtime_dir: runtime_dir.clone(),
         store_path,
-        managed_runtime_supervisor.clone(),
-        browser_pairing.clone(),
-    ));
+        supervisor: managed_runtime_supervisor.clone(),
+        browser_pairing: browser_pairing.clone(),
+    }));
     workers.push(start_registration_worker(
         completed.clone(),
-        shutdown_requested,
-        Arc::clone(store),
+        &shutdown_requested,
+        Arc::clone(&store),
         runtime_dir.clone(),
     ));
     workers.push(spawn_external_runtime_worker(
         completed.clone(),
         Arc::clone(&shutdown_requested),
-        Arc::clone(store),
+        Arc::clone(&store),
         data_dir,
         runtime_dir.clone(),
         managed_runtime_supervisor.clone(),
     ));
     workers.push(start_scheduler_worker(
         completed.clone(),
-        shutdown_requested,
-        Arc::clone(store),
+        &shutdown_requested,
+        Arc::clone(&store),
         runtime_dir,
         managed_runtime_supervisor.clone(),
     ));
     workers.extend(browser_gateway_worker(
         &completed,
-        shutdown_requested,
-        store,
-        managed_runtime_supervisor.clone(),
+        &shutdown_requested,
+        &store,
+        managed_runtime_supervisor,
         browser_gateway,
         browser_pairing,
     ));
     (workers, receiver)
 }
 
-fn start_boot_workers(
-    completed: &mpsc::Sender<Result<(), String>>,
-    shutdown_requested: &Arc<AtomicBool>,
-    store: &Arc<SqliteControlStore>,
+struct BootWorkerInputV1 {
+    completed: mpsc::Sender<Result<(), String>>,
+    shutdown_requested: Arc<AtomicBool>,
+    store: Arc<SqliteControlStore>,
     data_dir: std::path::PathBuf,
     runtime_dir: std::path::PathBuf,
     store_path: std::path::PathBuf,
     supervisor: ManagedRuntimeSupervisor,
     browser_pairing: Option<Arc<BrowserPairingAdmissionV1>>,
-) -> Vec<std::thread::JoinHandle<()>> {
+}
+
+fn start_boot_workers(input: BootWorkerInputV1) -> Vec<std::thread::JoinHandle<()>> {
+    let BootWorkerInputV1 {
+        completed,
+        shutdown_requested,
+        store,
+        data_dir,
+        runtime_dir,
+        store_path,
+        supervisor,
+        browser_pairing,
+    } = input;
     vec![
         start_recovery_worker(
             completed.clone(),
-            shutdown_requested,
-            Arc::clone(store),
+            &shutdown_requested,
+            Arc::clone(&store),
             runtime_dir.clone(),
             store_path,
         ),
         start_owner_worker(
             completed.clone(),
-            shutdown_requested,
-            store,
+            &shutdown_requested,
+            &store,
             data_dir,
             runtime_dir,
             supervisor,

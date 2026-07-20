@@ -7,6 +7,7 @@ const SESSION_TTL: Duration = Duration::from_secs(60);
 const MAX_SESSIONS: usize = 32;
 const MAX_BEGINS_PER_MINUTE: usize = 16;
 
+#[derive(Default)]
 pub struct RegistrationSessions {
     sessions: HashMap<String, Session>,
     begins: VecDeque<Instant>,
@@ -92,14 +93,5 @@ impl RegistrationSessions {
     fn purge(&mut self) {
         let now = Instant::now();
         self.sessions.retain(|_, item| item.expires_at > now);
-    }
-}
-
-impl Default for RegistrationSessions {
-    fn default() -> Self {
-        Self {
-            sessions: HashMap::new(),
-            begins: VecDeque::new(),
-        }
     }
 }

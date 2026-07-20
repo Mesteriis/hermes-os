@@ -103,23 +103,19 @@ fn restore_scheduler_developer_grants(
             .approve_module_registration(REGISTRATION_ID, &capabilities)
             .map_err(|_| "developer Scheduler grants cannot be restored".to_owned())?;
     }
-    if !supervisor.is_active(REGISTRATION_ID)? {
-        if let Some(binding) = store
+    if !supervisor.is_active(REGISTRATION_ID)?
+        && let Some(binding) = store
             .platform_storage_binding(REGISTRATION_ID, "storage.scheduler")
             .map_err(|_| "developer Scheduler Storage binding is unavailable".to_owned())?
-        {
-            if binding.state() == PlatformStorageBindingStateV1::Active {
-                store
-                    .begin_platform_storage_binding_revocation(
-                        REGISTRATION_ID,
-                        "storage.scheduler",
-                        binding.binding_revision(),
-                    )
-                    .map_err(|_| {
-                        "developer Scheduler Storage binding cannot be fenced".to_owned()
-                    })?;
-            }
-        }
+        && binding.state() == PlatformStorageBindingStateV1::Active
+    {
+        store
+            .begin_platform_storage_binding_revocation(
+                REGISTRATION_ID,
+                "storage.scheduler",
+                binding.binding_revision(),
+            )
+            .map_err(|_| "developer Scheduler Storage binding cannot be fenced".to_owned())?;
     }
     Ok(())
 }

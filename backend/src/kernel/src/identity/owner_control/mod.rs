@@ -44,35 +44,37 @@ pub fn serve(
         .map_err(|error| error.to_string())?;
     println!("owner_control_socket={}", socket_path.display());
     let mut sessions = OwnerControlSessions::default();
-    let result = accept_connections(
-        &store,
+    let result = accept_connections(OwnerControlConnectionLoopV1 {
+        store: &store,
         data_dir,
         runtime_dir,
         shutdown_requested,
-        &managed_runtime_supervisor,
-        browser_pairing.as_deref(),
-        &listener,
-        &mut sessions,
-    );
+        supervisor: &managed_runtime_supervisor,
+        browser_pairing: browser_pairing.as_deref(),
+        listener: &listener,
+        sessions: &mut sessions,
+    });
     drop(cleanup);
     result
 }
 
-fn accept_connections(
-    store: &SqliteControlStore,
-    data_dir: &Path,
-    runtime_dir: &Path,
+struct OwnerControlConnectionLoopV1<'a> {
+    store: &'a SqliteControlStore,
+    data_dir: &'a Path,
+    runtime_dir: &'a Path,
     shutdown_requested: Arc<AtomicBool>,
-    supervisor: &ManagedRuntimeSupervisor,
-    browser_pairing: Option<&BrowserPairingAdmissionV1>,
-    listener: &UnixListener,
-    sessions: &mut OwnerControlSessions,
-) -> Result<(), String> {
+    supervisor: &'a ManagedRuntimeSupervisor,
+    browser_pairing: Option<&'a BrowserPairingAdmissionV1>,
+    listener: &'a UnixListener,
+    sessions: &'a mut OwnerControlSessions,
+}
+
+fn accept_connections(input: OwnerControlConnectionLoopV1<'_>) -> Result<(), String> {
     loop {
-        if shutdown_requested.load(Ordering::Acquire) {
+        if input.shutdown_requested.load(Ordering::Acquire) {
             return Ok(());
         }
-        let mut stream = match listener.accept() {
+        let mut stream = match input.listener.accept() {
             Ok((stream, _)) => stream,
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 std::thread::sleep(SHUTDOWN_POLL);
@@ -81,12 +83,12 @@ fn accept_connections(
             Err(error) => return Err(error.to_string()),
         };
         let _ = handle_connection(
-            store,
-            data_dir,
-            runtime_dir,
-            supervisor,
-            browser_pairing,
-            sessions,
+            input.store,
+            input.data_dir,
+            input.runtime_dir,
+            input.supervisor,
+            input.browser_pairing,
+            input.sessions,
             &mut stream,
         );
     }
