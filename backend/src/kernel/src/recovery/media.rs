@@ -10,6 +10,10 @@ use p256::ecdsa::signature::Verifier;
 use p256::ecdsa::{Signature, VerifyingKey};
 use sha2::{Digest, Sha256};
 
+const MANIFEST_MAGIC: &[u8; 8] = b"HRMEDIA1";
+const MAX_ENTRIES: usize = 256;
+const MAX_PATH_BYTES: usize = 512;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct RecoveryMediaEntryV1 {
     path: String,
@@ -21,6 +25,51 @@ pub(crate) struct SignedRecoveryMediaManifestV1 {
     verification_key_id: String,
     raw_manifest_bytes: Vec<u8>,
     signature_raw: [u8; 64],
+}
+
+pub(crate) struct RecoveryMediaManifestV1 {
+    entries: Vec<RecoveryMediaEntryV1>,
+}
+
+impl RecoveryMediaManifestV1 {
+    pub(crate) fn encode(entries: Vec<RecoveryMediaEntryV1>) -> Result<Vec<u8>, String> {
+        validate_entries(&entries)?;
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(MANIFEST_MAGIC);
+        bytes.extend_from_slice(&(entries.len() as u16).to_be_bytes());
+        for entry in entries {
+            let path = entry.path.as_bytes();
+            bytes.extend_from_slice(&(path.len() as u16).to_be_bytes());
+            bytes.extend_from_slice(path);
+            bytes.extend_from_slice(&entry.size_bytes.to_be_bytes());
+            bytes.extend_from_slice(&entry.sha256);
+        }
+        Ok(bytes)
+    }
+
+    pub(crate) fn decode(bytes: &[u8]) -> Result<Self, String> {
+        let mut cursor = Cursor::new(bytes);
+        if cursor.take(8)? != MANIFEST_MAGIC {
+            return Err("recovery media manifest is invalid".to_owned());
+        }
+        let count = usize::from(u16::from_be_bytes(cursor.array()?));
+        if count == 0 || count > MAX_ENTRIES {
+            return Err("recovery media manifest is invalid".to_owned());
+        }
+        let mut entries = Vec::with_capacity(count);
+        for _ in 0..count {
+            entries.push(decode_entry(&mut cursor)?);
+        }
+        if !cursor.remaining().is_empty() {
+            return Err("recovery media manifest is invalid".to_owned());
+        }
+        validate_entries(&entries)?;
+        Ok(Self { entries })
+    }
+
+    fn entries(&self) -> &[RecoveryMediaEntryV1] {
+        &self.entries
+    }
 }
 
 impl SignedRecoveryMediaManifestV1 {
@@ -57,6 +106,15 @@ impl SignedRecoveryMediaManifestV1 {
         key.verify(&self.raw_manifest_bytes, &signature)
             .map_err(|_| "recovery media signature verification failed".to_owned())
     }
+
+    pub(crate) fn verify_and_decode(
+        &self,
+        expected_key_id: &str,
+        public_key_sec1: &[u8],
+    ) -> Result<RecoveryMediaManifestV1, String> {
+        self.verify(expected_key_id, public_key_sec1)?;
+        RecoveryMediaManifestV1::decode(&self.raw_manifest_bytes)
+    }
 }
 
 impl RecoveryMediaEntryV1 {
@@ -92,6 +150,75 @@ pub(crate) fn verify_inventory(
     expected
         .iter()
         .try_for_each(|entry| verify_entry(root, entry))
+}
+
+pub(crate) fn verify_signed_inventory(
+    root: &Path,
+    signed: &SignedRecoveryMediaManifestV1,
+    expected_key_id: &str,
+    public_key_sec1: &[u8],
+) -> Result<(), String> {
+    let manifest = signed.verify_and_decode(expected_key_id, public_key_sec1)?;
+    verify_inventory(root, manifest.entries())
+}
+
+fn decode_entry(cursor: &mut Cursor<'_>) -> Result<RecoveryMediaEntryV1, String> {
+    let length = usize::from(u16::from_be_bytes(cursor.array()?));
+    if length == 0 || length > MAX_PATH_BYTES {
+        return Err("recovery media manifest is invalid".to_owned());
+    }
+    let path = std::str::from_utf8(cursor.take(length)?)
+        .map_err(|_| "recovery media manifest is invalid".to_owned())?
+        .to_owned();
+    let size_bytes = u64::from_be_bytes(cursor.array()?);
+    let sha256 = cursor.array()?;
+    RecoveryMediaEntryV1::new(path, size_bytes, sha256)
+        .map_err(|_| "recovery media manifest is invalid".to_owned())
+}
+
+fn validate_entries(entries: &[RecoveryMediaEntryV1]) -> Result<(), String> {
+    if entries.is_empty() || entries.len() > MAX_ENTRIES {
+        return Err("recovery media manifest is invalid".to_owned());
+    }
+    let paths = entries
+        .iter()
+        .map(|entry| entry.path.as_str())
+        .collect::<Vec<_>>();
+    if paths.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err("recovery media manifest entries are not canonical".to_owned());
+    }
+    Ok(())
+}
+
+struct Cursor<'a> {
+    bytes: &'a [u8],
+    position: usize,
+}
+
+impl<'a> Cursor<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, position: 0 }
+    }
+    fn take(&mut self, length: usize) -> Result<&'a [u8], String> {
+        let end = self
+            .position
+            .checked_add(length)
+            .ok_or_else(|| "recovery media manifest is invalid".to_owned())?;
+        let bytes = self
+            .bytes
+            .get(self.position..end)
+            .ok_or_else(|| "recovery media manifest is invalid".to_owned())?;
+        self.position = end;
+        Ok(bytes)
+    }
+    fn array<const N: usize>(&mut self) -> Result<[u8; N], String> {
+        self.take(N)?
+            .try_into()
+            .map_err(|_| "recovery media manifest is invalid".to_owned())
+    }
+    fn remaining(&self) -> &'a [u8] {
+        &self.bytes[self.position..]
+    }
 }
 
 fn verify_entry(root: &Path, entry: &RecoveryMediaEntryV1) -> Result<(), String> {

@@ -3,7 +3,8 @@ use std::fs;
 use sha2::{Digest, Sha256};
 
 use crate::recovery::media::{
-    RecoveryMediaEntryV1, SignedRecoveryMediaManifestV1, verify_inventory,
+    RecoveryMediaEntryV1, RecoveryMediaManifestV1, SignedRecoveryMediaManifestV1, verify_inventory,
+    verify_signed_inventory,
 };
 use crate::tests::common::{Signer, SigningKey, unique_target_root};
 
@@ -58,7 +59,17 @@ fn recovery_media_rejects_symlinked_manifest_entry() {
 #[test]
 fn recovery_media_requires_the_pinned_manifest_signature() {
     let key = SigningKey::from_bytes((&[7_u8; 32]).into()).expect("signing key");
-    let raw = b"canonical recovery manifest".to_vec();
+    let root = unique_target_root("hermes-recovery-media-signed");
+    fs::create_dir_all(&root).expect("media root");
+    let bytes = b"canonical recovery manifest";
+    fs::write(root.join("control.bin"), bytes).expect("control store");
+    let entry = RecoveryMediaEntryV1::new(
+        "control.bin".to_owned(),
+        bytes.len() as u64,
+        Sha256::digest(bytes).into(),
+    )
+    .expect("entry");
+    let raw = RecoveryMediaManifestV1::encode(vec![entry]).expect("manifest");
     let signature: p256::ecdsa::Signature = key.sign(&raw);
     let manifest = SignedRecoveryMediaManifestV1::new(
         "recovery-media-2026".to_owned(),
@@ -68,13 +79,16 @@ fn recovery_media_requires_the_pinned_manifest_signature() {
     .expect("signed manifest");
     let public_key = key.verifying_key().to_sec1_point(false);
     assert!(
-        manifest
-            .verify("recovery-media-2026", public_key.as_bytes())
-            .is_ok()
+        verify_signed_inventory(
+            &root,
+            &manifest,
+            "recovery-media-2026",
+            public_key.as_bytes()
+        )
+        .is_ok()
     );
     assert!(
-        manifest
-            .verify("different-key", public_key.as_bytes())
-            .is_err()
+        verify_signed_inventory(&root, &manifest, "different-key", public_key.as_bytes()).is_err()
     );
+    fs::remove_dir_all(root).expect("cleanup");
 }
