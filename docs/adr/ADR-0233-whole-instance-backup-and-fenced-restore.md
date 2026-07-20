@@ -1,83 +1,128 @@
-# ADR-0233: Scoped local recovery export и отдельный PostgreSQL dump
+# ADR-0233: Whole-instance backup и fenced restore
 
 Статус: Принято  
 Дата: 2026-07-19  
-Состояние реализации: Частично реализовано. Существуют отдельные offline
-Control Store export/restore и encrypted authenticated Vault backup/restore.
-Добавлена отдельная процедура PostgreSQL data export. Единого
-whole-instance backup или restore coordinator нет.
+Состояние реализации: Частично реализовано. Offline Control Store
+export/restore, authenticated Vault snapshot, Blob backup classification и
+private PostgreSQL export существуют раздельно. Единого coordinator, signed
+instance manifest, Blob/JetStream capture и disposable full-restore evidence
+пока нет; следовательно `whole_instance_backup_v1` остаётся закрытым.
 
 Зависит от:
 
 - [ADR-0216: Private Kernel Control Store на SQLite](ADR-0216-private-kernel-control-store-with-sqlite.md);
+- [ADR-0220: Канонический durable envelope](ADR-0220-canonical-durable-envelope-and-contract-evolution.md);
 - [ADR-0223: Encrypted SQLite Vault и scoped credential leases](ADR-0223-encrypted-sqlite-vault-and-scoped-credential-leases.md);
-- [ADR-0224: Storage Control Plane, owner-scoped PostgreSQL и lifecycle migrations](ADR-0224-storage-control-plane-owner-scoped-postgresql-and-migration-lifecycle.md).
+- [ADR-0224: Storage Control Plane, owner-scoped PostgreSQL и lifecycle migrations](ADR-0224-storage-control-plane-owner-scoped-postgresql-and-migration-lifecycle.md);
+- [ADR-0225: Первый recovery-only Kernel slice и фазовые ворота](ADR-0225-first-production-recovery-only-kernel-slice-and-phase-gates.md).
 
 ## Контекст
 
-Текущий local recovery scope намеренно меньше whole-instance snapshot. Уже
-существующие операции сохраняют private Kernel Control Store (включая
-settings/control authority) и encrypted Vault storage. PostgreSQL business data
-в них не входит и требует независимой выгрузки.
+Отдельные export-операции не являются backup экземпляра: между ними могут
+измениться Control Store, Vault, PostgreSQL, Blob и JetStream. Называть такой
+набор «whole instance» означало бы скрыть потерю causation, duplicate delivery
+или старые credential/runtime leases после restore.
 
-Blob data, JetStream retained records/configuration, Scheduler runtime state,
-provider OS profiles/sessions, browser/device credentials, distribution bytes,
-логи и caches не являются частью этой процедуры. Их нельзя молча назвать
-сохранёнными.
+Backup должен быть owner-private recovery material, а не Gateway API и не
+generic file copier. Он не передаёт private content в NATS, логи, CLI argv или
+manifest plaintext. Restore никогда не применяется к существующему target и
+не запускается автоматически при boot.
 
 ## Решение
 
-### Три независимых owner-scoped артефакта
+### Exact inventory и ownership
 
-| Артефакт | Владелец и назначение | Входит |
-| --- | --- | --- |
-| Control Store export | Kernel offline recovery | Control Store authority и settings; не PostgreSQL business rows |
-| Vault backup | Vault offline recovery | encrypted Vault database, anchor и authenticated manifest |
-| PostgreSQL custom dump | Storage-admin export | schema и data одной явно указанной PostgreSQL database, включая её migration ledger |
+Координатор является Kernel-owned offline operation. Он вызывает только
+component-owned backup/restore ports; не открывает чужие databases, не читает
+owner SQL и не создаёт cross-owner schema.
 
-Эти артефакты не образуют атомарный глобальный snapshot. Оператор хранит их
-вместе только как recovery material с отмеченным временем создания; порядок и
-согласованность между ними не доказываются этой процедурой.
+| Component | Backup unit | Restore authority | Inclusion |
+| --- | --- | --- | --- |
+| Kernel Control Store | fenced SQLite export | stopped Kernel, exclusive data-dir lock | required |
+| Vault | authenticated encrypted snapshot and anchor | recovery-key holder into empty Vault paths | required |
+| Storage Control / PostgreSQL | verified custom dump plus schema/migration ledger | isolated empty cluster through Storage Control | required |
+| Blob | owner-independent encrypted object inventory and bytes | empty Blob root, verified refs only | required when Blob is admitted |
+| JetStream | stream/consumer/config catalog, then replay from durable outbox/inbox | recreated after stores, never arbitrary retained payload copy | required |
+| Scheduler | schedules, runs, leases and fences | after PostgreSQL and NATS recovery | only when Scheduler is enabled |
+| provider OS profiles, browser credentials, logs, caches, release outputs | none | none | explicitly excluded |
 
-### PostgreSQL export
+Provider session material belongs to the integration owner and is admitted only
+with that owner. The first Mail slice therefore does not silently inherit a
+backup promise outside this matrix.
 
-make -C backend export-postgres-backup вызывает repository-owned wrapper над
-явно указанным pg_dump. Он принимает только:
+### Quiesce and capture order
 
-- абсолютный путь к regular non-symlink pg_dump, который executable и не
-  writable group/other;
-- абсолютный private regular file 0600 с одной PostgreSQL URL;
-- отсутствующий абсолютный output path.
+The operator requests backup through an owner-authenticated local recovery
+surface. Coordinator obtains the exclusive recovery lock, rejects a running
+Kernel/managed child, records a monotonic backup generation and captures:
 
-Wrapper не передаёт URL или password в argv. Он создаёт private temporary
-pg_service.conf и pgpass, запускает pg_dump с format=custom, no-owner и
-no-privileges и публикует новый dump atomically without overwrite после digest
-и fsync.
+1. Control Store desired topology and generation fence;
+2. Vault snapshot while no Vault runtime owns its store;
+3. PostgreSQL owner data and migration ledger through Storage Control;
+4. required encrypted Blob objects, if enabled;
+5. JetStream topology only — canonical messages recover through exact-byte
+   outbox/inbox replay, not a second mutable payload authority;
+6. Scheduler state only after its conditional gate is admitted.
 
-Итоговый dump имеет mode 0600; stdout содержит только path, byte size и
-SHA-256. no-owner и no-privileges означают, что PostgreSQL global roles, grants
-и platform credentials не экспортируются. Это data/schema export, а не portable
-cluster image и не автоматическая процедура restore.
+Any failure removes only the new staging directory; it never overwrites an
+existing completed backup. A successful capture fsyncs every regular file and
+directory, then publishes exactly one new backup directory atomically.
 
-Пример запуска (значения путей задаёт operator; URL file не передаётся как
-command-line value):
+### Signed media manifest
 
-    make -C backend export-postgres-backup \
-      PG_DUMP=/absolute/path/to/pg_dump \
-      POSTGRES_CONNECTION_URL_FILE=/absolute/private/postgres-url \
-      POSTGRES_BACKUP_OUTPUT=/absolute/private/hermes-postgres.dump
+The published directory contains a versioned binary manifest, component
+inventory, byte length and SHA-256 for every file, source commit, Cargo lock,
+toolchain and policy digest. The manifest is signed by a P-256 recovery/media
+authority distinct from a provider credential or client device key. Its
+signature covers canonical order, inclusion classes, backup generation and
+all digests. Paths are relative, normalized, non-empty and contain neither
+symlinks nor special files. Secrets and message bodies never occur in manifest
+fields.
 
-### Restore boundary
+Media retention is an explicit owner policy, not a best-effort cleanup task.
+The coordinator only creates private `0700` directories and regular `0600`
+files. It uses fd-based no-symlink access for every operator-supplied key,
+input and output. Encryption is component-native: Vault/Blob retain their
+encryption; the media envelope receives a separate recovery encryption key.
 
-Проверенная автоматическая PostgreSQL restore procedure пока отсутствует.
-Восстановление такого custom dump требует отдельного owner-approved Storage
-Control procedure: stopped isolated cluster, explicit schema/ledger
-verification, then fresh storage/runtime credentials. Нельзя выполнять restore
-в работающий Kernel или считать dump доказательством fenced recovery.
+### Restore order and fencing
 
-## Последствия
+Restore requires a stopped Kernel, explicit source and **empty** target,
+exclusive target lock, local interactive confirmation and P-256 owner-device
+proof. The coordinator verifies the complete signed inventory before creating
+any target state, including no missing, extra or symlinked files.
 
-Backup UI/CLI и документация должны говорить точно: доступны отдельные Control
-Store/Vault recovery operations и PostgreSQL data export. Они не обещают
-backup/restore Blob, JetStream, Scheduler, provider state или whole Hermes
-instance.
+It restores in this order:
+
+1. Control Store into a staged empty target and raises the global generation;
+2. Vault into empty paths and validates its authenticated snapshot;
+3. isolated PostgreSQL and migration ledger through Storage Control;
+4. Blob bytes/metadata after their referenced owner storage exists;
+5. JetStream catalog and consumers; outbox/inbox replay reconstructs delivery;
+6. Scheduler state and leases, if admitted.
+
+Before any runtime starts, all module sessions, capability grants, storage
+bindings, JetStream consumers and Scheduler leases are invalidated or fenced
+above the captured generation. A stale process can neither use a restored
+credential lease nor publish into a new generation. Any verification failure
+leaves the target unpublished and boot remains fail-closed.
+
+### Required evidence before gate admission
+
+`whole_instance_backup_v1` opens only with executable proof of the matrix,
+quiesce order, encrypted/signature media validation, wrong/replayed authority
+rejection, corrupt/missing/extra/symlink inventory rejection, empty-target
+enforcement, generation/lease invalidation and a disposable full restore of
+Control Store, Vault, PostgreSQL, required Blob and NATS outbox/inbox replay.
+When Blob or Scheduler are enabled, their corresponding conditional evidence is
+mandatory. A component-local snapshot, a raw pg_dump or a documentation claim
+does not satisfy this ADR.
+
+## Consequences
+
+The existing independent recovery commands remain available but must be named
+precisely: they are component recovery, not whole-instance backup. UI and
+Gateway do not expose a persistent backup owner endpoint. Backup/restore is
+admitted only after the exact coordinator package/ports, test contour and
+policy evidence are in place; it is a prerequisite for the first durable
+owner, not an exception to that gate.
