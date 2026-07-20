@@ -334,14 +334,10 @@ async fn assert_released_slot_serves_health(address: std::net::SocketAddr) {
                 .await
                 .expect("replacement request write");
             let mut response = Vec::new();
-            stream
-                .read_to_end(&mut response)
-                .await
-                .expect("replacement response");
-            if response.starts_with(b"HTTP/1.1 200 OK\r\n") {
-                return response;
+            match stream.read_to_end(&mut response).await {
+                Ok(_) if response.starts_with(b"HTTP/1.1 200 OK\r\n") => return response,
+                Ok(_) | Err(_) => tokio::task::yield_now().await,
             }
-            tokio::task::yield_now().await;
         }
     })
     .await
