@@ -3,8 +3,8 @@ use std::fs;
 use sha2::{Digest, Sha256};
 
 use crate::recovery::media::{
-    RecoveryMediaEntryV1, RecoveryMediaManifestV1, SignedRecoveryMediaManifestV1, verify_inventory,
-    verify_signed_inventory,
+    RecoveryMediaEntryV1, RecoveryMediaManifestV1, RecoveryMediaProvenanceV1,
+    SignedRecoveryMediaManifestV1, verify_inventory, verify_signed_inventory,
 };
 use crate::tests::common::{Signer, SigningKey, unique_target_root};
 
@@ -69,7 +69,7 @@ fn recovery_media_requires_the_pinned_manifest_signature() {
         Sha256::digest(bytes).into(),
     )
     .expect("entry");
-    let raw = RecoveryMediaManifestV1::encode(vec![entry]).expect("manifest");
+    let raw = RecoveryMediaManifestV1::encode(provenance(), vec![entry]).expect("manifest");
     let signature: p256::ecdsa::Signature = key.sign(&raw);
     let manifest = SignedRecoveryMediaManifestV1::new(
         "recovery-media-2026".to_owned(),
@@ -91,4 +91,18 @@ fn recovery_media_requires_the_pinned_manifest_signature() {
         verify_signed_inventory(&root, &manifest, "different-key", public_key.as_bytes()).is_err()
     );
     fs::remove_dir_all(root).expect("cleanup");
+}
+
+#[test]
+fn recovery_media_rejects_invalid_signed_provenance() {
+    assert!(RecoveryMediaProvenanceV1::new(0, "a".repeat(40), [1; 32], [2; 32], [3; 32]).is_err());
+    assert!(
+        RecoveryMediaProvenanceV1::new(1, "not-a-commit".to_owned(), [1; 32], [2; 32], [3; 32])
+            .is_err()
+    );
+}
+
+fn provenance() -> RecoveryMediaProvenanceV1 {
+    RecoveryMediaProvenanceV1::new(1, "a".repeat(40), [1; 32], [2; 32], [3; 32])
+        .expect("provenance")
 }

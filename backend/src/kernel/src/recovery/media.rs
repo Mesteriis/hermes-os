@@ -10,7 +10,7 @@ use p256::ecdsa::signature::Verifier;
 use p256::ecdsa::{Signature, VerifyingKey};
 use sha2::{Digest, Sha256};
 
-const MANIFEST_MAGIC: &[u8; 8] = b"HRMEDIA1";
+const MANIFEST_MAGIC: &[u8; 8] = b"HRMEDIA2";
 const MAX_ENTRIES: usize = 256;
 const MAX_PATH_BYTES: usize = 512;
 
@@ -28,14 +28,34 @@ pub(crate) struct SignedRecoveryMediaManifestV1 {
 }
 
 pub(crate) struct RecoveryMediaManifestV1 {
+    provenance: RecoveryMediaProvenanceV1,
     entries: Vec<RecoveryMediaEntryV1>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RecoveryMediaProvenanceV1 {
+    backup_generation: u64,
+    source_commit: String,
+    cargo_lock_sha256: [u8; 32],
+    toolchain_sha256: [u8; 32],
+    policy_sha256: [u8; 32],
+}
+
 impl RecoveryMediaManifestV1 {
-    pub(crate) fn encode(entries: Vec<RecoveryMediaEntryV1>) -> Result<Vec<u8>, String> {
+    pub(crate) fn encode(
+        provenance: RecoveryMediaProvenanceV1,
+        entries: Vec<RecoveryMediaEntryV1>,
+    ) -> Result<Vec<u8>, String> {
+        provenance.validate()?;
         validate_entries(&entries)?;
         let mut bytes = Vec::new();
         bytes.extend_from_slice(MANIFEST_MAGIC);
+        bytes.extend_from_slice(&provenance.backup_generation.to_be_bytes());
+        bytes.push(provenance.source_commit.len() as u8);
+        bytes.extend_from_slice(provenance.source_commit.as_bytes());
+        bytes.extend_from_slice(&provenance.cargo_lock_sha256);
+        bytes.extend_from_slice(&provenance.toolchain_sha256);
+        bytes.extend_from_slice(&provenance.policy_sha256);
         bytes.extend_from_slice(&(entries.len() as u16).to_be_bytes());
         for entry in entries {
             let path = entry.path.as_bytes();
@@ -52,6 +72,7 @@ impl RecoveryMediaManifestV1 {
         if cursor.take(8)? != MANIFEST_MAGIC {
             return Err("recovery media manifest is invalid".to_owned());
         }
+        let provenance = RecoveryMediaProvenanceV1::decode(&mut cursor)?;
         let count = usize::from(u16::from_be_bytes(cursor.array()?));
         if count == 0 || count > MAX_ENTRIES {
             return Err("recovery media manifest is invalid".to_owned());
@@ -64,7 +85,10 @@ impl RecoveryMediaManifestV1 {
             return Err("recovery media manifest is invalid".to_owned());
         }
         validate_entries(&entries)?;
-        Ok(Self { entries })
+        Ok(Self {
+            provenance,
+            entries,
+        })
     }
 
     fn entries(&self) -> &[RecoveryMediaEntryV1] {
@@ -127,6 +151,53 @@ impl RecoveryMediaEntryV1 {
             size_bytes,
             sha256,
         })
+    }
+}
+
+impl RecoveryMediaProvenanceV1 {
+    pub(crate) fn new(
+        backup_generation: u64,
+        source_commit: String,
+        cargo_lock_sha256: [u8; 32],
+        toolchain_sha256: [u8; 32],
+        policy_sha256: [u8; 32],
+    ) -> Result<Self, String> {
+        let value = Self {
+            backup_generation,
+            source_commit,
+            cargo_lock_sha256,
+            toolchain_sha256,
+            policy_sha256,
+        };
+        value.validate()?;
+        Ok(value)
+    }
+
+    fn decode(cursor: &mut Cursor<'_>) -> Result<Self, String> {
+        let backup_generation = u64::from_be_bytes(cursor.array()?);
+        let commit_length = usize::from(cursor.byte()?);
+        let source_commit = std::str::from_utf8(cursor.take(commit_length)?)
+            .map_err(|_| "recovery media manifest is invalid".to_owned())?
+            .to_owned();
+        Self::new(
+            backup_generation,
+            source_commit,
+            cursor.array()?,
+            cursor.array()?,
+            cursor.array()?,
+        )
+        .map_err(|_| "recovery media manifest is invalid".to_owned())
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        let commit = self.source_commit.as_bytes();
+        if self.backup_generation == 0
+            || !(commit.len() == 40 || commit.len() == 64)
+            || !commit.iter().all(u8::is_ascii_hexdigit)
+        {
+            return Err("recovery media provenance is invalid".to_owned());
+        }
+        Ok(())
     }
 }
 
@@ -215,6 +286,9 @@ impl<'a> Cursor<'a> {
         self.take(N)?
             .try_into()
             .map_err(|_| "recovery media manifest is invalid".to_owned())
+    }
+    fn byte(&mut self) -> Result<u8, String> {
+        Ok(self.take(1)?[0])
     }
     fn remaining(&self) -> &'a [u8] {
         &self.bytes[self.position..]

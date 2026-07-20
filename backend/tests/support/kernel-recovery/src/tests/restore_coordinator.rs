@@ -3,7 +3,8 @@ use std::fs;
 use sha2::{Digest, Sha256};
 
 use crate::recovery::media::{
-    RecoveryMediaEntryV1, RecoveryMediaManifestV1, SignedRecoveryMediaManifestV1,
+    RecoveryMediaEntryV1, RecoveryMediaManifestV1, RecoveryMediaProvenanceV1,
+    SignedRecoveryMediaManifestV1,
 };
 use crate::recovery::restore_coordinator::{
     RestorePlanV1, WholeInstanceRestorePort, restore_verified_instance,
@@ -169,7 +170,12 @@ fn signed_media() -> (std::path::PathBuf, SignedRecoveryMediaManifestV1, [u8; 65
         Sha256::digest(bytes).into(),
     )
     .expect("entry");
-    let raw = RecoveryMediaManifestV1::encode(vec![entry]).expect("manifest");
+    let raw = RecoveryMediaManifestV1::encode(
+        RecoveryMediaProvenanceV1::new(1, "a".repeat(40), [1; 32], [2; 32], [3; 32])
+            .expect("provenance"),
+        vec![entry],
+    )
+    .expect("manifest");
     let key = SigningKey::from_bytes((&[11_u8; 32]).into()).expect("key");
     let signature: p256::ecdsa::Signature = key.sign(&raw);
     let signed = SignedRecoveryMediaManifestV1::new(
