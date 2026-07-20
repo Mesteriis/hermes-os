@@ -46,7 +46,7 @@ pub(super) fn blob_path(content_root: &Path, reference: &BlobRefV1) -> PathBuf {
     content_root.join(value)
 }
 
-pub(super) fn validate_private_directory(path: &Path) -> Result<(), BlobStorageError> {
+pub(crate) fn validate_private_directory(path: &Path) -> Result<(), BlobStorageError> {
     let metadata = fs::symlink_metadata(path).map_err(|_| BlobStorageError::Filesystem)?;
     if metadata.file_type().is_symlink()
         || !metadata.is_dir()
