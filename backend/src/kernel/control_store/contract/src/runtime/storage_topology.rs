@@ -64,30 +64,32 @@ pub struct PlatformStorageTopology {
     pgbouncer_artifact_sha256: [u8; 32],
 }
 
+pub struct PlatformStorageTopologyInputV1 {
+    pub revision: u64,
+    pub storage_generation: u64,
+    pub storage_instance_id: String,
+    pub database_id: String,
+    pub deployment_profile: StorageDeploymentProfileV1,
+    pub postgres_endpoint: PlatformStorageEndpointV1,
+    pub pgbouncer_endpoint: PlatformStorageEndpointV1,
+    pub postgres_artifact_sha256: [u8; 32],
+    pub pgbouncer_artifact_sha256: [u8; 32],
+}
+
 impl PlatformStorageTopology {
     #[must_use]
-    pub fn new(
-        revision: u64,
-        storage_generation: u64,
-        storage_instance_id: impl Into<String>,
-        database_id: impl Into<String>,
-        deployment_profile: StorageDeploymentProfileV1,
-        postgres_endpoint: PlatformStorageEndpointV1,
-        pgbouncer_endpoint: PlatformStorageEndpointV1,
-        postgres_artifact_sha256: [u8; 32],
-        pgbouncer_artifact_sha256: [u8; 32],
-    ) -> Self {
+    pub fn new(fields: PlatformStorageTopologyInputV1) -> Self {
         Self {
-            revision,
-            storage_generation,
-            storage_instance_id: storage_instance_id.into(),
-            database_id: database_id.into(),
-            deployment_profile,
-            pgbouncer_backend_endpoint: postgres_endpoint.clone(),
-            postgres_endpoint,
-            pgbouncer_endpoint,
-            postgres_artifact_sha256,
-            pgbouncer_artifact_sha256,
+            revision: fields.revision,
+            storage_generation: fields.storage_generation,
+            storage_instance_id: fields.storage_instance_id,
+            database_id: fields.database_id,
+            deployment_profile: fields.deployment_profile,
+            pgbouncer_backend_endpoint: fields.postgres_endpoint.clone(),
+            postgres_endpoint: fields.postgres_endpoint,
+            pgbouncer_endpoint: fields.pgbouncer_endpoint,
+            postgres_artifact_sha256: fields.postgres_artifact_sha256,
+            pgbouncer_artifact_sha256: fields.pgbouncer_artifact_sha256,
         }
     }
 

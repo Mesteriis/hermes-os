@@ -120,15 +120,17 @@ fn configured_store(root: &std::path::Path) -> SqliteControlStore {
     record_vault_launch(&store);
     store
         .record_platform_storage_topology(&PlatformStorageTopology::new(
-            1,
-            1,
-            "storage_main",
-            "hermes",
-            StorageDeploymentProfileV1::MacosTauriEmbedded,
-            endpoint(5_432),
-            endpoint(6_432),
-            [1; 32],
-            [2; 32],
+            hermes_kernel_control_store::PlatformStorageTopologyInputV1 {
+                revision: 1,
+                storage_generation: 1,
+                storage_instance_id: "storage_main".to_owned(),
+                database_id: "hermes".to_owned(),
+                deployment_profile: StorageDeploymentProfileV1::MacosTauriEmbedded,
+                postgres_endpoint: endpoint(5_432),
+                pgbouncer_endpoint: endpoint(6_432),
+                postgres_artifact_sha256: [1; 32],
+                pgbouncer_artifact_sha256: [2; 32],
+            },
         ))
         .expect("record topology");
     store

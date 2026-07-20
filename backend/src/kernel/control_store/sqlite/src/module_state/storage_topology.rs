@@ -1,7 +1,8 @@
 //! SQLite persistence for the desired, non-secret Storage platform topology.
 
 use hermes_kernel_control_store::{
-    PlatformStorageEndpointV1, PlatformStorageTopology, StorageDeploymentProfileV1,
+    PlatformStorageEndpointV1, PlatformStorageTopology, PlatformStorageTopologyInputV1,
+    StorageDeploymentProfileV1,
 };
 use rusqlite::{OptionalExtension, params};
 
@@ -54,22 +55,24 @@ fn decode_topology(row: &rusqlite::Row<'_>) -> Result<PlatformStorageTopology, r
             rusqlite::types::Type::Text,
         )
     })?;
-    Ok(PlatformStorageTopology::new(
-        as_u64(row.get(0)?, 0)?,
-        as_u64(row.get(1)?, 1)?,
-        row.get::<_, String>(2)?,
-        row.get::<_, String>(3)?,
-        profile,
-        endpoint(row.get(5)?, row.get(6)?, 5, 6)?,
-        endpoint(row.get(7)?, row.get(8)?, 7, 8)?,
-        postgres_digest
-            .try_into()
-            .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(11, 32))?,
-        pgbouncer_digest
-            .try_into()
-            .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(12, 32))?,
+    Ok(
+        PlatformStorageTopology::new(PlatformStorageTopologyInputV1 {
+            revision: as_u64(row.get(0)?, 0)?,
+            storage_generation: as_u64(row.get(1)?, 1)?,
+            storage_instance_id: row.get(2)?,
+            database_id: row.get(3)?,
+            deployment_profile: profile,
+            postgres_endpoint: endpoint(row.get(5)?, row.get(6)?, 5, 6)?,
+            pgbouncer_endpoint: endpoint(row.get(7)?, row.get(8)?, 7, 8)?,
+            postgres_artifact_sha256: postgres_digest
+                .try_into()
+                .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(11, 32))?,
+            pgbouncer_artifact_sha256: pgbouncer_digest
+                .try_into()
+                .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(12, 32))?,
+        })
+        .with_pgbouncer_backend_endpoint(endpoint(row.get(9)?, row.get(10)?, 9, 10)?),
     )
-    .with_pgbouncer_backend_endpoint(endpoint(row.get(9)?, row.get(10)?, 9, 10)?))
 }
 
 fn valid_topology(value: &PlatformStorageTopology) -> bool {

@@ -10,7 +10,7 @@ use hermes_kernel_control_store::{
     ModuleRegistrationState, ModuleStorageRequestV1, PlatformEventHubTopologyV1,
     PlatformEventStreamBudgetV1, PlatformEventsAuthorityConfigurationV1,
     PlatformStorageBindingStateV1, PlatformStorageBundleV1, PlatformStorageEndpointV1,
-    PlatformStorageTopology, StorageDeploymentProfileV1,
+    PlatformStorageTopology, PlatformStorageTopologyInputV1, StorageDeploymentProfileV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use sha2::{Digest, Sha256};
@@ -161,17 +161,17 @@ fn ensure_storage_topology(store: &SqliteControlStore) -> Result<(), String> {
         Sha256::digest(b"postgres:16-alpine/dev-authenticated-v1").into();
     let pgbouncer_digest: [u8; 32] =
         Sha256::digest(b"edoburu/pgbouncer:v1.25.2-p0/dev-authenticated-v1").into();
-    let topology = PlatformStorageTopology::new(
-        1,
-        1,
-        "storage_main",
-        "hermes_storage_authenticated",
-        StorageDeploymentProfileV1::MacosTauriEmbedded,
-        PlatformStorageEndpointV1::new("127.0.0.1", 35_532),
-        PlatformStorageEndpointV1::new("127.0.0.1", 36_532),
-        postgres_digest,
-        pgbouncer_digest,
-    )
+    let topology = PlatformStorageTopology::new(PlatformStorageTopologyInputV1 {
+        revision: 1,
+        storage_generation: 1,
+        storage_instance_id: "storage_main".to_owned(),
+        database_id: "hermes_storage_authenticated".to_owned(),
+        deployment_profile: StorageDeploymentProfileV1::MacosTauriEmbedded,
+        postgres_endpoint: PlatformStorageEndpointV1::new("127.0.0.1", 35_532),
+        pgbouncer_endpoint: PlatformStorageEndpointV1::new("127.0.0.1", 36_532),
+        postgres_artifact_sha256: postgres_digest,
+        pgbouncer_artifact_sha256: pgbouncer_digest,
+    })
     .with_pgbouncer_backend_endpoint(PlatformStorageEndpointV1::new("postgres", 5_432));
     store
         .record_platform_storage_topology(&topology)

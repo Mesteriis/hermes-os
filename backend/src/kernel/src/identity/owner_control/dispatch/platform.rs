@@ -17,7 +17,8 @@ use hermes_gateway_protocol::v1::{
     owner_control_request_v1::Operation,
 };
 use hermes_kernel_control_store::{
-    PlatformStorageEndpointV1, PlatformStorageTopology, StorageDeploymentProfileV1,
+    PlatformStorageEndpointV1, PlatformStorageTopology, PlatformStorageTopologyInputV1,
+    StorageDeploymentProfileV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::DeploymentProfileV1;
@@ -289,17 +290,17 @@ fn configure_storage_topology(
 ) -> Result<OwnerResult, String> {
     (|| {
         sessions.authorize(store, &request.owner_session_id)?;
-        let topology = PlatformStorageTopology::new(
-            next_topology_revision(store)?,
-            request.storage_generation,
-            request.storage_instance_id,
-            request.database_id,
-            deployment_profile(request.deployment_profile)?,
-            endpoint(request.postgres_host, request.postgres_port)?,
-            endpoint(request.pgbouncer_host, request.pgbouncer_port)?,
-            exact_digest(request.postgres_artifact_sha256)?,
-            exact_digest(request.pgbouncer_artifact_sha256)?,
-        )
+        let topology = PlatformStorageTopology::new(PlatformStorageTopologyInputV1 {
+            revision: next_topology_revision(store)?,
+            storage_generation: request.storage_generation,
+            storage_instance_id: request.storage_instance_id,
+            database_id: request.database_id,
+            deployment_profile: deployment_profile(request.deployment_profile)?,
+            postgres_endpoint: endpoint(request.postgres_host, request.postgres_port)?,
+            pgbouncer_endpoint: endpoint(request.pgbouncer_host, request.pgbouncer_port)?,
+            postgres_artifact_sha256: exact_digest(request.postgres_artifact_sha256)?,
+            pgbouncer_artifact_sha256: exact_digest(request.pgbouncer_artifact_sha256)?,
+        })
         .with_pgbouncer_backend_endpoint(endpoint(
             request.pgbouncer_backend_host,
             request.pgbouncer_backend_port,

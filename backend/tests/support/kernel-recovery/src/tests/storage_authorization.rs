@@ -248,15 +248,17 @@ fn assert_advanced_topology_rejects_binding(
     binding: &hermes_kernel_control_store::PlatformStorageBindingV1,
 ) {
     let topology = PlatformStorageTopology::new(
-        2,
-        2,
-        "storage_successor",
-        "hermes",
-        StorageDeploymentProfileV1::MacosTauriEmbedded,
-        PlatformStorageEndpointV1::new("127.0.0.1", 5_433),
-        PlatformStorageEndpointV1::new("127.0.0.1", 6_433),
-        [3; 32],
-        [4; 32],
+        hermes_kernel_control_store::PlatformStorageTopologyInputV1 {
+            revision: 2,
+            storage_generation: 2,
+            storage_instance_id: "storage_successor".to_owned(),
+            database_id: "hermes".to_owned(),
+            deployment_profile: StorageDeploymentProfileV1::MacosTauriEmbedded,
+            postgres_endpoint: PlatformStorageEndpointV1::new("127.0.0.1", 5_433),
+            pgbouncer_endpoint: PlatformStorageEndpointV1::new("127.0.0.1", 6_433),
+            postgres_artifact_sha256: [3; 32],
+            pgbouncer_artifact_sha256: [4; 32],
+        },
     );
     assert!(scheduler_launch::validate_storage_binding(reservation, binding, &topology).is_err());
 }
@@ -479,14 +481,16 @@ fn issue(role_epoch: u64, credential_lease_revision: u64) -> StorageBindingIssue
 
 fn topology() -> PlatformStorageTopology {
     PlatformStorageTopology::new(
-        1,
-        1,
-        "storage_main",
-        "hermes",
-        StorageDeploymentProfileV1::MacosTauriEmbedded,
-        PlatformStorageEndpointV1::new("127.0.0.1", 5_432),
-        PlatformStorageEndpointV1::new("127.0.0.1", 6_432),
-        [1; 32],
-        [2; 32],
+        hermes_kernel_control_store::PlatformStorageTopologyInputV1 {
+            revision: 1,
+            storage_generation: 1,
+            storage_instance_id: "storage_main".to_owned(),
+            database_id: "hermes".to_owned(),
+            deployment_profile: StorageDeploymentProfileV1::MacosTauriEmbedded,
+            postgres_endpoint: PlatformStorageEndpointV1::new("127.0.0.1", 5_432),
+            pgbouncer_endpoint: PlatformStorageEndpointV1::new("127.0.0.1", 6_432),
+            postgres_artifact_sha256: [1; 32],
+            pgbouncer_artifact_sha256: [2; 32],
+        },
     )
 }

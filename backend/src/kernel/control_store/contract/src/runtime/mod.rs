@@ -19,5 +19,6 @@ pub use storage_binding::{
 pub use storage_binding_state::PlatformStorageBindingStateV1;
 pub use storage_bundle::{PlatformStorageBundleErrorV1, PlatformStorageBundleV1};
 pub use storage_topology::{
-    PlatformStorageEndpointV1, PlatformStorageTopology, StorageDeploymentProfileV1,
+    PlatformStorageEndpointV1, PlatformStorageTopology, PlatformStorageTopologyInputV1,
+    StorageDeploymentProfileV1,
 };

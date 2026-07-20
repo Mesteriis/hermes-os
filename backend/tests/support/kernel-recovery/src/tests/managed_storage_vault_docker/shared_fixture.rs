@@ -8,21 +8,23 @@ pub(super) fn configured_store(root: &Path, kernel: &Path) -> SqliteControlStore
     store
         .record_platform_storage_topology(
             &PlatformStorageTopology::new(
-                1,
-                1,
-                "storage_main",
-                "hermes_storage_authenticated",
-                StorageDeploymentProfileV1::MacosTauriEmbedded,
-                endpoint(
-                    "HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST",
-                    "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT",
-                ),
-                endpoint(
-                    "HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_HOST",
-                    "HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_PORT",
-                ),
-                [1; 32],
-                [2; 32],
+                hermes_kernel_control_store::PlatformStorageTopologyInputV1 {
+                    revision: 1,
+                    storage_generation: 1,
+                    storage_instance_id: "storage_main".to_owned(),
+                    database_id: "hermes_storage_authenticated".to_owned(),
+                    deployment_profile: StorageDeploymentProfileV1::MacosTauriEmbedded,
+                    postgres_endpoint: endpoint(
+                        "HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST",
+                        "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT",
+                    ),
+                    pgbouncer_endpoint: endpoint(
+                        "HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_HOST",
+                        "HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_PORT",
+                    ),
+                    postgres_artifact_sha256: [1; 32],
+                    pgbouncer_artifact_sha256: [2; 32],
+                },
             )
             .with_pgbouncer_backend_endpoint(PlatformStorageEndpointV1::new("postgres", 5_432)),
         )

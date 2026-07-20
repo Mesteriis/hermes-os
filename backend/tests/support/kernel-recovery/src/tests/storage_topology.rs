@@ -1,7 +1,8 @@
 use super::common::*;
 use hermes_kernel_control_store::{
     PlatformStorageBindingInputV1, PlatformStorageBindingV1, PlatformStorageBundleV1,
-    PlatformStorageEndpointV1, PlatformStorageTopology, StorageDeploymentProfileV1,
+    PlatformStorageEndpointV1, PlatformStorageTopology, PlatformStorageTopologyInputV1,
+    StorageDeploymentProfileV1,
 };
 use hermes_storage_protocol::v1::{
     StorageBundleV1, StorageMigrationStepV1, StorageRuntimeConfigurationV1,
@@ -55,30 +56,30 @@ fn control_store_rejects_an_untrusted_storage_topology_shape() {
     std::fs::create_dir_all(&root).expect("create fixture root");
     let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
         .expect("create Control Store");
-    let invalid = PlatformStorageTopology::new(
-        1,
-        1,
-        "storage_main",
-        "hermes",
-        StorageDeploymentProfileV1::MacosTauriEmbedded,
-        endpoint(5_432),
-        endpoint(6_432),
-        [0; 32],
-        [2; 32],
-    );
+    let invalid = PlatformStorageTopology::new(PlatformStorageTopologyInputV1 {
+        revision: 1,
+        storage_generation: 1,
+        storage_instance_id: "storage_main".to_owned(),
+        database_id: "hermes".to_owned(),
+        deployment_profile: StorageDeploymentProfileV1::MacosTauriEmbedded,
+        postgres_endpoint: endpoint(5_432),
+        pgbouncer_endpoint: endpoint(6_432),
+        postgres_artifact_sha256: [0; 32],
+        pgbouncer_artifact_sha256: [2; 32],
+    });
 
     assert!(store.record_platform_storage_topology(&invalid).is_err());
-    let invalid_endpoint = PlatformStorageTopology::new(
-        1,
-        1,
-        "storage_main",
-        "hermes",
-        StorageDeploymentProfileV1::MacosTauriEmbedded,
-        PlatformStorageEndpointV1::new("not/a-host", 5_432),
-        endpoint(6_432),
-        [1; 32],
-        [2; 32],
-    );
+    let invalid_endpoint = PlatformStorageTopology::new(PlatformStorageTopologyInputV1 {
+        revision: 1,
+        storage_generation: 1,
+        storage_instance_id: "storage_main".to_owned(),
+        database_id: "hermes".to_owned(),
+        deployment_profile: StorageDeploymentProfileV1::MacosTauriEmbedded,
+        postgres_endpoint: PlatformStorageEndpointV1::new("not/a-host", 5_432),
+        pgbouncer_endpoint: endpoint(6_432),
+        postgres_artifact_sha256: [1; 32],
+        pgbouncer_artifact_sha256: [2; 32],
+    });
     assert!(
         store
             .record_platform_storage_topology(&invalid_endpoint)
@@ -133,17 +134,17 @@ fn runtime_configuration_stages_only_durable_bindings_for_the_current_topology()
 }
 
 fn topology(revision: u64, generation: u64) -> PlatformStorageTopology {
-    PlatformStorageTopology::new(
+    PlatformStorageTopology::new(PlatformStorageTopologyInputV1 {
         revision,
-        generation,
-        "storage_main",
-        "hermes",
-        StorageDeploymentProfileV1::MacosTauriEmbedded,
-        endpoint(5_432),
-        endpoint(6_432),
-        [1; 32],
-        [2; 32],
-    )
+        storage_generation: generation,
+        storage_instance_id: "storage_main".to_owned(),
+        database_id: "hermes".to_owned(),
+        deployment_profile: StorageDeploymentProfileV1::MacosTauriEmbedded,
+        postgres_endpoint: endpoint(5_432),
+        pgbouncer_endpoint: endpoint(6_432),
+        postgres_artifact_sha256: [1; 32],
+        pgbouncer_artifact_sha256: [2; 32],
+    })
 }
 
 fn endpoint(port: u16) -> PlatformStorageEndpointV1 {

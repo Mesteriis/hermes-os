@@ -37,6 +37,6 @@ pub use runtime::{
     PlatformManagedProcessBinding, PlatformManagedProcessLaunch, PlatformStorageBindingErrorV1,
     PlatformStorageBindingInputV1, PlatformStorageBindingStateV1, PlatformStorageBindingV1,
     PlatformStorageBundleErrorV1, PlatformStorageBundleV1, PlatformStorageEndpointV1,
-    PlatformStorageTopology, StorageDeploymentProfileV1,
+    PlatformStorageTopology, PlatformStorageTopologyInputV1, StorageDeploymentProfileV1,
 };
 pub use state::{ControlStore, StoreHealth};
