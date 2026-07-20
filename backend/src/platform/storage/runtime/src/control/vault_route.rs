@@ -1,6 +1,5 @@
 //! Concrete ciphertext-only Vault relay over the inherited managed channel.
 
-use std::future::Future;
 use std::os::unix::net::UnixStream;
 
 use hermes_runtime_protocol::v1::{
@@ -25,11 +24,13 @@ impl InheritedVaultRoutePortV1 {
 }
 
 impl StorageVaultRoutePortV1 for InheritedVaultRoutePortV1 {
+    #[allow(clippy::manual_async_fn)] // The public port must guarantee its returned future is Send.
     fn route_vault_ciphertext(
         &mut self,
         route: VaultCiphertextRouteV1,
-    ) -> impl Future<Output = Result<VaultCiphertextResponseV1, StorageVaultRouteFailureV1>> + Send
-    {
+    ) -> impl std::future::Future<
+        Output = Result<VaultCiphertextResponseV1, StorageVaultRouteFailureV1>,
+    > + Send {
         async move { route_once(&mut self.channel, route) }
     }
 }

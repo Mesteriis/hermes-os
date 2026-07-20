@@ -407,7 +407,6 @@ fn status_response(
             vault_runtime_generation: configuration.vault_runtime_generation,
             active_bindings: active_bindings.to_vec(),
             blocker_code,
-            ..Default::default()
         })),
         error_code: String::new(),
     }

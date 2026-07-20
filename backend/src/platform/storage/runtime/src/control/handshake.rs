@@ -14,6 +14,9 @@ use prost::Message;
 
 use super::framing::{read_frame, write_frame};
 
+// Test composition exercises the descriptor handshake through the same
+// inherited-channel path as the managed runtime. Production uses `authenticate`.
+#[allow(dead_code)]
 pub fn describe(
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Vec<u8>,
@@ -27,6 +30,7 @@ pub fn describe(
         .map(|(channel, _)| channel)
 }
 
+#[allow(dead_code)]
 pub fn describe_on_channel(
     stream: UnixStream,
     descriptor_bytes: Vec<u8>,

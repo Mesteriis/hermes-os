@@ -42,18 +42,22 @@ pub(crate) fn apply_authorized_bindings(
         .enable_all()
         .build()
         .map_err(|_| "Storage PgBouncer admin runtime is unavailable".to_owned())?;
-    runtime.block_on(replace_auth_and_reload(
+    let entries = database_entries(topology, &configuration.desired_bindings)?;
+    runtime.block_on(replace_auth_and_reload(AuthorizedPoolReplaceInputV1 {
         configuration,
         topology,
-        postgres_credential_bytes,
+        postgres_credential: postgres_credential_bytes,
         pgbouncer_credential_bytes,
         runtime_credentials,
-        &endpoint,
-        &credential,
-        &database_entries(topology, &configuration.desired_bindings)?,
-    ))
+        endpoint: &endpoint,
+        pgbouncer_credential: &credential,
+        entries: &entries,
+    }))
 }
 
+// Live storage composition tests stage the database include before the
+// credential-bound authentication reconciliation runs.
+#[allow(dead_code)]
 pub(crate) fn apply_staged_pool_configuration(
     configuration: &StorageRuntimeConfigurationV1,
     pgbouncer_credential_bytes: &Zeroizing<Vec<u8>>,
@@ -82,34 +86,36 @@ pub(crate) fn apply_staged_pool_configuration(
     runtime.block_on(reload_and_verify(&endpoint, &credential, &entries))
 }
 
-async fn replace_auth_and_reload(
-    configuration: &StorageRuntimeConfigurationV1,
-    topology: &StorageRuntimeTopologyV1,
-    postgres_credential: &Zeroizing<Vec<u8>>,
-    pgbouncer_credential_bytes: &Zeroizing<Vec<u8>>,
-    runtime_credentials: &[RuntimeRoleCredentialV1],
-    endpoint: &hermes_storage_pgbouncer::PgBouncerAdminEndpointV1,
-    pgbouncer_credential: &hermes_storage_pgbouncer::PgBouncerAdminCredentialV1,
-    entries: &[PgBouncerRuntimeConfigV1],
-) -> Result<(), String> {
+struct AuthorizedPoolReplaceInputV1<'a> {
+    configuration: &'a StorageRuntimeConfigurationV1,
+    topology: &'a StorageRuntimeTopologyV1,
+    postgres_credential: &'a Zeroizing<Vec<u8>>,
+    pgbouncer_credential_bytes: &'a Zeroizing<Vec<u8>>,
+    runtime_credentials: &'a [RuntimeRoleCredentialV1],
+    endpoint: &'a hermes_storage_pgbouncer::PgBouncerAdminEndpointV1,
+    pgbouncer_credential: &'a hermes_storage_pgbouncer::PgBouncerAdminCredentialV1,
+    entries: &'a [PgBouncerRuntimeConfigV1],
+}
+
+async fn replace_auth_and_reload(input: AuthorizedPoolReplaceInputV1<'_>) -> Result<(), String> {
     let auth_entries = auth_entries(
-        topology,
-        postgres_credential,
-        pgbouncer_credential_bytes,
-        runtime_credentials,
+        input.topology,
+        input.postgres_credential,
+        input.pgbouncer_credential_bytes,
+        input.runtime_credentials,
     )
     .await?;
     PgBouncerAuthFileV1::replace(
-        std::path::Path::new(&configuration.pgbouncer_auth_file_path),
+        std::path::Path::new(&input.configuration.pgbouncer_auth_file_path),
         auth_entries,
     )
     .map_err(|_| "Storage PgBouncer authentication configuration is unavailable".to_owned())?;
     PgBouncerDatabaseConfigFileV1::replace(
-        std::path::Path::new(&configuration.pgbouncer_database_config_path),
-        entries,
+        std::path::Path::new(&input.configuration.pgbouncer_database_config_path),
+        input.entries,
     )
     .map_err(|_| "Storage PgBouncer database configuration is unavailable".to_owned())?;
-    reload_and_verify(endpoint, pgbouncer_credential, entries).await
+    reload_and_verify(input.endpoint, input.pgbouncer_credential, input.entries).await
 }
 
 async fn auth_entries(
