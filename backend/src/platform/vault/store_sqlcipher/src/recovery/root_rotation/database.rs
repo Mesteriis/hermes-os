@@ -43,20 +43,21 @@ fn reencrypt_records(
         .unchecked_transaction()
         .map_err(VaultStoreError::Sqlite)?;
     for record in records {
-        let encrypted = secret_record::reencrypt_stored_record(
-            &record.record_id,
-            &record.owner,
-            &record.configuration,
-            &record.purpose,
-            record.class,
-            record.revision,
-            record.key_epoch,
-            &record.nonce,
-            &record.ciphertext,
-            current_record_key,
-            next_record_key,
-        )
-        .map_err(VaultStoreError::Record)?;
+        let encrypted =
+            secret_record::reencrypt_stored_record(secret_record::StoredRecordReencryptionInput {
+                record_id: &record.record_id,
+                logical_owner_id: &record.owner,
+                configuration_instance_id: &record.configuration,
+                purpose_id: &record.purpose,
+                secret_class: record.class,
+                secret_revision: record.revision,
+                key_epoch: record.key_epoch,
+                nonce: &record.nonce,
+                ciphertext: &record.ciphertext,
+                current_record_key,
+                next_record_key,
+            })
+            .map_err(VaultStoreError::Record)?;
         transaction
             .execute(
                 "UPDATE vault_secret_records SET nonce = ?1, ciphertext = ?2 WHERE record_id = ?3",

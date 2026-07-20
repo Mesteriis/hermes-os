@@ -172,6 +172,20 @@ pub(crate) struct EncryptedSecretRecord {
     pub(crate) ciphertext: Vec<u8>,
 }
 
+pub(crate) struct StoredRecordReencryptionInput<'a> {
+    pub(crate) record_id: &'a [u8],
+    pub(crate) logical_owner_id: &'a str,
+    pub(crate) configuration_instance_id: &'a str,
+    pub(crate) purpose_id: &'a str,
+    pub(crate) secret_class: i64,
+    pub(crate) secret_revision: i64,
+    pub(crate) key_epoch: i64,
+    pub(crate) nonce: &'a [u8],
+    pub(crate) ciphertext: &'a [u8],
+    pub(crate) current_record_key: &'a [u8; 32],
+    pub(crate) next_record_key: &'a [u8; 32],
+}
+
 pub(crate) fn encrypt(
     scope: &SecretRecordScope,
     payload: &[u8],
@@ -182,35 +196,30 @@ pub(crate) fn encrypt(
 }
 
 pub(crate) fn reencrypt_stored_record(
-    record_id: &[u8],
-    logical_owner_id: &str,
-    configuration_instance_id: &str,
-    purpose_id: &str,
-    secret_class: i64,
-    secret_revision: i64,
-    key_epoch: i64,
-    nonce: &[u8],
-    ciphertext: &[u8],
-    current_record_key: &[u8; 32],
-    next_record_key: &[u8; 32],
+    input: StoredRecordReencryptionInput<'_>,
 ) -> Result<EncryptedSecretRecord, SecretRecordError> {
     let scope = SecretRecordScope::from_stored_metadata(
-        logical_owner_id,
-        configuration_instance_id,
-        purpose_id,
-        secret_class,
-        secret_revision,
-        key_epoch,
+        input.logical_owner_id,
+        input.configuration_instance_id,
+        input.purpose_id,
+        input.secret_class,
+        input.secret_revision,
+        input.key_epoch,
     )?;
-    let record_id = SecretRecordId::from_slice(record_id)?;
+    let record_id = SecretRecordId::from_slice(input.record_id)?;
     let plaintext = decrypt(
         &scope,
         record_id.clone(),
-        nonce,
-        ciphertext,
-        current_record_key,
+        input.nonce,
+        input.ciphertext,
+        input.current_record_key,
     )?;
-    encrypt_with_record_id(&scope, record_id, plaintext.as_slice(), next_record_key)
+    encrypt_with_record_id(
+        &scope,
+        record_id,
+        plaintext.as_slice(),
+        input.next_record_key,
+    )
 }
 
 fn encrypt_with_record_id(
