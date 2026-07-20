@@ -10,7 +10,8 @@ TARGET ?= $(shell rustc +$(RUST_TOOLCHAIN) -vV | sed -n 's/^host: //p')
 	architecture-policy-check srp-policy-check cargo-boundaries-check \
 	architecture-evidence-check \
 	test-architecture fmt-check clippy test-workspace test-integration \
-	dependency-policy-check supply-chain-check check-target check-linux-container ci
+	dependency-policy-check supply-chain-check check-target check-linux-container ci \
+	restore-postgres-backup
 
 build:
 	cargo +$(RUST_TOOLCHAIN) build --locked --workspace
@@ -84,6 +85,9 @@ supply-chain-check:
 	mkdir -p target/evidence
 	syft dir:. --exclude './target/**' --exclude './.git/**' --output cyclonedx-json > target/evidence/backend-sbom.cdx.json
 	test -s target/evidence/backend-sbom.cdx.json
+
+restore-postgres-backup:
+	node scripts/restore-postgres-backup.mjs --pg-restore "$(PG_RESTORE)" --psql "$(PSQL)" --connection-url-file "$(POSTGRES_CONNECTION_URL_FILE)" --input "$(POSTGRES_BACKUP_INPUT)"
 
 check-target:
 	@test "$(TARGET)" = "aarch64-apple-darwin" -o "$(TARGET)" = "x86_64-unknown-linux-gnu" || { echo "unsupported CI target: $(TARGET)" >&2; exit 2; }
