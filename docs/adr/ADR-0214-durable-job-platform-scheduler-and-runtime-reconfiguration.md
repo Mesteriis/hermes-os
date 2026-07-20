@@ -2,8 +2,147 @@
 
 Статус: Принято
 Дата: 2026-07-15
-Состояние реализации: Не реализовано; production packages, schema и runtime
-Job Platform ещё не созданы
+Состояние реализации: `scheduler_persistence_foundation_v1` включает owner-neutral
+`hermes-scheduler-protocol` и отдельный `hermes-scheduler` reconciliation/lease
+component. Они фиксируют versioned JobKind и payload contract binding, opaque
+schedule scope, explicit opaque `ConcurrencyKeyV1`, bounded
+trigger/overlap/misfire/retry/deadline policies,
+revisioned schedule identity и run lease epoch/expiry. Deterministic Clock
+conformance подтверждает stale-lease fencing; reconciliation не перезаписывает
+equal revision и сохраняет active lease при update future schedule.
+`hermes-scheduler-persistence` предоставляет exact `StorageBundleV1` для
+`hermes_platform.scheduler_schedules`, `scheduler_runs`, `scheduler_dispatches`
+и bounded `scheduler_concurrency` slots; bundle проходит canonical digest и PostgreSQL
+AST admission Storage Control. Schedule policy сохраняется только в
+versioned canonical binary form; upsert использует schedule revision и
+отклоняет stale или same-revision-conflicting configuration. Его fenced
+PostgreSQL adapter в одной
+transaction reaps expired leases, reserves a shared concurrency slot, advances
+the due point, inserts the unique fire-key run и сохраняет accepted exact
+`DurableEnvelopeV1` bytes как pending dispatch; terminal completion releases
+the slot under the run lease epoch. Запуск и dispatch record откатываются
+вместе: crash между reservation и broker relay не теряет принятый запуск.
+Disposable PostgreSQL conformance proves
+the concurrent shared-key race, independent-key parallel claim, a shared
+`AllowBounded { max_parallelism: 2 }` limit, revisioned schedule insert/update
+and stale/conflicting rejection, and release by terminal fence or expired
+lease. Тот же persistence adapter выдаёт pending record только через
+canonical exact-byte outbox relay: publish failure сохраняет record pending;
+только broker acknowledgement атомарно меняет dispatch и run states.
+Disposable PostgreSQL + JetStream conformance proves the permitted Scheduler
+runtime publishes the stored bytes to its exact command subject.
+`JobRunReceiptV1::ACCEPTED` уже принимается Scheduler persistence только в
+отдельной PostgreSQL transaction для опубликованного dispatch с exact
+`run_id`/command `message_id`/lease epoch; повтор того же acknowledgement
+идемпотентен, а foreign или stale receipt не переводит run в `running`.
+Terminal `SUCCEEDED`/`FAILED`/`CANCELLED` receipt после такого acceptance
+применяется ровно один раз и освобождает fenced concurrency slot. Отдельный
+`RETRYABLE_FAILED` сохраняет outcome exact dispatch, atomically переводит run
+в `retry_wait` согласно persisted retry snapshot и остаётся идемпотентным при
+redelivery; обычный `FAILED` не становится retry по умолчанию. Scheduler
+receipt consumer получает exact bytes только через owner-neutral
+`SchedulerReceiptDeliveryPortV1`; JetStream adapter открывает ровно
+Kernel/Event-Hub-authorized pull consumer. Consumer сначала фиксирует fenced
+acceptance/terminal state в PostgreSQL и только затем ACK-ит JetStream. Live
+PostgreSQL + JetStream conformance доказывает оба шага для owner receipt.
+`hermes-scheduler-runtime` уже является отдельным managed-child binary: он
+проверяет descriptor-bound inherited channel, получает fenced PostgreSQL
+credential только через Kernel-mediated ciphertext Vault route, открывает
+PgBouncer pool только из typed Storage binding и получает отдельный ephemeral
+NATS credential для topology-derived publisher и каждого exact receipt
+consumer. После successful startup он запускает receipt workers, которые
+фиксируют state до JetStream ACK, bounded due/retry materializer и relay уже
+сохранённых pending dispatch. Materializer берёт fenced local Clock reading,
+fail-closed на wall-clock/suspend discontinuity, сохраняет exact envelope/outbox
+в той же PostgreSQL transaction, что и advance/disarm current schedule, и
+допускает только subject из Kernel-derived publisher bindings. Retry получает
+strictly newer lease epoch и новый immutable dispatch только для всё ещё
+current schedule revision. Relay публикует только original exact bytes в
+разрешённый command subject; ошибка worker завершает process для последующего
+supervised restart с successor identity. Runtime
+configuration несёт полный non-secret Storage fence (instance, owner, role
+epoch, pool/budget и bundle digest/revision), а также exact `logical_owner_id`
+и `runtime_instance_id`; child не восстанавливает identity по эвристике.
+Kernel теперь имеет непубличный owner-control launch-контур с отдельными
+reserve/bind/start шагами и exact `RestartSchedulerRuntime`: durable
+managed-launch reservation создаётся до
+выдачи зависимых ресурсов, а `StartReservedSchedulerRuntime` заново читает
+ровно её и требует явно названный active Storage capability binding. Reload
+повторно fences release binding revision, Kernel generation и grant epoch;
+selected Storage binding также сверяется с текущими topology
+revision/generation до staging exact verified artifact и configuration из
+Vault/Event Hub topology. Одна Scheduler reservation допускает ровно одну
+child attempt: после crash автоматический restart с теми же runtime identity,
+generation или process-bound leases запрещён; successor требует новый
+reserve/bind/start. `RestartSchedulerRuntime` собирает ровно этот successor
+flow в одну owner-authorized операцию: он сначала fail-closed переводит
+predecessor Storage binding в revoke, передаёт exact revoke активному Storage
+runtime и останавливает active Scheduler child; только затем создаёт новую
+reservation, выдаёт свежий Storage binding для её exact identity и запускает
+verified artifact. Predecessor identity/lease не принимается и не
+переиспользуется. Kernel Control Plane также держит fail-closed lifecycle worker
+для уже admitted Scheduler: active Storage binding является единственным
+durable desired-running intent, `Revoking` binding не может resurrect-ить
+child, а missing child получает только fresh reserve/bind/start successor.
+После трёх consecutive launch failures worker не retry-ит бесконечно и ждёт
+explicit healthy owner start/restart. Disposable PostgreSQL+JetStream
+conformance уже доказывает exact-byte relay, receipt commit до JetStream ACK,
+acceptance/terminal/retry fencing. Это всё ещё не `scheduler_v1`: live
+managed-runtime crash/restart conformance, hot reconciliation и full
+restart/revocation conformance должны соединить этот delivery contour с
+Kernel-managed successor identity/lease. Receipt delivery, materialization и
+relay не являются owner execution.
+`SchedulerJobRequestV1` из validated `ModuleDescriptorV1` теперь сохраняется
+в private Control Store как exact owner-bound JobKind contract request и
+становится Scheduler catalog entry только после capability-level approval;
+pending, foreign и duplicate request fail closed. Этот catalog не является
+schedule-control API, не upsert-ит schedules и не заменяет exact owner
+contract admission будущего gate. `JobContractBindingV1` и persisted Scheduler
+schedule теперь несут nonzero contract revision; старая row без revision
+отклоняется при decode до явного revisioned owner update. Private owner-control
+теперь содержит typed `UpsertSchedulerSchedule`: после owner-session check
+Kernel сверяет exact JobKind/revision/schema с current approved Scheduler
+catalog и передаёт mutation только по authenticated inherited channel active
+Scheduler runtime. Runtime сам декодирует versioned canonical policy и
+upsert-ит свою PostgreSQL row; Kernel не получает SQL pool или schedule table
+access. Это закрывает mutation seam; automatic production lifecycle уже
+ограничен ранее admitted active binding и fail-closed restart budget, но hot
+reconciliation или live restart/revoke conformance всё ещё не доказаны и не открывают
+`scheduler_v1`.
+Runtime protocol теперь дополнительно фиксирует bounded non-secret набор
+Event-Hub-authorized command publisher bindings и receipt bindings: publisher
+содержит exact command subject, а для каждого approved owner receipt contract
+есть по одной acceptance на `HERMES_ACK_V1` и terminal на
+`HERMES_RESULT_V1`. Receipt binding содержит exact durable consumer, subject и
+bounded JetStream budget; Kernel обязан сверить все bindings с approved
+topology перед передачей managed child. Это не даёт Scheduler права самому
+выбирать broker subject или consumer.
+Pure deterministic planner уже фиксирует `skip`, one-shot и bounded catch-up
+для fixed interval, а `fixed_delay` требует terminal completion перед
+перевооружением. Cron expression пока намеренно fail-closed: timezone/DST
+исполнитель ещё не реализован и не подменяется фиксированным offset. PostgreSQL
+foundation уже materializes bounded pending queue/coalescing, включая
+idempotent repeat fire. Pending fire переходит в fenced run через одну
+PostgreSQL transaction с slot reservation, current-policy verification и
+single-use deletion. Fixed-delay run не меняет due point на claim и rearm
+только в terminal fenced completion как `finished_at + delay`; обновлённая или
+disabled schedule не перезаписывается старым run. Atomic due-claim integration
+и dispatch остаются частью закрытого runtime slice, а не доказательством
+`scheduler_v1`. Retry snapshot хранится вместе с run: после transient failure
+тот же `JobRunId` ждёт bounded backoff, а retry claim требует строго больший
+lease epoch. Старый worker после этого не может terminally complete run или
+освободить его concurrency slot. Disposable PostgreSQL conformance подтверждает
+этот переход, включая отказ stale completion; это всё ещё persistence
+foundation, а не NATS delivery или owner execution runtime.
+
+Scheduler строит один canonical `DurableEnvelopeV1` для каждого persisted
+dispatch: delivery `message_id` остаётся идентичностью exact-byte outbox
+record, а `command_id`, correlation ID и `ScheduledJobCommandV1.job_run_id`
+равны одному `JobRunId`. Fire key становится command idempotency key, payload
+несёт schedule revision и lease epoch/expiry, а source fence фиксирует
+Scheduler runtime generation. Поэтому redelivery не создаёт новый owner job,
+а owner ack/result может быть сопоставлен с конкретным fenced run без
+provider/domain-specific Scheduler code.
 
 Зависит от:
 
@@ -385,8 +524,8 @@ execution.
 
 Для каждого schedule обязательны:
 
-- overlap policy: `forbid`, `queue`, `coalesce_latest` или explicitly bounded
-  `allow`;
+- overlap policy: `forbid`, `queue` с explicit `max_pending_runs`,
+  `coalesce_latest` или explicitly bounded `allow`;
 - misfire policy: `skip`, `fire_once` или `catch_up_bounded`;
 - concurrency key и maximum parallelism;
 - timeout/deadline;
@@ -395,6 +534,39 @@ execution.
 - timezone/DST policy для calendar schedules.
 
 Unbounded catch-up, concurrency, queue и retry запрещены.
+
+`concurrency_key` — opaque technical key конфликтующего ресурса, а не ID
+schedule. Один polling schedule mailbox получает отдельный key на mailbox;
+поэтому два разных mailbox могут идти параллельно, но два запуска одного
+mailbox делят один slot. Keys не содержат mailbox address, secret или payload.
+`forbid`, `queue` и `coalesce_latest` резервируют не более одного active run
+на key; `allow` резервирует ровно объявленный `max_parallelism`. `queue`
+сохраняет не более `max_pending_runs` durable due points, `coalesce_latest`
+заменяет единственный pending point самым свежим. Очередь и coalescing
+определяют судьбу следующего due point, но никогда не открывают
+второй active run без `allow`.
+
+PostgreSQL хранит slot отдельно от schedule row, поскольку один key может быть
+намеренно разделён несколькими schedules. Claim сначала atomically увеличивает
+`active_runs` только ниже pinned limit, затем сдвигает `next_due_at` и вставляет
+deduplicated run; любая неудача откатывает всё. Terminal completion или expiry
+lease освобождает тот же slot. Изменить max при active run нельзя; это требует
+drain или нового revisioned key.
+
+Deadline и expiry — это fence, а не обещание, что зависший provider SDK или
+внешний HTTP request физически остановился. Scheduler сначала делает старый
+lease неавторитетным, и owner executor обязан прекратить работу при
+cancellation/deadline. Пока такой worker продолжает жить, его checkpoint,
+terminal result и освобождение slot требуют exact current lease epoch и
+отклоняются. Любая внешняя side effect operation должна использовать stable
+`JobRunId` как owner-defined idempotency key; после неизвестного внешнего
+исхода Scheduler не создаёт silent automatic retry.
+
+Owner executor продлевает lease короткими heartbeat только до immutable
+deadline исходного run. Late heartbeat не resurrects expired run; завершение и
+failure report также требуют, чтобы lease был действителен в указанное время.
+После expiry следующий run того же key получает новый fencing state только
+через Scheduler claim, а не из ответа старого worker.
 
 Policy выбирается owner contract, а не глобальным default для всех jobs:
 
@@ -537,6 +709,9 @@ fencing, совместимые с PgBouncer transaction pooling. Session adviso
 - stale execution lease/epoch не может checkpoint или завершить run;
 - owner overlap/concurrency policy соблюдается для integration, domain, AI,
   workflow и platform job fixtures;
+- один concurrency key не допускает duplicate active run, independent keys
+  допускают bounded parallel work, а exhausted shared limit не сдвигает due
+  point;
 - hot schedule update применяется к future run и не меняет in-flight revision;
 - settings catalog не содержит Scheduler records, а composed client screen не
   превращает settings mutation в schedule mutation;

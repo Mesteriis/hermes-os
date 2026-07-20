@@ -6,13 +6,13 @@ use hermes_kernel_control_store::{
     RuntimeTrustStore,
 };
 use hermes_kernel_control_store_sqlite::StoreError;
-use hermes_runtime_protocol::validation::descriptor::decode_descriptor_v1;
-use sha2::{Digest, Sha256};
 
 use crate::identity::owner::authorization::{authorize as authorize_file_owner, operation_digest};
 use crate::infrastructure::filesystem::new_instance_id;
 use crate::modules::capability::policy::permits_external_route;
 use p256::ecdsa::VerifyingKey;
+
+use super::descriptor::DescriptorRegistrationRequests;
 
 pub struct ModuleRegistryStatus {
     registration: ModuleRegistration,
@@ -46,24 +46,35 @@ where
     {
         return Err("module registration requires an enrolled initial owner".to_owned());
     }
-    let descriptor = decode_descriptor_v1(descriptor_bytes)
-        .map_err(|_| "module descriptor is invalid or exceeds protocol limits".to_owned())?;
-    let capability_ids = descriptor
-        .capabilities
-        .iter()
-        .map(|capability| capability.capability_id.clone())
-        .collect::<Vec<_>>();
-    let descriptor_sha256: [u8; 32] = Sha256::digest(descriptor_bytes).into();
+    let requests = DescriptorRegistrationRequests::decode(descriptor_bytes)?;
+    persist_registration(store, requests)
+}
+
+fn persist_registration<S>(
+    store: &S,
+    requests: DescriptorRegistrationRequests,
+) -> Result<ModuleRegistration, String>
+where
+    S: ModuleRegistryStore<Error = StoreError>,
+{
     for _ in 0..16 {
         let registration = ModuleRegistration::new(
             new_instance_id()?,
-            descriptor.module_id.clone(),
-            descriptor.owner_id.clone(),
-            descriptor_sha256,
+            requests.module_id(),
+            requests.owner_id(),
+            requests.descriptor_sha256(),
             ModuleRegistrationState::Pending,
             1,
         );
-        match store.create_pending_registration(&registration, &capability_ids) {
+        let bound = requests.bind(&registration);
+        match store.create_pending_registration_with_descriptor_requests(
+            &registration,
+            requests.capability_ids(),
+            &bound.storage,
+            &bound.events,
+            &bound.blobs,
+            &bound.scheduler,
+        ) {
             Ok(()) => return Ok(registration),
             Err(
                 hermes_kernel_control_store_sqlite::StoreError::ModuleRegistrationAlreadyExists,

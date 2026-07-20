@@ -5,7 +5,9 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 
+#[cfg(feature = "provider-companions")]
 mod whatsapp_companion;
+#[cfg(feature = "provider-companions")]
 mod yandex_telemost_companion;
 
 #[derive(Default)]
@@ -20,6 +22,7 @@ const MAX_KERNEL_RESTARTS: u8 = 3;
 /// may use an explicitly provisioned local credential for its own deprecated
 /// loopback relay, but there is deliberately no shared fallback or sidecar
 /// environment forwarding.
+#[cfg(feature = "provider-companions")]
 pub(crate) fn legacy_companion_secret() -> Result<String, String> {
     std::env::var("HERMES_WHATSAPP_COMPANION_LEGACY_SECRET")
         .ok()
@@ -46,19 +49,21 @@ impl Drop for KernelSidecar {
 }
 
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![
-            whatsapp_companion::start_hidden_whatsapp_webview,
-            whatsapp_companion::whatsapp_web_companion_manifest,
-            whatsapp_companion::whatsapp_web_companion_relay_observation,
-            yandex_telemost_companion::open_yandex_telemost_companion,
-            yandex_telemost_companion::yandex_telemost_companion_manifest,
-            yandex_telemost_companion::yandex_telemost_prepare_audio_device,
-            yandex_telemost_companion::yandex_telemost_recording_start,
-            yandex_telemost_companion::yandex_telemost_recording_stop,
-            yandex_telemost_companion::yandex_telemost_speaker_timeline_append,
-        ])
+    let builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
+    #[cfg(feature = "provider-companions")]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        whatsapp_companion::start_hidden_whatsapp_webview,
+        whatsapp_companion::whatsapp_web_companion_manifest,
+        whatsapp_companion::whatsapp_web_companion_relay_observation,
+        yandex_telemost_companion::open_yandex_telemost_companion,
+        yandex_telemost_companion::yandex_telemost_companion_manifest,
+        yandex_telemost_companion::yandex_telemost_prepare_audio_device,
+        yandex_telemost_companion::yandex_telemost_recording_start,
+        yandex_telemost_companion::yandex_telemost_recording_stop,
+        yandex_telemost_companion::yandex_telemost_speaker_timeline_append,
+    ]);
+
+    builder
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -68,6 +73,7 @@ pub fn run() {
                 )?;
             }
             app.manage(KernelSidecar::default());
+            #[cfg(feature = "provider-companions")]
             app.manage(yandex_telemost_companion::TelemostLocalRecorder::default());
             if !cfg!(debug_assertions) {
                 start_kernel_sidecar(app.handle().clone(), 0)?;

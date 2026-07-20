@@ -1,38 +1,47 @@
 <script setup lang="ts">
-import PersonasWorkspace from '../components/PersonasWorkspace.vue'
+import { computed } from 'vue'
+import PersonasPage from '../presentation/PersonasPage.vue'
+import type { PersonasPageActions, PersonasPageModel } from '../presentation/personasPageModel'
 import { usePersonasPageSurface } from '../queries/usePersonasPageSurface'
 
+// Temporary legacy adapter. The page itself is presentation-only and can be
+// mounted by a generated Gateway contract without importing this surface.
 const surface = usePersonasPageSurface()
+
+const model = computed<PersonasPageModel>(() => ({
+	ownerPersona: surface.ownerPersona.value,
+	selectedPersona: surface.selectedPersona.value,
+	filteredPersonas: surface.filteredPersonas.value,
+	directoryCount: surface.directoryCount.value,
+	pendingReviewCount: surface.pendingReviewCount.value,
+	directoryFilter: surface.directoryFilter.value,
+	activeSection: surface.activeSection.value,
+	searchQuery: surface.personaSearchQuery.value,
+	suggestedIdentityCandidates: surface.suggestedIdentityCandidates.value,
+	identityTraces: surface.identityTraces.value,
+	selectedPersonaRelationships: surface.selectedPersonaRelationships.value,
+	isLoading: surface.isLoading.value,
+	isRefreshing: surface.isRefreshing.value,
+	actionError: surface.actionError.value,
+	settingOwnerPersonaId: surface.settingOwnerPersonaId.value,
+	reviewingCandidateId: surface.reviewingCandidateId.value,
+	assigningTraceId: surface.assigningTraceId.value,
+}))
+
+const actions: PersonasPageActions = {
+	refresh: surface.refresh,
+	selectPersona: surface.selectPersona,
+	setOwner: surface.setOwnerPersona,
+	reviewCandidate: surface.setIdentityCandidateReview,
+	assignTraceToOwner: surface.assignTraceToOwner,
+	assignTraceToSelectedPersona: surface.assignTraceToSelectedPersona,
+	toggleAddressBook: surface.toggleAddressBookMembership,
+	setDirectoryFilter: (value) => { surface.directoryFilter.value = value },
+	setActiveSection: (value) => { surface.activeSection.value = value },
+	setSearchQuery: (value) => { surface.personaSearchQuery.value = value },
+}
 </script>
 
 <template>
-  <PersonasWorkspace
-    :owner-persona="surface.ownerPersona.value"
-    :selected-persona="surface.selectedPersona.value"
-    :filtered-personas="surface.filteredPersonas.value"
-    :directory-count="surface.directoryCount.value"
-    :pending-review-count="surface.pendingReviewCount.value"
-    :directory-filter="surface.directoryFilter.value"
-    :active-section="surface.activeSection.value"
-    :search-query="surface.personaSearchQuery.value"
-    :suggested-identity-candidates="surface.suggestedIdentityCandidates.value"
-    :identity-traces="surface.identityTraces.value"
-    :selected-persona-relationships="surface.selectedPersonaRelationships.value"
-    :is-loading="surface.isLoading.value"
-    :is-refreshing="surface.isRefreshing.value"
-    :action-error="surface.actionError.value"
-    :setting-owner-persona-id="surface.settingOwnerPersonaId.value"
-    :reviewing-candidate-id="surface.reviewingCandidateId.value"
-    :assigning-trace-id="surface.assigningTraceId.value"
-    @refresh="surface.refresh"
-    @select-persona="surface.selectPersona"
-    @set-owner="surface.setOwnerPersona"
-    @review-candidate="surface.setIdentityCandidateReview"
-    @assign-trace-to-owner="surface.assignTraceToOwner"
-    @assign-trace-to-selected-persona="surface.assignTraceToSelectedPersona"
-    @toggle-address-book="surface.toggleAddressBookMembership"
-    @update:directory-filter="surface.directoryFilter.value = $event"
-    @update:active-section="surface.activeSection.value = $event"
-    @update:search-query="surface.personaSearchQuery.value = $event"
-  />
+	<PersonasPage :model="model" :actions="actions" />
 </template>

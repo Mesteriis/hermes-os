@@ -1,20 +1,20 @@
 //! Request dispatch for owner-private control IPC.
 
+mod platform;
+mod scheduler;
+
 use std::path::Path;
 
 use hermes_gateway_protocol::v1::{
     ApproveModuleRegistrationRequestV1, ApproveModuleRegistrationResponseV1,
+    BeginBrowserPairingRequestV1, BeginBrowserPairingResponseV1,
     BeginOwnerControlSessionResponseV1, BindBundledManagedReleaseRequestV1,
     BindBundledManagedReleaseResponseV1, BindExternalRuntimeIdentityRequestV1,
-    BindExternalRuntimeIdentityResponseV1, BindPlatformTelemetryReleaseRequestV1,
-    BindPlatformTelemetryReleaseResponseV1, BindPlatformVaultReleaseRequestV1,
-    BindPlatformVaultReleaseResponseV1, CompleteOwnerControlSessionRequestV1,
+    BindExternalRuntimeIdentityResponseV1, CompleteOwnerControlSessionRequestV1,
     CompleteOwnerControlSessionResponseV1, GetModuleRegistrationStatusRequestV1,
-    GetModuleRegistrationStatusResponseV1, GetPlatformTelemetryDiagnosticsRequestV1,
-    GetPlatformTelemetryDiagnosticsResponseV1, OwnerControlRequestV1, OwnerControlResponseV1,
+    GetModuleRegistrationStatusResponseV1, OwnerControlRequestV1, OwnerControlResponseV1,
+    ReserveBundledManagedRuntimeRequestV1, ReserveBundledManagedRuntimeResponseV1,
     StartBundledManagedRuntimeRequestV1, StartBundledManagedRuntimeResponseV1,
-    StartPlatformTelemetryRuntimeRequestV1, StartPlatformTelemetryRuntimeResponseV1,
-    StartPlatformVaultRuntimeRequestV1, StartPlatformVaultRuntimeResponseV1,
     TransitionModuleRegistrationRequestV1, TransitionModuleRegistrationResponseV1,
     UpdateOperatorSettingsRequestV1, UpdateOperatorSettingsResponseV1,
 };
@@ -24,22 +24,19 @@ use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use crate::identity::owner_control::sessions::OwnerControlSessions;
 use crate::modules::registration::registry as module_registry;
 use crate::modules::settings::mutation as settings_operator_mutation;
+use crate::platform::gateway::BrowserPairingAdmissionV1;
 use crate::platform::macos::bundled_release as macos_bundled_release_binding;
 use crate::platform::macos::managed_launch as macos_managed_runtime_launch;
-use crate::platform::telemetry::binding as platform_telemetry_binding;
-use crate::platform::telemetry::diagnostics as platform_telemetry_diagnostics;
-use crate::platform::telemetry::launch as platform_telemetry_launch;
-use crate::platform::vault::binding as platform_vault_binding;
-use crate::platform::vault::launch as platform_vault_launch;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
-type OwnerResult = hermes_gateway_protocol::v1::owner_control_response_v1::Result;
+pub(super) type OwnerResult = hermes_gateway_protocol::v1::owner_control_response_v1::Result;
 
 pub(super) fn handle(
     store: &SqliteControlStore,
     data_dir: &Path,
     runtime_dir: &Path,
     supervisor: &ManagedRuntimeSupervisor,
+    browser_pairing: Option<&BrowserPairingAdmissionV1>,
     sessions: &mut OwnerControlSessions,
     request: OwnerControlRequestV1,
 ) -> OwnerControlResponseV1 {
@@ -48,6 +45,7 @@ pub(super) fn handle(
         data_dir,
         runtime_dir,
         supervisor,
+        browser_pairing,
         sessions,
         request,
     ))
@@ -58,6 +56,7 @@ fn route(
     data_dir: &Path,
     runtime_dir: &Path,
     supervisor: &ManagedRuntimeSupervisor,
+    browser_pairing: Option<&BrowserPairingAdmissionV1>,
     sessions: &mut OwnerControlSessions,
     request: OwnerControlRequestV1,
 ) -> Result<OwnerResult, String> {
@@ -71,6 +70,9 @@ fn route(
         }
         Some(Operation::BeginOwnerSession(_)) => begin(store, sessions),
         Some(Operation::CompleteOwnerSession(request)) => complete(store, sessions, request),
+        Some(Operation::BeginBrowserPairing(request)) => {
+            begin_browser_pairing(store, sessions, browser_pairing, request)
+        }
         Some(Operation::UpdateOperatorSettings(request)) => {
             update_settings(store, sessions, request)
         }
@@ -83,35 +85,66 @@ fn route(
         Some(Operation::StartBundledManagedRuntime(request)) => {
             start_managed_runtime(store, runtime_dir, supervisor, sessions, request)
         }
-        Some(Operation::BindPlatformVaultRelease(request)) => {
-            bind_platform_vault_release(store, supervisor, sessions, request)
+        Some(Operation::ReserveBundledManagedRuntime(request)) => {
+            reserve_managed_runtime(store, supervisor, sessions, request)
         }
-        Some(Operation::StartPlatformVaultRuntime(request)) => start_platform_vault_runtime(
+        Some(Operation::StartReservedSchedulerRuntime(request)) => {
+            scheduler::start_reserved(store, runtime_dir, supervisor, sessions, request)
+        }
+        Some(Operation::UpsertSchedulerSchedule(request)) => {
+            scheduler::upsert(store, supervisor, sessions, request)
+        }
+        Some(Operation::RestartSchedulerRuntime(request)) => {
+            scheduler::restart(store, runtime_dir, supervisor, sessions, request)
+        }
+        Some(operation) => platform::route(
             store,
             data_dir,
             runtime_dir,
             supervisor,
             sessions,
-            request,
+            operation,
         ),
-        Some(Operation::BindPlatformTelemetryRelease(request)) => {
-            bind_platform_telemetry_release(store, supervisor, sessions, request)
-        }
-        Some(Operation::StartPlatformTelemetryRuntime(request)) => {
-            start_platform_telemetry_runtime(
-                store,
-                data_dir,
-                runtime_dir,
-                supervisor,
-                sessions,
-                request,
-            )
-        }
-        Some(Operation::GetPlatformTelemetryDiagnostics(request)) => {
-            telemetry_diagnostics(store, supervisor, sessions, request)
-        }
         None => Err("owner control operation is unavailable".to_owned()),
     }
+}
+
+fn begin_browser_pairing(
+    store: &SqliteControlStore,
+    sessions: &mut OwnerControlSessions,
+    browser_pairing: Option<&BrowserPairingAdmissionV1>,
+    request: BeginBrowserPairingRequestV1,
+) -> Result<OwnerResult, String> {
+    let owner = sessions.authorized_owner(store, &request.owner_session_id)?;
+    let browser_pairing =
+        browser_pairing.ok_or_else(|| "browser Gateway pairing is unavailable".to_owned())?;
+    let pairing = browser_pairing.begin(owner.owner_id(), owner.device_id(), unix_millis()?)?;
+    Ok(OwnerResult::BeginBrowserPairing(
+        BeginBrowserPairingResponseV1 {
+            pairing_id: pairing.pairing_id().to_owned(),
+            expires_at_unix_millis: pairing.expires_at_unix_millis(),
+        },
+    ))
+}
+
+fn reserve_managed_runtime(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    sessions: &mut OwnerControlSessions,
+    request: ReserveBundledManagedRuntimeRequestV1,
+) -> Result<OwnerResult, String> {
+    (|| {
+        sessions.authorize(store, &request.owner_session_id)?;
+        macos_managed_runtime_launch::reserve(supervisor, store, &request.registration_id)
+    })()
+    .map(|reservation| {
+        OwnerResult::ReserveBundledManagedRuntime(ReserveBundledManagedRuntimeResponseV1 {
+            registration_id: reservation.registration_id().to_owned(),
+            runtime_instance_id: reservation.runtime_instance_id().to_owned(),
+            runtime_generation: reservation.runtime_generation(),
+            grant_epoch: reservation.grant_epoch(),
+        })
+    })
 }
 
 fn status(
@@ -307,115 +340,6 @@ fn start_managed_runtime(
     })
 }
 
-fn bind_platform_vault_release(
-    store: &SqliteControlStore,
-    supervisor: &ManagedRuntimeSupervisor,
-    sessions: &mut OwnerControlSessions,
-    request: BindPlatformVaultReleaseRequestV1,
-) -> Result<OwnerResult, String> {
-    (|| {
-        sessions.authorize(store, &request.owner_session_id)?;
-        let binding = platform_vault_binding::bind_current_installed_release(store)?;
-        if supervisor.is_active(platform_vault_binding::VAULT_PROCESS_ID)? {
-            supervisor.stop(platform_vault_binding::VAULT_PROCESS_ID)?;
-        }
-        Ok(binding)
-    })()
-    .map(|binding| {
-        OwnerResult::BindPlatformVaultRelease(BindPlatformVaultReleaseResponseV1 {
-            process_id: binding.process_id().to_owned(),
-            binding_revision: binding.binding_revision(),
-            distribution_id: binding.distribution_id().to_owned(),
-            artifact_id: binding.artifact_id().to_owned(),
-        })
-    })
-}
-
-fn bind_platform_telemetry_release(
-    store: &SqliteControlStore,
-    supervisor: &ManagedRuntimeSupervisor,
-    sessions: &mut OwnerControlSessions,
-    request: BindPlatformTelemetryReleaseRequestV1,
-) -> Result<OwnerResult, String> {
-    (|| {
-        sessions.authorize(store, &request.owner_session_id)?;
-        let binding = platform_telemetry_binding::bind_current_installed_release(store)?;
-        if supervisor.is_active(platform_telemetry_binding::TELEMETRY_PROCESS_ID)? {
-            supervisor.stop(platform_telemetry_binding::TELEMETRY_PROCESS_ID)?;
-        }
-        Ok(binding)
-    })()
-    .map(|binding| {
-        OwnerResult::BindPlatformTelemetryRelease(BindPlatformTelemetryReleaseResponseV1 {
-            process_id: binding.process_id().to_owned(),
-            binding_revision: binding.binding_revision(),
-            distribution_id: binding.distribution_id().to_owned(),
-            artifact_id: binding.artifact_id().to_owned(),
-        })
-    })
-}
-
-fn start_platform_telemetry_runtime(
-    store: &SqliteControlStore,
-    data_dir: &Path,
-    runtime_dir: &Path,
-    supervisor: &ManagedRuntimeSupervisor,
-    sessions: &mut OwnerControlSessions,
-    request: StartPlatformTelemetryRuntimeRequestV1,
-) -> Result<OwnerResult, String> {
-    (|| {
-        sessions.authorize(store, &request.owner_session_id)?;
-        platform_telemetry_launch::start(supervisor, store, data_dir, runtime_dir)
-    })()
-    .map(|runtime_generation| {
-        OwnerResult::StartPlatformTelemetryRuntime(StartPlatformTelemetryRuntimeResponseV1 {
-            process_id: platform_telemetry_binding::TELEMETRY_PROCESS_ID.to_owned(),
-            runtime_generation,
-            launch_state: "accepted".to_owned(),
-        })
-    })
-}
-
-fn telemetry_diagnostics(
-    store: &SqliteControlStore,
-    supervisor: &ManagedRuntimeSupervisor,
-    sessions: &mut OwnerControlSessions,
-    request: GetPlatformTelemetryDiagnosticsRequestV1,
-) -> Result<OwnerResult, String> {
-    (|| {
-        sessions.authorize(store, &request.owner_session_id)?;
-        platform_telemetry_diagnostics::read(supervisor)
-    })()
-    .map(|diagnostics| {
-        OwnerResult::GetPlatformTelemetryDiagnostics(GetPlatformTelemetryDiagnosticsResponseV1 {
-            process_id: platform_telemetry_binding::TELEMETRY_PROCESS_ID.to_owned(),
-            segment_count: diagnostics.segment_count(),
-            total_bytes: diagnostics.total_bytes(),
-        })
-    })
-}
-
-fn start_platform_vault_runtime(
-    store: &SqliteControlStore,
-    data_dir: &Path,
-    runtime_dir: &Path,
-    supervisor: &ManagedRuntimeSupervisor,
-    sessions: &mut OwnerControlSessions,
-    request: StartPlatformVaultRuntimeRequestV1,
-) -> Result<OwnerResult, String> {
-    (|| {
-        sessions.authorize(store, &request.owner_session_id)?;
-        platform_vault_launch::start(supervisor, store, data_dir, runtime_dir)
-    })()
-    .map(|runtime_generation| {
-        OwnerResult::StartPlatformVaultRuntime(StartPlatformVaultRuntimeResponseV1 {
-            process_id: platform_vault_binding::VAULT_PROCESS_ID.to_owned(),
-            runtime_generation,
-            launch_state: "accepted".to_owned(),
-        })
-    })
-}
-
 fn transition_target(value: &str) -> Result<ModuleRegistrationState, String> {
     match value {
         "suspended" => Ok(ModuleRegistrationState::Suspended),
@@ -435,4 +359,11 @@ fn response(result: Result<OwnerResult, String>) -> OwnerControlResponseV1 {
             error_code: "operation_denied".to_owned(),
         },
     }
+}
+
+fn unix_millis() -> Result<u64, String> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .map_err(|_| "owner control clock is unavailable".to_owned())
 }

@@ -31,9 +31,10 @@ describe('Hermes UI data display component contracts', () => {
 		const barrel = readFileSync(join(uiRoot, 'index.ts'), 'utf8')
 
 		for (const componentName of dataDisplayComponents) {
-			expect(existsSync(join(uiRoot, `${componentName}.vue`))).toBe(true)
+			const componentPath = dataDisplayComponentPath(componentName)
+			expect(existsSync(join(uiRoot, componentPath))).toBe(true)
 			expect(existsSync(join(uiRoot, `${componentName}.README.md`))).toBe(true)
-			expect(barrel).toContain(`export { default as ${componentName} } from './${componentName}.vue'`)
+			expect(barrel).toContain(`export { default as ${componentName} } from './${componentPath}'`)
 		}
 	})
 
@@ -42,7 +43,7 @@ describe('Hermes UI data display component contracts', () => {
 		const forbiddenSource = /@\/domains|@\/integrations|@\/platform|fetch\(|useQuery|defineStore|createRouter/
 
 		for (const componentName of dataDisplayComponents) {
-			const source = readFileSync(join(uiRoot, `${componentName}.vue`), 'utf8')
+			const source = readFileSync(join(uiRoot, dataDisplayComponentPath(componentName)), 'utf8')
 			expect(source, componentName).not.toMatch(forbiddenSource)
 		}
 	})
@@ -58,3 +59,9 @@ describe('Hermes UI data display component contracts', () => {
 		}
 	})
 })
+
+function dataDisplayComponentPath(componentName: string): string {
+	return ['EmptyState', 'LoadingState', 'ErrorState', 'OfflineState', 'ComingSoonState'].includes(componentName)
+		? `patterns/${componentName}.vue`
+		: `${componentName}.vue`
+}

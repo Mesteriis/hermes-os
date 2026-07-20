@@ -1,5 +1,6 @@
 //! Standalone process entry point for the first Vault runtime foundation.
 
+mod bootstrap;
 pub mod control;
 pub mod service;
 pub mod transport;
@@ -26,6 +27,14 @@ enum Command {
         data_dir: PathBuf,
         #[arg(long)]
         instance_id: String,
+        #[arg(long)]
+        platform_credential_dir: Option<PathBuf>,
+    },
+    ImportPlatformCredentials {
+        #[arg(long)]
+        data_dir: PathBuf,
+        #[arg(long)]
+        platform_credential_dir: PathBuf,
     },
     Status {
         #[arg(long)]
@@ -62,7 +71,12 @@ fn main() -> Result<(), String> {
         Command::Initialize {
             data_dir,
             instance_id,
-        } => initialize(&data_dir, &instance_id),
+            platform_credential_dir,
+        } => initialize(&data_dir, &instance_id, platform_credential_dir.as_deref()),
+        Command::ImportPlatformCredentials {
+            data_dir,
+            platform_credential_dir,
+        } => import_platform_credentials(&data_dir, &platform_credential_dir),
         Command::Status { data_dir } => status(&data_dir),
         Command::Serve {
             data_dir,
@@ -147,18 +161,23 @@ fn read_contract_file(path: &Path) -> Result<Vec<u8>, String> {
     std::fs::read(path).map_err(|_| "Vault runtime contract is unavailable".to_owned())
 }
 
-fn initialize(data_dir: &Path, instance_id: &str) -> Result<(), String> {
+fn initialize(
+    data_dir: &Path,
+    instance_id: &str,
+    platform_credential_dir: Option<&Path>,
+) -> Result<(), String> {
     ensure_private_directory(data_dir)?;
     let key = FileWrappingKeyProvider::new(&data_dir.join("platform-wrapping-key.bin"))
         .load_or_create()
         .map_err(|_| "Vault file key is unavailable".to_owned())?;
-    VaultStore::initialize(
+    let store = VaultStore::initialize(
         &data_dir.join("vault.db"),
         &data_dir.join("vault.anchor"),
         instance_id,
         &key,
     )
     .map_err(|_| "Vault initialization failed".to_owned())?;
+    bootstrap::import_platform_credentials(&store, platform_credential_dir)?;
     println!("vault_state=sealed");
     Ok(())
 }
@@ -176,6 +195,25 @@ fn status(data_dir: &Path) -> Result<(), String> {
     VaultStore::open(&database_path, &data_dir.join("vault.anchor"), &key)
         .map_err(|_| "Vault recovery is required".to_owned())?;
     println!("vault_state=sealed");
+    Ok(())
+}
+
+fn import_platform_credentials(
+    data_dir: &Path,
+    platform_credential_dir: &Path,
+) -> Result<(), String> {
+    ensure_private_directory(data_dir)?;
+    let key = FileWrappingKeyProvider::new(&data_dir.join("platform-wrapping-key.bin"))
+        .load_or_create()
+        .map_err(|_| "Vault file key is unavailable".to_owned())?;
+    let store = VaultStore::open(
+        &data_dir.join("vault.db"),
+        &data_dir.join("vault.anchor"),
+        &key,
+    )
+    .map_err(|_| "Vault recovery is required".to_owned())?;
+    bootstrap::import_platform_credentials(&store, Some(platform_credential_dir))?;
+    println!("vault_platform_credentials=imported");
     Ok(())
 }
 

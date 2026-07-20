@@ -7,8 +7,9 @@ mod transport;
 pub use leases::{CredentialLeaseV1, LeaseAudienceV1, LeaseIdV1, VaultLeaseIssueRequestV1};
 pub use operations::{VaultTransportCommandError, VaultTransportCommandV1};
 pub use transport::{
-    VaultCiphertextFrameV1, VaultTransportBindingV1, VaultTransportDirectionV1,
-    VaultTransportError, VaultTransportPublicKey, VaultTransportSessionV1, seal,
+    VaultCiphertextFrameV1, VaultResponseRecipientV1, VaultTransportBindingV1,
+    VaultTransportDirectionV1, VaultTransportError, VaultTransportPublicKey,
+    VaultTransportSessionV1, seal,
 };
 
 pub const MAX_PURPOSE_ID_BYTES: usize = 128;
@@ -60,6 +61,32 @@ pub enum VaultActionV1 {
     Retire,
     Delete,
     IssueSessionStoreKey,
+}
+
+impl VaultActionV1 {
+    #[must_use]
+    pub const fn code(self) -> i64 {
+        match self {
+            Self::Resolve => 1,
+            Self::Create => 2,
+            Self::ReplaceCas => 3,
+            Self::Retire => 4,
+            Self::Delete => 5,
+            Self::IssueSessionStoreKey => 6,
+        }
+    }
+
+    pub const fn from_code(value: i64) -> Option<Self> {
+        match value {
+            1 => Some(Self::Resolve),
+            2 => Some(Self::Create),
+            3 => Some(Self::ReplaceCas),
+            4 => Some(Self::Retire),
+            5 => Some(Self::Delete),
+            6 => Some(Self::IssueSessionStoreKey),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

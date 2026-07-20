@@ -31,6 +31,7 @@ fn resolves_only_a_lease_bound_to_the_exact_secret_scope() {
     let audience = LeaseAudienceV1::new(
         "registration-mail".to_owned(),
         "runtime-mail-1".to_owned(),
+        1,
         7,
     )
     .expect("typed audience");
@@ -76,6 +77,7 @@ fn revoke_and_generation_advance_invalidate_unresolved_service_leases() {
     let audience = LeaseAudienceV1::new(
         "registration-mail".to_owned(),
         "runtime-mail-1".to_owned(),
+        1,
         7,
     )
     .expect("typed audience");
@@ -84,7 +86,13 @@ fn revoke_and_generation_advance_invalidate_unresolved_service_leases() {
     let revoked = service
         .issue_lease(lease_request(purpose.clone(), audience.clone(), 1), 100)
         .expect("lease before revoke");
-    service.revoke_audience(&audience);
+    assert_eq!(
+        service
+            .execute_command_once(&VaultTransportCommandV1::RevokeAudience, &audience, 101)
+            .expect("revoke command")
+            .as_slice(),
+        [1]
+    );
     assert_lease_is_invalidated(
         &mut service,
         revoked.lease_id(),
@@ -136,6 +144,7 @@ fn resolve_rejects_a_lease_without_the_resolve_action() {
     let audience = LeaseAudienceV1::new(
         "registration-mail".to_owned(),
         "runtime-mail-1".to_owned(),
+        1,
         7,
     )
     .expect("typed audience");
@@ -167,6 +176,7 @@ fn lease_issuance_rejects_declared_actions_without_an_executable_lifecycle() {
     let audience = LeaseAudienceV1::new(
         "registration-mail".to_owned(),
         "runtime-mail-1".to_owned(),
+        1,
         7,
     )
     .expect("typed audience");
@@ -244,6 +254,7 @@ fn resolve_command_uses_the_lease_scope_without_a_vault_record_identifier() {
     let audience = LeaseAudienceV1::new(
         "registration-mail".to_owned(),
         "runtime-mail-1".to_owned(),
+        1,
         7,
     )
     .expect("typed audience");
@@ -262,6 +273,66 @@ fn resolve_command_uses_the_lease_scope_without_a_vault_record_identifier() {
             .expect("resolve command")
             .as_slice(),
         b"service-credential-marker"
+    );
+}
+
+#[test]
+fn transport_issue_lease_requires_the_exact_encrypted_route_audience() {
+    let temporary = TempDir::new().expect("temporary Vault directory");
+    std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
+        .expect("private temporary Vault directory");
+    let store = initialize_store(&temporary);
+    let purpose = credential_purpose();
+    let scope = SecretRecordScope::new(
+        "mail".to_owned(),
+        &purpose,
+        SecretClassV1::ProviderCredential,
+        1,
+    )
+    .expect("record scope");
+    store
+        .store_secret(&scope, b"transport-issued-credential")
+        .expect("store credential");
+    let audience = LeaseAudienceV1::new(
+        "registration-mail".to_owned(),
+        "runtime-mail-1".to_owned(),
+        1,
+        7,
+    )
+    .expect("typed audience");
+    let request = lease_request(purpose, audience.clone(), 1);
+    let command = VaultTransportCommandV1::IssueLease { request };
+    let mut service = VaultService::new(store, 3).expect("Vault service");
+
+    let issued = service
+        .execute_command_once(&command, &audience, 100)
+        .expect("issue through transport");
+    let lease_id = hermes_vault_protocol::LeaseIdV1::new(
+        String::from_utf8(issued.to_vec()).expect("lease identifier text"),
+    )
+    .expect("typed lease identifier");
+    let resolve = VaultTransportCommandV1::ResolveLease {
+        lease_id,
+        secret_class: SecretClassV1::ProviderCredential,
+    };
+    assert_eq!(
+        service
+            .execute_command_once(&resolve, &audience, 101)
+            .expect("resolve issued lease")
+            .as_slice(),
+        b"transport-issued-credential"
+    );
+
+    let wrong_audience = LeaseAudienceV1::new(
+        "registration-other".to_owned(),
+        "runtime-mail-1".to_owned(),
+        1,
+        7,
+    )
+    .expect("different audience");
+    assert_eq!(
+        service.execute_command_once(&command, &wrong_audience, 102),
+        Err(VaultServiceError::LeaseScopeMismatch)
     );
 }
 
@@ -300,6 +371,7 @@ fn replacement_fixture() -> ReplacementFixture {
     let audience = LeaseAudienceV1::new(
         "registration-mail".to_owned(),
         "runtime-mail-1".to_owned(),
+        1,
         7,
     )
     .expect("typed audience");

@@ -10,3 +10,5 @@ path = "src/lib.rs"
 role = "core"
 owner = "kernel"
 surface = "contract"
+[dependencies]
+sha2 = { version = "=0.11.0", default-features = false }

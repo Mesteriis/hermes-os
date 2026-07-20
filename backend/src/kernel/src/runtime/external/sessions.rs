@@ -82,6 +82,35 @@ pub struct AuthenticatedRuntimeSession {
     expires_at_unix_millis: u64,
 }
 
+pub struct AuthorizedExternalRuntimeV1 {
+    registration_id: String,
+    runtime_id: String,
+    runtime_generation: u64,
+    grant_epoch: u64,
+}
+
+impl AuthorizedExternalRuntimeV1 {
+    #[must_use]
+    pub fn registration_id(&self) -> &str {
+        &self.registration_id
+    }
+
+    #[must_use]
+    pub fn runtime_id(&self) -> &str {
+        &self.runtime_id
+    }
+
+    #[must_use]
+    pub const fn runtime_generation(&self) -> u64 {
+        self.runtime_generation
+    }
+
+    #[must_use]
+    pub const fn grant_epoch(&self) -> u64 {
+        self.grant_epoch
+    }
+}
+
 impl AuthenticatedRuntimeSession {
     #[must_use]
     pub fn session_id(&self) -> &str {
@@ -262,6 +291,29 @@ impl ExternalRuntimeSessions {
         }
     }
 
+    pub fn authorize_storage_binding(
+        &mut self,
+        store: &SqliteControlStore,
+        session_id: &str,
+        capability_id: &str,
+    ) -> Result<AuthorizedExternalRuntimeV1, String> {
+        self.purge();
+        let session = self
+            .sessions
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| "runtime session is unavailable".to_owned())?;
+        let grant_epoch = self.authorize(store, session_id, capability_id)?;
+        (grant_epoch == session.grant_epoch)
+            .then_some(AuthorizedExternalRuntimeV1 {
+                registration_id: session.registration_id,
+                runtime_id: session.runtime_id,
+                runtime_generation: session.runtime_generation,
+                grant_epoch,
+            })
+            .ok_or_else(|| "runtime session is stale or unauthorized".to_owned())
+    }
+
     pub fn authorize_vault_route(
         &mut self,
         store: &SqliteControlStore,
@@ -284,12 +336,21 @@ impl ExternalRuntimeSessions {
         let authorization = authorize_external_route(store, &request);
         match authorization {
             Ok(authorization) if authorization.grant_epoch() == session.grant_epoch => {
-                vault_ciphertext_route::validate_for_authorized_external_runtime(
+                let validated = vault_ciphertext_route::validate_for_authorized_external_runtime(
                     &authorization,
                     &request,
                     vault_runtime_generation,
                     route,
-                )
+                )?;
+                crate::runtime::external::storage::validate_vault_credential_fence(
+                    store,
+                    &session.registration_id,
+                    &session.runtime_id,
+                    session.runtime_generation,
+                    session.grant_epoch,
+                    validated.route(),
+                )?;
+                Ok(validated)
             }
             Ok(_) | Err(_) => {
                 self.sessions.remove(session_id);

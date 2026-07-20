@@ -125,7 +125,7 @@ pub(crate) async fn start_hidden_whatsapp_webview(
     request: WhatsAppWebCompanionRequest,
 ) -> Result<WhatsAppWebCompanionManifest, String> {
     let window_label = companion_window_label(&request.account_id)?;
-    if let Some(window) = app.get_webview_window(&window_label) {
+    if let Some(_window) = app.get_webview_window(&window_label) {
         return manifest_for_account(&request.account_id, false, true);
     }
 

@@ -7,4 +7,5 @@ pub enum StorageBindingErrorV1 {
     Fence,
     Budget,
     Digest,
+    PoolAlias,
 }

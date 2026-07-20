@@ -13,6 +13,57 @@ fn distribution_bundle_verifier_requires_the_signed_target_and_exact_artifact_by
 }
 
 #[test]
+fn signed_browser_bootstrap_artifact_is_read_only_after_manifest_verification() {
+    let root = unique_target_root("hermes-browser-bootstrap-bundle");
+    let bootstrap_path = root.join("browser/bootstrap.html");
+    std::fs::create_dir_all(bootstrap_path.parent().expect("bootstrap parent"))
+        .expect("create bootstrap directory");
+    let bootstrap = b"<!doctype html><title>Hermes</title>".to_vec();
+    std::fs::write(&bootstrap_path, &bootstrap).expect("write bootstrap");
+    let signing_key = SigningKey::from_bytes((&[23_u8; 32]).into()).expect("test signing key");
+    let manifest = DistributionManifestV1 {
+        major: 1,
+        revision: 1,
+        distribution_id: "hermes-desktop".to_owned(),
+        release_version: "1.0.0".to_owned(),
+        build_id: "browser-bootstrap".to_owned(),
+        target_triple: "aarch64-apple-darwin".to_owned(),
+        generation: 1,
+        artifacts: vec![DistributionManifestArtifactV1 {
+            artifact_kind: DistributionArtifactKindV1::BrowserBootstrapBundle as i32,
+            artifact_id: "browser.bootstrap".to_owned(),
+            relative_path: "browser/bootstrap.html".to_owned(),
+            size_bytes: bootstrap.len() as u64,
+            sha256: Sha256::digest(&bootstrap).to_vec(),
+            required: true,
+            ..Default::default()
+        }],
+    };
+    let (signed, trust_root) = sign_bundle_manifest(&manifest, &signing_key);
+    let verified = distribution_bundle_verifier::verify(
+        &root,
+        &signed.encode_to_vec(),
+        &trust_root,
+        "aarch64-apple-darwin",
+    )
+    .expect("verify signed browser bootstrap");
+    let artifact = verified
+        .artifacts()
+        .iter()
+        .find(|artifact| artifact.artifact_id() == "browser.bootstrap")
+        .expect("verified bootstrap artifact");
+    assert_eq!(
+        artifact
+            .read_verified_bytes()
+            .expect("re-read guarded bytes"),
+        bootstrap
+    );
+    std::fs::write(&bootstrap_path, b"tampered").expect("tamper bootstrap");
+    assert!(artifact.read_verified_bytes().is_err());
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+#[test]
 fn telemetry_binding_requires_an_exact_signed_platform_descriptor() {
     let fixture = DistributionBundleFixture::telemetry();
     let verified = fixture.verify();
@@ -34,6 +85,25 @@ fn telemetry_binding_requires_an_exact_signed_platform_descriptor() {
         telemetry_binding::admit(&wrong_owner_store, &wrong_owner_bundle)
             .expect_err("reject wrong telemetry owner"),
         "signed release must contain exactly one designated Telemetry artifact"
+    );
+}
+
+#[test]
+fn storage_binding_requires_an_exact_signed_platform_descriptor() {
+    let fixture = DistributionBundleFixture::storage("storage");
+    let verified = fixture.verify();
+    let store = SqliteControlStore::create(&fixture.root.join("control.sqlite"), "instance-1", 1)
+        .expect("create control store");
+    let binding = storage_binding::admit(&store, &verified).expect("admit storage release");
+    assert_eq!(binding.process_id(), "storage");
+    assert_eq!(binding.artifact_id(), "platform.storage");
+
+    let wrong_owner = DistributionBundleFixture::storage("other-owner");
+    let wrong_owner_bundle = wrong_owner.verify();
+    assert_eq!(
+        storage_binding::admit(&store, &wrong_owner_bundle)
+            .expect_err("reject wrong storage owner"),
+        "signed release must contain exactly one designated Storage artifact"
     );
 }
 
@@ -65,6 +135,10 @@ impl DistributionBundleFixture {
 
     fn telemetry_for_owner(owner_id: &'static str) -> Self {
         Self::new_for(BundleIdentity::telemetry(owner_id))
+    }
+
+    fn storage(owner_id: &'static str) -> Self {
+        Self::new_for(BundleIdentity::storage(owner_id))
     }
 
     fn new_for(identity: BundleIdentity) -> Self {
@@ -340,6 +414,19 @@ impl BundleIdentity {
             capability_id: "collect",
         }
     }
+
+    const fn storage(owner_id: &'static str) -> Self {
+        Self {
+            artifact_id: "platform.storage",
+            artifact_relative_path: "bin/storage-control",
+            descriptor_relative_path: "contracts/storage-descriptor.pb",
+            settings_schema_relative_path: "contracts/storage-settings.pb",
+            module_id: "storage",
+            owner_id,
+            module_kind: ModuleKindV1::Platform,
+            capability_id: "control",
+        }
+    }
 }
 
 impl Drop for DistributionBundleFixture {
@@ -348,111 +435,8 @@ impl Drop for DistributionBundleFixture {
     }
 }
 
-fn bundle_descriptor(
-    schema: &SettingsSchemaV1,
-    settings_schema_digest: [u8; 32],
-    settings_schema_size: usize,
-    identity: BundleIdentity,
-) -> ModuleDescriptorV1 {
-    ModuleDescriptorV1 {
-        descriptor_major: 1,
-        descriptor_revision: 1,
-        module_id: identity.module_id.to_owned(),
-        owner_id: identity.owner_id.to_owned(),
-        module_kind: identity.module_kind as i32,
-        module_version: "1".to_owned(),
-        build_id: "build-1".to_owned(),
-        capabilities: vec![CapabilityDescriptorV1 {
-            capability_id: identity.capability_id.to_owned(),
-            capability_revision: 1,
-            criticality: CapabilityCriticalityV1::Required as i32,
-            ..Default::default()
-        }],
-        settings_schema_ref: Some(SettingsSchemaRefV1 {
-            major: schema.major,
-            revision: schema.revision,
-            artifact_size_bytes: settings_schema_size as u64,
-            sha256: settings_schema_digest.to_vec(),
-        }),
-        ..Default::default()
-    }
-}
+mod builders;
 
-fn bundle_manifest(
-    artifact_digest: [u8; 32],
-    descriptor_digest: [u8; 32],
-    settings_schema_digest: [u8; 32],
-    descriptor_size: usize,
-    settings_schema_size: usize,
-    identity: BundleIdentity,
-) -> DistributionManifestV1 {
-    DistributionManifestV1 {
-        major: 1,
-        revision: 1,
-        distribution_id: "hermes-desktop".to_owned(),
-        release_version: "1.0.0".to_owned(),
-        build_id: "build-1".to_owned(),
-        target_triple: "aarch64-apple-darwin".to_owned(),
-        generation: 1,
-        artifacts: vec![DistributionManifestArtifactV1 {
-            artifact_kind: DistributionArtifactKindV1::ModuleRuntime as i32,
-            artifact_id: identity.artifact_id.to_owned(),
-            relative_path: identity.artifact_relative_path.to_owned(),
-            size_bytes: DistributionBundleFixture::artifact_bytes().len() as u64,
-            sha256: artifact_digest.to_vec(),
-            descriptor_sha256: descriptor_digest.to_vec(),
-            settings_schema_sha256: settings_schema_digest.to_vec(),
-            required: true,
-            descriptor_relative_path: identity.descriptor_relative_path.to_owned(),
-            descriptor_size_bytes: descriptor_size as u64,
-            settings_schema_relative_path: identity.settings_schema_relative_path.to_owned(),
-            settings_schema_size_bytes: settings_schema_size as u64,
-        }],
-    }
-}
-
-fn sign_bundle_manifest(
-    manifest: &DistributionManifestV1,
-    signing_key: &SigningKey,
-) -> (SignedDistributionManifestV1, ReleaseTrustRoot) {
-    let raw_manifest_bytes = manifest.encode_to_vec();
-    let signature: Signature = signing_key.sign(&raw_manifest_bytes);
-    let signed = SignedDistributionManifestV1 {
-        verification_key_id: "release-2026".to_owned(),
-        raw_manifest_bytes,
-        signature_raw: signature.to_bytes().to_vec(),
-    };
-    let public_key_sec1: [u8; 65] = signing_key
-        .verifying_key()
-        .to_sec1_point(false)
-        .as_bytes()
-        .try_into()
-        .expect("uncompressed P-256 key");
-    (
-        signed,
-        release_trust_root(&[("release-2026", public_key_sec1)]),
-    )
-}
-
-fn register_approved_module(
-    store: &SqliteControlStore,
-    registration_id: &str,
-    module_id: &str,
-    owner_id: &str,
-    descriptor_digest: [u8; 32],
-) {
-    let registration = ModuleRegistration::new(
-        registration_id,
-        module_id,
-        owner_id,
-        descriptor_digest,
-        ModuleRegistrationState::Pending,
-        1,
-    );
-    store
-        .create_pending_registration(&registration, &["read".to_owned()])
-        .expect("create registration");
-    store
-        .approve_module_registration(registration_id, &["read".to_owned()])
-        .expect("approve registration");
-}
+use builders::{
+    bundle_descriptor, bundle_manifest, register_approved_module, sign_bundle_manifest,
+};

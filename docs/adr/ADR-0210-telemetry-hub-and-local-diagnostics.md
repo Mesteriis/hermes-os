@@ -12,8 +12,8 @@ descriptor и owner; Kernel-managed crash loop ограничен тремя att
 package inventory, private IPC, fixed-shape privacy/quotas, bounded retention,
 failure isolation и negative privacy conformance. Реализованная owner-private
 diagnostics операция возвращает только `segment_count` и `total_bytes` через
-authenticated inherited control channel; она не открывает raw logs, segment
-files или diagnostic export.
+authenticated inherited typed Protobuf control channel; она не открывает raw
+logs, segment files или diagnostic export.
 
 Зависит от:
 

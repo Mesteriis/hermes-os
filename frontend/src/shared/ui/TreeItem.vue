@@ -32,6 +32,9 @@ function handleClick(): void {
 	if (hasChildren.value) {
 		emit('toggle', props.item)
 	}
+	if (props.item.static) {
+		return
+	}
 	emit('select', props.item)
 }
 
@@ -60,11 +63,13 @@ function handleKeydown(event: KeyboardEvent): void {
 		:aria-level="level"
 		:aria-selected="isSelected"
 	>
-		<button
+		<component
+			:is="item.static ? 'div' : 'button'"
 			class="hermes-tree-item__button"
-			type="button"
-			:disabled="item.disabled"
-			:tabindex="isSelected ? 0 : -1"
+			:class="{ 'hermes-tree-item__button--static': item.static }"
+			:type="item.static ? undefined : 'button'"
+			:disabled="item.static ? undefined : item.disabled"
+			:tabindex="item.static ? undefined : (isSelected ? 0 : -1)"
 			@click="handleClick"
 			@keydown="handleKeydown"
 		>
@@ -77,8 +82,18 @@ function handleKeydown(event: KeyboardEvent): void {
 			/>
 			<span v-else class="hermes-tree-item__spacer" aria-hidden="true"></span>
 			<Icon v-if="item.icon" :icon="item.icon" size="1rem" class="hermes-tree-item__icon" aria-hidden="true" />
-			<span>{{ item.label }}</span>
-		</button>
+			<span class="hermes-tree-item__body">
+				<span>{{ item.label }}</span>
+				<span v-if="item.detail" class="hermes-tree-item__detail">{{ item.detail }}</span>
+			</span>
+			<span
+				v-if="item.status"
+				class="hermes-tree-item__status"
+				:class="`hermes-tree-item__status--${item.status}`"
+			>
+				{{ item.status }}
+			</span>
+		</component>
 		<ul v-if="hasChildren && isExpanded" class="hermes-tree-item__children" role="group">
 			<TreeItem
 				v-for="child in item.children"

@@ -1,0 +1,19 @@
+[package]
+name = "hermes-events-authority-runtime"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "hermes-events-authority-runtime"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "platform"
+owner = "events"
+surface = "runtime"
+
+[dependencies]
+hermes-events-authority-runtime-control = { path = "control" }
+hermes-runtime-protocol = { path = "../../../runtime_protocol" }
+libc = "=0.2.186"
+prost = "=0.14.4"

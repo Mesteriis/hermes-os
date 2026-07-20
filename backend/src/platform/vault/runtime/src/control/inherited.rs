@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use hermes_runtime_protocol::v1::{
     DescribeManagedRuntimeRequestV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, managed_runtime_control_request_v1::Operation,
+    ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
+    managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
 use prost::Message;
@@ -48,6 +49,18 @@ pub fn describe(
                 && describe.runtime_generation != 0
                 && describe.grant_epoch != 0 =>
         {
+            let ready = ManagedRuntimeControlRequestV1 {
+                operation: Some(Operation::Ready(ManagedRuntimeReadyRequestV1 {
+                    registration_id: describe.registration_id,
+                    runtime_generation: describe.runtime_generation,
+                    grant_epoch: describe.grant_epoch,
+                })),
+            };
+            write_frame(&mut stream, &ready.encode_to_vec())?;
+            stream
+                .set_read_timeout(None)
+                .and_then(|_| stream.set_write_timeout(None))
+                .map_err(|_| "Vault inherited control channel is unavailable".to_owned())?;
             Ok(stream)
         }
         _ => Err("Vault managed-runtime descriptor was rejected".to_owned()),

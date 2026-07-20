@@ -1,0 +1,19 @@
+[package]
+name = "hermes-events-authority-runtime-control"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "platform"
+owner = "events"
+surface = "implementation"
+
+[dependencies]
+hermes-events-authority = { path = "../.." }
+hermes-events-jetstream = { path = "../../../jetstream" }
+hermes-runtime-protocol = { path = "../../../../runtime_protocol" }
+prost = "=0.14.4"
+tokio = { version = "=1.52.4", default-features = false, features = ["net", "rt", "time"] }

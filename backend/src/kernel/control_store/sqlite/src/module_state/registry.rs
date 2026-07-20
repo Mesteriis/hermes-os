@@ -1,8 +1,9 @@
 //! Module registrations, grants, and external runtime attestations.
 
 use hermes_kernel_control_store::{
-    ExternalRuntimeAttestation, GrantSet, ModuleGrantSnapshot, ModuleRegistration,
-    ModuleRegistrationState,
+    ExternalRuntimeAttestation, GrantSet, ModuleBlobQuotaRequestV1, ModuleEventRouteRequestV1,
+    ModuleGrantSnapshot, ModuleRegistration, ModuleRegistrationState, ModuleSchedulerJobRequestV1,
+    ModuleStorageRequestV1,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -11,18 +12,77 @@ use crate::{
     valid_identity_token,
 };
 
+use super::{
+    blob_request::{insert_blob_quota_requests, validate_blob_quota_requests},
+    event_request::{insert_event_route_requests, validate_event_route_requests},
+    scheduler_request::{insert_scheduler_job_requests, validate_scheduler_job_requests},
+    storage_request::{insert_storage_requests, validate_storage_requests},
+};
+
 impl SqliteControlStore {
     pub fn create_pending_registration(
         &self,
         registration: &ModuleRegistration,
         requested_capability_ids: &[String],
     ) -> Result<(), StoreError> {
+        self.create_pending_registration_with_requests(
+            registration,
+            requested_capability_ids,
+            &[],
+            &[],
+            &[],
+        )
+    }
+
+    pub fn create_pending_registration_with_requests(
+        &self,
+        registration: &ModuleRegistration,
+        requested_capability_ids: &[String],
+        storage_requests: &[ModuleStorageRequestV1],
+        event_requests: &[ModuleEventRouteRequestV1],
+        blob_requests: &[ModuleBlobQuotaRequestV1],
+    ) -> Result<(), StoreError> {
+        self.create_pending_registration_with_descriptor_requests(
+            registration,
+            requested_capability_ids,
+            storage_requests,
+            event_requests,
+            blob_requests,
+            &[],
+        )
+    }
+
+    pub fn create_pending_registration_with_descriptor_requests(
+        &self,
+        registration: &ModuleRegistration,
+        requested_capability_ids: &[String],
+        storage_requests: &[ModuleStorageRequestV1],
+        event_requests: &[ModuleEventRouteRequestV1],
+        blob_requests: &[ModuleBlobQuotaRequestV1],
+        scheduler_requests: &[ModuleSchedulerJobRequestV1],
+    ) -> Result<(), StoreError> {
         validate_pending_registration(registration, requested_capability_ids)?;
+        validate_storage_requests(registration, requested_capability_ids, storage_requests)?;
+        validate_event_route_requests(registration, requested_capability_ids, event_requests)?;
+        validate_blob_quota_requests(registration, requested_capability_ids, blob_requests)?;
+        validate_scheduler_job_requests(
+            registration,
+            requested_capability_ids,
+            scheduler_requests,
+        )?;
         let registration = registration.clone();
         let capabilities = requested_capability_ids.to_vec();
+        let storage_requests = storage_requests.to_vec();
+        let event_requests = event_requests.to_vec();
+        let blob_requests = blob_requests.to_vec();
+        let scheduler_requests = scheduler_requests.to_vec();
         self.with_connection(move |connection| {
             let transaction = connection.transaction()?;
             insert_pending_registration(&transaction, &registration, &capabilities)?;
+            insert_storage_requests(&transaction, &storage_requests)?;
+            insert_event_route_requests(&transaction, &event_requests)?;
+            insert_blob_quota_requests(&transaction, &blob_requests)?;
+            insert_scheduler_job_requests(&transaction, &scheduler_requests)?;
             transaction.commit()?;
             Ok(())
         })
@@ -94,6 +154,26 @@ impl SqliteControlStore {
             };
             transaction.commit()?;
             Ok(Some(ModuleGrantSnapshot::new(registration, grants)))
+        })
+    }
+
+    pub fn approved_module_grant_snapshots(&self) -> Result<Vec<ModuleGrantSnapshot>, StoreError> {
+        self.with_connection(|connection| {
+            let transaction = connection.transaction()?;
+            let registrations = read_approved_registrations(&transaction)?;
+            let snapshots = registrations
+                .into_iter()
+                .map(|registration| {
+                    let grants = GrantSet::new(
+                        registration.registration_id(),
+                        registration.grant_epoch(),
+                        read_approved_capabilities(&transaction, registration.registration_id())?,
+                    );
+                    Ok(ModuleGrantSnapshot::new(registration, Some(grants)))
+                })
+                .collect::<Result<Vec<_>, StoreError>>()?;
+            transaction.commit()?;
+            Ok(snapshots)
         })
     }
 
@@ -322,6 +402,18 @@ pub(crate) fn read_required_registration(
 ) -> Result<ModuleRegistration, StoreError> {
     read_module_registration(connection, registration_id)?
         .ok_or(StoreError::ModuleRegistrationMissing)
+}
+
+fn read_approved_registrations(
+    connection: &Connection,
+) -> Result<Vec<ModuleRegistration>, StoreError> {
+    let mut statement = connection.prepare(
+        "SELECT registration_id, module_id, owner_id, descriptor_sha256, state, grant_epoch
+         FROM hermes_kernel_module_registration WHERE state = 'approved' ORDER BY registration_id",
+    )?;
+    let rows = statement.query_map([], decode_registration)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::from)
 }
 
 pub(crate) fn read_approved_capabilities(

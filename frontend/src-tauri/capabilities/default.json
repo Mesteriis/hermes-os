@@ -1,18 +1,9 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
+  "description": "Recovery shell permissions only; provider host bridges are isolated to their companion windows.",
   "windows": [
     "main"
   ],
-  "permissions": [
-    "core:default",
-    "allow-open-whatsapp-web-companion",
-    "allow-whatsapp-web-companion-manifest",
-    "allow-open-yandex-telemost-companion",
-    "allow-yandex-telemost-companion-manifest",
-    "allow-yandex-telemost-prepare-audio-device",
-    "allow-yandex-telemost-recording-start",
-    "allow-yandex-telemost-recording-stop"
-  ]
+  "permissions": ["core:default"]
 }

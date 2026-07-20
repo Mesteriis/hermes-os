@@ -62,7 +62,12 @@ HPKE public key, но не публикует paths, keys или credential meta
 protocol уже содержит bounded opaque `VaultCiphertextRouteV1`; Kernel сверяет
 route с current external runtime identity/generation/grant epoch и relays
 bounded opaque bytes только по inherited managed-runtime channel после
-descriptor handshake. Vault runtime исполняет этот relay приватно: до decrypt он
+descriptor handshake. На этом же authenticated inherited channel применяется
+отдельный typed `ManagedVaultRuntimeControlV1`: Kernel читает только `ready`,
+exact persisted runtime generation и 32-byte ephemeral HPKE public key; mismatch
+или error не создают ready state и останавливают новый child. Ciphertext остаётся
+отдельным oneof-variant, поэтому status нельзя спутать с secret-bearing frame.
+Vault runtime исполняет этот relay приватно: до decrypt он
 проверяет binding, direction и replay, а response шифрует только для response
 recipient из authenticated request binding. Control Store уже
 имеет отдельный Kernel-owned platform-process binding/launch fence без owner

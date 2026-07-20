@@ -157,13 +157,10 @@ opaque payload bytes, `Any`, generic maps, read-all grants, generic Context API
 ## Проверки
 
 ```sh
-make -C backend architecture-policy-check
-make -C backend cargo-boundaries-check
-make -C backend test-architecture
-make -C backend architecture-check
+make -C backend test
 ```
 
-- `architecture-policy-check` проверяет согласованность allowlist/blocklist,
+- В состав `test` входит проверка согласованности allowlist/blocklist,
   constitutional Kernel components, exact recovery-only implementation,
   fail-closed phase gates, AI context boundary, bootstrap/recovery invariants,
   production paths и SQL ownership.

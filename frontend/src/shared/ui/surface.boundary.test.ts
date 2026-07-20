@@ -30,14 +30,16 @@ describe('Hermes UI surface component contracts', () => {
 		const barrel = readFileSync(join(uiRoot, 'index.ts'), 'utf8')
 		const missingContracts = surfaceComponents.flatMap((componentName) => {
 			const violations = []
+			const componentPath = surfaceComponentPath(componentName)
+			const barrelPath = `./${componentPath}`
 
-			if (!existsSync(join(uiRoot, `${componentName}.vue`))) {
+			if (!existsSync(join(uiRoot, componentPath))) {
 				violations.push(`${componentName}.vue`)
 			}
 			if (!existsSync(join(uiRoot, `${componentName}.README.md`))) {
 				violations.push(`${componentName}.README.md`)
 			}
-			if (!barrel.includes(`export { default as ${componentName} } from './${componentName}.vue'`)) {
+			if (!barrel.includes(`export { default as ${componentName} } from '${barrelPath}'`)) {
 				violations.push(`${componentName} barrel export`)
 			}
 
@@ -50,9 +52,9 @@ describe('Hermes UI surface component contracts', () => {
 	it('keeps surface components presentation-only and independent from app data boundaries', () => {
 		const uiRoot = fileURLToPath(new URL('.', import.meta.url))
 		const violations = surfaceComponents
-			.filter((componentName) => existsSync(join(uiRoot, `${componentName}.vue`)))
+			.filter((componentName) => existsSync(join(uiRoot, surfaceComponentPath(componentName))))
 			.flatMap((componentName) => {
-				const source = readFileSync(join(uiRoot, `${componentName}.vue`), 'utf8')
+				const source = readFileSync(join(uiRoot, surfaceComponentPath(componentName)), 'utf8')
 				return forbiddenUiBoundaryMatches(source).map((match) => `${componentName}: ${match}`)
 			})
 
@@ -85,7 +87,7 @@ describe('Hermes UI surface component contracts', () => {
 
 	it('keeps Card signal state presentation-only and motion-safe', () => {
 		const uiRoot = fileURLToPath(new URL('.', import.meta.url))
-		const cardSource = readFileSync(join(uiRoot, 'Card.vue'), 'utf8')
+		const cardSource = readFileSync(join(uiRoot, 'primitives/Card.vue'), 'utf8')
 		const cssSource = readFileSync(join(uiRoot, 'styles/surfaces.css'), 'utf8')
 		const storySource = readFileSync(join(uiRoot, '../../../stories/ui/GeneralSurface.stories.ts'), 'utf8')
 		const signalCss = cssSource.slice(cssSource.indexOf('.hermes-card--signal'), cssSource.indexOf('.hermes-card-header'))
@@ -105,6 +107,10 @@ describe('Hermes UI surface component contracts', () => {
 		expect(storySource).toContain(':signal-tone="signalCard.tone"')
 	})
 })
+
+function surfaceComponentPath(componentName: string): string {
+	return componentName === 'Card' ? 'primitives/Card.vue' : `${componentName}.vue`
+}
 
 function storybookUiImports(source: string): string[] {
 	return Array.from(source.matchAll(/import \{([^}]+)\} from '@\/shared\/ui'/g))

@@ -33,7 +33,7 @@ test('Kernel migrates a canonical v8 pending settings revision without declaring
     const migrated = kernel(dataDir);
     assert.equal(migrated.status, 0, migrated.stderr);
     assert.match(migrated.stdout, /^state=module_control_plane\ncontrol_store=trustworthy\n$/);
-    assert.equal(readMigrationState(storePath), '14\npending_validation\n');
+    assert.equal(readMigrationState(storePath), '31\npending_validation\n');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

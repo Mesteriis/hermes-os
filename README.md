@@ -30,20 +30,24 @@ Hermes Hub — local-first Personal Memory System / Personal Operating System.
 
 ## Запуск и validation
 
-Поддерживаемой команды запуска clean-room full stack пока нет. Доступен только
-новый статический architecture gate:
+Поддерживаемый command surface намеренно мал:
 
 ```sh
-make -C backend architecture-check
-make -C backend test-architecture
-make -C backend validate
+make build
+make test
+make dev
+make docker
+make tauri
+make clean
 ```
 
-Текущий `make -C backend validate` проверяет только clean-room architecture
-policy и её negative self-tests; он не собирает и не запускает отсутствующий
-backend runtime.
+`test` запускает только проверки, затронутые текущими изменениями (базовый
+commit можно переопределить через `HERMES_TEST_BASE`); `dev` поднимает
+development Compose contour, Kernel и Vite в одном lifecycle, а `tauri`
+собирает desktop app. По умолчанию Kernel использует
+`.local/kernel-dev`; другой data directory задаётся через `HERMES_DEV_DATA_DIR`.
 
-Не следует использовать старые `make dev`, `make build`,
+Не следует использовать старые legacy `make`-цели,
 `/api/v1/**` routes или `X-Hermes-Secret` как описание новой системы. Legacy
 Makefile, scripts и связанные tool/CI configs перенесены в
 `references/backend-legacy/` и не являются поддерживаемым command surface.

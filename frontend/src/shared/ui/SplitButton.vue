@@ -7,7 +7,7 @@ import {
 	DropdownMenuTrigger
 } from 'reka-ui'
 import { computed, ref } from 'vue'
-import Button from './Button.vue'
+import Button from './primitives/Button.vue'
 import Icon from './Icon.vue'
 import IconButton from './IconButton.vue'
 import type { NavigationItem } from './Navigation.types'

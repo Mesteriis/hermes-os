@@ -2,7 +2,47 @@
 
 Статус: Принято
 Дата: 2026-07-15
-Состояние реализации: Не реализовано
+Состояние реализации: Foundation in progress. `hermes-events-jetstream`
+реализует NATS adapter boundary: отдельные Event Hub administration и runtime
+publisher connections, bounded topology reconciliation и strict subject grammar.
+Control Store atomically сохраняет exact descriptor-declared `EventRouteRequestV1`
+вместе с pending registration; Kernel resolves read-only catalog entries только
+из approved grants текущего epoch и fail-closed группирует их в canonical contract
+catalog, отклоняя конфликтующие revision/schema до broker reconciliation. Из catalog
+Kernel также строит детерминированный broker-neutral desired topology plan: exact subjects,
+используемые streams, publish permits и durable consumer identities с already-declared
+`max_in_flight`. Consumer descriptor теперь также обязан явно назвать requirement
+(`required`/`optional`), bounded `max_deliver` и `ack_wait_millis`; legacy route без
+этого policy не получает consumer topology после Control Store migration. Retention пока
+не объявлен descriptor contract, поэтому plan не создаёт для него фиктивный default.
+JetStream adapter также проверяет local
+publish permit against exact runtime generation, grant epoch и subject до broker
+publish. Adapter также имеет ciphertext-only Vault lease foundation для
+per-runtime broker credential: create/resolve проходят по HPKE route с exact
+registration/runtime/grant fences, а unavailable Vault не получает local-secret
+fallback; revoke audience инвалидирует active Vault leases по тому же route.
+Для Event Hub существует отдельный reserved Kernel audience, не маскируемый под
+module registration: он может получить только предварительно импортированный
+file-backed `nats-event-hub-password` через тот же ciphertext route, а identity
+не раскрывает credential в diagnostics. Отдельный JWT foundation выпускает
+короткоживущий non-bearer NATS user JWT для одной runtime/generation/grant-epoch
+fence и exact publish/subscribe subjects; единственный wildcard — обязательный
+reply inbox `_INBOX.>`. Его ephemeral Docker resolver conformance создаёт test
+Operator/Account/signing key вне репозитория, подтверждает NKey challenge,
+broker allowlist и отказ неизвестному account signing key. Managed Events
+authority then resolves a fenced System Account credential through Vault,
+publishes the revoked Account JWT to a full resolver, and proves broker-side
+forced disconnect. Это не выдаёт account authority Kernel. Для production
+foundation Kernel хранит только public account key и monotonic signer credential
+revision в owner-authorized Control Store record, а Events authority запускается
+как release-bound managed child после проверки current Vault generation.
+Изменение configuration останавливает child; account signing seed по-прежнему
+разрешён только Vault и возвращается authority исключительно как ciphertext
+route. Test-only PostgreSQL scaffolds доказывают owner-local outbox/inbox,
+exact-byte relay и pending replay при NATS outage. Reconciled broker ACL,
+runtime-generation fencing и managed authority lifecycle открывают
+`nats_data_plane_v1` как platform gate; production owner delivery остаётся
+`first_owner_v1`.
 
 Зависит от:
 

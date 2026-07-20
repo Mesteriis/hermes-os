@@ -32,6 +32,7 @@ business queries. Module runtimes ходят только через PgBouncer. 
 ```text
 backend/src/platform/storage/protocol/     hermes-storage-protocol
 backend/src/platform/storage/control/      hermes-storage-control
+backend/src/platform/storage/vault/        hermes-storage-vault
 backend/src/platform/storage/runtime/      hermes-storage-runtime
 backend/src/platform/storage/postgres/     hermes-storage-postgres
 backend/src/platform/storage/pgbouncer/    hermes-storage-pgbouncer
@@ -121,7 +122,157 @@ roles/grants и Testcontainers PostgreSQL/PgBouncer tests.
 
 Сейчас реализованы six-package foundation, `StorageBundleV1` Protobuf,
 structural bundle validation и fail-closed AST admission для owner-local
-`CREATE TABLE` / `ALTER TABLE … ADD COLUMN`. Managed adapters, Vault lease
-delivery, ledger, role/grant reconciliation, distribution trust execution и
-PostgreSQL/PgBouncer integration suite ещё должны быть реализованы. Поэтому
-`storage_control_v1` остаётся закрытым.
+`CREATE TABLE` / `ALTER TABLE … ADD COLUMN`. PostgreSQL adapter bootstrap-ит
+fixed schemas, проводит sanitized readiness probe, фиксирует unique
+owner/DDL/runtime mapping вместе с exact binding fences в platform ledger,
+создаёт owner-bound роли, применяет step atomically через exact DDL role и
+сверяет catalog перед выдачей DML grants только own tables/sequences. SQL-free
+lifecycle запрещает replacement binding до завершённого revoke. Binding
+детерминированно связывает pool alias с registration/runtime generation; SQL-free
+revoker сохраняет lifecycle в `Revoking`, пока не подтвердятся Vault invalidation,
+PgBouncer `PAUSE`/`DISABLE`/`KILL` и PostgreSQL `NOLOGIN`/revoke/terminate.
+Storage Vault adapter формирует fenced ciphertext-only `RevokeAudience`, а
+также однократно issue-ит `Create` или `Resolve` lease для одного
+`PlatformCredential`; он store/resolve-ит только AAD-bound encrypted response;
+принимает только AAD-bound encrypted response. Concrete trusted
+managed Storage→Kernel dispatcher уже существует: он сверяет registration,
+caller runtime generation, grant epoch и active Vault generation, затем
+подписывает и relay-ит opaque route. `hermes-storage-runtime serve-inherited`
+уже принимает только descriptor-bound inherited FD и обслуживает typed status,
+привязанный к exact managed runtime generation. Private owner control сохраняет
+non-secret desired topology с monotonic revision и завершает active runtime
+перед её заменой. Kernel stage-ит отдельную private runtime configuration:
+profile, storage generation, identities, exact PostgreSQL/PgBouncer digests и
+validated host:port endpoints, а также текущие non-secret `vault_instance_id`,
+Vault runtime generation и ephemeral HPKE public key. Это short-lived `0400`
+child contract; Vault context не попадает в desired topology или Control Store,
+и в нём нет credential либо Vault private key. Child возвращает staged Vault
+runtime generation в typed status и отвечает `reconciling` только с этими
+exact fences; Kernel сверяет их с текущим Vault status до
+успешного return из launch. Credential и runtime attestation не входят в
+topology. После Vault credential bootstrap и platform checks child посылает
+exact `ManagedRuntimeReadyRequestV1`; Kernel принимает normal status/control
+relay только после проверки registration, runtime generation и grant epoch.
+Для schema до endpoint contract старая topology сбрасывается
+fail-closed и должна быть явно настроена owner. Runtime contract допускает
+только topology-matching `desired_bindings` вместе с absolute private path
+PgBouncer include; пустой set не имеет path. Production `serve-inherited`
+после Vault-admin bootstrap атомарно заменяет include, делает exact `RELOAD`,
+проверяет catalog и лишь затем отражает bindings как `ready`; bypass test seam
+остаётся `reconciling`. Kernel persist-ит exact descriptor-declared storage request
+по registration/capability. Для managed module runtime owner-private control
+может выпустить durable non-secret binding только после проверки exact current
+managed launch, capability grant, topology и всех fence. Запись имеет строгую
+revision sequence; повторная выдача одновременно повышает role и credential
+lease epochs, а rollback bundle revision отклоняется. Перед launch Kernel
+повторно сверяет каждый staged binding с current managed launch и grant, затем
+передаёт только topology-matching set в private child contract. External
+attestation пока создаёт лишь authorization fact: его dedicated issuance path
+ещё отсутствует. Его client использует only inherited FD,
+descriptor handshake и typed route frame.
+Перед публикацией PgBouncer alias child теперь materializes typed binding в
+opaque deterministic DDL owner/runtime roles и reconciliation-ит их через
+PostgreSQL admin adapter. Затем он находит только exact staged
+`StorageBundleV1` по owner/revision/SHA-256 binding-а и применяет его под тем же
+DDL role до публикации pool. Ошибка role reconciliation, digest match или
+migration не публикует alias. Authenticated Docker contour подтверждает этот
+порядок с временными runner secrets. Отдельный сценарий на том же contour
+проверяет encrypted `RevokeAudience` route Storage child через test Vault
+recipient и реальные PgBouncer/PostgreSQL fences для exact staged binding; он
+не запускает реальный Kernel dispatcher или Vault process.
+Owner command `begin_managed_storage_binding_revocation` сначала атомарно
+сохраняет `active → revoking` с exact binding revision. Затем Kernel relay-ит
+тот же exact staged binding в live Storage child. Child выполняет
+`RevokeAudience`, PgBouncer `PAUSE`/`DISABLE`/`KILL` и PostgreSQL
+`NOLOGIN`/revoke/terminate; только complete typed response удаляет binding из
+его active set. Ошибка сохраняет durable reservation и останавливает child,
+поэтому restart не может снова stage-ить старый binding. Composition test
+пропускает Storage credential bootstrap через real Kernel route handler и live
+Vault service по inherited Unix channels; он не подменяет ciphertext response.
+Opt-in disposable Docker runner создаёт временный signed macOS release bundle
+для собранных Vault и Storage binaries, принимает оба через production
+release-binding path и запускает через production Kernel launch path. Он
+импортирует service-scoped file credentials into Vault, checks fenced
+`reconciling` status, затем independently stops и restarts Storage. Новый child
+проходит Vault-backed startup с новой generation и повторной signed-artifact
+verification; это conformance signed-release execution в disposable bundle, а
+не Developer ID signing, notarization или production release attestation.
+Storage release admission уже фиксирует один exact signed platform artifact,
+descriptor digest и binding revision. Перед каждым status child делает bounded
+credential-free TCP preflight staged PostgreSQL и PgBouncer endpoint'ов:
+неуспех даёт только `failed/storage_endpoint_unavailable`; при пустом binding
+set успех оставляет `reconciling`. Это reachability check, не endpoint
+attestation и не credential delivery; binding issuance и полноценная
+infrastructure composition всё ещё не подключены.
+PgBouncer adapter формирует только exact commands из fenced binding и имеет
+отдельный simple-query admin transport: endpoint и short-lived credential
+находятся только в Storage process. Он не доступен module processes и не
+передаёт credential Kernel. Его private `0600` database include заменяется
+через fsync/rename/directory-fsync только в Storage-owned `0700` directory;
+runtime alias сортируются, дубликаты и symlink paths отклоняются, затем adapter
+выполняет exact `RELOAD`. PostgreSQL adapter отклоняет несовпадающий binding.
+Disposable development Compose smoke реально выполняет PostgreSQL и PgBouncer
+`SELECT 1` и проверяет NATS health; отдельный opt-in test создаёт и сверяет
+PostgreSQL roles/migrations и runtime endpoint preflight на живом instance. Это не является runtime
+attestation или production evidence. Конфигурация переносит валидированный
+Vault public route context. Before the first Storage launch, the Vault
+initializer may import exactly two owner-private file-backed service secrets:
+`pgbouncer-admin-password` and `postgres-admin-password`. Their exact scopes
+are `storage_main` generation `1`; files are regular, non-symlink,
+owner-private inputs and their content never enters Kernel, Control Store or
+logs. При startup managed Storage child по descriptor-bound inherited FD
+сначала resolve-ит existing platform credential, а при отсутствии записи Vault
+сам генерирует opaque token; Kernel получает только ciphertext и generation
+response не содержит plaintext. A generated token cannot authenticate an
+already provisioned database deployment, so it does not by itself establish
+runtime readiness. Runtime wiring
+Для PgBouncer и PostgreSQL runtime запрашивает отдельные Vault purposes:
+plaintext приходит только через fresh `Resolve` response. Для каждого staged
+binding он использует отдельный runtime-principal Vault scope и exact
+`credential_lease_revision`: сначала пытается `Resolve`, а для отсутствующей
+record выполняет `Create`/opaque token generation и новый `Resolve`. Token
+остаётся только в zeroizing runtime memory и передаётся PostgreSQL через
+server-side quoted `ALTER ROLE ... PASSWORD`; он не появляется в Control Store,
+environment, PgBouncer include или Kernel. До normal control loop runtime
+выполняет bounded `SHOW VERSION` authentication в PgBouncer и idempotent
+bootstrap fixed PostgreSQL schemas под отдельным admin user. Exact
+owner-role/migration lifecycle теперь запускается до pool publication. Для
+одного exact binding live contour уже покрывает encrypted revoke route и
+PgBouncer/PostgreSQL session fencing и real Vault service delivery для Storage
+credential bootstrap. External binding issuance требует owner session, exact
+attestation, runtime generation и grant epoch; она сохраняет только non-secret
+binding. После proof-backed session external runtime может получить лишь exact
+canonical binding, PgBouncer endpoint и текущий Vault public context; пароль
+остаётся доступен только через отдельный fenced HPKE Vault route. Команда
+`make -C backend test-storage-external-process` подтверждает live external
+credential delivery и rotation через owner-control IPC: временный signed Kernel
+bundle запускает real Vault child, а отдельный proof-backed external process
+получает binding и выполняет HPKE lease route. После owner-authorized external
+revocation прежний binding получает `runtime_session_stale`, а successor
+получает другой credential; process сохраняет лишь SHA-256 assertions вместо
+plaintext. Authenticated Docker contour проверяет owner-local migrations, роли
+и Vault-delivered credentials against real PostgreSQL/PgBouncer. Immutable
+migration ledger остаётся admin-only. Ограничение same-UID direct endpoint
+документировано как ограничение evidence, а не как ложное заявление о sandbox
+изоляции. Эта совокупность conformance открывает `storage_control_v1`.
+
+Отдельный disposable authenticated Compose contour проверяет, что PgBouncer
+отвергает неверный admin password и принимает credential из private temporary
+file, смонтированного именно как Docker secret. Второй независимый secret
+даёт Storage runtime выполнить PostgreSQL fixed-schema bootstrap. Runner
+удаляет project, volumes и files после test. Эти secret создаются runner-ом, а
+не Vault, поэтому test не считается evidence production Vault deployment,
+binding issuance или credential rotation.
+
+Этот contour также монтирует Storage-owned database include как private
+directory. Он проверяет, что runtime применяет validated topology-matching
+binding: атомарно добавляет generation-scoped alias, делает PgBouncer `RELOAD`
+и сверяет alias через catalog. Отдельный runtime revoke scenario проверяет
+fencing exact binding, но это всё ещё не доказывает owner-authorized binding
+issuance через owner control IPC или полный external Kernel→Vault process path.
+
+Для будущего managed initial cluster bootstrap PostgreSQL adapter уже создаёт
+one-shot `initdb --pwfile`: только в Storage-owned `0700` runtime directory,
+exclusive `0600` file, `fsync`, explicit removal и best-effort drop cleanup.
+Он не запускает `initdb` сам и пока не связывает этот password file с
+managed PostgreSQL lifecycle; это отдельная оставшаяся runtime composition.

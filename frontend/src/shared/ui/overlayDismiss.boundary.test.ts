@@ -34,9 +34,13 @@ describe('Hermes UI mouse-leave overlay dismissal contract', () => {
 		const uiRoot = fileURLToPath(new URL('.', import.meta.url))
 
 		for (const componentName of mouseLeaveDismissComponents) {
-			const source = readFileSync(join(uiRoot, `${componentName}.vue`), 'utf8')
+			const componentPath = overlayComponentPath(componentName)
+			const source = readFileSync(join(uiRoot, componentPath), 'utf8')
+			const mouseLeaveImport = componentPath.startsWith('primitives/')
+				? "import { useMouseLeaveDismiss } from '../useMouseLeaveDismiss'"
+				: "import { useMouseLeaveDismiss } from './useMouseLeaveDismiss'"
 
-			expect(source, componentName).toContain("import { useMouseLeaveDismiss } from './useMouseLeaveDismiss'")
+			expect(source, componentName).toContain(mouseLeaveImport)
 			expect(source, componentName).toContain('cancelMouseLeaveDismiss')
 			expect(source, componentName).toContain('scheduleMouseLeaveDismiss')
 			expect(source, componentName).toContain('@mouseleave=')
@@ -62,3 +66,7 @@ describe('Hermes UI mouse-leave overlay dismissal contract', () => {
 		expect(styles).toContain('.hermes-tree-select__popover {\n\tposition: fixed;')
 	})
 })
+
+function overlayComponentPath(componentName: string): string {
+	return componentName === 'Select' ? 'primitives/Select.vue' : `${componentName}.vue`
+}

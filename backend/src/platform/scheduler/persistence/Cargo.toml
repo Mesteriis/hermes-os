@@ -1,0 +1,23 @@
+[package]
+name = "hermes-scheduler-persistence"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "platform"
+owner = "scheduler"
+surface = "persistence"
+
+[dependencies]
+hermes-clock-protocol = { path = "../../clock/protocol" }
+hermes-events-protocol = { path = "../../events" }
+hermes-runtime-protocol = { path = "../../runtime_protocol" }
+hermes-scheduler = { path = "../implementation" }
+hermes-scheduler-protocol = { path = "../protocol" }
+hermes-storage-protocol = { path = "../../storage/protocol" }
+prost = "=0.14.4"
+sha2 = { version = "=0.11.0", default-features = false }
+sqlx = { version = "=0.8.6", default-features = false, features = ["postgres", "runtime-tokio-rustls"] }

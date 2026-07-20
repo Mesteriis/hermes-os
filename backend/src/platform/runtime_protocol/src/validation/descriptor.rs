@@ -1,7 +1,8 @@
 use prost::Message;
 
 use crate::v1::{
-    CapabilityCriticalityV1, InitialOwnerEnrollmentChallengeV1, InitialOwnerEnrollmentV1,
+    CapabilityCriticalityV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
+    EventSubscriptionRequirementV1, InitialOwnerEnrollmentChallengeV1, InitialOwnerEnrollmentV1,
     ModuleDescriptorV1, ModuleKindV1, SettingApplyModeV1, SettingClientVisibilityV1,
     SettingMutationAuthorityV1, SettingTargetScopeV1, SettingValueTypeV1, SettingsSchemaV1,
     SettingsSnapshotV1, VaultActionV1, VaultSecretClassV1, VaultTargetScopeV1,
@@ -17,6 +18,8 @@ pub const MAX_VAULT_LEASE_TTL_SECONDS: u32 = 3_600;
 pub const MAX_REQUEST_TIMEOUT_MILLIS: u32 = 60_000;
 pub const MAX_REQUEST_CONNECTION_BUDGET: u32 = 1_024;
 pub const MAX_TELEMETRY_SIGNALS_PER_MINUTE: u32 = 1_000_000;
+pub const MAX_EVENT_ROUTE_IN_FLIGHT: u32 = 4_096;
+pub const MAX_BLOB_QUOTA_BYTES: u64 = 1 << 40;
 pub const MAX_IDENTIFIER_BYTES: usize = 128;
 pub const MAX_DISPLAY_BYTES: usize = 4096;
 pub const MAX_SETTINGS_SCHEMA_BYTES: usize = 256 * 1024;
@@ -168,7 +171,9 @@ fn valid_capability_request(request: &crate::v1::CapabilityRequestV1) -> bool {
         Some(capability_request_v1::Request::VaultPurpose(purpose)) => {
             valid_vault_purpose_request(purpose)
         }
-        Some(capability_request_v1::Request::BlobQuota(blob)) => blob.max_bytes > 0,
+        Some(capability_request_v1::Request::BlobQuota(blob)) => {
+            (1..=MAX_BLOB_QUOTA_BYTES).contains(&blob.max_bytes)
+        }
         Some(capability_request_v1::Request::ClockTimer(clock)) => clock.requires_wall_clock,
         Some(capability_request_v1::Request::SchedulerJob(scheduler)) => scheduler
             .job_kind
@@ -181,7 +186,44 @@ fn valid_capability_request(request: &crate::v1::CapabilityRequestV1) -> bool {
         Some(capability_request_v1::Request::HostCapability(host)) => {
             validate_identifier(&host.capability_id).is_ok()
         }
+        Some(capability_request_v1::Request::EventRoute(route)) => valid_event_route_request(route),
         None => false,
+    }
+}
+
+fn valid_event_route_request(route: &crate::v1::EventRouteRequestV1) -> bool {
+    DurableEnvelopeKindV1::try_from(route.envelope_kind)
+        .ok()
+        .is_some_and(|kind| kind != DurableEnvelopeKindV1::Unspecified)
+        && route
+            .contract
+            .as_ref()
+            .is_some_and(valid_contract_reference)
+        && EventRouteDirectionV1::try_from(route.direction)
+            .ok()
+            .is_some_and(|direction| direction != EventRouteDirectionV1::Unspecified)
+        && (1..=MAX_EVENT_ROUTE_IN_FLIGHT).contains(&route.max_in_flight)
+        && valid_event_delivery_policy(route)
+}
+
+fn valid_event_delivery_policy(route: &crate::v1::EventRouteRequestV1) -> bool {
+    match EventRouteDirectionV1::try_from(route.direction).ok() {
+        Some(EventRouteDirectionV1::Publish) => {
+            route.subscription_requirement == EventSubscriptionRequirementV1::Unspecified as i32
+                && route.max_deliver == 0
+                && route.ack_wait_millis == 0
+        }
+        Some(EventRouteDirectionV1::Consume) => {
+            matches!(
+                EventSubscriptionRequirementV1::try_from(route.subscription_requirement).ok(),
+                Some(
+                    EventSubscriptionRequirementV1::Required
+                        | EventSubscriptionRequirementV1::Optional
+                )
+            ) && (1..=32).contains(&route.max_deliver)
+                && (1..=600_000).contains(&route.ack_wait_millis)
+        }
+        _ => false,
     }
 }
 

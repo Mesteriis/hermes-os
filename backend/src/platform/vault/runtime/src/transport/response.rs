@@ -31,5 +31,6 @@ pub fn encrypt_result(
         hpke_encapped_key: frame.encapped_key().to_vec(),
         ciphertext: frame.ciphertext().to_vec(),
         hpke_authentication_tag: frame.tag().to_vec(),
+        caller_runtime_generation: request.audience().runtime_generation(),
     })
 }

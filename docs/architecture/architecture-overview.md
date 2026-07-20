@@ -145,8 +145,9 @@ readiness, но не находится на business data path. Runtime databas
 принадлежат Vault.
 
 ADR-0225 разделяет полный target и текущую реализацию. Six-package recovery
-baseline теперь дополнен private module control plane, managed-launch trust и
-five-package `vault_v1` и two-package `clock_v1`. Control Store работает через один bounded
+baseline теперь дополнен private module control plane, managed-launch trust,
+five-package `vault_v1`, two-package `clock_v1` и Scheduler protocol foundation.
+Control Store работает через один bounded
 SQLite actor и внешний crash-safe recovery fence. NATS, Blob,
 Scheduler, public client gateway, whole-instance backup и первый
 owner остаются закрытыми phase gates; Kernel не может достичь `ready`.
@@ -415,6 +416,8 @@ Telemetry Hub принимает structured logs, metrics, traces и lifecycle/c
 reports через private local channel, не зависящий от PostgreSQL или NATS.
 Kernel владеет identity, redaction, quotas и diagnostics policy; ingestion и
 bounded local retention выполняет отдельный managed Telemetry Collector.
+Private owner diagnostics проходят только через typed Protobuf control contract
+и возвращают aggregate `segment_count`/`total_bytes` без raw records.
 
 Collector failure переводит telemetry capability в `degraded`, но не
 останавливает Kernel или modules. Private content, provider payload и secrets

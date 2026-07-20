@@ -2,9 +2,10 @@
 
 use std::collections::BTreeSet;
 
+use hermes_runtime_protocol::v1::VaultCiphertextRouteV1;
 use hermes_vault_protocol::{
-    VaultTransportCommandV1, VaultTransportDirectionV1, VaultTransportError,
-    VaultTransportSessionV1,
+    SecretClassV1, VaultActionV1, VaultTransportBindingV1, VaultTransportCommandV1,
+    VaultTransportDirectionV1, VaultTransportError, VaultTransportSessionV1,
 };
 use zeroize::Zeroizing;
 
@@ -81,6 +82,57 @@ pub fn execute_session(
     service
         .execute_command_once(&command, session.binding().audience(), now_unix_seconds)
         .map_err(VaultSessionExecutionError::Service)
+}
+
+pub fn execute_storage_session(
+    guard: &mut VaultTransportReplayGuard,
+    keys: &VaultTransportKeyPair,
+    service: &mut VaultService,
+    session: &VaultTransportSessionV1,
+    route: &VaultCiphertextRouteV1,
+    now_unix_seconds: u64,
+) -> Result<Zeroizing<Vec<u8>>, VaultSessionExecutionError> {
+    let command = guard
+        .open_command(keys, session)
+        .map_err(VaultSessionExecutionError::Transport)?;
+    validate_storage_command(&command, session.binding(), route)
+        .map_err(VaultSessionExecutionError::Transport)?;
+    service
+        .execute_command_once(&command, session.binding().audience(), now_unix_seconds)
+        .map_err(VaultSessionExecutionError::Service)
+}
+
+fn validate_storage_command(
+    command: &VaultTransportCommandV1,
+    binding: &VaultTransportBindingV1,
+    route: &VaultCiphertextRouteV1,
+) -> Result<(), VaultTransportError> {
+    match command {
+        VaultTransportCommandV1::IssueLease { request } => {
+            let purpose = request.purpose();
+            (request.vault_runtime_generation() == binding.vault_runtime_generation()
+                && request.secret_revision() == route.storage_credential_lease_revision
+                && request.logical_owner_id() == route.storage_owner_id
+                && request.audience() == binding.audience()
+                && purpose.purpose_id() == "storage.runtime.credential"
+                && purpose.configuration_instance_id() == route.storage_runtime_principal
+                && purpose.allowed_secret_classes() == [SecretClassV1::PlatformCredential]
+                && matches!(
+                    purpose.actions(),
+                    [VaultActionV1::Create] | [VaultActionV1::Resolve]
+                ))
+            .then_some(())
+            .ok_or(VaultTransportError::InvalidBinding)
+        }
+        VaultTransportCommandV1::ResolveLease { secret_class, .. }
+        | VaultTransportCommandV1::GenerateOpaqueToken { secret_class, .. } => (*secret_class
+            == SecretClassV1::PlatformCredential)
+            .then_some(())
+            .ok_or(VaultTransportError::InvalidBinding),
+        VaultTransportCommandV1::RevokeAudience => Ok(()),
+        VaultTransportCommandV1::StoreLease { .. }
+        | VaultTransportCommandV1::ReplaceLease { .. } => Err(VaultTransportError::InvalidBinding),
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]

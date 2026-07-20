@@ -71,7 +71,7 @@ impl RegistrationFixture {
                 .expect("read bundled launch binding"),
             Some(binding.clone())
         );
-        let launch = ManagedLaunchRecord::new("registration-1", 1, 1, 1, 2);
+        let launch = ManagedLaunchRecord::new("registration-1", "runtime-1", 1, 1, 1, 2);
         self.store
             .record_managed_launch(&launch)
             .expect("record managed launch");

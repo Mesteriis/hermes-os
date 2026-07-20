@@ -57,7 +57,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "storage_foundation_v1",
+    "currentSlice": "gateway_runtime_foundation_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -152,10 +152,26 @@
       },
       {"name":"hermes-storage-protocol","role":"platform","owner":"storage","surface":"contract"},
       {"name":"hermes-storage-control","role":"platform","owner":"storage","surface":"implementation"},
+      {"name":"hermes-storage-vault","role":"platform","owner":"storage","surface":"implementation"},
       {"name":"hermes-storage-runtime","role":"platform","owner":"storage","surface":"runtime"},
       {"name":"hermes-storage-postgres","role":"platform","owner":"storage","surface":"persistence"},
       {"name":"hermes-storage-pgbouncer","role":"platform","owner":"storage","surface":"implementation"},
-      {"name":"hermes-storage-migrations","role":"platform","owner":"storage","surface":"implementation"}
+      {"name":"hermes-storage-migrations","role":"platform","owner":"storage","surface":"implementation"},
+      {"name":"hermes-events-jetstream","role":"platform","owner":"events","surface":"implementation"},
+      {"name":"hermes-events-authority","role":"platform","owner":"events","surface":"implementation"},
+      {"name":"hermes-events-authority-runtime-control","role":"platform","owner":"events","surface":"implementation"},
+      {"name":"hermes-events-authority-runtime","role":"platform","owner":"events","surface":"runtime"},
+      {"name":"hermes-blob-protocol","role":"platform","owner":"blob","surface":"contract"},
+      {"name":"hermes-blob-runtime","role":"platform","owner":"blob","surface":"implementation"},
+      {"name":"hermes-blob-service","role":"platform","owner":"blob","surface":"runtime"},
+      {"name":"hermes-scheduler-protocol","role":"platform","owner":"scheduler","surface":"contract"},
+      {"name":"hermes-scheduler","role":"platform","owner":"scheduler","surface":"implementation"},
+      {"name":"hermes-scheduler-persistence","role":"platform","owner":"scheduler","surface":"persistence"},
+      {"name":"hermes-gateway-session-contract","role":"api","owner":"gateway","surface":"contract"},
+      {"name":"hermes-gateway-session","role":"api","owner":"gateway","surface":"implementation"},
+      {"name":"hermes-scheduler-jetstream","role":"platform","owner":"scheduler","surface":"implementation"},
+      {"name":"hermes-scheduler-runtime","role":"platform","owner":"scheduler","surface":"runtime"},
+      {"name":"hermes-gateway-runtime","role":"api","owner":"gateway","surface":"implementation"}
     ],
     "workspaceDependencyAllowlist": {
       "hermes-events-protocol": [],
@@ -188,6 +204,22 @@
         },
         {
           "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-gateway-session-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-gateway-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-gateway-session",
           "kind": "normal"
         }
       ],
@@ -251,10 +283,82 @@
       ],
       "hermes-storage-protocol": [],
       "hermes-storage-control": [{"name":"hermes-storage-protocol","kind":"normal"}],
-      "hermes-storage-runtime": [{"name":"hermes-storage-protocol","kind":"normal"},{"name":"hermes-storage-control","kind":"normal"},{"name":"hermes-storage-postgres","kind":"normal"},{"name":"hermes-storage-pgbouncer","kind":"normal"},{"name":"hermes-storage-migrations","kind":"normal"}],
-      "hermes-storage-postgres": [{"name":"hermes-storage-control","kind":"normal"}],
-      "hermes-storage-pgbouncer": [{"name":"hermes-storage-control","kind":"normal"}],
-      "hermes-storage-migrations": [{"name":"hermes-storage-control","kind":"normal"},{"name":"hermes-storage-protocol","kind":"normal"}]
+      "hermes-storage-vault": [{"name":"hermes-runtime-protocol","kind":"normal"},{"name":"hermes-storage-control","kind":"normal"},{"name":"hermes-storage-protocol","kind":"normal"},{"name":"hermes-vault-protocol","kind":"normal"}],
+      "hermes-storage-runtime": [{"name":"hermes-storage-protocol","kind":"normal"},{"name":"hermes-storage-control","kind":"normal"},{"name":"hermes-storage-postgres","kind":"normal"},{"name":"hermes-storage-pgbouncer","kind":"normal"},{"name":"hermes-storage-migrations","kind":"normal"},{"name":"hermes-runtime-protocol","kind":"normal"},{"name":"hermes-storage-vault","kind":"normal"},{"name":"hermes-vault-protocol","kind":"normal"}],
+      "hermes-storage-postgres": [{"name":"hermes-storage-control","kind":"normal"},{"name":"hermes-storage-migrations","kind":"normal"},{"name":"hermes-storage-protocol","kind":"normal"}],
+      "hermes-storage-pgbouncer": [{"name":"hermes-storage-control","kind":"normal"},{"name":"hermes-storage-protocol","kind":"normal"}],
+      "hermes-storage-migrations": [{"name":"hermes-storage-control","kind":"normal"},{"name":"hermes-storage-protocol","kind":"normal"}],
+      "hermes-events-jetstream": [
+        {"name":"hermes-events-protocol","kind":"normal"},
+        {"name":"hermes-runtime-protocol","kind":"normal"},
+        {"name":"hermes-scheduler-protocol","kind":"normal"},
+        {"name":"hermes-vault-protocol","kind":"normal"}
+      ],
+      "hermes-events-authority": [
+        {"name":"hermes-events-jetstream","kind":"normal"}
+      ],
+      "hermes-events-authority-runtime-control": [
+        {"name":"hermes-events-authority","kind":"normal"},
+        {"name":"hermes-events-jetstream","kind":"normal"},
+        {"name":"hermes-runtime-protocol","kind":"normal"}
+      ],
+      "hermes-events-authority-runtime": [
+        {"name":"hermes-events-authority-runtime-control","kind":"normal"},
+        {"name":"hermes-runtime-protocol","kind":"normal"}
+      ],
+      "hermes-blob-protocol": [],
+      "hermes-blob-runtime": [
+        {"name":"hermes-blob-protocol","kind":"normal"},
+        {"name":"hermes-runtime-protocol","kind":"normal"},
+        {"name":"hermes-vault-protocol","kind":"normal"}
+      ],
+      "hermes-blob-service": [
+        {"name":"hermes-blob-protocol","kind":"normal"},
+        {"name":"hermes-blob-runtime","kind":"normal"},
+        {"name":"hermes-runtime-protocol","kind":"normal"},
+        {"name":"hermes-vault-protocol","kind":"normal"}
+      ],
+      "hermes-scheduler-protocol": [
+        {"name":"hermes-clock-protocol","kind":"normal"}
+      ],
+      "hermes-scheduler": [
+        {"name":"hermes-clock-protocol","kind":"normal"},
+        {"name":"hermes-events-protocol","kind":"normal"},
+        {"name":"hermes-scheduler-protocol","kind":"normal"}
+      ],
+      "hermes-scheduler-persistence": [
+        {"name":"hermes-clock-protocol","kind":"normal"},
+        {"name":"hermes-events-protocol","kind":"normal"},
+        {"name":"hermes-runtime-protocol","kind":"normal"},
+        {"name":"hermes-scheduler","kind":"normal"},
+        {"name":"hermes-scheduler-protocol","kind":"normal"},
+        {"name":"hermes-storage-protocol","kind":"normal"}
+      ],
+      "hermes-scheduler-jetstream": [
+        {"name":"hermes-events-protocol","kind":"normal"},
+        {"name":"hermes-runtime-protocol","kind":"normal"},
+        {"name":"hermes-scheduler-protocol","kind":"normal"}
+      ],
+      "hermes-scheduler-runtime": [
+        {"name":"hermes-clock-protocol","kind":"normal"},
+        {"name":"hermes-runtime-protocol","kind":"normal"},
+        {"name":"hermes-scheduler-jetstream","kind":"normal"},
+        {"name":"hermes-scheduler-persistence","kind":"normal"},
+        {"name":"hermes-scheduler-protocol","kind":"normal"},
+        {"name":"hermes-storage-vault","kind":"normal"}
+      ],
+      "hermes-gateway-runtime": [
+        {"name":"hermes-gateway-protocol","kind":"normal"},
+        {"name":"hermes-gateway-session","kind":"normal"},
+        {"name":"hermes-gateway-session-contract","kind":"normal"}
+      ],
+      "hermes-gateway-session-contract": [],
+      "hermes-gateway-session": [
+        {
+          "name": "hermes-gateway-session-contract",
+          "kind": "normal"
+        }
+      ]
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-events-protocol": [
@@ -287,6 +391,43 @@
           "kind": "build",
           "source": "crates_io",
           "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "hpke",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.0",
+          "defaultFeatures": false,
+          "features": [
+            "alloc",
+            "chacha",
+            "getrandom",
+            "x25519"
+          ]
+        },
+        {
+          "name": "nats-jwt",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.3.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
           "defaultFeatures": true,
           "features": []
         }
@@ -359,7 +500,16 @@
           "features": []
         }
       ],
-      "hermes-kernel-control-store": [],
+      "hermes-kernel-control-store": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-kernel-control-store-sqlite": [
         {
           "name": "rusqlite",
@@ -472,6 +622,35 @@
           "version": "=0.3.18",
           "defaultFeatures": true,
           "features": []
+        },
+        {
+          "name": "quinn",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.7",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "net",
+            "rt-multi-thread",
+            "sync",
+            "time"
+          ]
+        },
+        {
+          "name": "tokio-rustls",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.26.4",
+          "defaultFeatures": true,
+          "features": []
         }
       ],
       "hermes-vault-protocol": [
@@ -494,6 +673,14 @@
         "source": "crates_io",
         "version": "=0.11.0",
         "defaultFeatures": false,
+        "features": []
+      },
+      {
+        "name": "zeroize",
+        "kind": "normal",
+        "source": "crates_io",
+        "version": "=1.9.0",
+        "defaultFeatures": true,
         "features": []
       }
       ],
@@ -684,10 +871,105 @@
       ],
       "hermes-storage-protocol": [{"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},{"name":"sha2","kind":"normal","source":"crates_io","version":"=0.11.0","defaultFeatures":false,"features":[]},{"name":"prost-build","kind":"build","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},{"name":"protoc-bin-vendored","kind":"build","source":"crates_io","version":"=3.2.0","defaultFeatures":true,"features":[]}],
       "hermes-storage-control": [],
-      "hermes-storage-runtime": [],
-      "hermes-storage-postgres": [],
-      "hermes-storage-pgbouncer": [],
-      "hermes-storage-migrations": [{"name":"pg_query","kind":"normal","source":"crates_io","version":"=6.1.1","defaultFeatures":true,"features":[]}]
+      "hermes-storage-vault": [{"name":"getrandom","kind":"normal","source":"crates_io","version":"=0.4.3","defaultFeatures":false,"features":[]},{"name":"zeroize","kind":"normal","source":"crates_io","version":"=1.9.0","defaultFeatures":true,"features":[]}],
+      "hermes-storage-runtime": [{"name":"libc","kind":"normal","source":"crates_io","version":"=0.2.186","defaultFeatures":true,"features":[]},{"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},{"name":"sha2","kind":"normal","source":"crates_io","version":"=0.11.0","defaultFeatures":false,"features":[]},{"name":"tokio","kind":"normal","source":"crates_io","version":"=1.52.4","defaultFeatures":false,"features":["net","rt","time"]},{"name":"zeroize","kind":"normal","source":"crates_io","version":"=1.9.0","defaultFeatures":true,"features":[]}],
+      "hermes-storage-postgres": [{"name":"getrandom","kind":"normal","source":"crates_io","version":"=0.4.3","defaultFeatures":false,"features":[]},{"name":"libc","kind":"normal","source":"crates_io","version":"=0.2.186","defaultFeatures":true,"features":[]},{"name":"sha2","kind":"normal","source":"crates_io","version":"=0.11.0","defaultFeatures":false,"features":[]},{"name":"sqlx","kind":"normal","source":"crates_io","version":"=0.8.6","defaultFeatures":false,"features":["postgres","runtime-tokio-rustls"]},{"name":"zeroize","kind":"normal","source":"crates_io","version":"=1.9.0","defaultFeatures":true,"features":[]}],
+      "hermes-storage-pgbouncer": [
+        {"name":"libc","kind":"normal","source":"crates_io","version":"=0.2.186","defaultFeatures":true,"features":[]},
+        {"name":"tokio","kind":"normal","source":"crates_io","version":"=1.52.4","defaultFeatures":false,"features":["rt","time"]},
+        {"name":"tokio-postgres","kind":"normal","source":"crates_io","version":"=0.7.16","defaultFeatures":false,"features":["runtime"]},
+        {"name":"zeroize","kind":"normal","source":"crates_io","version":"=1.9.0","defaultFeatures":true,"features":[]}
+      ],
+      "hermes-storage-migrations": [{"name":"pg_query","kind":"normal","source":"crates_io","version":"=6.1.1","defaultFeatures":true,"features":[]}],
+      "hermes-events-jetstream": [
+        {"name":"async-nats","kind":"normal","source":"crates_io","version":"=0.49.1","defaultFeatures":true,"features":[]},
+        {"name":"base64","kind":"normal","source":"crates_io","version":"=0.22.1","defaultFeatures":true,"features":[]},
+        {"name":"futures-util","kind":"normal","source":"crates_io","version":"=0.3.32","defaultFeatures":true,"features":[]},
+        {"name":"getrandom","kind":"normal","source":"crates_io","version":"=0.4.3","defaultFeatures":false,"features":[]},
+        {"name":"hpke","kind":"normal","source":"crates_io","version":"=0.14.0","defaultFeatures":false,"features":["alloc","chacha","getrandom","x25519"]},
+        {"name":"nats-jwt","kind":"normal","source":"crates_io","version":"=0.3.0","defaultFeatures":true,"features":[]},
+        {"name":"serde","kind":"normal","source":"crates_io","version":"=1.0.228","defaultFeatures":false,"features":["derive"]},
+        {"name":"serde_json","kind":"normal","source":"crates_io","version":"=1.0.150","defaultFeatures":true,"features":[]},
+        {"name":"tokio","kind":"normal","source":"crates_io","version":"=1.52.4","defaultFeatures":false,"features":["rt-multi-thread","time"]},
+        {"name":"zeroize","kind":"normal","source":"crates_io","version":"=1.9.0","defaultFeatures":true,"features":[]}
+      ],
+      "hermes-events-authority": [
+        {"name":"zeroize","kind":"normal","source":"crates_io","version":"=1.9.0","defaultFeatures":true,"features":[]}
+      ],
+      "hermes-events-authority-runtime-control": [
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
+        {"name":"tokio","kind":"normal","source":"crates_io","version":"=1.52.4","defaultFeatures":false,"features":["net","rt","time"]}
+      ],
+      "hermes-events-authority-runtime": [
+        {"name":"libc","kind":"normal","source":"crates_io","version":"=0.2.186","defaultFeatures":true,"features":[]},
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]}
+      ],
+      "hermes-blob-protocol": [],
+      "hermes-blob-runtime": [
+        {"name":"chacha20poly1305","kind":"normal","source":"crates_io","version":"=0.11.0","defaultFeatures":false,"features":["alloc","zeroize"]},
+        {"name":"getrandom","kind":"normal","source":"crates_io","version":"=0.4.3","defaultFeatures":false,"features":[]},
+        {"name":"libc","kind":"normal","source":"crates_io","version":"=0.2.186","defaultFeatures":true,"features":[]},
+        {"name":"sha2","kind":"normal","source":"crates_io","version":"=0.11.0","defaultFeatures":false,"features":[]},
+        {"name":"zeroize","kind":"normal","source":"crates_io","version":"=1.9.0","defaultFeatures":true,"features":[]}
+      ],
+      "hermes-blob-service": [
+        {"name":"libc","kind":"normal","source":"crates_io","version":"=0.2.186","defaultFeatures":true,"features":[]},
+        {"name":"p256","kind":"normal","source":"crates_io","version":"=0.14.0","defaultFeatures":false,"features":["ecdsa"]},
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]}
+        ,{"name":"sha2","kind":"normal","source":"crates_io","version":"=0.11.0","defaultFeatures":false,"features":[]}
+      ],
+      "hermes-scheduler-protocol": [
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
+        {"name":"prost-build","kind":"build","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
+        {"name":"protoc-bin-vendored","kind":"build","source":"crates_io","version":"=3.2.0","defaultFeatures":true,"features":[]}
+      ],
+      "hermes-scheduler": [
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
+        {"name":"prost-types","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]}
+      ],
+      "hermes-scheduler-persistence": [
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
+        {"name":"sha2","kind":"normal","source":"crates_io","version":"=0.11.0","defaultFeatures":false,"features":[]},
+        {"name":"sqlx","kind":"normal","source":"crates_io","version":"=0.8.6","defaultFeatures":false,"features":["postgres","runtime-tokio-rustls"]}
+      ],
+      "hermes-scheduler-jetstream": [
+        {"name":"async-nats","kind":"normal","source":"crates_io","version":"=0.49.1","defaultFeatures":true,"features":[]},
+        {"name":"futures-util","kind":"normal","source":"crates_io","version":"=0.3.32","defaultFeatures":true,"features":[]},
+        {"name":"getrandom","kind":"normal","source":"crates_io","version":"=0.4.3","defaultFeatures":false,"features":[]},
+        {"name":"nats-jwt","kind":"normal","source":"crates_io","version":"=0.3.0","defaultFeatures":true,"features":[]},
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
+        {"name":"tokio","kind":"normal","source":"crates_io","version":"=1.52.4","defaultFeatures":false,"features":["time"]}
+      ],
+      "hermes-scheduler-runtime": [
+        {"name":"libc","kind":"normal","source":"crates_io","version":"=0.2.186","defaultFeatures":true,"features":[]},
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
+        {"name":"tokio","kind":"normal","source":"crates_io","version":"=1.52.4","defaultFeatures":false,"features":["net","rt-multi-thread","time"]}
+      ],
+      "hermes-gateway-runtime": [
+        {"name":"base64","kind":"normal","source":"crates_io","version":"=0.22.1","defaultFeatures":true,"features":[]},
+        {"name":"bytes","kind":"normal","source":"crates_io","version":"=1.12.1","defaultFeatures":true,"features":[]},
+        {"name":"futures-util","kind":"normal","source":"crates_io","version":"=0.3.32","defaultFeatures":true,"features":[]},
+        {"name":"h3","kind":"normal","source":"crates_io","version":"=0.0.8","defaultFeatures":true,"features":[]},
+        {"name":"h3-quinn","kind":"normal","source":"crates_io","version":"=0.0.10","defaultFeatures":true,"features":[]},
+        {"name":"http-body-util","kind":"normal","source":"crates_io","version":"=0.1.3","defaultFeatures":true,"features":[]},
+        {"name":"hyper","kind":"normal","source":"crates_io","version":"=1.10.1","defaultFeatures":false,"features":["http1","http2","server"]},
+        {"name":"hyper-util","kind":"normal","source":"crates_io","version":"=0.1.20","defaultFeatures":false,"features":["tokio"]},
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
+        {"name":"quinn","kind":"normal","source":"crates_io","version":"=0.11.7","defaultFeatures":true,"features":[]},
+        {"name":"serde","kind":"normal","source":"crates_io","version":"=1.0.228","defaultFeatures":true,"features":["derive"]},
+        {"name":"serde_json","kind":"normal","source":"crates_io","version":"=1.0.150","defaultFeatures":true,"features":[]},
+        {"name":"tokio","kind":"normal","source":"crates_io","version":"=1.52.4","defaultFeatures":false,"features":["io-util","macros","net","rt","sync"]},
+        {"name":"tokio-rustls","kind":"normal","source":"crates_io","version":"=0.26.4","defaultFeatures":true,"features":[]},
+        {"name":"webauthn-rs-core","kind":"normal","source":"crates_io","version":"=0.5.5","defaultFeatures":true,"features":[]}
+      ],
+      "hermes-gateway-session-contract": [],
+      "hermes-gateway-session": [
+        {"name":"getrandom","kind":"normal","source":"crates_io","version":"=0.4.3","defaultFeatures":false,"features":[]},
+        {"name":"p256","kind":"normal","source":"crates_io","version":"=0.14.0","defaultFeatures":false,"features":["ecdsa"]},
+        {"name":"serde_cbor_2","kind":"normal","source":"crates_io","version":"=0.13.0","defaultFeatures":true,"features":[]},
+        {"name":"url","kind":"normal","source":"crates_io","version":"=2.5.8","defaultFeatures":true,"features":[]},
+        {"name":"webauthn-rs-core","kind":"normal","source":"crates_io","version":"=0.5.5","defaultFeatures":true,"features":[]}
+      ]
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -773,10 +1055,26 @@
       },
       "hermes-storage-protocol": { "primaryKind": "lib", "customBuildAllowed": true },
       "hermes-storage-control": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-storage-vault": { "primaryKind": "lib", "customBuildAllowed": false },
       "hermes-storage-runtime": { "primaryKind": "bin", "customBuildAllowed": false },
       "hermes-storage-postgres": { "primaryKind": "lib", "customBuildAllowed": false },
       "hermes-storage-pgbouncer": { "primaryKind": "lib", "customBuildAllowed": false },
-      "hermes-storage-migrations": { "primaryKind": "lib", "customBuildAllowed": false }
+      "hermes-storage-migrations": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-events-jetstream": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-events-authority": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-events-authority-runtime-control": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-events-authority-runtime": { "primaryKind": "bin", "customBuildAllowed": false },
+      "hermes-blob-protocol": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-blob-runtime": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-blob-service": { "primaryKind": "bin", "customBuildAllowed": false },
+      "hermes-scheduler-protocol": { "primaryKind": "lib", "customBuildAllowed": true },
+      "hermes-scheduler": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-scheduler-persistence": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-scheduler-jetstream": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-scheduler-runtime": { "primaryKind": "bin", "customBuildAllowed": false },
+      "hermes-gateway-runtime": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-gateway-session-contract": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-gateway-session": { "primaryKind": "lib", "customBuildAllowed": false }
     },
     "developmentProfile": {
       "id": "development_full_platform_v1",
@@ -889,10 +1187,6 @@
   "phaseGates": {
     "transitionAuthority": "adr_policy_and_executable_evidence",
     "notAuthorized": [
-      "storage_control_v1",
-      "nats_data_plane_v1",
-      "blob_v1",
-      "scheduler_v1",
       "client_gateway_v1",
       "whole_instance_backup_v1",
       "first_owner_v1"
@@ -933,7 +1227,12 @@
         "nats_data_plane_v1",
         "clock_v1"
       ],
+      "browser_client_v1": [
+        "module_control_plane_v1",
+        "managed_launch_trust_v1"
+      ],
       "client_gateway_v1": [
+        "browser_client_v1",
         "module_control_plane_v1",
         "telemetry_v1",
         "nats_data_plane_v1"
@@ -1056,6 +1355,15 @@
         "retry_idempotency_and_recovery",
         "deterministic_clock_conformance"
       ],
+      "browser_client_v1": [
+        "exact_gateway_package_and_local_listener_inventory",
+        "browser_device_pairing_and_session_fencing",
+        "signed_browser_bootstrap_delivery",
+        "same_origin_connect_session_confirmation",
+        "same_origin_fetch_and_no_secret_boundary",
+        "sse_fail_closed_without_admitted_owner",
+        "browser_abuse_privacy_and_redaction_tests"
+      ],
       "client_gateway_v1": [
         "exact_gateway_package_and_listener_inventory",
         "owner_device_session_authorization",
@@ -1163,6 +1471,10 @@
     "owner": "storage",
     "protocolPackage": "hermes-storage-protocol",
     "controlPackage": "hermes-storage-control",
+    "vaultPackage": "hermes-storage-vault",
+    "sharedVaultRouteConsumers": [
+      "hermes-scheduler-runtime"
+    ],
     "runtimePackage": "hermes-storage-runtime",
     "postgresPackage": "hermes-storage-postgres",
     "pgbouncerPackage": "hermes-storage-pgbouncer",
@@ -1251,7 +1563,12 @@
       "sea-orm"
     ],
     "allowedPostgresClientDependencies": [
-      "sqlx"
+      "sqlx",
+      "tokio-postgres"
+    ],
+    "testSupportPostgresClientAllowlist": [
+      "hermes-events-jetstream-testkit:dev:sqlx",
+      "hermes-scheduler-testkit:dev:sqlx"
     ],
     "sqliteClientDependencies": [
       "rusqlite"

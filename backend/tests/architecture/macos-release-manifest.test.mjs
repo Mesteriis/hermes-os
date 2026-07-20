@@ -14,7 +14,7 @@ function validManifest() {
     artifacts: {
       tauri_bundle: { path: '/Applications/Hermes Hub.app' },
       kernel_sidecar: {
-        path: '/Applications/Hermes Hub.app/Contents/MacOS/hermes-kernel-aarch64-apple-darwin',
+        path: '/Applications/Hermes Hub.app/Contents/MacOS/hermes-kernel',
         sha256: digest,
       },
       release_trust_root: {
@@ -64,7 +64,7 @@ test('rejects non-macOS profiles, malformed Team IDs and missing Kernel digest',
 
 test('rejects a release manifest that points a signed artifact outside its Tauri bundle', () => {
   const detachedSidecar = validManifest();
-  detachedSidecar.artifacts.kernel_sidecar.path = '/opt/hermes/hermes-kernel-aarch64-apple-darwin';
+  detachedSidecar.artifacts.kernel_sidecar.path = '/opt/hermes/hermes-kernel';
   assert.ok(validateManifest(detachedSidecar).some((error) => error.includes('kernel_sidecar')));
 
   const wrongResourceRoot = validManifest();

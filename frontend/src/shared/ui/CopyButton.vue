@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import Button from './Button.vue'
+import Button from './primitives/Button.vue'
 
 type CopyState = 'idle' | 'copied' | 'error'
 

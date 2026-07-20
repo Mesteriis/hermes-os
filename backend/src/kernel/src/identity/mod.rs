@@ -1,5 +1,6 @@
 //! Device identity, owner enrollment, and server pairing.
 
+pub(crate) mod browser_gateway;
 pub(crate) mod device;
 pub(crate) mod enrollment;
 pub(crate) mod owner;

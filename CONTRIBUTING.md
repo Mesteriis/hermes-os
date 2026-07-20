@@ -33,9 +33,7 @@ fixtures и security invariants. Запрещено:
 Clean-room backend validation принадлежит `backend/`:
 
 ```sh
-make -C backend architecture-check
-make -C backend test-architecture
-make -C backend validate
+make -C backend test
 ```
 
 Эти команды проверяют architecture policy, но пока не доказывают наличие

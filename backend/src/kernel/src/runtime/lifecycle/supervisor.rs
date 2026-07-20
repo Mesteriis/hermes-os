@@ -2,30 +2,45 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, SyncSender};
-use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::sync::{Arc, Mutex, Weak};
 
 use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::distribution::staged_contracts::StagedRuntimeContracts;
-use crate::runtime::lifecycle::control::{ManagedRuntimeExpectation, ManagedRuntimeRelayRequest};
+use crate::runtime::lifecycle::control::{
+    ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation, ManagedRuntimeRelayRequest,
+    ManagedRuntimeVaultRouteHandler,
+};
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
-use crate::runtime::managed::supervisor as managed_child_supervisor;
+
+#[path = "supervisor/worker.rs"]
+mod worker;
+
+use worker::{ActiveWorker, new_active_worker, remove_staged_launch};
+
+const MANAGED_RUNTIME_RELAY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const MANAGED_RUNTIME_READY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
 #[derive(Clone)]
 pub struct ManagedRuntimeSupervisor {
     inner: Arc<Inner>,
 }
 
+#[derive(Clone)]
+pub struct ManagedRuntimeRelayPort {
+    inner: Weak<Inner>,
+}
+
+pub trait ManagedRuntimeRelay: Send + Sync {
+    fn relay(&self, registration_id: &str, payload: Vec<u8>) -> Result<Vec<u8>, String>;
+}
+
 struct Inner {
     shutdown_requested: Arc<AtomicBool>,
     workers: Mutex<HashMap<String, ActiveWorker>>,
-}
-
-struct ActiveWorker {
-    join: JoinHandle<()>,
-    relay: SyncSender<ManagedRuntimeRelayRequest>,
-    stop_requested: Arc<AtomicBool>,
+    failures: Mutex<HashMap<String, String>>,
+    event_credential_handler: Mutex<Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>>,
+    vault_route_handler: Mutex<Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>>,
 }
 
 impl ManagedRuntimeSupervisor {
@@ -35,7 +50,55 @@ impl ManagedRuntimeSupervisor {
             inner: Arc::new(Inner {
                 shutdown_requested,
                 workers: Mutex::new(HashMap::new()),
+                failures: Mutex::new(HashMap::new()),
+                event_credential_handler: Mutex::new(None),
+                vault_route_handler: Mutex::new(None),
             }),
+        }
+    }
+
+    pub fn configure_vault_route_handler(
+        &self,
+        handler: Arc<dyn ManagedRuntimeVaultRouteHandler>,
+    ) -> Result<(), String> {
+        if !self
+            .inner
+            .workers
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())?
+            .is_empty()
+        {
+            return Err(
+                "managed runtime Vault route handler must be configured before launch".to_owned(),
+            );
+        }
+        let mut current = self
+            .inner
+            .vault_route_handler
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())?;
+        if current.is_some() {
+            return Err("managed runtime Vault route handler is already configured".to_owned());
+        }
+        *current = Some(handler);
+        Ok(())
+    }
+
+    pub fn configure_event_credential_handler(
+        &self,
+        handler: Arc<dyn ManagedRuntimeEventCredentialHandler>,
+    ) -> Result<(), String> {
+        self.configure_before_launch(
+            &self.inner.event_credential_handler,
+            handler,
+            "managed runtime Event credential handler",
+        )
+    }
+
+    #[must_use]
+    pub fn relay_port(&self) -> ManagedRuntimeRelayPort {
+        ManagedRuntimeRelayPort {
+            inner: Arc::downgrade(&self.inner),
         }
     }
 
@@ -118,52 +181,119 @@ impl ManagedRuntimeSupervisor {
             remove_staged_launch(staged_executable, contracts);
             return Err("managed runtime is already active for this registration".to_owned());
         }
-        let shutdown_requested = Arc::clone(&self.inner.shutdown_requested);
-        let stop_requested = Arc::new(AtomicBool::new(false));
-        let worker_stop_requested = Arc::clone(&stop_requested);
-        let (relay_sender, relay_receiver) = mpsc::sync_channel(64);
-        let worker = std::thread::spawn(move || {
-            let _ = managed_child_supervisor::run_until_shutdown(
-                &staged_executable,
-                &arguments,
-                &expectation,
-                &policy,
-                &shutdown_requested,
-                &worker_stop_requested,
-                &relay_receiver,
-            );
-            let _ = staged_executable.remove();
-            if let Some(contracts) = contracts {
-                let _ = contracts.remove();
-            }
-        });
-        workers.insert(
-            registration_id,
-            ActiveWorker {
-                join: worker,
-                relay: relay_sender,
-                stop_requested,
-            },
+        if let Err(error) = self.clear_failure(&registration_id) {
+            drop(workers);
+            remove_staged_launch(staged_executable, contracts);
+            return Err(error);
+        }
+        let (vault_route_handler, event_credential_handler) =
+            match self.configured_request_handlers() {
+                Ok(handlers) => handlers,
+                Err(error) => {
+                    drop(workers);
+                    remove_staged_launch(staged_executable, contracts);
+                    return Err(error);
+                }
+            };
+        let worker = new_active_worker(
+            Arc::clone(&self.inner),
+            registration_id.clone(),
+            staged_executable,
+            arguments,
+            expectation,
+            policy,
+            contracts,
+            vault_route_handler,
+            event_credential_handler,
         );
+        workers.insert(registration_id, worker);
         Ok(())
     }
 
-    pub fn relay(&self, registration_id: &str, payload: Vec<u8>) -> Result<Vec<u8>, String> {
-        let sender = self
+    fn configured_request_handlers(
+        &self,
+    ) -> Result<
+        (
+            Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>,
+            Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>,
+        ),
+        String,
+    > {
+        Ok((
+            self.vault_route_handler()?,
+            self.event_credential_handler()?,
+        ))
+    }
+
+    fn vault_route_handler(
+        &self,
+    ) -> Result<Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>, String> {
+        self.inner
+            .vault_route_handler
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
+            .map(|handler| handler.clone())
+    }
+
+    fn event_credential_handler(
+        &self,
+    ) -> Result<Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>, String> {
+        self.inner
+            .event_credential_handler
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
+            .map(|handler| handler.clone())
+    }
+
+    fn configure_before_launch<T>(
+        &self,
+        slot: &Mutex<Option<Arc<T>>>,
+        handler: Arc<T>,
+        label: &str,
+    ) -> Result<(), String>
+    where
+        T: ?Sized + Send + Sync,
+    {
+        if !self
             .inner
             .workers
             .lock()
             .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())?
-            .get(registration_id)
-            .map(|worker| worker.relay.clone())
-            .ok_or_else(|| "managed runtime is unavailable".to_owned())?;
-        let (response_sender, response_receiver) = mpsc::sync_channel(1);
-        sender
-            .try_send(ManagedRuntimeRelayRequest::new(payload, response_sender))
-            .map_err(|_| "managed runtime relay is unavailable".to_owned())?;
-        response_receiver
-            .recv_timeout(std::time::Duration::from_secs(2))
-            .map_err(|_| "managed runtime relay timed out".to_owned())?
+            .is_empty()
+        {
+            return Err(format!("{label} must be configured before launch"));
+        }
+        let mut current = slot
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())?;
+        if current.is_some() {
+            return Err(format!("{label} is already configured"));
+        }
+        *current = Some(handler);
+        Ok(())
+    }
+
+    fn clear_failure(&self, registration_id: &str) -> Result<(), String> {
+        self.inner
+            .failures
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())?
+            .remove(registration_id);
+        Ok(())
+    }
+
+    pub fn relay(&self, registration_id: &str, payload: Vec<u8>) -> Result<Vec<u8>, String> {
+        self.relay_port().relay(registration_id, payload)
+    }
+
+    pub(crate) fn relay_with_timeout(
+        &self,
+        registration_id: &str,
+        payload: Vec<u8>,
+        timeout: std::time::Duration,
+    ) -> Result<Vec<u8>, String> {
+        self.relay_port()
+            .relay_with_timeout(registration_id, payload, timeout)
     }
 
     pub fn is_active(&self, registration_id: &str) -> Result<bool, String> {
@@ -173,6 +303,62 @@ impl ManagedRuntimeSupervisor {
             .lock()
             .map(|workers| workers.contains_key(registration_id))
             .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
+    }
+
+    pub fn wait_until_ready(&self, registration_id: &str) -> Result<(), String> {
+        let receiver = self.take_ready_receiver(registration_id)?;
+        match receiver.recv_timeout(MANAGED_RUNTIME_READY_TIMEOUT) {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(error)) => Err(error),
+            Err(RecvTimeoutError::Timeout) => {
+                let _ = self.stop(registration_id);
+                Err("managed runtime did not become ready before its deadline".to_owned())
+            }
+            Err(RecvTimeoutError::Disconnected) => Err(self
+                .last_failure(registration_id)?
+                .unwrap_or_else(|| "managed runtime stopped before readiness".to_owned())),
+        }
+    }
+
+    pub fn last_failure(&self, registration_id: &str) -> Result<Option<String>, String> {
+        self.inner
+            .failures
+            .lock()
+            .map(|failures| failures.get(registration_id).cloned())
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
+    }
+
+    pub(crate) fn record_failure(
+        &self,
+        registration_id: &str,
+        error: String,
+    ) -> Result<(), String> {
+        self.inner
+            .failures
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())?
+            .insert(registration_id.to_owned(), error);
+        Ok(())
+    }
+
+    fn take_ready_receiver(
+        &self,
+        registration_id: &str,
+    ) -> Result<Receiver<Result<(), String>>, String> {
+        let workers = self
+            .inner
+            .workers
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())?;
+        let worker = workers
+            .get(registration_id)
+            .ok_or_else(|| "managed runtime is unavailable".to_owned())?;
+        worker
+            .ready
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())?
+            .take()
+            .ok_or_else(|| "managed runtime readiness was already consumed".to_owned())
     }
 
     pub fn stop(&self, registration_id: &str) -> Result<(), String> {
@@ -227,12 +413,40 @@ impl ManagedRuntimeSupervisor {
     }
 }
 
-fn remove_staged_launch(
-    staged_executable: StagedNativeArtifact,
-    contracts: Option<StagedRuntimeContracts>,
-) {
-    let _ = staged_executable.remove();
-    if let Some(contracts) = contracts {
-        let _ = contracts.remove();
+impl ManagedRuntimeRelayPort {
+    pub fn relay(&self, registration_id: &str, payload: Vec<u8>) -> Result<Vec<u8>, String> {
+        self.relay_with_timeout(registration_id, payload, MANAGED_RUNTIME_RELAY_TIMEOUT)
+    }
+
+    pub(crate) fn relay_with_timeout(
+        &self,
+        registration_id: &str,
+        payload: Vec<u8>,
+        timeout: std::time::Duration,
+    ) -> Result<Vec<u8>, String> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or_else(|| "managed runtime supervisor is unavailable".to_owned())?;
+        let sender = inner
+            .workers
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())?
+            .get(registration_id)
+            .map(|worker| worker.relay.clone())
+            .ok_or_else(|| "managed runtime is unavailable".to_owned())?;
+        let (response_sender, response_receiver) = mpsc::sync_channel(1);
+        sender
+            .try_send(ManagedRuntimeRelayRequest::new(payload, response_sender))
+            .map_err(|_| "managed runtime relay is unavailable".to_owned())?;
+        response_receiver
+            .recv_timeout(timeout)
+            .map_err(|_| "managed runtime relay timed out".to_owned())?
+    }
+}
+
+impl ManagedRuntimeRelay for ManagedRuntimeRelayPort {
+    fn relay(&self, registration_id: &str, payload: Vec<u8>) -> Result<Vec<u8>, String> {
+        Self::relay(self, registration_id, payload)
     }
 }

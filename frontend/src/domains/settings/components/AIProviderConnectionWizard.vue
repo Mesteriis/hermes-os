@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from 'vue'
 import { useI18n } from '../../../platform/i18n'
-import Button from '../../../shared/ui/Button.vue'
+import Button from '../../../shared/ui/primitives/Button.vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import SearchableSelect from '../../../shared/ui/SearchableSelect.vue'
 import Steps from '../../../shared/ui/Steps.vue'

@@ -17,10 +17,24 @@ fn revoked_external_runtime_session_cannot_route_ciphertext_to_vault() {
 
     let mut sessions = ExternalRuntimeSessions::default();
     let session_id = complete_session(&mut sessions, &store, &signing_key);
+    let storage_runtime = sessions
+        .authorize_storage_binding(&store, &session_id, "vault.lease.resolve")
+        .expect("authorize exact external runtime session");
+    assert_eq!(storage_runtime.registration_id(), "registration-1");
+    assert_eq!(storage_runtime.runtime_id(), "runtime-1");
+    assert_eq!(storage_runtime.runtime_generation(), 5);
+    assert_eq!(storage_runtime.grant_epoch(), 3);
     assert!(
         sessions
             .authorize_vault_route(&store, &session_id, 7, current_route(3, 7))
             .is_ok()
+    );
+    let mut forged_generation = current_route(3, 7);
+    forged_generation.caller_runtime_generation = 6;
+    assert!(
+        sessions
+            .authorize_vault_route(&store, &session_id, 7, forged_generation)
+            .is_err()
     );
 
     store
@@ -100,6 +114,7 @@ fn current_route(grant_epoch: u64, vault_runtime_generation: u64) -> VaultCipher
         major: 1,
         registration_id: "registration-1".to_owned(),
         runtime_instance_id: "runtime-1".to_owned(),
+        caller_runtime_generation: 5,
         vault_runtime_generation,
         grant_epoch,
         request_id: vec![3; 16],
@@ -111,5 +126,9 @@ fn current_route(grant_epoch: u64, vault_runtime_generation: u64) -> VaultCipher
         response_recipient_hpke_public_key_x25519: vec![8; 32],
         kernel_instance_id: String::new(),
         kernel_authorization_signature_raw: Vec::new(),
+        storage_role_epoch: 0,
+        storage_credential_lease_revision: 0,
+        storage_runtime_principal: String::new(),
+        storage_owner_id: String::new(),
     }
 }

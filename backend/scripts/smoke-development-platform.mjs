@@ -12,11 +12,13 @@ async function run(service, command) {
 }
 
 try {
-  const [postgres, nats] = await Promise.all([
+  const [postgres, pgbouncer, nats] = await Promise.all([
     run('postgres', ['psql', '-U', 'hermes_development', '-d', 'hermes_development', '-tAc', 'SELECT 1']),
+    run('postgres', ['psql', 'postgres://hermes_development@pgbouncer:6432/hermes_development', '-tAc', 'SELECT 1']),
     run('nats', ['wget', '-q', '-O', '-', 'http://127.0.0.1:8222/healthz']),
   ]);
   if (postgres.trim() !== '1') throw new Error('PostgreSQL query did not return 1');
+  if (pgbouncer.trim() !== '1') throw new Error('PgBouncer query did not return 1');
   if (JSON.parse(nats).status !== 'ok') throw new Error('NATS health response is not ok');
   process.stdout.write('development-platform-smoke: ok\n');
 } catch (error) {

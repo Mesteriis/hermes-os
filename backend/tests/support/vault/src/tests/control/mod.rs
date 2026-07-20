@@ -1,1 +1,2 @@
 mod inherited;
+mod managed;

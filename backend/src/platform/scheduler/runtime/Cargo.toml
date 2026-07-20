@@ -1,0 +1,24 @@
+[package]
+name = "hermes-scheduler-runtime"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "hermes-scheduler-runtime"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "platform"
+owner = "scheduler"
+surface = "runtime"
+
+[dependencies]
+hermes-clock-protocol = { path = "../../clock/protocol" }
+hermes-runtime-protocol = { path = "../../runtime_protocol" }
+hermes-scheduler-jetstream = { path = "../jetstream" }
+hermes-scheduler-persistence = { path = "../persistence" }
+hermes-scheduler-protocol = { path = "../protocol" }
+hermes-storage-vault = { path = "../../storage/vault" }
+libc = "=0.2.186"
+prost = "=0.14.4"
+tokio = { version = "=1.52.4", default-features = false, features = ["net", "rt-multi-thread", "time"] }

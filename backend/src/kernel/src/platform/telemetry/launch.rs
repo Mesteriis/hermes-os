@@ -8,6 +8,7 @@ use hermes_kernel_control_store_sqlite::SqliteControlStore;
 
 use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::distribution::staged_contracts::StagedRuntimeContracts;
+use crate::infrastructure::filesystem::prepare_owner_private_directory;
 use crate::platform::macos::native_launch;
 use crate::platform::telemetry::binding::TELEMETRY_PROCESS_ID;
 use crate::runtime::lifecycle::control::ManagedRuntimeExpectation;
@@ -44,8 +45,13 @@ pub(crate) fn start_from_kernel(
         .map_err(|_| "Telemetry release binding is unavailable".to_owned())?
         .ok_or_else(|| "Telemetry release binding is unavailable".to_owned())?;
     let generation = next_generation(store)?;
-    let (artifact, contracts) = prepare(kernel, &binding, runtime_dir)?;
-    let arguments = match inherited_arguments(data_dir, runtime_dir, &contracts) {
+    prepare_owner_private_directory(&data_dir.join("telemetry"))?;
+    // The OS runtime-cache path can exceed Unix-domain socket limits on macOS.
+    // Keep the collector socket beneath the owner-private data directory.
+    let service_runtime_dir = data_dir.join("telemetry").join("runtime");
+    prepare_owner_private_directory(&service_runtime_dir)?;
+    let (artifact, contracts) = prepare(kernel, &binding, runtime_dir, generation)?;
+    let arguments = match inherited_arguments(data_dir, &service_runtime_dir, &contracts) {
         Ok(arguments) => arguments,
         Err(error) => {
             let _ = contracts.remove();
@@ -79,21 +85,35 @@ pub(crate) fn start_from_kernel(
         ManagedChildExecutionPolicy::new(MAX_ATTEMPTS, MAX_RUNTIME)?,
         contracts,
     )?;
-    Ok(generation)
+    match supervisor.wait_until_ready(TELEMETRY_PROCESS_ID) {
+        Ok(()) => Ok(generation),
+        Err(error) => {
+            let _ = supervisor.stop(TELEMETRY_PROCESS_ID);
+            Err(error)
+        }
+    }
 }
 
 fn prepare(
     kernel: &Path,
     binding: &hermes_kernel_control_store::PlatformManagedProcessBinding,
     runtime_dir: &Path,
+    runtime_generation: u64,
 ) -> Result<(StagedNativeArtifact, StagedRuntimeContracts), String> {
+    prepare_owner_private_directory(&runtime_dir.join("telemetry"))?;
     let prepared = native_launch::prepare_bound_platform_process(
         kernel,
         binding,
-        &runtime_dir.join("telemetry").join("managed"),
+        &runtime_dir
+            .join("telemetry")
+            .join(format!("launch-{runtime_generation}"))
+            .join("managed"),
     )?;
     let contracts = match StagedRuntimeContracts::stage(
-        &runtime_dir.join("telemetry").join("contracts"),
+        &runtime_dir
+            .join("telemetry")
+            .join(format!("launch-{runtime_generation}"))
+            .join("contracts"),
         prepared.descriptor_bytes(),
         prepared.settings_schema_bytes(),
     ) {
@@ -120,7 +140,7 @@ fn next_generation(store: &SqliteControlStore) -> Result<u64, String> {
 
 fn inherited_arguments(
     data_dir: &Path,
-    runtime_dir: &Path,
+    service_runtime_dir: &Path,
     contracts: &StagedRuntimeContracts,
 ) -> Result<Vec<String>, String> {
     let settings_schema_path = contracts
@@ -131,7 +151,7 @@ fn inherited_arguments(
         "--data-dir".to_owned(),
         data_dir.join("telemetry").display().to_string(),
         "--runtime-dir".to_owned(),
-        runtime_dir.join("telemetry").display().to_string(),
+        service_runtime_dir.display().to_string(),
         "--descriptor-path".to_owned(),
         contracts.descriptor_path().display().to_string(),
         "--settings-schema-path".to_owned(),

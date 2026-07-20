@@ -61,6 +61,20 @@ impl VaultStoreHandle {
         receive(receiver)
     }
 
+    pub(crate) fn store_secrets_atomically(
+        &self,
+        secrets: Vec<(SecretRecordScope, Zeroizing<Vec<u8>>)>,
+    ) -> Result<Vec<SecretRecordId>, VaultStoreError> {
+        if secrets.is_empty() {
+            return Err(VaultStoreError::Record(
+                secret_record::SecretRecordError::InvalidPayload,
+            ));
+        }
+        let (response, receiver) = sync_channel(1);
+        self.submit(VaultStoreRequest::StoreMany { secrets, response })?;
+        receive(receiver)
+    }
+
     pub(crate) fn resolve_current_secret(
         &self,
         scope: &SecretRecordScope,
@@ -115,6 +129,10 @@ enum VaultStoreRequest {
         payload: Zeroizing<Vec<u8>>,
         response: SyncSender<Result<SecretRecordId, VaultStoreError>>,
     },
+    StoreMany {
+        secrets: Vec<(SecretRecordScope, Zeroizing<Vec<u8>>)>,
+        response: SyncSender<Result<Vec<SecretRecordId>, VaultStoreError>>,
+    },
     Resolve {
         record_id: SecretRecordId,
         scope: SecretRecordScope,
@@ -155,6 +173,9 @@ fn actor_loop(
             } => {
                 let _ = response.send(store_secret(&mut connection, &record_key, &scope, &payload));
             }
+            VaultStoreRequest::StoreMany { secrets, response } => {
+                let _ = response.send(store_secrets(&mut connection, &record_key, secrets));
+            }
             VaultStoreRequest::Resolve {
                 record_id,
                 scope,
@@ -191,33 +212,55 @@ fn store_secret(
     scope: &SecretRecordScope,
     payload: &[u8],
 ) -> Result<SecretRecordId, VaultStoreError> {
-    let encrypted =
-        secret_record::encrypt(scope, payload, record_key).map_err(VaultStoreError::Record)?;
+    store_secrets(
+        connection,
+        record_key,
+        vec![(scope.clone(), Zeroizing::new(payload.to_vec()))],
+    )
+    .map(|mut records| records.remove(0))
+}
+
+fn store_secrets(
+    connection: &mut Connection,
+    record_key: &[u8; 32],
+    secrets: Vec<(SecretRecordScope, Zeroizing<Vec<u8>>)>,
+) -> Result<Vec<SecretRecordId>, VaultStoreError> {
+    let encrypted = secrets
+        .iter()
+        .map(|(scope, payload)| {
+            secret_record::encrypt(scope, payload, record_key).map_err(VaultStoreError::Record)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let transaction = connection
         .unchecked_transaction()
         .map_err(VaultStoreError::Sqlite)?;
-    let (owner, configuration, purpose, class, revision) = scope.metadata();
-    transaction
-        .execute(
-            "INSERT INTO vault_secret_records (
+    for ((scope, _), record) in secrets.into_iter().zip(encrypted.iter()) {
+        let (owner, configuration, purpose, class, revision) = scope.metadata();
+        transaction
+            .execute(
+                "INSERT INTO vault_secret_records (
                 record_id, logical_owner_id, configuration_instance_id, purpose_id,
                 secret_class, secret_revision, key_epoch, nonce, ciphertext
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            rusqlite::params![
-                encrypted.record_id.as_bytes().as_slice(),
-                owner,
-                configuration,
-                purpose,
-                class,
-                revision,
-                i64::from(secret_record::CURRENT_KEY_EPOCH),
-                encrypted.nonce.as_slice(),
-                encrypted.ciphertext,
-            ],
-        )
-        .map_err(VaultStoreError::Sqlite)?;
+                rusqlite::params![
+                    record.record_id.as_bytes().as_slice(),
+                    owner,
+                    configuration,
+                    purpose,
+                    class,
+                    revision,
+                    i64::from(secret_record::CURRENT_KEY_EPOCH),
+                    record.nonce.as_slice(),
+                    &record.ciphertext,
+                ],
+            )
+            .map_err(VaultStoreError::Sqlite)?;
+    }
     transaction.commit().map_err(VaultStoreError::Sqlite)?;
-    Ok(encrypted.record_id)
+    Ok(encrypted
+        .into_iter()
+        .map(|record| record.record_id)
+        .collect())
 }
 
 fn resolve_secret(

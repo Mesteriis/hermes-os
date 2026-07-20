@@ -1,5 +1,6 @@
 //! Vault lease and secret-resolution core, independent from IPC transport.
 
+use getrandom::fill;
 use hermes_vault_protocol::{
     CredentialLeaseV1, LeaseAudienceV1, LeaseIdV1, VaultActionV1, VaultLeaseIssueRequestV1,
     VaultTransportCommandV1,
@@ -87,7 +88,27 @@ impl VaultService {
         audience: &LeaseAudienceV1,
         now_unix_seconds: u64,
     ) -> Result<Zeroizing<Vec<u8>>, VaultServiceError> {
+        if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+            eprintln!(
+                "developer_vault_command={}",
+                match command {
+                    VaultTransportCommandV1::RevokeAudience => "revoke_audience",
+                    VaultTransportCommandV1::IssueLease { .. } => "issue_lease",
+                    VaultTransportCommandV1::ResolveLease { .. } => "resolve_lease",
+                    VaultTransportCommandV1::StoreLease { .. } => "store_lease",
+                    VaultTransportCommandV1::GenerateOpaqueToken { .. } => "generate_opaque_token",
+                    VaultTransportCommandV1::ReplaceLease { .. } => "replace_lease",
+                }
+            );
+        }
         match command {
+            VaultTransportCommandV1::RevokeAudience => {
+                self.revoke_audience(audience);
+                Ok(Zeroizing::new(vec![1]))
+            }
+            VaultTransportCommandV1::IssueLease { request } => self
+                .issue_transport_lease(request.clone(), audience, now_unix_seconds)
+                .map(|lease| Zeroizing::new(lease.lease_id().as_str().as_bytes().to_vec())),
             VaultTransportCommandV1::ResolveLease {
                 lease_id,
                 secret_class,
@@ -103,6 +124,12 @@ impl VaultService {
                 payload,
                 now_unix_seconds,
             ),
+            VaultTransportCommandV1::GenerateOpaqueToken {
+                lease_id,
+                secret_class,
+            } => {
+                self.generate_opaque_token_once(lease_id, audience, *secret_class, now_unix_seconds)
+            }
             VaultTransportCommandV1::ReplaceLease {
                 lease_id,
                 secret_class,
@@ -121,6 +148,18 @@ impl VaultService {
 
     pub fn revoke_audience(&mut self, audience: &LeaseAudienceV1) {
         self.leases.invalidate_audience(audience);
+    }
+
+    fn issue_transport_lease(
+        &mut self,
+        request: VaultLeaseIssueRequestV1,
+        audience: &LeaseAudienceV1,
+        now_unix_seconds: u64,
+    ) -> Result<CredentialLeaseV1, VaultServiceError> {
+        if request.audience() != audience {
+            return Err(VaultServiceError::LeaseScopeMismatch);
+        }
+        self.issue_lease(request, now_unix_seconds)
     }
 
     pub fn advance_runtime_generation(
@@ -171,9 +210,12 @@ impl VaultService {
             lease.request().secret_revision(),
         )
         .map_err(|_| VaultServiceError::LeaseScopeMismatch)?;
-        self.store
-            .resolve_current_secret(&scope)
-            .map_err(|_| VaultServiceError::SecretUnavailable)
+        self.store.resolve_current_secret(&scope).map_err(|error| {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_vault_resolve_runtime_credential_error={error:?}");
+            }
+            VaultServiceError::SecretUnavailable
+        })
     }
 
     fn store_current_once(
@@ -197,6 +239,29 @@ impl VaultService {
             .store
             .store_secret(&scope, payload)
             .map_err(|_| VaultServiceError::SecretUnavailable)?;
+        Ok(Zeroizing::new(record_id.as_bytes().to_vec()))
+    }
+
+    fn generate_opaque_token_once(
+        &mut self,
+        lease_id: &LeaseIdV1,
+        audience: &LeaseAudienceV1,
+        secret_class: hermes_vault_protocol::SecretClassV1,
+        now_unix_seconds: u64,
+    ) -> Result<Zeroizing<Vec<u8>>, VaultServiceError> {
+        let lease =
+            self.consume_action(lease_id, audience, VaultActionV1::Create, now_unix_seconds)?;
+        let scope = scope_for_lease(&lease, secret_class, lease.request().secret_revision())?;
+        let token = generate_opaque_token()?;
+        let record_id = self
+            .store
+            .store_secret(&scope, token.as_slice())
+            .map_err(|error| {
+                if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                    eprintln!("developer_vault_store_runtime_credential_error={error:?}");
+                }
+                VaultServiceError::SecretUnavailable
+            })?;
         Ok(Zeroizing::new(record_id.as_bytes().to_vec()))
     }
 
@@ -257,6 +322,24 @@ fn supported_action(action: VaultActionV1) -> bool {
     )
 }
 
+fn generate_opaque_token() -> Result<Zeroizing<Vec<u8>>, VaultServiceError> {
+    let mut entropy = Zeroizing::new([0_u8; 32]);
+    fill(entropy.as_mut()).map_err(|_| VaultServiceError::EntropyUnavailable)?;
+    let mut token = Zeroizing::new(Vec::with_capacity(entropy.len() * 2));
+    for byte in entropy.iter().copied() {
+        token.push(hex_digit(byte >> 4));
+        token.push(hex_digit(byte & 0x0f));
+    }
+    Ok(token)
+}
+
+const fn hex_digit(value: u8) -> u8 {
+    match value {
+        0..=9 => b'0' + value,
+        _ => b'a' + (value - 10),
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum VaultServiceError {
     Lease(LeaseError),
@@ -264,4 +347,5 @@ pub enum VaultServiceError {
     LeaseActionDenied,
     LeaseScopeMismatch,
     SecretUnavailable,
+    EntropyUnavailable,
 }

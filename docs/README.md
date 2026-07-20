@@ -39,6 +39,11 @@
 - [ADR-0225: Первый production slice — recovery-only Kernel и фазовые ворота](adr/ADR-0225-first-production-recovery-only-kernel-slice-and-phase-gates.md)
 - [ADR-0226: Контекст для AI только через use-case workflows](adr/ADR-0226-ai-context-acquisition-through-use-case-workflows.md)
 - [ADR-0229: Platform Clock contract и deterministic conformance](adr/ADR-0229-platform-clock-contract-and-deterministic-conformance.md)
+- [ADR-0230: Blob Platform — opaque references and owner-local metadata](adr/ADR-0230-blob-platform-opaque-references-and-owner-local-metadata.md)
+- [ADR-0231: Private Blob data session and Vault route](adr/ADR-0231-private-blob-data-session-and-vault-route.md)
+- [ADR-0232: Browser client identity and same-origin Gateway session](adr/ADR-0232-browser-client-device-identity-and-same-origin-session.md)
+- [ADR-0233: Scoped local recovery export и PostgreSQL dump](adr/ADR-0233-whole-instance-backup-and-fenced-restore.md)
+- [ADR-0234: Browser-local key binding for synchronised passkeys](adr/ADR-0234-browser-local-key-binding-for-synchronised-passkeys.md)
 
 ## Канонические summaries
 

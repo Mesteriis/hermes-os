@@ -1,0 +1,238 @@
+//! SQLite persistence for durable non-secret Storage binding fences.
+
+use hermes_kernel_control_store::{PlatformStorageBindingStateV1, PlatformStorageBindingV1};
+use rusqlite::{OptionalExtension, params};
+
+use crate::{SqliteControlStore, StoreError};
+
+impl SqliteControlStore {
+    pub fn record_platform_storage_binding(
+        &self,
+        binding: &PlatformStorageBindingV1,
+    ) -> Result<(), StoreError> {
+        let binding = binding.clone();
+        self.with_connection(move |connection| {
+            verify_initial_revision(connection, &binding)?;
+            let changed = connection.execute(
+                "INSERT INTO hermes_kernel_platform_storage_binding
+                 (registration_id, capability_id, owner_id, binding_revision, topology_revision,
+                  storage_generation, runtime_instance_id, runtime_generation, grant_epoch,
+                  role_epoch, runtime_principal, connection_budget, statement_timeout_millis,
+                  credential_lease_revision, storage_bundle_revision, storage_bundle_digest, state)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                 ON CONFLICT(registration_id, capability_id) DO UPDATE SET
+                   owner_id=excluded.owner_id,
+                   binding_revision=excluded.binding_revision,
+                   topology_revision=excluded.topology_revision,
+                   storage_generation=excluded.storage_generation,
+                   runtime_instance_id=excluded.runtime_instance_id,
+                   runtime_generation=excluded.runtime_generation,
+                   grant_epoch=excluded.grant_epoch,
+                   role_epoch=excluded.role_epoch,
+                   runtime_principal=excluded.runtime_principal,
+                   connection_budget=excluded.connection_budget,
+                   statement_timeout_millis=excluded.statement_timeout_millis,
+                   credential_lease_revision=excluded.credential_lease_revision,
+                   storage_bundle_revision=excluded.storage_bundle_revision,
+                   storage_bundle_digest=excluded.storage_bundle_digest,
+                   state=excluded.state
+                 WHERE excluded.binding_revision = hermes_kernel_platform_storage_binding.binding_revision + 1",
+                params![
+                    binding.registration_id(), binding.capability_id(), binding.owner_id(),
+                    as_sql(binding.binding_revision())?, as_sql(binding.topology_revision())?,
+                    as_sql(binding.storage_generation())?, binding.runtime_instance_id(),
+                    as_sql(binding.runtime_generation())?, as_sql(binding.grant_epoch())?,
+                    as_sql(binding.role_epoch())?, binding.runtime_principal(),
+                    i64::from(binding.connection_budget()),
+                    i64::from(binding.statement_timeout_millis()),
+                    as_sql(binding.credential_lease_revision())?,
+                    as_sql(binding.storage_bundle_revision())?,
+                    binding.storage_bundle_digest().as_slice(),
+                    binding.state().as_sql(),
+                ],
+            )?;
+            (changed == 1).then_some(()).ok_or(StoreError::PlatformStorageBindingRevisionConflict)
+        })
+    }
+
+    pub fn platform_storage_binding(
+        &self,
+        registration_id: &str,
+        capability_id: &str,
+    ) -> Result<Option<PlatformStorageBindingV1>, StoreError> {
+        let registration_id = registration_id.to_owned();
+        let capability_id = capability_id.to_owned();
+        self.with_connection(move |connection| {
+            connection
+                .query_row(
+                    "SELECT owner_id, binding_revision, topology_revision, storage_generation,
+                    runtime_instance_id, runtime_generation, grant_epoch, role_epoch,
+                    runtime_principal, connection_budget, statement_timeout_millis,
+                    credential_lease_revision, storage_bundle_revision, storage_bundle_digest, state
+             FROM hermes_kernel_platform_storage_binding
+             WHERE registration_id = ?1 AND capability_id = ?2",
+                    params![registration_id, capability_id],
+                    |row| decode_binding(row, &registration_id, &capability_id),
+                )
+                .optional()
+                .map_err(StoreError::from)
+        })
+    }
+
+    pub fn begin_platform_storage_binding_revocation(
+        &self,
+        registration_id: &str,
+        capability_id: &str,
+        binding_revision: u64,
+    ) -> Result<PlatformStorageBindingV1, StoreError> {
+        let registration_id = registration_id.to_owned();
+        let capability_id = capability_id.to_owned();
+        self.with_connection(move |connection| {
+            let changed = connection.execute(
+                "UPDATE hermes_kernel_platform_storage_binding
+                 SET state = 2
+                 WHERE registration_id = ?1 AND capability_id = ?2 AND binding_revision = ?3 AND state = 1",
+                params![registration_id, capability_id, as_sql(binding_revision)?],
+            )?;
+            if changed != 1 {
+                return Err(StoreError::PlatformStorageBindingStateConflict);
+            }
+            connection.query_row(
+                "SELECT owner_id, binding_revision, topology_revision, storage_generation,
+                        runtime_instance_id, runtime_generation, grant_epoch, role_epoch,
+                        runtime_principal, connection_budget, statement_timeout_millis,
+                        credential_lease_revision, storage_bundle_revision, storage_bundle_digest, state
+                 FROM hermes_kernel_platform_storage_binding
+                 WHERE registration_id = ?1 AND capability_id = ?2",
+                params![registration_id, capability_id],
+                |row| decode_binding(row, &registration_id, &capability_id),
+            ).map_err(StoreError::from)
+        })
+    }
+
+    pub fn platform_storage_bindings(&self) -> Result<Vec<PlatformStorageBindingV1>, StoreError> {
+        self.with_connection(move |connection| {
+            let mut statement = connection.prepare(
+                "SELECT registration_id, capability_id, owner_id, binding_revision,
+                        topology_revision, storage_generation, runtime_instance_id,
+                        runtime_generation, grant_epoch, role_epoch, runtime_principal,
+                        connection_budget, statement_timeout_millis, credential_lease_revision,
+                        storage_bundle_revision, storage_bundle_digest, state
+                 FROM hermes_kernel_platform_storage_binding
+                 ORDER BY registration_id, capability_id",
+            )?;
+            statement
+                .query_map([], decode_listed_binding)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(StoreError::from)
+        })
+    }
+}
+
+fn verify_initial_revision(
+    connection: &rusqlite::Connection,
+    binding: &PlatformStorageBindingV1,
+) -> Result<(), StoreError> {
+    let exists = connection.query_row(
+        "SELECT EXISTS(
+             SELECT 1 FROM hermes_kernel_platform_storage_binding
+             WHERE registration_id = ?1 AND capability_id = ?2
+         )",
+        params![binding.registration_id(), binding.capability_id()],
+        |row| row.get::<_, bool>(0),
+    )?;
+    if !exists && binding.binding_revision() != 1 {
+        return Err(StoreError::PlatformStorageBindingRevisionConflict);
+    }
+    Ok(())
+}
+
+fn decode_binding(
+    row: &rusqlite::Row<'_>,
+    registration_id: &str,
+    capability_id: &str,
+) -> Result<PlatformStorageBindingV1, rusqlite::Error> {
+    let digest: Vec<u8> = row.get(13)?;
+    let state = state(row.get(14)?)?;
+    PlatformStorageBindingV1::new(
+        registration_id,
+        capability_id,
+        row.get::<_, String>(0)?,
+        as_u64(row.get(1)?, 1)?,
+        as_u64(row.get(2)?, 2)?,
+        as_u64(row.get(3)?, 3)?,
+        row.get::<_, String>(4)?,
+        as_u64(row.get(5)?, 5)?,
+        as_u64(row.get(6)?, 6)?,
+        as_u64(row.get(7)?, 7)?,
+        row.get::<_, String>(8)?,
+        as_u16(row.get(9)?, 9)?,
+        as_u32(row.get(10)?, 10)?,
+        as_u64(row.get(11)?, 11)?,
+        as_u64(row.get(12)?, 12)?,
+        digest
+            .try_into()
+            .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(13, 32))?,
+    )
+    .map_err(|_| rusqlite::Error::InvalidQuery)
+    .map(|binding| binding.restore_state(state))
+}
+
+fn decode_listed_binding(
+    row: &rusqlite::Row<'_>,
+) -> Result<PlatformStorageBindingV1, rusqlite::Error> {
+    let registration_id: String = row.get(0)?;
+    let capability_id: String = row.get(1)?;
+    decode_binding_from_list(row, &registration_id, &capability_id)
+}
+
+fn decode_binding_from_list(
+    row: &rusqlite::Row<'_>,
+    registration_id: &str,
+    capability_id: &str,
+) -> Result<PlatformStorageBindingV1, rusqlite::Error> {
+    let digest: Vec<u8> = row.get(15)?;
+    let state = state(row.get(16)?)?;
+    PlatformStorageBindingV1::new(
+        registration_id,
+        capability_id,
+        row.get::<_, String>(2)?,
+        as_u64(row.get(3)?, 3)?,
+        as_u64(row.get(4)?, 4)?,
+        as_u64(row.get(5)?, 5)?,
+        row.get::<_, String>(6)?,
+        as_u64(row.get(7)?, 7)?,
+        as_u64(row.get(8)?, 8)?,
+        as_u64(row.get(9)?, 9)?,
+        row.get::<_, String>(10)?,
+        as_u16(row.get(11)?, 11)?,
+        as_u32(row.get(12)?, 12)?,
+        as_u64(row.get(13)?, 13)?,
+        as_u64(row.get(14)?, 14)?,
+        digest
+            .try_into()
+            .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(15, 32))?,
+    )
+    .map_err(|_| rusqlite::Error::InvalidQuery)
+    .map(|binding| binding.restore_state(state))
+}
+
+fn state(value: i64) -> Result<PlatformStorageBindingStateV1, rusqlite::Error> {
+    PlatformStorageBindingStateV1::from_sql(value).ok_or(rusqlite::Error::InvalidQuery)
+}
+
+fn as_sql(value: u64) -> Result<i64, StoreError> {
+    i64::try_from(value).map_err(|_| StoreError::InvalidPlatformStorageBinding)
+}
+
+fn as_u64(value: i64, index: usize) -> Result<u64, rusqlite::Error> {
+    u64::try_from(value).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(index, 0))
+}
+
+fn as_u16(value: i64, index: usize) -> Result<u16, rusqlite::Error> {
+    u16::try_from(value).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(index, 0))
+}
+
+fn as_u32(value: i64, index: usize) -> Result<u32, rusqlite::Error> {
+    u32::try_from(value).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(index, 0))
+}

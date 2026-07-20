@@ -23,6 +23,11 @@ simulation-команды живут только в отдельном
 `hermes-development-kernel-operator`. `clock_v1` открыт отдельным ADR-0229:
 exact UTC/monotonic Clock packages и deterministic conformance существуют без
 Scheduler, module timers или data plane.
+`browser_client_v1` открыт как отдельный owner-neutral local Gateway phase:
+signed single-document browser bootstrap, owner-approved WebAuthn pairing,
+cookie-backed session и bounded `BrowserSessionService/GetStatus` существуют
+без business owner, remote/public listener, HTTP/3 или owner receipt mapping.
+Полный `client_gateway_v1` остаётся следующей отдельной фазой.
 
 Уточняет:
 
@@ -135,6 +140,10 @@ Kernel как внешний child и не импортирует production com
 `hermes-vault-store-sqlcipher`, `hermes-vault-runtime`,
 `hermes-clock-protocol` и `hermes-clock-runtime`. Это exact inventory открытых
 `vault_v1` и `clock_v1`; ни один data-plane package этим не авторизуется.
+Текущий `gateway_session_foundation_v1` добавляет один API implementation
+package `hermes-gateway-session`: он владеет только memory-only session fences
+через gateway-owned authority port и не зависит от Kernel/SQLite implementation,
+не запускает listener и не открывает `client_gateway_v1`.
 
 ### Пустой business ownership inventory
 
@@ -153,6 +162,11 @@ governance ADR-0207/0208. Allowlist означает «разрешено про
 реализовывать после открытия owner gate», а не «уже входит в текущую
 distribution». До `first_owner_v1` никакой domain, integration, workflow,
 engine или AI production package не допускается.
+
+Test-only delivery scaffolds may reserve exact owner-local PostgreSQL schemas
+and validate durable outbox/inbox mechanics for the development allowlist.
+They are not owner packages, do not contain business tables, handlers, public
+contracts or migrations, and do not open `first_owner_v1`.
 
 ### Активные Kernel components
 
@@ -397,6 +411,18 @@ durable truth. До gate требуются:
 
 Shared broker token и временный wildcard `hermes.>` запрещены.
 
+Current implementation evidence includes a managed Events authority that
+receives an already signed bounded Account JWT only through owner-private
+Kernel control, validates its bound Account NKey, resolves a fenced System
+Account credential from Vault and applies the update through the NATS resolver.
+The JWT conformance contour uses that path for an Account-claim revocation and
+proves broker disconnect of the active runtime. Together with the exact-byte
+outbox/inbox contract, owner-neutral PostgreSQL outage/replay conformance,
+Event Hub topology reconciliation and runtime/grant fencing, this opens the
+gate as a platform capability. It does not admit a business owner or make a
+test scaffold a production owner: a real owner-local PostgreSQL
+business-mutation/outbox transaction remains required by `first_owner_v1`.
+
 ### `whole_instance_backup_v1`
 
 Зависит от `vault_v1`, `telemetry_v1`, `storage_control_v1` и
@@ -425,6 +451,14 @@ path-traversal defense, revoke semantics, backup classification и replay tests.
 Если Blob уже включён, `whole_instance_backup_v1` дополнительно зависит от
 `blob_v1`.
 
+`blob_v1` открыт как platform gate: exact protocol/runtime/service packages,
+opaque reference and fence validation, encrypted atomic filesystem storage with
+aggregate quota ledger, bounded range and path safety, two-phase retention/GC,
+and a live signed Blob-to-file-backed-Vault contour are present. This does not
+create a first owner or a generic content API. Owner-local metadata and the
+owner-specific content-session issuer remain under `first_owner_v1`; complete
+instance restore remains under `whole_instance_backup_v1`.
+
 Если Scheduler уже включён, `whole_instance_backup_v1` также условно зависит
 от `scheduler_v1` и включает его schedules, runs, leases и fencing state.
 
@@ -452,6 +486,21 @@ suite. Внутренний `KernelClock` текущего slice не откры
 
 Код job остаётся в owner module; Scheduler владеет временем, scheduling state,
 run identity и fencing, но не business execution.
+
+### Implementation update: `scheduler_v1` (2026-07-19)
+
+Gate открыт как owner-neutral platform capability. Exact package inventory,
+revisioned `JobSpec`/`JobKind` binding, PostgreSQL schedule/run/lease fencing,
+exact-byte JetStream dispatch and receipt-before-ACK, hot schedule
+reconciliation, retry/idempotency/recovery и deterministic Clock conformance
+имеют executable evidence в `test-scheduler-conformance` и managed Scheduler
+Docker contour. `backend/architecture/policy.json` и executable phase-gate
+policy теперь разрешают только `scheduler_v1`.
+
+Это не открывает first owner, не добавляет business handler, domain package или
+public client transport: Scheduler принимает только approved typed owner
+contract после отдельного owner ADR, а owner command/result outcome остаётся
+вне этого gate.
 
 ### `client_gateway_v1`
 

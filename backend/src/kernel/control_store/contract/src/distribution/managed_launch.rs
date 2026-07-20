@@ -66,6 +66,7 @@ impl BundledManagedLaunchBinding {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManagedLaunchRecord {
     registration_id: String,
+    runtime_instance_id: String,
     binding_revision: u64,
     kernel_generation: u64,
     runtime_generation: u64,
@@ -76,6 +77,7 @@ impl ManagedLaunchRecord {
     #[must_use]
     pub fn new(
         registration_id: impl Into<String>,
+        runtime_instance_id: impl Into<String>,
         binding_revision: u64,
         kernel_generation: u64,
         runtime_generation: u64,
@@ -83,6 +85,7 @@ impl ManagedLaunchRecord {
     ) -> Self {
         Self {
             registration_id: registration_id.into(),
+            runtime_instance_id: runtime_instance_id.into(),
             binding_revision,
             kernel_generation,
             runtime_generation,
@@ -93,6 +96,10 @@ impl ManagedLaunchRecord {
     #[must_use]
     pub fn registration_id(&self) -> &str {
         &self.registration_id
+    }
+    #[must_use]
+    pub fn runtime_instance_id(&self) -> &str {
+        &self.runtime_instance_id
     }
     #[must_use]
     pub fn binding_revision(&self) -> u64 {

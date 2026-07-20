@@ -10,7 +10,7 @@ mod platform;
 mod recovery;
 mod runtime;
 
-use cli::{Cli, Command};
+use cli::{BrowserPairingCommand, Cli, Command};
 
 fn main() {
     if let Err(error) = run(Cli::parse()) {
@@ -31,6 +31,9 @@ fn run(cli: Cli) -> Result<(), String> {
             listen_address,
             ttl_seconds,
         } => identity::server_pairing::bootstrap::run(cli.data_dir, listen_address, ttl_seconds),
+        Command::BrowserPairing {
+            operation: BrowserPairingCommand::Create,
+        } => identity::owner_control::cli::create_browser_pairing(cli.data_dir),
         command => runtime::run(cli.data_dir, command),
     }
 }

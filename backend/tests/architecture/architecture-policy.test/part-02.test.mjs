@@ -86,6 +86,10 @@ test('requires the exact Storage Control topology and fail-closed lifecycle poli
   ]);
   assert.ok(canonical.bindingFields.includes('role_epoch'));
   assert.ok(canonical.bindingFields.includes('storage_bundle_digest'));
+  assert.deepEqual(canonical.testSupportPostgresClientAllowlist, [
+    'hermes-events-jetstream-testkit:dev:sqlx',
+    'hermes-scheduler-testkit:dev:sqlx',
+  ]);
 
   const mutations = [
     (storage) => { storage.runtimeComponent = 'storage_manager'; },
@@ -106,6 +110,7 @@ test('requires the exact Storage Control topology and fail-closed lifecycle poli
     (storage) => { storage.bindingFields.pop(); },
     (storage) => { storage.revocationSequence.pop(); },
     (storage) => { storage.forbiddenProtocolDependencies.pop(); },
+    (storage) => { storage.testSupportPostgresClientAllowlist = []; },
   ];
 
   for (const mutate of mutations) {

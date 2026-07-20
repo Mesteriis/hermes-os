@@ -2,7 +2,58 @@
 
 Статус: Принято
 Дата: 2026-07-15
-Состояние реализации: Не реализовано
+Состояние реализации: Частично реализован foundation: typed Gateway contracts,
+browser device/session foundation, exact local/paired listener profiles,
+отдельный direct-private-LAN developer profile ADR-0235,
+loopback-only HTTP/1.1 serving, paired-remote TLS+HTTP/2 и HTTP/3 serving и
+detached technical/browser-auth/realtime routers. Kernel может явно включить
+local loopback TLS либо paired-remote profile через полный набор
+operator-supplied origin, RP ID и DER certificate/key; remote profile требует
+отдельного CLI flag, не получает сертификат автоматически и запускает TCP/TLS
+HTTP/2 и UDP/QUIC HTTP/3 на том же configured address/port. H3 endpoint
+advertises only `h3`, keeps TLS early data disabled and routes through the same
+Gateway adapter; executable conformance currently proves an actual H3
+`/healthz` request. Private owner-control теперь может создать
+одноразовый browser pairing, а local HTTPS Gateway выдаёт его server-held
+WebAuthn registration options и принимает exact-Origin finish. Signed installed
+macOS release может также отдать только exact required `browser.bootstrap`
+artifact на `/`: bytes повторно проверяются against signed manifest и остаются
+в памяти Gateway; filesystem/static-tree fallback запрещён. Single-document
+browser bootstrap выполняет owner-approved pairing, WebAuthn registration и
+cookie-backed sign-in без external assets или browser token/session storage.
+После sign-in он также вызывает typed owner-neutral ConnectRPC
+`BrowserSessionService/GetStatus`, который подтверждает только bounded expiry
+текущей cookie session и не выдаёт owner data, opaque session ID, credential
+или grant. После той же cookie session локальный `ClientBootstrapService/GetBootstrap`
+возвращает только approved composition текущего owner: module/registration,
+effective capability IDs, grant epoch и client-visible typed settings values.
+`hidden` values, raw schema/snapshot bytes, credentials и data другого owner
+fail closed и не попадают в response; при non-current settings revision
+`sections_enabled=false`. Это bootstrap для включения client sections, не
+generic settings mutation/query API и не owner business contract. Owner-neutral local browser contour открыт отдельным
+`browser_client_v1` gate по ADR-0232; в нём по-прежнему нет client-safe realtime
+owner, ConnectRPC owner contracts, durable receipt mapping, client-safe
+realtime replay or full public-client conformance. Поэтому `client_gateway_v1`
+остаётся закрытым: remote transport сам по себе не даёт public owner API.
+
+Bootstrap также содержит закрытый static catalog client surfaces. Product
+surface может стать `available` только при exact approved capability
+`client.surface.<surface>.v1` в composition текущего owner и только когда
+его module settings находятся в effective `current` state; та же capability
+при non-current settings даёт sanitized `blocked` state. `Settings` остаётся
+локальным recovery surface и не требует module grant. Gateway передаёт только
+ID/state/reason/contract major: labels, routes, chunks, icons и любой UI-код
+остаются compiled в client bundle. До появления owner-specific generated
+adapter локальный клиент дополнительно оставляет product route disabled.
+
+Тот же authenticated bootstrap возвращает закрытый typed inventory состояния
+Kernel, Control Store, Module Control Plane, Gateway, Vault, Storage Control,
+PostgreSQL, PgBouncer, NATS, Event Hub, Scheduler, Clock, Blob, Telemetry и SSE.
+Core components считаются healthy только потому, что authenticated snapshot
+успешно собран; platform runtime без отдельного live status proof получает
+`degraded` или `not_admitted`, а не optimistic healthy. Browser отдельно
+измеряет round-trip самого bootstrap RPC каждые 15 секунд; это client-observed
+network latency, она не подменяет server-side subsystem readiness.
 
 Зависит от:
 
@@ -77,6 +128,10 @@ Core Gateway является transport/security adapter, а не business modul
 - переводит transport/lifecycle failure в typed public error;
 - публикует client-safe realtime stream.
 
+Его implementation packages могут напрямую компоноваться только Kernel runtime
+как exact Core Gateway adapter; это не разрешает Kernel импортировать любой
+domain, integration, workflow или owner implementation package.
+
 Core Gateway не:
 
 - принимает business decisions;
@@ -123,13 +178,14 @@ paired_remote
   → HTTP/3 over QUIC как preferred negotiated transport
 ```
 
-HTTP/3 учитывается с первого `client_gateway_v1` walking skeleton в listener
-abstraction, configuration schema, metrics и integration tests. Recovery-only
-local IPC ADR-0225 не имеет network listener. HTTP/3 не откладывается после
-public gateway как новый application protocol и не требует других Protobuf
-contracts.
+HTTP/3 уже входит в listener abstraction и explicit paired-remote CLI profile.
+H3 endpoint исполняет тот же Gateway router, а TCP/TLS HTTP/2 остаётся
+обязательным fallback. Recovery-only local IPC ADR-0225 не имеет network
+listener. HTTP/3 не откладывается после public gateway как новый application
+protocol и не требует других Protobuf contracts.
 
-Для paired Android client HTTP/3 разрешается только после conformance spike,
+Технический H3 spike доказывает TLS/ALPN, запрет early data и live `/healthz`
+request. Для paired Android client HTTP/3 остаётся запрещён до conformance,
 доказывающего:
 
 - Connect unary requests и typed errors поверх выбранного HTTP/3 stack;
@@ -319,7 +375,10 @@ bounded batch.
 
 SSE client использует fetch-stream или другой механизм с authorization header.
 Client-session capability запрещено передавать в query string. Native browser
-`EventSource`, требующий token в URL, не используется.
+`EventSource` допускается только для exact same-origin route с HttpOnly browser
+session cookie: он не принимает token/cursor в URL и использует стандартный
+`Last-Event-ID` только для device-local reconnect replay. `EventSource`,
+требующий token в URL, не используется.
 
 ### Android lifecycle, offline и notifications
 

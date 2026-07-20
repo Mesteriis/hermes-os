@@ -14,13 +14,9 @@ describe('outbox infinite query boundary', () => {
 		expect(source).toContain('select: (data) => data.pages.flatMap((page) => page.items)')
 	})
 
-	it('exposes load-more state from the outbox strip hook without API ownership in the component', () => {
+	it('keeps outbox pagination in the query hook instead of its presentation helper', () => {
 		const hookSource = readFileSync(
 			new URL('./outboxStatusStrip.ts', import.meta.url),
-			'utf8'
-		)
-		const surfaceSource = readFileSync(
-			new URL('./useCommunicationsPageSurface.ts', import.meta.url),
 			'utf8'
 		)
 		const presentationSource = readFileSync(
@@ -32,9 +28,6 @@ describe('outbox infinite query boundary', () => {
 		expect(hookSource).toContain('loadMoreOutboxItems')
 		expect(hookSource).toContain('prefetchMoreOutboxItems')
 		expect(hookSource).toContain('outboxQuery.fetchNextPage()')
-		expect(surfaceSource).toContain('loadMoreOutboxItems')
-		expect(surfaceSource).toContain('prefetchMoreOutboxItems')
-		expect(surfaceSource).toContain('hasMoreOutboxItems')
 		expect(presentationSource).toContain('outboxStatusPresentation')
 		expect(presentationSource).not.toContain('fetch(')
 		expect(presentationSource).not.toContain('ApiClient')

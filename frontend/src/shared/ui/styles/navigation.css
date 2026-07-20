@@ -171,6 +171,10 @@
 	cursor: pointer;
 }
 
+.hermes-tree-item__button--static {
+	cursor: default;
+}
+
 .hermes-tree-item__button:hover:not(:disabled),
 .hermes-tree-item[aria-selected='true'] > .hermes-tree-item__button {
 	background: var(--h-color-surface-hover);
@@ -193,6 +197,36 @@
 	gap: var(--h-spacing-1);
 	margin-left: var(--h-spacing-5);
 }
+
+.hermes-tree-item__body {
+	display: grid;
+	min-width: 0;
+	gap: 2px;
+	flex: 1;
+}
+
+.hermes-tree-item__detail {
+	color: var(--h-color-text-muted);
+	font-size: 12px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.hermes-tree-item__status {
+	border-radius: var(--h-radius-pill);
+	background: var(--h-color-surface-raised);
+	color: var(--h-color-text-muted);
+	font-size: 10px;
+	font-weight: 720;
+	letter-spacing: 0.04em;
+	padding: 3px 7px;
+	text-transform: uppercase;
+}
+
+.hermes-tree-item__status--healthy { color: var(--h-color-success); }
+.hermes-tree-item__status--degraded { color: var(--h-color-warning); }
+.hermes-tree-item__status--unhealthy { color: var(--h-color-danger); }
 
 .hermes-context-menu {
 	position: relative;

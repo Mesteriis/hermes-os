@@ -1,12 +1,13 @@
 //! Public HPKE sender contract for credential material routed through Kernel.
 
 use hpke::{
-    Deserializable, Kem as KemTrait, OpModeS, Serializable,
+    Deserializable, Kem as KemTrait, OpModeR, OpModeS, Serializable,
     aead::{AeadTag, ChaCha20Poly1305},
     inout::InOutBuf,
     kdf::HkdfSha256,
     kem::X25519HkdfSha256,
 };
+use zeroize::Zeroizing;
 
 use crate::{LeaseAudienceV1, MAX_SESSION_CREDENTIAL_BYTES};
 
@@ -33,6 +34,65 @@ impl VaultTransportPublicKey {
     #[must_use]
     pub fn as_bytes(&self) -> &[u8; X25519_BYTES] {
         &self.0
+    }
+}
+
+/// Ephemeral response key owned by the runtime that initiated a Vault route.
+///
+/// This is deliberately distinct from the Vault runtime's long-lived transport
+/// receiver: callers create one per request, disclose only its public key to
+/// Vault, and retain the private key solely to open the matching response.
+pub struct VaultResponseRecipientV1 {
+    private_key: <Kem as KemTrait>::PrivateKey,
+    public_key: VaultTransportPublicKey,
+}
+
+impl VaultResponseRecipientV1 {
+    #[must_use]
+    pub fn generate() -> Self {
+        let (private_key, public_key) = Kem::gen_keypair();
+        let bytes = public_key.to_bytes();
+        let bytes = bytes
+            .as_slice()
+            .try_into()
+            .expect("X25519 public key has a fixed size");
+        Self {
+            private_key,
+            public_key: VaultTransportPublicKey::from_bytes(bytes)
+                .expect("generated X25519 key is valid"),
+        }
+    }
+
+    #[must_use]
+    pub fn public_key(&self) -> &VaultTransportPublicKey {
+        &self.public_key
+    }
+
+    pub fn open(
+        &self,
+        binding: &VaultTransportBindingV1,
+        frame: &VaultCiphertextFrameV1,
+    ) -> Result<Zeroizing<Vec<u8>>, VaultTransportError> {
+        let encapped_key = <Kem as KemTrait>::EncappedKey::from_bytes(frame.encapped_key())
+            .map_err(|_| VaultTransportError::MalformedFrame)?;
+        let tag = AeadTag::<Aead>::from_bytes(frame.tag())
+            .map_err(|_| VaultTransportError::MalformedFrame)?;
+        let mut receiver = hpke::setup_receiver::<Aead, Kdf, Kem>(
+            &OpModeR::Base,
+            &self.private_key,
+            &encapped_key,
+            TRANSPORT_INFO,
+        )
+        .map_err(|_| VaultTransportError::MalformedFrame)?;
+        let mut plaintext = frame.ciphertext().to_vec();
+        receiver
+            .open_inout_detached(
+                InOutBuf::from(plaintext.as_mut_slice()),
+                &binding.associated_data(),
+                &tag,
+            )
+            .map_err(|_| VaultTransportError::AuthenticationFailed)?;
+        Ok(Zeroizing::new(plaintext))
     }
 }
 
@@ -81,6 +141,7 @@ impl VaultTransportBindingV1 {
         aad.extend_from_slice(&self.vault_runtime_generation.to_be_bytes());
         append_field(&mut aad, self.audience.module_registration_id().as_bytes());
         append_field(&mut aad, self.audience.runtime_instance_id().as_bytes());
+        aad.extend_from_slice(&self.audience.runtime_generation().to_be_bytes());
         aad.extend_from_slice(&self.audience.grant_epoch().to_be_bytes());
         aad.extend_from_slice(&self.request_id);
         aad.extend_from_slice(&self.operation_digest);

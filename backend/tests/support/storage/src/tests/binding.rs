@@ -20,7 +20,7 @@ fn binding_message() -> StorageBindingMessageV1 {
         grant_epoch: 1,
         role_epoch: 1,
         runtime_principal: "runtime_notes".into(),
-        pool_alias: "pool_notes".into(),
+        pool_alias: "runtime_registration_notes_1".into(),
         effective_budgets: Some(StorageEffectiveBudgetsMessageV1 {
             max_connections: 4,
             statement_timeout_millis: 5_000,
@@ -56,6 +56,17 @@ fn rejects_identity_outside_the_storage_naming_contract() {
     );
 
     assert_eq!(result, Err(StorageBindingErrorV1::Owner));
+}
+
+#[test]
+fn rejects_a_pool_alias_that_is_not_derived_from_the_runtime_generation() {
+    let mut binding = binding_message();
+    binding.pool_alias = "runtime_registration_notes_2".into();
+
+    assert_eq!(
+        validate_storage_binding_message(&binding),
+        Err(StorageBindingErrorV1::PoolAlias)
+    );
 }
 
 #[test]

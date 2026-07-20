@@ -38,6 +38,7 @@ pub fn validate_for_authorized_external_runtime(
         .map_err(|_| "Vault ciphertext route is invalid".to_owned())?;
     if route.registration_id != request.registration_id()
         || route.runtime_instance_id != request.runtime_id()
+        || route.caller_runtime_generation != request.runtime_generation()
         || route.vault_runtime_generation != vault_runtime_generation
         || route.grant_epoch != authorization.grant_epoch()
     {
@@ -66,6 +67,7 @@ pub fn validate_response(
 ) -> Result<VaultCiphertextResponseV1, String> {
     if response.major != 1
         || response.vault_runtime_generation != request.vault_runtime_generation
+        || response.caller_runtime_generation != request.caller_runtime_generation
         || response.request_id != request.request_id
         || response.operation_digest_sha256 != request.operation_digest_sha256
         || VaultCiphertextRouteDirectionV1::try_from(response.direction).ok()

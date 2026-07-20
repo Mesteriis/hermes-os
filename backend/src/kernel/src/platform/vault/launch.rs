@@ -10,6 +10,7 @@ use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::identity::device::signer::{DeviceSigner, FileDeviceSigner};
 use crate::platform::macos::native_launch;
 use crate::platform::vault::binding::VAULT_PROCESS_ID;
+use crate::platform::vault::status;
 use crate::runtime::lifecycle::control::ManagedRuntimeExpectation;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
@@ -42,14 +43,25 @@ pub fn start(
     data_dir: &Path,
     runtime_dir: &Path,
 ) -> Result<u64, String> {
+    let kernel_executable =
+        std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())?;
+    start_from_kernel(supervisor, store, data_dir, &kernel_executable, runtime_dir)
+}
+
+pub(crate) fn start_from_kernel(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    data_dir: &Path,
+    kernel_executable: &Path,
+    runtime_dir: &Path,
+) -> Result<u64, String> {
     if supervisor.is_active(VAULT_PROCESS_ID)? {
         return Err("Vault runtime is already active".to_owned());
     }
     let binding = vault_binding(store)?;
     let runtime_generation = next_runtime_generation(store)?;
-    let kernel_executable =
-        std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())?;
-    let (prepared, contracts) = prepare_launch(&kernel_executable, &binding, runtime_dir)?;
+    let (prepared, contracts) =
+        prepare_launch(kernel_executable, &binding, runtime_dir, runtime_generation)?;
     let record = PlatformManagedProcessLaunch::new(
         VAULT_PROCESS_ID,
         binding.binding_revision(),
@@ -83,7 +95,14 @@ pub fn start(
         ManagedChildExecutionPolicy::new(MAX_ATTEMPTS, MAX_RUNTIME)?,
         contracts,
     )?;
-    Ok(runtime_generation)
+    supervisor.wait_until_ready(VAULT_PROCESS_ID)?;
+    match status::read_current(store, &supervisor.relay_port()) {
+        Ok(status) if status.runtime_generation() == runtime_generation => Ok(runtime_generation),
+        Ok(_) | Err(_) => {
+            let _ = supervisor.stop(VAULT_PROCESS_ID);
+            Err("Vault runtime did not confirm its managed status".to_owned())
+        }
+    }
 }
 
 fn vault_binding(
@@ -99,6 +118,7 @@ fn prepare_launch(
     kernel_executable: &Path,
     binding: &hermes_kernel_control_store::PlatformManagedProcessBinding,
     runtime_dir: &Path,
+    runtime_generation: u64,
 ) -> Result<
     (
         native_launch::PreparedPlatformManagedProcess,
@@ -109,10 +129,16 @@ fn prepare_launch(
     let prepared = native_launch::prepare_bound_platform_process(
         kernel_executable,
         binding,
-        &runtime_dir.join("vault").join("managed"),
+        &runtime_dir
+            .join("vault")
+            .join(format!("launch-{runtime_generation}"))
+            .join("managed"),
     )?;
     match StagedRuntimeContracts::stage(
-        &runtime_dir.join("vault").join("contracts"),
+        &runtime_dir
+            .join("vault")
+            .join(format!("launch-{runtime_generation}"))
+            .join("contracts"),
         prepared.descriptor_bytes(),
         prepared.settings_schema_bytes(),
     ) {

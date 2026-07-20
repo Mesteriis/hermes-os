@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import Button from '../ui/Button.vue'
+import Button from '../ui/primitives/Button.vue'
 import Icon from '../ui/Icon.vue'
-import Input from '../ui/Input.vue'
+import Input from '../ui/primitives/Input.vue'
 import Steps from '../ui/Steps.vue'
-import Switch from '../ui/Switch.vue'
+import Switch from '../ui/primitives/Switch.vue'
 import type { StepsItem } from '../ui/Steps.types'
 import type { SelectedIntegrationAccount } from './queries/useIntegrationConnectionWizardSurface'
 import { useIntegrationConnectionWizardSurface } from './queries/useIntegrationConnectionWizardSurface'

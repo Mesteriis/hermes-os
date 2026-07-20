@@ -9,7 +9,7 @@ import {
 	uiThemeFamilyOptions,
 	uiThemeModeOptions,
 	uiThemeNames
-} from './theme'
+} from './foundation/theme'
 
 const utilityComponents = [
 	'CopyButton',

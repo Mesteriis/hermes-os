@@ -6,6 +6,7 @@ pub(super) use crate::distribution::staged_contracts::StagedRuntimeContracts;
 pub(super) use crate::distribution::trust_root::ReleaseTrustRoot;
 pub(super) use crate::platform::macos::code_signature as macos_code_signature;
 pub(super) use crate::platform::macos::release_resources as macos_release_resources;
+pub(super) use crate::platform::storage::{binding as storage_binding, launch as storage_launch};
 pub(super) use crate::platform::telemetry::{
     binding as telemetry_binding, diagnostics as telemetry_diagnostics, launch as telemetry_launch,
 };

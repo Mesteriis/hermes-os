@@ -1,12 +1,17 @@
 //! Narrow Control Store port implementations over the SQLite actor facade.
 
 use hermes_kernel_control_store::{
-    BundledManagedLaunchBinding, ExternalRuntimeAttestation, ExternalRuntimeIdentity, GrantSet,
-    HealthRecoveryStore, InitialOwnerIdentity, ManagedLaunchRecord, ModuleGrantSnapshot,
-    ModuleRegistration, ModuleRegistrationState, ModuleRegistryStore, OwnerIdentityStore,
-    OwnerPinnedArtifactBinding, PlatformManagedProcessBinding, PlatformManagedProcessLaunch,
+    BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1, BundledManagedLaunchBinding, ControlStore,
+    EventHubTopologyStore, EventsAuthorityStore, ExternalRuntimeAttestation,
+    ExternalRuntimeIdentity, GrantSet, HealthRecoveryStore, InitialOwnerIdentity,
+    ManagedLaunchRecord, ModuleBlobQuotaRequestV1, ModuleEventRouteRequestV1, ModuleGrantSnapshot,
+    ModuleRegistration, ModuleRegistrationState, ModuleRegistryStore, ModuleSchedulerJobRequestV1,
+    ModuleStorageRequestV1, OwnerIdentityStore, OwnerPinnedArtifactBinding,
+    PlatformEventHubTopologyV1, PlatformEventsAuthorityConfigurationV1,
+    PlatformManagedProcessBinding, PlatformManagedProcessLaunch, PlatformStorageTopology,
     RuntimeTrustStore, ServerBootstrapPairing, SettingsApplyState, SettingsDesiredSnapshot,
-    SettingsRegistryStore, SettingsSchemaBinding,
+    SettingsRegistryStore, SettingsSchemaBinding, StorageBindingStore, StorageBundleStore,
+    StorageTopologyStore,
 };
 
 use crate::{SqliteControlStore, StoreError};
@@ -25,6 +30,52 @@ impl OwnerIdentityStore for SqliteControlStore {
     }
     fn claim_initial_owner(&self, identity: &InitialOwnerIdentity) -> Result<(), Self::Error> {
         SqliteControlStore::claim_initial_owner(self, identity)
+    }
+    fn current_identity_epoch(&self) -> Result<u64, Self::Error> {
+        SqliteControlStore::current_identity_epoch(self)
+    }
+    fn browser_device_identity(
+        &self,
+        device_id: &str,
+    ) -> Result<Option<BrowserDeviceIdentityV1>, Self::Error> {
+        SqliteControlStore::browser_device_identity(self, device_id)
+    }
+    fn browser_device_identity_by_credential_id(
+        &self,
+        credential_id: &[u8],
+    ) -> Result<Option<BrowserDeviceIdentityV1>, Self::Error> {
+        SqliteControlStore::browser_device_identity_by_credential_id(self, credential_id)
+    }
+    fn admit_browser_device(
+        &self,
+        enrollment: &BrowserDeviceEnrollmentV1,
+        expected_identity_epoch: u64,
+    ) -> Result<BrowserDeviceIdentityV1, Self::Error> {
+        SqliteControlStore::admit_browser_device(self, enrollment, expected_identity_epoch)
+    }
+    fn record_verified_browser_assertion(
+        &self,
+        credential_id: &[u8],
+        observed_sign_count: u32,
+        observed_backup_eligible: bool,
+        observed_backup_state: bool,
+        expected_identity_epoch: u64,
+    ) -> Result<BrowserDeviceIdentityV1, Self::Error> {
+        SqliteControlStore::record_verified_browser_assertion(
+            self,
+            credential_id,
+            observed_sign_count,
+            observed_backup_eligible,
+            observed_backup_state,
+            expected_identity_epoch,
+        )
+    }
+    fn revoke_browser_device(
+        &self,
+        device_id: &str,
+        expected_identity_epoch: u64,
+    ) -> Result<ControlStore, Self::Error> {
+        SqliteControlStore::revoke_browser_device(self, device_id, expected_identity_epoch)
     }
     fn begin_server_bootstrap_pairing(
         &self,
@@ -58,6 +109,42 @@ impl ModuleRegistryStore for SqliteControlStore {
     ) -> Result<(), Self::Error> {
         SqliteControlStore::create_pending_registration(self, registration, capabilities)
     }
+    fn create_pending_registration_with_requests(
+        &self,
+        registration: &ModuleRegistration,
+        capabilities: &[String],
+        storage_requests: &[ModuleStorageRequestV1],
+        event_requests: &[ModuleEventRouteRequestV1],
+        blob_requests: &[ModuleBlobQuotaRequestV1],
+    ) -> Result<(), Self::Error> {
+        SqliteControlStore::create_pending_registration_with_requests(
+            self,
+            registration,
+            capabilities,
+            storage_requests,
+            event_requests,
+            blob_requests,
+        )
+    }
+    fn create_pending_registration_with_descriptor_requests(
+        &self,
+        registration: &ModuleRegistration,
+        capabilities: &[String],
+        storage_requests: &[ModuleStorageRequestV1],
+        event_requests: &[ModuleEventRouteRequestV1],
+        blob_requests: &[ModuleBlobQuotaRequestV1],
+        scheduler_requests: &[ModuleSchedulerJobRequestV1],
+    ) -> Result<(), Self::Error> {
+        SqliteControlStore::create_pending_registration_with_descriptor_requests(
+            self,
+            registration,
+            capabilities,
+            storage_requests,
+            event_requests,
+            blob_requests,
+            scheduler_requests,
+        )
+    }
     fn module_registration(&self, id: &str) -> Result<Option<ModuleRegistration>, Self::Error> {
         SqliteControlStore::module_registration(self, id)
     }
@@ -77,6 +164,37 @@ impl ModuleRegistryStore for SqliteControlStore {
     }
     fn module_grant_snapshot(&self, id: &str) -> Result<Option<ModuleGrantSnapshot>, Self::Error> {
         SqliteControlStore::module_grant_snapshot(self, id)
+    }
+    fn approved_module_grant_snapshots(&self) -> Result<Vec<ModuleGrantSnapshot>, Self::Error> {
+        SqliteControlStore::approved_module_grant_snapshots(self)
+    }
+    fn module_storage_request(
+        &self,
+        registration_id: &str,
+        capability_id: &str,
+    ) -> Result<Option<ModuleStorageRequestV1>, Self::Error> {
+        SqliteControlStore::module_storage_request(self, registration_id, capability_id)
+    }
+    fn module_event_route_requests(
+        &self,
+        registration_id: &str,
+        capability_id: &str,
+    ) -> Result<Vec<ModuleEventRouteRequestV1>, Self::Error> {
+        SqliteControlStore::module_event_route_requests(self, registration_id, capability_id)
+    }
+    fn module_blob_quota_request(
+        &self,
+        registration_id: &str,
+        capability_id: &str,
+    ) -> Result<Option<ModuleBlobQuotaRequestV1>, Self::Error> {
+        SqliteControlStore::module_blob_quota_request(self, registration_id, capability_id)
+    }
+    fn module_scheduler_job_requests(
+        &self,
+        registration_id: &str,
+        capability_id: &str,
+    ) -> Result<Vec<ModuleSchedulerJobRequestV1>, Self::Error> {
+        SqliteControlStore::module_scheduler_job_requests(self, registration_id, capability_id)
     }
 }
 
@@ -123,6 +241,113 @@ impl SettingsRegistryStore for SqliteControlStore {
         revision: u64,
     ) -> Result<(), Self::Error> {
         SqliteControlStore::confirm_effective_settings_revision(self, id, revision)
+    }
+}
+
+impl EventsAuthorityStore for SqliteControlStore {
+    type Error = StoreError;
+
+    fn record_platform_events_authority_configuration(
+        &self,
+        configuration: &PlatformEventsAuthorityConfigurationV1,
+    ) -> Result<(), Self::Error> {
+        SqliteControlStore::record_platform_events_authority_configuration(self, configuration)
+    }
+
+    fn platform_events_authority_configuration(
+        &self,
+    ) -> Result<Option<PlatformEventsAuthorityConfigurationV1>, Self::Error> {
+        SqliteControlStore::platform_events_authority_configuration(self)
+    }
+}
+
+impl EventHubTopologyStore for SqliteControlStore {
+    type Error = StoreError;
+
+    fn record_platform_event_hub_topology(
+        &self,
+        topology: &PlatformEventHubTopologyV1,
+    ) -> Result<(), Self::Error> {
+        SqliteControlStore::record_platform_event_hub_topology(self, topology)
+    }
+
+    fn platform_event_hub_topology(
+        &self,
+    ) -> Result<Option<PlatformEventHubTopologyV1>, Self::Error> {
+        SqliteControlStore::platform_event_hub_topology(self)
+    }
+}
+
+impl StorageTopologyStore for SqliteControlStore {
+    type Error = StoreError;
+
+    fn record_platform_storage_topology(
+        &self,
+        topology: &PlatformStorageTopology,
+    ) -> Result<(), Self::Error> {
+        SqliteControlStore::record_platform_storage_topology(self, topology)
+    }
+
+    fn platform_storage_topology(&self) -> Result<Option<PlatformStorageTopology>, Self::Error> {
+        SqliteControlStore::platform_storage_topology(self)
+    }
+}
+
+impl StorageBindingStore for SqliteControlStore {
+    type Error = StoreError;
+
+    fn record_platform_storage_binding(
+        &self,
+        binding: &hermes_kernel_control_store::PlatformStorageBindingV1,
+    ) -> Result<(), Self::Error> {
+        SqliteControlStore::record_platform_storage_binding(self, binding)
+    }
+
+    fn platform_storage_binding(
+        &self,
+        registration_id: &str,
+        capability_id: &str,
+    ) -> Result<Option<hermes_kernel_control_store::PlatformStorageBindingV1>, Self::Error> {
+        SqliteControlStore::platform_storage_binding(self, registration_id, capability_id)
+    }
+
+    fn begin_platform_storage_binding_revocation(
+        &self,
+        registration_id: &str,
+        capability_id: &str,
+        binding_revision: u64,
+    ) -> Result<hermes_kernel_control_store::PlatformStorageBindingV1, Self::Error> {
+        SqliteControlStore::begin_platform_storage_binding_revocation(
+            self,
+            registration_id,
+            capability_id,
+            binding_revision,
+        )
+    }
+
+    fn platform_storage_bindings(
+        &self,
+    ) -> Result<Vec<hermes_kernel_control_store::PlatformStorageBindingV1>, Self::Error> {
+        SqliteControlStore::platform_storage_bindings(self)
+    }
+}
+
+impl StorageBundleStore for SqliteControlStore {
+    type Error = StoreError;
+
+    fn record_platform_storage_bundle(
+        &self,
+        bundle: &hermes_kernel_control_store::PlatformStorageBundleV1,
+    ) -> Result<(), Self::Error> {
+        SqliteControlStore::record_platform_storage_bundle(self, bundle)
+    }
+
+    fn platform_storage_bundle(
+        &self,
+        owner_id: &str,
+        revision: u64,
+    ) -> Result<Option<hermes_kernel_control_store::PlatformStorageBundleV1>, Self::Error> {
+        SqliteControlStore::platform_storage_bundle(self, owner_id, revision)
     }
 }
 

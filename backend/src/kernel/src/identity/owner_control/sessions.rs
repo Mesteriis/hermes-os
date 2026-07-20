@@ -43,6 +43,34 @@ pub struct OwnerControlChallenge {
 }
 
 impl OwnerControlChallenge {
+    pub(crate) fn new_for_client(
+        challenge_id: String,
+        bytes: [u8; 32],
+        kernel_instance_id: String,
+        owner_id: String,
+        device_id: String,
+        control_store_generation: u64,
+        expires_at_unix_millis: u64,
+    ) -> Result<Self, String> {
+        (challenge_id.len() == 64
+            && challenge_id.bytes().all(|byte| byte.is_ascii_hexdigit())
+            && valid_id(&kernel_instance_id)
+            && valid_id(&owner_id)
+            && valid_id(&device_id)
+            && control_store_generation > 0
+            && expires_at_unix_millis > 0)
+            .then_some(Self {
+                challenge_id,
+                bytes,
+                kernel_instance_id,
+                owner_id,
+                device_id,
+                control_store_generation,
+                expires_at_unix_millis,
+            })
+            .ok_or_else(|| "owner control challenge is invalid".to_owned())
+    }
+
     #[must_use]
     pub fn challenge_id(&self) -> &str {
         &self.challenge_id
@@ -194,6 +222,15 @@ impl OwnerControlSessions {
         Ok(())
     }
 
+    pub fn authorized_owner(
+        &mut self,
+        store: &SqliteControlStore,
+        session_id: &str,
+    ) -> Result<InitialOwnerIdentity, String> {
+        self.authorize(store, session_id)?;
+        current_owner(store)
+    }
+
     fn admit_begin(&mut self) -> Result<(), String> {
         let now = Instant::now();
         while self
@@ -227,21 +264,51 @@ fn current_owner(store: &SqliteControlStore) -> Result<InitialOwnerIdentity, Str
         .ok_or_else(|| "owner control requires an enrolled owner".to_owned())
 }
 
+fn valid_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+}
+
 fn proof_message(challenge: &Challenge) -> Result<Vec<u8>, String> {
-    let mut message = Vec::with_capacity(PROOF_DOMAIN.len() + 160);
-    message.extend_from_slice(PROOF_DOMAIN);
-    for text in [
+    proof_message_fields(
         &challenge.kernel_instance_id,
         challenge.owner.owner_id(),
         challenge.owner.device_id(),
-    ] {
+        challenge.control_store_generation,
+        &challenge.bytes,
+    )
+}
+
+pub(crate) fn client_proof_message(challenge: &OwnerControlChallenge) -> Result<Vec<u8>, String> {
+    proof_message_fields(
+        challenge.kernel_instance_id(),
+        challenge.owner_id(),
+        challenge.device_id(),
+        challenge.control_store_generation(),
+        challenge.bytes(),
+    )
+}
+
+fn proof_message_fields(
+    kernel_instance_id: &str,
+    owner_id: &str,
+    device_id: &str,
+    control_store_generation: u64,
+    bytes: &[u8; 32],
+) -> Result<Vec<u8>, String> {
+    let mut message = Vec::with_capacity(PROOF_DOMAIN.len() + 160);
+    message.extend_from_slice(PROOF_DOMAIN);
+    for text in [kernel_instance_id, owner_id, device_id] {
         let length = u16::try_from(text.len())
             .map_err(|_| "owner control proof field is too large".to_owned())?;
         message.extend_from_slice(&length.to_be_bytes());
         message.extend_from_slice(text.as_bytes());
     }
-    message.extend_from_slice(&challenge.control_store_generation.to_be_bytes());
-    message.extend_from_slice(&challenge.bytes);
+    message.extend_from_slice(&control_store_generation.to_be_bytes());
+    message.extend_from_slice(bytes);
     Ok(message)
 }
 

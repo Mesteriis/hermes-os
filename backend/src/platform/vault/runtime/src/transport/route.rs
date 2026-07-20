@@ -13,7 +13,9 @@ use prost::Message;
 use crate::service::runtime::VaultService;
 use crate::transport::keys::VaultTransportKeyPair;
 use crate::transport::response::encrypt_result;
-use crate::transport::session::{VaultTransportReplayGuard, execute_session};
+use crate::transport::session::{
+    VaultTransportReplayGuard, execute_session, execute_storage_session,
+};
 
 pub fn execute_route(
     service: &mut VaultService,
@@ -28,14 +30,30 @@ pub fn execute_route(
     verify_kernel_authorization(&route, authorization_key_sec1)?;
     let binding = binding_from_route(&route)?;
     let frame = VaultCiphertextFrameV1::from_parts(
-        route.hpke_encapped_key,
-        route.ciphertext,
-        route.hpke_authentication_tag,
+        route.hpke_encapped_key.clone(),
+        route.ciphertext.clone(),
+        route.hpke_authentication_tag.clone(),
     )
     .map_err(|_| "Vault ciphertext route is invalid".to_owned())?;
     let session = VaultTransportSessionV1::new(binding, frame);
-    let plaintext = execute_session(replay_guard, keys, service, &session, now_unix_seconds)
-        .map_err(|_| "Vault ciphertext route was denied".to_owned())?;
+    let plaintext = if route.storage_role_epoch != 0 {
+        execute_storage_session(
+            replay_guard,
+            keys,
+            service,
+            &session,
+            &route,
+            now_unix_seconds,
+        )
+    } else {
+        execute_session(replay_guard, keys, service, &session, now_unix_seconds)
+    }
+    .map_err(|error| {
+        if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+            return format!("developer Vault ciphertext route was denied: {error:?}");
+        }
+        "Vault ciphertext route was denied".to_owned()
+    })?;
     encrypt_result(session.binding(), plaintext.as_slice())
 }
 
@@ -63,6 +81,7 @@ fn binding_from_route(route: &VaultCiphertextRouteV1) -> Result<VaultTransportBi
     let audience = LeaseAudienceV1::new(
         route.registration_id.clone(),
         route.runtime_instance_id.clone(),
+        route.caller_runtime_generation,
         route.grant_epoch,
     )
     .map_err(|_| "Vault ciphertext route is invalid".to_owned())?;

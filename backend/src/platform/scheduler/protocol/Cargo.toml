@@ -1,0 +1,20 @@
+[package]
+name = "hermes-scheduler-protocol"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "platform"
+owner = "scheduler"
+surface = "contract"
+
+[dependencies]
+hermes-clock-protocol = { path = "../../clock/protocol" }
+prost = "=0.14.4"
+
+[build-dependencies]
+prost-build = "=0.14.4"
+protoc-bin-vendored = "=3.2.0"

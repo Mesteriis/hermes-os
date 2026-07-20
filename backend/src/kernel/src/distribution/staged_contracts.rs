@@ -10,6 +10,7 @@ use getrandom::fill;
 pub struct StagedRuntimeContracts {
     descriptor_path: PathBuf,
     settings_schema_path: Option<PathBuf>,
+    runtime_configuration_path: Option<PathBuf>,
 }
 
 impl StagedRuntimeContracts {
@@ -17,6 +18,20 @@ impl StagedRuntimeContracts {
         directory: &Path,
         descriptor_bytes: &[u8],
         settings_schema_bytes: Option<&[u8]>,
+    ) -> Result<Self, String> {
+        Self::stage_with_runtime_configuration(
+            directory,
+            descriptor_bytes,
+            settings_schema_bytes,
+            None,
+        )
+    }
+
+    pub fn stage_with_runtime_configuration(
+        directory: &Path,
+        descriptor_bytes: &[u8],
+        settings_schema_bytes: Option<&[u8]>,
+        runtime_configuration_bytes: Option<&[u8]>,
     ) -> Result<Self, String> {
         validate_directory(directory)?;
         if descriptor_bytes.is_empty() {
@@ -40,9 +55,26 @@ impl StagedRuntimeContracts {
             }
             None => None,
         };
+        let runtime_configuration_path = match runtime_configuration_bytes {
+            Some(bytes) if !bytes.is_empty() => {
+                let path = directory.join(format!("configuration-{suffix}.bin"));
+                if let Err(error) = write_private_file(&path, bytes) {
+                    let _ =
+                        remove_optional_files(&descriptor_path, settings_schema_path.as_deref());
+                    return Err(error);
+                }
+                Some(path)
+            }
+            Some(_) => {
+                let _ = remove_optional_files(&descriptor_path, settings_schema_path.as_deref());
+                return Err("managed runtime configuration bytes are invalid".to_owned());
+            }
+            None => None,
+        };
         Ok(Self {
             descriptor_path,
             settings_schema_path,
+            runtime_configuration_path,
         })
     }
 
@@ -56,13 +88,32 @@ impl StagedRuntimeContracts {
         self.settings_schema_path.as_deref()
     }
 
+    #[must_use]
+    pub fn runtime_configuration_path(&self) -> Option<&Path> {
+        self.runtime_configuration_path.as_deref()
+    }
+
     pub fn remove(self) -> Result<(), String> {
         remove_private_file(&self.descriptor_path)?;
         if let Some(path) = self.settings_schema_path {
             remove_private_file(&path)?;
         }
+        if let Some(path) = self.runtime_configuration_path {
+            remove_private_file(&path)?;
+        }
         Ok(())
     }
+}
+
+fn remove_optional_files(
+    descriptor_path: &Path,
+    settings_schema_path: Option<&Path>,
+) -> Result<(), String> {
+    remove_private_file(descriptor_path)?;
+    if let Some(path) = settings_schema_path {
+        remove_private_file(path)?;
+    }
+    Ok(())
 }
 
 fn validate_directory(directory: &Path) -> Result<(), String> {

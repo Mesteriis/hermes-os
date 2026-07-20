@@ -1,7 +1,6 @@
 import { ApiClient } from '../../platform/api/ApiClient'
 import type {
   MailContentEgressSettings,
-  MailSensitiveForwardingPolicy,
   MailSensitiveForwardingPolicyInput,
   MailSensitiveForwardingPolicyListResponse,
   MailSyncRunResponse,

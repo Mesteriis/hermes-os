@@ -68,9 +68,9 @@ export function validateManifest(manifest) {
     if (!isExpectedBundleArtifactPath(
       bundle.path,
       sidecar?.path,
-      ['Contents', 'MacOS', 'hermes-kernel-aarch64-apple-darwin'],
+      ['Contents', 'MacOS', 'hermes-kernel'],
     )) {
-      errors.push('artifacts.kernel_sidecar must be the target-specific sidecar inside the Tauri bundle');
+      errors.push('artifacts.kernel_sidecar must be the Tauri-normalized Kernel sidecar inside the bundle');
     }
     if (!isExpectedBundleArtifactPath(
       bundle.path,

@@ -7,7 +7,8 @@ import { join } from 'node:path'
 describe('Hermes UI Storybook visual coverage boundary', () => {
 	it('exports every shared UI component through the kit barrel', () => {
 		const uiDir = fileURLToPath(new URL('.', import.meta.url))
-		const componentNames = readdirSync(uiDir)
+		const componentNames = ['.', 'primitives', 'patterns']
+			.flatMap((relativePath) => readdirSync(join(uiDir, relativePath)))
 			.filter((fileName) => fileName.endsWith('.vue'))
 			.map((fileName) => fileName.replace(/\.vue$/, ''))
 			.sort()
@@ -50,7 +51,7 @@ describe('Hermes UI Storybook visual coverage boundary', () => {
 		expect(mainConfig).toContain("staticDirs: ['../public']")
 		expect(mainConfig).toContain("const allowedStorybookHosts = ['localhost', '127.0.0.1']")
 		expect(mainConfig).toContain('allowedHosts:')
-		expect(mainConfig).toContain("designTokenGlob: 'src/shared/ui/styles/**/*.css'")
+		expect(mainConfig).toContain("designTokenGlob: 'src/shared/ui/{foundation,styles}/**/*.css'")
 		expect(previewConfig).toContain('withThemeByDataAttribute')
 		expect(previewConfig).toContain('initialize({')
 		expect(previewConfig).toContain('loaders: [mswLoader]')
@@ -184,28 +185,17 @@ describe('Hermes UI Storybook visual coverage boundary', () => {
 		expect(visualSpec).toContain('toHaveScreenshot')
 	})
 
-	it('keeps Storybook visual regression wired into CI as a compare-only gate', () => {
+	it('keeps Storybook visual regression wired into the frontend validation command as a compare-only gate', () => {
 		const frontendRoot = fileURLToPath(new URL('../../../', import.meta.url))
-		const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
-		const makefile = readFileSync(join(repoRoot, 'Makefile'), 'utf8')
-		const ciWorkflow = readFileSync(join(repoRoot, '.github/workflows/ci.yml'), 'utf8')
-
-		expect(makefile).toContain('frontend-visual:\n\t@cd frontend && pnpm test:visual')
-		expect(makefile).toContain('frontend-visual-update:\n\t@cd frontend && pnpm test:visual:update')
-		expect(makefile).toContain('frontend-validate: frontend-lint frontend-test frontend-visual frontend-build')
-		expect(ciWorkflow).toContain('pull_request:')
-		expect(ciWorkflow).toContain('push:')
-		expect(ciWorkflow).toContain('frontend-visual:')
-		expect(ciWorkflow).toContain('runs-on: macos-latest')
-		expect(ciWorkflow).toContain('run: make frontend-visual')
-		expect(ciWorkflow).toContain('frontend-visual-regression')
-		expect(ciWorkflow).not.toContain('run: make frontend-visual-update')
 		const playwrightConfig = readFileSync(join(frontendRoot, 'playwright.config.ts'), 'utf8')
 		expect(playwrightConfig).toContain("process.env.HERMES_STORYBOOK_HOST ?? 'localhost'")
 		expect(playwrightConfig).toContain('pnpm exec storybook build --quiet --test --output-dir storybook-static')
 		expect(playwrightConfig).toContain('pnpm storybook:serve')
 		expect(playwrightConfig).toContain('reuseExistingServer: false')
 		const packageJson = readFileSync(join(frontendRoot, 'package.json'), 'utf8')
+		expect(packageJson).toContain('"test:visual": "playwright test"')
+		expect(packageJson).toContain('"test:visual:update": "playwright test --update-snapshots"')
+		expect(packageJson).toContain('"validate": "pnpm check:cleanroom-tauri-bundle && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:visual && pnpm build"')
 		expect(packageJson).toContain('"storybook:serve": "node scripts/serve-storybook-static.mjs"')
 		expect(packageJson).toContain('test-storybook --url http://localhost:6006')
 	})

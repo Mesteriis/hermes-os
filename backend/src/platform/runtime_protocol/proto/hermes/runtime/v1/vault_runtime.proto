@@ -38,6 +38,7 @@ message VaultCiphertextResponseV1 {
   bytes hpke_encapped_key = 6;
   bytes ciphertext = 7;
   bytes hpke_authentication_tag = 8;
+  uint64 caller_runtime_generation = 9;
 }
 
 message VaultCiphertextRouteV1 {
@@ -58,6 +59,13 @@ message VaultCiphertextRouteV1 {
   // decrypt.
   string kernel_instance_id = 13;
   bytes kernel_authorization_signature_raw = 14;
+  uint64 caller_runtime_generation = 15;
+  // Present only for a Storage runtime credential route. Kernel compares these
+  // non-secret fences with its active durable Storage binding before relay.
+  uint64 storage_role_epoch = 16;
+  uint64 storage_credential_lease_revision = 17;
+  string storage_runtime_principal = 18;
+  string storage_owner_id = 19;
 }
 
 message VaultRuntimeControlRequestV1 {
@@ -65,5 +73,22 @@ message VaultRuntimeControlRequestV1 {
 }
 message VaultRuntimeControlResponseV1 {
   oneof result { VaultRuntimeStatusV1 status = 1; }
+  string error_code = 15;
+}
+
+// Authenticated operations performed on the inherited FD of a Kernel-managed
+// Vault child. The Kernel establishes that channel from the signed launch
+// record; no Unix path, PID, or environment value authenticates this surface.
+message ManagedVaultRuntimeControlRequestV1 {
+  oneof operation {
+    GetVaultRuntimeStatusRequestV1 get_status = 1;
+    VaultCiphertextRouteV1 ciphertext_route = 2;
+  }
+}
+message ManagedVaultRuntimeControlResponseV1 {
+  oneof result {
+    VaultRuntimeStatusV1 status = 1;
+    VaultCiphertextResponseV1 ciphertext_response = 2;
+  }
   string error_code = 15;
 }

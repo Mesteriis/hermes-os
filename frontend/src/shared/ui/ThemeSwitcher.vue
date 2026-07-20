@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { UiThemeFamily, UiThemeFamilyOption, UiThemeMode, UiThemeModeOption, UiThemeName } from './theme'
+import type { UiThemeFamily, UiThemeFamilyOption, UiThemeMode, UiThemeModeOption, UiThemeName } from './foundation/theme'
 import {
 	normalizeUiThemeName,
 	themeNameToSelection,
 	themeSelectionToName,
 	uiThemeFamilyOptions,
 	uiThemeModeOptions
-} from './theme'
+} from './foundation/theme'
 
 const props = withDefaults(defineProps<{
 	modelValue?: UiThemeName

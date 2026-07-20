@@ -14,10 +14,16 @@ use hermes_gateway_protocol::v1::{
     BeginExternalRuntimeSessionRequestV1, BeginExternalRuntimeSessionResponseV1,
     CompleteExternalRuntimeSessionRequestV1, CompleteExternalRuntimeSessionResponseV1,
     ExternalRuntimeSessionRequestV1, ExternalRuntimeSessionResponseV1,
+    GetExternalRuntimeStorageBindingRequestV1, GetExternalRuntimeStorageBindingResponseV1,
     RouteVaultCiphertextRequestV1, RouteVaultCiphertextResponseV1,
     SubmitRuntimeSettingsSchemaRequestV1, SubmitRuntimeSettingsSchemaResponseV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
+use hermes_runtime_protocol::v1::{
+    ManagedVaultRuntimeControlRequestV1, ManagedVaultRuntimeControlResponseV1,
+    managed_vault_runtime_control_request_v1::Operation as VaultOperation,
+    managed_vault_runtime_control_response_v1::Result as VaultResult,
+};
 use prost::Message;
 
 use crate::infrastructure::filesystem::remove_stale_owner_unix_socket;
@@ -28,6 +34,7 @@ use crate::modules::settings::schema as settings_schema;
 use crate::platform::vault::binding::VAULT_PROCESS_ID;
 use crate::platform::vault::launch as vault_launch;
 use crate::runtime::external::sessions::ExternalRuntimeSessions;
+use crate::runtime::external::storage;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 const MAX_FRAME_BYTES: usize = 64 * 1024;
@@ -127,6 +134,9 @@ fn handle(
         }
         Some(Operation::RouteVaultCiphertext(request)) => {
             route_vault_ciphertext(store, data_dir, supervisor, sessions, request)
+        }
+        Some(Operation::GetStorageBinding(request)) => {
+            get_storage_binding(store, supervisor, sessions, request)
         }
         None => Err("invalid_request".to_owned()),
     };
@@ -274,16 +284,53 @@ fn route_vault_ciphertext(
         store.snapshot().instance_id(),
         &mut route,
     )?;
-    let response = supervisor.relay(VAULT_PROCESS_ID, route.encode_to_vec())?;
-    let response =
-        hermes_runtime_protocol::v1::VaultCiphertextResponseV1::decode(response.as_slice())
-            .map_err(|_| "Vault ciphertext response is invalid".to_owned())?;
+    let response = supervisor.relay(
+        VAULT_PROCESS_ID,
+        ManagedVaultRuntimeControlRequestV1 {
+            operation: Some(VaultOperation::CiphertextRoute(route.clone())),
+        }
+        .encode_to_vec(),
+    )?;
+    let response = ManagedVaultRuntimeControlResponseV1::decode(response.as_slice())
+        .map_err(|_| "Vault ciphertext response is invalid".to_owned())?;
+    if !response.error_code.is_empty() {
+        return Err("Vault ciphertext response is unavailable".to_owned());
+    }
+    let response = match response.result {
+        Some(VaultResult::CiphertextResponse(response)) => response,
+        _ => return Err("Vault ciphertext response is unavailable".to_owned()),
+    };
     let response = crate::platform::vault::ciphertext_route::validate_response(&route, response)?;
     Ok(SessionResult::RouteVaultCiphertext(
         RouteVaultCiphertextResponseV1 {
             response: Some(response),
         },
     ))
+}
+
+fn get_storage_binding(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    sessions: &mut ExternalRuntimeSessions,
+    request: GetExternalRuntimeStorageBindingRequestV1,
+) -> Result<SessionResult, String> {
+    storage::current_binding(
+        store,
+        supervisor,
+        sessions,
+        &request.session_id,
+        &request.capability_id,
+    )
+    .map(|binding| {
+        SessionResult::GetStorageBinding(GetExternalRuntimeStorageBindingResponseV1 {
+            storage_binding_v1: binding.storage_binding_v1().to_vec(),
+            pgbouncer_host: binding.pgbouncer_host().to_owned(),
+            pgbouncer_port: binding.pgbouncer_port(),
+            vault_instance_id: binding.vault_instance_id().to_owned(),
+            vault_runtime_generation: binding.vault_runtime_generation(),
+            vault_hpke_public_key_x25519: binding.vault_hpke_public_key_x25519().to_vec(),
+        })
+    })
 }
 
 fn error_response(error_code: &str) -> ExternalRuntimeSessionResponseV1 {
@@ -295,7 +342,9 @@ fn error_response(error_code: &str) -> ExternalRuntimeSessionResponseV1 {
 
 fn error_code(error: &str) -> &'static str {
     match error {
-        "invalid_request" | "external runtime distribution digest is invalid" => "invalid_request",
+        "invalid_request"
+        | "external runtime distribution digest is invalid"
+        | "Vault ciphertext route is invalid" => "invalid_request",
         "runtime session rate limited" => "runtime_session_rate_limited",
         "runtime challenge is unavailable" | "runtime session is unavailable" => {
             "runtime_session_unavailable"
@@ -303,9 +352,12 @@ fn error_code(error: &str) -> &'static str {
         "external runtime signature is invalid" | "external runtime proof verification failed" => {
             "runtime_proof_invalid"
         }
-        "external runtime challenge is stale" | "runtime session is stale or unauthorized" => {
-            "runtime_session_stale"
-        }
+        "external runtime challenge is stale"
+        | "runtime session is stale or unauthorized"
+        | "Vault ciphertext route is stale or unauthorized"
+        | "Storage credential route is unauthorized"
+        | "Storage credential route is stale or unauthorized" => "runtime_session_stale",
+        "Vault runtime is unavailable" => "runtime_session_unavailable",
         _ => "runtime_session_denied",
     }
 }

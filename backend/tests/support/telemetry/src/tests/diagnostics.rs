@@ -4,9 +4,16 @@ use std::os::unix::net::UnixStream;
 use crate::collector::control;
 use crate::collector::storage::{TelemetryRetentionV1, TelemetrySegmentStore};
 use crate::fixtures::directory::unique_directory;
+use hermes_runtime_protocol::v1::{
+    GetTelemetryDiagnosticsRequestV1, TelemetryRuntimeControlRequestV1,
+    TelemetryRuntimeControlResponseV1,
+    telemetry_runtime_control_request_v1::Operation as RequestOperation,
+    telemetry_runtime_control_response_v1::Result as ResponseResult,
+};
 use hermes_telemetry_protocol::{
     TelemetryPriorityV1, TelemetrySignalKindV1, TelemetrySignalV1, TelemetrySourceV1,
 };
+use prost::Message;
 
 #[test]
 fn collector_returns_only_aggregate_diagnostics_over_its_inherited_channel() {
@@ -20,16 +27,54 @@ fn collector_returns_only_aggregate_diagnostics_over_its_inherited_channel() {
     let (mut kernel, collector) = UnixStream::pair().expect("control pair");
     let worker = std::thread::spawn(move || control::serve_diagnostics(collector, store));
 
-    write_frame(&mut kernel, b"hermes.telemetry.diagnostics.v1");
-    let response = String::from_utf8(read_frame(&mut kernel)).expect("diagnostics text");
-    assert!(response.starts_with("hermes.telemetry.diagnostics.v1|1|"));
-    assert!(!response.contains("runtime-42"));
+    write_frame(&mut kernel, &diagnostics_request());
+    let response = TelemetryRuntimeControlResponseV1::decode(read_frame(&mut kernel).as_slice())
+        .expect("typed diagnostics response");
+    assert_eq!(response.error_code, "");
+    assert!(matches!(
+        response.result,
+        Some(ResponseResult::Diagnostics(diagnostics))
+            if diagnostics.segment_count == 1 && diagnostics.total_bytes > 0
+    ));
     drop(kernel);
     worker
         .join()
         .expect("collector worker")
         .expect("serve diagnostics");
     std::fs::remove_dir_all(directory).expect("remove test directory");
+}
+
+#[test]
+fn collector_rejects_malformed_control_without_echoing_input() {
+    let directory = unique_directory("diagnostics-malformed");
+    let store = TelemetrySegmentStore::open(
+        directory.clone(),
+        TelemetryRetentionV1::new(1024, 2048, 60).expect("retention"),
+    )
+    .expect("open store");
+    let (mut kernel, collector) = UnixStream::pair().expect("control pair");
+    let worker = std::thread::spawn(move || control::serve_diagnostics(collector, store));
+
+    write_frame(&mut kernel, b"private-message-content");
+    let response = TelemetryRuntimeControlResponseV1::decode(read_frame(&mut kernel).as_slice())
+        .expect("typed error response");
+    assert!(response.result.is_none());
+    assert_eq!(response.error_code, "invalid_request");
+    drop(kernel);
+    worker
+        .join()
+        .expect("collector worker")
+        .expect("serve diagnostics");
+    std::fs::remove_dir_all(directory).expect("remove test directory");
+}
+
+fn diagnostics_request() -> Vec<u8> {
+    TelemetryRuntimeControlRequestV1 {
+        operation: Some(RequestOperation::GetDiagnostics(
+            GetTelemetryDiagnosticsRequestV1 {},
+        )),
+    }
+    .encode_to_vec()
 }
 
 fn signal() -> TelemetrySignalV1 {

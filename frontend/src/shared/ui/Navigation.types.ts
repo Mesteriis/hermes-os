@@ -13,5 +13,8 @@ export interface TreeItemData {
 	label: string
 	icon?: string
 	disabled?: boolean
+	static?: boolean
+	detail?: string
+	status?: 'healthy' | 'degraded' | 'unhealthy' | 'unavailable'
 	children?: TreeItemData[]
 }

@@ -174,6 +174,7 @@ export function storageProtocol(dependencies = [], metadataOverrides = {}) {
 export function storagePackages({
   protocolDependencies = [],
   controlDependencies = [],
+  vaultDependencies = [],
   runtimeDependencies = [],
   postgresDependencies = [],
   pgbouncerDependencies = [],
@@ -191,6 +192,16 @@ export function storagePackages({
         ...overrides.control,
       },
       controlDependencies,
+    ),
+    workspacePackage(
+      'hermes-storage-vault',
+      {
+        role: 'platform',
+        owner: 'storage',
+        surface: 'implementation',
+        ...overrides.vault,
+      },
+      vaultDependencies,
     ),
     ...storageRuntimePackages({
       runtimeDependencies,

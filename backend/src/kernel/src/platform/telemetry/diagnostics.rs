@@ -1,10 +1,16 @@
 //! Owner-authorized, aggregate-only diagnostics relay for Telemetry Collector.
 
+use hermes_runtime_protocol::v1::{
+    GetTelemetryDiagnosticsRequestV1, TelemetryRuntimeControlRequestV1,
+    TelemetryRuntimeControlResponseV1,
+    telemetry_runtime_control_request_v1::Operation as RequestOperation,
+    telemetry_runtime_control_response_v1::Result as ResponseResult,
+};
+use hermes_runtime_protocol::validation::telemetry::validate_telemetry_runtime_control_response;
+use prost::Message;
+
 use crate::platform::telemetry::binding::TELEMETRY_PROCESS_ID;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
-
-const REQUEST: &[u8] = b"hermes.telemetry.diagnostics.v1";
-const HEADER: &str = "hermes.telemetry.diagnostics.v1";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TelemetryDiagnostics {
@@ -25,26 +31,36 @@ impl TelemetryDiagnostics {
 }
 
 pub fn read(supervisor: &ManagedRuntimeSupervisor) -> Result<TelemetryDiagnostics, String> {
-    let response = supervisor.relay(TELEMETRY_PROCESS_ID, REQUEST.to_vec())?;
-    parse(&response)
+    let response = supervisor
+        .relay(TELEMETRY_PROCESS_ID, request().encode_to_vec())
+        .inspect_err(|error| developer_diagnostics_error("relay", error))?;
+    parse(&response).inspect_err(|error| developer_diagnostics_error("response", error))
+}
+
+fn developer_diagnostics_error(stage: &str, error: &str) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        println!("developer_telemetry_diagnostics stage={stage} error={error}");
+    }
 }
 
 pub(crate) fn parse(response: &[u8]) -> Result<TelemetryDiagnostics, String> {
-    let text = std::str::from_utf8(response)
+    let response = TelemetryRuntimeControlResponseV1::decode(response)
         .map_err(|_| "Telemetry diagnostics response is invalid".to_owned())?;
-    let fields = text.split('|').collect::<Vec<_>>();
-    let [header, segment_count, total_bytes] = fields.as_slice() else {
-        return Err("Telemetry diagnostics response is invalid".to_owned());
+    validate_telemetry_runtime_control_response(&response)
+        .map_err(|_| "Telemetry diagnostics response is invalid".to_owned())?;
+    let Some(ResponseResult::Diagnostics(diagnostics)) = response.result else {
+        return Err("Telemetry diagnostics response is unavailable".to_owned());
     };
-    if *header != HEADER {
-        return Err("Telemetry diagnostics response is invalid".to_owned());
-    }
     Ok(TelemetryDiagnostics {
-        segment_count: segment_count
-            .parse()
-            .map_err(|_| "Telemetry diagnostics response is invalid".to_owned())?,
-        total_bytes: total_bytes
-            .parse()
-            .map_err(|_| "Telemetry diagnostics response is invalid".to_owned())?,
+        segment_count: diagnostics.segment_count,
+        total_bytes: diagnostics.total_bytes,
     })
+}
+
+fn request() -> TelemetryRuntimeControlRequestV1 {
+    TelemetryRuntimeControlRequestV1 {
+        operation: Some(RequestOperation::GetDiagnostics(
+            GetTelemetryDiagnosticsRequestV1 {},
+        )),
+    }
 }

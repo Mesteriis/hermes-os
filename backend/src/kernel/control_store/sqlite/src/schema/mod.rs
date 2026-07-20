@@ -16,8 +16,27 @@ mod v11_to_v12;
 mod v12_to_v13;
 mod v13_to_v14;
 mod v14_to_v15;
+mod v15_to_v16;
+mod v16_to_v17;
+mod v17_to_v18;
+mod v18_to_v19;
+mod v19_to_v20;
+mod v20_to_v21;
+mod v21_to_v22;
+mod v22_to_v23;
+mod v23_to_v24;
+mod v24_to_v25;
+mod v25_to_v26;
+mod v26_to_v27;
+mod v27_to_v28;
+mod v28_to_v29;
+mod v29_to_v30;
+mod v30_to_v31;
+mod v31_to_v32;
+mod v32_to_v33;
+mod v33_to_v34;
 
-pub const SCHEMA_VERSION: i64 = 15;
+pub const SCHEMA_VERSION: i64 = 34;
 
 pub fn migrate_schema(connection: &Connection) -> Result<(), StoreError> {
     loop {
@@ -101,8 +120,98 @@ fn version_feature_exists(connection: &Connection, version: i64) -> Result<bool,
             table_exists(connection, "hermes_kernel_platform_managed_process_binding")?
                 && table_exists(connection, "hermes_kernel_platform_managed_process_launch")?,
         ),
+        version @ 16..=33 => platform_storage_feature_exists(connection, version),
+        34 => table_exists(connection, "hermes_kernel_operator_settings"),
         _ => Ok(false),
     }
+}
+
+fn platform_storage_feature_exists(
+    connection: &Connection,
+    version: i64,
+) -> Result<bool, StoreError> {
+    match version {
+        16 => table_exists(connection, "hermes_kernel_platform_storage_topology"),
+        17 => storage_endpoint_columns_exist(connection),
+        18 => table_exists(connection, "hermes_kernel_module_storage_request"),
+        19 => column_exists(
+            connection,
+            "hermes_kernel_managed_launch_record",
+            "runtime_instance_id",
+        ),
+        20 => table_exists(connection, "hermes_kernel_platform_storage_binding"),
+        21 => table_exists(connection, "hermes_kernel_platform_storage_bundle"),
+        22 => column_exists(
+            connection,
+            "hermes_kernel_platform_storage_binding",
+            "state",
+        ),
+        23 => table_exists(connection, "hermes_kernel_module_event_route_request"),
+        24 => table_exists(connection, "hermes_kernel_module_blob_quota_request"),
+        25 => table_exists(connection, "hermes_kernel_module_event_delivery_policy"),
+        26 => table_exists(
+            connection,
+            "hermes_kernel_platform_events_authority_configuration",
+        ),
+        27 => Ok(
+            table_exists(connection, "hermes_kernel_platform_event_hub_topology")?
+                && table_exists(connection, "hermes_kernel_platform_event_stream_budget")?,
+        ),
+        28 => event_hub_connection_columns_exist(connection),
+        29 => table_exists(connection, "hermes_kernel_browser_device_identity"),
+        30 => table_exists(connection, "hermes_kernel_module_scheduler_job_request"),
+        31 => pgbouncer_backend_endpoint_columns_exist(connection),
+        32 => column_exists(
+            connection,
+            "hermes_kernel_browser_device_identity",
+            "browser_key_public_key",
+        ),
+        33 => Ok(columns_exist(
+            connection,
+            "hermes_kernel_browser_device_identity",
+            &["backup_eligible", "backup_state"],
+        )?),
+        _ => Ok(false),
+    }
+}
+
+fn storage_endpoint_columns_exist(connection: &Connection) -> Result<bool, StoreError> {
+    columns_exist(
+        connection,
+        "hermes_kernel_platform_storage_topology",
+        &[
+            "postgres_host",
+            "postgres_port",
+            "pgbouncer_host",
+            "pgbouncer_port",
+        ],
+    )
+}
+
+fn pgbouncer_backend_endpoint_columns_exist(connection: &Connection) -> Result<bool, StoreError> {
+    columns_exist(
+        connection,
+        "hermes_kernel_platform_storage_topology",
+        &["pgbouncer_backend_host", "pgbouncer_backend_port"],
+    )
+}
+
+fn event_hub_connection_columns_exist(connection: &Connection) -> Result<bool, StoreError> {
+    columns_exist(
+        connection,
+        "hermes_kernel_platform_event_hub_topology",
+        &["nats_endpoint", "nats_username", "credential_revision"],
+    )
+}
+
+fn columns_exist(
+    connection: &Connection,
+    table: &str,
+    columns: &[&str],
+) -> Result<bool, StoreError> {
+    columns.iter().try_fold(true, |exists, column| {
+        Ok(exists && column_exists(connection, table, column)?)
+    })
 }
 
 fn table_exists(connection: &Connection, table: &str) -> Result<bool, StoreError> {
@@ -152,6 +261,25 @@ fn apply_step(version: i64, transaction: &Transaction<'_>) -> Result<(), StoreEr
         12 => v12_to_v13::apply(transaction),
         13 => v13_to_v14::apply(transaction),
         14 => v14_to_v15::apply(transaction),
+        15 => v15_to_v16::apply(transaction),
+        16 => v16_to_v17::apply(transaction),
+        17 => v17_to_v18::apply(transaction),
+        18 => v18_to_v19::apply(transaction),
+        19 => v19_to_v20::apply(transaction),
+        20 => v20_to_v21::apply(transaction),
+        21 => v21_to_v22::apply(transaction),
+        22 => v22_to_v23::apply(transaction),
+        23 => v23_to_v24::apply(transaction),
+        24 => v24_to_v25::apply(transaction),
+        25 => v25_to_v26::apply(transaction),
+        26 => v26_to_v27::apply(transaction),
+        27 => v27_to_v28::apply(transaction),
+        28 => v28_to_v29::apply(transaction),
+        29 => v29_to_v30::apply(transaction),
+        30 => v30_to_v31::apply(transaction),
+        31 => v31_to_v32::apply(transaction),
+        32 => v32_to_v33::apply(transaction),
+        33 => v33_to_v34::apply(transaction),
         unsupported => Err(StoreError::UnsupportedSchema(unsupported)),
     }
 }

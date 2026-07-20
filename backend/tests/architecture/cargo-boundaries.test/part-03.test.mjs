@@ -31,7 +31,6 @@ test('rejects a singular blocked domain hidden in metadata owner', () => {
   assert.ok(codes(validateCargoMetadata(canonicalPolicyForTests(), metadata(packages))).has('blocked_domain'));
 });
 
-
 for (const provider of ['mail', 'telegram', 'whatsapp', 'zulip']) {
   test(`rejects provider ${provider} as a business domain`, () => {
     const packages = [
@@ -46,8 +45,6 @@ for (const provider of ['mail', 'telegram', 'whatsapp', 'zulip']) {
     assert.ok(codes(validateCargoMetadata(canonicalPolicyForTests(), metadata(packages))).has('blocked_domain'));
   });
 }
-
-
 
 test('prevents an integration from claiming an enabled business domain identity', () => {
   const packages = [
@@ -240,6 +237,26 @@ test('allows a workflow to use contracts but not implementations', () => {
     ),
   ];
   assert.ok(codes(validateCargoMetadata(canonicalPolicyForTests(), metadata(forbidden))).has('implementation_dependency'));
+});
+
+test('allows the Kernel runtime to compose only the exact Core Gateway adapters', () => {
+  const gatewaySession = workspacePackage('hermes-gateway-session', {
+    role: 'api',
+    owner: 'gateway',
+    surface: 'implementation',
+  });
+  const gatewayRuntime = workspacePackage('hermes-gateway-runtime', {
+    role: 'api',
+    owner: 'gateway',
+    surface: 'implementation',
+  });
+  const packages = [
+    kernel([dependency('hermes-gateway-session'), dependency('hermes-gateway-runtime')]),
+    gatewaySession,
+    gatewayRuntime,
+  ];
+
+  assert.deepEqual(validateCargoMetadata(canonicalPolicyForTests(), metadata(packages)), []);
 });
 
 
@@ -459,8 +476,6 @@ test('rejects a settings registry package outside Kernel without component metad
   assert.ok(codes(validateCargoMetadata(canonicalPolicyForTests(), metadata(packages))).has('exclusive_kernel_component'));
 });
 
-
-
 test('rejects an Event Hub package outside Kernel even without component metadata', () => {
   const packages = [
     kernel(),
@@ -473,8 +488,6 @@ test('rejects an Event Hub package outside Kernel even without component metadat
 
   assert.ok(codes(validateCargoMetadata(canonicalPolicyForTests(), metadata(packages))).has('exclusive_kernel_component'));
 });
-
-
 
 test('rejects Kernel components outside the constitutional registry', () => {
   const packages = [

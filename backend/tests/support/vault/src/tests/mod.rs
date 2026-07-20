@@ -1,3 +1,4 @@
+mod bootstrap;
 mod control;
 mod recovery;
 mod service;

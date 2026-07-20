@@ -85,16 +85,16 @@
 }
 
 .shell-bg-none { --hh-shell-bg-image: none; }
-.shell-bg-network-mesh { --hh-shell-bg-image: url('/assets/shell-backgrounds/network-mesh.png'); }
-.shell-bg-data-stream { --hh-shell-bg-image: url('/assets/shell-backgrounds/data-stream.png'); }
-.shell-bg-node-frame { --hh-shell-bg-image: url('/assets/shell-backgrounds/node-frame.png'); }
-.shell-bg-eclipse-grid { --hh-shell-bg-image: url('/assets/shell-backgrounds/eclipse-grid.png'); }
-.shell-bg-dna-blueprint { --hh-shell-bg-image: url('/assets/shell-backgrounds/dna-blueprint.png'); }
-.shell-bg-forest-network { --hh-shell-bg-image: url('/assets/shell-backgrounds/forest-network.png'); }
-.shell-bg-forest-stream { --hh-shell-bg-image: url('/assets/shell-backgrounds/forest-stream.png'); }
-.shell-bg-knowledge-map { --hh-shell-bg-image: url('/assets/shell-backgrounds/knowledge-map.png'); }
-.shell-bg-rune-gold { --hh-shell-bg-image: url('/assets/shell-backgrounds/rune-gold.png'); }
-.shell-bg-rune-teal { --hh-shell-bg-image: url('/assets/shell-backgrounds/rune-teal.png'); }
+.shell-bg-network-mesh { --hh-shell-bg-image: url('/assets/shell-backgrounds/network-mesh.webp'); }
+.shell-bg-data-stream { --hh-shell-bg-image: url('/assets/shell-backgrounds/data-stream.webp'); }
+.shell-bg-node-frame { --hh-shell-bg-image: url('/assets/shell-backgrounds/node-frame.webp'); }
+.shell-bg-eclipse-grid { --hh-shell-bg-image: url('/assets/shell-backgrounds/eclipse-grid.webp'); }
+.shell-bg-dna-blueprint { --hh-shell-bg-image: url('/assets/shell-backgrounds/dna-blueprint.webp'); }
+.shell-bg-forest-network { --hh-shell-bg-image: url('/assets/shell-backgrounds/forest-network.webp'); }
+.shell-bg-forest-stream { --hh-shell-bg-image: url('/assets/shell-backgrounds/forest-stream.webp'); }
+.shell-bg-knowledge-map { --hh-shell-bg-image: url('/assets/shell-backgrounds/knowledge-map.webp'); }
+.shell-bg-rune-gold { --hh-shell-bg-image: url('/assets/shell-backgrounds/rune-gold.webp'); }
+.shell-bg-rune-teal { --hh-shell-bg-image: url('/assets/shell-backgrounds/rune-teal.webp'); }
 
 .shell-bg-brightness-30 { --hh-shell-bg-dim: 0.74; }
 .shell-bg-brightness-40 { --hh-shell-bg-dim: 0.66; }

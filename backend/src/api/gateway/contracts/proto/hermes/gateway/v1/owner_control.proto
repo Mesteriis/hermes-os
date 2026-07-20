@@ -2,6 +2,10 @@ syntax = "proto3";
 
 package hermes.gateway.v1;
 
+import "hermes/runtime/v1/deployment.proto";
+import "hermes/runtime/v1/recovery.proto";
+import "hermes/runtime/v1/scheduler_runtime.proto";
+
 // Private owner-control contract. It is framed over an owner-private Unix
 // socket; it is neither a public Gateway request nor a module registration
 // transport.
@@ -108,6 +112,63 @@ message StartBundledManagedRuntimeResponseV1 {
   string launch_state = 3;
 }
 
+// A managed runtime with dependent fenced resources is reserved before those
+// resources are issued. The reservation is durable and contains no secret.
+message ReserveBundledManagedRuntimeRequestV1 {
+  string registration_id = 1;
+  string owner_session_id = 2;
+}
+message ReserveBundledManagedRuntimeResponseV1 {
+  string registration_id = 1;
+  string runtime_instance_id = 2;
+  uint64 runtime_generation = 3;
+  uint64 grant_epoch = 4;
+}
+
+// Scheduler must launch only against an explicitly selected Storage capability
+// binding for its already-reserved runtime identity.
+message StartReservedSchedulerRuntimeRequestV1 {
+  string registration_id = 1;
+  string storage_capability_id = 2;
+  string owner_session_id = 3;
+}
+message StartReservedSchedulerRuntimeResponseV1 {
+  string registration_id = 1;
+  uint64 runtime_generation = 2;
+  string launch_state = 3;
+}
+
+// Crash recovery composes a new durable Scheduler identity, its matching
+// Storage binding and one exact managed-child launch. It never reuses the
+// predecessor's runtime identity, credential lease or Storage binding.
+message RestartSchedulerRuntimeRequestV1 {
+  string registration_id = 1;
+  string storage_capability_id = 2;
+  string owner_session_id = 3;
+  uint64 role_epoch = 4;
+  uint64 credential_lease_revision = 5;
+  uint64 storage_bundle_revision = 6;
+  bytes storage_bundle_digest = 7;
+}
+message RestartSchedulerRuntimeResponseV1 {
+  string registration_id = 1;
+  uint64 runtime_generation = 2;
+  uint64 storage_binding_revision = 3;
+  string launch_state = 4;
+}
+
+// Owner control authorizes the mutation; Scheduler remains the only writer of
+// scheduler_schedules through its authenticated inherited Kernel channel.
+message UpsertSchedulerScheduleRequestV1 {
+  string scheduler_registration_id = 1;
+  hermes.runtime.v1.UpsertSchedulerScheduleRequestV1 schedule = 2;
+  string owner_session_id = 3;
+}
+message UpsertSchedulerScheduleResponseV1 {
+  string scheduler_registration_id = 1;
+  hermes.runtime.v1.UpsertSchedulerScheduleResponseV1 schedule = 2;
+}
+
 message BindPlatformVaultReleaseRequestV1 {
   string owner_session_id = 1;
 }
@@ -155,6 +216,251 @@ message GetPlatformTelemetryDiagnosticsResponseV1 {
   uint64 total_bytes = 3;
 }
 
+message BindPlatformStorageReleaseRequestV1 {
+  string owner_session_id = 1;
+}
+message BindPlatformStorageReleaseResponseV1 {
+  string process_id = 1;
+  uint64 binding_revision = 2;
+  string distribution_id = 3;
+  string artifact_id = 4;
+}
+
+message StartPlatformStorageRuntimeRequestV1 {
+  string owner_session_id = 1;
+}
+message StartPlatformStorageRuntimeResponseV1 {
+  string process_id = 1;
+  uint64 runtime_generation = 2;
+  string launch_state = 3;
+}
+
+message BindPlatformBlobReleaseRequestV1 {
+  string owner_session_id = 1;
+}
+message BindPlatformBlobReleaseResponseV1 {
+  string process_id = 1;
+  uint64 binding_revision = 2;
+  string distribution_id = 3;
+  string artifact_id = 4;
+}
+
+message StartPlatformBlobRuntimeRequestV1 {
+  string owner_session_id = 1;
+}
+message StartPlatformBlobRuntimeResponseV1 {
+  string process_id = 1;
+  uint64 runtime_generation = 2;
+  string launch_state = 3;
+}
+
+message BindPlatformEventsAuthorityReleaseRequestV1 {
+  string owner_session_id = 1;
+}
+message BindPlatformEventsAuthorityReleaseResponseV1 {
+  string process_id = 1;
+  uint64 binding_revision = 2;
+  string distribution_id = 3;
+  string artifact_id = 4;
+}
+
+// This includes only public NATS account identity. The signing seed remains
+// Vault-owned and is never accepted by owner control or persisted here.
+message ConfigurePlatformEventsAuthorityRequestV1 {
+  string owner_session_id = 1;
+  string account_public_key = 2;
+  uint64 signer_credential_revision = 3;
+}
+message ConfigurePlatformEventsAuthorityResponseV1 {
+  uint64 configuration_revision = 1;
+  uint64 signer_credential_revision = 2;
+}
+
+message StartPlatformEventsAuthorityRuntimeRequestV1 {
+  string owner_session_id = 1;
+}
+message StartPlatformEventsAuthorityRuntimeResponseV1 {
+  string process_id = 1;
+  uint64 runtime_generation = 2;
+  string launch_state = 3;
+}
+
+// The Account JWT is public broker configuration, but remains ephemeral in the
+// owner-to-authority relay. The Kernel does not retain it or any resolver
+// credential; the authority resolves its scoped System Account credential from
+// Vault only for this update.
+message ApplyPlatformEventsAuthorityAccountJwtRequestV1 {
+  string owner_session_id = 1;
+  uint64 resolver_credential_revision = 2;
+  string signed_account_jwt = 3;
+}
+message ApplyPlatformEventsAuthorityAccountJwtResponseV1 {
+  uint64 resolver_credential_revision = 1;
+}
+
+// Broker-neutral resource limits for each canonical durable-envelope kind.
+// The Event Hub receives broker credentials independently through Vault; this
+// request contains neither endpoint credentials nor any event content.
+message EventHubStreamBudgetV1 {
+  hermes.runtime.v1.DurableEnvelopeKindV1 envelope_kind = 1;
+  uint64 max_bytes = 2;
+  uint64 max_age_millis = 3;
+  uint32 replicas = 4;
+}
+
+message ConfigurePlatformEventHubTopologyRequestV1 {
+  string owner_session_id = 1;
+  repeated EventHubStreamBudgetV1 stream_budgets = 2;
+  // Public broker route only. Password material stays in the Vault scope.
+  string nats_endpoint = 3;
+  string nats_username = 4;
+  uint64 credential_revision = 5;
+}
+
+message ConfigurePlatformEventHubTopologyResponseV1 {
+  uint64 topology_revision = 1;
+  uint32 stream_count = 2;
+}
+
+message ReconcilePlatformEventHubTopologyRequestV1 {
+  string owner_session_id = 1;
+}
+
+message ReconcilePlatformEventHubTopologyResponseV1 {
+  uint64 topology_revision = 1;
+  uint32 stream_count = 2;
+  uint32 consumer_count = 3;
+}
+
+// Desired topology only. Endpoints, credentials and runtime attestations stay
+// outside this owner-control request and are never persisted in Control Store.
+message ConfigurePlatformStorageTopologyRequestV1 {
+  string owner_session_id = 1;
+  uint64 storage_generation = 2;
+  string storage_instance_id = 3;
+  string database_id = 4;
+  hermes.runtime.v1.DeploymentProfileV1 deployment_profile = 5;
+  bytes postgres_artifact_sha256 = 6;
+  bytes pgbouncer_artifact_sha256 = 7;
+  string postgres_host = 8;
+  uint32 postgres_port = 9;
+  string pgbouncer_host = 10;
+  uint32 pgbouncer_port = 11;
+  // PgBouncer resolves this endpoint from its own network namespace. It can
+  // differ from the host-side Postgres endpoint used by Storage Control.
+  string pgbouncer_backend_host = 12;
+  uint32 pgbouncer_backend_port = 13;
+}
+
+message ConfigurePlatformStorageTopologyResponseV1 {
+  uint64 topology_revision = 1;
+  uint64 storage_generation = 2;
+}
+
+// A managed module must be live under its exact Kernel launch record before a
+// Storage binding can be issued. External runtimes use a later dedicated
+// attestation path and cannot be substituted here.
+message IssueManagedStorageBindingRequestV1 {
+  string owner_session_id = 1;
+  string registration_id = 2;
+  string capability_id = 3;
+  string runtime_instance_id = 4;
+  uint64 runtime_generation = 5;
+  uint64 role_epoch = 6;
+  uint64 credential_lease_revision = 7;
+  uint64 storage_bundle_revision = 8;
+  bytes storage_bundle_digest = 9;
+}
+
+message IssueManagedStorageBindingResponseV1 {
+  string registration_id = 1;
+  string capability_id = 2;
+  uint64 binding_revision = 3;
+  uint64 topology_revision = 4;
+  uint64 storage_generation = 5;
+}
+
+// An external runtime must have a current owner-bound attestation for the
+// exact runtime ID, generation and grant epoch. Its operating environment is
+// never trusted as a substitute for this durable identity.
+message IssueExternalStorageBindingRequestV1 {
+  string owner_session_id = 1;
+  string registration_id = 2;
+  string capability_id = 3;
+  string runtime_instance_id = 4;
+  uint64 runtime_generation = 5;
+  uint64 role_epoch = 6;
+  uint64 credential_lease_revision = 7;
+  uint64 storage_bundle_revision = 8;
+  bytes storage_bundle_digest = 9;
+}
+
+message IssueExternalStorageBindingResponseV1 {
+  string registration_id = 1;
+  string capability_id = 2;
+  uint64 binding_revision = 3;
+  uint64 topology_revision = 4;
+  uint64 storage_generation = 5;
+}
+
+// Reserves one exact external Storage binding before its successor can be
+// issued. Owner authority is required, but the runtime need not still be
+// reachable: the durable reservation itself prevents use after restart.
+message BeginExternalStorageBindingRevocationRequestV1 {
+  string owner_session_id = 1;
+  string registration_id = 2;
+  string capability_id = 3;
+  uint64 binding_revision = 4;
+  string runtime_instance_id = 5;
+  uint64 runtime_generation = 6;
+}
+
+message BeginExternalStorageBindingRevocationResponseV1 {
+  string registration_id = 1;
+  string capability_id = 2;
+  uint64 binding_revision = 3;
+}
+
+// Reserves a managed Storage binding for revocation. The reservation is
+// durable before any runtime fence is attempted, so a Kernel restart cannot
+// stage the binding again. A later binding revision may be issued only after
+// this reservation succeeds.
+message BeginManagedStorageBindingRevocationRequestV1 {
+  string owner_session_id = 1;
+  string registration_id = 2;
+  string capability_id = 3;
+  uint64 binding_revision = 4;
+}
+
+message BeginManagedStorageBindingRevocationResponseV1 {
+  string registration_id = 1;
+  string capability_id = 2;
+  uint64 binding_revision = 3;
+}
+
+message AdmitStorageBundleRequestV1 {
+  string owner_session_id = 1;
+  bytes canonical_bundle = 2;
+}
+
+message AdmitStorageBundleResponseV1 {
+  string owner_id = 1;
+  uint64 storage_bundle_revision = 2;
+  bytes storage_bundle_digest = 3;
+}
+
+// Starts a one-time browser WebAuthn registration only after an existing
+// owner-device proves control over the private owner socket. The opaque ID is
+// not a browser session or durable credential.
+message BeginBrowserPairingRequestV1 {
+  string owner_session_id = 1;
+}
+
+message BeginBrowserPairingResponseV1 {
+  string pairing_id = 1;
+  uint64 expires_at_unix_millis = 2;
+}
+
 message OwnerControlRequestV1 {
   oneof operation {
     GetModuleRegistrationStatusRequestV1 get_module_registration_status = 1;
@@ -171,6 +477,27 @@ message OwnerControlRequestV1 {
     BindPlatformTelemetryReleaseRequestV1 bind_platform_telemetry_release = 12;
     StartPlatformTelemetryRuntimeRequestV1 start_platform_telemetry_runtime = 13;
     GetPlatformTelemetryDiagnosticsRequestV1 get_platform_telemetry_diagnostics = 14;
+    BindPlatformStorageReleaseRequestV1 bind_platform_storage_release = 15;
+    StartPlatformStorageRuntimeRequestV1 start_platform_storage_runtime = 16;
+    ConfigurePlatformStorageTopologyRequestV1 configure_platform_storage_topology = 17;
+    IssueManagedStorageBindingRequestV1 issue_managed_storage_binding = 18;
+    AdmitStorageBundleRequestV1 admit_storage_bundle = 19;
+    BeginManagedStorageBindingRevocationRequestV1 begin_managed_storage_binding_revocation = 20;
+    IssueExternalStorageBindingRequestV1 issue_external_storage_binding = 21;
+    BeginExternalStorageBindingRevocationRequestV1 begin_external_storage_binding_revocation = 22;
+    BindPlatformBlobReleaseRequestV1 bind_platform_blob_release = 23;
+    StartPlatformBlobRuntimeRequestV1 start_platform_blob_runtime = 24;
+    BindPlatformEventsAuthorityReleaseRequestV1 bind_platform_events_authority_release = 25;
+    ConfigurePlatformEventsAuthorityRequestV1 configure_platform_events_authority = 26;
+    StartPlatformEventsAuthorityRuntimeRequestV1 start_platform_events_authority_runtime = 27;
+    ConfigurePlatformEventHubTopologyRequestV1 configure_platform_event_hub_topology = 28;
+    ReconcilePlatformEventHubTopologyRequestV1 reconcile_platform_event_hub_topology = 29;
+    ApplyPlatformEventsAuthorityAccountJwtRequestV1 apply_platform_events_authority_account_jwt = 30;
+    ReserveBundledManagedRuntimeRequestV1 reserve_bundled_managed_runtime = 31;
+    StartReservedSchedulerRuntimeRequestV1 start_reserved_scheduler_runtime = 32;
+    UpsertSchedulerScheduleRequestV1 upsert_scheduler_schedule = 33;
+    RestartSchedulerRuntimeRequestV1 restart_scheduler_runtime = 34;
+    BeginBrowserPairingRequestV1 begin_browser_pairing = 35;
   }
 }
 
@@ -190,6 +517,27 @@ message OwnerControlResponseV1 {
     BindPlatformTelemetryReleaseResponseV1 bind_platform_telemetry_release = 12;
     StartPlatformTelemetryRuntimeResponseV1 start_platform_telemetry_runtime = 13;
     GetPlatformTelemetryDiagnosticsResponseV1 get_platform_telemetry_diagnostics = 14;
+    BindPlatformStorageReleaseResponseV1 bind_platform_storage_release = 16;
+    StartPlatformStorageRuntimeResponseV1 start_platform_storage_runtime = 17;
+    ConfigurePlatformStorageTopologyResponseV1 configure_platform_storage_topology = 18;
+    IssueManagedStorageBindingResponseV1 issue_managed_storage_binding = 19;
+    AdmitStorageBundleResponseV1 admit_storage_bundle = 20;
+    BeginManagedStorageBindingRevocationResponseV1 begin_managed_storage_binding_revocation = 21;
+    IssueExternalStorageBindingResponseV1 issue_external_storage_binding = 22;
+    BeginExternalStorageBindingRevocationResponseV1 begin_external_storage_binding_revocation = 23;
+    BindPlatformBlobReleaseResponseV1 bind_platform_blob_release = 24;
+    StartPlatformBlobRuntimeResponseV1 start_platform_blob_runtime = 25;
+    BindPlatformEventsAuthorityReleaseResponseV1 bind_platform_events_authority_release = 26;
+    ConfigurePlatformEventsAuthorityResponseV1 configure_platform_events_authority = 27;
+    StartPlatformEventsAuthorityRuntimeResponseV1 start_platform_events_authority_runtime = 28;
+    ConfigurePlatformEventHubTopologyResponseV1 configure_platform_event_hub_topology = 29;
+    ReconcilePlatformEventHubTopologyResponseV1 reconcile_platform_event_hub_topology = 30;
+    ApplyPlatformEventsAuthorityAccountJwtResponseV1 apply_platform_events_authority_account_jwt = 31;
+    ReserveBundledManagedRuntimeResponseV1 reserve_bundled_managed_runtime = 32;
+    StartReservedSchedulerRuntimeResponseV1 start_reserved_scheduler_runtime = 33;
+    UpsertSchedulerScheduleResponseV1 upsert_scheduler_schedule = 34;
+    RestartSchedulerRuntimeResponseV1 restart_scheduler_runtime = 35;
+    BeginBrowserPairingResponseV1 begin_browser_pairing = 36;
   }
 
   // Sanitized stable code; details and private data remain local to Kernel.

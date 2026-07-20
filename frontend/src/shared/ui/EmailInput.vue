@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Input from './Input.vue'
+import Input from './primitives/Input.vue'
 
 const props = withDefaults(defineProps<{
 	modelValue?: string

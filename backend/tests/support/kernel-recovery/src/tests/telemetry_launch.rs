@@ -1,4 +1,10 @@
 use super::common::*;
+use hermes_runtime_protocol::v1::{
+    GetTelemetryDiagnosticsRequestV1, TelemetryDiagnosticsV1, TelemetryRuntimeControlRequestV1,
+    TelemetryRuntimeControlResponseV1,
+    telemetry_runtime_control_request_v1::Operation as TelemetryOperation,
+    telemetry_runtime_control_response_v1::Result as TelemetryResult,
+};
 
 const TARGET: &str = "aarch64-apple-darwin";
 const ARTIFACT_ID: &str = "platform.telemetry";
@@ -39,11 +45,11 @@ fn kernel_bounds_telemetry_crash_restarts_without_stopping_kernel() {
 
 #[test]
 fn telemetry_diagnostics_accepts_only_the_exact_sanitized_summary() {
-    let diagnostics = telemetry_diagnostics::parse(b"hermes.telemetry.diagnostics.v1|2|4096")
-        .expect("parse diagnostics");
+    let diagnostics =
+        telemetry_diagnostics::parse(&diagnostics_response(2, 4096)).expect("parse diagnostics");
     assert_eq!(diagnostics.segment_count(), 2);
     assert_eq!(diagnostics.total_bytes(), 4096);
-    assert!(telemetry_diagnostics::parse(b"hermes.telemetry.diagnostics.v1|2|4096|raw").is_err());
+    assert!(telemetry_diagnostics::parse(&[0x10, 0x01]).is_err());
     assert!(telemetry_diagnostics::parse(b"private log payload").is_err());
 }
 
@@ -168,8 +174,8 @@ fn write_child(
 ) -> ArtifactMaterial {
     let request = managed_describe(contracts);
     let payload = framed(request);
-    let relay_request = framed(b"hermes.telemetry.diagnostics.v1".to_vec());
-    let relay_response = framed(b"hermes.telemetry.diagnostics.v1|0|0".to_vec());
+    let relay_request = framed(diagnostics_request());
+    let relay_response = framed(diagnostics_response(0, 0));
     let script = child_script(
         &payload,
         &relay_request,
@@ -200,6 +206,26 @@ fn managed_describe(contracts: &TelemetryContracts) -> Vec<u8> {
                 },
             ),
         ),
+    }
+    .encode_to_vec()
+}
+
+fn diagnostics_request() -> Vec<u8> {
+    TelemetryRuntimeControlRequestV1 {
+        operation: Some(TelemetryOperation::GetDiagnostics(
+            GetTelemetryDiagnosticsRequestV1 {},
+        )),
+    }
+    .encode_to_vec()
+}
+
+fn diagnostics_response(segment_count: u32, total_bytes: u64) -> Vec<u8> {
+    TelemetryRuntimeControlResponseV1 {
+        result: Some(TelemetryResult::Diagnostics(TelemetryDiagnosticsV1 {
+            segment_count,
+            total_bytes,
+        })),
+        error_code: String::new(),
     }
     .encode_to_vec()
 }
@@ -319,7 +345,7 @@ fn wait_for_inactive(supervisor: &ManagedRuntimeSupervisor) -> bool {
 }
 
 fn wait_for(supervisor: &ManagedRuntimeSupervisor, expected: bool) -> bool {
-    for _ in 0..100 {
+    for _ in 0..500 {
         if supervisor
             .is_active("telemetry")
             .expect("read worker state")

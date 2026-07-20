@@ -11,5 +11,16 @@ surface = "test_support"
 [dev-dependencies]
 hermes-storage-control = { path = "../../../src/platform/storage/control" }
 hermes-storage-migrations = { path = "../../../src/platform/storage/migrations" }
+hermes-storage-pgbouncer = { path = "../../../src/platform/storage/pgbouncer" }
+hermes-storage-postgres = { path = "../../../src/platform/storage/postgres" }
 hermes-storage-protocol = { path = "../../../src/platform/storage/protocol" }
+hermes-storage-vault = { path = "../../../src/platform/storage/vault" }
+hermes-runtime-protocol = { path = "../../../src/platform/runtime_protocol" }
+hermes-vault-protocol = { path = "../../../src/platform/vault/protocol" }
+getrandom = { version = "=0.4.3", default-features = false }
+libc = "=0.2.186"
+prost = "=0.14.4"
 sha2 = { version = "=0.11.0", default-features = false }
+tokio = { version = "=1.52.4", default-features = false, features = ["rt-multi-thread"] }
+tempfile = "=3.27.0"
+zeroize = "=1.9.0"

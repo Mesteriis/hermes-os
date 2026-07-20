@@ -48,6 +48,10 @@ policy через ссылки из новых документов.
 - [ADR-0227: Deployment profiles и server bootstrap pairing](ADR-0227-deployment-profiles-and-server-bootstrap-pairing.md)
 - [ADR-0228: Development simulation profile](ADR-0228-development-simulation-profile.md)
 - [ADR-0229: Platform Clock contract and deterministic conformance](ADR-0229-platform-clock-contract-and-deterministic-conformance.md)
+- [ADR-0230: Blob Platform — opaque references and owner-local metadata](ADR-0230-blob-platform-opaque-references-and-owner-local-metadata.md)
+- [ADR-0231: Private Blob data session and Vault route](ADR-0231-private-blob-data-session-and-vault-route.md)
+- [ADR-0232: Browser client identity and same-origin Gateway session](ADR-0232-browser-client-device-identity-and-same-origin-session.md)
+- [ADR-0233: Scoped local recovery export and PostgreSQL dump](ADR-0233-whole-instance-backup-and-fenced-restore.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -141,3 +145,23 @@ gates.
 ADR-0229 открывает `clock_v1`: UTC and monotonic reading, explicit
 discontinuity policy and deterministic fake clock. It does not open Scheduler,
 module timers or timezone/DST calendar evaluation.
+ADR-0230 фиксирует Blob Platform boundary: opaque references, owner-local
+metadata, Vault-scoped encryption authority, bounded range/path handling and
+fenced retention/GC. `blob_v1` остаётся закрытым до runtime conformance.
+ADR-0231 фиксирует следующий mandatory Blob vertical slice: private direct
+socket authenticated by a short-lived generation-bound session grant and
+ciphertext-only inherited Vault routing. Kernel never receives Blob plaintext.
+ADR-0232 включает browser как отдельный first-party client: он получает
+owner-approved, revocable, device-bound WebAuthn ES256 identity и только
+short-lived same-origin HttpOnly Gateway session. Его owner-neutral
+`browser_client_v1` gate открыт отдельно; explicit paired-remote HTTP/2+H3
+transport не открывает public owner API или полный `client_gateway_v1` runtime
+evidence.
+ADR-0233 фиксирует меньший текущий scope: отдельные Control Store/Vault
+recovery artifacts и PostgreSQL custom data dump. Blob, JetStream, Scheduler,
+provider state и automatic PostgreSQL restore не входят в эту процедуру;
+whole-instance recovery gate остаётся закрытым.
+ADR-0234 допускает synchronised WebAuthn passkeys только как одну часть
+двухключевой browser identity: session требует ещё и подписи отдельного
+non-extractable browser-local WebCrypto key. Новый Mac с синхронизированным
+passkey должен пройти новый CLI-approved pairing.

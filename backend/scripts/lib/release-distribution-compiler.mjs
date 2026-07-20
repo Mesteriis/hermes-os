@@ -7,15 +7,20 @@ import {
 } from 'node:crypto';
 import {
   closeSync,
+  copyFileSync,
   createReadStream,
   fstatSync,
   lstatSync,
+  mkdtempSync,
+  mkdirSync,
   openSync,
   readFileSync,
+  renameSync,
+  rmSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, isAbsolute } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 
 const MAX_ARTIFACT_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_CONTRACT_BYTES = 256 * 1024;
@@ -26,6 +31,8 @@ const artifactKinds = new Map([
   ['module_runtime', 1],
   ['infrastructure_executable', 2],
   ['storage_bundle', 3],
+  ['browser_bootstrap_bundle', 4],
+  ['browser_client_asset', 5],
 ]);
 
 function exactKeys(value, keys) {
@@ -272,6 +279,17 @@ function validateArtifactInput(artifact, previousArtifactId) {
   return kind;
 }
 
+function claimOutputPath(occupiedPaths, relativePath) {
+  for (const occupied of occupiedPaths) {
+    if (occupied === relativePath
+      || occupied.startsWith(`${relativePath}/`)
+      || relativePath.startsWith(`${occupied}/`)) {
+      throw new Error('release compiler output paths must not overlap');
+    }
+  }
+  occupiedPaths.add(relativePath);
+}
+
 function validateContractInput(contract, label) {
   if (!exactKeys(contract, ['relative_path', 'source_path'])
     || !validRelativePath(contract.relative_path)
@@ -330,9 +348,17 @@ export async function compileReleaseDistribution(input, privateKey) {
     input.verification_key_id,
   );
   const artifacts = [];
+  const occupiedPaths = new Set();
   let previousArtifactId = '';
   for (const artifact of input.artifacts) {
     const kind = validateArtifactInput(artifact, previousArtifactId);
+    claimOutputPath(occupiedPaths, artifact.relative_path);
+    if (kind === 1) {
+      claimOutputPath(occupiedPaths, artifact.descriptor.relative_path);
+      if (artifact.settings_schema !== null) {
+        claimOutputPath(occupiedPaths, artifact.settings_schema.relative_path);
+      }
+    }
     const executable = await digestSource(artifact.source_path, 'release artifact', MAX_ARTIFACT_BYTES);
     const descriptor = kind === 1
       ? await digestSource(artifact.descriptor.source_path, 'release descriptor', MAX_CONTRACT_BYTES)
@@ -344,13 +370,19 @@ export async function compileReleaseDistribution(input, privateKey) {
       kind,
       artifactId: artifact.artifact_id,
       relativePath: artifact.relative_path,
+      sourcePath: artifact.source_path,
       sizeBytes: executable.sizeBytes,
       sha256: executable.sha256,
       required: artifact.required,
-      descriptor: descriptor && { ...descriptor, relativePath: artifact.descriptor.relative_path },
+      descriptor: descriptor && {
+        ...descriptor,
+        relativePath: artifact.descriptor.relative_path,
+        sourcePath: artifact.descriptor.source_path,
+      },
       settingsSchema: settingsSchema && {
         ...settingsSchema,
         relativePath: artifact.settings_schema.relative_path,
+        sourcePath: artifact.settings_schema.source_path,
       },
     });
     previousArtifactId = artifact.artifact_id;
@@ -369,6 +401,7 @@ export async function compileReleaseDistribution(input, privateKey) {
     })),
   ].sort((left, right) => left.keyId.localeCompare(right.keyId));
   return {
+    artifacts,
     rawManifest,
     signedManifest: encodeSignedManifest(input.verification_key_id, rawManifest, signature),
     trustRoot: encodeTrustRoot(input.trust_root_revision, verificationKeys),
@@ -389,10 +422,75 @@ export function loadReleaseSigningKey(path) {
 }
 
 export function writeReleaseArtifact(path, bytes) {
-  if (!isAbsolute(path)) throw new Error('release output path must be absolute');
-  const parent = dirname(path);
-  assertNonSymlinkDirectory(parent, 'release output directory');
+  assertReleaseArtifactAbsent(path);
   writeFileSync(path, bytes, { mode: 0o644, flag: 'wx' });
+}
+
+export async function materializeReleaseDistribution(artifacts, destination) {
+  if (!isAbsolute(destination)) throw new Error('release distribution output path must be absolute');
+  const parent = dirname(destination);
+  assertNonSymlinkDirectory(parent, 'release distribution output directory');
+  assertReleaseDistributionAbsent(destination);
+  const staging = mkdtempSync(join(parent, '.hermes-distribution-'));
+  try {
+    for (const artifact of artifacts) {
+      await copyVerifiedReleaseFile(staging, artifact.relativePath, artifact.sourcePath, artifact);
+      if (artifact.descriptor) {
+        await copyVerifiedReleaseFile(
+          staging,
+          artifact.descriptor.relativePath,
+          artifact.descriptor.sourcePath,
+          artifact.descriptor,
+        );
+      }
+      if (artifact.settingsSchema) {
+        await copyVerifiedReleaseFile(
+          staging,
+          artifact.settingsSchema.relativePath,
+          artifact.settingsSchema.sourcePath,
+          artifact.settingsSchema,
+        );
+      }
+    }
+    renameSync(staging, destination);
+  } catch (error) {
+    rmSync(staging, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+async function copyVerifiedReleaseFile(root, relativePath, sourcePath, expected) {
+  const destination = join(root, ...relativePath.split('/'));
+  mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
+  copyFileSync(sourcePath, destination, 0);
+  const copied = await digestSource(destination, 'materialized release artifact', MAX_ARTIFACT_BYTES);
+  if (copied.sizeBytes !== expected.sizeBytes || !copied.sha256.equals(expected.sha256)) {
+    throw new Error('release artifact changed while distribution was materialized');
+  }
+}
+
+export function assertReleaseArtifactAbsent(path) {
+  if (!isAbsolute(path)) throw new Error('release output path must be absolute');
+  assertNonSymlinkDirectory(dirname(path), 'release output directory');
+  try {
+    lstatSync(path);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return;
+    throw error;
+  }
+  throw new Error('release output path already exists');
+}
+
+export function assertReleaseDistributionAbsent(path) {
+  if (!isAbsolute(path)) throw new Error('release distribution output path must be absolute');
+  assertNonSymlinkDirectory(dirname(path), 'release distribution output directory');
+  try {
+    lstatSync(path);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return;
+    throw error;
+  }
+  throw new Error('release distribution output path already exists');
 }
 
 export function generateReleaseSigningKey(path) {
@@ -410,5 +508,13 @@ export function removeReleaseArtifact(path) {
     unlinkSync(path);
   } catch {
     // A failed release write has no reusable output to clean up.
+  }
+}
+
+export function removeReleaseDistribution(path) {
+  try {
+    rmSync(path, { recursive: true, force: true });
+  } catch {
+    // A failed release materialization has no reusable output to keep.
   }
 }

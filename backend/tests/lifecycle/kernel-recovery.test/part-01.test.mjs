@@ -24,6 +24,23 @@ test('Kernel reaches module_control_plane with an explicit private data director
   }
 });
 
+test('incomplete browser Gateway admission fails before creating a control store', async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'hermes-kernel-browser-gateway-config-'));
+  try {
+    const result = spawnSync(
+      'cargo',
+      ['run', '-q', '-p', 'hermes-kernel', '--', '--data-dir', dataDir, 'serve', '--browser-gateway-listen-address', '127.0.0.1:0'],
+      { cwd: new URL('../../', import.meta.url), encoding: 'utf8' },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /browser Gateway listener, origin, RP ID, certificate DER and private-key DER must be specified together/);
+    await assert.rejects(stat(join(dataDir, 'kernel-control-store.sqlite')));
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
 
 test('one production Kernel serve owns every private control-plane socket', async () => {
   const dataDir = await mkdtemp(join(tmpdir(), 'hermes-kernel-control-plane-'));

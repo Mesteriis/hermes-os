@@ -21,12 +21,13 @@ import {
 const backendRoot = new URL('../../../', import.meta.url);
 const ownerProofDomain = Buffer.from('hermes.owner-control-session.v1\0', 'ascii');
 const runtimeProofDomain = Buffer.from('hermes.external-runtime-session.v1\0', 'ascii');
+const cargoEnvironment = { ...process.env, RUSTC_WRAPPER: '' };
 
 export function kernelCommand(dataDir, ...args) {
   return spawnSync(
     'cargo',
     ['run', '-q', '-p', 'hermes-kernel', '--', '--data-dir', dataDir, ...args],
-    { cwd: backendRoot, encoding: 'utf8' },
+    { cwd: backendRoot, encoding: 'utf8', env: cargoEnvironment },
   );
 }
 
@@ -34,7 +35,7 @@ export async function startKernel(dataDir) {
   const server = spawn(
     'cargo',
     ['run', '-q', '-p', 'hermes-kernel', '--', '--data-dir', dataDir, 'serve'],
-    { cwd: backendRoot, stdio: ['ignore', 'pipe', 'pipe'] },
+    { cwd: backendRoot, stdio: ['ignore', 'pipe', 'pipe'], env: cargoEnvironment },
   );
   return { server, socketPaths: await collectSocketPaths(server) };
 }
@@ -171,6 +172,10 @@ export function ownerUpdateSettings(registrationId, expectedRevision, snapshot, 
     field(3, snapshot),
     text(4, sessionId),
   ]));
+}
+
+export function ownerBeginBrowserPairing(sessionId) {
+  return field(35, text(1, sessionId));
 }
 
 export function ownerTelemetryDiagnostics(sessionId) {

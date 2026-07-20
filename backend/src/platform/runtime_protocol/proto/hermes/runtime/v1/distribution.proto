@@ -6,6 +6,14 @@ enum DistributionArtifactKindV1 {
   DISTRIBUTION_ARTIFACT_KIND_V1_MODULE_RUNTIME = 1;
   DISTRIBUTION_ARTIFACT_KIND_V1_INFRASTRUCTURE_EXECUTABLE = 2;
   DISTRIBUTION_ARTIFACT_KIND_V1_STORAGE_BUNDLE = 3;
+  // One self-contained, static, same-origin browser bootstrap document. The
+  // signed release manifest binds its exact bytes; it is not a remote plugin
+  // or a generic filesystem tree served by Gateway.
+  DISTRIBUTION_ARTIFACT_KIND_V1_BROWSER_BOOTSTRAP_BUNDLE = 4;
+  // A compiled first-party browser asset. Its URL is derived only from the
+  // signed release-relative `browser/assets/` path; Gateway never serves a
+  // directory or accepts an arbitrary URL from the client.
+  DISTRIBUTION_ARTIFACT_KIND_V1_BROWSER_CLIENT_ASSET = 5;
 }
 message DistributionManifestArtifactV1 {
   DistributionArtifactKindV1 artifact_kind = 1;

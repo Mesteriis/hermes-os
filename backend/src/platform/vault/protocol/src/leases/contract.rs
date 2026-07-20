@@ -1,5 +1,6 @@
 //! Typed, secret-free credential lease bindings.
 
+use super::transport::{TransportReader, write_audience, write_purpose, write_text};
 use crate::{
     MAX_LEASE_TTL_SECONDS, VaultProtocolError, VaultPurposeRequestV1, validate_logical_owner_id,
     validate_runtime_identifier,
@@ -32,6 +33,7 @@ impl LeaseIdV1 {
 pub struct LeaseAudienceV1 {
     module_registration_id: String,
     runtime_instance_id: String,
+    runtime_generation: u64,
     grant_epoch: u64,
 }
 
@@ -39,16 +41,21 @@ impl LeaseAudienceV1 {
     pub fn new(
         module_registration_id: String,
         runtime_instance_id: String,
+        runtime_generation: u64,
         grant_epoch: u64,
     ) -> Result<Self, VaultProtocolError> {
         validate_runtime_identifier(&module_registration_id)?;
         validate_runtime_identifier(&runtime_instance_id)?;
+        if runtime_generation == 0 {
+            return Err(VaultProtocolError::InvalidRuntimeGeneration);
+        }
         if grant_epoch == 0 {
             return Err(VaultProtocolError::InvalidGrantEpoch);
         }
         Ok(Self {
             module_registration_id,
             runtime_instance_id,
+            runtime_generation,
             grant_epoch,
         })
     }
@@ -61,6 +68,11 @@ impl LeaseAudienceV1 {
     #[must_use]
     pub fn runtime_instance_id(&self) -> &str {
         &self.runtime_instance_id
+    }
+
+    #[must_use]
+    pub const fn runtime_generation(&self) -> u64 {
+        self.runtime_generation
     }
 
     #[must_use]
@@ -134,6 +146,36 @@ impl VaultLeaseIssueRequestV1 {
     #[must_use]
     pub fn audience(&self) -> &LeaseAudienceV1 {
         &self.audience
+    }
+
+    pub(crate) fn encode_transport(&self, bytes: &mut Vec<u8>) {
+        write_text(bytes, &self.vault_instance_id);
+        bytes.extend_from_slice(&self.vault_runtime_generation.to_le_bytes());
+        bytes.extend_from_slice(&self.secret_revision.to_le_bytes());
+        write_text(bytes, &self.logical_owner_id);
+        write_purpose(bytes, &self.purpose);
+        write_audience(bytes, &self.audience);
+    }
+
+    pub(crate) fn decode_transport(bytes: &[u8]) -> Result<Self, VaultProtocolError> {
+        let mut reader = TransportReader::new(bytes);
+        let vault_instance_id = reader.text()?;
+        let vault_runtime_generation = reader.u64()?;
+        let secret_revision = reader.u64()?;
+        let logical_owner_id = reader.text()?;
+        let purpose = reader.purpose()?;
+        let audience = reader.audience()?;
+        if !reader.is_finished() {
+            return Err(VaultProtocolError::InvalidPurpose);
+        }
+        Self::new(
+            vault_instance_id,
+            vault_runtime_generation,
+            secret_revision,
+            logical_owner_id,
+            purpose,
+            audience,
+        )
     }
 }
 

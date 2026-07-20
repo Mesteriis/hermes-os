@@ -50,10 +50,19 @@ const STORAGE_FOUNDATION_PRODUCTION_PACKAGES = [
   ...TELEMETRY_FOUNDATION_PRODUCTION_PACKAGES,
   { name: 'hermes-storage-protocol', role: 'platform', owner: 'storage', surface: 'contract' },
   { name: 'hermes-storage-control', role: 'platform', owner: 'storage', surface: 'implementation' },
+  { name: 'hermes-storage-vault', role: 'platform', owner: 'storage', surface: 'implementation' },
   { name: 'hermes-storage-runtime', role: 'platform', owner: 'storage', surface: 'runtime' },
   { name: 'hermes-storage-postgres', role: 'platform', owner: 'storage', surface: 'persistence' },
   { name: 'hermes-storage-pgbouncer', role: 'platform', owner: 'storage', surface: 'implementation' },
   { name: 'hermes-storage-migrations', role: 'platform', owner: 'storage', surface: 'implementation' },
+];
+
+const NATS_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...STORAGE_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-events-jetstream', role: 'platform', owner: 'events', surface: 'implementation' },
+  { name: 'hermes-events-authority', role: 'platform', owner: 'events', surface: 'implementation' },
+  { name: 'hermes-events-authority-runtime-control', role: 'platform', owner: 'events', surface: 'implementation' },
+  { name: 'hermes-events-authority-runtime', role: 'platform', owner: 'events', surface: 'runtime' },
 ];
 
 const RECOVERY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
@@ -113,20 +122,212 @@ const TELEMETRY_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
 
 const STORAGE_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...TELEMETRY_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-kernel': [
+    ...RECOVERY_WORKSPACE_DEPENDENCY_ALLOWLIST['hermes-kernel'],
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
   'hermes-storage-protocol': [],
   'hermes-storage-control': [{ name: 'hermes-storage-protocol', kind: 'normal' }],
+  'hermes-storage-vault': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-control', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+  ],
   'hermes-storage-runtime': [
     { name: 'hermes-storage-protocol', kind: 'normal' },
     { name: 'hermes-storage-control', kind: 'normal' },
     { name: 'hermes-storage-postgres', kind: 'normal' },
     { name: 'hermes-storage-pgbouncer', kind: 'normal' },
     { name: 'hermes-storage-migrations', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
   ],
-  'hermes-storage-postgres': [{ name: 'hermes-storage-control', kind: 'normal' }],
-  'hermes-storage-pgbouncer': [{ name: 'hermes-storage-control', kind: 'normal' }],
+  'hermes-storage-postgres': [
+    { name: 'hermes-storage-control', kind: 'normal' },
+    { name: 'hermes-storage-migrations', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+  'hermes-storage-pgbouncer': [
+    { name: 'hermes-storage-control', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
   'hermes-storage-migrations': [
     { name: 'hermes-storage-control', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
+const NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...STORAGE_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-events-jetstream': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-scheduler-protocol', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+  ],
+  'hermes-events-authority': [
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+  ],
+  'hermes-events-authority-runtime-control': [
+    { name: 'hermes-events-authority', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-events-authority-runtime': [
+    { name: 'hermes-events-authority-runtime-control', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+};
+
+const BLOB_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...NATS_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-blob-protocol', role: 'platform', owner: 'blob', surface: 'contract' },
+];
+
+const BLOB_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...BLOB_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-blob-runtime', role: 'platform', owner: 'blob', surface: 'implementation' },
+  { name: 'hermes-blob-service', role: 'platform', owner: 'blob', surface: 'runtime' },
+];
+
+const SCHEDULER_PROTOCOL_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...BLOB_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-scheduler-protocol', role: 'platform', owner: 'scheduler', surface: 'contract' },
+];
+
+const SCHEDULER_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...SCHEDULER_PROTOCOL_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-scheduler', role: 'platform', owner: 'scheduler', surface: 'implementation' },
+];
+
+const SCHEDULER_PERSISTENCE_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...SCHEDULER_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-scheduler-persistence', role: 'platform', owner: 'scheduler', surface: 'persistence' },
+];
+
+const GATEWAY_SESSION_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...SCHEDULER_PERSISTENCE_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-gateway-session-contract', role: 'api', owner: 'gateway', surface: 'contract' },
+  { name: 'hermes-gateway-session', role: 'api', owner: 'gateway', surface: 'implementation' },
+];
+
+const SCHEDULER_RECEIPT_DELIVERY_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...GATEWAY_SESSION_FOUNDATION_PRODUCTION_PACKAGES,
+];
+
+const SCHEDULER_JETSTREAM_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...SCHEDULER_RECEIPT_DELIVERY_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-scheduler-jetstream', role: 'platform', owner: 'scheduler', surface: 'implementation' },
+];
+
+const SCHEDULER_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...SCHEDULER_JETSTREAM_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-scheduler-runtime', role: 'platform', owner: 'scheduler', surface: 'runtime' },
+];
+
+const GATEWAY_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...SCHEDULER_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-gateway-runtime', role: 'api', owner: 'gateway', surface: 'implementation' },
+];
+
+const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-blob-protocol': [],
+};
+
+const BLOB_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-blob-runtime': [
+    { name: 'hermes-blob-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+  ],
+  'hermes-blob-service': [
+    { name: 'hermes-blob-protocol', kind: 'normal' },
+    { name: 'hermes-blob-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+  ],
+};
+
+const SCHEDULER_PROTOCOL_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...BLOB_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-scheduler-protocol': [
+    { name: 'hermes-clock-protocol', kind: 'normal' },
+  ],
+};
+
+const SCHEDULER_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...SCHEDULER_PROTOCOL_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-scheduler': [
+    { name: 'hermes-clock-protocol', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-scheduler-protocol', kind: 'normal' },
+  ],
+};
+
+const SCHEDULER_PERSISTENCE_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...SCHEDULER_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-scheduler-persistence': [
+    { name: 'hermes-clock-protocol', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-scheduler', kind: 'normal' },
+    { name: 'hermes-scheduler-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
+const GATEWAY_SESSION_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...SCHEDULER_PERSISTENCE_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-kernel': [
+    ...SCHEDULER_PERSISTENCE_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST['hermes-kernel'],
+    { name: 'hermes-gateway-session-contract', kind: 'normal' },
+  ],
+  'hermes-gateway-session-contract': [],
+  'hermes-gateway-session': [
+    { name: 'hermes-gateway-session-contract', kind: 'normal' },
+  ],
+};
+
+const SCHEDULER_RECEIPT_DELIVERY_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...GATEWAY_SESSION_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+};
+
+const SCHEDULER_JETSTREAM_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...SCHEDULER_RECEIPT_DELIVERY_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-scheduler-jetstream': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-scheduler-protocol', kind: 'normal' },
+  ],
+};
+
+const SCHEDULER_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...SCHEDULER_JETSTREAM_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-scheduler-runtime': [
+    { name: 'hermes-clock-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-scheduler-jetstream', kind: 'normal' },
+    { name: 'hermes-scheduler-persistence', kind: 'normal' },
+    { name: 'hermes-scheduler-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+};
+
+const GATEWAY_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...SCHEDULER_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-kernel': [
+    ...SCHEDULER_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST['hermes-kernel'],
+    { name: 'hermes-gateway-runtime', kind: 'normal' },
+    { name: 'hermes-gateway-session', kind: 'normal' },
+  ],
+  'hermes-gateway-runtime': [
+    { name: 'hermes-gateway-protocol', kind: 'normal' },
+    { name: 'hermes-gateway-session', kind: 'normal' },
+    { name: 'hermes-gateway-session-contract', kind: 'normal' },
   ],
 };
 
@@ -146,10 +347,18 @@ const PROTOCOL_THIRD_PARTY_DEPENDENCIES = [
 ];
 
 const RECOVERY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
-  'hermes-events-protocol': PROTOCOL_THIRD_PARTY_DEPENDENCIES,
+  'hermes-events-protocol': [
+    ...PROTOCOL_THIRD_PARTY_DEPENDENCIES,
+    { name: 'hpke', kind: 'normal', source: 'crates_io', version: '=0.14.0', defaultFeatures: false, features: ['alloc', 'chacha', 'getrandom', 'x25519'] },
+    { name: 'nats-jwt', kind: 'normal', source: 'crates_io', version: '=0.3.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
   'hermes-runtime-protocol': PROTOCOL_THIRD_PARTY_DEPENDENCIES,
   'hermes-gateway-protocol': PROTOCOL_THIRD_PARTY_DEPENDENCIES,
-  'hermes-kernel-control-store': [],
+  'hermes-kernel-control-store': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
   'hermes-kernel-control-store-sqlite': [
     {
       name: 'rusqlite', kind: 'normal', source: 'crates_io', version: '=0.40.1', defaultFeatures: false, features: ['backup', 'bundled'],
@@ -197,6 +406,7 @@ const VAULT_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-vault-protocol': [
     { name: 'hpke', kind: 'normal', source: 'crates_io', version: '=0.14.0', defaultFeatures: false, features: ['alloc', 'chacha', 'getrandom', 'x25519'] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
   'hermes-vault-key-provider': [],
   'hermes-vault-key-provider-file': [
@@ -247,10 +457,172 @@ const STORAGE_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
   ],
-  'hermes-storage-control': [], 'hermes-storage-runtime': [],
-  'hermes-storage-postgres': [], 'hermes-storage-pgbouncer': [],
+  'hermes-storage-control': [],
+  'hermes-storage-vault': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-storage-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['net', 'rt', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-storage-postgres': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.8.6', defaultFeatures: false, features: ['postgres', 'runtime-tokio-rustls'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-storage-pgbouncer': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt', 'time'] },
+    { name: 'tokio-postgres', kind: 'normal', source: 'crates_io', version: '=0.7.16', defaultFeatures: false, features: ['runtime'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
   'hermes-storage-migrations': [
     { name: 'pg_query', kind: 'normal', source: 'crates_io', version: '=6.1.1', defaultFeatures: true, features: [] },
+  ],
+};
+
+const NATS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...STORAGE_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-events-jetstream': [
+    { name: 'async-nats', kind: 'normal', source: 'crates_io', version: '=0.49.1', defaultFeatures: true, features: [] },
+    { name: 'base64', kind: 'normal', source: 'crates_io', version: '=0.22.1', defaultFeatures: true, features: [] },
+    { name: 'futures-util', kind: 'normal', source: 'crates_io', version: '=0.3.32', defaultFeatures: true, features: [] },
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'hpke', kind: 'normal', source: 'crates_io', version: '=0.14.0', defaultFeatures: false, features: ['alloc', 'chacha', 'getrandom', 'x25519'] },
+    { name: 'nats-jwt', kind: 'normal', source: 'crates_io', version: '=0.3.0', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-events-authority': [
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-events-authority-runtime-control': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['net', 'rt', 'time'] },
+  ],
+  'hermes-events-authority-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+  ],
+};
+
+const BLOB_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...NATS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-blob-protocol': [],
+};
+
+const BLOB_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...BLOB_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-blob-runtime': [
+    { name: 'chacha20poly1305', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: ['alloc', 'zeroize'] },
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-blob-service': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'p256', kind: 'normal', source: 'crates_io', version: '=0.14.0', defaultFeatures: false, features: ['ecdsa'] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
+const SCHEDULER_PROTOCOL_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...BLOB_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-scheduler-protocol': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+  ],
+};
+
+const SCHEDULER_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...SCHEDULER_PROTOCOL_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-scheduler': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+  ],
+};
+
+const SCHEDULER_PERSISTENCE_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...SCHEDULER_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-scheduler-persistence': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.8.6', defaultFeatures: false, features: ['postgres', 'runtime-tokio-rustls'] },
+  ],
+};
+
+const GATEWAY_SESSION_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...SCHEDULER_PERSISTENCE_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-gateway-session-contract': [],
+  'hermes-gateway-session': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'p256', kind: 'normal', source: 'crates_io', version: '=0.14.0', defaultFeatures: false, features: ['ecdsa'] },
+    { name: 'serde_cbor_2', kind: 'normal', source: 'crates_io', version: '=0.13.0', defaultFeatures: true, features: [] },
+    { name: 'url', kind: 'normal', source: 'crates_io', version: '=2.5.8', defaultFeatures: true, features: [] },
+    { name: 'webauthn-rs-core', kind: 'normal', source: 'crates_io', version: '=0.5.5', defaultFeatures: true, features: [] },
+  ],
+};
+
+const SCHEDULER_RECEIPT_DELIVERY_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...GATEWAY_SESSION_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+};
+
+const SCHEDULER_JETSTREAM_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...SCHEDULER_RECEIPT_DELIVERY_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-scheduler-jetstream': [
+    { name: 'async-nats', kind: 'normal', source: 'crates_io', version: '=0.49.1', defaultFeatures: true, features: [] },
+    { name: 'futures-util', kind: 'normal', source: 'crates_io', version: '=0.3.32', defaultFeatures: true, features: [] },
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'nats-jwt', kind: 'normal', source: 'crates_io', version: '=0.3.0', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['time'] },
+  ],
+};
+
+const SCHEDULER_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...SCHEDULER_JETSTREAM_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-scheduler-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['net', 'rt-multi-thread', 'time'] },
+  ],
+};
+
+const GATEWAY_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...SCHEDULER_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-kernel': [
+    ...SCHEDULER_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST['hermes-kernel'],
+    { name: 'quinn', kind: 'normal', source: 'crates_io', version: '=0.11.7', defaultFeatures: true, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['net', 'rt-multi-thread', 'sync', 'time'] },
+    { name: 'tokio-rustls', kind: 'normal', source: 'crates_io', version: '=0.26.4', defaultFeatures: true, features: [] },
+  ],
+  'hermes-gateway-runtime': [
+    { name: 'base64', kind: 'normal', source: 'crates_io', version: '=0.22.1', defaultFeatures: true, features: [] },
+    { name: 'bytes', kind: 'normal', source: 'crates_io', version: '=1.12.1', defaultFeatures: true, features: [] },
+    { name: 'futures-util', kind: 'normal', source: 'crates_io', version: '=0.3.32', defaultFeatures: true, features: [] },
+    { name: 'h3', kind: 'normal', source: 'crates_io', version: '=0.0.8', defaultFeatures: true, features: [] },
+    { name: 'h3-quinn', kind: 'normal', source: 'crates_io', version: '=0.0.10', defaultFeatures: true, features: [] },
+    { name: 'http-body-util', kind: 'normal', source: 'crates_io', version: '=0.1.3', defaultFeatures: true, features: [] },
+    { name: 'hyper', kind: 'normal', source: 'crates_io', version: '=1.10.1', defaultFeatures: false, features: ['http1', 'http2', 'server'] },
+    { name: 'hyper-util', kind: 'normal', source: 'crates_io', version: '=0.1.20', defaultFeatures: false, features: ['tokio'] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'quinn', kind: 'normal', source: 'crates_io', version: '=0.11.7', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: true, features: ['derive'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['io-util', 'macros', 'net', 'rt', 'sync'] },
+    { name: 'tokio-rustls', kind: 'normal', source: 'crates_io', version: '=0.26.4', defaultFeatures: true, features: [] },
+    { name: 'webauthn-rs-core', kind: 'normal', source: 'crates_io', version: '=0.5.5', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -521,6 +893,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-runtime-protocol',
       'hermes-gateway-protocol',
       'hermes-storage-protocol',
+      'hermes-scheduler-protocol',
     ].includes(packageName);
     return hasExactKeys(target, ['primaryKind', 'customBuildAllowed'])
       && target.primaryKind === (packageDescriptor?.surface === 'runtime' ? 'bin' : 'lib')
@@ -594,6 +967,39 @@ function expectedSlice(currentSlice) {
   }
   if (currentSlice === 'storage_foundation_v1') {
     return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: STORAGE_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: STORAGE_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: STORAGE_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  if (currentSlice === 'nats_foundation_v1') {
+    return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: NATS_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: NATS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  if (currentSlice === 'blob_foundation_v1') {
+    return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: BLOB_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: BLOB_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  if (currentSlice === 'blob_runtime_foundation_v1') {
+    return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: BLOB_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: BLOB_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: BLOB_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  if (currentSlice === 'scheduler_protocol_foundation_v1') {
+    return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: SCHEDULER_PROTOCOL_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: SCHEDULER_PROTOCOL_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: SCHEDULER_PROTOCOL_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  if (currentSlice === 'scheduler_foundation_v1') {
+    return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: SCHEDULER_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: SCHEDULER_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: SCHEDULER_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  if (currentSlice === 'scheduler_persistence_foundation_v1') {
+    return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: SCHEDULER_PERSISTENCE_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: SCHEDULER_PERSISTENCE_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: SCHEDULER_PERSISTENCE_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  if (currentSlice === 'gateway_session_foundation_v1') {
+    return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: GATEWAY_SESSION_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: GATEWAY_SESSION_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: GATEWAY_SESSION_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  if (currentSlice === 'scheduler_receipt_delivery_foundation_v1') {
+    return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: SCHEDULER_RECEIPT_DELIVERY_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: SCHEDULER_RECEIPT_DELIVERY_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: SCHEDULER_RECEIPT_DELIVERY_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  if (currentSlice === 'scheduler_jetstream_foundation_v1') {
+    return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: SCHEDULER_JETSTREAM_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: SCHEDULER_JETSTREAM_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: SCHEDULER_JETSTREAM_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  if (currentSlice === 'scheduler_runtime_foundation_v1') {
+    return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: SCHEDULER_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: SCHEDULER_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: SCHEDULER_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  if (currentSlice === 'gateway_runtime_foundation_v1') {
+    return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: GATEWAY_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: GATEWAY_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: GATEWAY_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
   }
   return null;
 }

@@ -1,16 +1,20 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync, verify } from 'node:crypto';
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   compileReleaseDistribution,
@@ -18,6 +22,11 @@ import {
   loadReleaseSigningKey,
   writeReleaseArtifact,
 } from '../../scripts/lib/release-distribution-compiler.mjs';
+
+const browserBootstrapSource = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../frontend/browser-bootstrap/index.html',
+);
 
 function decodeVarint(bytes, offset) {
   let value = 0n;
@@ -124,6 +133,36 @@ test('compiles a signed P-256 distribution manifest and matching trust root', as
     assert.equal(fieldString(trustKey, 1), 'release-2026');
     assert.equal(trustKey.get(2)[0].length, 65);
     assert.equal(trustKey.get(2)[0][0], 4);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('binds a browser bootstrap document as a non-module signed release artifact', async () => {
+  const root = canonicalTemporaryDirectory('hermes-browser-bootstrap-release-');
+  try {
+    const privateKeyPath = join(root, 'release-key.pem');
+    assert.match(readFileSync(browserBootstrapSource, 'utf8'), /navigator\.credentials\.create/);
+    const keyPair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    writeFileSync(privateKeyPath, keyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }), {
+      mode: 0o600,
+    });
+    const release = await compileReleaseDistribution({
+      verification_key_id: 'release-2026', trust_root_revision: 1, revision: 1,
+      distribution_id: 'hermes-desktop', release_version: '1.0.0', build_id: 'build-browser',
+      target_triple: 'aarch64-apple-darwin', generation: 1, additional_verification_keys: [],
+      artifacts: [{
+        artifact_kind: 'browser_bootstrap_bundle', artifact_id: 'browser.bootstrap',
+        relative_path: 'browser/bootstrap.html', source_path: browserBootstrapSource, required: true,
+      }],
+    }, loadReleaseSigningKey(privateKeyPath));
+    const signed = decodeFields(release.signedManifest);
+    const manifest = decodeFields(signed.get(2)[0]);
+    const artifact = decodeFields(manifest.get(8)[0]);
+    assert.equal(artifact.get(1)[0], 4n);
+    assert.equal(fieldString(artifact, 2), 'browser.bootstrap');
+    assert.equal(artifact.get(5)[0].length, 32);
+    assert.equal(artifact.get(6), undefined);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -281,3 +320,82 @@ test('generates an owner-private P-256 release key without overwriting an existi
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('release build CLI materializes every signed artifact and preflights all outputs', () => {
+  const root = canonicalTemporaryDirectory('hermes-release-cli-');
+  try {
+    const runtime = join(root, 'runtime');
+    const descriptor = join(root, 'descriptor.pb');
+    const inputPath = join(root, 'release.json');
+    const keyPath = join(root, 'release-key.pem');
+    const trustRootPath = join(root, 'trust-root.pb');
+    const signedManifestPath = join(root, 'signed-manifest.pb');
+    const distributionRoot = join(root, 'distribution');
+    writeFileSync(runtime, 'runtime bytes', { mode: 0o700 });
+    writeFileSync(descriptor, 'descriptor bytes', { mode: 0o600 });
+    writeFileSync(inputPath, JSON.stringify(releaseInput(runtime, descriptor, browserBootstrapSource)), { mode: 0o600 });
+    execFileSync(process.execPath, [
+      'scripts/generate-release-signing-key.mjs', '--output', keyPath,
+    ], { cwd: process.cwd(), stdio: 'pipe' });
+
+    writeFileSync(signedManifestPath, 'stale signed manifest', { mode: 0o600 });
+    assert.throws(() => execFileSync(process.execPath, [
+      'scripts/build-distribution-release.mjs', '--input', inputPath,
+      '--signing-key', keyPath, '--trust-root', trustRootPath,
+      '--signed-manifest', signedManifestPath, '--distribution-root', distributionRoot,
+    ], { cwd: process.cwd(), stdio: 'pipe' }));
+    assert.equal(existsSync(trustRootPath), false);
+    assert.equal(existsSync(distributionRoot), false);
+    assert.equal(readFileSync(signedManifestPath, 'utf8'), 'stale signed manifest');
+
+    rmSync(signedManifestPath);
+    execFileSync(process.execPath, [
+      'scripts/build-distribution-release.mjs', '--input', inputPath,
+      '--signing-key', keyPath, '--trust-root', trustRootPath,
+      '--signed-manifest', signedManifestPath, '--distribution-root', distributionRoot,
+    ], { cwd: process.cwd(), stdio: 'pipe' });
+    assert.ok(readFileSync(trustRootPath).length > 0);
+    assert.ok(readFileSync(signedManifestPath).length > 0);
+    assert.equal(readFileSync(join(distributionRoot, 'bin/mail'), 'utf8'), 'runtime bytes');
+    assert.equal(readFileSync(join(distributionRoot, 'contracts/mail.pb'), 'utf8'), 'descriptor bytes');
+    assert.equal(
+      readFileSync(join(distributionRoot, 'browser/bootstrap.html'), 'utf8'),
+      readFileSync(browserBootstrapSource, 'utf8'),
+    );
+    assert.equal(statSync(distributionRoot).mode & 0o077, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function releaseInput(runtime, descriptor, browserBootstrap) {
+  return {
+    verification_key_id: 'release-2026',
+    trust_root_revision: 1,
+    revision: 1,
+    distribution_id: 'hermes-desktop',
+    release_version: '1.0.0',
+    build_id: 'build-cli',
+    target_triple: 'aarch64-apple-darwin',
+    generation: 1,
+    additional_verification_keys: [],
+    artifacts: [
+      {
+        artifact_kind: 'browser_bootstrap_bundle',
+        artifact_id: 'browser.bootstrap',
+        relative_path: 'browser/bootstrap.html',
+        source_path: browserBootstrap,
+        required: true,
+      },
+      {
+        artifact_kind: 'module_runtime',
+        artifact_id: 'runtime.mail',
+        relative_path: 'bin/mail',
+        source_path: runtime,
+        required: true,
+        descriptor: { relative_path: 'contracts/mail.pb', source_path: descriptor },
+        settings_schema: null,
+      },
+    ],
+  };
+}

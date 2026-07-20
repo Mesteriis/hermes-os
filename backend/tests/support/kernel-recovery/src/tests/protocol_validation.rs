@@ -10,12 +10,15 @@ use hermes_events_protocol::{
 use hermes_runtime_protocol::{
     v1::{
         BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1,
-        ClockTimerRequestV1, ContractReferenceV1, HostCapabilityRequestV1, ModuleDescriptorV1,
-        ModuleKindV1, SchedulerJobRequestV1, StorageNamespaceRequestV1, TelemetrySignalRequestV1,
-        VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1, VaultTargetScopeV1,
-        capability_request_v1::Request,
+        ClockTimerRequestV1, ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
+        EventRouteRequestV1, EventSubscriptionRequirementV1, HostCapabilityRequestV1,
+        ModuleDescriptorV1, ModuleKindV1, SchedulerJobRequestV1, StorageNamespaceRequestV1,
+        TelemetrySignalRequestV1, VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1,
+        VaultTargetScopeV1, capability_request_v1::Request,
     },
-    validation::descriptor::{DescriptorValidationError, validate_descriptor_v1},
+    validation::descriptor::{
+        DescriptorValidationError, MAX_BLOB_QUOTA_BYTES, validate_descriptor_v1,
+    },
 };
 use prost::Message;
 use prost_types::Timestamp;
@@ -186,6 +189,15 @@ fn valid_requests() -> Vec<Request> {
         Request::HostCapability(HostCapabilityRequestV1 {
             capability_id: "host.notification".into(),
         }),
+        Request::EventRoute(EventRouteRequestV1 {
+            envelope_kind: DurableEnvelopeKindV1::Event as i32,
+            contract: Some(contract_reference()),
+            direction: EventRouteDirectionV1::Publish as i32,
+            max_in_flight: 32,
+            subscription_requirement: EventSubscriptionRequirementV1::Unspecified as i32,
+            max_deliver: 0,
+            ack_wait_millis: 0,
+        }),
     ]
 }
 
@@ -220,6 +232,19 @@ fn descriptor_accepts_every_complete_capability_request_variant() {
 }
 
 #[test]
+fn descriptor_rejects_blob_quota_above_the_kernel_bound() {
+    let descriptor = descriptor(CapabilityRequestV1 {
+        request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
+            max_bytes: MAX_BLOB_QUOTA_BYTES + 1,
+        })),
+    });
+    assert_eq!(
+        validate_descriptor_v1(&descriptor),
+        Err(DescriptorValidationError::InvalidCapability)
+    );
+}
+
+#[test]
 fn descriptor_rejects_missing_and_unknown_capability_request_variants() {
     let missing = descriptor(CapabilityRequestV1 { request: None });
     assert_eq!(
@@ -227,10 +252,48 @@ fn descriptor_rejects_missing_and_unknown_capability_request_variants() {
         Err(DescriptorValidationError::InvalidCapability)
     );
     let unknown =
-        CapabilityRequestV1::decode([0x42, 0x00].as_slice()).expect("decode unknown field");
+        CapabilityRequestV1::decode([0x4a, 0x00].as_slice()).expect("decode unknown field");
     assert!(unknown.request.is_none());
     assert_eq!(
         validate_descriptor_v1(&descriptor(unknown)),
+        Err(DescriptorValidationError::InvalidCapability),
+    );
+}
+
+#[test]
+fn descriptor_rejects_an_incomplete_event_route_request() {
+    let route = EventRouteRequestV1 {
+        envelope_kind: DurableEnvelopeKindV1::Event as i32,
+        contract: Some(contract_reference()),
+        direction: EventRouteDirectionV1::Publish as i32,
+        max_in_flight: 0,
+        subscription_requirement: EventSubscriptionRequirementV1::Unspecified as i32,
+        max_deliver: 0,
+        ack_wait_millis: 0,
+    };
+    assert_eq!(
+        validate_descriptor_v1(&descriptor(CapabilityRequestV1 {
+            request: Some(Request::EventRoute(route)),
+        })),
+        Err(DescriptorValidationError::InvalidCapability),
+    );
+}
+
+#[test]
+fn descriptor_rejects_consumer_without_explicit_delivery_policy() {
+    let route = EventRouteRequestV1 {
+        envelope_kind: DurableEnvelopeKindV1::Event as i32,
+        contract: Some(contract_reference()),
+        direction: EventRouteDirectionV1::Consume as i32,
+        max_in_flight: 32,
+        subscription_requirement: EventSubscriptionRequirementV1::Unspecified as i32,
+        max_deliver: 0,
+        ack_wait_millis: 0,
+    };
+    assert_eq!(
+        validate_descriptor_v1(&descriptor(CapabilityRequestV1 {
+            request: Some(Request::EventRoute(route)),
+        })),
         Err(DescriptorValidationError::InvalidCapability),
     );
 }

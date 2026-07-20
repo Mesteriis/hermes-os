@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 
 describe('AppNavbarRouteBreadcrumbs boundary', () => {
 	it('keeps route breadcrumb dropdowns as a prop-driven layout component', () => {
-		const source = readFileSync(new URL('./AppNavbarRouteBreadcrumbs.vue', import.meta.url), 'utf8')
-		const layoutCss = readFileSync(new URL('./app-layout.css', import.meta.url), 'utf8')
+		const source = readFileSync(new URL('../../shared/ui/shell/AppNavbarRouteBreadcrumbs.vue', import.meta.url), 'utf8')
+		const layoutCss = readFileSync(new URL('../../shared/ui/shell/app-layout.css', import.meta.url), 'utf8')
 
 		expect(source).toContain('levels?: readonly AppNavbarRouteBreadcrumbLevel[]')
 		expect(source).toContain('select: [itemId: string]')

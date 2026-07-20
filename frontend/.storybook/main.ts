@@ -20,7 +20,7 @@ const config: StorybookConfig = {
 		{
 			name: 'storybook-design-token',
 			options: {
-				designTokenGlob: 'src/shared/ui/styles/**/*.css'
+				designTokenGlob: 'src/shared/ui/{foundation,styles}/**/*.css'
 			}
 		}
 	],

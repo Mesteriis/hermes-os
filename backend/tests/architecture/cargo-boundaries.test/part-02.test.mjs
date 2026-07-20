@@ -47,17 +47,24 @@ test('allows PostgreSQL and AST clients only in their exact Storage packages', (
   );
 });
 
-
-
-test('allows production packages outside Storage to use only storage protocol', () => {
+test('allows only the explicit Scheduler ciphertext route exception outside Storage', () => {
   const allowed = [
     kernel([dependency('hermes-storage-protocol')]),
+    workspacePackage('hermes-scheduler-runtime', {
+      role: 'platform',
+      owner: 'scheduler',
+      surface: 'runtime',
+    }, [dependency('hermes-storage-vault')]),
     ...storagePackages(),
   ];
   assert.deepEqual(validateCargoMetadata(canonicalPolicyForTests(), metadata(allowed)), []);
 
   const forbidden = [
-    kernel([dependency('hermes-storage-postgres')]),
+    workspacePackage('hermes-untrusted-scheduler-runtime', {
+      role: 'platform',
+      owner: 'scheduler',
+      surface: 'runtime',
+    }, [dependency('hermes-storage-vault')]),
     ...storagePackages(),
   ];
   assert.ok(
@@ -420,8 +427,6 @@ for (const owner of ['contacts', 'organizations', 'tasks', 'calendar', 'document
   });
 }
 
-
-
 test('accepts the split Communications ingress and client API package graph', () => {
   const packages = [
     kernel(),
@@ -462,8 +467,6 @@ test('accepts the split Communications ingress and client API package graph', ()
 
   assert.deepEqual(validateCargoMetadata(canonicalPolicyForTests(), metadata(packages)), []);
 });
-
-
 
 test('keeps WhatsApp implementation in the hidden host WebView boundary', () => {
   const packages = [

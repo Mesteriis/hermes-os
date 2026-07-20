@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import Button from './Button.vue'
+import Button from './primitives/Button.vue'
 import Command from './Command.vue'
 import type { CommandGroup, CommandItem } from './Command.types'
 

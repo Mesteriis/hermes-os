@@ -20,6 +20,33 @@ pub struct PreparedPlatformManagedProcess {
     settings_schema_bytes: Option<Vec<u8>>,
 }
 
+/// Verified bundled module bytes and its descriptor contracts for a managed launch.
+pub struct PreparedBundledManagedRuntime {
+    staged_executable: StagedNativeArtifact,
+    descriptor_bytes: Vec<u8>,
+    settings_schema_bytes: Option<Vec<u8>>,
+}
+
+impl PreparedBundledManagedRuntime {
+    #[must_use]
+    pub fn descriptor_bytes(&self) -> &[u8] {
+        &self.descriptor_bytes
+    }
+
+    #[must_use]
+    pub fn settings_schema_bytes(&self) -> Option<&[u8]> {
+        self.settings_schema_bytes.as_deref()
+    }
+
+    pub fn into_staged_executable(self) -> StagedNativeArtifact {
+        self.staged_executable
+    }
+
+    pub fn remove(self) -> Result<(), String> {
+        self.staged_executable.remove()
+    }
+}
+
 impl PreparedPlatformManagedProcess {
     #[must_use]
     pub fn descriptor_bytes(&self) -> &[u8] {
@@ -58,6 +85,24 @@ pub fn stage_bound_installed_release(
     let bundle = verify_selected_installed_bundle(kernel_executable, "aarch64-apple-darwin")?;
     let artifact = bound_artifact(&bundle, binding)?;
     stage_artifact(artifact, launch_directory)
+}
+
+pub fn prepare_bound_managed_runtime(
+    kernel_executable: &Path,
+    binding: &BundledManagedLaunchBinding,
+    launch_directory: &Path,
+) -> Result<PreparedBundledManagedRuntime, String> {
+    let bundle = verify_selected_installed_bundle(kernel_executable, "aarch64-apple-darwin")?;
+    let artifact = bound_artifact(&bundle, binding)?;
+    let descriptor_bytes = artifact
+        .module_descriptor_bytes()
+        .ok_or_else(|| "managed launch artifact lacks a module descriptor".to_owned())?
+        .to_vec();
+    Ok(PreparedBundledManagedRuntime {
+        staged_executable: stage_artifact(artifact, launch_directory)?,
+        descriptor_bytes,
+        settings_schema_bytes: artifact.settings_schema_bytes().map(ToOwned::to_owned),
+    })
 }
 
 pub fn prepare_bound_platform_process(

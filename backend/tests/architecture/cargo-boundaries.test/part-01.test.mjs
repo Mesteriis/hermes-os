@@ -371,14 +371,23 @@ test('accepts the exact canonical Storage Control package set', () => {
 test('accepts the intended isolated Storage Control dependency graph', () => {
   const packages = [
     kernel(),
+    runtimeProtocol(),
+    ...vaultPackages(),
     ...storagePackages({
       controlDependencies: [dependency('hermes-storage-protocol')],
+      vaultDependencies: [
+        dependency('hermes-storage-protocol'),
+        dependency('hermes-storage-control'),
+        dependency('hermes-runtime-protocol'),
+        dependency('hermes-vault-protocol'),
+      ],
       runtimeDependencies: [
         dependency('hermes-storage-protocol'),
         dependency('hermes-storage-control'),
         dependency('hermes-storage-postgres'),
         dependency('hermes-storage-pgbouncer'),
         dependency('hermes-storage-migrations'),
+        dependency('hermes-storage-vault'),
       ],
       postgresDependencies: [dependency('hermes-storage-control'), dependency('sqlx')],
       pgbouncerDependencies: [dependency('hermes-storage-control')],
@@ -395,6 +404,7 @@ test('rejects incorrect metadata on every canonical Storage Control package', ()
   const mutations = [
     { protocol: { surface: 'implementation' } },
     { control: { surface: 'runtime' } },
+    { vault: { surface: 'runtime' } },
     { runtime: { components: [] } },
     { postgres: { surface: 'implementation' } },
     { pgbouncer: { owner: 'events' } },

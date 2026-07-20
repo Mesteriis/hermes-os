@@ -19,6 +19,7 @@ const ALL_GATES = [
   'blob_v1',
   'clock_v1',
   'scheduler_v1',
+  'browser_client_v1',
   'client_gateway_v1',
   'whole_instance_backup_v1',
   'first_owner_v1',
@@ -30,7 +31,12 @@ const NOT_AUTHORIZED = ALL_GATES.filter((gate) => ![
   'managed_launch_trust_v1',
   'vault_v1',
   'telemetry_v1',
+  'storage_control_v1',
+  'nats_data_plane_v1',
+  'blob_v1',
   'clock_v1',
+  'scheduler_v1',
+  'browser_client_v1',
 ].includes(gate));
 
 const REQUIRES = {
@@ -56,7 +62,12 @@ const REQUIRES = {
     'nats_data_plane_v1',
     'clock_v1',
   ],
+  browser_client_v1: [
+    'module_control_plane_v1',
+    'managed_launch_trust_v1',
+  ],
   client_gateway_v1: [
+    'browser_client_v1',
     'module_control_plane_v1',
     'telemetry_v1',
     'nats_data_plane_v1',
@@ -180,6 +191,15 @@ const REQUIRED_DECISION_FIELDS = {
     'hot_schedule_reconciliation',
     'retry_idempotency_and_recovery',
     'deterministic_clock_conformance',
+  ],
+  browser_client_v1: [
+    'exact_gateway_package_and_local_listener_inventory',
+    'browser_device_pairing_and_session_fencing',
+    'signed_browser_bootstrap_delivery',
+    'same_origin_connect_session_confirmation',
+    'same_origin_fetch_and_no_secret_boundary',
+    'sse_fail_closed_without_admitted_owner',
+    'browser_abuse_privacy_and_redaction_tests',
   ],
   client_gateway_v1: [
     'exact_gateway_package_and_listener_inventory',

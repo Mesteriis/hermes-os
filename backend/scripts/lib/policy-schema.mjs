@@ -276,6 +276,8 @@ const STORAGE_POLICY_KEYS = [
   'owner',
   'protocolPackage',
   'controlPackage',
+  'vaultPackage',
+  'sharedVaultRouteConsumers',
   'runtimePackage',
   'postgresPackage',
   'pgbouncerPackage',
@@ -315,6 +317,7 @@ const STORAGE_POLICY_KEYS = [
   'clientDependencies',
   'postgresClientDependencies',
   'allowedPostgresClientDependencies',
+  'testSupportPostgresClientAllowlist',
   'sqliteClientDependencies',
   'sqlitePackages',
   'astParserDependencies',
@@ -820,6 +823,11 @@ export function validatePolicy(policy) {
     || storage?.owner !== 'storage'
     || storage?.protocolPackage !== 'hermes-storage-protocol'
     || storage?.controlPackage !== 'hermes-storage-control'
+    || storage?.vaultPackage !== 'hermes-storage-vault'
+    || !isExactOrderedStringList(
+      storage?.sharedVaultRouteConsumers,
+      ['hermes-scheduler-runtime'],
+    )
     || storage?.runtimePackage !== 'hermes-storage-runtime'
     || storage?.postgresPackage !== 'hermes-storage-postgres'
     || storage?.pgbouncerPackage !== 'hermes-storage-pgbouncer'
@@ -867,7 +875,17 @@ export function validatePolicy(policy) {
       storage?.postgresClientDependencies,
       STORAGE_POSTGRES_CLIENT_DEPENDENCIES,
     )
-    || !isExactOrderedStringList(storage?.allowedPostgresClientDependencies, ['sqlx'])
+    || !isExactOrderedStringList(
+      storage?.allowedPostgresClientDependencies,
+      ['sqlx', 'tokio-postgres'],
+    )
+    || !isExactOrderedStringList(
+      storage?.testSupportPostgresClientAllowlist,
+      [
+        'hermes-events-jetstream-testkit:dev:sqlx',
+        'hermes-scheduler-testkit:dev:sqlx',
+      ],
+    )
     || !isExactOrderedStringList(storage?.sqliteClientDependencies, ['rusqlite'])
     || !isExactOrderedStringList(storage?.sqlitePackages, STORAGE_SQLITE_PACKAGES)
     || !isExactOrderedStringList(storage?.astParserDependencies, ['pg_query'])

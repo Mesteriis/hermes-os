@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { UiThemeName } from './theme'
-import { normalizeUiThemeName, themeNameToSelection } from './theme'
+import type { UiThemeName } from './foundation/theme'
+import { normalizeUiThemeName, themeNameToSelection } from './foundation/theme'
 
 const props = withDefaults(defineProps<{
 	as?: string

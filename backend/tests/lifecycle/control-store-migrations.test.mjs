@@ -82,8 +82,8 @@ async function waitForPath(path) {
   assert.fail(`timed out waiting for ${path}`);
 }
 
-test('every source schema version 1 through 14 migrates atomically to 15', async () => {
-  for (let sourceVersion = 1; sourceVersion < 15; sourceVersion += 1) {
+test('every source schema version 1 through 33 migrates atomically to 34', async () => {
+  for (let sourceVersion = 1; sourceVersion < 34; sourceVersion += 1) {
     const dataDir = await pristineDataDirectory(`hermes-migration-v${sourceVersion}-`);
     try {
       const storePath = await replaceWithVersionOne(dataDir, sourceVersion);
@@ -91,7 +91,7 @@ test('every source schema version 1 through 14 migrates atomically to 15', async
       assert.equal(sqlite(storePath, 'SELECT schema_version FROM hermes_kernel_control_store_metadata;'), `${sourceVersion}\n`);
       sqlite(storePath, 'DROP TRIGGER stop_at_source_version;');
       assertTrustworthy(dataDir);
-      assert.equal(sqlite(storePath, 'SELECT schema_version FROM hermes_kernel_control_store_metadata;'), '15\n');
+      assert.equal(sqlite(storePath, 'SELECT schema_version FROM hermes_kernel_control_store_metadata;'), '34\n');
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }
@@ -100,7 +100,7 @@ test('every source schema version 1 through 14 migrates atomically to 15', async
 
 test('newer and partially incompatible schemas fail closed', async () => {
   for (const mutation of [
-    'UPDATE hermes_kernel_control_store_metadata SET schema_version = 16;',
+    'UPDATE hermes_kernel_control_store_metadata SET schema_version = 35;',
     'DROP TABLE hermes_kernel_initial_owner_identity;',
   ]) {
     const dataDir = await pristineDataDirectory('hermes-migration-reject-');
@@ -116,7 +116,7 @@ test('newer and partially incompatible schemas fail closed', async () => {
 test('a process kill with an active rollback journal preserves an atomic source schema', async () => {
   const dataDir = await pristineDataDirectory('hermes-migration-hot-journal-');
   try {
-    const storePath = await replaceWithVersionOne(dataDir, 14);
+    const storePath = await replaceWithVersionOne(dataDir, 18);
     sqlite(storePath, 'DROP TRIGGER stop_at_source_version;');
     const writer = spawn('sqlite3', [storePath], { stdio: ['pipe', 'ignore', 'pipe'] });
     writer.stdin.write(`
@@ -130,7 +130,7 @@ test('a process kill with an active rollback journal preserves an atomic source 
     await new Promise((resolve) => writer.once('exit', resolve));
 
     assertTrustworthy(dataDir);
-    assert.equal(sqlite(storePath, 'SELECT schema_version FROM hermes_kernel_control_store_metadata;'), '15\n');
+    assert.equal(sqlite(storePath, 'SELECT schema_version FROM hermes_kernel_control_store_metadata;'), '34\n');
     assert.equal(sqlite(storePath, "SELECT count(*) FROM pragma_table_info('hermes_kernel_control_store_metadata') WHERE name='interrupted_probe';"), '0\n');
   } finally {
     await rm(dataDir, { recursive: true, force: true });
@@ -140,7 +140,7 @@ test('a process kill with an active rollback journal preserves an atomic source 
 test('an OS-level database growth failure cannot expose a partial migration', async () => {
   const dataDir = await pristineDataDirectory('hermes-migration-file-limit-');
   try {
-    const storePath = await replaceWithVersionOne(dataDir, 14);
+    const storePath = await replaceWithVersionOne(dataDir, 18);
     sqlite(storePath, 'DROP TRIGGER stop_at_source_version;');
     const binary = fileURLToPath(new URL('target/debug/hermes-kernel', backend));
     const limited = runWithFileSizeLimit(
@@ -154,7 +154,7 @@ test('an OS-level database growth failure cannot expose a partial migration', as
     assert.equal(remainedRestricted, true, limited.stderr);
 
     const version = Number(sqlite(storePath, 'SELECT schema_version FROM hermes_kernel_control_store_metadata;').trim());
-    assert.ok(version >= 1 && version < 15);
+    assert.ok(version >= 1 && version < 34);
     assertTrustworthy(dataDir);
   } finally {
     await rm(dataDir, { recursive: true, force: true });

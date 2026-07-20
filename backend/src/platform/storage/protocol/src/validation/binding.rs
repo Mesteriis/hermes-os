@@ -2,20 +2,27 @@
 
 use crate::{
     StorageBindingAccessV1, StorageBindingErrorV1, StorageBindingFencesV1,
-    StorageBindingIdentityV1, StorageEffectiveBudgetsV1, v1::StorageBindingV1,
+    StorageBindingIdentityV1, StorageBindingV1, StorageEffectiveBudgetsV1,
+    v1::StorageBindingV1 as StorageBindingMessageV1,
 };
 
 pub fn validate_storage_binding_message(
-    binding: &StorageBindingV1,
+    binding: &StorageBindingMessageV1,
 ) -> Result<(), StorageBindingErrorV1> {
-    StorageBindingIdentityV1::new(
+    storage_binding_from_message(binding).map(|_| ())
+}
+
+pub fn storage_binding_from_message(
+    binding: &StorageBindingMessageV1,
+) -> Result<StorageBindingV1, StorageBindingErrorV1> {
+    let identity = StorageBindingIdentityV1::new(
         binding.storage_instance_id.clone(),
         binding.database_id.clone(),
         binding.owner.clone(),
         binding.registration_id.clone(),
         binding.runtime_instance_id.clone(),
     )?;
-    StorageBindingFencesV1::new(
+    let fences = StorageBindingFencesV1::new(
         binding.storage_generation,
         binding.runtime_generation,
         binding.grant_epoch,
@@ -36,11 +43,11 @@ pub fn validate_storage_binding_message(
         .as_slice()
         .try_into()
         .map_err(|_| StorageBindingErrorV1::Digest)?;
-    StorageBindingAccessV1::new(
+    let access = StorageBindingAccessV1::new(
         binding.runtime_principal.clone(),
         binding.pool_alias.clone(),
         budgets,
         digest,
     )?;
-    Ok(())
+    StorageBindingV1::new(identity, fences, access)
 }

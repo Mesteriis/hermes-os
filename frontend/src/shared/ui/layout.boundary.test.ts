@@ -33,9 +33,10 @@ describe('Hermes UI layout component contracts', () => {
 		const barrel = readFileSync(join(uiRoot, 'index.ts'), 'utf8')
 
 		for (const componentName of layoutComponents) {
-			expect(existsSync(join(uiRoot, `${componentName}.vue`))).toBe(true)
+			const componentPath = layoutComponentPath(componentName)
+			expect(existsSync(join(uiRoot, componentPath))).toBe(true)
 			expect(existsSync(join(uiRoot, `${componentName}.README.md`))).toBe(true)
-			expect(barrel).toContain(`export { default as ${componentName} } from './${componentName}.vue'`)
+			expect(barrel).toContain(`export { default as ${componentName} } from './${componentPath}'`)
 		}
 	})
 
@@ -44,7 +45,7 @@ describe('Hermes UI layout component contracts', () => {
 		const forbiddenSource = /@\/domains|@\/integrations|@\/platform|fetch\(|useQuery|defineStore|createRouter/
 
 		for (const componentName of layoutComponents) {
-			const source = readFileSync(join(uiRoot, `${componentName}.vue`), 'utf8')
+			const source = readFileSync(join(uiRoot, layoutComponentPath(componentName)), 'utf8')
 			expect(source, componentName).not.toMatch(forbiddenSource)
 		}
 	})
@@ -60,3 +61,7 @@ describe('Hermes UI layout component contracts', () => {
 		}
 	})
 })
+
+function layoutComponentPath(componentName: string): string {
+	return componentName === 'StatusBar' ? 'patterns/StatusBar.vue' : `${componentName}.vue`
+}

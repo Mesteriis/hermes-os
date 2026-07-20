@@ -54,9 +54,34 @@ services:
           cpus: "1.0"
           memory: 256M
 
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:36532:6432
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    networks:
+      - platform
+    healthcheck:
+      test: ["CMD-SHELL", "pgbouncer -V"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
 networks:
-  platform:
-    internal: true
+  # Docker Desktop does not publish loopback ports from an internal network.
+  # The explicit 127.0.0.1 bindings remain the host-side development boundary.
+  platform: {}
 
 volumes:
   hermes-development-postgres:

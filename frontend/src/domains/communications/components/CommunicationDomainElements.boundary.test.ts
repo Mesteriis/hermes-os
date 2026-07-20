@@ -483,17 +483,6 @@ describe('Communication domain elements', () => {
       new URL('../queries/communicationChannelSurface.ts', import.meta.url),
       'utf8'
     )
-    const communicationWorkspaceSurfaceSource = readFileSync(
-      new URL(
-        '../queries/useCommunicationsWorkspaceSurface.ts',
-        import.meta.url
-      ),
-      'utf8'
-    )
-    const zulipSurfaceSource = readFileSync(
-      new URL('../queries/useZulipCommunicationsSurface.ts', import.meta.url),
-      'utf8'
-    )
     const callsSurfaceSource = readFileSync(
       new URL('./CommunicationCallsSurface.vue', import.meta.url),
       'utf8'
@@ -1259,30 +1248,6 @@ describe('Communication domain elements', () => {
     expect(communicationSurfaceSource).toContain('CommunicationSubSurface')
     expect(communicationSurfaceSource).toContain('commonCapabilities')
     expect(communicationSurfaceSource).toContain('subSurfaces')
-    expect(communicationWorkspaceSurfaceSource).toContain(
-      'useZulipCommunicationsSurface'
-    )
-    expect(communicationWorkspaceSurfaceSource).toContain(
-      'useSlackCommunicationsSurface'
-    )
-    expect(communicationWorkspaceSurfaceSource).toContain(
-      'useDiscordCommunicationsSurface'
-    )
-    expect(communicationWorkspaceSurfaceSource).toContain(
-      'useMattermostCommunicationsSurface'
-    )
-    expect(communicationWorkspaceSurfaceSource).toContain(
-      'createCommunicationSurface'
-    )
-    expect(zulipSurfaceSource).toContain('send_stream_message')
-    expect(zulipSurfaceSource).toContain('send_direct_message_with_upload')
-    expect(zulipSurfaceSource).toContain('update_message')
-    expect(zulipSurfaceSource).toContain('delete_message')
-    expect(zulipSurfaceSource).toContain('add_reaction')
-    expect(zulipSurfaceSource).toContain('remove_reaction')
-    expect(zulipSurfaceSource).toContain('signal.raw.zulip.message.observed')
-    expect(zulipSurfaceSource).toContain('signal.accepted.zulip.message')
-    expect(zulipSurfaceSource).toContain('ZulipPreparedUpload')
     expect(callViewerSource).toContain('Call transcript')
     expect(shellSource).not.toContain('frontend/src/integrations')
     expect(outboxSource).toContain('communicationOutboxCardPresentation')
@@ -1372,8 +1337,8 @@ describe('Communication domain elements', () => {
     expect(channelStorySource).toContain('Ask in direct chat')
     expect(channelStorySource).toContain('Zulip')
     expect(channelStorySource).toContain('channels:zulip')
-    expect(channelStorySource).toContain('communicationsSurface.subSurfaces')
-    expect(channelStorySource).toContain('useCommunicationsWorkspaceSurface')
+    expect(channelStorySource).toContain('channelFixtureSurfaces')
+    expect(channelStorySource).not.toContain('useCommunicationsWorkspaceSurface')
     expect(channelStorySource).toContain('channelActionGroupsFromSubSurface')
     expect(channelStorySource).toContain(
       'channelComposerCapabilitiesFromSubSurface'

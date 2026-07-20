@@ -4,8 +4,31 @@
 Дата: 2026-07-15
 Состояние реализации: Executable architecture policy, negative self-tests и
 `hermes-events-protocol` canonical V1 schema с bounded outer-envelope decoder
-реализованы. Outbox/inbox adapters, Event Hub catalog и runtime conformance
-tests остаются закрытыми до `nats_data_plane_v1`.
+реализованы. `hermes-events-jetstream` foundation проверяет outer envelope,
+вычисляет exact subject и публикует original bytes with `Nats-Msg-Id`; Docker
+test доказывает broker deduplication и exact-byte delivery. Его NATS credential
+lease adapter использует только HPKE-protected Vault route и не имеет local
+secret fallback; Vault audience lease can be revoked through that route.
+Test-only owner delivery scaffolds now exercise a real PostgreSQL adapter for
+the seven currently designable owners. Each uses its own fixed schema and its
+own `durable_outbox_v1` / `durable_inbox_v1` tables; it stores original bytes,
+marks publication only after a receipt and classifies a same-ID retry as either
+duplicate or hash conflict. A disposable PostgreSQL+JetStream contour relays
+one independently identified record byte-for-byte through a fenced test runtime
+and changes the owner-local row only after the JetStream receipt. It also keeps
+the row pending after an unavailable real NATS endpoint and publishes it after
+reconnect. The scaffolds
+contain no domain behaviour and are not production owner packages, migrations
+or public contracts. Event Hub catalog-to-broker authority delivery, broker
+credential rotation/revoke and full runtime conformance are now present, so
+`nats_data_plane_v1` is open as a platform gate. A production outbox/inbox
+adapter remains owner-owned work under `first_owner_v1`.
+
+Their only direct SQL client is the explicitly named development dependency
+`hermes-events-jetstream-testkit:dev:sqlx`. The executable Cargo policy rejects
+the same client in every production package, every other test package and every
+other dependency kind; this exception does not grant a PostgreSQL capability to
+the Event protocol or a future owner runtime.
 
 Зависит от:
 
@@ -24,7 +47,11 @@ tests остаются закрытыми до `nats_data_plane_v1`.
 - [ADR-0221: ModuleDescriptorV1 и capability-level lifecycle](ADR-0221-module-descriptor-and-capability-lifecycle-contract.md);
 - [ADR-0222: Kernel Settings Registry и supervised reconfiguration](ADR-0222-kernel-settings-registry-and-supervised-reconfiguration.md).
 
-Этот ADR определяет только внутренний durable data plane Hermes. Синхронный
+Этот ADR определяет только внутренний durable data plane Hermes. `OutboxRecordV1`
+retains validated exact envelope bytes and `InboxRecordV1` classifies retries by
+message ID plus SHA-256, so equal IDs with different bytes fail as a conflict.
+These are owner-local persistence contracts, not a shared event database.
+Синхронный
 control/query/request RPC остаётся контрактом ADR-0201, а внешний realtime
 desktop/Android — отдельным client envelope ADR-0205.
 

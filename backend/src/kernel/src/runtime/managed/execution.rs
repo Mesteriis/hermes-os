@@ -94,12 +94,22 @@ pub fn spawn(
     stdin: Stdio,
 ) -> Result<Child, String> {
     ensure_staged_executable(staged_executable.path())?;
-    Command::new(staged_executable.path())
+    let stderr = if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        Stdio::inherit()
+    } else {
+        Stdio::null()
+    };
+    let mut command = Command::new(staged_executable.path());
+    command
         .args(arguments)
         .stdin(stdin)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .env_clear()
+        .stderr(stderr)
+        .env_clear();
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        command.env("HERMES_DEVELOPER_VERBOSE", "1");
+    }
+    command
         .spawn()
         .map_err(|error| format!("managed child could not start: {error}"))
 }

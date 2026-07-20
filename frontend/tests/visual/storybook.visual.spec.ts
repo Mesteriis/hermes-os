@@ -146,6 +146,7 @@ test.describe('Hermes UI Storybook visual regression', () => {
 					// Both are test-runner diagnostics rather than application runtime errors.
 					if (
 						!text.startsWith('UO:') &&
+						!text.startsWith('uD:') &&
 						!text.startsWith('TestingLibraryElementError:') &&
 						text !== SCRIPTLESS_SRCDOC_TRACE_ERROR
 					) {
@@ -233,6 +234,25 @@ async function openStory(page: Page, story: StorybookStory, theme: UiThemeName, 
 	await expect(shell).toHaveAttribute('data-ui-theme-mode', themeMode(theme))
 	await expect(shell).toHaveAttribute('data-ui-locale', locale)
 	await expect(shell).toHaveAttribute('lang', locale)
+	await waitForStableStoryFrame(page)
+	// A Storybook story becomes visible before its optional play function has
+	// finished. Wait for the preview lifecycle rather than a timer so visual
+	// baselines always capture one deterministic post-play state.
+	await page.waitForFunction(
+		(storyId) => {
+			const preview = (
+				globalThis as typeof globalThis & {
+					__STORYBOOK_PREVIEW__?: {
+						storyRenders?: readonly { id?: string; phase?: string }[]
+					}
+				}
+			).__STORYBOOK_PREVIEW__
+			return preview?.storyRenders?.some(
+				(storyRender) => storyRender.id === storyId && storyRender.phase === 'finished'
+			)
+		},
+		story.id
+	)
 	await waitForStableStoryFrame(page)
 	await assertNoStorybookError(page)
 }

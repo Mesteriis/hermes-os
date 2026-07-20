@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package hermes.runtime.v1;
 
+import "hermes/runtime/v1/vault_runtime.proto";
+
 // One-shot inherited private control channel for a Kernel-managed runtime.
 message DescribeManagedRuntimeRequestV1 {
   bytes descriptor_bytes = 1;
@@ -12,14 +14,45 @@ message DescribeManagedRuntimeResponseV1 {
   uint64 runtime_generation = 2;
   uint64 grant_epoch = 3;
 }
+message ManagedRuntimeReadyRequestV1 {
+  string registration_id = 1;
+  uint64 runtime_generation = 2;
+  uint64 grant_epoch = 3;
+}
+// Sent by a verified managed module after ready. It deliberately carries no
+// owner identity or NATS subjects: Kernel derives those from approved topology.
+message ManagedRuntimeEventCredentialRequestV1 {
+  bytes request_id = 1;
+  uint64 credential_revision = 2;
+  uint32 ttl_seconds = 3;
+  bytes recipient_public_key_x25519 = 4;
+}
+message ManagedRuntimeEventCredentialDeliveryV1 {
+  bytes encapped_key = 1;
+  bytes ciphertext = 2;
+  bytes tag = 3;
+}
 message ManagedRuntimeControlRequestV1 {
   oneof operation {
     DescribeManagedRuntimeRequestV1 describe = 1;
+    ManagedRuntimeReadyRequestV1 ready = 2;
+    ManagedRuntimeEventCredentialRequestV1 issue_event_credential = 3;
   }
 }
 message ManagedRuntimeControlResponseV1 {
   oneof result {
     DescribeManagedRuntimeResponseV1 describe = 1;
+    ManagedRuntimeEventCredentialDeliveryV1 event_credential_delivery = 2;
   }
+  string error_code = 15;
+}
+
+// Request initiated by an already verified managed platform process over its
+// inherited Kernel control FD. Only the Kernel may authorize and relay it.
+message ManagedRuntimeVaultRouteRequestV1 {
+  VaultCiphertextRouteV1 route = 1;
+}
+message ManagedRuntimeVaultRouteResponseV1 {
+  VaultCiphertextResponseV1 response = 1;
   string error_code = 15;
 }

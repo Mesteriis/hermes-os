@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import Button from './Button.vue'
+import Button from './primitives/Button.vue'
 import IconButton from './IconButton.vue'
 
 const props = withDefaults(defineProps<{

@@ -1,0 +1,605 @@
+//! Private-LAN developer bootstrap for the signed platform foundation.
+//!
+//! It starts only runtimes for which the private development profile has a
+//! complete local configuration. Event Hub and Scheduler remain owner-configured
+//! until their NATS and module-grant records are provisioned.
+
+use std::path::Path;
+use std::process::Command;
+use std::time::Duration;
+
+use hermes_events_jetstream::{
+    ConsumerBudgetV1 as JetStreamConsumerBudget, ConsumerSpecV1 as JetStreamConsumerSpec,
+    EventHubJetStreamConnection, EventHubTopologyPlanV1 as JetStreamTopologyPlan, JetStreamClient,
+    NatsPasswordCredentialV1, StreamBudgetV1 as JetStreamStreamBudget,
+    StreamKindV1 as JetStreamKind, StreamSpecV1 as JetStreamStreamSpec,
+};
+use hermes_kernel_control_store::{
+    ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
+    ModuleEventRouteRequestV1, ModuleEventSubscriptionRequirementV1, ModuleRegistration,
+    ModuleRegistrationState, ModuleStorageRequestV1, PlatformEventHubTopologyV1,
+    PlatformEventStreamBudgetV1, PlatformEventsAuthorityConfigurationV1,
+    PlatformStorageBindingStateV1, PlatformStorageBundleV1, PlatformStorageEndpointV1,
+    PlatformStorageTopology, StorageDeploymentProfileV1,
+};
+use hermes_kernel_control_store_sqlite::SqliteControlStore;
+use sha2::{Digest, Sha256};
+
+use crate::distribution::staged_artifact::StagedNativeArtifact;
+use crate::platform::{
+    blob::{binding as blob_binding, launch as blob_launch},
+    events::authority::{binding as events_binding, launch as events_launch},
+    macos::managed_launch,
+    macos::native_launch,
+    storage::{binding as storage_binding, launch as storage_launch},
+    telemetry::{binding as telemetry_binding, launch as telemetry_launch},
+    vault::{binding as vault_binding, launch as vault_launch},
+};
+use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
+use crate::{
+    distribution::bundled_launch,
+    platform::storage::issuance::{StorageBindingIssueV1, issue_managed},
+};
+
+/// Starts the signed local platform runtimes that have a complete local
+/// configuration. It is called only for the private-LAN developer Gateway.
+pub(crate) fn start_local_foundation(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    data_dir: &Path,
+    runtime_dir: &Path,
+) -> Result<(), String> {
+    let vault_binding = ensure_vault_binding(store)?;
+    ensure_initialized_vault(
+        data_dir,
+        runtime_dir,
+        &vault_binding,
+        store.snapshot().instance_id(),
+    )?;
+    ensure_blob_binding(store)?;
+    ensure_telemetry_binding(store)?;
+    restore_scheduler_developer_grants(supervisor, store)?;
+    ensure_storage_binding(store)?;
+    ensure_storage_topology(store)?;
+    ensure_events_binding(store)?;
+    ensure_events_configuration(store, data_dir)?;
+    ensure_event_hub_topology(store)?;
+
+    if !supervisor.is_active(vault_binding::VAULT_PROCESS_ID)? {
+        vault_launch::start(supervisor, store, data_dir, runtime_dir)
+            .map_err(|error| format!("developer Vault startup failed: {error}"))?;
+    }
+    if !supervisor.is_active(blob_binding::BLOB_PROCESS_ID)? {
+        blob_launch::start(supervisor, store, data_dir, runtime_dir)
+            .map_err(|error| format!("developer Blob startup failed: {error}"))?;
+    }
+    if !supervisor.is_active(telemetry_binding::TELEMETRY_PROCESS_ID)? {
+        telemetry_launch::start(supervisor, store, data_dir, runtime_dir)
+            .map_err(|error| format!("developer Telemetry startup failed: {error}"))?;
+    }
+    if !supervisor.is_active(storage_binding::STORAGE_PROCESS_ID)? {
+        storage_launch::start(supervisor, store, runtime_dir)
+            .map_err(|error| format!("developer Storage startup failed: {error}"))?;
+    }
+    if !supervisor.is_active(events_binding::EVENTS_AUTHORITY_PROCESS_ID)? {
+        events_launch::start(supervisor, store, runtime_dir)
+            .map_err(|error| format!("developer Event Hub startup failed: {error}"))?;
+    }
+    ensure_scheduler(supervisor, store, runtime_dir)?;
+    Ok(())
+}
+
+fn restore_scheduler_developer_grants(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+) -> Result<(), String> {
+    const REGISTRATION_ID: &str = "scheduler_developer";
+    let capabilities = [
+        "events.scheduler.ack".to_owned(),
+        "events.scheduler.dispatch".to_owned(),
+        "events.scheduler.result".to_owned(),
+        "storage.scheduler".to_owned(),
+    ];
+    if store
+        .module_registration(REGISTRATION_ID)
+        .map_err(|_| "developer Scheduler registration is unavailable".to_owned())?
+        .is_some_and(|registration| registration.state() != ModuleRegistrationState::Approved)
+    {
+        store
+            .approve_module_registration(REGISTRATION_ID, &capabilities)
+            .map_err(|_| "developer Scheduler grants cannot be restored".to_owned())?;
+    }
+    if !supervisor.is_active(REGISTRATION_ID)? {
+        if let Some(binding) = store
+            .platform_storage_binding(REGISTRATION_ID, "storage.scheduler")
+            .map_err(|_| "developer Scheduler Storage binding is unavailable".to_owned())?
+        {
+            if binding.state() == PlatformStorageBindingStateV1::Active {
+                store
+                    .begin_platform_storage_binding_revocation(
+                        REGISTRATION_ID,
+                        "storage.scheduler",
+                        binding.binding_revision(),
+                    )
+                    .map_err(|_| {
+                        "developer Scheduler Storage binding cannot be fenced".to_owned()
+                    })?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn ensure_vault_binding(
+    store: &SqliteControlStore,
+) -> Result<hermes_kernel_control_store::PlatformManagedProcessBinding, String> {
+    // The developer bundle may be rebuilt between local launches. Rebind the
+    // exact installed artifact rather than retaining a stale digest from a
+    // prior temporary bundle.
+    vault_binding::bind_current_installed_release(store)
+}
+
+fn ensure_blob_binding(store: &SqliteControlStore) -> Result<(), String> {
+    blob_binding::bind_current_installed_release(store)?;
+    Ok(())
+}
+
+fn ensure_telemetry_binding(store: &SqliteControlStore) -> Result<(), String> {
+    telemetry_binding::bind_current_installed_release(store)?;
+    Ok(())
+}
+
+fn ensure_storage_binding(store: &SqliteControlStore) -> Result<(), String> {
+    storage_binding::bind_current_installed_release(store)?;
+    Ok(())
+}
+
+fn ensure_storage_topology(store: &SqliteControlStore) -> Result<(), String> {
+    let existing = store
+        .platform_storage_topology()
+        .map_err(|_| "developer Storage topology is unavailable".to_owned())?
+        ;
+    if existing.is_some() {
+        return Ok(());
+    }
+    // The development operator owns this private localhost contour. The
+    // database and pooler image identities are explicit dev-profile markers;
+    // production topology continues to require owner-authorized image pins.
+    let postgres_digest: [u8; 32] =
+        Sha256::digest(b"postgres:16-alpine/dev-authenticated-v1").into();
+    let pgbouncer_digest: [u8; 32] =
+        Sha256::digest(b"edoburu/pgbouncer:v1.25.2-p0/dev-authenticated-v1").into();
+    let topology = PlatformStorageTopology::new(
+        1,
+        1,
+        "storage_main",
+        "hermes_storage_authenticated",
+        StorageDeploymentProfileV1::MacosTauriEmbedded,
+        PlatformStorageEndpointV1::new("127.0.0.1", 35_532),
+        PlatformStorageEndpointV1::new("127.0.0.1", 36_532),
+        postgres_digest,
+        pgbouncer_digest,
+    )
+    .with_pgbouncer_backend_endpoint(PlatformStorageEndpointV1::new("postgres", 5_432));
+    store
+        .record_platform_storage_topology(&topology)
+        .map_err(|_| "developer Storage topology cannot be recorded".to_owned())
+}
+
+fn ensure_events_binding(store: &SqliteControlStore) -> Result<(), String> {
+    events_binding::bind_current_installed_release(store).map(|_| ())
+}
+
+fn ensure_events_configuration(store: &SqliteControlStore, data_dir: &Path) -> Result<(), String> {
+    if store
+        .platform_events_authority_configuration()
+        .map_err(|_| "developer Event Hub configuration is unavailable".to_owned())?
+        .is_some()
+    {
+        return Ok(());
+    }
+    let account_public_key = std::fs::read_to_string(
+        data_dir
+            .join("developer-platform-credentials")
+            .join("nats-account-public-key"),
+    )
+    .map_err(|_| "developer Event Hub identity is unavailable".to_owned())?;
+    let configuration =
+        PlatformEventsAuthorityConfigurationV1::new(1, account_public_key.trim(), 1);
+    store
+        .record_platform_events_authority_configuration(&configuration)
+        .map_err(|_| "developer Event Hub configuration cannot be recorded".to_owned())
+}
+
+fn ensure_event_hub_topology(store: &SqliteControlStore) -> Result<(), String> {
+    if store
+        .platform_event_hub_topology()
+        .map_err(|_| "developer Event Hub topology is unavailable".to_owned())?
+        .is_some()
+    {
+        return Ok(());
+    }
+    let budgets = [
+        ModuleEventEnvelopeKindV1::Command,
+        ModuleEventEnvelopeKindV1::Event,
+        ModuleEventEnvelopeKindV1::Observation,
+        ModuleEventEnvelopeKindV1::Result,
+        ModuleEventEnvelopeKindV1::Ack,
+    ]
+    .into_iter()
+    .map(|kind| PlatformEventStreamBudgetV1::new(kind, 1_048_576, 3_600_000, 1))
+    .collect();
+    let topology =
+        PlatformEventHubTopologyV1::new(1, "nats://127.0.0.1:43225", "event_hub", 1, budgets);
+    store
+        .record_platform_event_hub_topology(&topology)
+        .map_err(|_| "developer Event Hub topology cannot be recorded".to_owned())
+}
+
+fn reconcile_event_hub(store: &SqliteControlStore) -> Result<(), String> {
+    let contracts = crate::platform::events::catalog::resolve_contracts(store)?;
+    let topology = crate::platform::events::topology::plan(
+        &contracts,
+        &crate::platform::events::authority::status::current_topology(store)?,
+    )?;
+    let streams = topology
+        .streams()
+        .iter()
+        .map(|stream| {
+            Ok::<_, String>(JetStreamStreamSpec::new(
+                jetstream_kind(stream.kind()),
+                JetStreamStreamBudget::new(
+                    i64::try_from(stream.max_bytes())
+                        .map_err(|_| "developer Event Hub stream budget is invalid".to_owned())?,
+                    Duration::from_millis(stream.max_age_millis()),
+                    usize::from(stream.replicas()),
+                )
+                .map_err(|_| "developer Event Hub stream budget is invalid".to_owned())?,
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let consumers = topology
+        .consumers()
+        .iter()
+        .map(|consumer| {
+            let policy = consumer.delivery_policy();
+            JetStreamConsumerSpec::new(
+                jetstream_kind(consumer.subject().kind()),
+                consumer.durable_name(),
+                consumer.subject().as_str(),
+                JetStreamConsumerBudget::new(
+                    i64::from(consumer.max_in_flight()),
+                    i64::from(policy.max_deliver()),
+                    Duration::from_millis(u64::from(policy.ack_wait_millis())),
+                )
+                .map_err(|_| "developer Event Hub consumer budget is invalid".to_owned())?,
+            )
+            .map_err(|_| "developer Event Hub consumer topology is invalid".to_owned())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let plan = JetStreamTopologyPlan::new(streams, consumers)
+        .map_err(|_| "developer Event Hub topology is invalid".to_owned())?;
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|_| "developer Event Hub runtime is unavailable".to_owned())?;
+    runtime.block_on(async move {
+        let credential = NatsPasswordCredentialV1::new("event_hub", "developer-local")
+            .map_err(|_| "developer Event Hub credential is unavailable".to_owned())?;
+        let connection: EventHubJetStreamConnection =
+            JetStreamClient::connect_event_hub("nats://127.0.0.1:43225", credential).await?;
+        connection.reconcile(&plan).await
+    })
+}
+
+fn jetstream_kind(
+    kind: crate::platform::events::topology::subject::EventStreamKindV1,
+) -> JetStreamKind {
+    match kind {
+        crate::platform::events::topology::subject::EventStreamKindV1::Command => {
+            JetStreamKind::Command
+        }
+        crate::platform::events::topology::subject::EventStreamKindV1::Event => {
+            JetStreamKind::Event
+        }
+        crate::platform::events::topology::subject::EventStreamKindV1::Observation => {
+            JetStreamKind::Observation
+        }
+        crate::platform::events::topology::subject::EventStreamKindV1::Result => {
+            JetStreamKind::Result
+        }
+        crate::platform::events::topology::subject::EventStreamKindV1::Ack => JetStreamKind::Ack,
+    }
+}
+
+fn ensure_scheduler(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+) -> Result<(), String> {
+    const REGISTRATION_ID: &str = "scheduler_developer";
+    const STORAGE_CAPABILITY: &str = "storage.scheduler";
+    const DISPATCH_CAPABILITY: &str = "events.scheduler.dispatch";
+    const ACK_CAPABILITY: &str = "events.scheduler.ack";
+    const RESULT_CAPABILITY: &str = "events.scheduler.result";
+
+    if supervisor.is_active(REGISTRATION_ID)? {
+        return Ok(());
+    }
+    let kernel =
+        std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())?;
+    let bundle = native_launch::verify_selected_installed_bundle(&kernel, "aarch64-apple-darwin")?;
+    let artifact = bundle
+        .artifacts()
+        .iter()
+        .find(|artifact| artifact.artifact_id() == "platform.scheduler")
+        .ok_or_else(|| "developer Scheduler release is unavailable".to_owned())?;
+    let descriptor = artifact
+        .module_descriptor_bytes()
+        .ok_or_else(|| "developer Scheduler descriptor is unavailable".to_owned())?;
+    let capabilities = [
+        ACK_CAPABILITY.to_owned(),
+        DISPATCH_CAPABILITY.to_owned(),
+        RESULT_CAPABILITY.to_owned(),
+        STORAGE_CAPABILITY.to_owned(),
+    ];
+    if store
+        .module_registration(REGISTRATION_ID)
+        .map_err(|_| "developer Scheduler registration is unavailable".to_owned())?
+        .is_none()
+    {
+        let registration = ModuleRegistration::new(
+            REGISTRATION_ID,
+            "scheduler",
+            "scheduler",
+            Sha256::digest(descriptor).into(),
+            ModuleRegistrationState::Pending,
+            1,
+        );
+        let storage =
+            ModuleStorageRequestV1::new(REGISTRATION_ID, STORAGE_CAPABILITY, "scheduler", 4, 5_000);
+        let routes = [
+            scheduler_event_route(
+                DISPATCH_CAPABILITY,
+                ModuleEventEnvelopeKindV1::Command,
+                "platform",
+                "maintenance",
+                ModuleEventRouteDirectionV1::Publish,
+            ),
+            scheduler_event_route(
+                ACK_CAPABILITY,
+                ModuleEventEnvelopeKindV1::Ack,
+                "scheduler",
+                "job_receipt",
+                ModuleEventRouteDirectionV1::Consume,
+            ),
+            scheduler_event_route(
+                RESULT_CAPABILITY,
+                ModuleEventEnvelopeKindV1::Result,
+                "scheduler",
+                "job_receipt",
+                ModuleEventRouteDirectionV1::Consume,
+            ),
+        ];
+        store
+            .create_pending_registration_with_requests(
+                &registration,
+                &capabilities,
+                std::slice::from_ref(&storage),
+                &routes,
+                &[],
+            )
+            .map_err(|_| "developer Scheduler registration cannot be recorded".to_owned())?;
+        store
+            .approve_module_registration(REGISTRATION_ID, &capabilities)
+            .map_err(|_| "developer Scheduler grants cannot be recorded".to_owned())?;
+    } else if store
+        .module_registration(REGISTRATION_ID)
+        .map_err(|_| "developer Scheduler registration is unavailable".to_owned())?
+        .is_some_and(|registration| registration.state() != ModuleRegistrationState::Approved)
+    {
+        store
+            .approve_module_registration(REGISTRATION_ID, &capabilities)
+            .map_err(|_| "developer Scheduler grants cannot be restored".to_owned())?;
+    }
+    bundled_launch::admit(store, REGISTRATION_ID, &bundle, "platform.scheduler")?;
+    let bundle_bytes = export_scheduler_storage_bundle(&kernel, runtime_dir)?;
+    let digest: [u8; 32] = Sha256::digest(&bundle_bytes).into();
+    let storage_bundle = PlatformStorageBundleV1::new("scheduler", 7, digest, bundle_bytes)
+        .map_err(|_| "developer Scheduler Storage bundle is invalid".to_owned())?;
+    match store
+        .platform_storage_bundle("scheduler", storage_bundle.revision())
+        .map_err(|_| "developer Scheduler Storage bundle is unavailable".to_owned())?
+    {
+        Some(existing) if existing.digest() == storage_bundle.digest() => {}
+        Some(_) => {
+            return Err(
+                "developer Scheduler Storage bundle revision conflicts with the persisted contract"
+                    .to_owned(),
+            );
+        }
+        None => store
+            .record_platform_storage_bundle(&storage_bundle)
+            .map_err(|_| "developer Scheduler Storage bundle cannot be recorded".to_owned())?,
+    }
+    let reservation = managed_launch::reserve(supervisor, store, REGISTRATION_ID)?;
+    let binding_issue = match store
+        .platform_storage_binding(REGISTRATION_ID, STORAGE_CAPABILITY)
+        .map_err(|_| "developer Scheduler Storage binding is unavailable".to_owned())?
+    {
+        Some(binding) => crate::platform::scheduler::lifecycle::successor_issue(&binding)?,
+        None => StorageBindingIssueV1::new(1, 1, 7, digest)?,
+    };
+    let binding = issue_managed(
+        store,
+        REGISTRATION_ID,
+        reservation.runtime_instance_id(),
+        reservation.runtime_generation(),
+        STORAGE_CAPABILITY,
+        binding_issue,
+    )?;
+    // Scheduler's consumers are part of the approved topology. Reconcile only
+    // after its registration and grants are durable, but before its runtime can
+    // attempt to attach a receipt consumer.
+    reconcile_event_hub(store)?;
+    crate::platform::scheduler::launch::start_from_reservation(
+        supervisor,
+        store,
+        &kernel,
+        runtime_dir,
+        reservation,
+        &binding,
+    )
+    .map(|_| ())
+    .map_err(|error| format!("developer Scheduler startup failed: {error}"))
+}
+
+fn scheduler_event_route(
+    capability: &str,
+    kind: ModuleEventEnvelopeKindV1,
+    owner: &str,
+    contract: &str,
+    direction: ModuleEventRouteDirectionV1,
+) -> ModuleEventRouteRequestV1 {
+    ModuleEventRouteRequestV1::new(
+        "scheduler_developer",
+        capability,
+        kind,
+        owner,
+        contract,
+        1,
+        1,
+        [7; 32],
+        direction,
+        16,
+        matches!(direction, ModuleEventRouteDirectionV1::Consume).then(|| {
+            ModuleEventDeliveryPolicyV1::new(
+                ModuleEventSubscriptionRequirementV1::Required,
+                3,
+                2_000,
+            )
+        }),
+    )
+}
+
+fn export_scheduler_storage_bundle(kernel: &Path, runtime_dir: &Path) -> Result<Vec<u8>, String> {
+    let staged = native_launch::verify_selected_installed_release(
+        kernel,
+        "aarch64-apple-darwin",
+        "platform.scheduler",
+        &runtime_dir
+            .join("developer-bootstrap")
+            .join("scheduler-bundle"),
+    )?;
+    let output = Command::new(staged.path())
+        .arg("export-storage-bundle")
+        .output()
+        .map_err(|_| "developer Scheduler Storage bundle is unavailable".to_owned());
+    let _ = staged.remove();
+    let output = output?;
+    (output.status.success() && !output.stdout.is_empty())
+        .then_some(output.stdout)
+        .ok_or_else(|| "developer Scheduler Storage bundle is unavailable".to_owned())
+}
+
+fn ensure_initialized_vault(
+    data_dir: &Path,
+    runtime_dir: &Path,
+    binding: &hermes_kernel_control_store::PlatformManagedProcessBinding,
+    instance_id: &str,
+) -> Result<(), String> {
+    let vault_dir = data_dir.join("vault");
+    match vault_initialization_state(&vault_dir)? {
+        VaultInitializationState::Initialized => return Ok(()),
+        VaultInitializationState::Partial => return Err("Vault recovery is required".to_owned()),
+        VaultInitializationState::Missing => {}
+    }
+    let kernel =
+        std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())?;
+    let prepared = native_launch::prepare_bound_platform_process(
+        &kernel,
+        binding,
+        &runtime_dir
+            .join("developer-bootstrap")
+            .join("vault-initialize"),
+    )?;
+    let artifact = prepared.into_staged_executable();
+    initialize_vault_from_artifact(
+        artifact,
+        &vault_dir,
+        instance_id,
+        &data_dir.join("developer-platform-credentials"),
+    )
+}
+
+fn initialize_vault_from_artifact(
+    artifact: StagedNativeArtifact,
+    vault_dir: &Path,
+    instance_id: &str,
+    platform_credential_dir: &Path,
+) -> Result<(), String> {
+    let status = Command::new(artifact.path())
+        .args(["initialize", "--data-dir"])
+        .arg(vault_dir)
+        .args(["--instance-id", instance_id])
+        .args(["--platform-credential-dir"])
+        .arg(platform_credential_dir)
+        .status()
+        .map_err(|_| "Vault initialization is unavailable".to_owned());
+    let _ = artifact.remove();
+    match status {
+        Ok(status) if status.success() => Ok(()),
+        Ok(_) => Err("Vault initialization failed".to_owned()),
+        Err(error) => Err(error),
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum VaultInitializationState {
+    Missing,
+    Initialized,
+    Partial,
+}
+
+fn vault_initialization_state(vault_dir: &Path) -> Result<VaultInitializationState, String> {
+    let files = [
+        vault_dir.join("platform-wrapping-key.bin"),
+        vault_dir.join("vault.db"),
+        vault_dir.join("vault.anchor"),
+    ];
+    let present = files.iter().filter(|path| path.exists()).count();
+    match present {
+        0 => Ok(VaultInitializationState::Missing),
+        3 => Ok(VaultInitializationState::Initialized),
+        _ => Ok(VaultInitializationState::Partial),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{VaultInitializationState, vault_initialization_state};
+
+    #[test]
+    fn vault_initialization_requires_an_atomic_three_file_state() {
+        let root = std::env::temp_dir().join(format!(
+            "hermes-developer-vault-state-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(
+            vault_initialization_state(&root).expect("missing state"),
+            VaultInitializationState::Missing
+        );
+        std::fs::create_dir_all(&root).expect("create fixture");
+        std::fs::write(root.join("vault.db"), []).expect("write partial fixture");
+        assert_eq!(
+            vault_initialization_state(&root).expect("partial state"),
+            VaultInitializationState::Partial
+        );
+        std::fs::write(root.join("platform-wrapping-key.bin"), []).expect("write key fixture");
+        std::fs::write(root.join("vault.anchor"), []).expect("write anchor fixture");
+        assert_eq!(
+            vault_initialization_state(&root).expect("initialized state"),
+            VaultInitializationState::Initialized
+        );
+        std::fs::remove_dir_all(root).expect("remove fixture");
+    }
+}

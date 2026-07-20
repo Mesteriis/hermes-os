@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package hermes.runtime.v1;
+
+// Short-lived private configuration staged only for a verified Blob child.
+// It carries no content, Blob references, or key material.
+message BlobRuntimeConfigurationV1 {
+  string data_dir = 1;
+  uint64 maximum_blob_bytes = 2;
+  string vault_instance_id = 3;
+  uint64 vault_runtime_generation = 4;
+  bytes vault_hpke_public_key_x25519 = 5;
+  // Private Unix socket owned by the verified Blob process. Content never
+  // travels over the inherited Kernel control channel.
+  string data_socket_path = 6;
+  string kernel_instance_id = 7;
+  bytes kernel_authorization_public_key_sec1 = 8;
+}
+
+// A short-lived, one-use authorization for exactly one Blob data operation.
+// The signature covers the complete message with this field cleared.
+message BlobDataSessionGrantV1 {
+  uint32 major = 1;
+  string kernel_instance_id = 2;
+  bytes session_id = 3;
+  bytes channel_binding_sha256 = 4;
+  string owner_id = 5;
+  string registration_id = 6;
+  string capability_id = 7;
+  string runtime_instance_id = 8;
+  uint64 runtime_generation = 9;
+  uint64 grant_epoch = 10;
+  uint64 key_revision = 11;
+  uint64 quota_max_bytes = 12;
+  bytes reference_id = 13;
+  uint64 declared_size = 14;
+  uint64 reference_expires_at_unix_ms = 15;
+  BlobBackupClassV1 backup_class = 16;
+  BlobDataOperationV1 operation = 17;
+  uint64 expires_at_unix_ms = 18;
+  bytes kernel_authorization_signature_raw = 19;
+  uint64 blob_runtime_generation = 20;
+}
+
+enum BlobBackupClassV1 {
+  BLOB_BACKUP_CLASS_UNSPECIFIED_V1 = 0;
+  BLOB_BACKUP_CLASS_REQUIRED_V1 = 1;
+  BLOB_BACKUP_CLASS_REBUILDABLE_V1 = 2;
+  BLOB_BACKUP_CLASS_EXCLUDED_V1 = 3;
+}
+
+enum BlobDataOperationV1 {
+  BLOB_DATA_OPERATION_UNSPECIFIED_V1 = 0;
+  BLOB_DATA_OPERATION_WRITE_V1 = 1;
+  BLOB_DATA_OPERATION_READ_RANGE_V1 = 2;
+}
+
+message BlobDataRequestV1 {
+  BlobDataSessionGrantV1 grant = 1;
+  bytes channel_binding = 2;
+  oneof operation {
+    BlobDataWriteRequestV1 write = 3;
+    BlobDataReadRangeRequestV1 read_range = 4;
+  }
+}
+
+message BlobDataWriteRequestV1 { bytes plaintext = 1; }
+
+message BlobDataReadRangeRequestV1 {
+  uint64 start = 1;
+  uint64 end_exclusive = 2;
+}
+
+message BlobDataResponseV1 {
+  bytes plaintext = 1;
+  // Distinguishes a successful empty write response from an invalid frame.
+  bool accepted = 2;
+  string error_code = 15;
+}
+
+enum BlobRuntimeStateV1 {
+  BLOB_RUNTIME_STATE_V1_UNSPECIFIED = 0;
+  BLOB_RUNTIME_STATE_V1_READY = 1;
+  BLOB_RUNTIME_STATE_V1_BLOCKED = 2;
+  BLOB_RUNTIME_STATE_V1_STOPPED = 3;
+}
+
+message GetBlobRuntimeStatusRequestV1 {}
+
+// Sanitized process attestation; it never carries a Blob reference or content.
+message BlobRuntimeStatusV1 {
+  BlobRuntimeStateV1 state = 1;
+  uint64 runtime_generation = 2;
+  uint64 vault_runtime_generation = 3;
+  uint64 maximum_blob_bytes = 4;
+  string blocker_code = 5;
+}
+
+message BlobRuntimeControlRequestV1 {
+  oneof operation { GetBlobRuntimeStatusRequestV1 get_status = 1; }
+}
+
+message BlobRuntimeControlResponseV1 {
+  oneof result { BlobRuntimeStatusV1 status = 1; }
+  string error_code = 15;
+}

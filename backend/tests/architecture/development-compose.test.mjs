@@ -12,7 +12,8 @@ test('clean-room development Compose stays loopback-only and excludes Docker con
   assert.match(compose, /^  nats:$/m);
   assert.match(compose, /127\.0\.0\.1:35432:5432/);
   assert.match(compose, /127\.0\.0\.1:34222:4222/);
-  assert.match(compose, /internal: true/);
+  assert.match(compose, /127\.0\.0\.1:36432:6432/);
+  assert.doesNotMatch(compose, /internal: true/);
   assert.doesNotMatch(compose, /docker\.sock|DOCKER_HOST|privileged:/i);
   assert.doesNotMatch(compose, /\.\.?\/docker\//);
 });

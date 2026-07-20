@@ -43,6 +43,21 @@ message RouteVaultCiphertextRequestV1 {
 message RouteVaultCiphertextResponseV1 {
   hermes.runtime.v1.VaultCiphertextResponseV1 response = 1;
 }
+// Returns the current non-secret Storage binding only to its attested external
+// runtime. The binding bytes are canonical StorageBindingV1 protobuf bytes;
+// database credentials remain available solely through the Vault route above.
+message GetExternalRuntimeStorageBindingRequestV1 {
+  string session_id = 1;
+  string capability_id = 2;
+}
+message GetExternalRuntimeStorageBindingResponseV1 {
+  bytes storage_binding_v1 = 1;
+  string pgbouncer_host = 2;
+  uint32 pgbouncer_port = 3;
+  string vault_instance_id = 4;
+  uint64 vault_runtime_generation = 5;
+  bytes vault_hpke_public_key_x25519 = 6;
+}
 message ExternalRuntimeSessionRequestV1 {
   oneof operation {
     BeginExternalRuntimeSessionRequestV1 begin = 1;
@@ -51,6 +66,7 @@ message ExternalRuntimeSessionRequestV1 {
     SubmitRuntimeSettingsSchemaRequestV1 submit_settings_schema = 4;
     AcknowledgeRuntimeSettingsLifecycleRequestV1 acknowledge_settings_lifecycle = 5;
     RouteVaultCiphertextRequestV1 route_vault_ciphertext = 6;
+    GetExternalRuntimeStorageBindingRequestV1 get_storage_binding = 7;
   }
 }
 message ExternalRuntimeSessionResponseV1 {
@@ -61,6 +77,7 @@ message ExternalRuntimeSessionResponseV1 {
     SubmitRuntimeSettingsSchemaResponseV1 submit_settings_schema = 4;
     AcknowledgeRuntimeSettingsLifecycleResponseV1 acknowledge_settings_lifecycle = 5;
     RouteVaultCiphertextResponseV1 route_vault_ciphertext = 6;
+    GetExternalRuntimeStorageBindingResponseV1 get_storage_binding = 7;
   }
   string error_code = 15;
 }

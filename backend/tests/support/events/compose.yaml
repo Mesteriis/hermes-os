@@ -1,0 +1,15 @@
+name: hermes-events-conformance
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    command: ["-c", "/etc/nats/server.conf"]
+    ports:
+      - 127.0.0.1:43222:4222
+    volumes:
+      - ./nats/server.conf:/etc/nats/server.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8222/healthz >/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 20

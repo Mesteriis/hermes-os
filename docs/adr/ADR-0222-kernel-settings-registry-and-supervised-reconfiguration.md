@@ -475,6 +475,13 @@ Gateway. Gateway возвращает composed catalog grouped по product area
 - apply state;
 - sanitized validation metadata.
 
+Уже реализованный browser-local bootstrap передаёт ровно тот минимум, который
+нужен до first owner UI: approved module composition, effective capability IDs,
+grant epoch, desired/effective revisions, apply state и typed values только
+для `editable`/`read_only` definitions. `hidden` entries и non-current values
+не сериализуются; non-current module остаётся в composition с
+`sections_enabled=false`. Он не заменяет будущий `hermes.settings.v1`.
+
 Первая public client surface — generated platform service
 `hermes.settings.v1` с bounded methods:
 

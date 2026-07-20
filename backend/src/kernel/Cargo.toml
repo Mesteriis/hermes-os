@@ -18,13 +18,21 @@ clap = { version = "=4.6.2", default-features = false, features = ["derive", "er
 directories = "=6.0.0"
 getrandom = { version = "=0.4.3", default-features = false }
 hermes-gateway-protocol = { path = "../api/gateway/contracts" }
+hermes-gateway-runtime = { path = "../api/gateway/runtime" }
+hermes-gateway-session = { path = "../api/gateway/session" }
+hermes-gateway-session-contract = { path = "../api/gateway/session_contract" }
+hermes-events-jetstream = { path = "../platform/events/jetstream" }
 hermes-kernel-control-store = { path = "control_store/contract" }
 hermes-kernel-control-store-sqlite = { path = "control_store/sqlite" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
 p256 = { version = "=0.14.0", default-features = false, features = ["ecdsa"] }
 prost = "=0.14.4"
+quinn = "=0.11.7"
 rcgen = "=0.13.2"
 rustls = { version = "=0.23.37", default-features = false, features = ["ring", "std"] }
 sha2 = { version = "=0.11.0", default-features = false }
 signal-hook = "=0.3.18"
 libc = "=0.2.186"
+tokio = { version = "=1.52.4", default-features = false, features = ["net", "rt-multi-thread", "sync", "time"] }
+tokio-rustls = "=0.26.4"

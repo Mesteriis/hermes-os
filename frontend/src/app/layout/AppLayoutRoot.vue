@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { watch } from 'vue'
 import Toast from '../../shared/ui/Toast.vue'
-import CommunicationsWorkspaceView from '../../domains/communications/views/CommunicationsWorkspaceView.vue'
-import PersonasWorkspaceView from '../../domains/personas/views/PersonasWorkspaceView.vue'
-import SettingsPage from '../../domains/settings/views/SettingsPage.vue'
-import { useAppLayoutNavbarSurface } from '../queries/useAppLayoutNavbarSurface'
-import { useTelegramConversationRuntimeActions } from '../queries/useTelegramConversationRuntimeActions'
-import AppLayout from './AppLayout.vue'
-import AppNavbar from './AppNavbar.vue'
+import SystemControlPage from '../../platform/system-control/SystemControlPage.vue'
+import { useClientNavigationSurface } from '../queries/useClientNavigationSurface'
+import AppLayout from '../../shared/ui/shell/AppLayout.vue'
+import AppNavbar from '../../shared/ui/shell/AppNavbar.vue'
+import { BrowserGatewayAccessModeV1 } from '../../gen/hermes/gateway/v1/browser_session_pb'
 
-const navbar = useAppLayoutNavbarSurface()
+const props = defineProps<{ gatewayAccessMode: BrowserGatewayAccessModeV1 }>()
+
+const navbar = useClientNavigationSurface()
 const breadcrumbs = navbar.breadcrumbs
 const currentTheme = navbar.currentTheme
 const currentThemeFamily = navbar.currentThemeFamily
@@ -21,9 +21,8 @@ const notificationsCount = navbar.notificationsCount
 const notificationToasts = navbar.notificationToasts
 const selectedRouteId = navbar.selectedRouteId
 const selectedTopLevelRouteId = navbar.selectedTopLevelRouteId
-const telegramRuntimeActions = useTelegramConversationRuntimeActions()
-
-consumeReturnNavigationFromLocation()
+const bootstrap = navbar.bootstrap
+const routeDowngradeReason = navbar.routeDowngradeReason
 
 watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mode]) => {
 	document.documentElement.setAttribute('data-ui-theme', theme)
@@ -31,22 +30,6 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 	document.documentElement.setAttribute('data-ui-theme-mode', mode)
 }, { immediate: true })
 
-function consumeReturnNavigationFromLocation(): void {
-	if (typeof window === 'undefined') return
-
-	navbar.selectReturnRouteFromSearch(window.location.search)
-
-	const params = new URLSearchParams(window.location.search)
-	const hadReturnRoute = params.has('hermes_route')
-	const hadOauthStatus = params.has('hermes_oauth')
-	params.delete('hermes_route')
-	params.delete('hermes_oauth')
-	if (!hadReturnRoute && !hadOauthStatus) return
-
-	const nextSearch = params.toString()
-	const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`
-	window.history.replaceState(window.history.state, '', nextUrl)
-}
 </script>
 
 <template>
@@ -68,7 +51,7 @@ function consumeReturnNavigationFromLocation(): void {
 						:breadcrumbs="breadcrumbs"
 						:health-checks="healthChecks"
 						:health-status-label-visible-ms="navbar.healthStatusLabelVisibleMs"
-						:current-language="navbar.currentLanguage"
+						:current-language="navbar.currentLanguage.value"
 						:current-theme-family="currentThemeFamily"
 						:current-theme-mode="currentThemeMode"
 						:language-options="navbar.languageOptions"
@@ -78,6 +61,7 @@ function consumeReturnNavigationFromLocation(): void {
 						:theme-family-options="navbar.themeFamilyOptions"
 						:theme-mode-options="navbar.themeModeOptions"
 						@navigation-select="navbar.selectNavigationItem"
+						@language-change="navbar.selectLanguage"
 						@notification-dismiss="navbar.dismissNotification"
 						@notification-select="navbar.selectNotification"
 						@notifications-clear="navbar.clearNotifications"
@@ -86,13 +70,15 @@ function consumeReturnNavigationFromLocation(): void {
 					/>
 				</template>
 
-				<CommunicationsWorkspaceView
-					v-if="selectedTopLevelRouteId === 'communications'"
-					:selected-route-id="selectedRouteId"
-					:telegram-runtime-action-runner="telegramRuntimeActions.run"
+				<SystemControlPage
+					v-if="selectedTopLevelRouteId === 'settings'"
+					:bootstrap="bootstrap"
+					:route-downgrade-reason="routeDowngradeReason"
+					:developer-mode="props.gatewayAccessMode === BrowserGatewayAccessModeV1.LAN_DEVELOPMENT"
+					:current-language="navbar.currentLanguage.value"
+					:language-options="navbar.languageOptions"
+					@language-change="navbar.selectLanguage"
 				/>
-				<PersonasWorkspaceView v-else-if="selectedTopLevelRouteId === 'personas'" />
-				<SettingsPage v-else-if="selectedTopLevelRouteId === 'settings'" />
 			</AppLayout>
 		</Toast>
 	</section>

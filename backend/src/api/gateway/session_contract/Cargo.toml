@@ -1,0 +1,12 @@
+[package]
+name = "hermes-gateway-session-contract"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "api"
+owner = "gateway"
+surface = "contract"

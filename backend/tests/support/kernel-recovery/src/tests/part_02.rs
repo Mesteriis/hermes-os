@@ -233,6 +233,7 @@ fn prepare_staged_restore_fixture(root: &Path) -> (PathBuf, PathBuf) {
     store
         .record_managed_launch(&ManagedLaunchRecord::new(
             "registration-restore",
+            "runtime-restore",
             1,
             1,
             1,

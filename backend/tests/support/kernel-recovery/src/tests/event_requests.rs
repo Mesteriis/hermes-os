@@ -1,0 +1,234 @@
+use hermes_kernel_control_store::{
+    ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1, ModuleEventRouteRequestV1,
+    ModuleRegistration, ModuleRegistrationState,
+};
+use hermes_kernel_control_store_sqlite::SqliteControlStore;
+
+use crate::platform::events::catalog;
+
+use super::common::unique_target_root;
+
+#[test]
+fn control_store_retains_exact_descriptor_event_routes_with_registration() {
+    let root = unique_target_root("hermes-event-route-request");
+    std::fs::create_dir_all(&root).expect("create fixture directory");
+    let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
+        .expect("create Control Store");
+    let request = event_route("events.publish");
+
+    store
+        .create_pending_registration_with_requests(
+            &registration(),
+            &["events.publish".to_owned()],
+            &[],
+            std::slice::from_ref(&request),
+            &[],
+        )
+        .expect("persist registration and Event route together");
+
+    assert_eq!(
+        store
+            .module_event_route_requests("registration_notes", "events.publish")
+            .expect("read Event route"),
+        vec![request.clone()]
+    );
+    assert!(
+        store
+            .module_event_route_requests("registration_notes", "unrequested")
+            .expect("read absent Event route")
+            .is_empty()
+    );
+    assert!(
+        catalog::resolve(&store)
+            .expect("resolve catalog without approvals")
+            .is_empty()
+    );
+    store
+        .approve_module_registration("registration_notes", &["events.publish".to_owned()])
+        .expect("approve Event capability");
+    let catalog_entries = catalog::resolve(&store).expect("resolve approved Event catalog");
+    assert_eq!(catalog_entries.len(), 1);
+    assert_eq!(catalog_entries[0].registration_id(), "registration_notes");
+    assert_eq!(catalog_entries[0].module_id(), "module_notes");
+    assert_eq!(catalog_entries[0].grant_epoch(), 2);
+    assert_eq!(catalog_entries[0].capability_id(), "events.publish");
+    assert_eq!(catalog_entries[0].route(), &request);
+    let contracts = catalog::resolve_contracts(&store).expect("resolve Event contracts");
+    assert_eq!(contracts.len(), 1);
+    assert_eq!(contracts[0].owner(), "owner_notes");
+    assert_eq!(contracts[0].name(), "changed");
+    assert_eq!(contracts[0].major(), 1);
+    assert_eq!(contracts[0].revision(), 1);
+    assert_eq!(contracts[0].publishers().len(), 1);
+    assert!(contracts[0].consumers().is_empty());
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+#[test]
+fn control_store_rejects_event_routes_without_a_unique_requested_capability() {
+    let root = unique_target_root("hermes-event-route-request-invalid");
+    std::fs::create_dir_all(&root).expect("create fixture directory");
+    let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
+        .expect("create Control Store");
+    let route = event_route("events.publish");
+
+    assert!(
+        store
+            .create_pending_registration_with_requests(
+                &registration(),
+                &["events.publish".to_owned()],
+                &[],
+                &[route.clone(), route],
+                &[],
+            )
+            .is_err()
+    );
+    assert!(
+        store
+            .create_pending_registration_with_requests(
+                &registration(),
+                &["events.publish".to_owned()],
+                &[],
+                &[event_route_with_limit("events.publish", 4_097)],
+                &[],
+            )
+            .is_err()
+    );
+    assert!(
+        store
+            .module_registration("registration_notes")
+            .expect("registration remains absent")
+            .is_none()
+    );
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+#[test]
+fn control_store_rejects_consumer_without_explicit_delivery_policy() {
+    let root = unique_target_root("hermes-event-route-consumer-policy");
+    std::fs::create_dir_all(&root).expect("create fixture directory");
+    let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
+        .expect("create Control Store");
+    let consumer = ModuleEventRouteRequestV1::new(
+        "registration_notes",
+        "events.consume",
+        ModuleEventEnvelopeKindV1::Event,
+        "owner_notes",
+        "changed",
+        1,
+        1,
+        [7; 32],
+        ModuleEventRouteDirectionV1::Consume,
+        32,
+        None,
+    );
+
+    assert!(
+        store
+            .create_pending_registration_with_requests(
+                &registration(),
+                &["events.consume".to_owned()],
+                &[],
+                &[consumer],
+                &[],
+            )
+            .is_err()
+    );
+    assert!(
+        store
+            .module_registration("registration_notes")
+            .expect("registration remains absent")
+            .is_none()
+    );
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+#[test]
+fn event_catalog_rejects_incompatible_contract_revisions_before_broker_reconciliation() {
+    let root = unique_target_root("hermes-event-route-conflict");
+    std::fs::create_dir_all(&root).expect("create fixture directory");
+    let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
+        .expect("create Control Store");
+    let first = registration();
+    let second = ModuleRegistration::new(
+        "registration_search",
+        "module_search",
+        "owner_search",
+        [2; 32],
+        ModuleRegistrationState::Pending,
+        1,
+    );
+    store
+        .create_pending_registration_with_requests(
+            &first,
+            &["events.publish".to_owned()],
+            &[],
+            &[event_route("events.publish")],
+            &[],
+        )
+        .expect("persist first Event route");
+    store
+        .create_pending_registration_with_requests(
+            &second,
+            &["events.publish".to_owned()],
+            &[],
+            &[ModuleEventRouteRequestV1::new(
+                "registration_search",
+                "events.publish",
+                ModuleEventEnvelopeKindV1::Event,
+                "owner_notes",
+                "changed",
+                1,
+                2,
+                [8; 32],
+                ModuleEventRouteDirectionV1::Publish,
+                32,
+                None,
+            )],
+            &[],
+        )
+        .expect("persist second Event route");
+    store
+        .approve_module_registration("registration_notes", &["events.publish".to_owned()])
+        .expect("approve first Event route");
+    store
+        .approve_module_registration("registration_search", &["events.publish".to_owned()])
+        .expect("approve second Event route");
+
+    assert_eq!(
+        catalog::resolve_contracts(&store),
+        Err("Event catalog is incompatible: IncompatibleRevisionOrSchema".to_owned())
+    );
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+fn registration() -> ModuleRegistration {
+    ModuleRegistration::new(
+        "registration_notes",
+        "module_notes",
+        "owner_notes",
+        [1; 32],
+        ModuleRegistrationState::Pending,
+        1,
+    )
+}
+
+fn event_route(capability_id: &str) -> ModuleEventRouteRequestV1 {
+    event_route_with_limit(capability_id, 32)
+}
+
+fn event_route_with_limit(capability_id: &str, max_in_flight: u16) -> ModuleEventRouteRequestV1 {
+    ModuleEventRouteRequestV1::new(
+        "registration_notes",
+        capability_id,
+        ModuleEventEnvelopeKindV1::Event,
+        "owner_notes",
+        "changed",
+        1,
+        1,
+        [7; 32],
+        ModuleEventRouteDirectionV1::Publish,
+        max_in_flight,
+        None,
+    )
+}

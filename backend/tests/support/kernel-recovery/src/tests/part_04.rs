@@ -106,6 +106,7 @@ fn inherited_managed_runtime_control_accepts_only_the_bound_descriptor() {
     let descriptor_bytes = descriptor.encode_to_vec();
     let expectation = ManagedRuntimeExpectation::new(
         "registration-1",
+        "runtime-1",
         "mail",
         3,
         7,
@@ -156,6 +157,7 @@ fn inherited_managed_runtime_control_rejects_a_replaced_descriptor() {
     };
     let expectation = ManagedRuntimeExpectation::new(
         "registration-1",
+        "runtime-1",
         "mail",
         1,
         2,
@@ -209,6 +211,7 @@ fn inherited_managed_runtime_control_relays_only_bounded_opaque_frames_after_des
     let descriptor_bytes = descriptor.encode_to_vec();
     let expectation = ManagedRuntimeExpectation::new(
         "registration-1",
+        "runtime-1",
         "mail",
         3,
         7,
@@ -259,7 +262,15 @@ fn managed_runtime_expectation_rejects_a_stale_persisted_launch_fence() {
         [7; 32],
         None,
     );
-    let stale_record = ManagedLaunchRecord::new("registration-1", 1, 1, 1, 3);
+    let current_record = ManagedLaunchRecord::new("registration-1", "runtime-1", 1, 1, 1, 2);
+    let stale_record = ManagedLaunchRecord::new("registration-1", "runtime-1", 1, 1, 1, 3);
+
+    assert_eq!(
+        ManagedRuntimeExpectation::from_fenced_launch(&registration, &binding, &current_record)
+            .expect("current launch fence")
+            .runtime_instance_id(),
+        "runtime-1"
+    );
 
     assert_eq!(
         ManagedRuntimeExpectation::from_fenced_launch(&registration, &binding, &stale_record)
@@ -415,24 +426,11 @@ fn managed_child_supervisor_requires_describe_on_the_inherited_fd() {
         request_bytes.len() < 128,
         "test request uses one-byte frame length"
     );
-    std::fs::create_dir_all(&root).expect("create fixture root");
-    let source = root.join("managed-child.sh");
     let payload = [vec![request_bytes.len() as u8], request_bytes].concat();
-    std::fs::write(
-        &source,
-        format!(
-            "#!/bin/sh\nprintf '{}' >&0\nIFS= read -r ignored || true\n",
-            shell_binary_literal(&payload)
-        ),
-    )
-    .expect("write child script");
-    let digest: [u8; 32] =
-        Sha256::digest(std::fs::read(&source).expect("read child script")).into();
-    let staged =
-        staged_native_artifact::stage(&source, &root.join("launch"), "managed-child", &digest)
-            .expect("stage child script");
+    let staged = stage_describing_child(&root, &payload);
     let expectation = ManagedRuntimeExpectation::new(
         "registration-1",
+        "runtime-1",
         "mail",
         1,
         2,
@@ -446,6 +444,26 @@ fn managed_child_supervisor_requires_describe_on_the_inherited_fd() {
         .expect("managed child describe");
     assert_managed_child_completed(result);
     std::fs::remove_dir_all(root).expect("remove supervisor fixture");
+}
+
+fn stage_describing_child(
+    root: &std::path::Path,
+    payload: &[u8],
+) -> staged_native_artifact::StagedNativeArtifact {
+    std::fs::create_dir_all(root).expect("create fixture root");
+    let source = root.join("managed-child.sh");
+    std::fs::write(
+        &source,
+        format!(
+            "#!/bin/sh\nprintf '{}' >&0\nIFS= read -r ignored || true\n",
+            shell_binary_literal(payload)
+        ),
+    )
+    .expect("write child script");
+    let digest: [u8; 32] =
+        Sha256::digest(std::fs::read(&source).expect("read child script")).into();
+    staged_native_artifact::stage(&source, &root.join("launch"), "managed-child", &digest)
+        .expect("stage child script")
 }
 
 fn assert_managed_child_completed(

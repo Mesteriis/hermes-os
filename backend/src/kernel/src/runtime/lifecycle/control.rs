@@ -13,16 +13,38 @@ use hermes_kernel_control_store::{
 };
 use hermes_runtime_protocol::v1::{
     DescribeManagedRuntimeResponseV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1,
+    ManagedRuntimeControlResponseV1, ManagedRuntimeEventCredentialDeliveryV1,
+    ManagedRuntimeEventCredentialRequestV1, ManagedRuntimeVaultRouteRequestV1,
+    VaultCiphertextResponseV1, VaultCiphertextRouteV1,
 };
 use hermes_runtime_protocol::validation::descriptor::{
     decode_descriptor_v1, decode_settings_schema_v1,
 };
+use hermes_runtime_protocol::validation::vault::validate_vault_ciphertext_route_v1;
 use prost::Message;
 use sha2::{Digest, Sha256};
 
 const MAX_FRAME_BYTES: usize = 512 * 1024;
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[path = "control/inbound.rs"]
+pub(crate) mod inbound;
+
+pub trait ManagedRuntimeVaultRouteHandler: Send + Sync {
+    fn route_vault_ciphertext(
+        &self,
+        expectation: &ManagedRuntimeExpectation,
+        route: VaultCiphertextRouteV1,
+    ) -> Result<VaultCiphertextResponseV1, String>;
+}
+
+pub trait ManagedRuntimeEventCredentialHandler: Send + Sync {
+    fn issue_event_credential(
+        &self,
+        expectation: &ManagedRuntimeExpectation,
+        request: ManagedRuntimeEventCredentialRequestV1,
+    ) -> Result<ManagedRuntimeEventCredentialDeliveryV1, String>;
+}
 
 pub struct ManagedRuntimeRelayRequest {
     payload: Vec<u8>,
@@ -34,14 +56,25 @@ impl ManagedRuntimeRelayRequest {
         Self { payload, response }
     }
 
-    pub fn dispatch(self, channel: &mut UnixStream) {
-        let _ = self.response.send(relay(channel, &self.payload));
+    pub fn dispatch(
+        self,
+        channel: &mut UnixStream,
+        expectation: &ManagedRuntimeExpectation,
+        vault_route_handler: Option<&dyn ManagedRuntimeVaultRouteHandler>,
+    ) {
+        let _ = self.response.send(relay_with_vault_routes(
+            channel,
+            &self.payload,
+            expectation,
+            vault_route_handler,
+        ));
     }
 }
 
 #[derive(Debug)]
 pub struct ManagedRuntimeExpectation {
     registration_id: String,
+    runtime_instance_id: String,
     module_id: String,
     runtime_generation: u64,
     grant_epoch: u64,
@@ -53,6 +86,7 @@ impl ManagedRuntimeExpectation {
     #[must_use]
     pub fn new(
         registration_id: impl Into<String>,
+        runtime_instance_id: impl Into<String>,
         module_id: impl Into<String>,
         runtime_generation: u64,
         grant_epoch: u64,
@@ -61,6 +95,7 @@ impl ManagedRuntimeExpectation {
     ) -> Self {
         Self {
             registration_id: registration_id.into(),
+            runtime_instance_id: runtime_instance_id.into(),
             module_id: module_id.into(),
             runtime_generation,
             grant_epoch,
@@ -85,6 +120,7 @@ impl ManagedRuntimeExpectation {
         }
         Ok(Self::new(
             registration.registration_id(),
+            record.runtime_instance_id(),
             registration.module_id(),
             record.runtime_generation(),
             record.grant_epoch(),
@@ -108,12 +144,43 @@ impl ManagedRuntimeExpectation {
         }
         Ok(Self::new(
             process_id,
+            process_id,
             module_id,
             launch.runtime_generation(),
             launch.grant_epoch(),
             *binding.descriptor_sha256(),
             binding.settings_schema_sha256().copied(),
         ))
+    }
+
+    #[must_use]
+    pub fn registration_id(&self) -> &str {
+        &self.registration_id
+    }
+
+    #[must_use]
+    pub fn runtime_instance_id(&self) -> &str {
+        &self.runtime_instance_id
+    }
+
+    #[must_use]
+    pub const fn runtime_generation(&self) -> u64 {
+        self.runtime_generation
+    }
+
+    #[must_use]
+    pub const fn grant_epoch(&self) -> u64 {
+        self.grant_epoch
+    }
+
+    #[must_use]
+    pub fn matches_ready(
+        &self,
+        ready: &hermes_runtime_protocol::v1::ManagedRuntimeReadyRequestV1,
+    ) -> bool {
+        ready.registration_id == self.registration_id
+            && ready.runtime_generation == self.runtime_generation
+            && ready.grant_epoch == self.grant_epoch
     }
 }
 
@@ -156,6 +223,12 @@ pub fn establish_channel(
         },
     };
     write_frame(&mut stream, &response.encode_to_vec())?;
+    if result.is_ok() {
+        stream
+            .set_read_timeout(None)
+            .and_then(|_| stream.set_write_timeout(None))
+            .map_err(|error| error.to_string())?;
+    }
     result.map(|()| stream)
 }
 
@@ -169,6 +242,36 @@ pub fn relay(channel: &mut UnixStream, payload: &[u8]) -> Result<Vec<u8>, String
         return Err("managed runtime relay response is invalid".to_owned());
     }
     Ok(response)
+}
+
+pub(crate) fn relay_with_vault_routes(
+    channel: &mut UnixStream,
+    payload: &[u8],
+    expectation: &ManagedRuntimeExpectation,
+    vault_route_handler: Option<&dyn ManagedRuntimeVaultRouteHandler>,
+) -> Result<Vec<u8>, String> {
+    if payload.is_empty() || payload.len() > MAX_FRAME_BYTES {
+        return Err("managed runtime relay payload is invalid".to_owned());
+    }
+    write_frame(channel, payload)?;
+    loop {
+        let frame = read_frame(channel)?;
+        let Some(route) = vault_route(&frame) else {
+            return Ok(frame);
+        };
+        let result = vault_route_handler
+            .ok_or_else(|| "managed runtime Vault route is not available".to_owned())?
+            .route_vault_ciphertext(expectation, route);
+        inbound::respond_vault_route(channel, result)?;
+    }
+}
+
+fn vault_route(frame: &[u8]) -> Option<VaultCiphertextRouteV1> {
+    let route = ManagedRuntimeVaultRouteRequestV1::decode(frame)
+        .ok()?
+        .route?;
+    validate_vault_ciphertext_route_v1(&route).ok()?;
+    Some(route)
 }
 
 fn validate_describe(

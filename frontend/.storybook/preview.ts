@@ -1,8 +1,10 @@
 import type { Preview } from '@storybook/vue3-vite'
 import { withThemeByDataAttribute } from '@storybook/addon-themes'
+import { QueryClient, VUE_QUERY_CLIENT } from '@tanstack/vue-query'
+import { provide } from 'vue'
 import { initialize, mswLoader } from 'msw-storybook-addon'
 import { storybookLocaleToolbarItems } from '../stories/ui/storybook-i18n'
-import { isUiThemeName, themeNameToSelection } from '../src/shared/ui/theme'
+import { isUiThemeName, themeNameToSelection } from '../src/shared/ui/foundation/theme'
 import '../src/style.css'
 import '../src/styles/surfaces.css'
 import '../src/styles/theme-classes.css'
@@ -57,6 +59,7 @@ const preview: Preview = {
 		(story, context) => ({
 			components: { story },
 			setup() {
+				provide(VUE_QUERY_CLIENT, new QueryClient())
 				const theme = isUiThemeName(context.globals.theme) ? context.globals.theme : 'base-light'
 				const themeSelection = themeNameToSelection(theme)
 				return {

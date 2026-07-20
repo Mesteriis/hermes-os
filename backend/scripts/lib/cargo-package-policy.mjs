@@ -66,6 +66,7 @@ function storagePackageSpecifications(policy) {
   return [
     { name: policy.storage.protocolPackage, surface: 'contract', components: [] },
     { name: policy.storage.controlPackage, surface: 'implementation', components: [] },
+    { name: policy.storage.vaultPackage, surface: 'implementation', components: [] },
     {
       name: policy.storage.runtimePackage,
       surface: 'runtime',

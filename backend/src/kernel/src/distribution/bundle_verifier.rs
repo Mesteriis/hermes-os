@@ -20,6 +20,7 @@ use crate::distribution::trust_root::ReleaseTrustRoot;
 pub struct VerifiedDistributionArtifact {
     artifact_id: String,
     canonical_path: PathBuf,
+    size_bytes: u64,
     expected_sha256: [u8; 32],
     module_contract: Option<VerifiedModuleContract>,
 }
@@ -47,6 +48,18 @@ impl VerifiedDistributionArtifact {
     #[must_use]
     pub fn expected_sha256(&self) -> &[u8; 32] {
         &self.expected_sha256
+    }
+
+    /// Re-reads exact bytes with the same non-symlink, inode/metadata and
+    /// digest checks used during bundle verification. Consumers retain the
+    /// returned bytes in memory instead of serving a mutable bundle path.
+    pub fn read_verified_bytes(&self) -> Result<Vec<u8>, String> {
+        read_verified_file(
+            &self.canonical_path,
+            self.size_bytes,
+            &self.expected_sha256,
+            "distribution artifact",
+        )
     }
 
     #[must_use]
@@ -170,6 +183,7 @@ fn verify_artifact(
     Ok(VerifiedDistributionArtifact {
         artifact_id: artifact.artifact_id.clone(),
         canonical_path: path,
+        size_bytes: artifact.size_bytes,
         expected_sha256: artifact.sha256.as_slice().try_into().map_err(|_| {
             "distribution artifact digest does not match manifest schema".to_owned()
         })?,

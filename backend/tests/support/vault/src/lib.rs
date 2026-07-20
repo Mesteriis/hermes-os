@@ -1,7 +1,13 @@
 #[cfg(test)]
+#[path = "../../../../src/platform/vault/runtime/src/bootstrap/mod.rs"]
+mod bootstrap;
+
+#[cfg(test)]
 mod control {
     #[path = "../../../../../src/platform/vault/runtime/src/control/inherited.rs"]
     pub(crate) mod inherited;
+    #[path = "../../../../../src/platform/vault/runtime/src/control/runtime.rs"]
+    pub(crate) mod runtime;
     #[path = "../../../../../src/platform/vault/runtime/src/control/socket.rs"]
     pub(crate) mod socket;
 }
@@ -218,6 +224,7 @@ mod foundation {
         let audience = LeaseAudienceV1::new(
             "registration-mail".to_owned(),
             "runtime-mail-1".to_owned(),
+            1,
             7,
         )
         .expect("typed audience");
@@ -272,6 +279,7 @@ mod foundation {
         let changed_epoch = LeaseAudienceV1::new(
             "registration-mail".to_owned(),
             "runtime-mail-1".to_owned(),
+            1,
             8,
         )
         .expect("changed epoch audience");
@@ -323,7 +331,11 @@ mod foundation {
         let bytes = request_status_with_retry(&socket_path, &request);
         let response = VaultRuntimeControlResponseV1::decode(bytes.as_slice())
             .expect("typed Vault status response");
-        assert!(response.error_code.is_empty());
+        assert!(
+            response.error_code.is_empty(),
+            "private Vault status request failed: {:?}",
+            response
+        );
         match response.result {
             Some(ResponseResult::Status(status)) => {
                 assert_eq!(status.state, VaultRuntimeStateV1::Ready as i32);

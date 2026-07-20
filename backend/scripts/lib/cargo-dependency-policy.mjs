@@ -16,7 +16,18 @@ function isAllowedSameOwnerDependency(source, target) {
   }
 }
 
+function isKernelCoreGatewayAdapter(policy, source, target, targetPackageName) {
+  return source.role === 'core'
+    && source.owner === policy.owners.core
+    && source.surface === 'runtime'
+    && target.role === 'api'
+    && target.owner === 'gateway'
+    && target.surface === 'implementation'
+    && ['hermes-gateway-runtime', 'hermes-gateway-session'].includes(targetPackageName);
+}
+
 function isAllowedDependency(policy, source, target, targetPackageName) {
+  if (isKernelCoreGatewayAdapter(policy, source, target, targetPackageName)) return true;
   if (source.role === target.role && source.owner === target.owner) {
     return isAllowedSameOwnerDependency(source, target);
   }
@@ -84,10 +95,14 @@ export function validateDependencyEdges(policy, packages, descriptors) {
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
           `${dependency.name} is reserved for the exact private SQLite/SQLCipher packages`,
         ));
-      } else if (isPostgresClient && (!policy.storage.allowedPostgresClientDependencies
-        .includes(dependency.name)
-        || source.surface !== 'persistence'
-        || (sourceIsStorageOwner && pkg.name !== policy.storage.postgresPackage))) {
+      } else if (isPostgresClient && !isAllowedStoragePostgresClient(
+        policy,
+        source,
+        pkg.name,
+        kind,
+        dependency.name,
+        sourceIsStorageOwner,
+      )) {
         violations.push(violation(
           'storage_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
@@ -206,6 +221,14 @@ export function validateDependencyEdges(policy, packages, descriptors) {
         && target.owner === policy.vault.owner;
       const targetIsStorageOwner = target.role === policy.storage.role
         && target.owner === policy.storage.owner;
+      const isSharedStorageVaultRouteConsumer = dependency.name === policy.storage.vaultPackage
+        && list(policy.storage.sharedVaultRouteConsumers).includes(pkg.name);
+      const isCoreGatewayAdapter = isKernelCoreGatewayAdapter(
+        policy,
+        source,
+        target,
+        dependency.name,
+      );
 
       if (!sourceIsVaultOwner
         && source.role !== 'test'
@@ -232,7 +255,8 @@ export function validateDependencyEdges(policy, packages, descriptors) {
       if (!sourceIsStorageOwner
         && source.role !== 'test'
         && targetIsStorageOwner
-        && dependency.name !== policy.storage.protocolPackage) {
+        && dependency.name !== policy.storage.protocolPackage
+        && !isSharedStorageVaultRouteConsumer) {
         violations.push(violation(
           'storage_private_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
@@ -317,7 +341,10 @@ export function validateDependencyEdges(policy, packages, descriptors) {
         continue;
       }
 
-      if (source.owner !== target.owner && target.surface !== 'contract') {
+      if (source.owner !== target.owner
+        && target.surface !== 'contract'
+        && !isSharedStorageVaultRouteConsumer
+        && !isCoreGatewayAdapter) {
         violations.push(violation(
           'implementation_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
@@ -326,7 +353,9 @@ export function validateDependencyEdges(policy, packages, descriptors) {
         continue;
       }
 
-      if (!isAllowedDependency(policy, source, target, dependency.name)) {
+      if (!isSharedStorageVaultRouteConsumer
+        && !isCoreGatewayAdapter
+        && !isAllowedDependency(policy, source, target, dependency.name)) {
         violations.push(violation(
           'forbidden_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
@@ -337,4 +366,27 @@ export function validateDependencyEdges(policy, packages, descriptors) {
   }
 
   return violations;
+}
+
+function isAllowedStoragePostgresClient(
+  policy,
+  source,
+  packageName,
+  dependencyKind,
+  dependencyName,
+  sourceIsStorageOwner,
+) {
+  if (!policy.storage.allowedPostgresClientDependencies.includes(dependencyName)) return false;
+  const testOnlyKey = `${packageName}:${dependencyKind}:${dependencyName}`;
+  if (policy.storage.testSupportPostgresClientAllowlist.includes(testOnlyKey)) {
+    return source.role === 'test' && source.surface === 'test_support' && dependencyKind === 'dev';
+  }
+  if (dependencyName === 'sqlx') {
+    return source.surface === 'persistence'
+      && (!sourceIsStorageOwner || packageName === policy.storage.postgresPackage);
+  }
+  return dependencyName === 'tokio-postgres'
+    && sourceIsStorageOwner
+    && source.surface === 'implementation'
+    && packageName === policy.storage.pgbouncerPackage;
 }

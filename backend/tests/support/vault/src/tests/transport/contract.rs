@@ -13,6 +13,7 @@ fn public_hpke_sender_binds_ciphertext_to_generation_audience_epoch_and_request(
     let audience = LeaseAudienceV1::new(
         "registration-mail".to_owned(),
         "runtime-mail-1".to_owned(),
+        1,
         7,
     )
     .expect("typed audience");
@@ -55,9 +56,63 @@ fn store_command_round_trip_rejects_an_empty_credential_payload() {
         hermes_vault_protocol::VaultTransportCommandV1::decode(&command.encode()),
         Ok(command)
     );
+    assert_eq!(
+        hermes_vault_protocol::VaultTransportCommandV1::decode(
+            &VaultTransportCommandV1::RevokeAudience.encode(),
+        ),
+        Ok(VaultTransportCommandV1::RevokeAudience)
+    );
     let mut empty = resolve_command().encode();
     empty[1] = 2;
     assert!(hermes_vault_protocol::VaultTransportCommandV1::decode(&empty).is_err());
+}
+
+#[test]
+fn generated_token_command_carries_no_secret_payload() {
+    let command = VaultTransportCommandV1::GenerateOpaqueToken {
+        lease_id: hermes_vault_protocol::LeaseIdV1::new("c".repeat(32))
+            .expect("typed lease identifier"),
+        secret_class: SecretClassV1::PlatformCredential,
+    };
+    assert_eq!(
+        VaultTransportCommandV1::decode(&command.encode()),
+        Ok(command)
+    );
+    assert!(VaultTransportCommandV1::decode(&[1, 6, 4]).is_err());
+}
+
+#[test]
+fn issue_lease_command_round_trip_preserves_all_fences() {
+    let audience = LeaseAudienceV1::new(
+        "registration-storage".to_owned(),
+        "runtime-storage-1".to_owned(),
+        4,
+        9,
+    )
+    .expect("typed audience");
+    let request = hermes_vault_protocol::VaultLeaseIssueRequestV1::new(
+        "vault-instance".to_owned(),
+        3,
+        2,
+        "storage".to_owned(),
+        hermes_vault_protocol::VaultPurposeRequestV1::new(
+            "storage.runtime.credential".to_owned(),
+            "storage-notes".to_owned(),
+            vec![SecretClassV1::PlatformCredential],
+            vec![hermes_vault_protocol::VaultActionV1::Resolve],
+            60,
+        )
+        .expect("typed purpose"),
+        audience,
+    )
+    .expect("typed lease request");
+    let command = VaultTransportCommandV1::IssueLease { request };
+
+    assert_eq!(
+        VaultTransportCommandV1::decode(&command.encode()),
+        Ok(command)
+    );
+    assert!(VaultTransportCommandV1::decode(&[1, 5]).is_err());
 }
 
 fn assert_rejects_context_substitution(
@@ -70,6 +125,7 @@ fn assert_rejects_context_substitution(
         LeaseAudienceV1::new(
             "registration-mail".to_owned(),
             "runtime-mail-1".to_owned(),
+            1,
             8,
         )
         .expect("stale epoch audience"),
@@ -81,6 +137,25 @@ fn assert_rejects_context_substitution(
     .expect("stale transport binding");
     assert_eq!(
         keys.open(&stale_epoch, &frame),
+        Err(VaultTransportError::AuthenticationFailed)
+    );
+    let stale_runtime = VaultTransportBindingV1::new(
+        3,
+        LeaseAudienceV1::new(
+            "registration-mail".to_owned(),
+            "runtime-mail-1".to_owned(),
+            2,
+            7,
+        )
+        .expect("stale runtime audience"),
+        [1; 16],
+        [2; 32],
+        VaultTransportDirectionV1::ToVault,
+        [6; 32],
+    )
+    .expect("stale runtime binding");
+    assert_eq!(
+        keys.open(&stale_runtime, &frame),
         Err(VaultTransportError::AuthenticationFailed)
     );
     let reverse_direction = VaultTransportBindingV1::new(
@@ -150,6 +225,7 @@ fn vault_private_transport_session_requires_the_decrypted_command_digest() {
     let audience = LeaseAudienceV1::new(
         "registration-mail".to_owned(),
         "runtime-mail-1".to_owned(),
+        1,
         7,
     )
     .expect("typed audience");
@@ -179,6 +255,7 @@ fn vault_result_is_reencrypted_for_the_aad_bound_response_recipient() {
     let audience = LeaseAudienceV1::new(
         "registration-mail".to_owned(),
         "runtime-mail-1".to_owned(),
+        1,
         7,
     )
     .expect("typed audience");
@@ -227,6 +304,7 @@ fn sealed_session(
     let audience = LeaseAudienceV1::new(
         "registration-mail".to_owned(),
         "runtime-mail-1".to_owned(),
+        1,
         7,
     )
     .expect("typed audience");

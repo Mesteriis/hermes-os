@@ -6,7 +6,8 @@ use std::time::Duration;
 
 use hermes_runtime_protocol::v1::{
     DescribeManagedRuntimeRequestV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, managed_runtime_control_request_v1::Operation,
+    ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
+    managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
 use prost::Message;
@@ -41,6 +42,18 @@ pub fn describe(
                 && !value.registration_id.is_empty()
                 && value.runtime_generation != 0 =>
         {
+            let ready = ManagedRuntimeControlRequestV1 {
+                operation: Some(Operation::Ready(ManagedRuntimeReadyRequestV1 {
+                    registration_id: value.registration_id,
+                    runtime_generation: value.runtime_generation,
+                    grant_epoch: value.grant_epoch,
+                })),
+            };
+            write_frame(&mut stream, &ready.encode_to_vec())?;
+            stream
+                .set_read_timeout(None)
+                .and_then(|_| stream.set_write_timeout(None))
+                .map_err(|_| "Telemetry inherited control is unavailable".to_owned())?;
             Ok(stream)
         }
         _ => Err("Telemetry managed-runtime descriptor was rejected".to_owned()),

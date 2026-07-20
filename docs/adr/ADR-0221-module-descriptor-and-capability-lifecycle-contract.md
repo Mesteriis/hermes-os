@@ -229,7 +229,11 @@ Client-routable contract не позволяет module открыть listener 
 - `StorageNamespaceRequestV1` ADR-0224: owner, совпадающий с descriptor owner,
   required/optional, closed access profile, bounded connection budget и
   timeouts;
-- publish/consume конкретного durable contract;
+- `EventRouteRequestV1` ADR-0209/0220: exact envelope kind, complete durable
+  contract reference, publish/consume direction и bounded `max_in_flight`.
+  Он сохраняется atomically вместе с pending registration, но не содержит NATS
+  endpoint, stream, wildcard, consumer name или credential и сам по себе не
+  выдаёт broker permission;
 - `VaultPurposeRequestV1` ADR-0223: stable purpose ID, разрешённые secret
   classes/actions, bounded target scope и requested lease TTL без secret value,
   secret reference или private account label;

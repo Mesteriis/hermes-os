@@ -1,0 +1,180 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const backendRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const inputBuilder = join(backendRoot, 'scripts/build-local-platform-release-input.mjs');
+const platformBinaries = [
+  'hermes-blob-service',
+  'hermes-events-authority-runtime',
+  'hermes-scheduler-runtime',
+  'hermes-storage-runtime',
+  'hermes-telemetry-collector',
+  'hermes-vault-runtime',
+];
+
+function temporaryDirectory(prefix) {
+  return mkdtempSync(join(realpathSync(tmpdir()), prefix));
+}
+
+function decodeVarint(bytes, offset) {
+  let value = 0n;
+  let shift = 0n;
+  let cursor = offset;
+  while (cursor < bytes.length) {
+    const byte = bytes[cursor];
+    cursor += 1;
+    value |= BigInt(byte & 0x7f) << shift;
+    if ((byte & 0x80) === 0) return [value, cursor];
+    shift += 7n;
+  }
+  throw new Error('truncated protobuf varint');
+}
+
+function decodeFields(bytes) {
+  const fields = new Map();
+  let offset = 0;
+  while (offset < bytes.length) {
+    const [tag, afterTag] = decodeVarint(bytes, offset);
+    const field = Number(tag >> 3n);
+    const wireType = Number(tag & 0x07n);
+    offset = afterTag;
+    if (wireType === 0) {
+      const [value, afterValue] = decodeVarint(bytes, offset);
+      fields.set(field, [...(fields.get(field) ?? []), value]);
+      offset = afterValue;
+      continue;
+    }
+    assert.equal(wireType, 2);
+    const [length, afterLength] = decodeVarint(bytes, offset);
+    const end = afterLength + Number(length);
+    fields.set(field, [...(fields.get(field) ?? []), bytes.subarray(afterLength, end)]);
+    offset = end;
+  }
+  return fields;
+}
+
+function fieldString(fields, number) {
+  return fields.get(number)?.[0]?.toString('utf8');
+}
+
+function runBuilder(root, browserAssetsDirectory = null) {
+  const artifactDirectory = join(root, 'artifacts');
+  const browserBootstrap = join(root, 'bootstrap.html');
+  const output = join(root, 'release-input.json');
+  const descriptorDirectory = join(root, 'contracts');
+  return {
+    artifactDirectory,
+    descriptorDirectory,
+    output,
+    result: spawnSync(process.execPath, [
+      inputBuilder,
+      '--target', 'aarch64-apple-darwin',
+      '--artifact-dir', artifactDirectory,
+      '--browser-bootstrap', browserBootstrap,
+      '--output', output,
+      '--descriptor-dir', descriptorDirectory,
+      '--distribution-id', 'hermes-desktop',
+      '--release-version', '0.1.0',
+      '--build-id', 'local-platform-v1',
+      ...(browserAssetsDirectory === null ? [] : ['--browser-assets-dir', browserAssetsDirectory]),
+    ], { cwd: backendRoot, encoding: 'utf8' }),
+  };
+}
+
+function createFixture(root, missingBinary = null) {
+  const artifactDirectory = join(root, 'artifacts');
+  const browserBootstrap = join(root, 'bootstrap.html');
+  mkdirSync(artifactDirectory, { mode: 0o700 });
+  writeFileSync(browserBootstrap, '<!doctype html>');
+  for (const binary of platformBinaries) {
+    if (binary !== missingBinary) writeFileSync(join(artifactDirectory, binary), binary, { mode: 0o700 });
+  }
+}
+
+test('creates exact local platform runtime contracts before compiling a distribution', () => {
+  const root = temporaryDirectory('hermes-local-platform-release-');
+  try {
+    createFixture(root);
+    const { descriptorDirectory, output, result } = runBuilder(root);
+    assert.equal(result.status, 0, result.stderr);
+    const input = JSON.parse(readFileSync(output, 'utf8'));
+    assert.deepEqual(input.artifacts.map((artifact) => artifact.artifact_id), [
+      'browser.bootstrap',
+      'platform.blob',
+      'platform.events-authority',
+      'platform.scheduler',
+      'platform.storage',
+      'platform.telemetry',
+      'platform.vault',
+    ]);
+    const scheduler = input.artifacts.find((artifact) => artifact.artifact_id === 'platform.scheduler');
+    assert.equal(scheduler.artifact_kind, 'module_runtime');
+    assert.equal(scheduler.relative_path, 'bin/hermes-scheduler-runtime');
+    assert.equal(readFileSync(scheduler.settings_schema.source_path).toString('hex'), '08011001');
+    const descriptor = decodeFields(readFileSync(scheduler.descriptor.source_path));
+    assert.equal(fieldString(descriptor, 3), 'scheduler');
+    assert.equal(fieldString(descriptor, 4), 'scheduler');
+    assert.equal(descriptor.get(5)?.[0], 5n);
+    const schemaReference = decodeFields(descriptor.get(10)[0]);
+    assert.equal(schemaReference.get(3)?.[0], 4n);
+    assert.equal(schemaReference.get(4)?.[0].length, 32);
+    assert.equal(existsSync(descriptorDirectory), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('includes exact compiled browser assets in the signed distribution input', () => {
+  const root = temporaryDirectory('hermes-local-platform-browser-assets-');
+  try {
+    createFixture(root);
+    const browserAssetsDirectory = join(root, 'browser-assets');
+    mkdirSync(join(browserAssetsDirectory, 'assets'), { recursive: true, mode: 0o700 });
+    writeFileSync(join(browserAssetsDirectory, 'assets', 'app.js'), 'compiled browser entry');
+    writeFileSync(join(browserAssetsDirectory, 'assets', 'theme.css'), 'compiled browser styles');
+
+    const { output, result } = runBuilder(root, browserAssetsDirectory);
+    assert.equal(result.status, 0, result.stderr);
+    const input = JSON.parse(readFileSync(output, 'utf8'));
+    assert.deepEqual(
+      input.artifacts
+        .filter((artifact) => artifact.artifact_kind === 'browser_client_asset')
+        .map(({ artifact_id, relative_path, source_path, required }) => ({ artifact_id, relative_path, source_path, required })),
+      [
+        {
+          artifact_id: 'browser.asset.assets/app.js',
+          relative_path: 'browser/assets/assets/app.js',
+          source_path: join(browserAssetsDirectory, 'assets', 'app.js'),
+          required: true,
+        },
+        {
+          artifact_id: 'browser.asset.assets/theme.css',
+          relative_path: 'browser/assets/assets/theme.css',
+          source_path: join(browserAssetsDirectory, 'assets', 'theme.css'),
+          required: true,
+        },
+      ],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects an incomplete platform inventory before creating contracts', () => {
+  const root = temporaryDirectory('hermes-local-platform-release-missing-');
+  try {
+    createFixture(root, 'hermes-vault-runtime');
+    const { descriptorDirectory, output, result } = runBuilder(root);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /platform\.vault binary is unavailable: ENOENT/);
+    assert.equal(existsSync(output), false);
+    assert.equal(existsSync(descriptorDirectory), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

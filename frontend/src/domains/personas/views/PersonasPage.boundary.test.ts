@@ -49,7 +49,9 @@ describe('PersonasPage boundary', () => {
     const typeSource = readFileSync(typeUrl, 'utf8')
     const storySource = readFileSync(storyUrl, 'utf8')
 
-    expect(viewSource).toContain('PersonasWorkspace')
+    expect(viewSource).toContain('PersonasPage')
+    expect(viewSource).toContain("../presentation/PersonasPage.vue")
+    expect(viewSource).toContain("../presentation/personasPageModel")
     expect(viewSource).toContain('usePersonasPageSurface')
     expect(viewSource).toContain('surface.ownerPersona')
     expect(viewSource).toContain('surface.setOwnerPersona')
@@ -58,7 +60,9 @@ describe('PersonasPage boundary', () => {
     expect(viewSource).toContain('surface.directoryFilter')
     expect(viewSource).toContain('surface.activeSection')
     expect(viewSource).toContain('surface.toggleAddressBookMembership')
-    expect(viewSource).toContain('@update:active-section')
+    expect(viewSource).toContain('const model = computed<PersonasPageModel>')
+    expect(viewSource).toContain('const actions: PersonasPageActions')
+    expect(viewSource).toContain('<PersonasPage :model="model" :actions="actions"')
     expect(viewSource).not.toContain('ApiClient')
     expect(viewSource).not.toContain('fetch(')
 

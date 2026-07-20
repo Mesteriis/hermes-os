@@ -160,6 +160,13 @@ impl VaultStore {
         self.handle.store_secret(scope, payload)
     }
 
+    pub fn store_secrets_atomically(
+        &self,
+        secrets: Vec<(SecretRecordScope, Zeroizing<Vec<u8>>)>,
+    ) -> Result<Vec<SecretRecordId>, VaultStoreError> {
+        self.handle.store_secrets_atomically(secrets)
+    }
+
     pub fn resolve_scoped_secret(
         &self,
         record_id: &SecretRecordId,

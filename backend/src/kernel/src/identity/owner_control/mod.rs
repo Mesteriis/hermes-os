@@ -1,5 +1,6 @@
 //! Owner-private Unix IPC transport for Module Registry control operations.
 
+pub(crate) mod cli;
 mod dispatch;
 pub(crate) mod sessions;
 
@@ -17,6 +18,7 @@ use prost::Message;
 
 use crate::identity::owner_control::sessions::OwnerControlSessions;
 use crate::infrastructure::filesystem::remove_stale_owner_unix_socket;
+use crate::platform::gateway::BrowserPairingAdmissionV1;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 const MAX_FRAME_BYTES: usize = 64 * 1024;
@@ -29,6 +31,7 @@ pub fn serve(
     runtime_dir: &Path,
     shutdown_requested: Arc<AtomicBool>,
     managed_runtime_supervisor: ManagedRuntimeSupervisor,
+    browser_pairing: Option<Arc<BrowserPairingAdmissionV1>>,
 ) -> Result<(), String> {
     let socket_path = runtime_dir.join("owner.sock");
     remove_stale_owner_unix_socket(&socket_path, "owner control socket")?;
@@ -47,6 +50,7 @@ pub fn serve(
         runtime_dir,
         shutdown_requested,
         &managed_runtime_supervisor,
+        browser_pairing.as_deref(),
         &listener,
         &mut sessions,
     );
@@ -60,6 +64,7 @@ fn accept_connections(
     runtime_dir: &Path,
     shutdown_requested: Arc<AtomicBool>,
     supervisor: &ManagedRuntimeSupervisor,
+    browser_pairing: Option<&BrowserPairingAdmissionV1>,
     listener: &UnixListener,
     sessions: &mut OwnerControlSessions,
 ) -> Result<(), String> {
@@ -80,6 +85,7 @@ fn accept_connections(
             data_dir,
             runtime_dir,
             supervisor,
+            browser_pairing,
             sessions,
             &mut stream,
         );
@@ -99,6 +105,7 @@ fn handle_connection(
     data_dir: &Path,
     runtime_dir: &Path,
     supervisor: &ManagedRuntimeSupervisor,
+    browser_pairing: Option<&BrowserPairingAdmissionV1>,
     sessions: &mut OwnerControlSessions,
     stream: &mut UnixStream,
 ) -> Result<(), String> {
@@ -107,9 +114,15 @@ fn handle_connection(
         .and_then(|_| stream.set_write_timeout(Some(IPC_TIMEOUT)))
         .map_err(|error| error.to_string())?;
     let response = match decode_request(stream) {
-        Ok(request) => {
-            dispatch::handle(store, data_dir, runtime_dir, supervisor, sessions, request)
-        }
+        Ok(request) => dispatch::handle(
+            store,
+            data_dir,
+            runtime_dir,
+            supervisor,
+            browser_pairing,
+            sessions,
+            request,
+        ),
         Err(_) => OwnerControlResponseV1 {
             result: None,
             error_code: "invalid_request".to_owned(),
@@ -124,7 +137,7 @@ fn decode_request(stream: &mut UnixStream) -> Result<OwnerControlRequestV1, Stri
         .map_err(|_| "invalid owner control request".to_owned())
 }
 
-fn read_frame(stream: &mut impl Read) -> Result<Vec<u8>, String> {
+pub(super) fn read_frame(stream: &mut impl Read) -> Result<Vec<u8>, String> {
     let length = usize::try_from(read_varint(stream)?)
         .map_err(|_| "owner control frame is too large".to_owned())?;
     if length > MAX_FRAME_BYTES {
@@ -152,7 +165,7 @@ fn read_varint(stream: &mut impl Read) -> Result<u64, String> {
     Err("owner control frame length is invalid".to_owned())
 }
 
-fn write_frame(stream: &mut impl Write, bytes: &[u8]) -> Result<(), String> {
+pub(super) fn write_frame(stream: &mut impl Write, bytes: &[u8]) -> Result<(), String> {
     let mut length =
         u32::try_from(bytes.len()).map_err(|_| "owner control response is too large".to_owned())?;
     let mut prefix = [0_u8; 5];

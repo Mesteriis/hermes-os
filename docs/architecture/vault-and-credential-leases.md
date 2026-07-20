@@ -253,7 +253,11 @@ generation и `ToVault` direction, а request ID закрепляет тольк
 authentication. Это не открывает public secret socket. Runtime protocol теперь фиксирует
 bounded `VaultCiphertextRouteV1`, а Kernel сверяет opaque route с exact external
 runtime identity, generation и grant epoch; inherited managed-runtime channel
-сохраняется после descriptor handshake и relays только bounded opaque frames.
+сохраняется после descriptor handshake. Его `ManagedVaultRuntimeControlV1`
+разделяет typed status и ciphertext oneof-variants: Kernel принимает только
+`ready` status с exact persisted Vault generation и 32-byte ephemeral HPKE public
+key, а mismatch/error останавливает новый child. Ciphertext relay остаётся
+bounded opaque frames и не может быть принят как status.
 Owner-private IPC уже принимает proof-bound bind и explicit start только для
 designated Vault artifact из current verified signed release.
 Kernel сохраняет platform-process binding/launch fence без owner module

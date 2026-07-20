@@ -10,10 +10,28 @@ fn admits_owner_local_create_table() {
 }
 
 #[test]
+fn admits_canonical_owner_identifier_with_digits() {
+    let result = admit_owner_local_additive_sql(
+        "storage_runtime_revoke_20260717",
+        "CREATE TABLE hermes_data.storage_runtime_revoke_20260717_entries (entry_id uuid);",
+    );
+    assert_eq!(result, Ok(()));
+}
+
+#[test]
 fn admits_owner_local_add_column() {
     let result = admit_owner_local_additive_sql(
         "notes",
         "ALTER TABLE hermes_data.notes_entries ADD COLUMN title text;",
+    );
+    assert_eq!(result, Ok(()));
+}
+
+#[test]
+fn admits_the_exact_scheduler_platform_schema() {
+    let result = admit_owner_local_additive_sql(
+        "scheduler",
+        "CREATE TABLE hermes_platform.scheduler_schedules (schedule_id bytea PRIMARY KEY);",
     );
     assert_eq!(result, Ok(()));
 }
