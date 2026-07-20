@@ -10,12 +10,13 @@ pub use listener::{
 pub use profile::{GatewayTransportProfileV1, PairedRemoteProfileV1};
 
 use std::convert::Infallible;
+use std::time::Duration;
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::service::Service;
 use hyper::{Request, Response, body::Incoming};
-use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::rt::{TokioExecutor, TokioIo, TokioTimer};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::server::TlsStream;
 
@@ -35,7 +36,11 @@ where
     S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     S::Future: Send + 'static,
 {
-    hyper::server::conn::http1::Builder::new()
+    let mut builder = hyper::server::conn::http1::Builder::new();
+    builder
+        .timer(TokioTimer::new())
+        .header_read_timeout(Duration::from_secs(10));
+    builder
         .serve_connection(TokioIo::new(stream), service)
         .await
         .map_err(|error| format!("Gateway local HTTP/1.1 connection failed: {error}"))

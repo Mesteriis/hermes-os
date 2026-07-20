@@ -1,4 +1,6 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
+use std::time::Duration;
 
 use bytes::{Buf, Bytes, BytesMut};
 use h3::server::Connection;
@@ -6,8 +8,9 @@ use http_body_util::{BodyExt, Full};
 use hyper::service::Service;
 use hyper::{Request, Response, StatusCode};
 use quinn::{Endpoint, ServerConfig, VarInt};
-use tokio::sync::watch;
+use tokio::sync::{Semaphore, watch};
 use tokio::task::JoinSet;
+use tokio::time::timeout;
 
 use crate::{
     GatewayHttpResponse, GatewayTransportProfileV1, PairedRemoteProfileV1, full_gateway_body,
@@ -16,6 +19,10 @@ use crate::{
 /// Request bodies are buffered only at the HTTP/3 adapter boundary. Gateway
 /// routes currently need bounded protocol messages, never an unbounded upload.
 const MAX_HTTP3_REQUEST_BODY_BYTES: usize = 1024 * 1024;
+const MAX_CONCURRENT_HTTP3_CONNECTIONS: usize = 128;
+const MAX_CONCURRENT_HTTP3_REQUESTS_PER_CONNECTION: usize = 32;
+const HTTP3_HANDSHAKE_DEADLINE: Duration = Duration::from_secs(10);
+const HTTP3_REQUEST_BODY_DEADLINE: Duration = Duration::from_secs(10);
 
 /// A paired-remote HTTP/3 listener. It accepts only HTTP/3 over a Quinn server
 /// endpoint; raw QUIC is never exposed to Gateway routes.
@@ -63,8 +70,12 @@ impl GatewayHttp3ListenerV1 {
             return Ok(());
         }
         let mut connections = JoinSet::new();
+        let budget = Arc::new(Semaphore::new(MAX_CONCURRENT_HTTP3_CONNECTIONS));
         loop {
             tokio::select! {
+                completed = connections.join_next(), if !connections.is_empty() => {
+                    let _ = completed;
+                }
                 changed = shutdown_requested.changed() => {
                     match changed {
                         Ok(()) if *shutdown_requested.borrow() => {
@@ -86,9 +97,13 @@ impl GatewayHttp3ListenerV1 {
                     let Some(incoming) = incoming else {
                         return Ok(());
                     };
+                    let Ok(permit) = budget.clone().try_acquire_owned() else {
+                        continue;
+                    };
                     let service = service.clone();
                     connections.spawn(async move {
-                        let Ok(connection) = incoming.await else {
+                        let _permit = permit;
+                        let Ok(Ok(connection)) = timeout(HTTP3_HANDSHAKE_DEADLINE, incoming).await else {
                             return;
                         };
                         let _ = serve_http3_connection(connection, service).await;
@@ -115,18 +130,29 @@ where
         .await
         .map_err(|error| format!("Gateway HTTP/3 setup failed: {error}"))?;
     let mut requests = JoinSet::new();
-    while let Some(resolver) = connection
-        .accept()
-        .await
-        .map_err(|error| format!("Gateway HTTP/3 accept failed: {error}"))?
-    {
-        let service = service.clone();
-        requests.spawn(async move {
-            let Ok((request, stream)) = resolver.resolve_request().await else {
-                return;
-            };
-            let _ = serve_http3_request(request, stream, service).await;
-        });
+    let budget = Arc::new(Semaphore::new(MAX_CONCURRENT_HTTP3_REQUESTS_PER_CONNECTION));
+    loop {
+        tokio::select! {
+            completed = requests.join_next(), if !requests.is_empty() => {
+                let _ = completed;
+            }
+            accepted = connection.accept() => {
+                let Some(resolver) = accepted.map_err(|error| format!("Gateway HTTP/3 accept failed: {error}"))? else {
+                    break;
+                };
+                let Ok(permit) = budget.clone().try_acquire_owned() else {
+                    continue;
+                };
+                let service = service.clone();
+                requests.spawn(async move {
+                    let _permit = permit;
+                    let Ok((request, stream)) = resolver.resolve_request().await else {
+                        return;
+                    };
+                    let _ = serve_http3_request(request, stream, service).await;
+                });
+            }
+        }
     }
     while requests.join_next().await.is_some() {}
     Ok(())
@@ -142,9 +168,9 @@ where
     S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
     let mut body = BytesMut::new();
-    while let Some(mut data) = stream
-        .recv_data()
+    while let Some(mut data) = timeout(HTTP3_REQUEST_BODY_DEADLINE, stream.recv_data())
         .await
+        .map_err(|_| "Gateway HTTP/3 request body deadline exceeded".to_owned())?
         .map_err(|error| format!("Gateway HTTP/3 request body failed: {error}"))?
     {
         let remaining = data.remaining();

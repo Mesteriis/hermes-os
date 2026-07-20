@@ -1,17 +1,31 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
+use std::time::Duration;
 
 use hyper::Request;
 use hyper::body::Incoming;
 use hyper::service::Service;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::watch;
+use tokio::sync::{Semaphore, watch};
 use tokio::task::JoinSet;
+use tokio::time::timeout;
 use tokio_rustls::{TlsAcceptor, server::TlsStream};
 
 use crate::{
     GatewayHttpResponse, GatewayTransportProfileV1, PairedRemoteProfileV1,
     serve_local_embedded_http1, serve_paired_remote_http2,
 };
+
+/// A listener must never turn an unauthenticated connection storm into an
+/// unbounded task or file-descriptor allocation. This cap is deliberately
+/// transport-wide and owner-neutral; owner routes apply their own request
+/// budgets after authentication.
+const MAX_CONCURRENT_CONNECTIONS: usize = 128;
+const TLS_HANDSHAKE_DEADLINE: Duration = Duration::from_secs(10);
+
+fn connection_budget() -> Arc<Semaphore> {
+    Arc::new(Semaphore::new(MAX_CONCURRENT_CONNECTIONS))
+}
 
 /// A local application listener. It can bind only loopback and deliberately
 /// has no TLS or paired-remote admission path.
@@ -130,8 +144,12 @@ where
         return Ok(());
     }
     let mut connections = JoinSet::new();
+    let budget = connection_budget();
     loop {
         tokio::select! {
+            completed = connections.join_next(), if !connections.is_empty() => {
+                let _ = completed;
+            }
             changed = shutdown_requested.changed() => {
                 match changed {
                     Ok(()) if *shutdown_requested.borrow() => {
@@ -150,8 +168,14 @@ where
             accepted = listener.accept() => {
                 let (stream, _) = accepted
                     .map_err(|error| format!("Gateway {profile} listener accept failed: {error}"))?;
+                let Ok(permit) = budget.clone().try_acquire_owned() else {
+                    // Drop unauthenticated excess peers immediately. A future
+                    // accepted peer can use the released slot.
+                    continue;
+                };
                 let service = service.clone();
                 connections.spawn(async move {
+                    let _permit = permit;
                     let _ = serve_local_embedded_http1(stream, service).await;
                 });
             }
@@ -195,8 +219,12 @@ impl GatewayLoopbackTlsListenerV1 {
             return Ok(());
         }
         let mut connections = JoinSet::new();
+        let budget = connection_budget();
         loop {
             tokio::select! {
+                completed = connections.join_next(), if !connections.is_empty() => {
+                    let _ = completed;
+                }
                 changed = shutdown_requested.changed() => {
                     match changed {
                         Ok(()) if *shutdown_requested.borrow() => {
@@ -215,10 +243,14 @@ impl GatewayLoopbackTlsListenerV1 {
                 accepted = self.listener.accept() => {
                     let (stream, _) = accepted
                         .map_err(|error| format!("Gateway loopback TLS listener accept failed: {error}"))?;
+                    let Ok(permit) = budget.clone().try_acquire_owned() else {
+                        continue;
+                    };
                     let acceptor = self.acceptor.clone();
                     let service = service.clone();
                     connections.spawn(async move {
-                        if let Ok(stream) = acceptor.accept(stream).await {
+                        let _permit = permit;
+                        if let Ok(Ok(stream)) = timeout(TLS_HANDSHAKE_DEADLINE, acceptor.accept(stream)).await {
                             let _ = serve_local_embedded_http1(stream, service).await;
                         }
                     });
@@ -300,8 +332,12 @@ impl GatewayTlsListenerV1 {
             return Ok(());
         }
         let mut connections = JoinSet::new();
+        let budget = connection_budget();
         loop {
             tokio::select! {
+                completed = connections.join_next(), if !connections.is_empty() => {
+                    let _ = completed;
+                }
                 changed = shutdown_requested.changed() => {
                     match changed {
                         Ok(()) if *shutdown_requested.borrow() => {
@@ -320,10 +356,14 @@ impl GatewayTlsListenerV1 {
                 accepted = self.listener.accept() => {
                     let (stream, _) = accepted
                         .map_err(|error| format!("Gateway TLS listener accept failed: {error}"))?;
+                    let Ok(permit) = budget.clone().try_acquire_owned() else {
+                        continue;
+                    };
                     let acceptor = self.acceptor.clone();
                     let service = service.clone();
                     connections.spawn(async move {
-                        if let Ok(stream) = acceptor.accept(stream).await {
+                        let _permit = permit;
+                        if let Ok(Ok(stream)) = timeout(TLS_HANDSHAKE_DEADLINE, acceptor.accept(stream)).await {
                             let _ = serve_paired_remote_http2(stream, service).await;
                         }
                     });

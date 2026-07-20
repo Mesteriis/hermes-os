@@ -1,5 +1,6 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
+use std::time::Duration;
 
 use hermes_gateway_runtime::{
     BrowserBootstrapRouter, GatewayLoopbackListenerV1, GatewayLoopbackTlsListenerV1,
@@ -12,6 +13,7 @@ use rustls::{ClientConfig, RootCertStore, ServerConfig};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::watch;
+use tokio::time::timeout;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 use crate::platform::gateway::{
@@ -261,6 +263,84 @@ fn loopback_listener_serves_multiple_connections_until_its_owner_shuts_it_down()
                     .starts_with("HTTP/1.1 200 OK\r\n")
             );
         }
+        shutdown.send(true).expect("request shutdown");
+        server.await.expect("server task");
+    });
+}
+
+#[test]
+fn loopback_listener_bounds_slow_connection_storm_and_reclaims_a_released_slot() {
+    let runtime = tokio::runtime::Runtime::new().expect("test runtime");
+    let listener = runtime
+        .block_on(GatewayLoopbackListenerV1::bind(
+            "127.0.0.1:0".parse().expect("loopback address"),
+        ))
+        .expect("loopback listener");
+    let address = listener.local_address().expect("local address");
+    let (shutdown, receiver) = watch::channel(false);
+    let server = runtime.spawn(async move {
+        listener
+            .serve_until_shutdown(GatewayTechnicalRouter::new(true), receiver)
+            .await
+            .expect("local HTTP server")
+    });
+
+    runtime.block_on(async move {
+        let mut stalled = Vec::new();
+        for _ in 0..128 {
+            stalled.push(TcpStream::connect(address).await.expect("slow TCP peer"));
+        }
+
+        let mut rejected = TcpStream::connect(address)
+            .await
+            .expect("overflow TCP peer");
+        rejected
+            .write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            .await
+            .expect("overflow request write");
+        let mut rejected_response = [0_u8; 1];
+        let rejected_result = timeout(
+            Duration::from_millis(250),
+            rejected.read(&mut rejected_response),
+        )
+        .await
+        .expect("overflow peer must not retain an active Gateway task");
+        assert!(
+            match rejected_result {
+                Ok(0) => true,
+                Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => true,
+                Ok(_) | Err(_) => false,
+            },
+            "connection over the fixed admission budget must be dropped"
+        );
+
+        drop(stalled.pop().expect("one stalled peer"));
+        let response = timeout(Duration::from_secs(2), async {
+            loop {
+                let mut stream = TcpStream::connect(address)
+                    .await
+                    .expect("replacement TCP peer");
+                stream
+                    .write_all(
+                        b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+                    )
+                    .await
+                    .expect("replacement request write");
+                let mut response = Vec::new();
+                stream
+                    .read_to_end(&mut response)
+                    .await
+                    .expect("replacement response");
+                if response.starts_with(b"HTTP/1.1 200 OK\r\n") {
+                    return response;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("released connection slot must be reaped");
+        assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
+
         shutdown.send(true).expect("request shutdown");
         server.await.expect("server task");
     });
