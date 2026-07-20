@@ -38,12 +38,16 @@
 - [ADR-0224: Storage Control Plane, owner-scoped PostgreSQL и lifecycle migrations](adr/ADR-0224-storage-control-plane-owner-scoped-postgresql-and-migration-lifecycle.md)
 - [ADR-0225: Первый production slice — recovery-only Kernel и фазовые ворота](adr/ADR-0225-first-production-recovery-only-kernel-slice-and-phase-gates.md)
 - [ADR-0226: Контекст для AI только через use-case workflows](adr/ADR-0226-ai-context-acquisition-through-use-case-workflows.md)
+- [ADR-0227: Deployment profiles и server bootstrap pairing](adr/ADR-0227-deployment-profiles-and-server-bootstrap-pairing.md)
+- [ADR-0228: Development simulation profile](adr/ADR-0228-development-simulation-profile.md)
 - [ADR-0229: Platform Clock contract и deterministic conformance](adr/ADR-0229-platform-clock-contract-and-deterministic-conformance.md)
 - [ADR-0230: Blob Platform — opaque references and owner-local metadata](adr/ADR-0230-blob-platform-opaque-references-and-owner-local-metadata.md)
 - [ADR-0231: Private Blob data session and Vault route](adr/ADR-0231-private-blob-data-session-and-vault-route.md)
 - [ADR-0232: Browser client identity and same-origin Gateway session](adr/ADR-0232-browser-client-device-identity-and-same-origin-session.md)
 - [ADR-0233: Scoped local recovery export и PostgreSQL dump](adr/ADR-0233-whole-instance-backup-and-fenced-restore.md)
 - [ADR-0234: Browser-local key binding for synchronised passkeys](adr/ADR-0234-browser-local-key-binding-for-synchronised-passkeys.md)
+- [ADR-0235: Private-LAN developer mode](adr/ADR-0235-private-lan-developer-mode.md)
+- [ADR-0236: Integration owners, protocol adapters и configuration instances](adr/ADR-0236-integration-owners-protocol-adapters-and-configuration-instances.md)
 
 ## Канонические summaries
 
@@ -57,7 +61,9 @@
 ## Что ещё не определено
 
 Активных подробных product, provider, UI, testing, deployment и operations
-specifications пока нет. Общая module settings model зафиксирована ADR-0222,
+specifications пока нет. Entity model integrations предложена ADR-0236; exact
+owner contracts и implementations ещё не выбраны. Общая module
+settings model зафиксирована ADR-0222,
 Vault boundary — ADR-0223, Storage Control и migration lifecycle — ADR-0224,
 первый recovery-only production slice — ADR-0225, Clock boundary — ADR-0229,
 а cross-owner AI context

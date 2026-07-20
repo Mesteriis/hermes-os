@@ -52,6 +52,9 @@ policy через ссылки из новых документов.
 - [ADR-0231: Private Blob data session and Vault route](ADR-0231-private-blob-data-session-and-vault-route.md)
 - [ADR-0232: Browser client identity and same-origin Gateway session](ADR-0232-browser-client-device-identity-and-same-origin-session.md)
 - [ADR-0233: Scoped local recovery export and PostgreSQL dump](ADR-0233-whole-instance-backup-and-fenced-restore.md)
+- [ADR-0234: Browser-local key binding for synchronised passkeys](ADR-0234-browser-local-key-binding-for-synchronised-passkeys.md)
+- [ADR-0235: Private-LAN developer mode](ADR-0235-private-lan-developer-mode.md)
+- [ADR-0236: Integration owners, protocol adapters и configuration instances](ADR-0236-integration-owners-protocol-adapters-and-configuration-instances.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -165,3 +168,10 @@ ADR-0234 допускает synchronised WebAuthn passkeys только как �
 двухключевой browser identity: session требует ещё и подписи отдельного
 non-extractable browser-local WebCrypto key. Новый Mac с синхронизированным
 passkey должен пройти новый CLI-approved pairing.
+ADR-0235 добавляет explicit private-LAN developer mode с durable Kernel setting,
+direct-LAN admission и заметным client access mode, не ослабляя paired public
+profile.
+ADR-0236 предлагается как уточнение integration granularity: integration
+является owner/runtime boundary, protocol/SDK client — owner-local adapter, а
+настроенное подключение — opaque configuration instance. Решение не выбирает
+первый owner и не открывает `first_owner_v1`.
