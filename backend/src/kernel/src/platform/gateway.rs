@@ -13,8 +13,8 @@ use hermes_gateway_protocol::v1::{
 use hermes_gateway_runtime::{
     BrowserBootstrapRouter, BrowserPairingRouter, BrowserRealtimeSubscriptionSource,
     ClientRealtimeSubscriptionV1, GatewayApplicationRouter, GatewayHttp3ListenerV1,
-    GatewayLanDevelopmentListenerV1, GatewayLoopbackTlsListenerV1, GatewayTlsListenerV1,
-    PairedRemoteProfileV1, SharedBrowserPairingManager,
+    GatewayLanDevelopmentListenerV1, GatewayLoopbackTlsListenerV1, GatewayTechnicalRouter,
+    GatewayTlsListenerV1, PairedRemoteProfileV1, SharedBrowserPairingManager,
 };
 use hermes_gateway_session::{
     BrowserGatewaySessionService, BrowserPairingChallengeV1, BrowserPairingManager, BrowserSession,
@@ -362,7 +362,9 @@ async fn serve_configured_listener(
             println!("developer_mode_ingress=private_lan_http_only");
             println!("developer_mode_egress=unrestricted");
             println!("browser_gateway_listener={}", listener.local_address()?);
-            listener.serve_until_shutdown(service, receiver).await
+            listener
+                .serve_until_shutdown(GatewayTechnicalRouter::new(true), receiver)
+                .await
         }
     }
 }
