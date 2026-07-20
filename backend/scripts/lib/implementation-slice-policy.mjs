@@ -486,7 +486,7 @@ const STORAGE_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-storage-pgbouncer': [
     { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt', 'time'] },
-    { name: 'tokio-postgres', kind: 'normal', source: 'crates_io', version: '=0.7.16', defaultFeatures: false, features: ['runtime'] },
+    { name: 'tokio-postgres', kind: 'normal', source: 'crates_io', version: '=0.7.18', defaultFeatures: false, features: ['runtime'] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
   'hermes-storage-migrations': [
