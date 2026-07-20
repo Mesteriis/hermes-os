@@ -7,8 +7,8 @@ use std::{
 
 use futures_util::StreamExt;
 use hermes_events_protocol::{
-    NatsRuntimeCredentialDeliveryBindingV1, NatsRuntimeCredentialRecipientPublicKeyV1,
-    RuntimeNatsJwtCredentialV1, v1::DurableEnvelopeV1,
+    NatsRuntimeCredentialDeliveryBindingInputV1, NatsRuntimeCredentialDeliveryBindingV1,
+    NatsRuntimeCredentialRecipientPublicKeyV1, RuntimeNatsJwtCredentialV1, v1::DurableEnvelopeV1,
 };
 use hermes_kernel_control_store::{
     BundledManagedLaunchBinding, ManagedLaunchRecord, ModuleEventDeliveryPolicyV1,
@@ -455,14 +455,16 @@ impl ManagedRuntimeEventCredentialHandler for UnauthenticatedNatsCredentialHandl
         )
         .map_err(|_| "Scheduler Event request is invalid".to_owned())?;
         let binding = NatsRuntimeCredentialDeliveryBindingV1::new(
-            "scheduler".to_owned(),
-            expectation.registration_id().to_owned(),
-            expectation.runtime_instance_id().to_owned(),
-            expectation.runtime_generation(),
-            expectation.grant_epoch(),
-            request.credential_revision,
-            request_id,
-            recipient,
+            NatsRuntimeCredentialDeliveryBindingInputV1 {
+                logical_owner_id: "scheduler".to_owned(),
+                registration_id: expectation.registration_id().to_owned(),
+                runtime_instance_id: expectation.runtime_instance_id().to_owned(),
+                runtime_generation: expectation.runtime_generation(),
+                grant_epoch: expectation.grant_epoch(),
+                credential_revision: request.credential_revision,
+                request_id,
+                recipient_public_key: recipient,
+            },
         )
         .map_err(|_| "Scheduler Event binding is invalid".to_owned())?;
         let key = KeyPair::new_user();

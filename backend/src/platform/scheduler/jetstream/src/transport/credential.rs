@@ -7,8 +7,8 @@ use std::{
 };
 
 use hermes_events_protocol::{
-    NatsRuntimeCredentialDeliveryBindingV1, NatsRuntimeCredentialDeliveryV1,
-    NatsRuntimeCredentialRecipientV1, RuntimeNatsJwtCredentialV1,
+    NatsRuntimeCredentialDeliveryBindingInputV1, NatsRuntimeCredentialDeliveryBindingV1,
+    NatsRuntimeCredentialDeliveryV1, NatsRuntimeCredentialRecipientV1, RuntimeNatsJwtCredentialV1,
 };
 use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
@@ -50,17 +50,18 @@ pub fn request_runtime_credential(
     let response = ManagedRuntimeControlResponseV1::decode(read_frame(channel)?.as_slice())
         .map_err(|_| SchedulerNatsCredentialErrorV1::Rejected)?;
     let delivery = delivery(response)?;
-    let binding = NatsRuntimeCredentialDeliveryBindingV1::new(
-        logical_owner_id.to_owned(),
-        registration_id.to_owned(),
-        runtime_instance_id.to_owned(),
-        runtime_generation,
-        grant_epoch,
-        credential_revision,
-        request_id,
-        recipient.public_key().clone(),
-    )
-    .map_err(|_| SchedulerNatsCredentialErrorV1::Rejected)?;
+    let binding =
+        NatsRuntimeCredentialDeliveryBindingV1::new(NatsRuntimeCredentialDeliveryBindingInputV1 {
+            logical_owner_id: logical_owner_id.to_owned(),
+            registration_id: registration_id.to_owned(),
+            runtime_instance_id: runtime_instance_id.to_owned(),
+            runtime_generation,
+            grant_epoch,
+            credential_revision,
+            request_id,
+            recipient_public_key: recipient.public_key().clone(),
+        })
+        .map_err(|_| SchedulerNatsCredentialErrorV1::Rejected)?;
     recipient
         .open(&binding, &delivery)
         .map_err(|_| SchedulerNatsCredentialErrorV1::Rejected)

@@ -112,33 +112,37 @@ pub struct NatsRuntimeCredentialDeliveryBindingV1 {
     recipient_public_key: NatsRuntimeCredentialRecipientPublicKeyV1,
 }
 
+pub struct NatsRuntimeCredentialDeliveryBindingInputV1 {
+    pub logical_owner_id: String,
+    pub registration_id: String,
+    pub runtime_instance_id: String,
+    pub runtime_generation: u64,
+    pub grant_epoch: u64,
+    pub credential_revision: u64,
+    pub request_id: [u8; REQUEST_ID_BYTES],
+    pub recipient_public_key: NatsRuntimeCredentialRecipientPublicKeyV1,
+}
+
 impl NatsRuntimeCredentialDeliveryBindingV1 {
     pub fn new(
-        logical_owner_id: String,
-        registration_id: String,
-        runtime_instance_id: String,
-        runtime_generation: u64,
-        grant_epoch: u64,
-        credential_revision: u64,
-        request_id: [u8; REQUEST_ID_BYTES],
-        recipient_public_key: NatsRuntimeCredentialRecipientPublicKeyV1,
+        fields: NatsRuntimeCredentialDeliveryBindingInputV1,
     ) -> Result<Self, NatsRuntimeCredentialDeliveryErrorV1> {
-        (valid_id(&logical_owner_id)
-            && valid_id(&registration_id)
-            && valid_id(&runtime_instance_id)
-            && runtime_generation > 0
-            && grant_epoch > 0
-            && credential_revision > 0
-            && request_id.iter().any(|byte| *byte != 0))
+        (valid_id(&fields.logical_owner_id)
+            && valid_id(&fields.registration_id)
+            && valid_id(&fields.runtime_instance_id)
+            && fields.runtime_generation > 0
+            && fields.grant_epoch > 0
+            && fields.credential_revision > 0
+            && fields.request_id.iter().any(|byte| *byte != 0))
         .then_some(Self {
-            logical_owner_id,
-            registration_id,
-            runtime_instance_id,
-            runtime_generation,
-            grant_epoch,
-            credential_revision,
-            request_id,
-            recipient_public_key,
+            logical_owner_id: fields.logical_owner_id,
+            registration_id: fields.registration_id,
+            runtime_instance_id: fields.runtime_instance_id,
+            runtime_generation: fields.runtime_generation,
+            grant_epoch: fields.grant_epoch,
+            credential_revision: fields.credential_revision,
+            request_id: fields.request_id,
+            recipient_public_key: fields.recipient_public_key,
         })
         .ok_or(NatsRuntimeCredentialDeliveryErrorV1::InvalidBinding)
     }

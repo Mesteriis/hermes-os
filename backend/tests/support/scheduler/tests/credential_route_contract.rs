@@ -7,8 +7,8 @@ use std::{
 };
 
 use hermes_events_protocol::{
-    NatsRuntimeCredentialDeliveryBindingV1, NatsRuntimeCredentialRecipientPublicKeyV1,
-    RuntimeNatsJwtCredentialV1,
+    NatsRuntimeCredentialDeliveryBindingInputV1, NatsRuntimeCredentialDeliveryBindingV1,
+    NatsRuntimeCredentialRecipientPublicKeyV1, RuntimeNatsJwtCredentialV1,
 };
 use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
@@ -94,17 +94,18 @@ fn respond_with_credential(mut relay: UnixStream, credential: RuntimeNatsJwtCred
             .expect("recipient key length"),
     )
     .expect("recipient public key");
-    let binding = NatsRuntimeCredentialDeliveryBindingV1::new(
-        OWNER.to_owned(),
-        REGISTRATION.to_owned(),
-        RUNTIME.to_owned(),
-        GENERATION,
-        EPOCH,
-        REVISION,
-        request_id,
-        recipient,
-    )
-    .expect("delivery binding");
+    let binding =
+        NatsRuntimeCredentialDeliveryBindingV1::new(NatsRuntimeCredentialDeliveryBindingInputV1 {
+            logical_owner_id: OWNER.to_owned(),
+            registration_id: REGISTRATION.to_owned(),
+            runtime_instance_id: RUNTIME.to_owned(),
+            runtime_generation: GENERATION,
+            grant_epoch: EPOCH,
+            credential_revision: REVISION,
+            request_id,
+            recipient_public_key: recipient,
+        })
+        .expect("delivery binding");
     let delivery = credential.seal_for(&binding).expect("encrypted delivery");
     write_response(
         &mut relay,
