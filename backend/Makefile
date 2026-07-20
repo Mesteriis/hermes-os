@@ -78,7 +78,7 @@ dependency-policy-check:
 supply-chain-check:
 	cargo audit
 	mkdir -p target/evidence
-	syft dir:. --output cyclonedx-json > target/evidence/backend-sbom.cdx.json
+	syft dir:. --exclude './target/**' --exclude './.git/**' --output cyclonedx-json > target/evidence/backend-sbom.cdx.json
 	test -s target/evidence/backend-sbom.cdx.json
 
 check-target:
