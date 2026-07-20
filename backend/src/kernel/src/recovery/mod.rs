@@ -3,6 +3,7 @@ mod export;
 pub(crate) mod fence;
 mod framing;
 pub(crate) mod media;
+pub(crate) mod restore_coordinator;
 
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};

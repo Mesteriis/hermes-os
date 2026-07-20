@@ -102,6 +102,8 @@ mod recovery {
     pub(crate) mod fence;
     #[path = "../../../../../src/kernel/src/recovery/media.rs"]
     pub(crate) mod media;
+    #[path = "../../../../../src/kernel/src/recovery/restore_coordinator.rs"]
+    pub(crate) mod restore_coordinator;
 }
 
 #[cfg(test)]
@@ -151,6 +153,7 @@ mod tests {
     mod protocol_validation;
     mod recovery_fence;
     mod recovery_media;
+    mod restore_coordinator;
     mod scheduler_lifecycle;
     mod scheduler_requests;
     mod secure_file;
