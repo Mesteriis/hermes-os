@@ -2,7 +2,7 @@
 
 mod bootstrap;
 pub mod control;
-mod offline_backup;
+mod offline;
 pub mod service;
 pub mod transport;
 
@@ -102,13 +102,13 @@ fn main() -> Result<(), String> {
         Command::ExportBackup {
             data_dir,
             destination,
-        } => offline_backup::export(&data_dir, &destination),
-        Command::VerifyBackup { data_dir, source } => offline_backup::verify(&data_dir, &source),
+        } => offline::backup::export(&data_dir, &destination),
+        Command::VerifyBackup { data_dir, source } => offline::backup::verify(&data_dir, &source),
         Command::RestoreBackup {
             data_dir,
             source,
             recovery_key_file,
-        } => offline_backup::restore(&data_dir, &source, &recovery_key_file),
+        } => offline::backup::restore(&data_dir, &source, &recovery_key_file),
         Command::Serve {
             data_dir,
             runtime_dir,

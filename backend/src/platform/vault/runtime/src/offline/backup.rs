@@ -11,7 +11,7 @@ use zeroize::Zeroize;
 const MAX_RECOVERY_KEY_FILE_BYTES: u64 = 4096;
 
 pub(crate) fn export(data_dir: &Path, destination: &Path) -> Result<(), String> {
-    super::ensure_private_directory(data_dir)?;
+    crate::ensure_private_directory(data_dir)?;
     let wrapping_key = load_wrapping_key(data_dir)?;
     VaultStore::export_backup_offline(
         &data_dir.join("vault.db"),
@@ -25,7 +25,7 @@ pub(crate) fn export(data_dir: &Path, destination: &Path) -> Result<(), String> 
 }
 
 pub(crate) fn verify(data_dir: &Path, source: &Path) -> Result<(), String> {
-    super::ensure_private_directory(data_dir)?;
+    crate::ensure_private_directory(data_dir)?;
     let wrapping_key = load_wrapping_key(data_dir)?;
     VaultStore::verify_backup_offline(source, &wrapping_key)
         .map_err(|_| "Vault backup verification failed".to_owned())?;
@@ -73,7 +73,7 @@ fn load_recovery_key(path: &Path) -> Result<VaultRecoveryKeyV1, String> {
 }
 
 fn ensure_empty_private_directory(path: &Path) -> Result<(), String> {
-    super::ensure_private_directory(path)?;
+    crate::ensure_private_directory(path)?;
     std::fs::read_dir(path)
         .map_err(|_| "Vault restore target is unavailable".to_owned())?
         .next()

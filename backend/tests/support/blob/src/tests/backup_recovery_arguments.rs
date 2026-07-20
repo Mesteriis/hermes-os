@@ -1,5 +1,5 @@
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::blob_service_cli::{
     OfflineRecoveryCommand, parse_offline_recovery_command, parse_serve_inherited_arguments,
@@ -21,8 +21,8 @@ fn offline_blob_recovery_commands_preserve_the_exact_paths() {
     assert!(matches!(
         export,
         OfflineRecoveryCommand::Export { data_dir, destination }
-            if data_dir == PathBuf::from("/private/hermes/blob")
-                && destination == PathBuf::from("/private/hermes/recovery/blob")
+            if data_dir == Path::new("/private/hermes/blob")
+                && destination == Path::new("/private/hermes/recovery/blob")
     ));
 
     let mut restore = [
@@ -39,8 +39,8 @@ fn offline_blob_recovery_commands_preserve_the_exact_paths() {
     assert!(matches!(
         restore,
         OfflineRecoveryCommand::Restore { source, data_dir }
-            if source == PathBuf::from("/private/hermes/recovery/blob")
-                && data_dir == PathBuf::from("/private/hermes/blob-restored")
+            if source == Path::new("/private/hermes/recovery/blob")
+                && data_dir == Path::new("/private/hermes/blob-restored")
     ));
 
     let mut verify = ["--source", "/private/hermes/recovery/blob"]
@@ -52,7 +52,7 @@ fn offline_blob_recovery_commands_preserve_the_exact_paths() {
     assert!(matches!(
         verify,
         OfflineRecoveryCommand::Verify { source }
-            if source == PathBuf::from("/private/hermes/recovery/blob")
+            if source == Path::new("/private/hermes/recovery/blob")
     ));
 }
 

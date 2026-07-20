@@ -21,5 +21,5 @@ test('online control-plane IPC uses the one shared SQLite actor facade', async (
   }
   const coordinator = await source('platform/control_plane.rs');
   assert.match(coordinator, /Arc<SqliteControlStore>/);
-  assert.match(coordinator, /Some\(store\)/);
+  assert.match(coordinator, /Some\(Arc::clone\(&store\)\)/);
 });
