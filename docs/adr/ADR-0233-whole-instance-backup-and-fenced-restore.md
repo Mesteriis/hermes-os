@@ -4,9 +4,12 @@
 Дата: 2026-07-19  
 Состояние реализации: Частично реализовано. Offline Control Store
 export/restore, authenticated Vault snapshot, Blob backup classification и
-private PostgreSQL export существуют раздельно. Единого coordinator, signed
-instance manifest, Blob/JetStream capture и disposable full-restore evidence
-пока нет; следовательно `whole_instance_backup_v1` остаётся закрытым.
+private PostgreSQL export существуют раздельно. Kernel уже содержит
+fail-closed coordinator порядка restore и P-256 signed media inventory с
+fd-based no-symlink verification. Однако он пока не связан с реальными
+component-owned restore ports; Blob/JetStream capture и disposable full-restore
+evidence также отсутствуют. Следовательно `whole_instance_backup_v1` остаётся
+закрытым.
 
 Зависит от:
 
