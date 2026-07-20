@@ -48,6 +48,7 @@
 - [ADR-0234: Browser-local key binding for synchronised passkeys](adr/ADR-0234-browser-local-key-binding-for-synchronised-passkeys.md)
 - [ADR-0235: Private-LAN developer mode](adr/ADR-0235-private-lan-developer-mode.md)
 - [ADR-0236: Integration owners, protocol adapters и configuration instances](adr/ADR-0236-integration-owners-protocol-adapters-and-configuration-instances.md)
+- [ADR-0237: Временный private-LAN development без owner authority](adr/ADR-0237-temporary-private-lan-development-without-owner-authority.md)
 
 ## Канонические summaries
 

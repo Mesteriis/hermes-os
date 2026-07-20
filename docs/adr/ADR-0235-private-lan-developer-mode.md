@@ -1,10 +1,10 @@
 # ADR-0235: Private-LAN developer mode
 
-Статус: Принято  
+Статус: Заменено
 Дата: 2026-07-20  
-Состояние реализации: реализован foundation: durable Kernel setting, explicit
-offline CLI mutation, direct-private-LAN admission, cookie-free developer
-principal, sanitized verbose request logging и client-visible access mode.
+Состояние реализации: historical evidence only. Durable LAN setting и
+cookie-free owner principal удалены migration 35→36; действующее решение —
+[ADR-0237](ADR-0237-temporary-private-lan-development-without-owner-authority.md).
 
 Зависит от:
 

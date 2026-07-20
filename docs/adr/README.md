@@ -55,6 +55,7 @@ policy через ссылки из новых документов.
 - [ADR-0234: Browser-local key binding for synchronised passkeys](ADR-0234-browser-local-key-binding-for-synchronised-passkeys.md)
 - [ADR-0235: Private-LAN developer mode](ADR-0235-private-lan-developer-mode.md)
 - [ADR-0236: Integration owners, protocol adapters и configuration instances](ADR-0236-integration-owners-protocol-adapters-and-configuration-instances.md)
+- [ADR-0237: Временный private-LAN development без owner authority](ADR-0237-temporary-private-lan-development-without-owner-authority.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -168,10 +169,11 @@ ADR-0234 допускает synchronised WebAuthn passkeys только как �
 двухключевой browser identity: session требует ещё и подписи отдельного
 non-extractable browser-local WebCrypto key. Новый Mac с синхронизированным
 passkey должен пройти новый CLI-approved pairing.
-ADR-0235 добавляет explicit private-LAN developer mode с durable Kernel setting,
-direct-LAN admission и заметным client access mode, не ослабляя paired public
-profile.
+ADR-0235 заменён: persistent LAN owner bypass оказался несовместим с owner
+device proof boundary.
 ADR-0236 предлагается как уточнение integration granularity: integration
 является owner/runtime boundary, protocol/SDK client — owner-local adapter, а
 настроенное подключение — opaque configuration instance. Решение не выбирает
 первый owner и не открывает `first_owner_v1`.
+ADR-0237 оставляет `--dangerous-lan-development` только временным technical
+listener без owner APIs: он не сохраняется и не даёт owner authority.
