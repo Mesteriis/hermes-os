@@ -92,6 +92,29 @@ fn coordinator_requires_an_empty_target_before_control_store_restore() {
     fs::remove_dir_all(root).expect("cleanup");
 }
 
+#[test]
+fn coordinator_rejects_media_changed_after_the_manifest_was_signed() {
+    let (root, signed, public_key) = signed_media();
+    fs::write(root.join("control.bin"), b"tampered-whole-instance-media").expect("tamper media");
+    let mut port = RecordingPort::default();
+    assert!(
+        restore_verified_instance(
+            &root,
+            &signed,
+            "recovery-key",
+            &public_key,
+            RestorePlanV1 {
+                blob_enabled: false,
+                scheduler_enabled: false
+            },
+            &mut port,
+        )
+        .is_err()
+    );
+    assert!(port.calls.is_empty());
+    fs::remove_dir_all(root).expect("cleanup");
+}
+
 #[derive(Default)]
 struct RecordingPort {
     calls: Vec<&'static str>,
