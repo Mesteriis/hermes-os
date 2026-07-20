@@ -214,16 +214,17 @@ fn prepare_launch(
                 return Err(error);
             }
         };
-    let configuration = topology::encoded_managed_macos(
-        topology,
-        desired_bindings,
-        desired_bundles,
-        &pgbouncer_directory.join("databases.ini"),
-        &pgbouncer_auth_directory.join("users.txt"),
-        vault_instance_id,
-        vault.runtime_generation(),
-        vault.hpke_public_key_x25519(),
-    )?;
+    let configuration =
+        topology::encoded_managed_macos(topology::ManagedStorageConfigurationInputV1 {
+            topology,
+            bindings: desired_bindings,
+            bundles: desired_bundles,
+            pgbouncer_database_config_path: &pgbouncer_directory.join("databases.ini"),
+            pgbouncer_auth_file_path: &pgbouncer_auth_directory.join("users.txt"),
+            vault_instance_id,
+            vault_runtime_generation: vault.runtime_generation(),
+            vault_hpke_public_key_x25519: vault.hpke_public_key_x25519(),
+        })?;
     match StagedRuntimeContracts::stage_with_runtime_configuration(
         &runtime_dir
             .join("storage")

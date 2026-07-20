@@ -21,36 +21,42 @@ pub fn current(store: &SqliteControlStore) -> Result<PlatformStorageTopology, St
         .ok_or_else(|| "Storage topology is unavailable".to_owned())
 }
 
+pub struct ManagedStorageConfigurationInputV1<'a> {
+    pub topology: &'a PlatformStorageTopology,
+    pub bindings: &'a [PlatformStorageBindingV1],
+    pub bundles: &'a [PlatformStorageBundleV1],
+    pub pgbouncer_database_config_path: &'a Path,
+    pub pgbouncer_auth_file_path: &'a Path,
+    pub vault_instance_id: &'a str,
+    pub vault_runtime_generation: u64,
+    pub vault_hpke_public_key_x25519: &'a [u8; 32],
+}
+
 pub fn encoded_managed_macos(
-    topology: &PlatformStorageTopology,
-    bindings: &[PlatformStorageBindingV1],
-    bundles: &[PlatformStorageBundleV1],
-    pgbouncer_database_config_path: &Path,
-    pgbouncer_auth_file_path: &Path,
-    vault_instance_id: &str,
-    vault_runtime_generation: u64,
-    vault_hpke_public_key_x25519: &[u8; 32],
+    input: ManagedStorageConfigurationInputV1<'_>,
 ) -> Result<Vec<u8>, String> {
-    let topology = to_runtime(topology)?;
+    let topology = to_runtime(input.topology)?;
     if topology.deployment_profile != RuntimeDeploymentProfile::MacosTauriEmbedded as i32 {
         return Err("Storage topology is not managed by this Kernel profile".to_owned());
     }
-    let desired_bindings = bindings
+    let desired_bindings = input
+        .bindings
         .iter()
         .map(|binding| to_runtime_binding(&topology, binding))
         .collect::<Result<Vec<_>, _>>()?;
-    let desired_bundles = bundles
+    let desired_bundles = input
+        .bundles
         .iter()
         .map(to_runtime_bundle)
         .collect::<Result<Vec<_>, _>>()?;
     verify_bound_bundles(&desired_bindings, &desired_bundles)?;
-    let pgbouncer_database_config_path = configured_path(pgbouncer_database_config_path)?;
-    let pgbouncer_auth_file_path = configured_path(pgbouncer_auth_file_path)?;
+    let pgbouncer_database_config_path = configured_path(input.pgbouncer_database_config_path)?;
+    let pgbouncer_auth_file_path = configured_path(input.pgbouncer_auth_file_path)?;
     let configuration = StorageRuntimeConfigurationV1 {
         topology: Some(topology),
-        vault_instance_id: vault_instance_id.to_owned(),
-        vault_runtime_generation,
-        vault_hpke_public_key_x25519: vault_hpke_public_key_x25519.to_vec(),
+        vault_instance_id: input.vault_instance_id.to_owned(),
+        vault_runtime_generation: input.vault_runtime_generation,
+        vault_hpke_public_key_x25519: input.vault_hpke_public_key_x25519.to_vec(),
         desired_bindings,
         pgbouncer_database_config_path,
         desired_bundles,

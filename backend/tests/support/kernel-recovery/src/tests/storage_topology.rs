@@ -10,7 +10,9 @@ use hermes_storage_protocol::v1::{
 use prost::Message;
 use sha2::{Digest, Sha256};
 
-use crate::platform::storage::topology::encoded_managed_macos;
+use crate::platform::storage::topology::{
+    ManagedStorageConfigurationInputV1, encoded_managed_macos,
+};
 
 #[test]
 fn control_store_persists_only_monotonic_fenced_storage_topology() {
@@ -92,16 +94,17 @@ fn control_store_rejects_an_untrusted_storage_topology_shape() {
 fn runtime_configuration_stages_only_durable_bindings_for_the_current_topology() {
     let current = topology(1, 1);
     let bundle = storage_bundle();
-    let configuration = encoded_managed_macos(
-        &current,
-        &[binding(1, 1, *bundle.digest())],
-        &[bundle],
-        &unique_target_root("hermes-storage-pgbouncer").join("databases.ini"),
-        &unique_target_root("hermes-storage-pgbouncer").join("users.txt"),
-        "vault_main",
-        3,
-        &[7; 32],
-    )
+    let configuration = encoded_managed_macos(ManagedStorageConfigurationInputV1 {
+        topology: &current,
+        bindings: &[binding(1, 1, *bundle.digest())],
+        bundles: &[bundle],
+        pgbouncer_database_config_path: &unique_target_root("hermes-storage-pgbouncer")
+            .join("databases.ini"),
+        pgbouncer_auth_file_path: &unique_target_root("hermes-storage-pgbouncer").join("users.txt"),
+        vault_instance_id: "vault_main",
+        vault_runtime_generation: 3,
+        vault_hpke_public_key_x25519: &[7; 32],
+    })
     .expect("encode current fenced binding");
     let configuration = StorageRuntimeConfigurationV1::decode(configuration.as_slice())
         .expect("decode Storage runtime configuration");
@@ -117,16 +120,18 @@ fn runtime_configuration_stages_only_durable_bindings_for_the_current_topology()
             .ends_with("databases.ini")
     );
 
-    let stale = encoded_managed_macos(
-        &current,
-        &[binding(1, 2, [7; 32])],
-        &[],
-        &unique_target_root("hermes-storage-pgbouncer-stale").join("databases.ini"),
-        &unique_target_root("hermes-storage-pgbouncer-stale").join("users.txt"),
-        "vault_main",
-        3,
-        &[7; 32],
-    );
+    let stale = encoded_managed_macos(ManagedStorageConfigurationInputV1 {
+        topology: &current,
+        bindings: &[binding(1, 2, [7; 32])],
+        bundles: &[],
+        pgbouncer_database_config_path: &unique_target_root("hermes-storage-pgbouncer-stale")
+            .join("databases.ini"),
+        pgbouncer_auth_file_path: &unique_target_root("hermes-storage-pgbouncer-stale")
+            .join("users.txt"),
+        vault_instance_id: "vault_main",
+        vault_runtime_generation: 3,
+        vault_hpke_public_key_x25519: &[7; 32],
+    });
     assert!(matches!(
         stale,
         Err(error) if error == "Storage binding is stale for the current topology"
