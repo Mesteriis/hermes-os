@@ -23,41 +23,40 @@ pub struct BrowserEnrollmentV1 {
     identity_fence: GatewayIdentityFenceV1,
 }
 
+pub struct BrowserEnrollmentInputV1 {
+    pub owner_id: String,
+    pub device_id: String,
+    pub rp_id: String,
+    pub credential_id: Vec<u8>,
+    pub cose_public_key: Vec<u8>,
+    pub browser_key_public_key: Vec<u8>,
+    pub sign_count: u32,
+    pub backup_eligible: bool,
+    pub backup_state: bool,
+    pub identity_fence: GatewayIdentityFenceV1,
+}
+
 impl BrowserEnrollmentV1 {
-    pub fn new(
-        owner_id: impl Into<String>,
-        device_id: impl Into<String>,
-        rp_id: impl Into<String>,
-        credential_id: Vec<u8>,
-        cose_public_key: Vec<u8>,
-        browser_key_public_key: Vec<u8>,
-        sign_count: u32,
-        backup_eligible: bool,
-        backup_state: bool,
-        identity_fence: GatewayIdentityFenceV1,
-    ) -> Result<Self, String> {
-        let owner_id = owner_id.into();
-        let device_id = device_id.into();
-        let rp_id = rp_id.into();
-        (valid_id(&owner_id)
-            && valid_id(&device_id)
-            && valid_rp_id(&rp_id)
-            && !credential_id.is_empty()
-            && credential_id.len() <= 1024
-            && (16..=1024).contains(&cose_public_key.len())
-            && valid_browser_key_public_key(&browser_key_public_key)
-            && (!backup_state || backup_eligible))
+    pub fn new(fields: BrowserEnrollmentInputV1) -> Result<Self, String> {
+        (valid_id(&fields.owner_id)
+            && valid_id(&fields.device_id)
+            && valid_rp_id(&fields.rp_id)
+            && !fields.credential_id.is_empty()
+            && fields.credential_id.len() <= 1024
+            && (16..=1024).contains(&fields.cose_public_key.len())
+            && valid_browser_key_public_key(&fields.browser_key_public_key)
+            && (!fields.backup_state || fields.backup_eligible))
             .then_some(Self {
-                owner_id,
-                device_id,
-                rp_id,
-                credential_id,
-                cose_public_key,
-                browser_key_public_key,
-                sign_count,
-                backup_eligible,
-                backup_state,
-                identity_fence,
+                owner_id: fields.owner_id,
+                device_id: fields.device_id,
+                rp_id: fields.rp_id,
+                credential_id: fields.credential_id,
+                cose_public_key: fields.cose_public_key,
+                browser_key_public_key: fields.browser_key_public_key,
+                sign_count: fields.sign_count,
+                backup_eligible: fields.backup_eligible,
+                backup_state: fields.backup_state,
+                identity_fence: fields.identity_fence,
             })
             .ok_or_else(|| "browser enrollment is invalid".to_owned())
     }

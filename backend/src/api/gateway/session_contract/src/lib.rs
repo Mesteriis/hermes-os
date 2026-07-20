@@ -9,7 +9,9 @@ pub use browser::client_bootstrap::{
     ClientSystemComponentIdV1, ClientSystemComponentStateV1,
     ClientSystemComponentStatusProjectionV1,
 };
-pub use browser::enrollment::{BrowserEnrollmentAuthority, BrowserEnrollmentV1};
+pub use browser::enrollment::{
+    BrowserEnrollmentAuthority, BrowserEnrollmentInputV1, BrowserEnrollmentV1,
+};
 pub use browser::identity::{
     BrowserAssertionAuthority, BrowserAuthenticationAuthority, BrowserDeviceAuthority,
     BrowserDeviceCredentialV1, BrowserDevicePrincipalV1, BrowserPairingAuthority,

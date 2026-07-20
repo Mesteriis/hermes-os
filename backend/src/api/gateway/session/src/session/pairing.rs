@@ -5,8 +5,8 @@ use super::webauthn::{
     BrowserRegistrationCeremonyV1, BrowserWebauthnVerifier, VerifiedBrowserCredentialV1,
 };
 use hermes_gateway_session_contract::{
-    BrowserDevicePrincipalV1, BrowserEnrollmentAuthority, BrowserEnrollmentV1,
-    BrowserPairingAuthority, GatewayIdentityFenceV1,
+    BrowserDevicePrincipalV1, BrowserEnrollmentAuthority, BrowserEnrollmentInputV1,
+    BrowserEnrollmentV1, BrowserPairingAuthority, GatewayIdentityFenceV1,
 };
 use webauthn_rs_core::proto::{CreationChallengeResponse, RegisterPublicKeyCredential};
 
@@ -210,18 +210,18 @@ impl BrowserPairingManager {
             response,
             |pairing, credential| {
                 let material = credential.material()?;
-                let enrollment = BrowserEnrollmentV1::new(
-                    pairing.challenge.owner_id(),
-                    &device_id,
-                    pairing.challenge.rp_id(),
-                    material.credential_id().to_vec(),
-                    material.cose_public_key().to_vec(),
-                    browser_key_public_key.to_vec(),
-                    material.sign_count(),
-                    material.backup_eligible(),
-                    material.backup_state(),
-                    pairing.fence.clone(),
-                )?;
+                let enrollment = BrowserEnrollmentV1::new(BrowserEnrollmentInputV1 {
+                    owner_id: pairing.challenge.owner_id().to_owned(),
+                    device_id: device_id.clone(),
+                    rp_id: pairing.challenge.rp_id().to_owned(),
+                    credential_id: material.credential_id().to_vec(),
+                    cose_public_key: material.cose_public_key().to_vec(),
+                    browser_key_public_key: browser_key_public_key.to_vec(),
+                    sign_count: material.sign_count(),
+                    backup_eligible: material.backup_eligible(),
+                    backup_state: material.backup_state(),
+                    identity_fence: pairing.fence.clone(),
+                })?;
                 authority.admit_browser_device(&enrollment)
             },
         )
