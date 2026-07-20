@@ -100,6 +100,8 @@ mod storage_control;
 mod recovery {
     #[path = "../../../../../src/kernel/src/recovery/fence.rs"]
     pub(crate) mod fence;
+    #[path = "../../../../../src/kernel/src/recovery/media.rs"]
+    pub(crate) mod media;
 }
 
 #[cfg(test)]
@@ -148,6 +150,7 @@ mod tests {
     mod platform_vault;
     mod protocol_validation;
     mod recovery_fence;
+    mod recovery_media;
     mod scheduler_lifecycle;
     mod scheduler_requests;
     mod secure_file;

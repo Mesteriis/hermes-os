@@ -2,6 +2,7 @@ mod dispatch;
 mod export;
 pub(crate) mod fence;
 mod framing;
+pub(crate) mod media;
 
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
