@@ -19,6 +19,10 @@ use crate::storage_runtime_vault::{
 
 use super::fixtures::storage_role_binding;
 
+#[path = "runtime_vault/unavailable_route.rs"]
+mod unavailable_route;
+use unavailable_route::UnavailableVaultRoute;
+
 #[test]
 fn storage_vault_adapter_revokes_only_its_fenced_runtime_audience() {
     let vault = VaultResponseRecipientV1::generate();
@@ -338,19 +342,6 @@ impl StorageVaultRoutePortV1 for RejectingVaultRoute {
     ) -> impl Future<Output = Result<VaultCiphertextResponseV1, StorageVaultRouteFailureV1>> + Send
     {
         async { Err(StorageVaultRouteFailureV1::Rejected) }
-    }
-}
-
-struct UnavailableVaultRoute;
-
-impl StorageVaultRoutePortV1 for UnavailableVaultRoute {
-    #[allow(clippy::manual_async_fn)] // The route port requires a Send future.
-    fn route_vault_ciphertext(
-        &mut self,
-        _: VaultCiphertextRouteV1,
-    ) -> impl Future<Output = Result<VaultCiphertextResponseV1, StorageVaultRouteFailureV1>> + Send
-    {
-        async { Err(StorageVaultRouteFailureV1::Unavailable) }
     }
 }
 
