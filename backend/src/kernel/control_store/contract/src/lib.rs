@@ -11,6 +11,7 @@ mod state;
 
 pub use distribution::{
     BundledManagedLaunchBinding, ManagedLaunchRecord, OwnerPinnedArtifactBinding,
+    OwnerPinnedArtifactBindingInputV1,
 };
 pub use identity::{
     BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1, BrowserDeviceStateV1, InitialOwnerIdentity,

@@ -1,6 +1,8 @@
 //! Owner-pinned external artifact bindings.
 
-use hermes_kernel_control_store::{ModuleRegistrationState, OwnerPinnedArtifactBinding};
+use hermes_kernel_control_store::{
+    ModuleRegistrationState, OwnerPinnedArtifactBinding, OwnerPinnedArtifactBindingInputV1,
+};
 use rusqlite::{OptionalExtension, params};
 
 use crate::module_state::registry::read_required_registration;
@@ -73,18 +75,20 @@ fn decode_binding(
     let digest: Vec<u8> = row.get(2)?;
     let signature: Vec<u8> = row.get(6)?;
     Ok(OwnerPinnedArtifactBinding::new(
-        registration_id,
-        as_u64(row.get(0)?, 0)?,
-        row.get::<_, String>(1)?,
-        digest
-            .try_into()
-            .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(2, 32))?,
-        as_u64(row.get(3)?, 3)?,
-        as_u64(row.get(4)?, 4)?,
-        as_u64(row.get(5)?, 5)?,
-        signature
-            .try_into()
-            .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(6, 64))?,
+        OwnerPinnedArtifactBindingInputV1 {
+            registration_id: registration_id.to_owned(),
+            binding_revision: as_u64(row.get(0)?, 0)?,
+            canonical_artifact_path: row.get(1)?,
+            artifact_sha256: digest
+                .try_into()
+                .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(2, 32))?,
+            artifact_size: as_u64(row.get(3)?, 3)?,
+            artifact_device: as_u64(row.get(4)?, 4)?,
+            artifact_inode: as_u64(row.get(5)?, 5)?,
+            owner_signature_raw: signature
+                .try_into()
+                .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(6, 64))?,
+        },
     ))
 }
 

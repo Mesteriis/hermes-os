@@ -12,27 +12,29 @@ pub struct OwnerPinnedArtifactBinding {
     owner_signature_raw: [u8; 64],
 }
 
+pub struct OwnerPinnedArtifactBindingInputV1 {
+    pub registration_id: String,
+    pub binding_revision: u64,
+    pub canonical_artifact_path: String,
+    pub artifact_sha256: [u8; 32],
+    pub artifact_size: u64,
+    pub artifact_device: u64,
+    pub artifact_inode: u64,
+    pub owner_signature_raw: [u8; 64],
+}
+
 impl OwnerPinnedArtifactBinding {
     #[must_use]
-    pub fn new(
-        registration_id: impl Into<String>,
-        binding_revision: u64,
-        canonical_artifact_path: impl Into<String>,
-        artifact_sha256: [u8; 32],
-        artifact_size: u64,
-        artifact_device: u64,
-        artifact_inode: u64,
-        owner_signature_raw: [u8; 64],
-    ) -> Self {
+    pub fn new(fields: OwnerPinnedArtifactBindingInputV1) -> Self {
         Self {
-            registration_id: registration_id.into(),
-            binding_revision,
-            canonical_artifact_path: canonical_artifact_path.into(),
-            artifact_sha256,
-            artifact_size,
-            artifact_device,
-            artifact_inode,
-            owner_signature_raw,
+            registration_id: fields.registration_id,
+            binding_revision: fields.binding_revision,
+            canonical_artifact_path: fields.canonical_artifact_path,
+            artifact_sha256: fields.artifact_sha256,
+            artifact_size: fields.artifact_size,
+            artifact_device: fields.artifact_device,
+            artifact_inode: fields.artifact_inode,
+            owner_signature_raw: fields.owner_signature_raw,
         }
     }
 
