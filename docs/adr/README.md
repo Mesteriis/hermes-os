@@ -162,9 +162,9 @@ short-lived same-origin HttpOnly Gateway session. Его owner-neutral
 `browser_client_v1` gate открыт отдельно; explicit paired-remote HTTP/2+H3
 transport не открывает public owner API или полный `client_gateway_v1` runtime
 evidence.
-ADR-0233 фиксирует меньший текущий scope: отдельные Control Store/Vault
-recovery artifacts и PostgreSQL custom data dump. Blob, JetStream, Scheduler,
-provider state и automatic PostgreSQL restore не входят в эту процедуру;
+ADR-0233 фиксирует меньший текущий scope: отдельные Control Store/Vault/Blob
+recovery artifacts и PostgreSQL custom data dump. JetStream, Scheduler,
+provider state и composed whole-instance restore не входят в эту процедуру;
 whole-instance recovery gate остаётся закрытым.
 ADR-0234 допускает synchronised WebAuthn passkeys только как одну часть
 двухключевой browser identity: session требует ещё и подписи отдельного
