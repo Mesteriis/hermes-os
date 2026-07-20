@@ -15,7 +15,7 @@ impl StorageDeploymentProfileV1 {
         }
     }
 
-    pub fn from_str(value: &str) -> Option<Self> {
+    pub fn parse(value: &str) -> Option<Self> {
         match value {
             "macos_tauri_embedded" => Some(Self::MacosTauriEmbedded),
             "linux_docker_server" => Some(Self::LinuxDockerServer),

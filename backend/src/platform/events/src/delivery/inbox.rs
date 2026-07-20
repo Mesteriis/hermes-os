@@ -39,8 +39,10 @@ impl InboxRecordV1 {
         if self.message_id != *candidate.message_id() {
             return InboxDecisionV1::Accept;
         }
-        (self.envelope_sha256 == *candidate.envelope_sha256())
-            .then_some(InboxDecisionV1::Duplicate)
-            .unwrap_or(InboxDecisionV1::HashConflict)
+        if self.envelope_sha256 == *candidate.envelope_sha256() {
+            InboxDecisionV1::Duplicate
+        } else {
+            InboxDecisionV1::HashConflict
+        }
     }
 }

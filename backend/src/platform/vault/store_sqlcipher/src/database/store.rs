@@ -330,11 +330,12 @@ pub(crate) fn validate_store_parent(path: &Path) -> Result<(), VaultStoreError> 
     if metadata.file_type().is_symlink() || !metadata.is_dir() || metadata.mode() & 0o077 != 0 {
         return Err(VaultStoreError::InsecurePath);
     }
-    if let Ok(metadata) = fs::symlink_metadata(path) {
-        if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.mode() & 0o077 != 0
-        {
-            return Err(VaultStoreError::InsecurePath);
-        }
+    if let Ok(metadata) = fs::symlink_metadata(path)
+        && (metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || metadata.mode() & 0o077 != 0)
+    {
+        return Err(VaultStoreError::InsecurePath);
     }
     Ok(())
 }

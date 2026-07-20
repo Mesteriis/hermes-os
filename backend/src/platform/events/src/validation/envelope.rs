@@ -110,19 +110,18 @@ fn validate_actor_trace_and_fence(
     {
         return Err(EnvelopeValidationError::InvalidActor);
     }
-    if let Some(trace) = &envelope.trace {
-        if trace.trace_id.len() != 16 || trace.parent_span_id.len() != 8 || trace.trace_flags > 1 {
-            return Err(EnvelopeValidationError::InvalidTrace);
-        }
+    if let Some(trace) = &envelope.trace
+        && (trace.trace_id.len() != 16 || trace.parent_span_id.len() != 8 || trace.trace_flags > 1)
+    {
+        return Err(EnvelopeValidationError::InvalidTrace);
     }
-    if let Some(fence) = &envelope.source_fence {
-        if !valid_enum::<FenceKindV1>(fence.kind)
+    if let Some(fence) = &envelope.source_fence
+        && (!valid_enum::<FenceKindV1>(fence.kind)
             || fence.scope_id.is_empty()
             || fence.scope_id.len() > 64
-            || fence.epoch == 0
-        {
-            return Err(EnvelopeValidationError::InvalidFence);
-        }
+            || fence.epoch == 0)
+    {
+        return Err(EnvelopeValidationError::InvalidFence);
     }
     Ok(())
 }

@@ -373,7 +373,7 @@ fn validate_misfire(policy: MisfirePolicyV1) -> Result<(), ScheduleErrorV1> {
 }
 
 fn valid_interval(value: u64) -> bool {
-    value >= MIN_INTERVAL_MILLIS && value <= MAX_INTERVAL_MILLIS
+    (MIN_INTERVAL_MILLIS..=MAX_INTERVAL_MILLIS).contains(&value)
 }
 
 fn valid_concurrency_key(value: &str) -> bool {

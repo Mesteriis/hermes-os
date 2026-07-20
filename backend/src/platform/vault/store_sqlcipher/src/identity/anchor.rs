@@ -268,7 +268,7 @@ fn decode_anchor(
         .decrypt(
             &nonce,
             Payload {
-                msg: &slot.wrapped,
+                msg: slot.wrapped,
                 aad: &aad,
             },
         )

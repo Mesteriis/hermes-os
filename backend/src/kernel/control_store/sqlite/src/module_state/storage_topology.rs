@@ -47,7 +47,7 @@ fn decode_topology(row: &rusqlite::Row<'_>) -> Result<PlatformStorageTopology, r
     let profile: String = row.get(4)?;
     let postgres_digest: Vec<u8> = row.get(11)?;
     let pgbouncer_digest: Vec<u8> = row.get(12)?;
-    let profile = StorageDeploymentProfileV1::from_str(&profile).ok_or_else(|| {
+    let profile = StorageDeploymentProfileV1::parse(&profile).ok_or_else(|| {
         rusqlite::Error::InvalidColumnType(
             4,
             "deployment_profile".into(),
