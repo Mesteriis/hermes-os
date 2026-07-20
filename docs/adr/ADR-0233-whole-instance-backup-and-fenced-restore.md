@@ -8,8 +8,9 @@ private PostgreSQL export существуют раздельно. Kernel уже
 fail-closed coordinator порядка restore и P-256 signed media inventory с
 fd-based no-symlink verification. Однако он пока не связан с реальными
 component-owned restore ports; JetStream capture и disposable full-restore
-evidence также отсутствуют. Blob runtime уже имеет отдельный ciphertext-only
-snapshot/verify/empty-target restore, но coordinator пока не вызывает его.
+evidence также отсутствуют. Blob service уже имеет отдельный ciphertext-only
+offline export/verify/empty-target restore port, но coordinator пока не
+вызывает его.
 Следовательно `whole_instance_backup_v1` остаётся
 закрытым.
 
