@@ -53,27 +53,29 @@ pub struct SettingsSchemaBinding {
     sanitized_reason_code: Option<String>,
 }
 
+pub struct SettingsSchemaBindingInputV1 {
+    pub registration_id: String,
+    pub schema_major: u32,
+    pub schema_revision: u32,
+    pub schema_sha256: [u8; 32],
+    pub desired_revision: u64,
+    pub effective_revision: u64,
+    pub apply_state: SettingsApplyState,
+    pub sanitized_reason_code: Option<String>,
+}
+
 impl SettingsSchemaBinding {
     #[must_use]
-    pub fn new(
-        registration_id: impl Into<String>,
-        schema_major: u32,
-        schema_revision: u32,
-        schema_sha256: [u8; 32],
-        desired_revision: u64,
-        effective_revision: u64,
-        apply_state: SettingsApplyState,
-        sanitized_reason_code: Option<String>,
-    ) -> Self {
+    pub fn new(fields: SettingsSchemaBindingInputV1) -> Self {
         Self {
-            registration_id: registration_id.into(),
-            schema_major,
-            schema_revision,
-            schema_sha256,
-            desired_revision,
-            effective_revision,
-            apply_state,
-            sanitized_reason_code,
+            registration_id: fields.registration_id,
+            schema_major: fields.schema_major,
+            schema_revision: fields.schema_revision,
+            schema_sha256: fields.schema_sha256,
+            desired_revision: fields.desired_revision,
+            effective_revision: fields.effective_revision,
+            apply_state: fields.apply_state,
+            sanitized_reason_code: fields.sanitized_reason_code,
         }
     }
     #[must_use]

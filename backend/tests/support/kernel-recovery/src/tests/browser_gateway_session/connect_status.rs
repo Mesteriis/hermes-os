@@ -343,14 +343,16 @@ fn admit_current_visible_settings(fixture: &AuthenticationHttpFixture) {
         .store
         .admit_settings_schema(
             &SettingsSchemaBinding::new(
-                "registration-visible",
-                1,
-                1,
-                Sha256::digest(&bytes).into(),
-                0,
-                0,
-                SettingsApplyState::Current,
-                None,
+                hermes_kernel_control_store::SettingsSchemaBindingInputV1 {
+                    registration_id: "registration-visible".to_owned(),
+                    schema_major: 1,
+                    schema_revision: 1,
+                    schema_sha256: Sha256::digest(&bytes).into(),
+                    desired_revision: 0,
+                    effective_revision: 0,
+                    apply_state: SettingsApplyState::Current,
+                    sanitized_reason_code: None,
+                },
             ),
             &bytes,
         )

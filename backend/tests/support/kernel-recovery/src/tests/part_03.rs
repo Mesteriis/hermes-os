@@ -164,16 +164,17 @@ impl RegistrationFixture {
     }
 
     fn assert_settings_applied(&self) {
-        let schema = SettingsSchemaBinding::new(
-            "registration-1",
-            1,
-            1,
-            [8; 32],
-            0,
-            0,
-            SettingsApplyState::Current,
-            None,
-        );
+        let schema =
+            SettingsSchemaBinding::new(hermes_kernel_control_store::SettingsSchemaBindingInputV1 {
+                registration_id: "registration-1".to_owned(),
+                schema_major: 1,
+                schema_revision: 1,
+                schema_sha256: [8; 32],
+                desired_revision: 0,
+                effective_revision: 0,
+                apply_state: SettingsApplyState::Current,
+                sanitized_reason_code: None,
+            });
         self.store
             .register_settings_schema(&schema)
             .expect("bind settings schema");

@@ -2,6 +2,7 @@
 
 use hermes_kernel_control_store::{
     ModuleRegistrationState, SettingsApplyState, SettingsDesiredSnapshot, SettingsSchemaBinding,
+    SettingsSchemaBindingInputV1,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -250,18 +251,18 @@ fn read_settings_binding(
                 let digest: Vec<u8> = row.get(2)?;
                 let state = settings_apply_state_from_str(&row.get::<_, String>(5)?)
                     .ok_or(rusqlite::Error::InvalidQuery)?;
-                Ok(SettingsSchemaBinding::new(
-                    registration_id,
-                    row.get(0)?,
-                    row.get(1)?,
-                    digest
+                Ok(SettingsSchemaBinding::new(SettingsSchemaBindingInputV1 {
+                    registration_id: registration_id.to_owned(),
+                    schema_major: row.get(0)?,
+                    schema_revision: row.get(1)?,
+                    schema_sha256: digest
                         .try_into()
                         .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(2, 32))?,
-                    as_u64(row.get(3)?, 3)?,
-                    as_u64(row.get(4)?, 4)?,
-                    state,
-                    row.get(6)?,
-                ))
+                    desired_revision: as_u64(row.get(3)?, 3)?,
+                    effective_revision: as_u64(row.get(4)?, 4)?,
+                    apply_state: state,
+                    sanitized_reason_code: row.get(6)?,
+                }))
             },
         )
         .optional()

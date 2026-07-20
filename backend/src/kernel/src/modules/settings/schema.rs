@@ -2,7 +2,7 @@
 
 use hermes_kernel_control_store::{
     ModuleRegistrationState, ModuleRegistryStore, SettingsApplyState, SettingsRegistryStore,
-    SettingsSchemaBinding,
+    SettingsSchemaBinding, SettingsSchemaBindingInputV1,
 };
 use hermes_kernel_control_store_sqlite::StoreError;
 use hermes_runtime_protocol::validation::descriptor::{
@@ -49,16 +49,16 @@ where
         return Err("settings schema does not match the descriptor binding".to_owned());
     }
     validate_capability_bindings(&descriptor, &schema)?;
-    let binding = SettingsSchemaBinding::new(
-        registration_id,
-        schema.major,
-        schema.revision,
+    let binding = SettingsSchemaBinding::new(SettingsSchemaBindingInputV1 {
+        registration_id: registration_id.to_owned(),
+        schema_major: schema.major,
+        schema_revision: schema.revision,
         schema_sha256,
-        0,
-        0,
-        SettingsApplyState::Current,
-        None,
-    );
+        desired_revision: 0,
+        effective_revision: 0,
+        apply_state: SettingsApplyState::Current,
+        sanitized_reason_code: None,
+    });
     store
         .admit_settings_schema(&binding, schema_bytes)
         .map_err(|error| format!("{error:?}"))?;
