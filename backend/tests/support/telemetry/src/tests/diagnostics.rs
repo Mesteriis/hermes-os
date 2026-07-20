@@ -11,7 +11,8 @@ use hermes_runtime_protocol::v1::{
     telemetry_runtime_control_response_v1::Result as ResponseResult,
 };
 use hermes_telemetry_protocol::{
-    TelemetryPriorityV1, TelemetrySignalKindV1, TelemetrySignalV1, TelemetrySourceV1,
+    TelemetryPriorityV1, TelemetrySignalInputV1, TelemetrySignalKindV1, TelemetrySignalV1,
+    TelemetrySourceV1,
 };
 use prost::Message;
 
@@ -78,17 +79,17 @@ fn diagnostics_request() -> Vec<u8> {
 }
 
 fn signal() -> TelemetrySignalV1 {
-    TelemetrySignalV1::new(
-        1,
-        TelemetrySourceV1::new("runtime-42".to_owned(), "module.lifecycle".to_owned())
+    TelemetrySignalV1::new(TelemetrySignalInputV1 {
+        observed_at_utc_millis: 1,
+        source: TelemetrySourceV1::new("runtime-42".to_owned(), "module.lifecycle".to_owned())
             .expect("source"),
-        TelemetrySignalKindV1::Lifecycle,
-        TelemetryPriorityV1::Info,
-        "runtime.lifecycle.transition".to_owned(),
-        None,
-        None,
-        0,
-    )
+        kind: TelemetrySignalKindV1::Lifecycle,
+        priority: TelemetryPriorityV1::Info,
+        operation: "runtime.lifecycle.transition".to_owned(),
+        error_class: None,
+        trace_id: None,
+        dropped_count: 0,
+    })
     .expect("signal")
 }
 

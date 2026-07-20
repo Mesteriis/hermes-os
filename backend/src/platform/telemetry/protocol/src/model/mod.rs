@@ -3,5 +3,6 @@ mod signal;
 
 pub use identity::{TelemetryIdentityErrorV1, TelemetrySourceV1};
 pub use signal::{
-    TelemetryPriorityV1, TelemetrySignalErrorV1, TelemetrySignalKindV1, TelemetrySignalV1,
+    TelemetryPriorityV1, TelemetrySignalErrorV1, TelemetrySignalInputV1, TelemetrySignalKindV1,
+    TelemetrySignalV1,
 };

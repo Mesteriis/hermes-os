@@ -41,13 +41,11 @@ fn serve_listener(runtime_dir: &Path, store: TelemetrySegmentStore) -> Result<()
     std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600))
         .map_err(|_| "Telemetry listener is unavailable".to_owned())?;
     let mut quota = TelemetryQuotaV1::default();
-    for stream in listener.incoming() {
-        if let Ok(stream) = stream {
-            if let Ok(signal) = ingest(stream) {
-                if quota.admit(&signal) {
-                    let _ = store.append(&signal);
-                }
-            }
+    for stream in listener.incoming().flatten() {
+        if let Ok(signal) = ingest(stream)
+            && quota.admit(&signal)
+        {
+            let _ = store.append(&signal);
         }
     }
     Err("Telemetry listener stopped".to_owned())
@@ -116,21 +114,21 @@ fn decode(frame: &str) -> Result<TelemetrySignalV1, String> {
     else {
         return Err("Telemetry frame is invalid".to_owned());
     };
-    TelemetrySignalV1::new(
-        timestamp
+    TelemetrySignalV1::new(hermes_telemetry_protocol::TelemetrySignalInputV1 {
+        observed_at_utc_millis: timestamp
             .parse()
             .map_err(|_| "Telemetry frame is invalid".to_owned())?,
-        TelemetrySourceV1::new((*runtime).to_owned(), (*component).to_owned())
+        source: TelemetrySourceV1::new((*runtime).to_owned(), (*component).to_owned())
             .map_err(|_| "Telemetry frame is invalid".to_owned())?,
-        parse_kind(kind)?,
-        parse_priority(priority)?,
-        (*operation).to_owned(),
-        optional(error),
-        optional(trace),
-        dropped
+        kind: parse_kind(kind)?,
+        priority: parse_priority(priority)?,
+        operation: (*operation).to_owned(),
+        error_class: optional(error),
+        trace_id: optional(trace),
+        dropped_count: dropped
             .parse()
             .map_err(|_| "Telemetry frame is invalid".to_owned())?,
-    )
+    })
     .map_err(|_| "Telemetry frame is invalid".to_owned())
 }
 

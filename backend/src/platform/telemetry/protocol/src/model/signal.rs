@@ -35,41 +35,43 @@ pub struct TelemetrySignalV1 {
     dropped_count: u32,
 }
 
+pub struct TelemetrySignalInputV1 {
+    pub observed_at_utc_millis: i64,
+    pub source: TelemetrySourceV1,
+    pub kind: TelemetrySignalKindV1,
+    pub priority: TelemetryPriorityV1,
+    pub operation: String,
+    pub error_class: Option<String>,
+    pub trace_id: Option<String>,
+    pub dropped_count: u32,
+}
+
 impl TelemetrySignalV1 {
-    pub fn new(
-        observed_at_utc_millis: i64,
-        source: TelemetrySourceV1,
-        kind: TelemetrySignalKindV1,
-        priority: TelemetryPriorityV1,
-        operation: String,
-        error_class: Option<String>,
-        trace_id: Option<String>,
-        dropped_count: u32,
-    ) -> Result<Self, TelemetrySignalErrorV1> {
+    pub fn new(fields: TelemetrySignalInputV1) -> Result<Self, TelemetrySignalErrorV1> {
         validate_field(
-            &operation,
+            &fields.operation,
             MAX_OPERATION_BYTES,
             TelemetrySignalErrorV1::InvalidOperation,
         )?;
         validate_optional_field(
-            &error_class,
+            &fields.error_class,
             MAX_ERROR_CLASS_BYTES,
             TelemetrySignalErrorV1::InvalidErrorClass,
         )?;
         validate_optional_field(
-            &trace_id,
+            &fields.trace_id,
             MAX_TRACE_ID_BYTES,
             TelemetrySignalErrorV1::InvalidTraceId,
         )?;
         Ok(Self {
-            observed_at_utc_millis,
-            source,
-            kind,
-            priority,
-            operation,
-            error_class,
-            trace_id,
-            dropped_count,
+            observed_at_utc_millis: fields.observed_at_utc_millis,
+            source: fields.source,
+            kind: fields.kind,
+            priority: fields.priority,
+            operation: fields.operation,
+            error_class: fields.error_class,
+            trace_id: fields.trace_id,
+            dropped_count: fields.dropped_count,
         })
     }
 
