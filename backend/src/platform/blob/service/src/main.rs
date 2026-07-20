@@ -15,7 +15,30 @@ fn main() -> Result<(), String> {
     let mut arguments = arguments.peekable();
     match command.as_deref() {
         Some(command) if command == "serve-inherited" => serve_inherited(&mut arguments),
+        Some(command) => offline_recovery(command, &mut arguments),
         _ => Err("Blob service command is unavailable".to_owned()),
+    }
+}
+
+fn offline_recovery<I>(
+    command: &std::ffi::OsStr,
+    arguments: &mut std::iter::Peekable<I>,
+) -> Result<(), String>
+where
+    I: Iterator<Item = std::ffi::OsString>,
+{
+    match cli::parse_offline_recovery_command(command, arguments)? {
+        cli::OfflineRecoveryCommand::Export {
+            data_dir,
+            destination,
+        } => hermes_blob_runtime::recovery::export_backup_offline(&data_dir, &destination)
+            .map(|_| ()),
+        cli::OfflineRecoveryCommand::Verify { source } => {
+            hermes_blob_runtime::recovery::verify_backup_offline(&source).map(|_| ())
+        }
+        cli::OfflineRecoveryCommand::Restore { source, data_dir } => {
+            hermes_blob_runtime::recovery::restore_backup_offline(&source, &data_dir).map(|_| ())
+        }
     }
 }
 
