@@ -23,17 +23,30 @@ pub(super) struct ActiveWorker {
     pub(super) stop_requested: Arc<AtomicBool>,
 }
 
-pub(super) fn new_active_worker(
-    inner: Arc<Inner>,
-    registration_id: String,
-    staged_executable: StagedNativeArtifact,
-    arguments: Vec<String>,
-    expectation: ManagedRuntimeExpectation,
-    policy: ManagedChildExecutionPolicy,
-    contracts: Option<StagedRuntimeContracts>,
-    vault_route_handler: Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>,
-    event_credential_handler: Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>,
-) -> ActiveWorker {
+pub(super) struct ActiveWorkerInput {
+    pub(super) inner: Arc<Inner>,
+    pub(super) registration_id: String,
+    pub(super) staged_executable: StagedNativeArtifact,
+    pub(super) arguments: Vec<String>,
+    pub(super) expectation: ManagedRuntimeExpectation,
+    pub(super) policy: ManagedChildExecutionPolicy,
+    pub(super) contracts: Option<StagedRuntimeContracts>,
+    pub(super) vault_route_handler: Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>,
+    pub(super) event_credential_handler: Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>,
+}
+
+pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
+    let ActiveWorkerInput {
+        inner,
+        registration_id,
+        staged_executable,
+        arguments,
+        expectation,
+        policy,
+        contracts,
+        vault_route_handler,
+        event_credential_handler,
+    } = input;
     let shutdown_requested = Arc::clone(&inner.shutdown_requested);
     let stop_requested = Arc::new(AtomicBool::new(false));
     let worker_stop_requested = Arc::clone(&stop_requested);
@@ -44,16 +57,18 @@ pub(super) fn new_active_worker(
             &inner,
             &registration_id,
             managed_child_supervisor::run_until_shutdown(
-                &staged_executable,
-                &arguments,
-                &expectation,
-                &policy,
-                &shutdown_requested,
-                &worker_stop_requested,
-                &relay_requests,
-                vault_route_handler.as_deref(),
-                event_credential_handler.as_deref(),
-                &ready_sender,
+                managed_child_supervisor::ManagedChildRunInput {
+                    staged_executable: &staged_executable,
+                    arguments: &arguments,
+                    expectation: &expectation,
+                    policy: &policy,
+                    shutdown_requested: &shutdown_requested,
+                    stop_requested: &worker_stop_requested,
+                    relay_requests: &relay_requests,
+                    vault_route_handler: vault_route_handler.as_deref(),
+                    event_credential_handler: event_credential_handler.as_deref(),
+                    ready_sender: &ready_sender,
+                },
             )
             .map(|_| ()),
         );

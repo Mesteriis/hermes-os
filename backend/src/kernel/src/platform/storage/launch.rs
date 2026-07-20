@@ -45,17 +45,17 @@ pub(crate) fn start_from_kernel(
     let (desired_bindings, desired_bundles) = desired_configuration(store)?;
     let vault = vault_status::read_current(store, &supervisor.relay_port())?;
     let runtime_generation = next_runtime_generation(store)?;
-    let (prepared, contracts) = prepare_launch(
+    let (prepared, contracts) = prepare_launch(StorageLaunchInputV1 {
         kernel,
-        &binding,
-        &topology,
-        &desired_bindings,
-        &desired_bundles,
-        store.snapshot().instance_id(),
-        &vault,
+        binding: &binding,
+        topology: &topology,
+        desired_bindings: &desired_bindings,
+        desired_bundles: &desired_bundles,
+        vault_instance_id: store.snapshot().instance_id(),
+        vault: &vault,
         runtime_dir,
         runtime_generation,
-    )?;
+    })?;
     let record = PlatformManagedProcessLaunch::new(
         STORAGE_PROCESS_ID,
         binding.binding_revision(),
@@ -181,16 +181,20 @@ fn storage_binding(
         .ok_or_else(|| "Storage release binding is unavailable".to_owned())
 }
 
-fn prepare_launch(
-    kernel: &Path,
-    binding: &hermes_kernel_control_store::PlatformManagedProcessBinding,
-    topology: &hermes_kernel_control_store::PlatformStorageTopology,
-    desired_bindings: &[hermes_kernel_control_store::PlatformStorageBindingV1],
-    desired_bundles: &[hermes_kernel_control_store::PlatformStorageBundleV1],
-    vault_instance_id: &str,
-    vault: &vault_status::ManagedVaultStatus,
-    runtime_dir: &Path,
+struct StorageLaunchInputV1<'a> {
+    kernel: &'a Path,
+    binding: &'a hermes_kernel_control_store::PlatformManagedProcessBinding,
+    topology: &'a hermes_kernel_control_store::PlatformStorageTopology,
+    desired_bindings: &'a [hermes_kernel_control_store::PlatformStorageBindingV1],
+    desired_bundles: &'a [hermes_kernel_control_store::PlatformStorageBundleV1],
+    vault_instance_id: &'a str,
+    vault: &'a vault_status::ManagedVaultStatus,
+    runtime_dir: &'a Path,
     runtime_generation: u64,
+}
+
+fn prepare_launch(
+    input: StorageLaunchInputV1<'_>,
 ) -> Result<
     (
         native_launch::PreparedPlatformManagedProcess,
@@ -199,15 +203,16 @@ fn prepare_launch(
     String,
 > {
     let prepared = native_launch::prepare_bound_platform_process(
-        kernel,
-        binding,
-        &runtime_dir
+        input.kernel,
+        input.binding,
+        &input
+            .runtime_dir
             .join("storage")
-            .join(format!("launch-{runtime_generation}"))
+            .join(format!("launch-{}", input.runtime_generation))
             .join("managed"),
     )?;
     let (pgbouncer_directory, pgbouncer_auth_directory) =
-        match prepare_pgbouncer_directories(runtime_dir) {
+        match prepare_pgbouncer_directories(input.runtime_dir) {
             Ok(directories) => directories,
             Err(error) => {
                 let _ = prepared.remove();
@@ -216,19 +221,20 @@ fn prepare_launch(
         };
     let configuration =
         topology::encoded_managed_macos(topology::ManagedStorageConfigurationInputV1 {
-            topology,
-            bindings: desired_bindings,
-            bundles: desired_bundles,
+            topology: input.topology,
+            bindings: input.desired_bindings,
+            bundles: input.desired_bundles,
             pgbouncer_database_config_path: &pgbouncer_directory.join("databases.ini"),
             pgbouncer_auth_file_path: &pgbouncer_auth_directory.join("users.txt"),
-            vault_instance_id,
-            vault_runtime_generation: vault.runtime_generation(),
-            vault_hpke_public_key_x25519: vault.hpke_public_key_x25519(),
+            vault_instance_id: input.vault_instance_id,
+            vault_runtime_generation: input.vault.runtime_generation(),
+            vault_hpke_public_key_x25519: input.vault.hpke_public_key_x25519(),
         })?;
     match StagedRuntimeContracts::stage_with_runtime_configuration(
-        &runtime_dir
+        &input
+            .runtime_dir
             .join("storage")
-            .join(format!("launch-{runtime_generation}"))
+            .join(format!("launch-{}", input.runtime_generation))
             .join("contracts"),
         prepared.descriptor_bytes(),
         prepared.settings_schema_bytes(),

@@ -29,36 +29,28 @@ pub fn run(
     )
 }
 
+pub struct ManagedChildRunInput<'a> {
+    pub staged_executable: &'a StagedNativeArtifact,
+    pub arguments: &'a [String],
+    pub expectation: &'a ManagedRuntimeExpectation,
+    pub policy: &'a ManagedChildExecutionPolicy,
+    pub shutdown_requested: &'a AtomicBool,
+    pub stop_requested: &'a AtomicBool,
+    pub relay_requests: &'a Receiver<managed_runtime_control::ManagedRuntimeRelayRequest>,
+    pub vault_route_handler: Option<&'a dyn ManagedRuntimeVaultRouteHandler>,
+    pub event_credential_handler: Option<&'a dyn ManagedRuntimeEventCredentialHandler>,
+    pub ready_sender: &'a SyncSender<Result<(), String>>,
+}
+
 pub fn run_until_shutdown(
-    staged_executable: &StagedNativeArtifact,
-    arguments: &[String],
-    expectation: &ManagedRuntimeExpectation,
-    policy: &ManagedChildExecutionPolicy,
-    shutdown_requested: &AtomicBool,
-    stop_requested: &AtomicBool,
-    relay_requests: &Receiver<managed_runtime_control::ManagedRuntimeRelayRequest>,
-    vault_route_handler: Option<&dyn ManagedRuntimeVaultRouteHandler>,
-    event_credential_handler: Option<&dyn ManagedRuntimeEventCredentialHandler>,
-    ready_sender: &SyncSender<Result<(), String>>,
+    input: ManagedChildRunInput<'_>,
 ) -> Result<ManagedChildExecutionResult, String> {
     run_with_wait(
-        staged_executable,
-        arguments,
-        expectation,
-        policy,
-        |child, channel| {
-            wait_until_shutdown_with_relay(
-                child,
-                channel,
-                expectation,
-                shutdown_requested,
-                stop_requested,
-                relay_requests,
-                vault_route_handler,
-                event_credential_handler,
-                ready_sender,
-            )
-        },
+        input.staged_executable,
+        input.arguments,
+        input.expectation,
+        input.policy,
+        |child, channel| wait_until_shutdown_with_relay(child, channel, &input),
     )
 }
 
@@ -101,45 +93,44 @@ where
 fn wait_until_shutdown_with_relay(
     child: &mut Child,
     channel: &mut std::os::unix::net::UnixStream,
-    expectation: &ManagedRuntimeExpectation,
-    shutdown_requested: &AtomicBool,
-    stop_requested: &AtomicBool,
-    relay_requests: &Receiver<managed_runtime_control::ManagedRuntimeRelayRequest>,
-    vault_route_handler: Option<&dyn ManagedRuntimeVaultRouteHandler>,
-    event_credential_handler: Option<&dyn ManagedRuntimeEventCredentialHandler>,
-    ready_sender: &SyncSender<Result<(), String>>,
+    input: &ManagedChildRunInput<'_>,
 ) -> Result<ExitStatus, String> {
     loop {
         if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
             return Ok(status);
         }
-        if shutdown_requested.load(std::sync::atomic::Ordering::Acquire)
-            || stop_requested.load(std::sync::atomic::Ordering::Acquire)
+        if input
+            .shutdown_requested
+            .load(std::sync::atomic::Ordering::Acquire)
+            || input
+                .stop_requested
+                .load(std::sync::atomic::Ordering::Acquire)
         {
             bounded_managed_child_execution::terminate(child)?;
             return Err("managed child stopped by Kernel shutdown".to_owned());
         }
         if let Some(ready) = managed_runtime_control::inbound::try_receive_ready(channel)? {
-            if !expectation.matches_ready(&ready) {
-                let _ =
-                    ready_sender.try_send(Err("managed runtime ready signal is stale".to_owned()));
+            if !input.expectation.matches_ready(&ready) {
+                let _ = input
+                    .ready_sender
+                    .try_send(Err("managed runtime ready signal is stale".to_owned()));
                 return Err("managed runtime ready signal is stale".to_owned());
             }
-            let _ = ready_sender.try_send(Ok(()));
+            let _ = input.ready_sender.try_send(Ok(()));
             continue;
         }
         match process_typed_requests(
             channel,
-            expectation,
-            vault_route_handler,
-            event_credential_handler,
+            input.expectation,
+            input.vault_route_handler,
+            input.event_credential_handler,
         ) {
             Ok(true) => continue,
             Ok(false) => {}
             Err(_) => return terminal_status_after_control_close(child),
         }
-        match relay_requests.recv_timeout(Duration::from_millis(25)) {
-            Ok(request) => request.dispatch(channel, expectation, vault_route_handler),
+        match input.relay_requests.recv_timeout(Duration::from_millis(25)) {
+            Ok(request) => request.dispatch(channel, input.expectation, input.vault_route_handler),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {
                 bounded_managed_child_execution::terminate(child)?;

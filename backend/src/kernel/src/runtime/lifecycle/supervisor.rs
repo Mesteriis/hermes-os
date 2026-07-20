@@ -16,10 +16,15 @@ use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
 #[path = "supervisor/worker.rs"]
 mod worker;
 
-use worker::{ActiveWorker, new_active_worker, remove_staged_launch};
+use worker::{ActiveWorker, ActiveWorkerInput, new_active_worker, remove_staged_launch};
 
 const MANAGED_RUNTIME_RELAY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 const MANAGED_RUNTIME_READY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+type ConfiguredRequestHandlers = (
+    Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>,
+    Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>,
+);
 
 #[derive(Clone)]
 pub struct ManagedRuntimeSupervisor {
@@ -195,9 +200,9 @@ impl ManagedRuntimeSupervisor {
                     return Err(error);
                 }
             };
-        let worker = new_active_worker(
-            Arc::clone(&self.inner),
-            registration_id.clone(),
+        let worker = new_active_worker(ActiveWorkerInput {
+            inner: Arc::clone(&self.inner),
+            registration_id: registration_id.clone(),
             staged_executable,
             arguments,
             expectation,
@@ -205,20 +210,12 @@ impl ManagedRuntimeSupervisor {
             contracts,
             vault_route_handler,
             event_credential_handler,
-        );
+        });
         workers.insert(registration_id, worker);
         Ok(())
     }
 
-    fn configured_request_handlers(
-        &self,
-    ) -> Result<
-        (
-            Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>,
-            Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>,
-        ),
-        String,
-    > {
+    fn configured_request_handlers(&self) -> Result<ConfiguredRequestHandlers, String> {
         Ok((
             self.vault_route_handler()?,
             self.event_credential_handler()?,
@@ -381,7 +378,8 @@ impl ManagedRuntimeSupervisor {
             Ok(mut workers) => {
                 let ids = workers
                     .iter()
-                    .filter_map(|(id, worker)| worker.join.is_finished().then(|| id.clone()))
+                    .filter(|(_, worker)| worker.join.is_finished())
+                    .map(|(id, _)| id.clone())
                     .collect::<Vec<_>>();
                 ids.into_iter()
                     .filter_map(|id| workers.remove(&id))

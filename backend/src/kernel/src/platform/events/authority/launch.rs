@@ -48,16 +48,16 @@ pub(crate) fn start_from_kernel(
     let topology = status::current_topology(store)?;
     let vault = vault_status::read_current(store, &supervisor.relay_port())?;
     let runtime_generation = next_runtime_generation(store)?;
-    let (prepared, contracts) = prepare_launch(
+    let (prepared, contracts) = prepare_launch(EventsAuthorityLaunchInputV1 {
         kernel,
-        &binding,
+        binding: &binding,
         runtime_dir,
-        store.snapshot().instance_id(),
-        &configuration,
-        &topology,
-        &vault,
+        vault_instance_id: store.snapshot().instance_id(),
+        configuration: &configuration,
+        topology: &topology,
+        vault: &vault,
         runtime_generation,
-    )?;
+    })?;
     let launch = PlatformManagedProcessLaunch::new(
         EVENTS_AUTHORITY_PROCESS_ID,
         binding.binding_revision(),
@@ -126,15 +126,19 @@ fn authority_binding(
         .ok_or_else(|| "Events authority release binding is unavailable".to_owned())
 }
 
-fn prepare_launch(
-    kernel: &Path,
-    binding: &hermes_kernel_control_store::PlatformManagedProcessBinding,
-    runtime_dir: &Path,
-    vault_instance_id: &str,
-    configuration: &PlatformEventsAuthorityConfigurationV1,
-    topology: &PlatformEventHubTopologyV1,
-    vault: &vault_status::ManagedVaultStatus,
+struct EventsAuthorityLaunchInputV1<'a> {
+    kernel: &'a Path,
+    binding: &'a hermes_kernel_control_store::PlatformManagedProcessBinding,
+    runtime_dir: &'a Path,
+    vault_instance_id: &'a str,
+    configuration: &'a PlatformEventsAuthorityConfigurationV1,
+    topology: &'a PlatformEventHubTopologyV1,
+    vault: &'a vault_status::ManagedVaultStatus,
     runtime_generation: u64,
+}
+
+fn prepare_launch(
+    input: EventsAuthorityLaunchInputV1<'_>,
 ) -> Result<
     (
         native_launch::PreparedPlatformManagedProcess,
@@ -143,25 +147,31 @@ fn prepare_launch(
     String,
 > {
     let prepared = native_launch::prepare_bound_platform_process(
-        kernel,
-        binding,
-        &runtime_dir
+        input.kernel,
+        input.binding,
+        &input
+            .runtime_dir
             .join("events")
             .join("authority")
-            .join(format!("launch-{runtime_generation}"))
+            .join(format!("launch-{}", input.runtime_generation))
             .join("managed"),
     )?;
     let Some(settings_schema) = prepared.settings_schema_bytes() else {
         let _ = prepared.remove();
         return Err("Events authority release lacks a settings schema".to_owned());
     };
-    let runtime_configuration =
-        runtime_configuration(vault_instance_id, configuration, topology, vault)?;
+    let runtime_configuration = runtime_configuration(
+        input.vault_instance_id,
+        input.configuration,
+        input.topology,
+        input.vault,
+    )?;
     match StagedRuntimeContracts::stage_with_runtime_configuration(
-        &runtime_dir
+        &input
+            .runtime_dir
             .join("events")
             .join("authority")
-            .join(format!("launch-{runtime_generation}"))
+            .join(format!("launch-{}", input.runtime_generation))
             .join("contracts"),
         prepared.descriptor_bytes(),
         Some(settings_schema),
