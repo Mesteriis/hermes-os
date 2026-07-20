@@ -20,6 +20,7 @@ pub struct SchedulerRunClaimV1 {
 }
 
 impl SchedulerRunClaimV1 {
+    #[allow(clippy::too_many_arguments)] // The persisted claim is validated atomically from its exact durable fields.
     pub fn new(
         lease: ScheduleRunLeaseV1,
         scheduled_for: UtcMillisV1,
