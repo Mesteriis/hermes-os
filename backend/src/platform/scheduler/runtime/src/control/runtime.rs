@@ -1,10 +1,9 @@
 //! Scheduler startup and receipt-worker lifecycle on the inherited channel.
 
 use std::os::unix::net::UnixStream;
-use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 
-use hermes_clock_protocol::{ClockDiscontinuityV1, ClockPolicyV1};
 use hermes_runtime_protocol::{
     v1::{
         ManagedRuntimeControlRequestV1, ManagedRuntimeReadyRequestV1,
@@ -24,17 +23,17 @@ use hermes_scheduler_jetstream::{
 };
 use hermes_scheduler_persistence::{
     SchedulerDispatchAdmissionV1, SchedulerMaterializationSourceV1, SchedulerPostgresEndpointV1,
-    SchedulerPostgresStoreV1, SchedulerReceiptConsumerV1, scheduler_storage_binding_from_runtime,
+    SchedulerPostgresStoreV1, scheduler_storage_binding_from_runtime,
 };
 use hermes_storage_vault::{StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1};
 use prost::Message;
 
 use super::{
-    clock::SchedulerSystemClockV1,
     framing::{read_frame, write_frame},
     handshake::{SchedulerRuntimeIdentity, authenticate},
     schedules,
     vault_route::InheritedSchedulerVaultRouteV1,
+    workers::{SchedulerWorkerLaunchInputV1, launch_workers},
 };
 
 const CONTROL_IDLE: Duration = Duration::from_millis(25);
@@ -209,110 +208,6 @@ async fn connect_receipt_ports(
     Ok(ports)
 }
 
-struct SchedulerWorkerLaunchInputV1<'a> {
-    runtime: &'a tokio::runtime::Runtime,
-    store: SchedulerPostgresStoreV1,
-    dispatch: SchedulerJetStreamDispatchPortV1,
-    ports: Vec<SchedulerJetStreamReceiptPortV1>,
-    dispatch_batch_limit: u32,
-    reconcile_interval_millis: u32,
-    source: SchedulerMaterializationSourceV1,
-    admission: SchedulerDispatchAdmissionV1,
-}
-
-fn launch_workers(input: SchedulerWorkerLaunchInputV1<'_>) -> Receiver<()> {
-    let SchedulerWorkerLaunchInputV1 {
-        runtime,
-        store,
-        dispatch,
-        ports,
-        dispatch_batch_limit,
-        reconcile_interval_millis,
-        source,
-        admission,
-    } = input;
-    let (sender, receiver) = channel();
-    for port in ports {
-        let sender = sender.clone();
-        let store = store.clone();
-        runtime.spawn(async move { receive_receipts(port, store, sender).await });
-    }
-    let sender = sender.clone();
-    runtime.spawn(async move {
-        relay_dispatches(
-            store,
-            dispatch,
-            dispatch_batch_limit,
-            reconcile_interval_millis,
-            source,
-            admission,
-            sender,
-        )
-        .await;
-    });
-    receiver
-}
-
-async fn relay_dispatches(
-    mut store: SchedulerPostgresStoreV1,
-    dispatch: SchedulerJetStreamDispatchPortV1,
-    dispatch_batch_limit: u32,
-    reconcile_interval_millis: u32,
-    source: SchedulerMaterializationSourceV1,
-    admission: SchedulerDispatchAdmissionV1,
-    failure: Sender<()>,
-) {
-    let clock = SchedulerSystemClockV1::new(ClockPolicyV1::production_default());
-    let mut interval =
-        tokio::time::interval(Duration::from_millis(u64::from(reconcile_interval_millis)));
-    loop {
-        interval.tick().await;
-        let reading = match clock.read() {
-            Ok(reading) if reading.discontinuity() == ClockDiscontinuityV1::Stable => reading,
-            _ => {
-                let _ = failure.send(());
-                return;
-            }
-        };
-        if store
-            .materialize_due(
-                reading.wall_utc(),
-                u16::try_from(dispatch_batch_limit).unwrap_or(u16::MAX),
-                &source,
-                &admission,
-            )
-            .await
-            .is_err()
-        {
-            let _ = failure.send(());
-            return;
-        }
-        if store
-            .materialize_retries(
-                reading.wall_utc(),
-                u16::try_from(dispatch_batch_limit).unwrap_or(u16::MAX),
-                &source,
-                &admission,
-            )
-            .await
-            .is_err()
-        {
-            let _ = failure.send(());
-            return;
-        }
-        for _ in 0..dispatch_batch_limit {
-            match dispatch.relay_once(&mut store).await {
-                Ok(true) => {}
-                Ok(false) => break,
-                Err(_) => {
-                    let _ = failure.send(());
-                    return;
-                }
-            }
-        }
-    }
-}
-
 fn materialization_source(
     identity: &SchedulerRuntimeIdentity,
     configuration: &SchedulerRuntimeConfigurationV1,
@@ -347,20 +242,6 @@ fn dispatch_admission(
             .map(|binding| binding.subject.clone()),
     )
     .map_err(|_| "Scheduler dispatch admission is invalid".to_owned())
-}
-
-async fn receive_receipts(
-    port: SchedulerJetStreamReceiptPortV1,
-    store: SchedulerPostgresStoreV1,
-    failure: Sender<()>,
-) {
-    let mut consumer = SchedulerReceiptConsumerV1::new(port, &store);
-    loop {
-        if consumer.consume_one().await.is_err() {
-            let _ = failure.send(());
-            return;
-        }
-    }
 }
 
 fn announce_ready(

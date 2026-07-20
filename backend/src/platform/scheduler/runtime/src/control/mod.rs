@@ -6,5 +6,6 @@ mod handshake;
 mod runtime;
 mod schedules;
 mod vault_route;
+mod workers;
 
 pub(crate) use runtime::serve_inherited;
