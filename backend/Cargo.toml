@@ -14,6 +14,7 @@ members = [
   "src/platform/scheduler/jetstream",
   "src/platform/scheduler/runtime",
   "src/platform/runtime_protocol",
+  "src/platform/secure_file",
   "src/platform/clock/protocol",
   "src/platform/clock/runtime",
   "src/platform/telemetry/protocol",

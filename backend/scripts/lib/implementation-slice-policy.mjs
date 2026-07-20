@@ -30,6 +30,7 @@ const VAULT_FOUNDATION_PRODUCTION_PACKAGES = [
   { name: 'hermes-vault-protocol', role: 'platform', owner: 'vault', surface: 'contract' },
   { name: 'hermes-vault-key-provider', role: 'platform', owner: 'vault', surface: 'contract' },
   { name: 'hermes-vault-key-provider-file', role: 'platform', owner: 'vault', surface: 'implementation' },
+  { name: 'hermes-secure-file', role: 'platform', owner: 'secure_file', surface: 'contract' },
   { name: 'hermes-vault-store-sqlcipher', role: 'platform', owner: 'vault', surface: 'persistence' },
   { name: 'hermes-vault-runtime', role: 'platform', owner: 'vault', surface: 'runtime' },
 ];
@@ -80,7 +81,9 @@ const RECOVERY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-kernel-control-store', kind: 'normal' },
     { name: 'hermes-kernel-control-store-sqlite', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-secure-file', kind: 'normal' },
   ],
+  'hermes-secure-file': [],
 };
 
 const VAULT_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
@@ -89,6 +92,7 @@ const VAULT_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   'hermes-vault-key-provider': [],
   'hermes-vault-key-provider-file': [
     { name: 'hermes-vault-key-provider', kind: 'normal' },
+    { name: 'hermes-secure-file', kind: 'normal' },
   ],
   'hermes-vault-store-sqlcipher': [
     { name: 'hermes-vault-key-provider', kind: 'normal' },
@@ -398,6 +402,9 @@ const RECOVERY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     {
       name: 'signal-hook', kind: 'normal', source: 'crates_io', version: '=0.3.18', defaultFeatures: true, features: [],
     },
+  ],
+  'hermes-secure-file': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
   ],
 };
 

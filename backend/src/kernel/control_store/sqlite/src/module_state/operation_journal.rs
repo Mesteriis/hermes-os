@@ -19,7 +19,9 @@ impl SqliteControlStore {
             let transaction = connection.transaction()?;
             let existing = load_status(&transaction, operation_id)?;
             let admission = match existing {
-                Some((digest, status)) if digest == request_digest => OperationAdmissionV1::Duplicate(status),
+                Some((digest, status)) if digest == request_digest => {
+                    OperationAdmissionV1::Duplicate(status)
+                }
                 Some(_) => return Err(StoreError::OperationRequestDigestConflict),
                 None => {
                     transaction.execute("INSERT INTO hermes_kernel_operation_journal (operation_id, request_digest, deadline_unix_millis, terminal_kind, terminal_payload) VALUES (?1, ?2, ?3, NULL, NULL)", params![operation_id.as_bytes().as_slice(), request_digest.as_slice(), deadline])?;
@@ -40,9 +42,19 @@ impl SqliteControlStore {
         let outcome = outcome.clone();
         self.with_connection(move |connection| {
             let transaction = connection.transaction()?;
-            let Some((digest, status)) = load_status(&transaction, operation_id)? else { return Err(StoreError::OperationMissing); };
-            if digest != request_digest { return Err(StoreError::OperationRequestDigestConflict); }
-            if status != OperationStatusV1::Admitted { return if status == OperationStatusV1::Terminal(outcome) { Ok(()) } else { Err(StoreError::OperationOutcomeConflict) }; }
+            let Some((digest, status)) = load_status(&transaction, operation_id)? else {
+                return Err(StoreError::OperationMissing);
+            };
+            if digest != request_digest {
+                return Err(StoreError::OperationRequestDigestConflict);
+            }
+            if status != OperationStatusV1::Admitted {
+                return if status == OperationStatusV1::Terminal(outcome) {
+                    Ok(())
+                } else {
+                    Err(StoreError::OperationOutcomeConflict)
+                };
+            }
             let (kind, payload) = encode_outcome(&outcome);
             transaction.execute("UPDATE hermes_kernel_operation_journal SET terminal_kind=?1, terminal_payload=?2 WHERE operation_id=?3", params![kind, payload, operation_id.as_bytes().as_slice()])?;
             transaction.commit()?;
@@ -62,6 +74,7 @@ impl SqliteControlStore {
 
 impl OperationJournalStore for SqliteControlStore {
     type Error = StoreError;
+
     fn admit_operation(
         &self,
         id: OperationIdV1,
@@ -70,6 +83,7 @@ impl OperationJournalStore for SqliteControlStore {
     ) -> Result<OperationAdmissionV1, Self::Error> {
         Self::admit_operation(self, id, digest, deadline)
     }
+
     fn complete_operation(
         &self,
         id: OperationIdV1,
@@ -78,6 +92,7 @@ impl OperationJournalStore for SqliteControlStore {
     ) -> Result<(), Self::Error> {
         Self::complete_operation(self, id, digest, outcome)
     }
+
     fn operation_status(
         &self,
         id: OperationIdV1,

@@ -56,6 +56,7 @@ policy через ссылки из новых документов.
 - [ADR-0235: Private-LAN developer mode](ADR-0235-private-lan-developer-mode.md)
 - [ADR-0236: Integration owners, protocol adapters и configuration instances](ADR-0236-integration-owners-protocol-adapters-and-configuration-instances.md)
 - [ADR-0237: Временный private-LAN development без owner authority](ADR-0237-temporary-private-lan-development-without-owner-authority.md)
+- [ADR-0238: Secure-file FD boundary](ADR-0238-secure-file-fd-boundary.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -177,3 +178,6 @@ ADR-0236 предлагается как уточнение integration granular
 первый owner и не открывает `first_owner_v1`.
 ADR-0237 оставляет `--dangerous-lan-development` только временным technical
 listener без owner APIs: он не сохраняется и не даёт owner authority.
+ADR-0238 вводит один FD-bound secure-file contract для bounded no-symlink
+readers private material и release inputs; rollout readers остаётся явным
+admission prerequisite.

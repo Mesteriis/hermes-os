@@ -6,6 +6,7 @@ mod event_request;
 mod events_authority;
 mod external_identity;
 mod managed_launch;
+mod operation_journal;
 mod pinned_artifact;
 mod platform_process;
 pub(crate) mod registry;

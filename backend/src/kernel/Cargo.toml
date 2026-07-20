@@ -25,6 +25,7 @@ hermes-gateway-session-contract = { path = "../api/gateway/session_contract" }
 hermes-kernel-control-store = { path = "control_store/contract" }
 hermes-kernel-control-store-sqlite = { path = "control_store/sqlite" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-secure-file = { path = "../platform/secure_file" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 p256 = { version = "=0.14.0", default-features = false, features = ["ecdsa"] }
 prost = "=0.14.4"

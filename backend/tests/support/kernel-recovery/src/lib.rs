@@ -155,6 +155,7 @@ mod tests {
     mod recovery_fence;
     mod scheduler_lifecycle;
     mod scheduler_requests;
+    mod secure_file;
     mod settings_contract;
     mod storage_authorization;
     mod storage_launch;

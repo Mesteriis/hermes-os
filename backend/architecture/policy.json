@@ -115,6 +115,12 @@
         "surface": "implementation"
       },
       {
+        "name": "hermes-secure-file",
+        "role": "platform",
+        "owner": "secure_file",
+        "surface": "contract"
+      },
+      {
         "name": "hermes-vault-store-sqlcipher",
         "role": "platform",
         "owner": "vault",
@@ -207,6 +213,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-secure-file",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-storage-protocol",
           "kind": "normal"
         },
@@ -229,8 +239,13 @@
         {
           "name": "hermes-vault-key-provider",
           "kind": "normal"
+        },
+        {
+          "name": "hermes-secure-file",
+          "kind": "normal"
         }
       ],
+      "hermes-secure-file": [],
       "hermes-vault-store-sqlcipher": [
         {
           "name": "hermes-vault-key-provider",
@@ -703,6 +718,16 @@
           "features": []
         }
       ],
+      "hermes-secure-file": [
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-vault-store-sqlcipher": [
         {
           "name": "bip39",
@@ -1026,6 +1051,10 @@
         "customBuildAllowed": false
       },
       "hermes-vault-key-provider-file": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-secure-file": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
@@ -1428,7 +1457,8 @@
       "blob",
       "clock",
       "scheduler",
-      "runtime_protocol"
+      "runtime_protocol",
+      "secure_file"
     ],
     "api": [
       "gateway"

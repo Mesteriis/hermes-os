@@ -49,6 +49,7 @@
 - [ADR-0235: Private-LAN developer mode](adr/ADR-0235-private-lan-developer-mode.md)
 - [ADR-0236: Integration owners, protocol adapters и configuration instances](adr/ADR-0236-integration-owners-protocol-adapters-and-configuration-instances.md)
 - [ADR-0237: Временный private-LAN development без owner authority](adr/ADR-0237-temporary-private-lan-development-without-owner-authority.md)
+- [ADR-0238: Secure-file FD boundary](adr/ADR-0238-secure-file-fd-boundary.md)
 
 ## Канонические summaries
 

@@ -1428,6 +1428,7 @@ dependencies = [
  "hermes-kernel-control-store",
  "hermes-kernel-control-store-sqlite",
  "hermes-runtime-protocol",
+ "hermes-secure-file",
  "hermes-storage-protocol",
  "libc",
  "p256",
@@ -1479,6 +1480,7 @@ dependencies = [
  "hermes-runtime-protocol",
  "hermes-scheduler-persistence",
  "hermes-scheduler-protocol",
+ "hermes-secure-file",
  "hermes-storage-control",
  "hermes-storage-protocol",
  "hermes-vault-key-provider",
@@ -1604,6 +1606,13 @@ dependencies = [
  "prost-types 0.14.4",
  "sqlx",
  "tokio",
+]
+
+[[package]]
+name = "hermes-secure-file"
+version = "0.1.0"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -1743,6 +1752,7 @@ name = "hermes-vault-key-provider-file"
 version = "0.1.0"
 dependencies = [
  "getrandom 0.4.3",
+ "hermes-secure-file",
  "hermes-vault-key-provider",
  "libc",
 ]

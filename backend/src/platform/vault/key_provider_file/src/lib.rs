@@ -1,10 +1,11 @@
 //! Owner-private regular-file adapter for a Vault platform wrapping key.
 
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
+use hermes_secure_file::{SecureReadPolicy, read as read_secure_file};
 use hermes_vault_key_provider::{WrappingKey, WrappingKeyProvider};
 
 const KEY_BYTES: usize = 32;
@@ -62,19 +63,18 @@ fn load_existing(
     if !is_private_regular_file(metadata) {
         return Err(FileWrappingKeyError::InsecureKeyFile);
     }
-    let mut file = File::open(path).map_err(FileWrappingKeyError::Io)?;
-    let opened = file.metadata().map_err(FileWrappingKeyError::Io)?;
-    if !same_file(metadata, &opened) {
-        return Err(FileWrappingKeyError::InsecureKeyFile);
-    }
-    let mut bytes = [0; KEY_BYTES];
-    file.read_exact(&mut bytes)
-        .map_err(FileWrappingKeyError::Io)?;
-    let after = file.metadata().map_err(FileWrappingKeyError::Io)?;
-    let path_after = std::fs::symlink_metadata(path).map_err(FileWrappingKeyError::Io)?;
-    if !same_file(&opened, &after) || !same_file(&opened, &path_after) {
-        return Err(FileWrappingKeyError::InsecureKeyFile);
-    }
+    let bytes = read_secure_file(path, SecureReadPolicy::owner_private(KEY_BYTES as u64)).map_err(
+        |error| match error {
+            hermes_secure_file::SecureFileError::Io(error) => FileWrappingKeyError::Io(error),
+            hermes_secure_file::SecureFileError::InvalidFile
+            | hermes_secure_file::SecureFileError::TooLarge => {
+                FileWrappingKeyError::InsecureKeyFile
+            }
+        },
+    )?;
+    let bytes: [u8; KEY_BYTES] = bytes
+        .try_into()
+        .map_err(|_| FileWrappingKeyError::InsecureKeyFile)?;
     Ok(WrappingKey::from_bytes(bytes))
 }
 
@@ -112,12 +112,4 @@ fn is_private_regular_file(metadata: &std::fs::Metadata) -> bool {
         && metadata.len() == KEY_BYTES as u64
         && metadata.uid() == unsafe { libc::geteuid() }
         && metadata.mode() & 0o077 == 0
-}
-
-fn same_file(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {
-    left.dev() == right.dev()
-        && left.ino() == right.ino()
-        && left.len() == right.len()
-        && left.mtime() == right.mtime()
-        && left.mtime_nsec() == right.mtime_nsec()
 }

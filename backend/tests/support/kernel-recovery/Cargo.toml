@@ -27,6 +27,7 @@ hermes-gateway-runtime = { path = "../../../src/api/gateway/runtime" }
 hermes-kernel-control-store = { path = "../../../src/kernel/control_store/contract" }
 hermes-kernel-control-store-sqlite = { path = "../../../src/kernel/control_store/sqlite" }
 hermes-runtime-protocol = { path = "../../../src/platform/runtime_protocol" }
+hermes-secure-file = { path = "../../../src/platform/secure_file" }
 hermes-scheduler-persistence = { path = "../../../src/platform/scheduler/persistence" }
 hermes-scheduler-protocol = { path = "../../../src/platform/scheduler/protocol" }
 hermes-storage-protocol = { path = "../../../src/platform/storage/protocol" }

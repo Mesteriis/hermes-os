@@ -1,7 +1,7 @@
-use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
+use hermes_secure_file::{SecureReadPolicy, read as read_secure_file};
 use quinn::ServerConfig as QuinnServerConfig;
 use quinn::crypto::rustls::QuicServerConfig;
 use rustls::ServerConfig;
@@ -70,10 +70,9 @@ pub(super) fn http3_server_config(
 }
 
 fn read_material(path: &Path) -> Result<Vec<u8>, String> {
-    let metadata =
-        fs::metadata(path).map_err(|_| "browser Gateway TLS material is unavailable".to_owned())?;
-    (metadata.is_file() && metadata.len() > 0 && metadata.len() <= TLS_MATERIAL_MAX_BYTES)
-        .then_some(())
-        .ok_or_else(|| "browser Gateway TLS material is invalid".to_owned())?;
-    fs::read(path).map_err(|_| "browser Gateway TLS material is unavailable".to_owned())
+    read_secure_file(
+        path,
+        SecureReadPolicy::owner_private(TLS_MATERIAL_MAX_BYTES),
+    )
+    .map_err(|_| "browser Gateway TLS material is unavailable".to_owned())
 }
