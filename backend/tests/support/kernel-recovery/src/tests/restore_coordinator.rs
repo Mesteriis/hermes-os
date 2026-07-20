@@ -29,6 +29,7 @@ fn coordinator_restores_verified_components_in_canonical_order() {
     assert_eq!(
         port.calls,
         [
+            "empty",
             "control",
             "vault",
             "storage",
@@ -62,7 +63,32 @@ fn coordinator_stops_before_later_components_after_failure() {
         )
         .is_err()
     );
-    assert_eq!(port.calls, ["control", "vault", "storage"]);
+    assert_eq!(port.calls, ["empty", "control", "vault", "storage"]);
+    fs::remove_dir_all(root).expect("cleanup");
+}
+
+#[test]
+fn coordinator_requires_an_empty_target_before_control_store_restore() {
+    let (root, signed, public_key) = signed_media();
+    let mut port = RecordingPort {
+        fail_at: Some("empty"),
+        ..Default::default()
+    };
+    assert!(
+        restore_verified_instance(
+            &root,
+            &signed,
+            "recovery-key",
+            &public_key,
+            RestorePlanV1 {
+                blob_enabled: false,
+                scheduler_enabled: false
+            },
+            &mut port,
+        )
+        .is_err()
+    );
+    assert_eq!(port.calls, ["empty"]);
     fs::remove_dir_all(root).expect("cleanup");
 }
 
@@ -83,6 +109,9 @@ impl RecordingPort {
 }
 
 impl WholeInstanceRestorePort for RecordingPort {
+    fn verify_empty_target(&mut self) -> Result<(), String> {
+        self.call("empty")
+    }
     fn restore_control_store(&mut self) -> Result<(), String> {
         self.call("control")
     }

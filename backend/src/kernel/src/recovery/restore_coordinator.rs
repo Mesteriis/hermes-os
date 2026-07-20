@@ -11,6 +11,7 @@ pub(crate) struct RestorePlanV1 {
 }
 
 pub(crate) trait WholeInstanceRestorePort {
+    fn verify_empty_target(&mut self) -> Result<(), String>;
     fn restore_control_store(&mut self) -> Result<(), String>;
     fn restore_vault(&mut self) -> Result<(), String>;
     fn restore_storage(&mut self) -> Result<(), String>;
@@ -31,6 +32,7 @@ pub(crate) fn restore_verified_instance(
     port: &mut impl WholeInstanceRestorePort,
 ) -> Result<(), String> {
     verify_signed_inventory(media_root, signed_manifest, key_id, public_key_sec1)?;
+    port.verify_empty_target()?;
     port.restore_control_store()?;
     port.restore_vault()?;
     port.restore_storage()?;
