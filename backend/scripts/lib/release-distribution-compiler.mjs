@@ -52,6 +52,14 @@ function validTarget(value) {
   return validIdentifier(value) && value.includes('-') && !/[\\/\s]/.test(value);
 }
 
+function validSha256(value) {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+}
+
+function validSourceCommit(value) {
+  return typeof value === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
+}
+
 function validRelativePath(value) {
   return typeof value === 'string'
     && value.length > 0
@@ -122,6 +130,10 @@ function encodeManifest(input, artifacts) {
     fieldString(6, input.target_triple),
     fieldVarint(7, input.generation),
     ...artifacts.map((artifact) => fieldBytes(8, encodeArtifact(artifact))),
+    fieldString(9, input.source_commit),
+    fieldString(10, input.lockfile_sha256),
+    fieldString(11, input.sbom_sha256),
+    fieldString(12, input.toolchain_sha256),
   ]);
 }
 
@@ -225,6 +237,10 @@ function validateInput(input) {
     'build_id',
     'target_triple',
     'generation',
+    'source_commit',
+    'lockfile_sha256',
+    'sbom_sha256',
+    'toolchain_sha256',
     'additional_verification_keys',
     'artifacts',
   ];
@@ -237,6 +253,10 @@ function validateInput(input) {
     || !validIdentifier(input.build_id)
     || !validTarget(input.target_triple)
     || !Number.isSafeInteger(input.generation) || input.generation < 1
+    || !validSourceCommit(input.source_commit)
+    || !validSha256(input.lockfile_sha256)
+    || !validSha256(input.sbom_sha256)
+    || !validSha256(input.toolchain_sha256)
     || !Array.isArray(input.additional_verification_keys)
     || input.additional_verification_keys.length > 255
     || !Array.isArray(input.artifacts) || input.artifacts.length === 0 || input.artifacts.length > 256) {
@@ -342,11 +362,35 @@ function loadAdditionalVerificationKey(path) {
 }
 
 export async function compileReleaseDistribution(input, privateKey) {
-  validateInput(input);
+  const content = await compileUnsignedReleaseContent(input);
   const additionalVerificationKeys = validateAdditionalVerificationKeys(
     input.additional_verification_keys,
     input.verification_key_id,
   );
+  const signature = sign('sha256', content.rawManifest, { key: privateKey, dsaEncoding: 'ieee-p1363' });
+  if (signature.length !== 64) throw new Error('release manifest signature is invalid');
+  const verificationKeys = [
+    {
+      keyId: input.verification_key_id,
+      publicKeySec1: publicKeySec1(privateKey, 'release signing public key'),
+    },
+    ...additionalVerificationKeys.map((key) => ({
+      keyId: key.key_id,
+      publicKeySec1: loadAdditionalVerificationKey(key.public_key_path),
+    })),
+  ].sort((left, right) => left.keyId.localeCompare(right.keyId));
+  return {
+    ...content,
+    signedManifest: encodeSignedManifest(input.verification_key_id, content.rawManifest, signature),
+    trustRoot: encodeTrustRoot(input.trust_root_revision, verificationKeys),
+  };
+}
+
+// This deliberately excludes trust-root material and the ECDSA signature. It is
+// the deterministic content boundary that two isolated builds must agree on
+// before a release signer is allowed to see either output.
+export async function compileUnsignedReleaseContent(input) {
+  validateInput(input);
   const artifacts = [];
   const occupiedPaths = new Set();
   let previousArtifactId = '';
@@ -387,25 +431,7 @@ export async function compileReleaseDistribution(input, privateKey) {
     });
     previousArtifactId = artifact.artifact_id;
   }
-  const rawManifest = encodeManifest(input, artifacts);
-  const signature = sign('sha256', rawManifest, { key: privateKey, dsaEncoding: 'ieee-p1363' });
-  if (signature.length !== 64) throw new Error('release manifest signature is invalid');
-  const verificationKeys = [
-    {
-      keyId: input.verification_key_id,
-      publicKeySec1: publicKeySec1(privateKey, 'release signing public key'),
-    },
-    ...additionalVerificationKeys.map((key) => ({
-      keyId: key.key_id,
-      publicKeySec1: loadAdditionalVerificationKey(key.public_key_path),
-    })),
-  ].sort((left, right) => left.keyId.localeCompare(right.keyId));
-  return {
-    artifacts,
-    rawManifest,
-    signedManifest: encodeSignedManifest(input.verification_key_id, rawManifest, signature),
-    trustRoot: encodeTrustRoot(input.trust_root_revision, verificationKeys),
-  };
+  return { artifacts, rawManifest: encodeManifest(input, artifacts) };
 }
 
 export function readReleaseCompilerInput(path) {

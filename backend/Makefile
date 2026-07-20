@@ -11,7 +11,7 @@ TARGET ?= $(shell rustc +$(RUST_TOOLCHAIN) -vV | sed -n 's/^host: //p')
 	architecture-evidence-check \
 	test-architecture fmt-check clippy test-workspace test-integration \
 	dependency-policy-check supply-chain-check check-target check-linux-container ci \
-	restore-postgres-backup
+	restore-postgres-backup verify-release-reproducibility
 
 build:
 	cargo +$(RUST_TOOLCHAIN) build --locked --workspace
@@ -88,6 +88,9 @@ supply-chain-check:
 
 restore-postgres-backup:
 	node scripts/restore-postgres-backup.mjs --pg-restore "$(PG_RESTORE)" --psql "$(PSQL)" --connection-url-file "$(POSTGRES_CONNECTION_URL_FILE)" --input "$(POSTGRES_BACKUP_INPUT)"
+
+verify-release-reproducibility:
+	node scripts/verify-release-reproducibility.mjs --first-input "$(FIRST_RELEASE_INPUT)" --second-input "$(SECOND_RELEASE_INPUT)"
 
 check-target:
 	@test "$(TARGET)" = "aarch64-apple-darwin" -o "$(TARGET)" = "x86_64-unknown-linux-gnu" || { echo "unsupported CI target: $(TARGET)" >&2; exit 2; }

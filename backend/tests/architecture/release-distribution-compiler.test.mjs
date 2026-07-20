@@ -4,6 +4,7 @@ import { generateKeyPairSync, verify } from 'node:crypto';
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -17,6 +18,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  compileUnsignedReleaseContent,
   compileReleaseDistribution,
   generateReleaseSigningKey,
   loadReleaseSigningKey,
@@ -27,6 +29,12 @@ const browserBootstrapSource = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../../../frontend/browser-bootstrap/index.html',
 );
+const releaseProvenance = {
+  source_commit: 'a'.repeat(40),
+  lockfile_sha256: 'b'.repeat(64),
+  sbom_sha256: 'c'.repeat(64),
+  toolchain_sha256: 'd'.repeat(64),
+};
 
 function decodeVarint(bytes, offset) {
   let value = 0n;
@@ -94,6 +102,7 @@ test('compiles a signed P-256 distribution manifest and matching trust root', as
       build_id: 'build-1',
       target_triple: 'aarch64-apple-darwin',
       generation: 1,
+      ...releaseProvenance,
       additional_verification_keys: [],
       artifacts: [{
         artifact_kind: 'module_runtime',
@@ -138,6 +147,66 @@ test('compiles a signed P-256 distribution manifest and matching trust root', as
   }
 });
 
+test('produces an identical unsigned content manifest from independent build inputs', async () => {
+  const root = canonicalTemporaryDirectory('hermes-release-reproducibility-');
+  try {
+    const firstRoot = join(root, 'first');
+    const secondRoot = join(root, 'second');
+    const firstRuntime = join(firstRoot, 'runtime');
+    const secondRuntime = join(secondRoot, 'runtime');
+    const firstDescriptor = join(firstRoot, 'descriptor.pb');
+    const secondDescriptor = join(secondRoot, 'descriptor.pb');
+    mkdirSync(firstRoot, { mode: 0o700 });
+    mkdirSync(secondRoot, { mode: 0o700 });
+    writeFileSync(firstRuntime, 'runtime bytes', { mode: 0o700 });
+    writeFileSync(secondRuntime, 'runtime bytes', { mode: 0o700 });
+    writeFileSync(firstDescriptor, 'descriptor bytes', { mode: 0o600 });
+    writeFileSync(secondDescriptor, 'descriptor bytes', { mode: 0o600 });
+    const first = await compileUnsignedReleaseContent(releaseInput(firstRuntime, firstDescriptor, browserBootstrapSource));
+    const second = await compileUnsignedReleaseContent(releaseInput(secondRuntime, secondDescriptor, browserBootstrapSource));
+    assert.deepEqual(first.rawManifest, second.rawManifest);
+    writeFileSync(secondRuntime, 'different runtime bytes', { mode: 0o700 });
+    const changed = await compileUnsignedReleaseContent(releaseInput(secondRuntime, secondDescriptor, browserBootstrapSource));
+    assert.notDeepEqual(first.rawManifest, changed.rawManifest);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('release reproducibility CLI refuses divergent unsigned content before signing', () => {
+  const root = canonicalTemporaryDirectory('hermes-release-reproducibility-cli-');
+  try {
+    const firstRoot = join(root, 'first');
+    const secondRoot = join(root, 'second');
+    mkdirSync(firstRoot, { mode: 0o700 });
+    mkdirSync(secondRoot, { mode: 0o700 });
+    const firstRuntime = join(firstRoot, 'runtime');
+    const secondRuntime = join(secondRoot, 'runtime');
+    const firstDescriptor = join(firstRoot, 'descriptor.pb');
+    const secondDescriptor = join(secondRoot, 'descriptor.pb');
+    writeFileSync(firstRuntime, 'runtime bytes', { mode: 0o700 });
+    writeFileSync(secondRuntime, 'runtime bytes', { mode: 0o700 });
+    writeFileSync(firstDescriptor, 'descriptor bytes', { mode: 0o600 });
+    writeFileSync(secondDescriptor, 'descriptor bytes', { mode: 0o600 });
+    const firstInput = join(firstRoot, 'release.json');
+    const secondInput = join(secondRoot, 'release.json');
+    writeFileSync(firstInput, JSON.stringify(releaseInput(firstRuntime, firstDescriptor, browserBootstrapSource)), { mode: 0o600 });
+    writeFileSync(secondInput, JSON.stringify(releaseInput(secondRuntime, secondDescriptor, browserBootstrapSource)), { mode: 0o600 });
+    const command = [
+      'scripts/verify-release-reproducibility.mjs', '--first-input', firstInput,
+      '--second-input', secondInput,
+    ];
+    execFileSync(process.execPath, command, { cwd: process.cwd(), stdio: 'pipe' });
+    writeFileSync(secondRuntime, 'different runtime bytes', { mode: 0o700 });
+    assert.throws(
+      () => execFileSync(process.execPath, command, { cwd: process.cwd(), stdio: 'pipe' }),
+      /unsigned content manifests differ/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('binds a browser bootstrap document as a non-module signed release artifact', async () => {
   const root = canonicalTemporaryDirectory('hermes-browser-bootstrap-release-');
   try {
@@ -150,7 +219,7 @@ test('binds a browser bootstrap document as a non-module signed release artifact
     const release = await compileReleaseDistribution({
       verification_key_id: 'release-2026', trust_root_revision: 1, revision: 1,
       distribution_id: 'hermes-desktop', release_version: '1.0.0', build_id: 'build-browser',
-      target_triple: 'aarch64-apple-darwin', generation: 1, additional_verification_keys: [],
+      target_triple: 'aarch64-apple-darwin', generation: 1, ...releaseProvenance, additional_verification_keys: [],
       artifacts: [{
         artifact_kind: 'browser_bootstrap_bundle', artifact_id: 'browser.bootstrap',
         relative_path: 'browser/bootstrap.html', source_path: browserBootstrapSource, required: true,
@@ -189,6 +258,7 @@ test('rejects unordered artifacts and an exposed release signing key', async () 
       build_id: 'build-1',
       target_triple: 'aarch64-apple-darwin',
       generation: 1,
+      ...releaseProvenance,
       additional_verification_keys: [],
       artifacts: [
         {
@@ -240,6 +310,7 @@ test('adds sorted public P-256 rotation keys to the release trust root', async (
       build_id: 'build-rotation',
       target_triple: 'aarch64-apple-darwin',
       generation: 1,
+      ...releaseProvenance,
       additional_verification_keys: [{
         key_id: 'release-2027',
         public_key_path: nextKeyPath,
@@ -276,6 +347,7 @@ test('adds sorted public P-256 rotation keys to the release trust root', async (
         build_id: 'build-reject-private-key',
         target_triple: 'aarch64-apple-darwin',
         generation: 1,
+        ...releaseProvenance,
         additional_verification_keys: [{
           key_id: 'release-2027',
           public_key_path: activeKeyPath,
@@ -378,6 +450,7 @@ function releaseInput(runtime, descriptor, browserBootstrap) {
     build_id: 'build-cli',
     target_triple: 'aarch64-apple-darwin',
     generation: 1,
+    ...releaseProvenance,
     additional_verification_keys: [],
     artifacts: [
       {
