@@ -6,11 +6,12 @@
 
 use hermes_kernel_control_store::{
     ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
-    ModuleEventRouteRequestV1, ModuleEventSubscriptionRequirementV1, ModuleRegistration,
-    ModuleRegistrationState, ModuleStorageRequestV1, PlatformEventHubTopologyV1,
-    PlatformEventStreamBudgetV1, PlatformEventsAuthorityConfigurationV1,
-    PlatformStorageBindingStateV1, PlatformStorageBundleV1, PlatformStorageEndpointV1,
-    PlatformStorageTopology, PlatformStorageTopologyInputV1, StorageDeploymentProfileV1,
+    ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
+    ModuleEventSubscriptionRequirementV1, ModuleRegistration, ModuleRegistrationState,
+    ModuleStorageRequestV1, PlatformEventHubTopologyV1, PlatformEventStreamBudgetV1,
+    PlatformEventsAuthorityConfigurationV1, PlatformStorageBindingStateV1, PlatformStorageBundleV1,
+    PlatformStorageEndpointV1, PlatformStorageTopology, PlatformStorageTopologyInputV1,
+    StorageDeploymentProfileV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use sha2::{Digest, Sha256};
@@ -402,25 +403,25 @@ fn scheduler_event_route(
     contract: &str,
     direction: ModuleEventRouteDirectionV1,
 ) -> ModuleEventRouteRequestV1 {
-    ModuleEventRouteRequestV1::new(
-        "scheduler_developer",
-        capability,
-        kind,
-        owner,
-        contract,
-        1,
-        1,
-        [7; 32],
+    ModuleEventRouteRequestV1::new(ModuleEventRouteRequestInputV1 {
+        registration_id: "scheduler_developer".to_owned(),
+        capability_id: capability.to_owned(),
+        envelope_kind: kind,
+        contract_owner: owner.to_owned(),
+        contract_name: contract.to_owned(),
+        contract_major: 1,
+        contract_revision: 1,
+        contract_schema_sha256: [7; 32],
         direction,
-        16,
-        matches!(direction, ModuleEventRouteDirectionV1::Consume).then(|| {
+        max_in_flight: 16,
+        delivery_policy: matches!(direction, ModuleEventRouteDirectionV1::Consume).then(|| {
             ModuleEventDeliveryPolicyV1::new(
                 ModuleEventSubscriptionRequirementV1::Required,
                 3,
                 2_000,
             )
         }),
-    )
+    })
 }
 
 fn export_scheduler_storage_bundle(kernel: &Path, runtime_dir: &Path) -> Result<Vec<u8>, String> {

@@ -198,17 +198,19 @@ fn register_route(
         1,
     );
     let route = ModuleEventRouteRequestV1::new(
-        registration_id,
-        capability,
-        ModuleEventEnvelopeKindV1::Event,
-        "notes",
-        "changed",
-        1,
-        1,
-        [8; 32],
-        direction,
-        16,
-        delivery_policy(direction),
+        hermes_kernel_control_store::ModuleEventRouteRequestInputV1 {
+            registration_id: registration_id.to_owned(),
+            capability_id: capability.to_owned(),
+            envelope_kind: ModuleEventEnvelopeKindV1::Event,
+            contract_owner: "notes".to_owned(),
+            contract_name: "changed".to_owned(),
+            contract_major: 1,
+            contract_revision: 1,
+            contract_schema_sha256: [8; 32],
+            direction,
+            max_in_flight: 16,
+            delivery_policy: delivery_policy(direction),
+        },
     );
     store
         .create_pending_registration_with_requests(

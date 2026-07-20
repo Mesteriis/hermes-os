@@ -4,7 +4,8 @@ use std::collections::BTreeSet;
 
 use hermes_kernel_control_store::{
     ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
-    ModuleEventRouteRequestV1, ModuleEventSubscriptionRequirementV1, ModuleRegistration,
+    ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
+    ModuleEventSubscriptionRequirementV1, ModuleRegistration,
 };
 use rusqlite::{Connection, params};
 
@@ -221,17 +222,19 @@ fn decode_event_route_request(
     let delivery_policy =
         decode_delivery_policy(direction, requirement, max_deliver, ack_wait_millis)?;
     Ok(ModuleEventRouteRequestV1::new(
-        registration_id,
-        capability_id,
-        kind,
-        owner,
-        name,
-        major,
-        revision,
-        digest,
-        direction,
-        max_in_flight,
-        delivery_policy,
+        ModuleEventRouteRequestInputV1 {
+            registration_id: registration_id.to_owned(),
+            capability_id: capability_id.to_owned(),
+            envelope_kind: kind,
+            contract_owner: owner,
+            contract_name: name,
+            contract_major: major,
+            contract_revision: revision,
+            contract_schema_sha256: digest,
+            direction,
+            max_in_flight,
+            delivery_policy,
+        },
     ))
 }
 

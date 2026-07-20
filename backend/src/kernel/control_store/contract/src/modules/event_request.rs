@@ -136,33 +136,35 @@ pub struct ModuleEventRouteRequestV1 {
     delivery_policy: Option<ModuleEventDeliveryPolicyV1>,
 }
 
+pub struct ModuleEventRouteRequestInputV1 {
+    pub registration_id: String,
+    pub capability_id: String,
+    pub envelope_kind: ModuleEventEnvelopeKindV1,
+    pub contract_owner: String,
+    pub contract_name: String,
+    pub contract_major: u32,
+    pub contract_revision: u32,
+    pub contract_schema_sha256: [u8; 32],
+    pub direction: ModuleEventRouteDirectionV1,
+    pub max_in_flight: u16,
+    pub delivery_policy: Option<ModuleEventDeliveryPolicyV1>,
+}
+
 impl ModuleEventRouteRequestV1 {
     #[must_use]
-    pub fn new(
-        registration_id: impl Into<String>,
-        capability_id: impl Into<String>,
-        envelope_kind: ModuleEventEnvelopeKindV1,
-        contract_owner: impl Into<String>,
-        contract_name: impl Into<String>,
-        contract_major: u32,
-        contract_revision: u32,
-        contract_schema_sha256: [u8; 32],
-        direction: ModuleEventRouteDirectionV1,
-        max_in_flight: u16,
-        delivery_policy: Option<ModuleEventDeliveryPolicyV1>,
-    ) -> Self {
+    pub fn new(fields: ModuleEventRouteRequestInputV1) -> Self {
         Self {
-            registration_id: registration_id.into(),
-            capability_id: capability_id.into(),
-            envelope_kind,
-            contract_owner: contract_owner.into(),
-            contract_name: contract_name.into(),
-            contract_major,
-            contract_revision,
-            contract_schema_sha256,
-            direction,
-            max_in_flight,
-            delivery_policy,
+            registration_id: fields.registration_id,
+            capability_id: fields.capability_id,
+            envelope_kind: fields.envelope_kind,
+            contract_owner: fields.contract_owner,
+            contract_name: fields.contract_name,
+            contract_major: fields.contract_major,
+            contract_revision: fields.contract_revision,
+            contract_schema_sha256: fields.contract_schema_sha256,
+            direction: fields.direction,
+            max_in_flight: fields.max_in_flight,
+            delivery_policy: fields.delivery_policy,
         }
     }
 

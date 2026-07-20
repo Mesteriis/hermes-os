@@ -19,9 +19,10 @@ pub use identity::{
 };
 pub use modules::{
     GrantSet, ModuleBlobQuotaRequestV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
-    ModuleEventRouteDirectionV1, ModuleEventRouteRequestV1, ModuleEventSubscriptionRequirementV1,
-    ModuleGrantSnapshot, ModuleRegistration, ModuleRegistrationState, ModuleSchedulerJobRequestV1,
-    ModuleStorageRequestV1, SettingsApplyState, SettingsDesiredSnapshot, SettingsSchemaBinding,
+    ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
+    ModuleEventSubscriptionRequirementV1, ModuleGrantSnapshot, ModuleRegistration,
+    ModuleRegistrationState, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
+    SettingsApplyState, SettingsDesiredSnapshot, SettingsSchemaBinding,
     SettingsSchemaBindingInputV1,
 };
 pub use operation::{

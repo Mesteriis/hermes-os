@@ -329,17 +329,19 @@ fn scheduler_dispatch_route(
     capability_id: &str,
 ) -> ModuleEventRouteRequestV1 {
     ModuleEventRouteRequestV1::new(
-        registration_id,
-        capability_id,
-        ModuleEventEnvelopeKindV1::Command,
-        "owner_notes",
-        "sync_job",
-        1,
-        1,
-        [8; 32],
-        ModuleEventRouteDirectionV1::Publish,
-        32,
-        None,
+        hermes_kernel_control_store::ModuleEventRouteRequestInputV1 {
+            registration_id: registration_id.to_owned(),
+            capability_id: capability_id.to_owned(),
+            envelope_kind: ModuleEventEnvelopeKindV1::Command,
+            contract_owner: "owner_notes".to_owned(),
+            contract_name: "sync_job".to_owned(),
+            contract_major: 1,
+            contract_revision: 1,
+            contract_schema_sha256: [8; 32],
+            direction: ModuleEventRouteDirectionV1::Publish,
+            max_in_flight: 32,
+            delivery_policy: None,
+        },
     )
 }
 
@@ -349,17 +351,19 @@ fn scheduler_receipt_route(
     envelope_kind: ModuleEventEnvelopeKindV1,
 ) -> ModuleEventRouteRequestV1 {
     ModuleEventRouteRequestV1::new(
-        registration_id,
-        capability_id,
-        envelope_kind,
-        "owner_notes",
-        "job_receipt",
-        1,
-        1,
-        [8; 32],
-        ModuleEventRouteDirectionV1::Consume,
-        32,
-        delivery_policy(ModuleEventRouteDirectionV1::Consume),
+        hermes_kernel_control_store::ModuleEventRouteRequestInputV1 {
+            registration_id: registration_id.to_owned(),
+            capability_id: capability_id.to_owned(),
+            envelope_kind,
+            contract_owner: "owner_notes".to_owned(),
+            contract_name: "job_receipt".to_owned(),
+            contract_major: 1,
+            contract_revision: 1,
+            contract_schema_sha256: [8; 32],
+            direction: ModuleEventRouteDirectionV1::Consume,
+            max_in_flight: 32,
+            delivery_policy: delivery_policy(ModuleEventRouteDirectionV1::Consume),
+        },
     )
 }
 
@@ -390,17 +394,19 @@ fn register(
     capability_id: &str,
 ) {
     let route = ModuleEventRouteRequestV1::new(
-        registration.registration_id(),
-        capability_id,
-        ModuleEventEnvelopeKindV1::Event,
-        "owner_notes",
-        "changed",
-        1,
-        1,
-        [7; 32],
-        direction,
-        32,
-        delivery_policy(direction),
+        hermes_kernel_control_store::ModuleEventRouteRequestInputV1 {
+            registration_id: registration.registration_id().to_owned(),
+            capability_id: capability_id.to_owned(),
+            envelope_kind: ModuleEventEnvelopeKindV1::Event,
+            contract_owner: "owner_notes".to_owned(),
+            contract_name: "changed".to_owned(),
+            contract_major: 1,
+            contract_revision: 1,
+            contract_schema_sha256: [7; 32],
+            direction,
+            max_in_flight: 32,
+            delivery_policy: delivery_policy(direction),
+        },
     );
     store
         .create_pending_registration_with_requests(

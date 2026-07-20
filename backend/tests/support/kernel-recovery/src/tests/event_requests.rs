@@ -110,17 +110,19 @@ fn control_store_rejects_consumer_without_explicit_delivery_policy() {
     let store = SqliteControlStore::create(&root.join("control.sqlite"), "instance-1", 1)
         .expect("create Control Store");
     let consumer = ModuleEventRouteRequestV1::new(
-        "registration_notes",
-        "events.consume",
-        ModuleEventEnvelopeKindV1::Event,
-        "owner_notes",
-        "changed",
-        1,
-        1,
-        [7; 32],
-        ModuleEventRouteDirectionV1::Consume,
-        32,
-        None,
+        hermes_kernel_control_store::ModuleEventRouteRequestInputV1 {
+            registration_id: "registration_notes".to_owned(),
+            capability_id: "events.consume".to_owned(),
+            envelope_kind: ModuleEventEnvelopeKindV1::Event,
+            contract_owner: "owner_notes".to_owned(),
+            contract_name: "changed".to_owned(),
+            contract_major: 1,
+            contract_revision: 1,
+            contract_schema_sha256: [7; 32],
+            direction: ModuleEventRouteDirectionV1::Consume,
+            max_in_flight: 32,
+            delivery_policy: None,
+        },
     );
 
     assert!(
@@ -173,17 +175,19 @@ fn event_catalog_rejects_incompatible_contract_revisions_before_broker_reconcili
             &["events.publish".to_owned()],
             &[],
             &[ModuleEventRouteRequestV1::new(
-                "registration_search",
-                "events.publish",
-                ModuleEventEnvelopeKindV1::Event,
-                "owner_notes",
-                "changed",
-                1,
-                2,
-                [8; 32],
-                ModuleEventRouteDirectionV1::Publish,
-                32,
-                None,
+                hermes_kernel_control_store::ModuleEventRouteRequestInputV1 {
+                    registration_id: "registration_search".to_owned(),
+                    capability_id: "events.publish".to_owned(),
+                    envelope_kind: ModuleEventEnvelopeKindV1::Event,
+                    contract_owner: "owner_notes".to_owned(),
+                    contract_name: "changed".to_owned(),
+                    contract_major: 1,
+                    contract_revision: 2,
+                    contract_schema_sha256: [8; 32],
+                    direction: ModuleEventRouteDirectionV1::Publish,
+                    max_in_flight: 32,
+                    delivery_policy: None,
+                },
             )],
             &[],
         )
@@ -219,16 +223,18 @@ fn event_route(capability_id: &str) -> ModuleEventRouteRequestV1 {
 
 fn event_route_with_limit(capability_id: &str, max_in_flight: u16) -> ModuleEventRouteRequestV1 {
     ModuleEventRouteRequestV1::new(
-        "registration_notes",
-        capability_id,
-        ModuleEventEnvelopeKindV1::Event,
-        "owner_notes",
-        "changed",
-        1,
-        1,
-        [7; 32],
-        ModuleEventRouteDirectionV1::Publish,
-        max_in_flight,
-        None,
+        hermes_kernel_control_store::ModuleEventRouteRequestInputV1 {
+            registration_id: "registration_notes".to_owned(),
+            capability_id: capability_id.to_owned(),
+            envelope_kind: ModuleEventEnvelopeKindV1::Event,
+            contract_owner: "owner_notes".to_owned(),
+            contract_name: "changed".to_owned(),
+            contract_major: 1,
+            contract_revision: 1,
+            contract_schema_sha256: [7; 32],
+            direction: ModuleEventRouteDirectionV1::Publish,
+            max_in_flight,
+            delivery_policy: None,
+        },
     )
 }

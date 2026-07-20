@@ -10,7 +10,8 @@ mod storage_request;
 pub use blob_request::ModuleBlobQuotaRequestV1;
 pub use event_request::{
     ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
-    ModuleEventRouteRequestV1, ModuleEventSubscriptionRequirementV1,
+    ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
+    ModuleEventSubscriptionRequirementV1,
 };
 pub use grant::GrantSet;
 pub use grant_snapshot::ModuleGrantSnapshot;

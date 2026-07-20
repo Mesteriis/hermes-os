@@ -137,23 +137,25 @@ fn event_route(
     direction: ModuleEventRouteDirectionV1,
 ) -> ModuleEventRouteRequestV1 {
     ModuleEventRouteRequestV1::new(
-        SCHEDULER_REGISTRATION,
-        capability,
-        kind,
-        owner,
-        contract,
-        1,
-        1,
-        [7; 32],
-        direction,
-        16,
-        matches!(direction, ModuleEventRouteDirectionV1::Consume).then(|| {
-            ModuleEventDeliveryPolicyV1::new(
-                ModuleEventSubscriptionRequirementV1::Required,
-                3,
-                2_000,
-            )
-        }),
+        hermes_kernel_control_store::ModuleEventRouteRequestInputV1 {
+            registration_id: SCHEDULER_REGISTRATION.to_owned(),
+            capability_id: capability.to_owned(),
+            envelope_kind: kind,
+            contract_owner: owner.to_owned(),
+            contract_name: contract.to_owned(),
+            contract_major: 1,
+            contract_revision: 1,
+            contract_schema_sha256: [7; 32],
+            direction,
+            max_in_flight: 16,
+            delivery_policy: matches!(direction, ModuleEventRouteDirectionV1::Consume).then(|| {
+                ModuleEventDeliveryPolicyV1::new(
+                    ModuleEventSubscriptionRequirementV1::Required,
+                    3,
+                    2_000,
+                )
+            }),
+        },
     )
 }
 

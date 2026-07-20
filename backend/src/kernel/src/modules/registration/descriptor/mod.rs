@@ -2,8 +2,9 @@
 
 use hermes_kernel_control_store::{
     ModuleBlobQuotaRequestV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
-    ModuleEventRouteDirectionV1, ModuleEventRouteRequestV1, ModuleEventSubscriptionRequirementV1,
-    ModuleRegistration, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
+    ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
+    ModuleEventSubscriptionRequirementV1, ModuleRegistration, ModuleSchedulerJobRequestV1,
+    ModuleStorageRequestV1,
 };
 use hermes_runtime_protocol::{
     v1::{
@@ -103,19 +104,19 @@ fn bind_event_route_requests(
     requests
         .iter()
         .map(|request| {
-            ModuleEventRouteRequestV1::new(
-                registration.registration_id(),
-                &request.capability_id,
-                request.envelope_kind,
-                &request.contract_owner,
-                &request.contract_name,
-                request.contract_major,
-                request.contract_revision,
-                request.contract_schema_sha256,
-                request.direction,
-                request.max_in_flight,
-                request.delivery_policy,
-            )
+            ModuleEventRouteRequestV1::new(ModuleEventRouteRequestInputV1 {
+                registration_id: registration.registration_id().to_owned(),
+                capability_id: request.capability_id.clone(),
+                envelope_kind: request.envelope_kind,
+                contract_owner: request.contract_owner.clone(),
+                contract_name: request.contract_name.clone(),
+                contract_major: request.contract_major,
+                contract_revision: request.contract_revision,
+                contract_schema_sha256: request.contract_schema_sha256,
+                direction: request.direction,
+                max_in_flight: request.max_in_flight,
+                delivery_policy: request.delivery_policy,
+            })
         })
         .collect()
 }
