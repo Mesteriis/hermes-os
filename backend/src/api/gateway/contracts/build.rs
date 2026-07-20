@@ -6,6 +6,10 @@ fn main() {
 
     let mut config = prost_build::Config::new();
     config.extern_path(".hermes.runtime.v1", "::hermes_runtime_protocol::v1");
+    config.enum_attribute(
+        ".hermes.gateway.v1.ExternalRuntimeSessionRequestV1.operation",
+        "#[allow(clippy::large_enum_variant)]",
+    );
     config
         .compile_protos(
             &[
