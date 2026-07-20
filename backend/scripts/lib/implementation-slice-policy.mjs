@@ -101,6 +101,7 @@ const VAULT_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   'hermes-vault-runtime': [
     { name: 'hermes-vault-key-provider', kind: 'normal' },
     { name: 'hermes-vault-key-provider-file', kind: 'normal' },
+    { name: 'hermes-secure-file', kind: 'normal' },
     { name: 'hermes-vault-protocol', kind: 'normal' },
     { name: 'hermes-vault-store-sqlcipher', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },

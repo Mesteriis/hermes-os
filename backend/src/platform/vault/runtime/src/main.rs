@@ -2,6 +2,7 @@
 
 mod bootstrap;
 pub mod control;
+mod offline_backup;
 pub mod service;
 pub mod transport;
 
@@ -39,6 +40,26 @@ enum Command {
     Status {
         #[arg(long)]
         data_dir: PathBuf,
+    },
+    ExportBackup {
+        #[arg(long)]
+        data_dir: PathBuf,
+        #[arg(long)]
+        destination: PathBuf,
+    },
+    VerifyBackup {
+        #[arg(long)]
+        data_dir: PathBuf,
+        #[arg(long)]
+        source: PathBuf,
+    },
+    RestoreBackup {
+        #[arg(long)]
+        data_dir: PathBuf,
+        #[arg(long)]
+        source: PathBuf,
+        #[arg(long)]
+        recovery_key_file: PathBuf,
     },
     Serve {
         #[arg(long)]
@@ -78,6 +99,16 @@ fn main() -> Result<(), String> {
             platform_credential_dir,
         } => import_platform_credentials(&data_dir, &platform_credential_dir),
         Command::Status { data_dir } => status(&data_dir),
+        Command::ExportBackup {
+            data_dir,
+            destination,
+        } => offline_backup::export(&data_dir, &destination),
+        Command::VerifyBackup { data_dir, source } => offline_backup::verify(&data_dir, &source),
+        Command::RestoreBackup {
+            data_dir,
+            source,
+            recovery_key_file,
+        } => offline_backup::restore(&data_dir, &source, &recovery_key_file),
         Command::Serve {
             data_dir,
             runtime_dir,

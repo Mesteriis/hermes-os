@@ -21,6 +21,7 @@ hermes-vault-key-provider = { path = "../key_provider" }
 hermes-vault-key-provider-file = { path = "../key_provider_file" }
 hermes-vault-protocol = { path = "../protocol" }
 hermes-vault-store-sqlcipher = { path = "../store_sqlcipher" }
+hermes-secure-file = { path = "../../secure_file" }
 hermes-runtime-protocol = { path = "../../runtime_protocol" }
 hpke = { version = "=0.14.0", default-features = false, features = ["alloc", "chacha", "getrandom", "x25519"] }
 libc = "=0.2.186"

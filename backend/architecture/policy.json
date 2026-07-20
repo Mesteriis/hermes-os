@@ -266,6 +266,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-secure-file",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-vault-protocol",
           "kind": "normal"
         },

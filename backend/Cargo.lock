@@ -1773,6 +1773,7 @@ dependencies = [
  "clap",
  "getrandom 0.4.3",
  "hermes-runtime-protocol",
+ "hermes-secure-file",
  "hermes-vault-key-provider",
  "hermes-vault-key-provider-file",
  "hermes-vault-protocol",
