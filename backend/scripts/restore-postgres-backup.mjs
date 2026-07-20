@@ -90,6 +90,8 @@ export function main(argv = process.argv.slice(2)) {
     const empty = command(psql, ['--tuples-only', '--no-align', '--dbname=service=hermes_restore', '--command=SELECT count(*) = 0 FROM pg_catalog.pg_tables WHERE schemaname NOT IN (\'pg_catalog\', \'information_schema\')'], environment, 'cannot verify PostgreSQL restore target');
     if (empty !== 't') throw new Error('PostgreSQL restore target is not empty');
     command(pgRestore, ['--no-owner', '--no-privileges', '--exit-on-error', '--single-transaction', '--dbname=service=hermes_restore', input], environment, 'pg_restore failed without a partial-recovery success claim');
+    const ledger = command(psql, ['--tuples-only', '--no-align', '--dbname=service=hermes_restore', '--command=SELECT count(*) = 1 FROM information_schema.tables WHERE table_schema = \'hermes_platform\' AND table_name = \'storage_migration_ledger\''], environment, 'cannot validate restored PostgreSQL migration ledger');
+    if (ledger !== 't') throw new Error('restored PostgreSQL migration ledger is unavailable');
     process.stdout.write(`postgres_restore_input=${input}\npostgres_restore_size_bytes=${dump.size}\n`);
   } catch (error) {
     process.stderr.write(`postgres-restore: ${error.message}\n`);

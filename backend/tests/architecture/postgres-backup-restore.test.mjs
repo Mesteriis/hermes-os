@@ -22,14 +22,14 @@ function writeExecutable(path, source) {
   chmodSync(path, 0o700);
 }
 
-function fixtures(root, empty = true) {
+function fixtures(root, empty = true, ledger = true) {
   const psql = join(root, 'psql');
   const pgRestore = join(root, 'pg_restore');
   const connectionUrl = join(root, 'postgres-url');
   const input = join(root, 'owner-data.dump');
   writeExecutable(psql, `
 if (!process.env.PGPASSFILE || process.argv.includes('--password')) process.exit(71);
-process.stdout.write('${empty ? 't' : 'f'}\\n');
+process.stdout.write(process.argv.join(' ').includes('storage_migration_ledger') ? '${ledger ? 't' : 'f'}\\n' : '${empty ? 't' : 'f'}\\n');
 `);
   writeExecutable(pgRestore, `
 if (!process.env.PGSERVICEFILE || process.argv.includes('--clean') || process.argv.some((value) => value.includes('pass@'))) process.exit(72);
@@ -67,6 +67,21 @@ test('refuses a non-empty PostgreSQL target before pg_restore', () => {
     ]);
     assert.equal(result.status, 1);
     assert.match(result.stderr, /target is not empty/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects a restored database without the Storage migration ledger', () => {
+  const root = temporaryDirectory('hermes-postgres-restore-ledger-');
+  try {
+    const values = fixtures(root, true, false);
+    const result = run([
+      '--pg-restore', values.pgRestore, '--psql', values.psql,
+      '--connection-url-file', values.connectionUrl, '--input', values.input,
+    ]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /migration ledger is unavailable/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
