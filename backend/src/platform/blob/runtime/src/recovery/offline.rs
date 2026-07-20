@@ -3,7 +3,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
@@ -71,14 +71,14 @@ pub fn restore_backup_offline(
     destination_data_dir: &Path,
 ) -> Result<BlobBackupManifestV1, String> {
     let manifest = verify_backup_offline(source)?;
-    prepare_empty_target(destination_data_dir)?;
-    for entry in &manifest.entries {
-        copy_verified_file(source, destination_data_dir, entry)?;
+    let parent = prepare_absent_target_parent(destination_data_dir)?;
+    let staging = create_restore_staging(&parent)?;
+    let result = restore_into_staging(source, &staging, &manifest)
+        .and_then(|()| publish_staging(&staging, destination_data_dir, &parent));
+    if result.is_err() {
+        let _ = fs::remove_dir_all(&staging);
     }
-    sync_directory(&destination_data_dir.join("content"))?;
-    sync_directory(&destination_data_dir.join("metadata"))?;
-    sync_directory(destination_data_dir)?;
-    Ok(manifest)
+    result.map(|()| manifest)
 }
 
 impl BlobBackupManifestV1 {
@@ -266,28 +266,50 @@ fn copy_verified_file(
     })
 }
 
-fn prepare_empty_target(path: &Path) -> Result<(), String> {
+fn prepare_absent_target_parent(path: &Path) -> Result<PathBuf, String> {
     let parent = path.parent().ok_or_else(unavailable)?;
     root::validate_private_directory(parent).map_err(|_| unavailable())?;
-    if path.exists() {
-        root::validate_private_directory(path).map_err(|_| unavailable())?;
-        if fs::read_dir(path)
-            .map_err(|_| unavailable())?
-            .next()
-            .is_some()
-        {
-            return Err(unavailable());
+    (!path.exists())
+        .then_some(parent.to_path_buf())
+        .ok_or_else(unavailable)
+}
+
+fn create_restore_staging(parent: &Path) -> Result<PathBuf, String> {
+    for attempt in 0..64 {
+        let staging = parent.join(format!(".blob-restore-{}-{attempt}", std::process::id()));
+        match fs::create_dir(&staging) {
+            Ok(()) => {
+                set_private_directory(&staging)?;
+                for child in ["content", "metadata"] {
+                    let directory = staging.join(child);
+                    fs::create_dir(&directory).map_err(|_| unavailable())?;
+                    set_private_directory(&directory)?;
+                }
+                return Ok(staging);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(_) => return Err(unavailable()),
         }
-    } else {
-        fs::create_dir(path).map_err(|_| unavailable())?;
-        set_private_directory(path)?;
     }
-    for child in ["content", "metadata"] {
-        let directory = path.join(child);
-        fs::create_dir(&directory).map_err(|_| unavailable())?;
-        set_private_directory(&directory)?;
+    Err(unavailable())
+}
+
+fn restore_into_staging(
+    source: &Path,
+    staging: &Path,
+    manifest: &BlobBackupManifestV1,
+) -> Result<(), String> {
+    for entry in &manifest.entries {
+        copy_verified_file(source, staging, entry)?;
     }
-    Ok(())
+    sync_directory(&staging.join("content"))?;
+    sync_directory(&staging.join("metadata"))?;
+    sync_directory(staging)
+}
+
+fn publish_staging(staging: &Path, destination: &Path, parent: &Path) -> Result<(), String> {
+    fs::rename(staging, destination).map_err(|_| unavailable())?;
+    sync_directory(parent)
 }
 
 fn open_private(path: &Path) -> Result<File, String> {

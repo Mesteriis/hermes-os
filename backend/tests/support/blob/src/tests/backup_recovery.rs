@@ -35,6 +35,15 @@ fn blob_backup_restores_exact_ciphertext_inventory_only_into_an_empty_target() {
             .expect("restored content"),
         b"ciphertext-only-content"
     );
+    assert!(
+        fs::read_dir(root.path())
+            .expect("read recovery parent")
+            .all(|entry| !entry
+                .expect("read recovery entry")
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".blob-restore-"))
+    );
 
     write_private(&restored.join("unexpected"), b"occupied");
     assert!(restore_backup_offline(&backup, &restored).is_err());
