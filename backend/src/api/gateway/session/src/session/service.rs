@@ -119,10 +119,12 @@ where
             &self.authority,
             verifier,
             &mut sessions,
-            authentication_id,
-            response,
-            browser_key_signature,
-            now_unix_millis,
+            super::browser::BrowserAuthenticationFinishInput {
+                authentication_id,
+                response,
+                browser_key_signature,
+                now_unix_millis,
+            },
         )?;
         BrowserSameOriginSessionV1::issue_cookie(session.session_id())
     }

@@ -20,10 +20,10 @@ impl BrowserSameOriginSessionV1 {
             let Some((name, value)) = item.trim().split_once('=') else {
                 continue;
             };
-            if name == COOKIE_NAME {
-                if session_id.replace(value).is_some() || !valid_session_id(value) {
-                    return Err("browser session cookie is invalid".to_owned());
-                }
+            if name == COOKIE_NAME
+                && (session_id.replace(value).is_some() || !valid_session_id(value))
+            {
+                return Err("browser session cookie is invalid".to_owned());
             }
         }
         session_id

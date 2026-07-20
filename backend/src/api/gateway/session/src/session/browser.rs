@@ -26,6 +26,13 @@ pub struct BrowserSession {
     expires_at_unix_millis: u64,
 }
 
+pub struct BrowserAuthenticationFinishInput<'a> {
+    pub authentication_id: &'a str,
+    pub response: &'a PublicKeyCredential,
+    pub browser_key_signature: &'a [u8],
+    pub now_unix_millis: u64,
+}
+
 /// Server-held WebAuthn state for one browser authentication attempt.
 #[derive(Clone)]
 pub struct BrowserWebauthnAuthenticationCeremonyV1 {
@@ -159,24 +166,21 @@ impl BrowserAuthenticationManager {
         authority: &A,
         verifier: &BrowserWebauthnVerifier,
         sessions: &mut BrowserSessionManager,
-        authentication_id: &str,
-        response: &PublicKeyCredential,
-        browser_key_signature: &[u8],
-        now_unix_millis: u64,
+        input: BrowserAuthenticationFinishInput<'_>,
     ) -> Result<BrowserSession, String> {
         self.purge();
         let pending = self
             .pending
-            .get(authentication_id)
+            .get(input.authentication_id)
             .ok_or_else(authentication_unavailable)?;
         verify_browser_key_proof(
             &pending.browser_key_public_key,
             &pending.browser_key_challenge,
-            browser_key_signature,
+            input.browser_key_signature,
         )?;
-        let assertion = verifier.finish_authentication(&pending.ceremony, response)?;
-        let session = sessions.begin(authority, assertion, now_unix_millis)?;
-        self.pending.remove(authentication_id);
+        let assertion = verifier.finish_authentication(&pending.ceremony, input.response)?;
+        let session = sessions.begin(authority, assertion, input.now_unix_millis)?;
+        self.pending.remove(input.authentication_id);
         Ok(session)
     }
 
