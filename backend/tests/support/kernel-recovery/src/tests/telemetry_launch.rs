@@ -1,7 +1,10 @@
 use super::common::*;
 use hermes_runtime_protocol::v1::{
-    GetTelemetryDiagnosticsRequestV1, TelemetryDiagnosticsV1, TelemetryRuntimeControlRequestV1,
+    DescribeManagedRuntimeResponseV1, GetTelemetryDiagnosticsRequestV1,
+    ManagedRuntimeReadyRequestV1, TelemetryDiagnosticsV1, TelemetryRuntimeControlRequestV1,
     TelemetryRuntimeControlResponseV1,
+    managed_runtime_control_request_v1::Operation as ManagedOperation,
+    managed_runtime_control_response_v1::Result as ManagedResult,
     telemetry_runtime_control_request_v1::Operation as TelemetryOperation,
     telemetry_runtime_control_response_v1::Result as TelemetryResult,
 };
@@ -174,12 +177,15 @@ fn write_child(
 ) -> ArtifactMaterial {
     let request = managed_describe(contracts);
     let payload = framed(request);
+    let ready = framed(managed_ready());
     let relay_request = framed(diagnostics_request());
     let relay_response = framed(diagnostics_response(0, 0));
     let script = child_script(
         &payload,
+        &ready,
         &relay_request,
         &relay_response,
+        describe_response_length(),
         marker,
         crash_after_describe,
     );
@@ -210,6 +216,32 @@ fn managed_describe(contracts: &TelemetryContracts) -> Vec<u8> {
     .encode_to_vec()
 }
 
+fn managed_ready() -> Vec<u8> {
+    ManagedRuntimeControlRequestV1 {
+        operation: Some(ManagedOperation::Ready(ManagedRuntimeReadyRequestV1 {
+            registration_id: "telemetry".to_owned(),
+            runtime_generation: 1,
+            grant_epoch: 1,
+        })),
+    }
+    .encode_to_vec()
+}
+
+fn describe_response_length() -> usize {
+    framed(
+        ManagedRuntimeControlResponseV1 {
+            result: Some(ManagedResult::Describe(DescribeManagedRuntimeResponseV1 {
+                registration_id: "telemetry".to_owned(),
+                runtime_generation: 1,
+                grant_epoch: 1,
+            })),
+            error_code: String::new(),
+        }
+        .encode_to_vec(),
+    )
+    .len()
+}
+
 fn diagnostics_request() -> Vec<u8> {
     TelemetryRuntimeControlRequestV1 {
         operation: Some(TelemetryOperation::GetDiagnostics(
@@ -237,13 +269,15 @@ fn framed(payload: Vec<u8>) -> Vec<u8> {
 
 fn child_script(
     describe: &[u8],
+    ready: &[u8],
     relay_request: &[u8],
     relay_response: &[u8],
+    describe_response_length: usize,
     marker: &std::path::Path,
     crash_after_describe: bool,
 ) -> Vec<u8> {
     let after_describe = if crash_after_describe {
-        "exit 1".to_owned()
+        "sleep 1\nexit 1".to_owned()
     } else {
         format!(
             "dd bs=1 count={} of=/dev/null 2>/dev/null\nprintf '{}' >&0\nsleep 30",
@@ -252,9 +286,10 @@ fn child_script(
         )
     };
     format!(
-        "#!/bin/sh\nprintf x >> '{}'\nprintf '{}' >&0\ndd bs=1 count=15 of=/dev/null 2>/dev/null\n{after_describe}\n",
+        "#!/bin/sh\nprintf x >> '{}'\nprintf '{}' >&0\ndd bs=1 count={describe_response_length} of=/dev/null 2>/dev/null\nprintf '{}' >&0\n{after_describe}\n",
         marker.display(),
         shell_binary_literal(describe),
+        shell_binary_literal(ready),
     )
     .into_bytes()
 }
