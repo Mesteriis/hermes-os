@@ -3,6 +3,7 @@
 mod distribution;
 mod identity;
 mod modules;
+mod operation;
 mod ports;
 mod recovery;
 mod runtime;
@@ -21,10 +22,13 @@ pub use modules::{
     ModuleGrantSnapshot, ModuleRegistration, ModuleRegistrationState, ModuleSchedulerJobRequestV1,
     ModuleStorageRequestV1, SettingsApplyState, SettingsDesiredSnapshot, SettingsSchemaBinding,
 };
+pub use operation::{
+    OperationAdmissionV1, OperationIdV1, OperationStatusV1, OperationTerminalOutcomeV1,
+};
 pub use ports::{
     EventHubTopologyStore, EventsAuthorityStore, HealthRecoveryStore, ModuleRegistryStore,
-    OwnerIdentityStore, RuntimeTrustStore, SettingsRegistryStore, StorageBindingStore,
-    StorageBundleStore, StorageTopologyStore,
+    OperationJournalStore, OwnerIdentityStore, RuntimeTrustStore, SettingsRegistryStore,
+    StorageBindingStore, StorageBundleStore, StorageTopologyStore,
 };
 pub use recovery::RecoveryFences;
 pub use runtime::{

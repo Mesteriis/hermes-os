@@ -14,11 +14,9 @@ use tokio::net::TcpStream;
 use tokio::sync::watch;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
-use super::common::unique_target_root;
 use crate::platform::gateway::{
     BrowserGatewayConfigurationV1, required_browser_bootstrap_manifest,
 };
-use hermes_kernel_control_store_sqlite::SqliteControlStore;
 
 #[test]
 fn installed_browser_listener_requires_a_signed_bootstrap_artifact() {
@@ -83,29 +81,6 @@ fn developer_gateway_configuration_requires_one_exact_private_lan_origin() {
         )
         .is_err()
     );
-}
-
-#[test]
-fn developer_mode_setting_is_disabled_by_default_and_persists_explicit_changes() {
-    let root = unique_target_root("hermes-developer-mode-setting");
-    std::fs::create_dir_all(&root).expect("create fixture directory");
-    let path = root.join("control.sqlite");
-    let store = SqliteControlStore::create(&path, "instance-development-setting", 1)
-        .expect("create control store");
-    assert!(!store.developer_mode_enabled().expect("read default"));
-    store
-        .set_developer_mode_enabled(true)
-        .expect("enable developer mode");
-    drop(store);
-
-    let reopened = SqliteControlStore::open(&path).expect("reopen control store");
-    assert!(
-        reopened
-            .developer_mode_enabled()
-            .expect("read persisted setting")
-    );
-    drop(reopened);
-    std::fs::remove_dir_all(root).expect("remove fixture directory");
 }
 
 #[test]

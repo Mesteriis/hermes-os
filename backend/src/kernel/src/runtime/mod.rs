@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use hermes_kernel_control_store::StoreHealth;
 
-use crate::cli::{Command, DeveloperModeCommand};
+use crate::cli::Command;
 use crate::control_store::lifecycle::bootstrap_control_store;
 use crate::infrastructure::filesystem::{
     acquire_runtime_directory_lock, resolve_data_directory, resolve_runtime_directory,
@@ -28,51 +28,11 @@ pub(crate) fn run(data_dir_override: Option<PathBuf>, command: Command) -> Resul
         Command::Status => print_status(bootstrap_control_store(&data_dir, &store_path)),
         Command::Serve { browser_gateway } => {
             let store = bootstrap_control_store(&data_dir, &store_path);
-            let developer_mode_enabled = store
-                .as_ref()
-                .map_err(Clone::clone)?
-                .developer_mode_enabled()
-                .map_err(|error| format!("{error:?}"))?;
-            let browser_gateway = browser_gateway.into_configuration(developer_mode_enabled)?;
+            let browser_gateway = browser_gateway.into_configuration()?;
             serve(store, &data_dir, &runtime_dir, &store_path, browser_gateway)
-        }
-        Command::DeveloperMode { operation } => {
-            configure_developer_mode(bootstrap_control_store(&data_dir, &store_path)?, operation)
         }
         _ => unreachable!("non-runtime command was dispatched to runtime"),
     }
-}
-
-fn configure_developer_mode(
-    store: hermes_kernel_control_store_sqlite::SqliteControlStore,
-    operation: DeveloperModeCommand,
-) -> Result<(), String> {
-    if store
-        .initial_owner_identity()
-        .map_err(|error| format!("{error:?}"))?
-        .is_none()
-    {
-        return Err("developer mode requires an enrolled initial owner".to_owned());
-    }
-    match operation {
-        DeveloperModeCommand::Status => {}
-        DeveloperModeCommand::Enable => store
-            .set_developer_mode_enabled(true)
-            .map_err(|error| format!("{error:?}"))?,
-        DeveloperModeCommand::Disable => store
-            .set_developer_mode_enabled(false)
-            .map_err(|error| format!("{error:?}"))?,
-    }
-    let enabled = store
-        .developer_mode_enabled()
-        .map_err(|error| format!("{error:?}"))?;
-    println!(
-        "developer_mode={}",
-        if enabled { "enabled" } else { "disabled" }
-    );
-    println!("developer_mode_ingress=private_lan_http_only");
-    println!("developer_mode_egress=unrestricted");
-    Ok(())
 }
 
 fn print_status(

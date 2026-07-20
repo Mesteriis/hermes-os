@@ -216,11 +216,6 @@ impl BrowserRealtimeSource {
     fn unavailable() -> Self {
         Self { live: None }
     }
-
-    fn developer() -> Self {
-        let (live, _) = broadcast::channel(1);
-        Self { live: Some(live) }
-    }
 }
 
 impl BrowserRealtimeSubscriptionSource for BrowserRealtimeSource {
@@ -291,48 +286,20 @@ fn gateway_service(
     configuration: &BrowserGatewayConfigurationV1,
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
 ) -> Result<BrowserGatewayRouter, String> {
-    let developer_mode = configuration.is_lan_development();
     let authority = ControlStoreBrowserAuthority::new(Arc::clone(&store), supervisor);
-    let authority = if developer_mode {
-        authority.with_developer_realtime()
-    } else {
-        authority
-    };
-    let session = if developer_mode {
-        let owner = store
-            .initial_owner_identity()
-            .map_err(|_| "developer mode owner is unavailable".to_owned())?
-            .ok_or_else(|| "developer mode owner is unavailable".to_owned())?;
-        BrowserGatewaySessionService::new_lan_development(
-            authority,
-            configuration.exact_https_origin.clone(),
-            owner.owner_id(),
-            owner.device_id(),
-        )
-    } else {
-        let verifier =
-            BrowserWebauthnVerifier::new(&configuration.rp_id, &configuration.exact_https_origin)
-                .map_err(|_| "browser Gateway origin or RP ID is invalid".to_owned())?;
-        BrowserGatewaySessionService::new(
-            authority,
-            verifier,
-            configuration.exact_https_origin.clone(),
-        )
-    }
+    let verifier =
+        BrowserWebauthnVerifier::new(&configuration.rp_id, &configuration.exact_https_origin)
+            .map_err(|_| "browser Gateway origin or RP ID is invalid".to_owned())?;
+    let session = BrowserGatewaySessionService::new(
+        authority,
+        verifier,
+        configuration.exact_https_origin.clone(),
+    )
     .map_err(|_| "browser Gateway session service is unavailable".to_owned())?;
-    let realtime = if developer_mode {
-        BrowserRealtimeSource::developer()
-    } else {
-        BrowserRealtimeSource::unavailable()
-    };
+    let realtime = BrowserRealtimeSource::unavailable();
     let mut service = GatewayApplicationRouter::new(true, Arc::new(session), realtime);
     if let Some(pairing) = pairing {
         service = service.with_browser_pairing(pairing.router(configuration)?);
-    }
-    if configuration.is_lan_development() {
-        service = service
-            .with_lan_development_policy(&configuration.exact_https_origin)
-            .map_err(|_| "developer mode request policy is invalid".to_owned())?;
     }
     if let Some(bootstrap) = load_signed_browser_bootstrap()? {
         service = service.with_browser_bootstrap(bootstrap);
@@ -390,7 +357,7 @@ async fn serve_configured_listener(
             let listener =
                 GatewayLanDevelopmentListenerV1::bind(configuration.listen_address).await?;
             println!("developer_mode=enabled");
-            println!("developer_mode_authentication=bypassed");
+            println!("developer_mode_authentication=owner_apis_unavailable");
             println!("developer_mode_logging=verbose_sanitized_console");
             println!("developer_mode_ingress=private_lan_http_only");
             println!("developer_mode_egress=unrestricted");

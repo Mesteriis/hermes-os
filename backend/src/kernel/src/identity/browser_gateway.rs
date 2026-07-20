@@ -47,12 +47,6 @@ impl ControlStoreBrowserAuthority {
             developer_realtime_enabled: false,
         }
     }
-
-    #[must_use]
-    pub(crate) fn with_developer_realtime(mut self) -> Self {
-        self.developer_realtime_enabled = true;
-        self
-    }
 }
 
 impl BrowserDeviceAuthority for ControlStoreBrowserAuthority {

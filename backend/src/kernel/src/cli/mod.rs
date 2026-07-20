@@ -40,21 +40,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         operation: BrowserPairingCommand,
     },
-    DeveloperMode {
-        #[command(subcommand)]
-        operation: DeveloperModeCommand,
-    },
     ControlStore {
         #[command(subcommand)]
         operation: OfflineControlStoreCommand,
     },
-}
-
-#[derive(Subcommand)]
-pub(crate) enum DeveloperModeCommand {
-    Status,
-    Enable,
-    Disable,
 }
 
 /// Browser device enrollment is created only through the owner-private server
@@ -83,12 +72,14 @@ pub(crate) struct BrowserGatewayCli {
     /// loopback-only.
     #[arg(long)]
     browser_gateway_paired_remote: bool,
+    /// Enables process-local private-LAN HTTP diagnostics. It never grants owner access.
+    #[arg(long)]
+    pub(crate) dangerous_lan_development: bool,
 }
 
 impl BrowserGatewayCli {
     pub(crate) fn into_configuration(
         self,
-        developer_mode_enabled: bool,
     ) -> Result<Option<BrowserGatewayConfigurationV1>, String> {
         match (
             self.browser_gateway_listen_address,
@@ -97,16 +88,16 @@ impl BrowserGatewayCli {
             self.browser_gateway_certificate_der,
             self.browser_gateway_private_key_der,
             self.browser_gateway_paired_remote,
+            self.dangerous_lan_development,
         ) {
-            (None, None, None, None, None, false) => Ok(None),
-            (Some(address), Some(origin), Some(rp_id), None, None, false)
-                if developer_mode_enabled =>
+            (None, None, None, None, None, false, false) => Ok(None),
+            (Some(address), Some(origin), Some(rp_id), None, None, false, true) =>
             {
                 BrowserGatewayConfigurationV1::new_lan_development(address, origin, rp_id)
                     .map(Some)
             }
-            (Some(address), Some(origin), Some(rp_id), Some(certificate), Some(private_key), paired_remote) => {
-                let configuration = if developer_mode_enabled {
+            (Some(address), Some(origin), Some(rp_id), Some(certificate), Some(private_key), paired_remote, dangerous_lan_development) => {
+                let configuration = if dangerous_lan_development {
                     return Err("developer mode uses private-LAN HTTP and does not accept TLS or paired-remote inputs".to_owned());
                 } else if paired_remote {
                     BrowserGatewayConfigurationV1::new_paired_remote(

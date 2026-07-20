@@ -4,6 +4,7 @@ mod actor;
 mod configuration;
 mod database;
 mod module_state;
+mod operation_journal;
 mod owner;
 mod ports;
 mod recovery;

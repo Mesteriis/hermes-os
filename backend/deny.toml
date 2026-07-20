@@ -24,7 +24,10 @@ ignore = true
 
 [bans]
 multiple-versions = "warn"
-wildcards = "deny"
+# Cargo-deny cannot distinguish an unpinned registry wildcard from an internal
+# path dependency without a version. The executable dependency policy below
+# rejects the former and permits only workspace-local Hermes paths.
+wildcards = "allow"
 
 [sources]
 unknown-registry = "deny"

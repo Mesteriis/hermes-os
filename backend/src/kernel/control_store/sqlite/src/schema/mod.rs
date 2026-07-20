@@ -35,8 +35,10 @@ mod v30_to_v31;
 mod v31_to_v32;
 mod v32_to_v33;
 mod v33_to_v34;
+mod v34_to_v35;
+mod v35_to_v36;
 
-pub const SCHEMA_VERSION: i64 = 34;
+pub const SCHEMA_VERSION: i64 = 36;
 
 pub fn migrate_schema(connection: &Connection) -> Result<(), StoreError> {
     loop {
@@ -66,6 +68,9 @@ fn assert_schema_for_version(connection: &Connection, version: i64) -> Result<()
         return Err(StoreError::MigrationSchemaAssertion { version });
     }
     for required_version in 2..=version {
+        if version >= 36 && required_version == 34 {
+            continue;
+        }
         if !version_feature_exists(connection, required_version)? {
             return Err(StoreError::MigrationSchemaAssertion { version });
         }
@@ -122,6 +127,8 @@ fn version_feature_exists(connection: &Connection, version: i64) -> Result<bool,
         ),
         version @ 16..=33 => platform_storage_feature_exists(connection, version),
         34 => table_exists(connection, "hermes_kernel_operator_settings"),
+        35 => table_exists(connection, "hermes_kernel_operation_journal"),
+        36 => table_exists(connection, "hermes_kernel_operator_settings").map(|exists| !exists),
         _ => Ok(false),
     }
 }
@@ -280,6 +287,8 @@ fn apply_step(version: i64, transaction: &Transaction<'_>) -> Result<(), StoreEr
         31 => v31_to_v32::apply(transaction),
         32 => v32_to_v33::apply(transaction),
         33 => v33_to_v34::apply(transaction),
+        34 => v34_to_v35::apply(transaction),
+        35 => v35_to_v36::apply(transaction),
         unsupported => Err(StoreError::UnsupportedSchema(unsupported)),
     }
 }

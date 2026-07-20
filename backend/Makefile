@@ -72,6 +72,7 @@ test-integration:
 	cargo nextest run --locked --workspace --profile integration
 
 dependency-policy-check:
+	node scripts/check-dependency-policy.mjs
 	cargo deny check bans licenses sources
 
 supply-chain-check:

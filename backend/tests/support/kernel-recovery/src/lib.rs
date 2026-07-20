@@ -143,6 +143,7 @@ mod tests {
     mod managed_vault_binary;
     mod managed_vault_route;
     mod module_grant_snapshot;
+    mod operation_journal;
     mod part_01;
     mod part_02;
     mod part_03;
