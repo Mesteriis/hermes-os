@@ -1,8 +1,9 @@
 //! Fail-closed verification of a published recovery-media inventory.
 
 use std::collections::BTreeSet;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Read;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path, PathBuf};
 
 use p256::ecdsa::signature::Verifier;
@@ -103,8 +104,13 @@ fn verify_entry(root: &Path, entry: &RecoveryMediaEntryV1) -> Result<(), String>
     {
         return Err("recovery media file is invalid".to_owned());
     }
-    let mut file =
-        File::open(path).map_err(|_| "recovery media file cannot be opened".to_owned())?;
+    let mut file = open_no_follow(&path)?;
+    let opened = file
+        .metadata()
+        .map_err(|_| "recovery media file cannot be inspected".to_owned())?;
+    if !same_file(&metadata, &opened) {
+        return Err("recovery media file changed while it was opened".to_owned());
+    }
     let mut digest = Sha256::new();
     let mut buffer = [0_u8; 8192];
     loop {
@@ -116,10 +122,36 @@ fn verify_entry(root: &Path, entry: &RecoveryMediaEntryV1) -> Result<(), String>
         }
         digest.update(&buffer[..count]);
     }
+    let after = file
+        .metadata()
+        .map_err(|_| "recovery media file cannot be inspected".to_owned())?;
+    let path_after = std::fs::symlink_metadata(&path)
+        .map_err(|_| "recovery media file is unavailable".to_owned())?;
+    if !same_file(&opened, &after) || !same_file(&opened, &path_after) {
+        return Err("recovery media file changed while it was read".to_owned());
+    }
     if <[u8; 32]>::from(digest.finalize()) != entry.sha256 {
         return Err("recovery media file digest does not match manifest".to_owned());
     }
     Ok(())
+}
+
+fn open_no_follow(path: &Path) -> Result<File, String> {
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+        .map_err(|_| "recovery media file cannot be opened".to_owned())
+}
+
+fn same_file(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {
+    left.dev() == right.dev()
+        && left.ino() == right.ino()
+        && left.len() == right.len()
+        && left.mtime() == right.mtime()
+        && left.mtime_nsec() == right.mtime_nsec()
+        && left.ctime() == right.ctime()
+        && left.ctime_nsec() == right.ctime_nsec()
 }
 
 fn collect_regular_files(root: &Path) -> Result<BTreeSet<String>, String> {
