@@ -34,3 +34,21 @@ fn recovery_media_rejects_path_escape_and_digest_drift() {
     assert!(verify_inventory(&root, &[entry]).is_err());
     fs::remove_dir_all(root).expect("cleanup");
 }
+
+#[test]
+fn recovery_media_rejects_symlinked_manifest_entry() {
+    let root = unique_target_root("hermes-recovery-media-symlink");
+    fs::create_dir_all(&root).expect("media root");
+    let external = unique_target_root("hermes-recovery-media-external");
+    fs::write(&external, b"external").expect("external file");
+    std::os::unix::fs::symlink(&external, root.join("vault.bin")).expect("media symlink");
+    let entry = RecoveryMediaEntryV1::new(
+        "vault.bin".to_owned(),
+        8,
+        Sha256::digest(b"external").into(),
+    )
+    .expect("entry");
+    assert!(verify_inventory(&root, &[entry]).is_err());
+    fs::remove_dir_all(root).expect("cleanup media");
+    fs::remove_file(external).expect("cleanup external");
+}
