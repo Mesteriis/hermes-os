@@ -40,16 +40,16 @@ pub(crate) fn rotate(
         &current_record_key,
         &next_record_key,
     )?;
-    let result = stage_anchor_and_install(
+    let result = stage_anchor_and_install(RotationInstallInput {
         database_path,
         anchor_path,
         current_root,
-        &next_root,
+        next_root: &next_root,
         wrapping_key,
         recovery_key,
-        &staged_database,
-        &staged_anchor,
-    );
+        staged_database: &staged_database,
+        staged_anchor: &staged_anchor,
+    });
     if result.is_err() && !journal::exists(database_path)? {
         let _ = std::fs::remove_file(&staged_database);
         let _ = std::fs::remove_file(&staged_anchor);
@@ -61,29 +61,37 @@ pub(crate) fn rotation_pending(database_path: &Path) -> Result<bool, VaultStoreE
     journal::exists(database_path)
 }
 
-fn stage_anchor_and_install(
-    database_path: &Path,
-    anchor_path: &Path,
-    current_root: &VaultRootKey,
-    next_root: &VaultRootKey,
-    wrapping_key: &WrappingKey,
-    recovery_key: Option<&VaultRecoveryKeyV1>,
-    staged_database: &Path,
-    staged_anchor: &Path,
-) -> Result<(), VaultStoreError> {
+struct RotationInstallInput<'a> {
+    database_path: &'a Path,
+    anchor_path: &'a Path,
+    current_root: &'a VaultRootKey,
+    next_root: &'a VaultRootKey,
+    wrapping_key: &'a WrappingKey,
+    recovery_key: Option<&'a VaultRecoveryKeyV1>,
+    staged_database: &'a Path,
+    staged_anchor: &'a Path,
+}
+
+fn stage_anchor_and_install(input: RotationInstallInput<'_>) -> Result<(), VaultStoreError> {
     let anchor = vault_anchor::encode_rotated_root_anchor(
-        anchor_path,
-        current_root,
-        next_root,
-        wrapping_key,
-        recovery_key,
+        input.anchor_path,
+        input.current_root,
+        input.next_root,
+        input.wrapping_key,
+        input.recovery_key,
     )
     .map_err(|_| VaultStoreError::Anchor)?;
-    vault_anchor::write_staged_anchor(staged_anchor, &anchor)
+    vault_anchor::write_staged_anchor(input.staged_anchor, &anchor)
         .map_err(|_| VaultStoreError::Anchor)?;
-    let reservation = journal::Reservation::from_staged(staged_database, staged_anchor)?;
-    journal::write(database_path, &reservation)?;
-    install_staged_pair(database_path, anchor_path, staged_database, staged_anchor)
+    let reservation =
+        journal::Reservation::from_staged(input.staged_database, input.staged_anchor)?;
+    journal::write(input.database_path, &reservation)?;
+    install_staged_pair(
+        input.database_path,
+        input.anchor_path,
+        input.staged_database,
+        input.staged_anchor,
+    )
 }
 
 fn install_staged_pair(
