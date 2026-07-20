@@ -121,6 +121,7 @@ mod tests {
     mod browser_device_identity;
     mod browser_gateway_session;
     mod common;
+    mod control_plane_worker;
     mod deployment_contract;
     mod descriptor_basics;
     mod distribution_bundle_fixture;
@@ -174,3 +175,7 @@ pub(crate) use hermes_kernel_control_store_sqlite::StoreError;
 #[cfg(test)]
 #[path = "../../../../src/kernel/control_store/sqlite/src/actor/handle.rs"]
 mod control_store_handle;
+
+#[cfg(test)]
+#[path = "../../../../src/kernel/src/platform/control_plane/worker.rs"]
+mod control_plane_worker;

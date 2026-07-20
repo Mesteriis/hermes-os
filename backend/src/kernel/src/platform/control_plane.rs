@@ -21,6 +21,11 @@ use crate::runtime::external::ipc as external_session_ipc;
 use crate::runtime::lifecycle::shutdown;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
+#[path = "control_plane/worker.rs"]
+mod worker;
+
+use worker::{WorkerClassV1, WorkerCompletionV1, spawn as spawn_worker};
+
 const EXIT_POLL: Duration = Duration::from_millis(25);
 
 pub fn serve(
@@ -131,7 +136,7 @@ fn start_workers(
     input: ControlPlaneWorkerInputV1,
 ) -> (
     Vec<std::thread::JoinHandle<()>>,
-    mpsc::Receiver<Result<(), String>>,
+    mpsc::Receiver<WorkerCompletionV1>,
 ) {
     let ControlPlaneWorkerInputV1 {
         store,
@@ -143,7 +148,7 @@ fn start_workers(
         browser_gateway,
         browser_pairing,
     } = input;
-    let (completed, receiver) = mpsc::channel();
+    let (completed, receiver) = mpsc::channel::<WorkerCompletionV1>();
     let mut workers = Vec::with_capacity(6);
     workers.extend(start_boot_workers(BootWorkerInputV1 {
         completed: completed.clone(),
@@ -188,7 +193,7 @@ fn start_workers(
 }
 
 struct BootWorkerInputV1 {
-    completed: mpsc::Sender<Result<(), String>>,
+    completed: mpsc::Sender<WorkerCompletionV1>,
     shutdown_requested: Arc<AtomicBool>,
     store: Arc<SqliteControlStore>,
     data_dir: std::path::PathBuf,
@@ -230,7 +235,7 @@ fn start_boot_workers(input: BootWorkerInputV1) -> Vec<std::thread::JoinHandle<(
 }
 
 fn start_scheduler_worker(
-    completed: mpsc::Sender<Result<(), String>>,
+    completed: mpsc::Sender<WorkerCompletionV1>,
     shutdown_requested: &Arc<AtomicBool>,
     store: Arc<SqliteControlStore>,
     runtime_dir: std::path::PathBuf,
@@ -246,7 +251,7 @@ fn start_scheduler_worker(
 }
 
 fn browser_gateway_worker(
-    completed: &mpsc::Sender<Result<(), String>>,
+    completed: &mpsc::Sender<WorkerCompletionV1>,
     shutdown_requested: &Arc<AtomicBool>,
     store: &Arc<SqliteControlStore>,
     supervisor: ManagedRuntimeSupervisor,
@@ -265,43 +270,70 @@ fn browser_gateway_worker(
 }
 
 fn start_registration_worker(
-    completed: mpsc::Sender<Result<(), String>>,
+    completed: mpsc::Sender<WorkerCompletionV1>,
     shutdown_requested: &Arc<AtomicBool>,
     store: Arc<SqliteControlStore>,
     runtime_dir: std::path::PathBuf,
 ) -> std::thread::JoinHandle<()> {
-    spawn_worker(completed, Arc::clone(shutdown_requested), move |shutdown| {
-        registration_ipc::serve(store, &runtime_dir, shutdown)
-    })
+    spawn_worker(
+        completed,
+        WorkerClassV1::Critical,
+        "registration",
+        Arc::clone(shutdown_requested),
+        move |shutdown| registration_ipc::serve(Arc::clone(&store), &runtime_dir, shutdown),
+    )
 }
 
 fn start_recovery_worker(
-    completed: mpsc::Sender<Result<(), String>>,
+    completed: mpsc::Sender<WorkerCompletionV1>,
     shutdown_requested: &Arc<AtomicBool>,
     store: Arc<SqliteControlStore>,
     runtime_dir: std::path::PathBuf,
     store_path: std::path::PathBuf,
 ) -> std::thread::JoinHandle<()> {
-    spawn_worker(completed, Arc::clone(shutdown_requested), move |shutdown| {
-        recovery::serve_recovery_socket(&runtime_dir, &store_path, Some(store), shutdown)
-    })
+    spawn_worker(
+        completed,
+        WorkerClassV1::Critical,
+        "recovery",
+        Arc::clone(shutdown_requested),
+        move |shutdown| {
+            recovery::serve_recovery_socket(
+                &runtime_dir,
+                &store_path,
+                Some(Arc::clone(&store)),
+                shutdown,
+            )
+        },
+    )
 }
 
 fn start_browser_gateway_worker(
-    completed: mpsc::Sender<Result<(), String>>,
+    completed: mpsc::Sender<WorkerCompletionV1>,
     shutdown_requested: &Arc<AtomicBool>,
     store: Arc<SqliteControlStore>,
     supervisor: ManagedRuntimeSupervisor,
     configuration: BrowserGatewayConfigurationV1,
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
 ) -> std::thread::JoinHandle<()> {
-    spawn_worker(completed, Arc::clone(shutdown_requested), move |shutdown| {
-        gateway::serve(store, supervisor, configuration, pairing, shutdown)
-    })
+    spawn_worker(
+        completed,
+        WorkerClassV1::Restartable,
+        "browser_gateway",
+        Arc::clone(shutdown_requested),
+        move |shutdown| {
+            gateway::serve(
+                Arc::clone(&store),
+                supervisor.clone(),
+                configuration.clone(),
+                pairing.clone(),
+                shutdown,
+            )
+        },
+    )
 }
 
 fn start_owner_worker(
-    completed: mpsc::Sender<Result<(), String>>,
+    completed: mpsc::Sender<WorkerCompletionV1>,
     shutdown_requested: &Arc<AtomicBool>,
     store: &Arc<SqliteControlStore>,
     data_dir: std::path::PathBuf,
@@ -310,71 +342,99 @@ fn start_owner_worker(
     browser_pairing: Option<Arc<BrowserPairingAdmissionV1>>,
 ) -> std::thread::JoinHandle<()> {
     let store = Arc::clone(store);
-    spawn_worker(completed, Arc::clone(shutdown_requested), move |shutdown| {
-        owner_control::serve(
-            store,
-            &data_dir,
-            &runtime_dir,
-            shutdown,
-            supervisor,
-            browser_pairing,
-        )
-    })
+    spawn_worker(
+        completed,
+        WorkerClassV1::Critical,
+        "owner",
+        Arc::clone(shutdown_requested),
+        move |shutdown| {
+            owner_control::serve(
+                Arc::clone(&store),
+                &data_dir,
+                &runtime_dir,
+                shutdown,
+                supervisor.clone(),
+                browser_pairing.clone(),
+            )
+        },
+    )
 }
 
 fn spawn_external_runtime_worker(
-    completed: mpsc::Sender<Result<(), String>>,
+    completed: mpsc::Sender<WorkerCompletionV1>,
     shutdown_requested: Arc<AtomicBool>,
     store: Arc<SqliteControlStore>,
     data_dir: std::path::PathBuf,
     runtime_dir: std::path::PathBuf,
     managed_runtime_supervisor: ManagedRuntimeSupervisor,
 ) -> std::thread::JoinHandle<()> {
-    spawn_worker(completed, shutdown_requested, move |shutdown| {
-        external_session_ipc::serve(
-            store,
-            &data_dir,
-            &runtime_dir,
-            shutdown,
-            managed_runtime_supervisor,
-        )
-    })
+    spawn_worker(
+        completed,
+        WorkerClassV1::Restartable,
+        "external_runtime",
+        shutdown_requested,
+        move |shutdown| {
+            external_session_ipc::serve(
+                Arc::clone(&store),
+                &data_dir,
+                &runtime_dir,
+                shutdown,
+                managed_runtime_supervisor.clone(),
+            )
+        },
+    )
 }
 
 fn spawn_scheduler_lifecycle_worker(
-    completed: mpsc::Sender<Result<(), String>>,
+    completed: mpsc::Sender<WorkerCompletionV1>,
     shutdown_requested: Arc<AtomicBool>,
     store: Arc<SqliteControlStore>,
     runtime_dir: std::path::PathBuf,
     managed_runtime_supervisor: ManagedRuntimeSupervisor,
 ) -> std::thread::JoinHandle<()> {
-    spawn_worker(completed, shutdown_requested, move |shutdown| {
-        let kernel = std::env::current_exe()
-            .map_err(|_| "Kernel executable path is unavailable".to_owned())?;
-        scheduler_lifecycle::serve(
-            store,
-            &kernel,
-            &runtime_dir,
-            shutdown,
-            managed_runtime_supervisor,
-        )
-    })
+    spawn_worker(
+        completed,
+        WorkerClassV1::Restartable,
+        "scheduler_lifecycle",
+        shutdown_requested,
+        move |shutdown| {
+            let kernel = std::env::current_exe()
+                .map_err(|_| "Kernel executable path is unavailable".to_owned())?;
+            scheduler_lifecycle::serve(
+                Arc::clone(&store),
+                &kernel,
+                &runtime_dir,
+                shutdown,
+                managed_runtime_supervisor.clone(),
+            )
+        },
+    )
 }
 
 fn supervise_workers(
-    receiver: &mpsc::Receiver<Result<(), String>>,
+    receiver: &mpsc::Receiver<WorkerCompletionV1>,
     shutdown_requested: &Arc<AtomicBool>,
 ) -> Option<String> {
     let mut failure = None;
     while !shutdown_requested.load(Ordering::Acquire) {
         match receiver.recv_timeout(EXIT_POLL) {
-            Ok(Ok(())) => {
-                failure = Some("a private control-plane socket stopped unexpectedly".to_owned());
+            Ok(completion) if completion.class == WorkerClassV1::Critical => {
+                failure = Some(completion.result.err().unwrap_or_else(|| {
+                    "a critical control-plane worker stopped unexpectedly".to_owned()
+                }));
                 shutdown_requested.store(true, Ordering::Release);
             }
-            Ok(Err(error)) => {
-                failure = Some(error);
-                shutdown_requested.store(true, Ordering::Release);
+            Ok(completion) => {
+                if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                    let result = completion
+                        .result
+                        .err()
+                        .unwrap_or_else(|| "stopped".to_owned());
+                    eprintln!(
+                        "developer_control_plane_restarting worker={} error={result}",
+                        completion.label
+                    );
+                }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -398,21 +458,4 @@ fn join_workers(
         }
     }
     failure.map_or(Ok(()), Err)
-}
-
-fn spawn_worker<F>(
-    completed: mpsc::Sender<Result<(), String>>,
-    shutdown_requested: Arc<AtomicBool>,
-    serve: F,
-) -> std::thread::JoinHandle<()>
-where
-    F: FnOnce(Arc<AtomicBool>) -> Result<(), String> + Send + 'static,
-{
-    std::thread::spawn(move || {
-        let result = serve(Arc::clone(&shutdown_requested));
-        if result.is_err() {
-            shutdown_requested.store(true, Ordering::Release);
-        }
-        let _ = completed.send(result);
-    })
 }
