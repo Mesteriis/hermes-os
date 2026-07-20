@@ -8,7 +8,9 @@ use std::sync::{Arc, Mutex};
 
 use hermes_kernel_control_store::{PlatformManagedProcessBinding, PlatformManagedProcessLaunch};
 use hermes_runtime_protocol::v1::{
-    ManagedRuntimeVaultRouteRequestV1, ManagedRuntimeVaultRouteResponseV1,
+    ManagedRuntimeControlRequestV1, ManagedRuntimeVaultRouteRequestV1,
+    ManagedRuntimeVaultRouteResponseV1,
+    managed_runtime_control_request_v1::Operation as ManagedOperation,
 };
 use hermes_vault_key_provider::WrappingKeyProvider;
 use hermes_vault_key_provider_file::FileWrappingKeyProvider;
@@ -51,8 +53,9 @@ fn kernel_routes_storage_credential_bootstrap_through_a_live_vault_service() {
         keys,
         signer.public_key_sec1(),
     );
-    let vault_channel = establish_channel(vault_kernel, &vault_expectation())
+    let mut vault_channel = establish_channel(vault_kernel, &vault_expectation())
         .expect("Kernel accepts Vault descriptor");
+    assert_vault_ready(&mut vault_channel);
     let relays = Arc::new(AtomicU64::new(0));
     let direct_relay = Arc::new(DirectVaultRelay {
         channel: Mutex::new(vault_channel),
@@ -158,6 +161,21 @@ fn vault_expectation() -> ManagedRuntimeExpectation {
         Sha256::digest(descriptor.encode_to_vec()).into(),
         None,
     )
+}
+
+fn assert_vault_ready(channel: &mut UnixStream) {
+    let request = ManagedRuntimeControlRequestV1::decode(
+        read_frame(channel)
+            .expect("read Vault ready frame")
+            .as_slice(),
+    )
+    .expect("decode Vault ready frame");
+    let Some(ManagedOperation::Ready(ready)) = request.operation else {
+        panic!("Vault sends a typed ready frame");
+    };
+    assert_eq!(ready.registration_id, "vault");
+    assert_eq!(ready.runtime_generation, 1);
+    assert_eq!(ready.grant_epoch, 1);
 }
 
 fn vault_descriptor() -> ModuleDescriptorV1 {

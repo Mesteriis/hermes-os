@@ -1,7 +1,8 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_runtime_protocol::v1::{
-    DescribeManagedRuntimeResponseV1, ManagedRuntimeControlResponseV1,
+    DescribeManagedRuntimeResponseV1, ManagedRuntimeControlRequestV1,
+    ManagedRuntimeControlResponseV1, managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
 use prost::Message;
@@ -24,6 +25,13 @@ fn vault_inherited_control_requires_a_successful_typed_descriptor_response() {
             error_code: String::new(),
         };
         write_frame(&mut stream, &response.encode_to_vec()).expect("write descriptor response");
+        let ready = ManagedRuntimeControlRequestV1::decode(
+            read_frame(&mut stream)
+                .expect("read ready request")
+                .as_slice(),
+        )
+        .expect("decode ready request");
+        assert!(matches!(ready.operation, Some(Operation::Ready(_))));
     });
     let channel = describe(client_stream, vec![1], Vec::new()).expect("descriptor accepted");
     drop(channel);
