@@ -23,6 +23,7 @@ impl InheritedVaultRoutePortV1 {
 }
 
 impl NatsVaultRoutePortV1 for InheritedVaultRoutePortV1 {
+    #[allow(clippy::manual_async_fn)] // The NATS-to-Vault port requires a Send future.
     fn route_vault_ciphertext(
         &mut self,
         route: VaultCiphertextRouteV1,

@@ -1,7 +1,10 @@
 //! Retention limits for diagnostic-only telemetry.
 
+#[allow(dead_code)] // Used by the production retention preset.
 pub const MAX_SEGMENT_BYTES: u64 = 1024 * 1024;
+#[allow(dead_code)] // Used by the production retention preset.
 pub const MAX_TOTAL_BYTES: u64 = 32 * 1024 * 1024;
+#[allow(dead_code)] // Used by the production retention preset.
 pub const MAX_AGE_SECONDS: u64 = 7 * 24 * 60 * 60;
 
 #[derive(Clone, Copy, Debug)]
@@ -28,6 +31,7 @@ impl TelemetryRetentionV1 {
     }
 
     #[must_use]
+    #[allow(dead_code)] // Used by production Collector composition.
     pub const fn production_default() -> Self {
         Self {
             max_segment_bytes: MAX_SEGMENT_BYTES,

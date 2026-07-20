@@ -73,7 +73,7 @@ fn authenticated_session_stores_then_resolves_a_lease_scoped_secret() {
     };
     let stored = execute_command(
         &mut service,
-        keys,
+        &keys,
         &response_recipient,
         &mut guard,
         &audience,
@@ -263,7 +263,7 @@ fn assert_inherited_route(
     assert!(crate::transport::route::verify_kernel_authorization(&route, [4; 65]).is_err());
     let response = execute_route(
         service,
-        &keys,
+        keys,
         &mut VaultTransportReplayGuard::new(3),
         authorization_key,
         route,

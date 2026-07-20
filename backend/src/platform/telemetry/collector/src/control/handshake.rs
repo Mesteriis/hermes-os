@@ -14,6 +14,7 @@ use prost::Message;
 
 use super::framing::{read_frame, write_frame};
 
+#[allow(dead_code)] // Used by the Collector inherited-channel composition harness.
 pub fn describe(
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Vec<u8>,
