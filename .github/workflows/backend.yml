@@ -36,3 +36,25 @@ jobs:
         with:
           node-version: 22
       - run: make -C backend ci
+      - name: Record validation evidence
+        if: always()
+        run: |
+          mkdir -p backend/target/evidence
+          {
+            echo "source_sha=${{ github.sha }}"
+            echo "runner=${{ matrix.runner }}"
+            echo "target=${{ matrix.target }}"
+            rustc --version
+            cargo --version
+            cargo nextest --version
+            cargo deny --version
+            syft version
+          } > backend/target/evidence/validation.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: backend-validation-${{ matrix.runner }}
+          path: backend/target/evidence
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 90
