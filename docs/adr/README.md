@@ -181,3 +181,6 @@ listener без owner APIs: он не сохраняется и не даёт ow
 ADR-0238 вводит один FD-bound secure-file contract для bounded no-symlink
 readers private material и release inputs; rollout readers остаётся явным
 admission prerequisite.
+ADR-0239 предлагает exact first-owner Mail/IMAP read-only vertical slice и
+Communications evidence boundary, но сохраняет все prerequisite gates закрытыми
+до атомарной package/evidence admission.
