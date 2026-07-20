@@ -135,6 +135,7 @@ impl<'a> RuntimeOutboxPublisherV1<'a> {
 }
 
 impl ExactOutboxPublisherPortV1 for RuntimeOutboxPublisherV1<'_> {
+    #[allow(clippy::manual_async_fn)] // The relay port requires a Send future across all publishers.
     fn publish_exact(
         &self,
         record: &OutboxRecordV1,

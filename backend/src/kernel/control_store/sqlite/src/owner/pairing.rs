@@ -105,7 +105,7 @@ fn claim_pairing(
         transaction.commit()?;
         return Err(StoreError::ServerBootstrapPairingExpired);
     }
-    if !constant_time_equal(&token_sha256, &presented_token_sha256) {
+    if !constant_time_equal(&token_sha256, presented_token_sha256) {
         return Err(StoreError::ServerBootstrapPairingTokenRejected);
     }
     let claimed = transaction.execute(
