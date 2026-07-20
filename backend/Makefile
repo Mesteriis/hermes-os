@@ -8,6 +8,7 @@ TARGET ?= $(shell rustc +$(RUST_TOOLCHAIN) -vV | sed -n 's/^host: //p')
 
 .PHONY: build test dev docker tauri clean \
 	architecture-policy-check srp-policy-check cargo-boundaries-check \
+	architecture-evidence-check \
 	test-architecture fmt-check clippy test-workspace test-integration \
 	dependency-policy-check supply-chain-check check-target check-linux-container ci
 
@@ -50,6 +51,9 @@ clean:
 architecture-policy-check:
 	node scripts/check-architecture-policy.mjs
 
+architecture-evidence-check:
+	node scripts/check-architecture-evidence.mjs
+
 srp-policy-check:
 	node scripts/check-srp-policy.mjs
 
@@ -88,4 +92,4 @@ check-target:
 check-linux-container:
 	$(DOCKER) run --rm --platform $(LINUX_CI_PLATFORM) --mount type=bind,src="$(CURDIR)",dst=/workspace,readonly --workdir /workspace -e CARGO_TARGET_DIR=/tmp/hermes-target $(LINUX_CI_IMAGE) cargo +$(RUST_TOOLCHAIN) check --locked --workspace --target x86_64-unknown-linux-gnu
 
-ci: check-target architecture-policy-check srp-policy-check cargo-boundaries-check test-architecture fmt-check clippy test-workspace test-integration dependency-policy-check supply-chain-check
+ci: check-target architecture-policy-check architecture-evidence-check srp-policy-check cargo-boundaries-check test-architecture fmt-check clippy test-workspace test-integration dependency-policy-check supply-chain-check
