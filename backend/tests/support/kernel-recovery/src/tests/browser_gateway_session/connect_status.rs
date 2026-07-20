@@ -260,11 +260,11 @@ fn assert_pending_owner_bootstrap(pending: &ClientBootstrapResponseV1) {
 
 fn assert_bootstrap_requires_session(fixture: &AuthenticationHttpFixture) {
     assert_eq!(
-        read_bootstrap_status(&fixture, None),
+        read_bootstrap_status(fixture, None),
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(
-        read_bootstrap_status(&fixture, Some("__Host-hermes-session=invalid")),
+        read_bootstrap_status(fixture, Some("__Host-hermes-session=invalid")),
         StatusCode::UNAUTHORIZED
     );
 }

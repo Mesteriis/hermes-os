@@ -83,16 +83,14 @@ fn start_staged_runtime(
     };
     let runtime_generation = reservation.runtime_generation();
     let (registration_id, expectation, policy) = reservation.into_single_attempt_launch_parts()?;
-    if let Err(error) = supervisor.start_with_arguments_and_contracts(
+    supervisor.start_with_arguments_and_contracts(
         registration_id.clone(),
         prepared.into_staged_executable(),
         arguments,
         expectation,
         policy,
         contracts,
-    ) {
-        return Err(error);
-    }
+    )?;
     if let Err(error) = supervisor.wait_until_ready(&registration_id) {
         let _ = supervisor.stop(&registration_id);
         let _ = supervisor.record_failure(&registration_id, error.clone());

@@ -42,7 +42,7 @@ async fn assert_tls_health_peer(address: std::net::SocketAddr, connector: &TlsCo
     let (mut client, connection) = h2::client::handshake(stream)
         .await
         .expect("HTTP/2 handshake");
-    let connection = tokio::spawn(async move { connection.await });
+    let connection = tokio::spawn(connection);
     let request = Request::builder()
         .method(Method::GET)
         .uri("https://localhost/healthz")
@@ -99,9 +99,7 @@ pub(super) fn tls_endpoints() -> (TlsAcceptor, TlsConnector) {
         .with_single_cert(vec![certificate.clone()], key)
         .expect("server configuration");
     let mut roots = RootCertStore::empty();
-    roots
-        .add(CertificateDer::from(certificate))
-        .expect("test certificate root");
+    roots.add(certificate).expect("test certificate root");
     let client = ClientConfig::builder()
         .with_root_certificates(roots)
         .with_no_client_auth();

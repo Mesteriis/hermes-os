@@ -1,3 +1,10 @@
+#![cfg_attr(test, allow(dead_code, unused_imports))]
+
+// This crate is a test-only composition harness that path-includes selected
+// private production slices. Those slices intentionally expose more members
+// than each individual recovery scenario calls; semantic Clippy lints remain
+// enabled for the harness and every included source file.
+
 #[cfg(test)]
 mod distribution {
     #[path = "../../../../../src/kernel/src/distribution/bundle_verifier.rs"]
@@ -44,18 +51,6 @@ mod platform {
     pub(crate) mod managed;
     #[path = "../../../../../src/kernel/src/platform/scheduler/mod.rs"]
     pub(crate) mod scheduler;
-    #[path = "../../../../../src/kernel/src/platform/scheduler/admission.rs"]
-    pub(crate) mod scheduler_admission;
-    #[path = "../../../../../src/kernel/src/platform/scheduler/catalog.rs"]
-    pub(crate) mod scheduler_catalog;
-    #[path = "../../../../../src/kernel/src/platform/scheduler/launch.rs"]
-    pub(crate) mod scheduler_launch;
-    #[path = "../../../../../src/kernel/src/platform/scheduler/restart.rs"]
-    pub(crate) mod scheduler_restart;
-    pub(crate) use scheduler_launch as launch;
-    pub(crate) use scheduler_restart as restart;
-    #[path = "../../../../../src/kernel/src/platform/scheduler/lifecycle.rs"]
-    pub(crate) mod scheduler_lifecycle;
     pub(crate) mod macos {
         #[path = "../../../../../../src/kernel/src/platform/macos/code_signature.rs"]
         pub(crate) mod code_signature;

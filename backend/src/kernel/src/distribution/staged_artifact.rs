@@ -110,7 +110,7 @@ fn copy_verified(
         return Err("staged artifact digest does not match manifest".to_owned());
     }
     drop(output);
-    std::fs::set_permissions(&destination, std::fs::Permissions::from_mode(0o500))
+    std::fs::set_permissions(destination, std::fs::Permissions::from_mode(0o500))
         .map_err(|error| error.to_string())?;
     Ok(StagedNativeArtifact {
         path: destination.to_owned(),

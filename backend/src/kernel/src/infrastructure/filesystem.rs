@@ -33,6 +33,7 @@ pub fn acquire_runtime_directory_lock(runtime_dir: &Path) -> Result<File, String
         .read(true)
         .write(true)
         .create(true)
+        .truncate(false)
         .open(lock_path)
         .map_err(|error| error.to_string())?;
     lock.try_lock()

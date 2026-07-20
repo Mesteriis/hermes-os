@@ -10,7 +10,7 @@ use hermes_runtime_protocol::v1::{
 use prost::Message;
 
 use crate::modules::registration::registry;
-use crate::platform::{scheduler_admission, scheduler_catalog as catalog};
+use crate::platform::scheduler::{admission as scheduler_admission, catalog};
 
 use super::common::unique_target_root;
 

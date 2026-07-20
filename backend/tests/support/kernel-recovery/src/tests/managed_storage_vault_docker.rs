@@ -45,7 +45,7 @@ use crate::platform::vault::{binding as vault_binding, launch as vault_launch};
 use crate::platform::{
     events::{catalog as event_catalog, topology as event_topology},
     macos::managed_launch,
-    scheduler_launch, scheduler_lifecycle,
+    scheduler::{launch as scheduler_launch, lifecycle as scheduler_lifecycle},
     storage::issuance::{StorageBindingIssueV1, issue_managed},
 };
 use crate::runtime::lifecycle::control::{

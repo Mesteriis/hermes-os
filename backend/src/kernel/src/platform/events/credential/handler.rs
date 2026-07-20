@@ -11,7 +11,7 @@ use hermes_runtime_protocol::v1::{
 
 use crate::platform::events::credential::{
     authority::{EventAuthorityCredentialRelayErrorV1, EventAuthorityCredentialRelayV1},
-    permit::derive_credential_request,
+    permit::{EventCredentialRequestInputV1, derive_credential_request},
 };
 use crate::platform::events::{catalog, topology};
 use crate::runtime::lifecycle::control::{
@@ -53,16 +53,16 @@ where
             return Err("managed runtime Events credential fence is stale".to_owned());
         }
         let topology = current_topology(&self.store)?;
-        let authority_request = derive_credential_request(
-            &registration,
-            expectation.runtime_instance_id(),
-            expectation.runtime_generation(),
-            request.credential_revision,
-            fixed_request_id(&request)?,
-            fixed_recipient_key(&request)?,
-            request.ttl_seconds,
-            &topology,
-        )
+        let authority_request = derive_credential_request(EventCredentialRequestInputV1 {
+            registration: &registration,
+            runtime_instance_id: expectation.runtime_instance_id(),
+            runtime_generation: expectation.runtime_generation(),
+            credential_revision: request.credential_revision,
+            request_id: fixed_request_id(&request)?,
+            recipient_public_key_x25519: fixed_recipient_key(&request)?,
+            ttl_seconds: request.ttl_seconds,
+            topology: &topology,
+        })
         .map_err(|_| "managed runtime Events credential request is denied".to_owned())?;
         let delivery = self
             .authority

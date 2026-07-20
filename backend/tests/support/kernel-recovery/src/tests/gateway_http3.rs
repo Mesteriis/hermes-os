@@ -97,9 +97,7 @@ fn http3_endpoints() -> (QuinnServerConfig, QuinnClientConfig) {
         QuicServerConfig::try_from(server_crypto).expect("QUIC server crypto"),
     ));
     let mut roots = RootCertStore::empty();
-    roots
-        .add(CertificateDer::from(certificate))
-        .expect("test certificate root");
+    roots.add(certificate).expect("test certificate root");
     let mut client_crypto = ClientConfig::builder()
         .with_root_certificates(roots)
         .with_no_client_auth();

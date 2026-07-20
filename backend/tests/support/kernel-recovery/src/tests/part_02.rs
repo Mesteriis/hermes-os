@@ -192,8 +192,8 @@ fn staged_restore_suspends_authority_and_replaces_every_fence() {
 fn prepare_staged_restore_fixture(root: &Path) -> (PathBuf, PathBuf) {
     let source = root.join("source.sqlite");
     let staged = root.join("staged.sqlite");
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir(&root).expect("create restore fixture");
+    let _ = std::fs::remove_dir_all(root);
+    std::fs::create_dir(root).expect("create restore fixture");
     let store = SqliteControlStore::create(&source, "11111111111111111111111111111111", 1)
         .expect("create source store");
     let registration = ModuleRegistration::new(
@@ -244,7 +244,7 @@ fn prepare_staged_restore_fixture(root: &Path) -> (PathBuf, PathBuf) {
 }
 
 fn assert_staged_authority_is_suspended(staged: &Path) {
-    let restored = SqliteControlStore::open(&staged).expect("open staged restore");
+    let restored = SqliteControlStore::open(staged).expect("open staged restore");
     let restored_registration = restored
         .module_registration("registration-restore")
         .expect("read restored registration")

@@ -137,8 +137,8 @@ fn configured_store(root: &std::path::Path) -> SqliteControlStore {
 }
 
 fn start_status_children(root: &std::path::Path, supervisor: &ManagedRuntimeSupervisor) {
-    let (staged, expectation) = status_child(&root);
-    let (vault_staged, vault_expectation) = vault_status_child(&root);
+    let (staged, expectation) = status_child(root);
+    let (vault_staged, vault_expectation) = vault_status_child(root);
     supervisor
         .start(
             "vault".to_owned(),

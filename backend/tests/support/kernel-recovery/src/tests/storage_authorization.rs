@@ -8,9 +8,9 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, atomic::AtomicBool};
 
 use crate::platform::macos::managed_launch;
+use crate::platform::scheduler::{launch as scheduler_launch, restart as scheduler_restart};
 use crate::platform::storage::authorization::{authorize_binding, authorize_managed_binding};
 use crate::platform::storage::issuance::{StorageBindingIssueV1, issue_external, issue_managed};
-use crate::platform::{scheduler_launch, scheduler_restart};
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 use super::common::unique_target_root;

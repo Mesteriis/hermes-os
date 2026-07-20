@@ -9,48 +9,52 @@ use hermes_runtime_protocol::v1::{
 
 use crate::platform::events::topology::EventTopologyPlanV1;
 
+pub(crate) struct EventCredentialRequestInputV1<'a> {
+    pub(crate) registration: &'a ModuleRegistration,
+    pub(crate) runtime_instance_id: &'a str,
+    pub(crate) runtime_generation: u64,
+    pub(crate) credential_revision: u64,
+    pub(crate) request_id: [u8; 16],
+    pub(crate) recipient_public_key_x25519: [u8; 32],
+    pub(crate) ttl_seconds: u32,
+    pub(crate) topology: &'a EventTopologyPlanV1,
+}
+
 pub(crate) fn derive_credential_request(
-    registration: &ModuleRegistration,
-    runtime_instance_id: &str,
-    runtime_generation: u64,
-    credential_revision: u64,
-    request_id: [u8; 16],
-    recipient_public_key_x25519: [u8; 32],
-    ttl_seconds: u32,
-    topology: &EventTopologyPlanV1,
+    input: EventCredentialRequestInputV1<'_>,
 ) -> Result<IssueEventsRuntimeCredentialRequestV1, EventCredentialPermitErrorV1> {
     validate_input(
-        registration,
-        runtime_instance_id,
-        runtime_generation,
-        credential_revision,
-        &request_id,
-        ttl_seconds,
+        input.registration,
+        input.runtime_instance_id,
+        input.runtime_generation,
+        input.credential_revision,
+        &input.request_id,
+        input.ttl_seconds,
     )?;
     let publish_subjects = subjects_for_registration(
-        topology.publishers(),
-        registration.registration_id(),
-        registration.grant_epoch(),
+        input.topology.publishers(),
+        input.registration.registration_id(),
+        input.registration.grant_epoch(),
         |permit| permit.subject().as_str(),
     );
     let consumer_grants = consumer_grants_for_registration(
-        topology.consumers(),
-        registration.registration_id(),
-        registration.grant_epoch(),
+        input.topology.consumers(),
+        input.registration.registration_id(),
+        input.registration.grant_epoch(),
     );
     (!publish_subjects.is_empty() || !consumer_grants.is_empty())
         .then_some(IssueEventsRuntimeCredentialRequestV1 {
-            logical_owner_id: registration.owner_id().to_owned(),
-            registration_id: registration.registration_id().to_owned(),
-            runtime_instance_id: runtime_instance_id.to_owned(),
-            runtime_generation,
-            grant_epoch: registration.grant_epoch(),
-            credential_revision,
+            logical_owner_id: input.registration.owner_id().to_owned(),
+            registration_id: input.registration.registration_id().to_owned(),
+            runtime_instance_id: input.runtime_instance_id.to_owned(),
+            runtime_generation: input.runtime_generation,
+            grant_epoch: input.registration.grant_epoch(),
+            credential_revision: input.credential_revision,
             publish_subjects,
             subscribe_subjects: Vec::new(),
-            ttl_seconds,
-            request_id: request_id.to_vec(),
-            recipient_public_key_x25519: recipient_public_key_x25519.to_vec(),
+            ttl_seconds: input.ttl_seconds,
+            request_id: input.request_id.to_vec(),
+            recipient_public_key_x25519: input.recipient_public_key_x25519.to_vec(),
             consumer_grants,
         })
         .ok_or(EventCredentialPermitErrorV1::NoApprovedRoute)

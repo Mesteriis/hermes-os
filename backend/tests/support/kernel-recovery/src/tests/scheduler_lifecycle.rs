@@ -13,7 +13,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::platform::{scheduler_lifecycle, storage::issuance::issue_managed};
+use crate::platform::{
+    scheduler::lifecycle as scheduler_lifecycle, storage::issuance::issue_managed,
+};
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 use super::common::unique_target_root;

@@ -55,14 +55,16 @@ fn approved_catalog_builds_deterministic_exact_event_topology() {
 fn kernel_derives_event_credential_subjects_only_from_current_approved_topology() {
     let (root, _, topology, _, registration) = event_topology_fixture();
     let request = credential::permit::derive_credential_request(
-        &registration,
-        "runtime_1",
-        3,
-        2,
-        [8; 16],
-        [9; 32],
-        60,
-        &topology,
+        credential::permit::EventCredentialRequestInputV1 {
+            registration: &registration,
+            runtime_instance_id: "runtime_1",
+            runtime_generation: 3,
+            credential_revision: 2,
+            request_id: [8; 16],
+            recipient_public_key_x25519: [9; 32],
+            ttl_seconds: 60,
+            topology: &topology,
+        },
     )
     .expect("credential request");
 
@@ -77,14 +79,16 @@ fn kernel_derives_event_credential_subjects_only_from_current_approved_topology(
     let stale = approved_registration("registration_notes", "module_notes", "owner_notes", 3);
     assert_eq!(
         credential::permit::derive_credential_request(
-            &stale,
-            "runtime_1",
-            3,
-            2,
-            [8; 16],
-            [9; 32],
-            60,
-            &topology
+            credential::permit::EventCredentialRequestInputV1 {
+                registration: &stale,
+                runtime_instance_id: "runtime_1",
+                runtime_generation: 3,
+                credential_revision: 2,
+                request_id: [8; 16],
+                recipient_public_key_x25519: [9; 32],
+                ttl_seconds: 60,
+                topology: &topology,
+            },
         ),
         Err(credential::permit::EventCredentialPermitErrorV1::NoApprovedRoute)
     );
@@ -97,14 +101,16 @@ fn kernel_derives_exact_durable_consumer_grants_from_current_approved_topology()
     let registration =
         approved_registration("registration_search", "module_search", "owner_search", 2);
     let request = credential::permit::derive_credential_request(
-        &registration,
-        "runtime_1",
-        3,
-        2,
-        [8; 16],
-        [9; 32],
-        60,
-        &topology,
+        credential::permit::EventCredentialRequestInputV1 {
+            registration: &registration,
+            runtime_instance_id: "runtime_1",
+            runtime_generation: 3,
+            credential_revision: 2,
+            request_id: [8; 16],
+            recipient_public_key_x25519: [9; 32],
+            ttl_seconds: 60,
+            topology: &topology,
+        },
     )
     .expect("credential request");
 
@@ -166,14 +172,16 @@ fn kernel_derives_scheduler_receipt_bindings_only_from_approved_topology() {
 fn kernel_relays_only_topology_derived_credential_request_to_the_authority_child() {
     let (root, _, topology, _, registration) = event_topology_fixture();
     let request = credential::permit::derive_credential_request(
-        &registration,
-        "runtime_1",
-        3,
-        2,
-        [8; 16],
-        [9; 32],
-        60,
-        &topology,
+        credential::permit::EventCredentialRequestInputV1 {
+            registration: &registration,
+            runtime_instance_id: "runtime_1",
+            runtime_generation: 3,
+            credential_revision: 2,
+            request_id: [8; 16],
+            recipient_public_key_x25519: [9; 32],
+            ttl_seconds: 60,
+            topology: &topology,
+        },
     )
     .expect("credential request");
     let relay = credential::authority::EventAuthorityCredentialRelayV1::new(

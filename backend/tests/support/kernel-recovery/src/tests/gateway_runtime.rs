@@ -377,7 +377,7 @@ fn paired_remote_listener_serves_technical_routes_only_after_tls_handshake() {
         let (mut client, connection) = h2::client::handshake(stream)
             .await
             .expect("HTTP/2 handshake");
-        let connection = tokio::spawn(async move { connection.await });
+        let connection = tokio::spawn(connection);
         let request = Request::builder()
             .method(Method::GET)
             .uri("https://localhost/healthz")

@@ -73,13 +73,13 @@ pub(super) fn assert_reconciling_status(
         operation: Some(Operation::GetStatus(GetStorageRuntimeStatusRequestV1 {})),
     };
     for _ in 0..40 {
-        if let Ok(bytes) = supervisor.relay("storage", request.encode_to_vec()) {
-            if let Ok(response) = StorageRuntimeControlResponseV1::decode(bytes.as_slice()) {
-                assert!(
-                    matches!(response.result, Some(StorageResult::Status(status)) if status.state == StorageRuntimeStateV1::Reconciling as i32 && status.runtime_generation == expected_generation && status.vault_runtime_generation == 1)
-                );
-                return;
-            }
+        if let Ok(bytes) = supervisor.relay("storage", request.encode_to_vec())
+            && let Ok(response) = StorageRuntimeControlResponseV1::decode(bytes.as_slice())
+        {
+            assert!(
+                matches!(response.result, Some(StorageResult::Status(status)) if status.state == StorageRuntimeStateV1::Reconciling as i32 && status.runtime_generation == expected_generation && status.vault_runtime_generation == 1)
+            );
+            return;
         }
         std::thread::sleep(Duration::from_millis(50));
     }
