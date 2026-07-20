@@ -15,6 +15,16 @@ pub struct VaultService {
     leases: LeaseManager,
 }
 
+pub struct VaultSecretReplaceRequestV1<'a> {
+    pub lease_id: &'a LeaseIdV1,
+    pub audience: &'a LeaseAudienceV1,
+    pub prior_record_id: &'a SecretRecordId,
+    pub prior_scope: &'a SecretRecordScope,
+    pub next_scope: &'a SecretRecordScope,
+    pub payload: &'a [u8],
+    pub now_unix_seconds: u64,
+}
+
 impl VaultService {
     pub fn new(store: VaultStore, runtime_generation: u64) -> Result<Self, VaultServiceError> {
         let leases = LeaseManager::new(store.instance_id().to_owned(), runtime_generation)
@@ -60,25 +70,24 @@ impl VaultService {
 
     pub fn replace_once(
         &mut self,
-        lease_id: &LeaseIdV1,
-        audience: &LeaseAudienceV1,
-        prior_record_id: &SecretRecordId,
-        prior_scope: &SecretRecordScope,
-        next_scope: &SecretRecordScope,
-        payload: &[u8],
-        now_unix_seconds: u64,
+        request: VaultSecretReplaceRequestV1<'_>,
     ) -> Result<SecretRecordId, VaultServiceError> {
         let lease = self.consume_action(
-            lease_id,
-            audience,
+            request.lease_id,
+            request.audience,
             VaultActionV1::ReplaceCas,
-            now_unix_seconds,
+            request.now_unix_seconds,
         )?;
-        if !next_scope.matches_lease_request(lease.request()) {
+        if !request.next_scope.matches_lease_request(lease.request()) {
             return Err(VaultServiceError::LeaseScopeMismatch);
         }
         self.store
-            .replace_secret(prior_record_id, prior_scope, next_scope, payload)
+            .replace_secret(
+                request.prior_record_id,
+                request.prior_scope,
+                request.next_scope,
+                request.payload,
+            )
             .map_err(|_| VaultServiceError::SecretUnavailable)
     }
 

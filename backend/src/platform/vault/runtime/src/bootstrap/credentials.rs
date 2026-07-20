@@ -17,6 +17,8 @@ const POSTGRES_ADMIN_PURPOSE: &str = "storage.control.postgres.admin";
 const EVENT_HUB_NATS_PURPOSE: &str = "events.nats.event_hub.credential";
 const EVENT_ACCOUNT_SIGNER_PURPOSE: &str = "events.nats.account_signer";
 
+type ScopedPlatformCredentialV1 = (SecretRecordScope, Zeroizing<Vec<u8>>);
+
 pub(super) struct PlatformCredentialSeeds {
     pgbouncer_admin: Zeroizing<Vec<u8>>,
     postgres_admin: Zeroizing<Vec<u8>>,
@@ -41,9 +43,7 @@ impl PlatformCredentialSeeds {
         Ok(seeds)
     }
 
-    pub(super) fn scoped_credentials(
-        self,
-    ) -> Result<Vec<(SecretRecordScope, Zeroizing<Vec<u8>>)>, String> {
+    pub(super) fn scoped_credentials(self) -> Result<Vec<ScopedPlatformCredentialV1>, String> {
         let mut credentials = vec![
             (scope(PGBOUNCER_ADMIN_PURPOSE)?, self.pgbouncer_admin),
             (scope(POSTGRES_ADMIN_PURPOSE)?, self.postgres_admin),

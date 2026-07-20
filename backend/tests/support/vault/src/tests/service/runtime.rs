@@ -9,7 +9,7 @@ use hermes_vault_protocol::{
 use hermes_vault_store_sqlcipher::{SecretRecordScope, VaultStore};
 use tempfile::TempDir;
 
-use crate::service::runtime::{VaultService, VaultServiceError};
+use crate::service::runtime::{VaultSecretReplaceRequestV1, VaultService, VaultServiceError};
 
 #[test]
 fn resolves_only_a_lease_bound_to_the_exact_secret_scope() {
@@ -201,15 +201,15 @@ fn replace_cas_requires_a_one_time_replace_lease_for_the_next_revision() {
 
     let replacement = fixture
         .service
-        .replace_once(
-            lease.lease_id(),
-            &fixture.audience,
-            &fixture.prior_record,
-            &fixture.prior_scope,
-            &fixture.next_scope,
-            b"credential-revision-two",
-            101,
-        )
+        .replace_once(VaultSecretReplaceRequestV1 {
+            lease_id: lease.lease_id(),
+            audience: &fixture.audience,
+            prior_record_id: &fixture.prior_record,
+            prior_scope: &fixture.prior_scope,
+            next_scope: &fixture.next_scope,
+            payload: b"credential-revision-two",
+            now_unix_seconds: 101,
+        })
         .expect("replacement");
     let resolve_lease = fixture
         .service
