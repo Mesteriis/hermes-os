@@ -5,6 +5,8 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
+use p256::ecdsa::signature::Verifier;
+use p256::ecdsa::{Signature, VerifyingKey};
 use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -12,6 +14,48 @@ pub(crate) struct RecoveryMediaEntryV1 {
     path: String,
     size_bytes: u64,
     sha256: [u8; 32],
+}
+
+pub(crate) struct SignedRecoveryMediaManifestV1 {
+    verification_key_id: String,
+    raw_manifest_bytes: Vec<u8>,
+    signature_raw: [u8; 64],
+}
+
+impl SignedRecoveryMediaManifestV1 {
+    pub(crate) fn new(
+        verification_key_id: String,
+        raw_manifest_bytes: Vec<u8>,
+        signature_raw: [u8; 64],
+    ) -> Result<Self, String> {
+        if verification_key_id.is_empty()
+            || verification_key_id.len() > 128
+            || raw_manifest_bytes.is_empty()
+        {
+            return Err("signed recovery media manifest is invalid".to_owned());
+        }
+        Ok(Self {
+            verification_key_id,
+            raw_manifest_bytes,
+            signature_raw,
+        })
+    }
+
+    pub(crate) fn verify(
+        &self,
+        expected_key_id: &str,
+        public_key_sec1: &[u8],
+    ) -> Result<(), String> {
+        if self.verification_key_id != expected_key_id {
+            return Err("recovery media verification key is not pinned".to_owned());
+        }
+        let key = VerifyingKey::from_sec1_bytes(public_key_sec1)
+            .map_err(|_| "recovery media verification key is invalid".to_owned())?;
+        let signature = Signature::from_slice(&self.signature_raw)
+            .map_err(|_| "recovery media signature is invalid".to_owned())?;
+        key.verify(&self.raw_manifest_bytes, &signature)
+            .map_err(|_| "recovery media signature verification failed".to_owned())
+    }
 }
 
 impl RecoveryMediaEntryV1 {

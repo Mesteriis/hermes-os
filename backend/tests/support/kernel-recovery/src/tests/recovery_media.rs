@@ -2,8 +2,10 @@ use std::fs;
 
 use sha2::{Digest, Sha256};
 
-use crate::recovery::media::{RecoveryMediaEntryV1, verify_inventory};
-use crate::tests::common::unique_target_root;
+use crate::recovery::media::{
+    RecoveryMediaEntryV1, SignedRecoveryMediaManifestV1, verify_inventory,
+};
+use crate::tests::common::{Signer, SigningKey, unique_target_root};
 
 #[test]
 fn recovery_media_requires_an_exact_regular_file_inventory() {
@@ -51,4 +53,28 @@ fn recovery_media_rejects_symlinked_manifest_entry() {
     assert!(verify_inventory(&root, &[entry]).is_err());
     fs::remove_dir_all(root).expect("cleanup media");
     fs::remove_file(external).expect("cleanup external");
+}
+
+#[test]
+fn recovery_media_requires_the_pinned_manifest_signature() {
+    let key = SigningKey::from_bytes((&[7_u8; 32]).into()).expect("signing key");
+    let raw = b"canonical recovery manifest".to_vec();
+    let signature: p256::ecdsa::Signature = key.sign(&raw);
+    let manifest = SignedRecoveryMediaManifestV1::new(
+        "recovery-media-2026".to_owned(),
+        raw,
+        signature.to_bytes().into(),
+    )
+    .expect("signed manifest");
+    let public_key = key.verifying_key().to_sec1_point(false);
+    assert!(
+        manifest
+            .verify("recovery-media-2026", public_key.as_bytes())
+            .is_ok()
+    );
+    assert!(
+        manifest
+            .verify("different-key", public_key.as_bytes())
+            .is_err()
+    );
 }
