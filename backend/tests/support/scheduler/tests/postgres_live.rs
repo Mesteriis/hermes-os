@@ -62,7 +62,7 @@ async fn assert_shared_key_race(
     let (first_result, second_result) =
         tokio::join!(store.claim_due(&first), store.claim_due(&second));
     assert_one_claim_won(&first_result, &second_result);
-    assert_eq!(due_at(&pool, 2).await, CLAIMED_AT);
+    assert_eq!(due_at(pool, 2).await, CLAIMED_AT);
     store
         .claim_due(&claim(13, 3, other, policy))
         .await
@@ -348,6 +348,7 @@ fn claim(
     )
 }
 
+#[allow(clippy::too_many_arguments)] // The fixture makes each persisted timing fence explicit.
 fn claim_at(
     run: u8,
     schedule: u8,

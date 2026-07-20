@@ -62,6 +62,7 @@ async fn unavailable_broker_keeps_scheduler_dispatch_pending_until_acknowledged(
 struct UnavailablePublisher;
 
 impl ExactOutboxPublisherPortV1 for UnavailablePublisher {
+    #[allow(clippy::manual_async_fn)] // The outbox publisher port requires a Send future.
     fn publish_exact(
         &self,
         _: &OutboxRecordV1,
@@ -74,6 +75,7 @@ impl ExactOutboxPublisherPortV1 for UnavailablePublisher {
 struct AcknowledgingPublisher;
 
 impl ExactOutboxPublisherPortV1 for AcknowledgingPublisher {
+    #[allow(clippy::manual_async_fn)] // The outbox publisher port requires a Send future.
     fn publish_exact(
         &self,
         _: &OutboxRecordV1,
