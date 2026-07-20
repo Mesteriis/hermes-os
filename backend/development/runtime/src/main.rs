@@ -1,3 +1,9 @@
+#![allow(dead_code)]
+
+// The development operator composes selected private Kernel slices directly.
+// Not every helper is reachable from every operator command; semantic Clippy
+// lints remain enabled for this executable and the included source.
+
 mod cli;
 mod identity;
 mod kernel_operator;

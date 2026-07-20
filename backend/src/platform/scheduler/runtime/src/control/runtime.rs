@@ -58,16 +58,16 @@ pub(crate) fn serve_inherited(
         &configuration,
     ))?;
     let control_store = dependencies.store.clone();
-    let failures = launch_workers(
-        &runtime,
-        dependencies.store,
-        dependencies.dispatch,
-        dependencies.ports,
-        configuration.dispatch_batch_limit,
-        configuration.reconcile_interval_millis,
-        materialization_source(&identity, &configuration)?,
-        dispatch_admission(&configuration)?,
-    );
+    let failures = launch_workers(SchedulerWorkerLaunchInputV1 {
+        runtime: &runtime,
+        store: dependencies.store,
+        dispatch: dependencies.dispatch,
+        ports: dependencies.ports,
+        dispatch_batch_limit: configuration.dispatch_batch_limit,
+        reconcile_interval_millis: configuration.reconcile_interval_millis,
+        source: materialization_source(&identity, &configuration)?,
+        admission: dispatch_admission(&configuration)?,
+    });
     announce_ready(&mut channel, &identity)?;
     serve_control(
         channel,
@@ -209,8 +209,8 @@ async fn connect_receipt_ports(
     Ok(ports)
 }
 
-fn launch_workers(
-    runtime: &tokio::runtime::Runtime,
+struct SchedulerWorkerLaunchInputV1<'a> {
+    runtime: &'a tokio::runtime::Runtime,
     store: SchedulerPostgresStoreV1,
     dispatch: SchedulerJetStreamDispatchPortV1,
     ports: Vec<SchedulerJetStreamReceiptPortV1>,
@@ -218,7 +218,19 @@ fn launch_workers(
     reconcile_interval_millis: u32,
     source: SchedulerMaterializationSourceV1,
     admission: SchedulerDispatchAdmissionV1,
-) -> Receiver<()> {
+}
+
+fn launch_workers(input: SchedulerWorkerLaunchInputV1<'_>) -> Receiver<()> {
+    let SchedulerWorkerLaunchInputV1 {
+        runtime,
+        store,
+        dispatch,
+        ports,
+        dispatch_batch_limit,
+        reconcile_interval_millis,
+        source,
+        admission,
+    } = input;
     let (sender, receiver) = channel();
     for port in ports {
         let sender = sender.clone();

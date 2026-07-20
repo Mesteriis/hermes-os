@@ -82,6 +82,7 @@ impl PostgresOwnerDeliveryStore {
 }
 
 impl OwnerOutboxStorePortV1 for PostgresOwnerDeliveryStore {
+    #[allow(clippy::manual_async_fn)] // The owner outbox port requires a Send future.
     fn next_pending(
         &mut self,
     ) -> impl std::future::Future<Output = Result<Option<OutboxEntryV1>, OutboxRelayErrorV1>> + Send
@@ -95,6 +96,7 @@ impl OwnerOutboxStorePortV1 for PostgresOwnerDeliveryStore {
         }
     }
 
+    #[allow(clippy::manual_async_fn)] // The owner outbox port requires a Send future.
     fn mark_published(
         &mut self,
         entry: &OutboxEntryV1,

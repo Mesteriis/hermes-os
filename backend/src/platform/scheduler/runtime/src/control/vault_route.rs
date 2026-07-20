@@ -28,6 +28,7 @@ impl InheritedSchedulerVaultRouteV1 {
 }
 
 impl StorageVaultRoutePortV1 for InheritedSchedulerVaultRouteV1 {
+    #[allow(clippy::manual_async_fn)] // The Scheduler-to-Vault port requires a Send future.
     fn route_vault_ciphertext(
         &mut self,
         route: VaultCiphertextRouteV1,

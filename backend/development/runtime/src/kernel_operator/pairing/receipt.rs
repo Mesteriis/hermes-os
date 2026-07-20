@@ -92,11 +92,11 @@ fn parse_and_verify_receipt(bytes: &[u8]) -> Result<InitialOwnerIdentity, String
     }
     let owner_id = lines
         .next()
-        .filter(|value| valid_identity(value))
+        .filter(valid_identity)
         .ok_or_else(|| "development pairing receipt owner is invalid".to_owned())?;
     let device_id = lines
         .next()
-        .filter(|value| valid_identity(value))
+        .filter(valid_identity)
         .ok_or_else(|| "development pairing receipt device is invalid".to_owned())?;
     let challenge = lines
         .next()
