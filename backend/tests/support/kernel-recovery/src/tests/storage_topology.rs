@@ -1,7 +1,7 @@
 use super::common::*;
 use hermes_kernel_control_store::{
-    PlatformStorageBindingV1, PlatformStorageBundleV1, PlatformStorageEndpointV1,
-    PlatformStorageTopology, StorageDeploymentProfileV1,
+    PlatformStorageBindingInputV1, PlatformStorageBindingV1, PlatformStorageBundleV1,
+    PlatformStorageEndpointV1, PlatformStorageTopology, StorageDeploymentProfileV1,
 };
 use hermes_storage_protocol::v1::{
     StorageBundleV1, StorageMigrationStepV1, StorageRuntimeConfigurationV1,
@@ -155,24 +155,24 @@ fn binding(
     topology_revision: u64,
     storage_bundle_digest: [u8; 32],
 ) -> PlatformStorageBindingV1 {
-    PlatformStorageBindingV1::new(
-        "registration_notes",
-        "storage.access",
-        "owner_notes",
-        revision,
+    PlatformStorageBindingV1::new(PlatformStorageBindingInputV1 {
+        registration_id: "registration_notes".to_owned(),
+        capability_id: "storage.access".to_owned(),
+        owner_id: "owner_notes".to_owned(),
+        binding_revision: revision,
         topology_revision,
-        1,
-        "runtime_notes",
-        7,
-        3,
-        revision,
-        "runtime_notes",
-        4,
-        5_000,
-        revision,
-        1,
+        storage_generation: 1,
+        runtime_instance_id: "runtime_notes".to_owned(),
+        runtime_generation: 7,
+        grant_epoch: 3,
+        role_epoch: revision,
+        runtime_principal: "runtime_notes".to_owned(),
+        connection_budget: 4,
+        statement_timeout_millis: 5_000,
+        credential_lease_revision: revision,
+        storage_bundle_revision: 1,
         storage_bundle_digest,
-    )
+    })
     .expect("valid durable storage binding")
 }
 

@@ -1,6 +1,6 @@
 use hermes_kernel_control_store::{
-    ModuleRegistration, ModuleRegistrationState, ModuleStorageRequestV1, PlatformStorageBindingV1,
-    PlatformStorageBundleV1,
+    ModuleRegistration, ModuleRegistrationState, ModuleStorageRequestV1,
+    PlatformStorageBindingInputV1, PlatformStorageBindingV1, PlatformStorageBundleV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use sha2::{Digest, Sha256};
@@ -165,24 +165,24 @@ fn storage_request(capability_id: &str, owner_id: &str) -> ModuleStorageRequestV
 }
 
 fn storage_binding(revision: u64, runtime_instance_id: &str) -> PlatformStorageBindingV1 {
-    PlatformStorageBindingV1::new(
-        "registration_notes",
-        "storage.access",
-        "owner_notes",
-        revision,
-        1,
-        1,
-        runtime_instance_id,
-        7,
-        3,
-        revision,
-        "runtime_notes",
-        4,
-        5_000,
-        revision,
-        1,
-        [7; 32],
-    )
+    PlatformStorageBindingV1::new(PlatformStorageBindingInputV1 {
+        registration_id: "registration_notes".to_owned(),
+        capability_id: "storage.access".to_owned(),
+        owner_id: "owner_notes".to_owned(),
+        binding_revision: revision,
+        topology_revision: 1,
+        storage_generation: 1,
+        runtime_instance_id: runtime_instance_id.to_owned(),
+        runtime_generation: 7,
+        grant_epoch: 3,
+        role_epoch: revision,
+        runtime_principal: "runtime_notes".to_owned(),
+        connection_budget: 4,
+        statement_timeout_millis: 5_000,
+        credential_lease_revision: revision,
+        storage_bundle_revision: 1,
+        storage_bundle_digest: [7; 32],
+    })
     .expect("valid binding")
 }
 

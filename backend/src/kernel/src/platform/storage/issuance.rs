@@ -1,6 +1,8 @@
 //! Owner-authorized issuance of durable bindings for managed module runtimes.
 
-use hermes_kernel_control_store::{PlatformStorageBindingStateV1, PlatformStorageBindingV1};
+use hermes_kernel_control_store::{
+    PlatformStorageBindingInputV1, PlatformStorageBindingStateV1, PlatformStorageBindingV1,
+};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use sha2::{Digest, Sha256};
 
@@ -148,29 +150,29 @@ fn bind(
     previous: Option<&PlatformStorageBindingV1>,
     issue: StorageBindingIssueV1,
 ) -> Result<PlatformStorageBindingV1, String> {
-    PlatformStorageBindingV1::new(
-        authorization.registration_id(),
-        authorization.capability_id(),
-        authorization.owner_id(),
-        next_revision(previous)?,
-        topology.revision(),
-        topology.storage_generation(),
-        authorization.runtime_id(),
-        authorization.runtime_generation(),
-        authorization.grant_epoch(),
-        issue.role_epoch,
-        runtime_principal(
+    PlatformStorageBindingV1::new(PlatformStorageBindingInputV1 {
+        registration_id: authorization.registration_id().to_owned(),
+        capability_id: authorization.capability_id().to_owned(),
+        owner_id: authorization.owner_id().to_owned(),
+        binding_revision: next_revision(previous)?,
+        topology_revision: topology.revision(),
+        storage_generation: topology.storage_generation(),
+        runtime_instance_id: authorization.runtime_id().to_owned(),
+        runtime_generation: authorization.runtime_generation(),
+        grant_epoch: authorization.grant_epoch(),
+        role_epoch: issue.role_epoch,
+        runtime_principal: runtime_principal(
             topology.storage_instance_id(),
             authorization.registration_id(),
             authorization.capability_id(),
             issue.role_epoch,
         ),
-        authorization.connection_budget(),
-        authorization.statement_timeout_millis(),
-        issue.credential_lease_revision,
-        issue.storage_bundle_revision,
-        issue.storage_bundle_digest,
-    )
+        connection_budget: authorization.connection_budget(),
+        statement_timeout_millis: authorization.statement_timeout_millis(),
+        credential_lease_revision: issue.credential_lease_revision,
+        storage_bundle_revision: issue.storage_bundle_revision,
+        storage_bundle_digest: issue.storage_bundle_digest,
+    })
     .map_err(|_| "Storage binding is invalid".to_owned())
 }
 

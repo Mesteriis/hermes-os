@@ -4,7 +4,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 
 use hermes_kernel_control_store::{
-    ExternalRuntimeIdentity, ModuleRegistration, ModuleRegistrationState, PlatformStorageBindingV1,
+    ExternalRuntimeIdentity, ModuleRegistration, ModuleRegistrationState,
+    PlatformStorageBindingInputV1, PlatformStorageBindingV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_storage_protocol::{
@@ -251,24 +252,24 @@ fn durable_binding(
     credential_revision: u64,
     runtime_principal: &str,
 ) -> PlatformStorageBindingV1 {
-    PlatformStorageBindingV1::new(
-        REGISTRATION_ID,
-        "storage.access",
-        "owner_1",
-        revision,
-        1,
-        1,
-        RUNTIME_ID,
-        RUNTIME_GENERATION,
-        3,
-        revision,
-        runtime_principal,
-        8,
-        5_000,
-        credential_revision,
-        1,
-        [1; 32],
-    )
+    PlatformStorageBindingV1::new(PlatformStorageBindingInputV1 {
+        registration_id: REGISTRATION_ID.to_owned(),
+        capability_id: "storage.access".to_owned(),
+        owner_id: "owner_1".to_owned(),
+        binding_revision: revision,
+        topology_revision: 1,
+        storage_generation: 1,
+        runtime_instance_id: RUNTIME_ID.to_owned(),
+        runtime_generation: RUNTIME_GENERATION,
+        grant_epoch: 3,
+        role_epoch: revision,
+        runtime_principal: runtime_principal.to_owned(),
+        connection_budget: 8,
+        statement_timeout_millis: 5_000,
+        credential_lease_revision: credential_revision,
+        storage_bundle_revision: 1,
+        storage_bundle_digest: [1; 32],
+    })
     .expect("durable Storage binding")
 }
 

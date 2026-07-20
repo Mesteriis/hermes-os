@@ -1,6 +1,8 @@
 //! SQLite persistence for durable non-secret Storage binding fences.
 
-use hermes_kernel_control_store::{PlatformStorageBindingStateV1, PlatformStorageBindingV1};
+use hermes_kernel_control_store::{
+    PlatformStorageBindingInputV1, PlatformStorageBindingStateV1, PlatformStorageBindingV1,
+};
 use rusqlite::{OptionalExtension, params};
 
 use crate::{SqliteControlStore, StoreError};
@@ -154,26 +156,26 @@ fn decode_binding(
 ) -> Result<PlatformStorageBindingV1, rusqlite::Error> {
     let digest: Vec<u8> = row.get(13)?;
     let state = state(row.get(14)?)?;
-    PlatformStorageBindingV1::new(
-        registration_id,
-        capability_id,
-        row.get::<_, String>(0)?,
-        as_u64(row.get(1)?, 1)?,
-        as_u64(row.get(2)?, 2)?,
-        as_u64(row.get(3)?, 3)?,
-        row.get::<_, String>(4)?,
-        as_u64(row.get(5)?, 5)?,
-        as_u64(row.get(6)?, 6)?,
-        as_u64(row.get(7)?, 7)?,
-        row.get::<_, String>(8)?,
-        as_u16(row.get(9)?, 9)?,
-        as_u32(row.get(10)?, 10)?,
-        as_u64(row.get(11)?, 11)?,
-        as_u64(row.get(12)?, 12)?,
-        digest
+    PlatformStorageBindingV1::new(PlatformStorageBindingInputV1 {
+        registration_id: registration_id.to_owned(),
+        capability_id: capability_id.to_owned(),
+        owner_id: row.get(0)?,
+        binding_revision: as_u64(row.get(1)?, 1)?,
+        topology_revision: as_u64(row.get(2)?, 2)?,
+        storage_generation: as_u64(row.get(3)?, 3)?,
+        runtime_instance_id: row.get(4)?,
+        runtime_generation: as_u64(row.get(5)?, 5)?,
+        grant_epoch: as_u64(row.get(6)?, 6)?,
+        role_epoch: as_u64(row.get(7)?, 7)?,
+        runtime_principal: row.get(8)?,
+        connection_budget: as_u16(row.get(9)?, 9)?,
+        statement_timeout_millis: as_u32(row.get(10)?, 10)?,
+        credential_lease_revision: as_u64(row.get(11)?, 11)?,
+        storage_bundle_revision: as_u64(row.get(12)?, 12)?,
+        storage_bundle_digest: digest
             .try_into()
             .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(13, 32))?,
-    )
+    })
     .map_err(|_| rusqlite::Error::InvalidQuery)
     .map(|binding| binding.restore_state(state))
 }
@@ -193,26 +195,26 @@ fn decode_binding_from_list(
 ) -> Result<PlatformStorageBindingV1, rusqlite::Error> {
     let digest: Vec<u8> = row.get(15)?;
     let state = state(row.get(16)?)?;
-    PlatformStorageBindingV1::new(
-        registration_id,
-        capability_id,
-        row.get::<_, String>(2)?,
-        as_u64(row.get(3)?, 3)?,
-        as_u64(row.get(4)?, 4)?,
-        as_u64(row.get(5)?, 5)?,
-        row.get::<_, String>(6)?,
-        as_u64(row.get(7)?, 7)?,
-        as_u64(row.get(8)?, 8)?,
-        as_u64(row.get(9)?, 9)?,
-        row.get::<_, String>(10)?,
-        as_u16(row.get(11)?, 11)?,
-        as_u32(row.get(12)?, 12)?,
-        as_u64(row.get(13)?, 13)?,
-        as_u64(row.get(14)?, 14)?,
-        digest
+    PlatformStorageBindingV1::new(PlatformStorageBindingInputV1 {
+        registration_id: registration_id.to_owned(),
+        capability_id: capability_id.to_owned(),
+        owner_id: row.get(2)?,
+        binding_revision: as_u64(row.get(3)?, 3)?,
+        topology_revision: as_u64(row.get(4)?, 4)?,
+        storage_generation: as_u64(row.get(5)?, 5)?,
+        runtime_instance_id: row.get(6)?,
+        runtime_generation: as_u64(row.get(7)?, 7)?,
+        grant_epoch: as_u64(row.get(8)?, 8)?,
+        role_epoch: as_u64(row.get(9)?, 9)?,
+        runtime_principal: row.get(10)?,
+        connection_budget: as_u16(row.get(11)?, 11)?,
+        statement_timeout_millis: as_u32(row.get(12)?, 12)?,
+        credential_lease_revision: as_u64(row.get(13)?, 13)?,
+        storage_bundle_revision: as_u64(row.get(14)?, 14)?,
+        storage_bundle_digest: digest
             .try_into()
             .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(15, 32))?,
-    )
+    })
     .map_err(|_| rusqlite::Error::InvalidQuery)
     .map(|binding| binding.restore_state(state))
 }

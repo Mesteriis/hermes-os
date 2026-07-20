@@ -34,8 +34,9 @@ pub use recovery::RecoveryFences;
 pub use runtime::{
     ExternalRuntimeAttestation, ExternalRuntimeIdentity, PlatformEventHubTopologyV1,
     PlatformEventStreamBudgetV1, PlatformEventsAuthorityConfigurationV1,
-    PlatformManagedProcessBinding, PlatformManagedProcessLaunch, PlatformStorageBindingStateV1,
-    PlatformStorageBindingV1, PlatformStorageBundleV1, PlatformStorageEndpointV1,
+    PlatformManagedProcessBinding, PlatformManagedProcessLaunch, PlatformStorageBindingErrorV1,
+    PlatformStorageBindingInputV1, PlatformStorageBindingStateV1, PlatformStorageBindingV1,
+    PlatformStorageBundleErrorV1, PlatformStorageBundleV1, PlatformStorageEndpointV1,
     PlatformStorageTopology, StorageDeploymentProfileV1,
 };
 pub use state::{ControlStore, StoreHealth};
