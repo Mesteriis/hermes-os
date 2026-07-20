@@ -14,5 +14,5 @@ hermes-storage-control = { path = "../control" }
 hermes-storage-protocol = { path = "../protocol" }
 libc = "=0.2.186"
 tokio = { version = "=1.52.4", default-features = false, features = ["rt", "time"] }
-tokio-postgres = { version = "=0.7.16", default-features = false, features = ["runtime"] }
+tokio-postgres = { version = "=0.7.18", default-features = false, features = ["runtime"] }
 zeroize = "=1.9.0"
