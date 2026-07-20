@@ -16,7 +16,8 @@ pub(crate) trait WholeInstanceRestorePort {
     fn restore_vault(&mut self) -> Result<(), String>;
     fn restore_storage(&mut self) -> Result<(), String>;
     fn restore_blob(&mut self) -> Result<(), String>;
-    fn restore_event_topology(&mut self) -> Result<(), String>;
+    fn recreate_event_topology(&mut self) -> Result<(), String>;
+    fn replay_outbox_inbox(&mut self) -> Result<(), String>;
     fn restore_scheduler(&mut self) -> Result<(), String>;
     fn invalidate_stale_runtime_state(&mut self) -> Result<(), String>;
 }
@@ -39,7 +40,8 @@ pub(crate) fn restore_verified_instance(
     if plan.blob_enabled {
         port.restore_blob()?;
     }
-    port.restore_event_topology()?;
+    port.recreate_event_topology()?;
+    port.replay_outbox_inbox()?;
     if plan.scheduler_enabled {
         port.restore_scheduler()?;
     }

@@ -35,7 +35,8 @@ fn coordinator_restores_verified_components_in_canonical_order() {
             "vault",
             "storage",
             "blob",
-            "events",
+            "events_topology",
+            "outbox_inbox_replay",
             "scheduler",
             "fence"
         ]
@@ -148,8 +149,12 @@ impl WholeInstanceRestorePort for RecordingPort {
     fn restore_blob(&mut self) -> Result<(), String> {
         self.call("blob")
     }
-    fn restore_event_topology(&mut self) -> Result<(), String> {
-        self.call("events")
+    fn recreate_event_topology(&mut self) -> Result<(), String> {
+        self.call("events_topology")
+    }
+
+    fn replay_outbox_inbox(&mut self) -> Result<(), String> {
+        self.call("outbox_inbox_replay")
     }
     fn restore_scheduler(&mut self) -> Result<(), String> {
         self.call("scheduler")
