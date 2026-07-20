@@ -290,60 +290,63 @@ fn loopback_listener_bounds_slow_connection_storm_and_reclaims_a_released_slot()
         for _ in 0..128 {
             stalled.push(TcpStream::connect(address).await.expect("slow TCP peer"));
         }
-
-        let mut rejected = TcpStream::connect(address)
-            .await
-            .expect("overflow TCP peer");
-        rejected
-            .write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-            .await
-            .expect("overflow request write");
-        let mut rejected_response = [0_u8; 1];
-        let rejected_result = timeout(
-            Duration::from_millis(250),
-            rejected.read(&mut rejected_response),
-        )
-        .await
-        .expect("overflow peer must not retain an active Gateway task");
-        assert!(
-            match rejected_result {
-                Ok(0) => true,
-                Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => true,
-                Ok(_) | Err(_) => false,
-            },
-            "connection over the fixed admission budget must be dropped"
-        );
-
+        assert_over_budget_peer_is_dropped(address).await;
         drop(stalled.pop().expect("one stalled peer"));
-        let response = timeout(Duration::from_secs(2), async {
-            loop {
-                let mut stream = TcpStream::connect(address)
-                    .await
-                    .expect("replacement TCP peer");
-                stream
-                    .write_all(
-                        b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-                    )
-                    .await
-                    .expect("replacement request write");
-                let mut response = Vec::new();
-                stream
-                    .read_to_end(&mut response)
-                    .await
-                    .expect("replacement response");
-                if response.starts_with(b"HTTP/1.1 200 OK\r\n") {
-                    return response;
-                }
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .expect("released connection slot must be reaped");
-        assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
-
+        assert_released_slot_serves_health(address).await;
         shutdown.send(true).expect("request shutdown");
         server.await.expect("server task");
     });
+}
+
+async fn assert_over_budget_peer_is_dropped(address: std::net::SocketAddr) {
+    let mut rejected = TcpStream::connect(address)
+        .await
+        .expect("overflow TCP peer");
+    rejected
+        .write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .await
+        .expect("overflow request write");
+    let mut rejected_response = [0_u8; 1];
+    let rejected_result = timeout(
+        Duration::from_millis(250),
+        rejected.read(&mut rejected_response),
+    )
+    .await
+    .expect("overflow peer must not retain an active Gateway task");
+    assert!(
+        match rejected_result {
+            Ok(0) => true,
+            Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => true,
+            Ok(_) | Err(_) => false,
+        },
+        "connection over the fixed admission budget must be dropped"
+    );
+}
+
+async fn assert_released_slot_serves_health(address: std::net::SocketAddr) {
+    let response = timeout(Duration::from_secs(2), async {
+        loop {
+            let mut stream = TcpStream::connect(address)
+                .await
+                .expect("replacement TCP peer");
+            stream
+                .write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+                .await
+                .expect("replacement request write");
+            let mut response = Vec::new();
+            stream
+                .read_to_end(&mut response)
+                .await
+                .expect("replacement response");
+            if response.starts_with(b"HTTP/1.1 200 OK\r\n") {
+                return response;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("released connection slot must be reaped");
+    assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
 }
 
 #[test]
