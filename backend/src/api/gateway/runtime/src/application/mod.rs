@@ -112,16 +112,16 @@ where
     {
         let route = route_class(request.uri().path());
         let method = request.method().clone();
-        if let Some(policy) = &self.lan_development_policy {
-            if !policy.admits(&request) {
-                println!(
-                    "developer_gateway_request method={} route={} status={} admission=rejected",
-                    method,
-                    route,
-                    StatusCode::FORBIDDEN.as_u16()
-                );
-                return forbidden();
-            }
+        if let Some(policy) = &self.lan_development_policy
+            && !policy.admits(&request)
+        {
+            println!(
+                "developer_gateway_request method={} route={} status={} admission=rejected",
+                method,
+                route,
+                StatusCode::FORBIDDEN.as_u16()
+            );
+            return forbidden();
         }
         let response = self.route_admitted(request).await;
         if self.lan_development_policy.is_some() {

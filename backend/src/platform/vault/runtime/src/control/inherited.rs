@@ -16,6 +16,7 @@ use prost::Message;
 const MAX_FRAME_BYTES: usize = 512 * 1024;
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
 
+#[allow(dead_code)] // Used by the inherited-channel composition harness.
 pub fn open_and_describe(
     descriptor_bytes: Vec<u8>,
     settings_schema_bytes: Vec<u8>,
@@ -99,6 +100,7 @@ pub fn write_frame(stream: &mut UnixStream, bytes: &[u8]) -> Result<(), String> 
         .map_err(|_| "Vault inherited control channel is unavailable".to_owned())
 }
 
+#[allow(dead_code)] // Used only by `open_and_describe` in the composition harness.
 fn duplicate_inherited_stream() -> Result<UnixStream, String> {
     let duplicated = unsafe { libc::dup(std::io::stdin().as_raw_fd()) };
     if duplicated < 0 {

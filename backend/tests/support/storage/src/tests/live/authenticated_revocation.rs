@@ -218,6 +218,7 @@ fn port(name: &str) -> u16 {
 struct AppliedVault;
 
 impl StorageVaultLeasePortV1 for AppliedVault {
+    #[allow(clippy::manual_async_fn)] // The lease port requires a Send future.
     fn invalidate_lease(
         &mut self,
         _: &StorageBindingV1,

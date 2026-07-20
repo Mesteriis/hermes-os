@@ -16,6 +16,7 @@ use crate::transport::keys::VaultTransportKeyPair;
 use crate::transport::route::execute_route;
 use crate::transport::session::VaultTransportReplayGuard;
 
+#[allow(dead_code)] // Used by the inherited-channel composition harness.
 pub fn serve(
     service: &mut VaultService,
     keys: &VaultTransportKeyPair,
@@ -27,6 +28,7 @@ pub fn serve(
     serve_on_channel(channel, service, keys, authorization_key_sec1)
 }
 
+#[allow(dead_code)] // Used by the inherited-channel composition harness.
 pub(crate) fn serve_on_channel(
     mut channel: std::os::unix::net::UnixStream,
     service: &mut VaultService,

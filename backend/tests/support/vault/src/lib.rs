@@ -143,13 +143,13 @@ mod foundation {
 
     fn assert_test_credential_is_encrypted(database_path: &std::path::Path) {
         assert!(
-            !std::fs::read(&database_path)
+            !std::fs::read(database_path)
                 .expect("encrypted database bytes")
                 .windows("vault-instance-marker".len())
                 .any(|window| window == b"vault-instance-marker")
         );
         assert!(
-            !std::fs::read(&database_path)
+            !std::fs::read(database_path)
                 .expect("encrypted database bytes")
                 .windows("credential-material-marker".len())
                 .any(|window| window == b"credential-material-marker")
@@ -183,10 +183,10 @@ mod foundation {
         anchor_path: &std::path::Path,
         wrapping_key: &hermes_vault_key_provider::WrappingKey,
     ) {
-        let mut tampered_anchor = std::fs::read(&anchor_path).expect("anchor bytes");
+        let mut tampered_anchor = std::fs::read(anchor_path).expect("anchor bytes");
         let last_byte = tampered_anchor.last_mut().expect("nonempty anchor");
         *last_byte ^= 0x01;
-        std::fs::write(&anchor_path, tampered_anchor).expect("tamper synthetic anchor");
+        std::fs::write(anchor_path, tampered_anchor).expect("tamper synthetic anchor");
         assert!(VaultStore::open(database_path, anchor_path, wrapping_key).is_err());
     }
 
@@ -287,9 +287,9 @@ mod foundation {
             leases.consume_once(renewed.lease_id(), &changed_epoch, 201),
             Err(LeaseError::AudienceOrGrantEpochMismatch)
         );
-        leases.invalidate_audience(&audience);
+        leases.invalidate_audience(audience);
         assert_eq!(
-            leases.consume_once(renewed.lease_id(), &audience, 201),
+            leases.consume_once(renewed.lease_id(), audience, 201),
             Err(LeaseError::UnknownOrInvalidatedLease)
         );
 
@@ -305,7 +305,7 @@ mod foundation {
             .issue(lease_request(4, 2, audience), 300)
             .expect("expiring lease");
         assert_eq!(
-            leases.consume_once(expiring.lease_id(), &audience, 360),
+            leases.consume_once(expiring.lease_id(), audience, 360),
             Err(LeaseError::ExpiredLease)
         );
     }
@@ -371,10 +371,10 @@ mod foundation {
     fn request_status_with_retry(path: &std::path::Path, request: &[u8]) -> Vec<u8> {
         for _ in 0..8 {
             let mut client = connect_private_socket(path);
-            if write_framed(&mut client, request).is_ok() {
-                if let Ok(response) = read_framed(&mut client) {
-                    return response;
-                }
+            if write_framed(&mut client, request).is_ok()
+                && let Ok(response) = read_framed(&mut client)
+            {
+                return response;
             }
             std::thread::sleep(Duration::from_millis(5));
         }

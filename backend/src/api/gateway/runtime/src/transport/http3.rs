@@ -98,7 +98,6 @@ impl GatewayHttp3ListenerV1 {
         }
     }
 
-    #[must_use]
     pub fn local_address(&self) -> Result<SocketAddr, String> {
         self.endpoint
             .local_addr()

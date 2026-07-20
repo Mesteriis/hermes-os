@@ -30,6 +30,7 @@ impl InheritedBlobVaultRouteV1 {
 }
 
 impl BlobVaultRoutePortV1 for InheritedBlobVaultRouteV1 {
+    #[allow(clippy::manual_async_fn)] // The Blob-to-Vault port requires a Send future.
     fn route_vault_ciphertext(
         &mut self,
         route: VaultCiphertextRouteV1,

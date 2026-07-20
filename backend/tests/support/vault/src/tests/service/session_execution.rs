@@ -73,7 +73,7 @@ fn authenticated_session_stores_then_resolves_a_lease_scoped_secret() {
     };
     let stored = execute_command(
         &mut service,
-        &keys,
+        keys,
         &response_recipient,
         &mut guard,
         &audience,

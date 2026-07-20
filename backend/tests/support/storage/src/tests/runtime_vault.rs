@@ -319,6 +319,7 @@ impl MissingThenGeneratedVaultRoute {
 }
 
 impl StorageVaultRoutePortV1 for CredentialVaultRoute {
+    #[allow(clippy::manual_async_fn)] // The route port requires a Send future.
     fn route_vault_ciphertext(
         &mut self,
         route: VaultCiphertextRouteV1,
@@ -330,6 +331,7 @@ impl StorageVaultRoutePortV1 for CredentialVaultRoute {
 }
 
 impl StorageVaultRoutePortV1 for RejectingVaultRoute {
+    #[allow(clippy::manual_async_fn)] // The route port requires a Send future.
     fn route_vault_ciphertext(
         &mut self,
         _: VaultCiphertextRouteV1,
@@ -342,6 +344,7 @@ impl StorageVaultRoutePortV1 for RejectingVaultRoute {
 struct UnavailableVaultRoute;
 
 impl StorageVaultRoutePortV1 for UnavailableVaultRoute {
+    #[allow(clippy::manual_async_fn)] // The route port requires a Send future.
     fn route_vault_ciphertext(
         &mut self,
         _: VaultCiphertextRouteV1,
