@@ -309,7 +309,12 @@ fn restore_into_staging(
 
 fn publish_staging(staging: &Path, destination: &Path, parent: &Path) -> Result<(), String> {
     fs::rename(staging, destination).map_err(|_| unavailable())?;
-    sync_directory(parent)
+    if sync_directory(parent).is_err() {
+        let _ = fs::remove_dir_all(destination);
+        let _ = sync_directory(parent);
+        return Err(unavailable());
+    }
+    Ok(())
 }
 
 fn open_private(path: &Path) -> Result<File, String> {
