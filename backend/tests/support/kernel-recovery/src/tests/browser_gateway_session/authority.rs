@@ -11,15 +11,17 @@ fn browser_gateway_authority_persists_the_verified_assertion_counter() {
         .claim_initial_owner(&InitialOwnerIdentity::new("owner-1", "desktop-1", [4; 65]))
         .expect("claim initial owner");
     let enrollment = BrowserDeviceEnrollmentV1::new(
-        "owner-1",
-        "browser-1",
-        vec![1],
-        vec![2; 16],
-        vec![4; 65],
-        "hub.local",
-        0,
-        false,
-        false,
+        hermes_kernel_control_store::BrowserDeviceEnrollmentInputV1 {
+            owner_id: "owner-1".to_owned(),
+            device_id: "browser-1".to_owned(),
+            credential_id: vec![1],
+            cose_public_key: vec![2; 16],
+            browser_key_public_key: vec![4; 65],
+            rp_id: "hub.local".to_owned(),
+            sign_count: 0,
+            backup_eligible: false,
+            backup_state: false,
+        },
     )
     .expect("valid browser enrollment");
     store

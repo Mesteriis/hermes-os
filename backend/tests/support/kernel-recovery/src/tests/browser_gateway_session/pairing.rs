@@ -34,15 +34,17 @@ fn browser_pairing_is_single_use_and_fenced_by_owner_identity_epoch() {
         .begin(&authority, approval, "hub.local", 1_000)
         .expect("begin pairing");
     let enrollment = BrowserDeviceEnrollmentV1::new(
-        "owner-1",
-        "browser-1",
-        vec![1],
-        vec![2; 16],
-        vec![4; 65],
-        "hub.local",
-        0,
-        false,
-        false,
+        hermes_kernel_control_store::BrowserDeviceEnrollmentInputV1 {
+            owner_id: "owner-1".to_owned(),
+            device_id: "browser-1".to_owned(),
+            credential_id: vec![1],
+            cose_public_key: vec![2; 16],
+            browser_key_public_key: vec![4; 65],
+            rp_id: "hub.local".to_owned(),
+            sign_count: 0,
+            backup_eligible: false,
+            backup_state: false,
+        },
     )
     .expect("enrollment");
     store

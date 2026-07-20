@@ -11,8 +11,8 @@ use hermes_gateway_session_contract::{
     ClientSurfaceAvailabilityStateV1, ClientSurfaceIdV1, GatewayIdentityFenceV1,
 };
 use hermes_kernel_control_store::{
-    BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1, BrowserDeviceStateV1, ModuleGrantSnapshot,
-    SettingsApplyState,
+    BrowserDeviceEnrollmentInputV1, BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1,
+    BrowserDeviceStateV1, ModuleGrantSnapshot, SettingsApplyState,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
@@ -240,17 +240,17 @@ impl BrowserEnrollmentAuthority for ControlStoreBrowserAuthority {
         (current == *enrollment.identity_fence())
             .then_some(())
             .ok_or_else(|| "browser pairing is stale".to_owned())?;
-        let enrollment = BrowserDeviceEnrollmentV1::new(
-            enrollment.owner_id(),
-            enrollment.device_id(),
-            enrollment.credential_id().to_vec(),
-            enrollment.cose_public_key().to_vec(),
-            enrollment.browser_key_public_key().to_vec(),
-            enrollment.rp_id(),
-            enrollment.sign_count(),
-            enrollment.backup_eligible(),
-            enrollment.backup_state(),
-        )?;
+        let enrollment = BrowserDeviceEnrollmentV1::new(BrowserDeviceEnrollmentInputV1 {
+            owner_id: enrollment.owner_id().to_owned(),
+            device_id: enrollment.device_id().to_owned(),
+            credential_id: enrollment.credential_id().to_vec(),
+            cose_public_key: enrollment.cose_public_key().to_vec(),
+            browser_key_public_key: enrollment.browser_key_public_key().to_vec(),
+            rp_id: enrollment.rp_id().to_owned(),
+            sign_count: enrollment.sign_count(),
+            backup_eligible: enrollment.backup_eligible(),
+            backup_state: enrollment.backup_state(),
+        })?;
         self.store
             .admit_browser_device(&enrollment, current.identity_epoch())
             .map_err(store_error)

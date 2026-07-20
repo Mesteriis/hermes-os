@@ -14,8 +14,8 @@ pub use distribution::{
     OwnerPinnedArtifactBindingInputV1,
 };
 pub use identity::{
-    BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1, BrowserDeviceStateV1, InitialOwnerIdentity,
-    ServerBootstrapPairing,
+    BrowserDeviceEnrollmentInputV1, BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1,
+    BrowserDeviceStateV1, InitialOwnerIdentity, ServerBootstrapPairing,
 };
 pub use modules::{
     GrantSet, ModuleBlobQuotaRequestV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,

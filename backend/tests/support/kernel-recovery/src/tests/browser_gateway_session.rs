@@ -117,15 +117,17 @@ fn authentication_http_fixture() -> AuthenticationHttpFixture {
     store
         .admit_browser_device(
             &BrowserDeviceEnrollmentV1::new(
-                "owner-1",
-                "browser-1",
-                vec![1],
-                valid_browser_cose_key(),
-                valid_browser_local_key(),
-                "hub.local",
-                0,
-                false,
-                false,
+                hermes_kernel_control_store::BrowserDeviceEnrollmentInputV1 {
+                    owner_id: "owner-1".to_owned(),
+                    device_id: "browser-1".to_owned(),
+                    credential_id: vec![1],
+                    cose_public_key: valid_browser_cose_key(),
+                    browser_key_public_key: valid_browser_local_key(),
+                    rp_id: "hub.local".to_owned(),
+                    sign_count: 0,
+                    backup_eligible: false,
+                    backup_state: false,
+                },
             )
             .expect("valid browser enrollment"),
             1,

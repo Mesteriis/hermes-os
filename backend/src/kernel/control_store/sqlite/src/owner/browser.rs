@@ -1,7 +1,8 @@
 //! Browser device identity persistence through the single-writer actor.
 
 use hermes_kernel_control_store::{
-    BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1, BrowserDeviceStateV1, ControlStore,
+    BrowserDeviceEnrollmentInputV1, BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1,
+    BrowserDeviceStateV1, ControlStore,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
@@ -401,17 +402,18 @@ fn browser_device_record_from_row(
 
 impl BrowserDeviceRecord {
     fn decode(self) -> Result<BrowserDeviceIdentityV1, StoreError> {
-        let enrollment = BrowserDeviceEnrollmentV1::new(
-            self.owner_id,
-            self.device_id,
-            self.credential_id,
-            self.cose_public_key,
-            self.browser_key_public_key,
-            self.rp_id,
-            u32::try_from(self.sign_count).map_err(|_| StoreError::InvalidBrowserDeviceIdentity)?,
-            self.backup_eligible,
-            self.backup_state,
-        )
+        let enrollment = BrowserDeviceEnrollmentV1::new(BrowserDeviceEnrollmentInputV1 {
+            owner_id: self.owner_id,
+            device_id: self.device_id,
+            credential_id: self.credential_id,
+            cose_public_key: self.cose_public_key,
+            browser_key_public_key: self.browser_key_public_key,
+            rp_id: self.rp_id,
+            sign_count: u32::try_from(self.sign_count)
+                .map_err(|_| StoreError::InvalidBrowserDeviceIdentity)?,
+            backup_eligible: self.backup_eligible,
+            backup_state: self.backup_state,
+        })
         .map_err(|_| StoreError::InvalidBrowserDeviceIdentity)?;
         let state = BrowserDeviceStateV1::parse(&self.state)
             .ok_or(StoreError::InvalidBrowserDeviceIdentity)?;

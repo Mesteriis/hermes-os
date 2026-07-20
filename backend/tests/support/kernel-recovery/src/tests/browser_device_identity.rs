@@ -1,5 +1,7 @@
 use super::common::*;
-use hermes_kernel_control_store::{BrowserDeviceEnrollmentV1, BrowserDeviceStateV1};
+use hermes_kernel_control_store::{
+    BrowserDeviceEnrollmentInputV1, BrowserDeviceEnrollmentV1, BrowserDeviceStateV1,
+};
 
 #[test]
 fn browser_device_identity_is_admitted_and_revoked_with_an_epoch_fence() {
@@ -60,17 +62,17 @@ fn browser_device_identity_rejects_foreign_owner_and_malformed_registration() {
         .claim_initial_owner(&InitialOwnerIdentity::new("owner-1", "desktop-1", [4; 65]))
         .expect("claim initial owner");
     assert!(
-        BrowserDeviceEnrollmentV1::new(
-            "owner-1",
-            "browser-1",
-            vec![1; 16],
-            vec![2; 16],
-            vec![4; 65],
-            "invalid",
-            0,
-            false,
-            false,
-        )
+        BrowserDeviceEnrollmentV1::new(BrowserDeviceEnrollmentInputV1 {
+            owner_id: "owner-1".to_owned(),
+            device_id: "browser-1".to_owned(),
+            credential_id: vec![1; 16],
+            cose_public_key: vec![2; 16],
+            browser_key_public_key: vec![4; 65],
+            rp_id: "invalid".to_owned(),
+            sign_count: 0,
+            backup_eligible: false,
+            backup_state: false,
+        })
         .is_err()
     );
     assert!(matches!(
@@ -79,17 +81,17 @@ fn browser_device_identity_rejects_foreign_owner_and_malformed_registration() {
             .expect_err("foreign owner"),
         StoreError::BrowserDeviceOwnerMismatch
     ));
-    let short_credential = BrowserDeviceEnrollmentV1::new(
-        "owner-1",
-        "browser-2",
-        vec![9],
-        vec![3; 16],
-        vec![4; 65],
-        "hub.local",
-        0,
-        false,
-        false,
-    )
+    let short_credential = BrowserDeviceEnrollmentV1::new(BrowserDeviceEnrollmentInputV1 {
+        owner_id: "owner-1".to_owned(),
+        device_id: "browser-2".to_owned(),
+        credential_id: vec![9],
+        cose_public_key: vec![3; 16],
+        browser_key_public_key: vec![4; 65],
+        rp_id: "hub.local".to_owned(),
+        sign_count: 0,
+        backup_eligible: false,
+        backup_state: false,
+    })
     .expect("WebAuthn credential identifiers may be short");
     store
         .admit_browser_device(&short_credential, 1)
@@ -136,16 +138,16 @@ fn browser_assertion_counter_is_durable_and_never_regresses_after_initial_zero()
 }
 
 fn browser_enrollment(owner_id: &str, device_id: &str, marker: u8) -> BrowserDeviceEnrollmentV1 {
-    BrowserDeviceEnrollmentV1::new(
-        owner_id,
-        device_id,
-        vec![marker; 16],
-        vec![marker.wrapping_add(1); 16],
-        vec![4; 65],
-        "hub.local",
-        0,
-        false,
-        false,
-    )
+    BrowserDeviceEnrollmentV1::new(BrowserDeviceEnrollmentInputV1 {
+        owner_id: owner_id.to_owned(),
+        device_id: device_id.to_owned(),
+        credential_id: vec![marker; 16],
+        cose_public_key: vec![marker.wrapping_add(1); 16],
+        browser_key_public_key: vec![4; 65],
+        rp_id: "hub.local".to_owned(),
+        sign_count: 0,
+        backup_eligible: false,
+        backup_state: false,
+    })
     .expect("valid browser enrollment")
 }

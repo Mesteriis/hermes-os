@@ -26,15 +26,17 @@ fn active_browser_credential_fixture() -> (std::path::PathBuf, Arc<SqliteControl
     store
         .admit_browser_device(
             &BrowserDeviceEnrollmentV1::new(
-                "owner-1",
-                "browser-1",
-                vec![1],
-                cose_public_key.clone(),
-                valid_browser_local_key(),
-                "hub.local",
-                0,
-                true,
-                true,
+                hermes_kernel_control_store::BrowserDeviceEnrollmentInputV1 {
+                    owner_id: "owner-1".to_owned(),
+                    device_id: "browser-1".to_owned(),
+                    credential_id: vec![1],
+                    cose_public_key: cose_public_key.clone(),
+                    browser_key_public_key: valid_browser_local_key(),
+                    rp_id: "hub.local".to_owned(),
+                    sign_count: 0,
+                    backup_eligible: true,
+                    backup_state: true,
+                },
             )
             .expect("valid browser enrollment"),
             1,

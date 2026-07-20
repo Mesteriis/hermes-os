@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use hermes_kernel_control_store::{
     ExternalRuntimeAttestation, ModuleRegistrationState, OwnerPinnedArtifactBinding,
+    OwnerPinnedArtifactBindingInputV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 
@@ -241,16 +242,16 @@ pub fn run_owner_pinned_artifact_binding(
     )?;
     let signature = signer.sign(&message);
     verify_owner_proof(&owner, &message, &signature)?;
-    let binding = OwnerPinnedArtifactBinding::new(
-        registration_id,
+    let binding = OwnerPinnedArtifactBinding::new(OwnerPinnedArtifactBindingInputV1 {
+        registration_id: registration_id.to_owned(),
         binding_revision,
-        artifact.canonical_path(),
-        *artifact.sha256(),
-        artifact.size(),
-        artifact.device(),
-        artifact.inode(),
-        signature,
-    );
+        canonical_artifact_path: artifact.canonical_path().to_owned(),
+        artifact_sha256: *artifact.sha256(),
+        artifact_size: artifact.size(),
+        artifact_device: artifact.device(),
+        artifact_inode: artifact.inode(),
+        owner_signature_raw: signature,
+    });
     store
         .record_owner_pinned_artifact_binding(&binding)
         .map_err(|error| format!("{error:?}"))?;
