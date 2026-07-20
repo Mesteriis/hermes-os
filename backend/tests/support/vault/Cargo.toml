@@ -2,6 +2,7 @@
 name = "hermes-vault-testkit"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [package.metadata.hermes]
 role = "test"

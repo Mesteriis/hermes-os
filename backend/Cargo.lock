@@ -1421,7 +1421,6 @@ dependencies = [
  "clap",
  "directories",
  "getrandom 0.4.3",
- "hermes-events-jetstream",
  "hermes-gateway-protocol",
  "hermes-gateway-runtime",
  "hermes-gateway-session",

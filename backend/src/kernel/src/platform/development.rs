@@ -4,16 +4,6 @@
 //! complete local configuration. Event Hub and Scheduler remain owner-configured
 //! until their NATS and module-grant records are provisioned.
 
-use std::path::Path;
-use std::process::Command;
-use std::time::Duration;
-
-use hermes_events_jetstream::{
-    ConsumerBudgetV1 as JetStreamConsumerBudget, ConsumerSpecV1 as JetStreamConsumerSpec,
-    EventHubJetStreamConnection, EventHubTopologyPlanV1 as JetStreamTopologyPlan, JetStreamClient,
-    NatsPasswordCredentialV1, StreamBudgetV1 as JetStreamStreamBudget,
-    StreamKindV1 as JetStreamKind, StreamSpecV1 as JetStreamStreamSpec,
-};
 use hermes_kernel_control_store::{
     ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
     ModuleEventRouteRequestV1, ModuleEventSubscriptionRequirementV1, ModuleRegistration,
@@ -24,8 +14,9 @@ use hermes_kernel_control_store::{
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use sha2::{Digest, Sha256};
+use std::path::Path;
+use std::process::Command;
 
-use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::platform::{
     blob::{binding as blob_binding, launch as blob_launch},
     events::authority::{binding as events_binding, launch as events_launch},
@@ -41,6 +32,8 @@ use crate::{
     platform::storage::issuance::{StorageBindingIssueV1, issue_managed},
 };
 
+mod vault;
+
 /// Starts the signed local platform runtimes that have a complete local
 /// configuration. It is called only for the private-LAN developer Gateway.
 pub(crate) fn start_local_foundation(
@@ -50,7 +43,7 @@ pub(crate) fn start_local_foundation(
     runtime_dir: &Path,
 ) -> Result<(), String> {
     let vault_binding = ensure_vault_binding(store)?;
-    ensure_initialized_vault(
+    vault::ensure_initialized_vault(
         data_dir,
         runtime_dir,
         &vault_binding,
@@ -157,8 +150,7 @@ fn ensure_storage_binding(store: &SqliteControlStore) -> Result<(), String> {
 fn ensure_storage_topology(store: &SqliteControlStore) -> Result<(), String> {
     let existing = store
         .platform_storage_topology()
-        .map_err(|_| "developer Storage topology is unavailable".to_owned())?
-        ;
+        .map_err(|_| "developer Storage topology is unavailable".to_owned())?;
     if existing.is_some() {
         return Ok(());
     }
@@ -236,80 +228,6 @@ fn ensure_event_hub_topology(store: &SqliteControlStore) -> Result<(), String> {
         .map_err(|_| "developer Event Hub topology cannot be recorded".to_owned())
 }
 
-fn reconcile_event_hub(store: &SqliteControlStore) -> Result<(), String> {
-    let contracts = crate::platform::events::catalog::resolve_contracts(store)?;
-    let topology = crate::platform::events::topology::plan(
-        &contracts,
-        &crate::platform::events::authority::status::current_topology(store)?,
-    )?;
-    let streams = topology
-        .streams()
-        .iter()
-        .map(|stream| {
-            Ok::<_, String>(JetStreamStreamSpec::new(
-                jetstream_kind(stream.kind()),
-                JetStreamStreamBudget::new(
-                    i64::try_from(stream.max_bytes())
-                        .map_err(|_| "developer Event Hub stream budget is invalid".to_owned())?,
-                    Duration::from_millis(stream.max_age_millis()),
-                    usize::from(stream.replicas()),
-                )
-                .map_err(|_| "developer Event Hub stream budget is invalid".to_owned())?,
-            ))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let consumers = topology
-        .consumers()
-        .iter()
-        .map(|consumer| {
-            let policy = consumer.delivery_policy();
-            JetStreamConsumerSpec::new(
-                jetstream_kind(consumer.subject().kind()),
-                consumer.durable_name(),
-                consumer.subject().as_str(),
-                JetStreamConsumerBudget::new(
-                    i64::from(consumer.max_in_flight()),
-                    i64::from(policy.max_deliver()),
-                    Duration::from_millis(u64::from(policy.ack_wait_millis())),
-                )
-                .map_err(|_| "developer Event Hub consumer budget is invalid".to_owned())?,
-            )
-            .map_err(|_| "developer Event Hub consumer topology is invalid".to_owned())
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let plan = JetStreamTopologyPlan::new(streams, consumers)
-        .map_err(|_| "developer Event Hub topology is invalid".to_owned())?;
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|_| "developer Event Hub runtime is unavailable".to_owned())?;
-    runtime.block_on(async move {
-        let credential = NatsPasswordCredentialV1::new("event_hub", "developer-local")
-            .map_err(|_| "developer Event Hub credential is unavailable".to_owned())?;
-        let connection: EventHubJetStreamConnection =
-            JetStreamClient::connect_event_hub("nats://127.0.0.1:43225", credential).await?;
-        connection.reconcile(&plan).await
-    })
-}
-
-fn jetstream_kind(
-    kind: crate::platform::events::topology::subject::EventStreamKindV1,
-) -> JetStreamKind {
-    match kind {
-        crate::platform::events::topology::subject::EventStreamKindV1::Command => {
-            JetStreamKind::Command
-        }
-        crate::platform::events::topology::subject::EventStreamKindV1::Event => {
-            JetStreamKind::Event
-        }
-        crate::platform::events::topology::subject::EventStreamKindV1::Observation => {
-            JetStreamKind::Observation
-        }
-        crate::platform::events::topology::subject::EventStreamKindV1::Result => {
-            JetStreamKind::Result
-        }
-        crate::platform::events::topology::subject::EventStreamKindV1::Ack => JetStreamKind::Ack,
-    }
-}
-
 fn ensure_scheduler(
     supervisor: &ManagedRuntimeSupervisor,
     store: &SqliteControlStore,
@@ -335,91 +253,9 @@ fn ensure_scheduler(
     let descriptor = artifact
         .module_descriptor_bytes()
         .ok_or_else(|| "developer Scheduler descriptor is unavailable".to_owned())?;
-    let capabilities = [
-        ACK_CAPABILITY.to_owned(),
-        DISPATCH_CAPABILITY.to_owned(),
-        RESULT_CAPABILITY.to_owned(),
-        STORAGE_CAPABILITY.to_owned(),
-    ];
-    if store
-        .module_registration(REGISTRATION_ID)
-        .map_err(|_| "developer Scheduler registration is unavailable".to_owned())?
-        .is_none()
-    {
-        let registration = ModuleRegistration::new(
-            REGISTRATION_ID,
-            "scheduler",
-            "scheduler",
-            Sha256::digest(descriptor).into(),
-            ModuleRegistrationState::Pending,
-            1,
-        );
-        let storage =
-            ModuleStorageRequestV1::new(REGISTRATION_ID, STORAGE_CAPABILITY, "scheduler", 4, 5_000);
-        let routes = [
-            scheduler_event_route(
-                DISPATCH_CAPABILITY,
-                ModuleEventEnvelopeKindV1::Command,
-                "platform",
-                "maintenance",
-                ModuleEventRouteDirectionV1::Publish,
-            ),
-            scheduler_event_route(
-                ACK_CAPABILITY,
-                ModuleEventEnvelopeKindV1::Ack,
-                "scheduler",
-                "job_receipt",
-                ModuleEventRouteDirectionV1::Consume,
-            ),
-            scheduler_event_route(
-                RESULT_CAPABILITY,
-                ModuleEventEnvelopeKindV1::Result,
-                "scheduler",
-                "job_receipt",
-                ModuleEventRouteDirectionV1::Consume,
-            ),
-        ];
-        store
-            .create_pending_registration_with_requests(
-                &registration,
-                &capabilities,
-                std::slice::from_ref(&storage),
-                &routes,
-                &[],
-            )
-            .map_err(|_| "developer Scheduler registration cannot be recorded".to_owned())?;
-        store
-            .approve_module_registration(REGISTRATION_ID, &capabilities)
-            .map_err(|_| "developer Scheduler grants cannot be recorded".to_owned())?;
-    } else if store
-        .module_registration(REGISTRATION_ID)
-        .map_err(|_| "developer Scheduler registration is unavailable".to_owned())?
-        .is_some_and(|registration| registration.state() != ModuleRegistrationState::Approved)
-    {
-        store
-            .approve_module_registration(REGISTRATION_ID, &capabilities)
-            .map_err(|_| "developer Scheduler grants cannot be restored".to_owned())?;
-    }
+    ensure_scheduler_registration(store, descriptor)?;
     bundled_launch::admit(store, REGISTRATION_ID, &bundle, "platform.scheduler")?;
-    let bundle_bytes = export_scheduler_storage_bundle(&kernel, runtime_dir)?;
-    let digest: [u8; 32] = Sha256::digest(&bundle_bytes).into();
-    let storage_bundle = PlatformStorageBundleV1::new("scheduler", 7, digest, bundle_bytes)
-        .map_err(|_| "developer Scheduler Storage bundle is invalid".to_owned())?;
-    match store
-        .platform_storage_bundle("scheduler", storage_bundle.revision())
-        .map_err(|_| "developer Scheduler Storage bundle is unavailable".to_owned())?
-    {
-        Some(existing) if existing.digest() == storage_bundle.digest() => {}
-        Some(_) => {
-            return Err(
-                "developer Scheduler Storage bundle revision conflicts with the persisted contract"
-                    .to_owned(),
-            );
-        }
-        None => store
-            .record_platform_storage_bundle(&storage_bundle)
-            .map_err(|_| "developer Scheduler Storage bundle cannot be recorded".to_owned())?,
-    }
+    let digest = ensure_scheduler_storage_bundle(store, &kernel, runtime_dir)?;
     let reservation = managed_launch::reserve(supervisor, store, REGISTRATION_ID)?;
     let binding_issue = match store
         .platform_storage_binding(REGISTRATION_ID, STORAGE_CAPABILITY)
@@ -439,7 +275,7 @@ fn ensure_scheduler(
     // Scheduler's consumers are part of the approved topology. Reconcile only
     // after its registration and grants are durable, but before its runtime can
     // attempt to attach a receipt consumer.
-    reconcile_event_hub(store)?;
+    crate::platform::events::reconciliation::apply(store, &supervisor.relay_port())?;
     crate::platform::scheduler::launch::start_from_reservation(
         supervisor,
         store,
@@ -450,6 +286,113 @@ fn ensure_scheduler(
     )
     .map(|_| ())
     .map_err(|error| format!("developer Scheduler startup failed: {error}"))
+}
+
+fn ensure_scheduler_registration(
+    store: &SqliteControlStore,
+    descriptor: &[u8],
+) -> Result<(), String> {
+    const REGISTRATION_ID: &str = "scheduler_developer";
+    const STORAGE_CAPABILITY: &str = "storage.scheduler";
+    let capabilities = scheduler_capabilities();
+    let registration = store
+        .module_registration(REGISTRATION_ID)
+        .map_err(|_| "developer Scheduler registration is unavailable".to_owned())?;
+    if registration.is_none() {
+        let registration = ModuleRegistration::new(
+            REGISTRATION_ID,
+            "scheduler",
+            "scheduler",
+            Sha256::digest(descriptor).into(),
+            ModuleRegistrationState::Pending,
+            1,
+        );
+        let storage =
+            ModuleStorageRequestV1::new(REGISTRATION_ID, STORAGE_CAPABILITY, "scheduler", 4, 5_000);
+        let routes = scheduler_event_routes();
+        store
+            .create_pending_registration_with_requests(
+                &registration,
+                &capabilities,
+                std::slice::from_ref(&storage),
+                &routes,
+                &[],
+            )
+            .map_err(|_| "developer Scheduler registration cannot be recorded")?;
+        return store
+            .approve_module_registration(REGISTRATION_ID, &capabilities)
+            .map(|_| ())
+            .map_err(|_| "developer Scheduler grants cannot be recorded".to_owned());
+    }
+    registration
+        .is_some_and(|current| current.state() != ModuleRegistrationState::Approved)
+        .then(|| store.approve_module_registration(REGISTRATION_ID, &capabilities))
+        .transpose()
+        .map(|_| ())
+        .map_err(|_| "developer Scheduler grants cannot be restored".to_owned())
+}
+
+fn scheduler_capabilities() -> [String; 4] {
+    [
+        "events.scheduler.ack",
+        "events.scheduler.dispatch",
+        "events.scheduler.result",
+        "storage.scheduler",
+    ]
+    .map(str::to_owned)
+}
+
+fn scheduler_event_routes() -> [ModuleEventRouteRequestV1; 3] {
+    [
+        scheduler_event_route(
+            "events.scheduler.dispatch",
+            ModuleEventEnvelopeKindV1::Command,
+            "platform",
+            "maintenance",
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        scheduler_event_route(
+            "events.scheduler.ack",
+            ModuleEventEnvelopeKindV1::Ack,
+            "scheduler",
+            "job_receipt",
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+        scheduler_event_route(
+            "events.scheduler.result",
+            ModuleEventEnvelopeKindV1::Result,
+            "scheduler",
+            "job_receipt",
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+    ]
+}
+
+fn ensure_scheduler_storage_bundle(
+    store: &SqliteControlStore,
+    kernel: &Path,
+    runtime_dir: &Path,
+) -> Result<[u8; 32], String> {
+    let bytes = export_scheduler_storage_bundle(kernel, runtime_dir)?;
+    let digest: [u8; 32] = Sha256::digest(&bytes).into();
+    let bundle = PlatformStorageBundleV1::new("scheduler", 7, digest, bytes)
+        .map_err(|_| "developer Scheduler Storage bundle is invalid".to_owned())?;
+    match store
+        .platform_storage_bundle("scheduler", bundle.revision())
+        .map_err(|_| "developer Scheduler Storage bundle is unavailable".to_owned())?
+    {
+        Some(existing) if existing.digest() == bundle.digest() => Ok(digest),
+        Some(_) => Err(
+            "developer Scheduler Storage bundle revision conflicts with the persisted contract"
+                .to_owned(),
+        ),
+        None => {
+            store
+                .record_platform_storage_bundle(&bundle)
+                .map_err(|_| "developer Scheduler Storage bundle cannot be recorded".to_owned())?;
+            Ok(digest)
+        }
+    }
 }
 
 fn scheduler_event_route(
@@ -498,108 +441,4 @@ fn export_scheduler_storage_bundle(kernel: &Path, runtime_dir: &Path) -> Result<
     (output.status.success() && !output.stdout.is_empty())
         .then_some(output.stdout)
         .ok_or_else(|| "developer Scheduler Storage bundle is unavailable".to_owned())
-}
-
-fn ensure_initialized_vault(
-    data_dir: &Path,
-    runtime_dir: &Path,
-    binding: &hermes_kernel_control_store::PlatformManagedProcessBinding,
-    instance_id: &str,
-) -> Result<(), String> {
-    let vault_dir = data_dir.join("vault");
-    match vault_initialization_state(&vault_dir)? {
-        VaultInitializationState::Initialized => return Ok(()),
-        VaultInitializationState::Partial => return Err("Vault recovery is required".to_owned()),
-        VaultInitializationState::Missing => {}
-    }
-    let kernel =
-        std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())?;
-    let prepared = native_launch::prepare_bound_platform_process(
-        &kernel,
-        binding,
-        &runtime_dir
-            .join("developer-bootstrap")
-            .join("vault-initialize"),
-    )?;
-    let artifact = prepared.into_staged_executable();
-    initialize_vault_from_artifact(
-        artifact,
-        &vault_dir,
-        instance_id,
-        &data_dir.join("developer-platform-credentials"),
-    )
-}
-
-fn initialize_vault_from_artifact(
-    artifact: StagedNativeArtifact,
-    vault_dir: &Path,
-    instance_id: &str,
-    platform_credential_dir: &Path,
-) -> Result<(), String> {
-    let status = Command::new(artifact.path())
-        .args(["initialize", "--data-dir"])
-        .arg(vault_dir)
-        .args(["--instance-id", instance_id])
-        .args(["--platform-credential-dir"])
-        .arg(platform_credential_dir)
-        .status()
-        .map_err(|_| "Vault initialization is unavailable".to_owned());
-    let _ = artifact.remove();
-    match status {
-        Ok(status) if status.success() => Ok(()),
-        Ok(_) => Err("Vault initialization failed".to_owned()),
-        Err(error) => Err(error),
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum VaultInitializationState {
-    Missing,
-    Initialized,
-    Partial,
-}
-
-fn vault_initialization_state(vault_dir: &Path) -> Result<VaultInitializationState, String> {
-    let files = [
-        vault_dir.join("platform-wrapping-key.bin"),
-        vault_dir.join("vault.db"),
-        vault_dir.join("vault.anchor"),
-    ];
-    let present = files.iter().filter(|path| path.exists()).count();
-    match present {
-        0 => Ok(VaultInitializationState::Missing),
-        3 => Ok(VaultInitializationState::Initialized),
-        _ => Ok(VaultInitializationState::Partial),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{VaultInitializationState, vault_initialization_state};
-
-    #[test]
-    fn vault_initialization_requires_an_atomic_three_file_state() {
-        let root = std::env::temp_dir().join(format!(
-            "hermes-developer-vault-state-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&root);
-        assert_eq!(
-            vault_initialization_state(&root).expect("missing state"),
-            VaultInitializationState::Missing
-        );
-        std::fs::create_dir_all(&root).expect("create fixture");
-        std::fs::write(root.join("vault.db"), []).expect("write partial fixture");
-        assert_eq!(
-            vault_initialization_state(&root).expect("partial state"),
-            VaultInitializationState::Partial
-        );
-        std::fs::write(root.join("platform-wrapping-key.bin"), []).expect("write key fixture");
-        std::fs::write(root.join("vault.anchor"), []).expect("write anchor fixture");
-        assert_eq!(
-            vault_initialization_state(&root).expect("initialized state"),
-            VaultInitializationState::Initialized
-        );
-        std::fs::remove_dir_all(root).expect("remove fixture");
-    }
 }

@@ -88,19 +88,7 @@ impl VaultService {
         audience: &LeaseAudienceV1,
         now_unix_seconds: u64,
     ) -> Result<Zeroizing<Vec<u8>>, VaultServiceError> {
-        if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
-            eprintln!(
-                "developer_vault_command={}",
-                match command {
-                    VaultTransportCommandV1::RevokeAudience => "revoke_audience",
-                    VaultTransportCommandV1::IssueLease { .. } => "issue_lease",
-                    VaultTransportCommandV1::ResolveLease { .. } => "resolve_lease",
-                    VaultTransportCommandV1::StoreLease { .. } => "store_lease",
-                    VaultTransportCommandV1::GenerateOpaqueToken { .. } => "generate_opaque_token",
-                    VaultTransportCommandV1::ReplaceLease { .. } => "replace_lease",
-                }
-            );
-        }
+        log_developer_command(command);
         match command {
             VaultTransportCommandV1::RevokeAudience => {
                 self.revoke_audience(audience);
@@ -299,6 +287,21 @@ impl VaultService {
             .map_err(|_| VaultServiceError::SecretUnavailable)?;
         Ok(Zeroizing::new(record_id.as_bytes().to_vec()))
     }
+}
+
+fn log_developer_command(command: &VaultTransportCommandV1) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_none() {
+        return;
+    }
+    let name = match command {
+        VaultTransportCommandV1::RevokeAudience => "revoke_audience",
+        VaultTransportCommandV1::IssueLease { .. } => "issue_lease",
+        VaultTransportCommandV1::ResolveLease { .. } => "resolve_lease",
+        VaultTransportCommandV1::StoreLease { .. } => "store_lease",
+        VaultTransportCommandV1::GenerateOpaqueToken { .. } => "generate_opaque_token",
+        VaultTransportCommandV1::ReplaceLease { .. } => "replace_lease",
+    };
+    eprintln!("developer_vault_command={name}");
 }
 
 fn scope_for_lease(

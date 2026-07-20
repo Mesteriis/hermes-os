@@ -2005,7 +2005,6 @@
     ],
     "forbiddenProjectPaths": [
       "Cargo.toml",
-      "Makefile",
       "architecture",
       "scripts",
       "tests/architecture",

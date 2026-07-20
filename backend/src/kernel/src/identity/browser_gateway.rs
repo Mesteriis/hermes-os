@@ -8,8 +8,7 @@ use hermes_gateway_session_contract::{
     BrowserEnrollmentV1, BrowserPairingAuthority, ClientBootstrapAuthority,
     ClientBootstrapProjectionV1, ClientModuleProjectionV1, ClientModuleSettingsProjectionV1,
     ClientSettingValueEntryV1, ClientSettingValueV1, ClientSurfaceAvailabilityProjectionV1,
-    ClientSurfaceAvailabilityStateV1, ClientSurfaceIdV1, ClientSystemComponentIdV1,
-    ClientSystemComponentStateV1, ClientSystemComponentStatusProjectionV1, GatewayIdentityFenceV1,
+    ClientSurfaceAvailabilityStateV1, ClientSurfaceIdV1, GatewayIdentityFenceV1,
 };
 use hermes_kernel_control_store::{
     BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1, BrowserDeviceStateV1, ModuleGrantSnapshot,
@@ -24,12 +23,10 @@ use hermes_runtime_protocol::{
     },
 };
 
-use crate::platform::{
-    blob::status as blob_status, events::authority::status as events_status,
-    scheduler::status as scheduler_status, storage::status as storage_status,
-    telemetry::diagnostics as telemetry_diagnostics, vault::status as vault_status,
-};
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
+
+#[path = "browser_gateway/system_status.rs"]
+mod system_status;
 
 #[derive(Clone)]
 pub(crate) struct ControlStoreBrowserAuthority {
@@ -155,7 +152,7 @@ impl ClientBootstrapAuthority for ControlStoreBrowserAuthority {
         }
         modules.sort_by(|left, right| left.registration_id().cmp(right.registration_id()));
         let surfaces = client_surface_availability(&modules)?;
-        let system_status = client_system_status(
+        let system_status = system_status::client_system_status(
             &self.store,
             &self.supervisor,
             self.developer_realtime_enabled,
@@ -166,105 +163,6 @@ impl ClientBootstrapAuthority for ControlStoreBrowserAuthority {
             system_status,
         ))
     }
-}
-
-fn client_system_status(
-    store: &SqliteControlStore,
-    supervisor: &ManagedRuntimeSupervisor,
-    developer_realtime_enabled: bool,
-) -> Vec<ClientSystemComponentStatusProjectionV1> {
-    use ClientSystemComponentIdV1::{
-        Blob, Clock, ControlStore, EventHub, Gateway, Kernel, ModuleControlPlane, Nats, Pgbouncer,
-        Postgresql, Scheduler, Sse, StorageControl, Telemetry, Vault,
-    };
-    use ClientSystemComponentStateV1::{Degraded, Healthy, NotAdmitted, Unavailable};
-
-    let mut statuses = [Kernel, ControlStore, ModuleControlPlane, Gateway]
-        .into_iter()
-        .map(|component| ClientSystemComponentStatusProjectionV1::new(component, Healthy, None))
-        .collect::<Vec<_>>();
-    let launched = |component, process_id| match store.platform_managed_process_launch(process_id) {
-        Ok(Some(_)) => ClientSystemComponentStatusProjectionV1::new(
-            component,
-            Degraded,
-            Some("runtime_liveness_not_observed".to_owned()),
-        ),
-        Ok(None) => ClientSystemComponentStatusProjectionV1::new(
-            component,
-            NotAdmitted,
-            Some("runtime_status_not_admitted".to_owned()),
-        ),
-        Err(_) => ClientSystemComponentStatusProjectionV1::new(
-            component,
-            Unavailable,
-            Some("runtime_status_unavailable".to_owned()),
-        ),
-    };
-    let relay = supervisor.relay_port();
-    let live = |component, process_id, current: Result<(), String>| match current {
-        Ok(()) => ClientSystemComponentStatusProjectionV1::new(component, Healthy, None),
-        Err(_) => launched(component, process_id),
-    };
-    let vault = live(
-        Vault,
-        "vault",
-        vault_status::read_current(store, &relay).map(|_| ()),
-    );
-    let storage = live(
-        StorageControl,
-        "storage",
-        storage_status::read_current(store, &relay).map(|_| ()),
-    );
-    let events = live(
-        EventHub,
-        "events_authority",
-        events_status::read_current(store, &relay).map(|_| ()),
-    );
-    statuses.push(vault);
-    statuses.push(storage.clone());
-    statuses.push(derived_platform_status(Postgresql, &storage));
-    statuses.push(derived_platform_status(Pgbouncer, &storage));
-    statuses.push(derived_platform_status(Nats, &events));
-    statuses.push(events);
-    let scheduler = live(
-        Scheduler,
-        "scheduler_developer",
-        scheduler_status::read_current(store, &relay),
-    );
-    statuses.push(scheduler.clone());
-    // Clock is an in-process dependency of the verified Scheduler runtime.
-    statuses.push(derived_platform_status(Clock, &scheduler));
-    statuses.push(live(
-        Blob,
-        "blob",
-        blob_status::read_current(store, &relay).map(|_| ()),
-    ));
-    statuses.push(live(
-        Telemetry,
-        "telemetry",
-        telemetry_diagnostics::read(supervisor).map(|_| ()),
-    ));
-    statuses.push(if developer_realtime_enabled {
-        ClientSystemComponentStatusProjectionV1::new(Sse, Healthy, None)
-    } else {
-        ClientSystemComponentStatusProjectionV1::new(
-            Sse,
-            Unavailable,
-            Some("client_realtime_owner_not_admitted".to_owned()),
-        )
-    });
-    statuses
-}
-
-fn derived_platform_status(
-    component_id: ClientSystemComponentIdV1,
-    owner: &ClientSystemComponentStatusProjectionV1,
-) -> ClientSystemComponentStatusProjectionV1 {
-    ClientSystemComponentStatusProjectionV1::new(
-        component_id,
-        owner.state(),
-        owner.sanitized_reason_code().map(str::to_owned),
-    )
 }
 
 fn client_surface_availability(
@@ -483,8 +381,11 @@ fn visible_entry(
         .ok()
         .map(|index| &schema.definitions[index])?;
     let visibility = SettingClientVisibilityV1::try_from(definition.client_visibility).ok()?;
-    matches!(visibility, SettingClientVisibilityV1::Editable | SettingClientVisibilityV1::ReadOnly)
-        .then(|| {
+    matches!(
+        visibility,
+        SettingClientVisibilityV1::Editable | SettingClientVisibilityV1::ReadOnly
+    )
+    .then(|| {
         entry
             .value
             .as_ref()

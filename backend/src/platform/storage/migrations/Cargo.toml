@@ -2,6 +2,7 @@
 name = "hermes-storage-migrations"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 [lib]
 path = "src/lib.rs"
 [package.metadata.hermes]

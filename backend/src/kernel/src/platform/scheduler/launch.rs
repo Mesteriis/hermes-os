@@ -66,19 +66,7 @@ fn start_staged_runtime(
             .join(format!("launch-{}", reservation.runtime_generation()))
             .join("managed"),
     )?;
-    let Some(settings_schema) = prepared.settings_schema_bytes() else {
-        let _ = prepared.remove();
-        return Err("Scheduler release lacks a settings schema".to_owned());
-    };
-    let contracts = match StagedRuntimeContracts::stage_with_runtime_configuration(
-        &runtime_dir
-            .join("scheduler")
-            .join(format!("launch-{}", reservation.runtime_generation()))
-            .join("contracts"),
-        prepared.descriptor_bytes(),
-        Some(settings_schema),
-        Some(&configuration),
-    ) {
+    let contracts = match stage_contracts(runtime_dir, &reservation, &prepared, &configuration) {
         Ok(contracts) => contracts,
         Err(error) => {
             let _ = prepared.remove();
@@ -111,6 +99,26 @@ fn start_staged_runtime(
         return Err(error);
     }
     Ok(runtime_generation)
+}
+
+fn stage_contracts(
+    runtime_dir: &Path,
+    reservation: &ManagedLaunchReservation,
+    prepared: &native_launch::PreparedBundledManagedRuntime,
+    configuration: &[u8],
+) -> Result<StagedRuntimeContracts, String> {
+    let Some(settings_schema) = prepared.settings_schema_bytes() else {
+        return Err("Scheduler release lacks a settings schema".to_owned());
+    };
+    StagedRuntimeContracts::stage_with_runtime_configuration(
+        &runtime_dir
+            .join("scheduler")
+            .join(format!("launch-{}", reservation.runtime_generation()))
+            .join("contracts"),
+        prepared.descriptor_bytes(),
+        Some(settings_schema),
+        Some(configuration),
+    )
 }
 
 pub(crate) fn validate_storage_binding(

@@ -206,16 +206,14 @@ fn prepare_launch(
             .join(format!("launch-{runtime_generation}"))
             .join("managed"),
     )?;
-    let pgbouncer_directory = runtime_dir.join("storage").join("pgbouncer");
-    if let Err(error) = prepare_owner_private_directory(&pgbouncer_directory) {
-        let _ = prepared.remove();
-        return Err(error);
-    }
-    let pgbouncer_auth_directory = pgbouncer_directory.join("auth");
-    if let Err(error) = prepare_owner_private_directory(&pgbouncer_auth_directory) {
-        let _ = prepared.remove();
-        return Err(error);
-    }
+    let (pgbouncer_directory, pgbouncer_auth_directory) =
+        match prepare_pgbouncer_directories(runtime_dir) {
+            Ok(directories) => directories,
+            Err(error) => {
+                let _ = prepared.remove();
+                return Err(error);
+            }
+        };
     let configuration = topology::encoded_managed_macos(
         topology,
         desired_bindings,
@@ -241,6 +239,16 @@ fn prepare_launch(
             Err(error)
         }
     }
+}
+
+fn prepare_pgbouncer_directories(
+    runtime_dir: &Path,
+) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
+    let pgbouncer_directory = runtime_dir.join("storage").join("pgbouncer");
+    prepare_owner_private_directory(&pgbouncer_directory)?;
+    let pgbouncer_auth_directory = pgbouncer_directory.join("auth");
+    prepare_owner_private_directory(&pgbouncer_auth_directory)?;
+    Ok((pgbouncer_directory, pgbouncer_auth_directory))
 }
 
 fn next_runtime_generation(store: &SqliteControlStore) -> Result<u64, String> {

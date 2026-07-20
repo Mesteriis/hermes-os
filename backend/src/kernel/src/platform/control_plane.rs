@@ -33,6 +33,39 @@ pub fn serve(
     let shutdown_requested = shutdown::install()?;
     let managed_runtime_supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown_requested));
     let store = Arc::new(store);
+    configure_runtime(&managed_runtime_supervisor, &store, data_dir)?;
+    start_development_foundation(
+        &managed_runtime_supervisor,
+        &store,
+        data_dir,
+        runtime_dir,
+        browser_gateway.as_ref(),
+    )?;
+    let browser_pairing = browser_pairing(
+        &store,
+        &managed_runtime_supervisor,
+        browser_gateway.as_ref(),
+    )?;
+    let (mut workers, receiver) = start_workers(
+        &store,
+        data_dir,
+        runtime_dir,
+        store_path,
+        &shutdown_requested,
+        &managed_runtime_supervisor,
+        browser_gateway,
+        browser_pairing,
+    );
+    let failure = supervise_workers(&receiver, &shutdown_requested);
+    managed_runtime_supervisor.shutdown()?;
+    join_workers(&mut workers, failure)
+}
+
+fn configure_runtime(
+    managed_runtime_supervisor: &ManagedRuntimeSupervisor,
+    store: &Arc<SqliteControlStore>,
+    data_dir: &Path,
+) -> Result<(), String> {
     managed_runtime_supervisor.configure_vault_route_handler(Arc::new(
         KernelManagedVaultRouteHandler::new(
             Arc::clone(&store),
@@ -47,49 +80,40 @@ pub fn serve(
             managed_runtime_supervisor.relay_port(),
         )?,
     ))?;
-    if browser_gateway
-        .as_ref()
-        .is_some_and(crate::platform::gateway::BrowserGatewayConfigurationV1::is_lan_development)
-    {
-        if let Err(error) = crate::platform::development::start_local_foundation(
-            &managed_runtime_supervisor,
-            &store,
-            data_dir,
-            runtime_dir,
-        ) {
-            return match managed_runtime_supervisor.shutdown() {
-                Ok(()) => Err(error),
-                Err(cleanup_error) => Err(format!(
-                    "{error}; managed runtime cleanup after developer bootstrap failure also failed: {cleanup_error}"
-                )),
-            };
-        }
+    Ok(())
+}
+
+fn start_development_foundation(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &Arc<SqliteControlStore>,
+    data_dir: &Path,
+    runtime_dir: &Path,
+    browser_gateway: Option<&BrowserGatewayConfigurationV1>,
+) -> Result<(), String> {
+    if !browser_gateway.is_some_and(BrowserGatewayConfigurationV1::is_lan_development) {
+        return Ok(());
     }
-    let browser_pairing = browser_gateway
-        .as_ref()
+    crate::platform::development::start_local_foundation(supervisor, store, data_dir, runtime_dir)
+        .or_else(|error| match supervisor.shutdown() {
+            Ok(()) => Err(error),
+            Err(cleanup_error) => Err(format!(
+                "{error}; managed runtime cleanup after developer bootstrap failure also failed: {cleanup_error}"
+            )),
+        })
+}
+
+fn browser_pairing(
+    store: &Arc<SqliteControlStore>,
+    supervisor: &ManagedRuntimeSupervisor,
+    browser_gateway: Option<&BrowserGatewayConfigurationV1>,
+) -> Result<Option<Arc<BrowserPairingAdmissionV1>>, String> {
+    browser_gateway
         .filter(|configuration| !configuration.is_lan_development())
         .map(|configuration| {
-            BrowserPairingAdmissionV1::new(
-                Arc::clone(&store),
-                managed_runtime_supervisor.clone(),
-                configuration,
-            )
+            BrowserPairingAdmissionV1::new(Arc::clone(store), supervisor.clone(), configuration)
         })
-        .transpose()?
-        .map(Arc::new);
-    let (mut workers, receiver) = start_workers(
-        &store,
-        data_dir,
-        runtime_dir,
-        store_path,
-        &shutdown_requested,
-        &managed_runtime_supervisor,
-        browser_gateway,
-        browser_pairing,
-    );
-    let failure = supervise_workers(&receiver, &shutdown_requested);
-    managed_runtime_supervisor.shutdown()?;
-    join_workers(&mut workers, failure)
+        .transpose()
+        .map(|pairing| pairing.map(Arc::new))
 }
 
 fn start_workers(

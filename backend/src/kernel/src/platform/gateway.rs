@@ -1,8 +1,7 @@
 //! Kernel-owned admission for the narrow browser Gateway foundation.
 
-use std::fs;
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -23,21 +22,18 @@ use hermes_gateway_session::{
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::{DistributionArtifactKindV1, DistributionManifestArtifactV1};
-use quinn::ServerConfig as QuinnServerConfig;
-use quinn::crypto::rustls::QuicServerConfig;
-use rustls::ServerConfig;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::sync::{broadcast, watch};
-use tokio_rustls::TlsAcceptor;
 
 use crate::identity::browser_gateway::ControlStoreBrowserAuthority;
 use crate::platform::macos::native_launch;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
-const TLS_MATERIAL_MAX_BYTES: u64 = 64 * 1024;
 const SHUTDOWN_POLL: Duration = Duration::from_millis(25);
 const BROWSER_BOOTSTRAP_ARTIFACT_ID: &str = "browser.bootstrap";
 const MACOS_KERNEL_TARGET: &str = "aarch64-apple-darwin";
+
+#[path = "gateway/tls.rs"]
+mod tls;
 
 /// Explicit operator-owned parameters for a browser Gateway. TLS material is
 /// absent only in the private-LAN HTTP developer profile.
@@ -365,7 +361,7 @@ async fn serve_configured_listener(
         BrowserGatewayExposureV1::LocalEmbedded => {
             let listener = GatewayLoopbackTlsListenerV1::bind(
                 configuration.listen_address,
-                tls_acceptor(&configuration, None)?,
+                tls::acceptor(&configuration, None)?,
             )
             .await?;
             println!("browser_gateway_listener={}", listener.local_address()?);
@@ -376,13 +372,13 @@ async fn serve_configured_listener(
             let http2 = GatewayTlsListenerV1::bind(
                 configuration.listen_address,
                 profile,
-                tls_acceptor(&configuration, Some(b"h2"))?,
+                tls::acceptor(&configuration, Some(b"h2"))?,
             )
             .await?;
             let http3 = GatewayHttp3ListenerV1::bind(
                 configuration.listen_address,
                 profile,
-                http3_server_config(&configuration)?,
+                tls::http3_server_config(&configuration)?,
             )?;
             println!("browser_gateway_listener={}", http2.local_address()?);
             println!("browser_gateway_http3_listener={}", http3.local_address()?);
@@ -471,70 +467,4 @@ pub(crate) fn required_browser_bootstrap_manifest(
         .iter()
         .find(|artifact| artifact.artifact_id == BROWSER_BOOTSTRAP_ARTIFACT_ID)
         .ok_or_else(|| "signed browser bootstrap artifact is required".to_owned())
-}
-
-fn tls_acceptor(
-    configuration: &BrowserGatewayConfigurationV1,
-    alpn: Option<&[u8]>,
-) -> Result<TlsAcceptor, String> {
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    let certificate_path = configuration
-        .certificate_der_path
-        .as_ref()
-        .ok_or_else(|| "browser Gateway TLS certificate is unavailable".to_owned())?;
-    let private_key_path = configuration
-        .private_key_der_path
-        .as_ref()
-        .ok_or_else(|| "browser Gateway TLS private key is unavailable".to_owned())?;
-    let certificate = CertificateDer::from(read_tls_material(certificate_path)?);
-    let private_key = PrivateKeyDer::try_from(read_tls_material(private_key_path)?)
-        .map_err(|_| "browser Gateway private key is invalid".to_owned())?;
-    let mut server = ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(vec![certificate], private_key)
-        .map_err(|error| {
-            format!("browser Gateway TLS certificate or private key is invalid: {error}")
-        })?;
-    if let Some(alpn) = alpn {
-        server.alpn_protocols = vec![alpn.to_vec()];
-    }
-    Ok(TlsAcceptor::from(Arc::new(server)))
-}
-
-fn http3_server_config(
-    configuration: &BrowserGatewayConfigurationV1,
-) -> Result<QuinnServerConfig, String> {
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    let certificate_path = configuration
-        .certificate_der_path
-        .as_ref()
-        .ok_or_else(|| "browser Gateway TLS certificate is unavailable".to_owned())?;
-    let private_key_path = configuration
-        .private_key_der_path
-        .as_ref()
-        .ok_or_else(|| "browser Gateway TLS private key is unavailable".to_owned())?;
-    let certificate = CertificateDer::from(read_tls_material(certificate_path)?);
-    let private_key = PrivateKeyDer::try_from(read_tls_material(private_key_path)?)
-        .map_err(|_| "browser Gateway private key is invalid".to_owned())?;
-    let mut crypto = ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(vec![certificate], private_key)
-        .map_err(|error| {
-            format!("browser Gateway TLS certificate or private key is invalid: {error}")
-        })?;
-    crypto.alpn_protocols = vec![b"h3".to_vec()];
-    crypto.max_early_data_size = 0;
-    Ok(QuinnServerConfig::with_crypto(Arc::new(
-        QuicServerConfig::try_from(crypto)
-            .map_err(|_| "browser Gateway HTTP/3 TLS configuration is invalid".to_owned())?,
-    )))
-}
-
-fn read_tls_material(path: &Path) -> Result<Vec<u8>, String> {
-    let metadata =
-        fs::metadata(path).map_err(|_| "browser Gateway TLS material is unavailable".to_owned())?;
-    (metadata.is_file() && metadata.len() > 0 && metadata.len() <= TLS_MATERIAL_MAX_BYTES)
-        .then_some(())
-        .ok_or_else(|| "browser Gateway TLS material is invalid".to_owned())?;
-    fs::read(path).map_err(|_| "browser Gateway TLS material is unavailable".to_owned())
 }

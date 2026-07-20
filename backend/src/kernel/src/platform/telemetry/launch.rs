@@ -45,11 +45,7 @@ pub(crate) fn start_from_kernel(
         .map_err(|_| "Telemetry release binding is unavailable".to_owned())?
         .ok_or_else(|| "Telemetry release binding is unavailable".to_owned())?;
     let generation = next_generation(store)?;
-    prepare_owner_private_directory(&data_dir.join("telemetry"))?;
-    // The OS runtime-cache path can exceed Unix-domain socket limits on macOS.
-    // Keep the collector socket beneath the owner-private data directory.
-    let service_runtime_dir = data_dir.join("telemetry").join("runtime");
-    prepare_owner_private_directory(&service_runtime_dir)?;
+    let service_runtime_dir = prepare_service_directories(data_dir)?;
     let (artifact, contracts) = prepare(kernel, &binding, runtime_dir, generation)?;
     let arguments = match inherited_arguments(data_dir, &service_runtime_dir, &contracts) {
         Ok(arguments) => arguments,
@@ -92,6 +88,16 @@ pub(crate) fn start_from_kernel(
             Err(error)
         }
     }
+}
+
+fn prepare_service_directories(data_dir: &Path) -> Result<std::path::PathBuf, String> {
+    let data_directory = data_dir.join("telemetry");
+    prepare_owner_private_directory(&data_directory)?;
+    // The OS runtime-cache path can exceed Unix-domain socket limits on macOS.
+    // Keep the collector socket beneath the owner-private data directory.
+    let runtime_directory = data_directory.join("runtime");
+    prepare_owner_private_directory(&runtime_directory)?;
+    Ok(runtime_directory)
 }
 
 fn prepare(

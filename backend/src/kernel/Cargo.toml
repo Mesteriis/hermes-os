@@ -2,6 +2,7 @@
 name = "hermes-kernel"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [[bin]]
 name = "hermes-kernel"
@@ -21,7 +22,6 @@ hermes-gateway-protocol = { path = "../api/gateway/contracts" }
 hermes-gateway-runtime = { path = "../api/gateway/runtime" }
 hermes-gateway-session = { path = "../api/gateway/session" }
 hermes-gateway-session-contract = { path = "../api/gateway/session_contract" }
-hermes-events-jetstream = { path = "../platform/events/jetstream" }
 hermes-kernel-control-store = { path = "control_store/contract" }
 hermes-kernel-control-store-sqlite = { path = "control_store/sqlite" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
