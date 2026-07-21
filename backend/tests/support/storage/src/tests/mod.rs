@@ -18,6 +18,7 @@ mod postgres_bootstrap;
 mod postgres_live;
 mod provisioning;
 mod reconciliation;
+mod recovery;
 mod revocation;
 mod runtime_admin_live;
 mod runtime_binding_apply_live;

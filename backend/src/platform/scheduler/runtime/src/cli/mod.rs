@@ -1,7 +1,13 @@
 //! Parses fixed Scheduler inherited-runtime arguments.
 
+mod recovery;
+
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
+
+pub(crate) use recovery::{
+    RecoveryArguments, parse_export_bundle_arguments, parse_recovery_arguments,
+};
 
 pub(crate) struct ServeInheritedPaths {
     pub(crate) descriptor_path: PathBuf,

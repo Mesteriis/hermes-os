@@ -1,0 +1,16 @@
+[package]
+name = "hermes-communications-persistence"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "domain"
+owner = "communications"
+surface = "persistence"
+
+[dependencies]
+hermes-communications-domain = { path = "../communications-domain" }

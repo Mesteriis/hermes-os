@@ -139,7 +139,10 @@ fn data_directory_has_artifacts(data_dir: &Path) -> Result<bool, String> {
         .is_some())
 }
 
-fn write_installation_anchor(anchor_path: &Path, instance_id: &str) -> Result<(), String> {
+pub(crate) fn write_installation_anchor(
+    anchor_path: &Path,
+    instance_id: &str,
+) -> Result<(), String> {
     let parent = anchor_path
         .parent()
         .ok_or_else(|| "installation anchor path has no parent".to_owned())?;

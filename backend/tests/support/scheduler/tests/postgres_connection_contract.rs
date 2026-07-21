@@ -1,6 +1,6 @@
 use hermes_runtime_protocol::v1::SchedulerRuntimeStorageBindingV1;
 use hermes_scheduler_persistence::{
-    SchedulerPostgresEndpointV1, SchedulerStoreConnectionErrorV1,
+    SchedulerPostgresEndpointV1, SchedulerRecoveryDatabaseV1, SchedulerStoreConnectionErrorV1,
     scheduler_storage_binding_from_runtime,
 };
 
@@ -13,6 +13,50 @@ fn scheduler_postgres_endpoint_rejects_url_or_secret_shaped_hosts() {
     assert_eq!(
         SchedulerPostgresEndpointV1::new("127.0.0.1".to_owned(), 0),
         Err(SchedulerStoreConnectionErrorV1::InvalidEndpoint)
+    );
+}
+
+#[test]
+fn scheduler_recovery_database_rejects_secret_or_url_shaped_arguments() {
+    assert!(
+        SchedulerRecoveryDatabaseV1::new(
+            "127.0.0.1".to_owned(),
+            5432,
+            "hermes".to_owned(),
+            "recovery".to_owned(),
+            "verify-full",
+        )
+        .is_ok()
+    );
+    assert!(
+        SchedulerRecoveryDatabaseV1::new(
+            "user:secret@localhost".to_owned(),
+            5432,
+            "hermes".to_owned(),
+            "recovery".to_owned(),
+            "require",
+        )
+        .is_err()
+    );
+    assert!(
+        SchedulerRecoveryDatabaseV1::new(
+            "127.0.0.1".to_owned(),
+            5432,
+            "postgres://other".to_owned(),
+            "recovery".to_owned(),
+            "disable",
+        )
+        .is_err()
+    );
+    assert!(
+        SchedulerRecoveryDatabaseV1::new(
+            "127.0.0.1".to_owned(),
+            5432,
+            "hermes".to_owned(),
+            "recovery".to_owned(),
+            "unknown",
+        )
+        .is_err()
     );
 }
 

@@ -28,6 +28,9 @@ fn main() {
 fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
         Command::ControlStore { operation } => control_store::offline::run(cli.data_dir, operation),
+        Command::WholeInstanceRecovery { operation } => {
+            recovery::offline::run(cli.data_dir, *operation)
+        }
         Command::DeviceKeyGenerate => identity::device::generation::run(cli.data_dir),
         Command::InitialOwnerEnroll {
             owner_id,

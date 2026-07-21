@@ -14,6 +14,8 @@ import {
   ownerBindExternal,
   ownerComplete,
   ownerStatus,
+  ownerMailRuntimeCommand,
+  ownerCommunicationsRuntimeCommand,
   ownerTelemetryDiagnostics,
   ownerTransition,
   ownerUpdateSettings,
@@ -192,6 +194,12 @@ async function proveOwnerSessionEnforcement(socketPath, registrationId) {
     socketPath, ownerBeginBrowserPairing('missing'),
   )), 'operation_denied');
   assert.equal(errorCode(await request(
+    socketPath, ownerMailRuntimeCommand('missing', 'status'),
+  )), 'operation_denied');
+  assert.equal(errorCode(await request(
+    socketPath, ownerCommunicationsRuntimeCommand('missing', 'status'),
+  )), 'operation_denied');
+  assert.equal(errorCode(await request(
     socketPath, configurePlatformEventHubTopology('missing'),
   )), 'operation_denied');
 }
@@ -199,58 +207,106 @@ async function proveOwnerSessionEnforcement(socketPath, registrationId) {
 async function exerciseOwnerMutations(context, dataDir, descriptor, schema) {
   const { socketPaths, registrationId } = context;
   const ownerSessionId = await openOwnerSession(socketPaths.owner, dataDir);
-  const approval = await request(socketPaths.owner, ownerApprove(registrationId, ownerSessionId));
+  const pairSession = runtimeKeyPair();
+  await assertModuleBindRestrictions(
+    socketPaths.owner,
+    registrationId,
+    ownerSessionId,
+    dataDir,
+    pairSession,
+  );
+  await assertRuntimeOwnerCommandStatus(socketPaths.owner, ownerSessionId);
+  await admitSchema(context, pairSession, descriptor, schema);
+  await assertTopologyAndSchedulerGuards(socketPaths.owner, registrationId, ownerSessionId);
+  return ownerSessionId;
+}
+
+async function assertModuleBindRestrictions(ownerSocket, registrationId, ownerSessionId, dataDir, pairSession) {
+  const { publicKey } = pairSession;
+  const approval = await request(ownerSocket, ownerApprove(registrationId, ownerSessionId));
   assert.ok(
     decode(approval).get(2),
     `owner approval failed: ${errorCode(approval)}`,
   );
   assert.equal(errorCode(await request(
-    socketPaths.owner,
+    ownerSocket,
     bindBundledManagedRelease(registrationId, 'runtime.mail', ownerSessionId),
   )), 'operation_denied');
   assert.equal(errorCode(await request(
-    socketPaths.owner,
+    ownerSocket,
     startBundledManagedRuntime(registrationId, ownerSessionId),
   )), 'operation_denied');
-  const { pair, publicKey } = runtimeKeyPair();
-  const bindingSession = await openOwnerSession(socketPaths.owner, dataDir);
+  const bindingSession = await openOwnerSession(ownerSocket, dataDir);
   const binding = await request(
-    socketPaths.owner,
+    ownerSocket,
     ownerBindExternal(registrationId, publicKey, bindingSession),
   );
   const bound = decode(binding).get(7);
   assert.ok(bound, `external runtime bind failed: ${errorCode(binding)}`);
   assert.equal(decode(bound).get(2), 3);
   assert.equal(errorCode(await request(
-    socketPaths.owner,
+    ownerSocket,
     ownerBindExternal(registrationId, Buffer.alloc(65, 4), 'missing'),
   )), 'operation_denied');
-  await admitSchema(context, pair, descriptor, schema);
-  const status = await request(socketPaths.owner, ownerStatus(registrationId));
-  assert.ok(status.includes(Buffer.from('approved', 'ascii')));
-  const topologyResponse = await request(
-    socketPaths.owner,
-    configurePlatformStorageTopology(ownerSessionId, 1, 'storage-1'),
-  );
-  const topology = decode(topologyResponse).get(18);
-  assert.ok(topology, `storage topology configuration failed: ${errorCode(topologyResponse)}`);
-  assert.equal(decode(topology).get(1), 1);
-  assert.equal(decode(topology).get(2), 1);
-  const eventHubResponse = await request(
-    socketPaths.owner, configurePlatformEventHubTopology(ownerSessionId),
-  );
-  const eventHub = decode(eventHubResponse).get(29);
-  assert.ok(eventHub, `Event Hub topology configuration failed: ${errorCode(eventHubResponse)}`);
-  assert.equal(decode(eventHub).get(1), 1);
-  assert.equal(decode(eventHub).get(2), 5);
-  assert.equal(errorCode(await request(
-    socketPaths.owner, restartSchedulerRuntime(ownerSessionId, registrationId),
-  )), 'operation_denied');
-  return ownerSessionId;
 }
 
-async function admitSchema(context, pair, descriptor, schema) {
+async function assertRuntimeOwnerCommandStatus(ownerSocket, ownerSessionId) {
+  const mailStatus = decode(
+    decode(await request(
+      ownerSocket,
+      ownerMailRuntimeCommand(ownerSessionId, 'status'),
+    )).get(37),
+  );
+  assert.ok(mailStatus, 'owner mail runtime status command failed');
+  assert.equal(mailStatus.get(2) ?? 0, 0);
+  assert.equal(stringValue(mailStatus, 1), 'status');
+  assert.ok(stringValue(mailStatus, 3).includes('mail_runtime_status'));
+  const commStatus = decode(
+    decode(await request(
+      ownerSocket,
+      ownerCommunicationsRuntimeCommand(ownerSessionId, 'status'),
+    )).get(38),
+  );
+  assert.ok(commStatus, 'owner communications runtime status command failed');
+  assert.equal(stringValue(commStatus, 1), 'status');
+  assert.equal(commStatus.get(2) ?? 0, 0);
+  assert.ok(stringValue(commStatus, 3).includes('communications_runtime status ok'));
+  assert.equal(errorCode(await request(
+    ownerSocket,
+    ownerMailRuntimeCommand(ownerSessionId, 'sync'),
+  )), 'operation_denied');
+  assert.equal(errorCode(await request(
+    ownerSocket,
+    ownerMailRuntimeCommand(ownerSessionId, 'magic-sync'),
+  )), 'operation_denied');
+  assert.equal(errorCode(await request(
+    ownerSocket,
+    ownerMailRuntimeCommand(ownerSessionId, 'sync', ['conn-1']),
+  )), 'operation_denied');
+  assert.equal(errorCode(await request(
+    ownerSocket,
+    ownerMailRuntimeCommand(ownerSessionId, 'ingest'),
+  )), 'operation_denied');
+  assert.equal(errorCode(await request(
+    ownerSocket,
+    ownerCommunicationsRuntimeCommand(ownerSessionId, 'ingest'),
+  )), 'operation_denied');
+  assert.equal(errorCode(await request(
+    ownerSocket,
+    ownerCommunicationsRuntimeCommand(ownerSessionId, 'ingest', ['op-1']),
+  )), 'operation_denied');
+  assert.equal(errorCode(await request(
+    ownerSocket,
+    ownerCommunicationsRuntimeCommand(ownerSessionId, 'magic-ingest'),
+  )), 'operation_denied');
+}
+
+async function admitSchema(context, pairSession, descriptor, schema) {
+  const { pair } = pairSession;
   const { socketPaths, registrationId } = context;
+  if (!pair) {
+    return;
+  }
   const runtimeSession = await openRuntimeSession({
     socketPath: socketPaths.runtime,
     registrationId,
@@ -264,6 +320,33 @@ async function admitSchema(context, pair, descriptor, schema) {
     runtimeSubmitSchema(runtimeSession, descriptor, schema),
   )).get(4);
   assert.equal(stringValue(decode(admitted), 1), registrationId);
+
+  const status = await request(socketPaths.owner, ownerStatus(registrationId));
+  assert.ok(status.includes(Buffer.from('approved', 'ascii')));
+}
+
+async function assertTopologyAndSchedulerGuards(ownerSocket, registrationId, ownerSessionId) {
+  const status = await request(ownerSocket, ownerStatus(registrationId));
+  assert.ok(status.includes(Buffer.from('approved', 'ascii')));
+  const topologyResponse = await request(
+    ownerSocket,
+    configurePlatformStorageTopology(ownerSessionId, 1, 'storage-1'),
+  );
+  const topology = decode(topologyResponse).get(18);
+  assert.ok(topology, `storage topology configuration failed: ${errorCode(topologyResponse)}`);
+  assert.equal(decode(topology).get(1), 1);
+  assert.equal(decode(topology).get(2), 1);
+  const eventHubResponse = await request(
+    ownerSocket, configurePlatformEventHubTopology(ownerSessionId),
+  );
+  const eventHub = decode(eventHubResponse).get(29);
+  assert.ok(eventHub, `Event Hub topology configuration failed: ${errorCode(eventHubResponse)}`);
+  assert.equal(decode(eventHub).get(1), 1);
+  assert.equal(decode(eventHub).get(2), 5);
+  assert.equal(errorCode(await request(
+    ownerSocket,
+    restartSchedulerRuntime(ownerSessionId, registrationId),
+  )), 'operation_denied');
 }
 
 async function exerciseSettingsMutation(context, dataDir, staleSessionId) {

@@ -1,0 +1,20 @@
+[package]
+name = "hermes-mail-communications-slice-testkit"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[package.metadata.hermes]
+role = "test"
+owner = "test"
+surface = "test_support"
+
+[dependencies]
+hermes-communications-api = { path = "../../../src/communications-api" }
+hermes-communications-domain = { path = "../../../src/communications-domain" }
+hermes-communications-ingress = { path = "../../../src/communications-ingress" }
+hermes-communications-persistence = { path = "../../../src/communications-persistence" }
+hermes-mail-api = { path = "../../../src/mail-api" }
+hermes-mail-core = { path = "../../../src/mail-core" }
+hermes-mail-imap = { path = "../../../src/mail-imap" }
+hermes-mail-persistence = { path = "../../../src/mail-persistence" }

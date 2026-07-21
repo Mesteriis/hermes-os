@@ -461,6 +461,32 @@ message BeginBrowserPairingResponseV1 {
   uint64 expires_at_unix_millis = 2;
 }
 
+message ExecuteMailRuntimeOwnerCommandRequestV1 {
+  string owner_session_id = 1;
+  string command = 2;
+  repeated string arg = 3;
+}
+
+message ExecuteMailRuntimeOwnerCommandResponseV1 {
+  string command = 1;
+  uint32 exit_code = 2;
+  string stdout = 3;
+  string stderr = 4;
+}
+
+message ExecuteCommunicationsRuntimeOwnerCommandRequestV1 {
+  string owner_session_id = 1;
+  string command = 2;
+  repeated string arg = 3;
+}
+
+message ExecuteCommunicationsRuntimeOwnerCommandResponseV1 {
+  string command = 1;
+  uint32 exit_code = 2;
+  string stdout = 3;
+  string stderr = 4;
+}
+
 message OwnerControlRequestV1 {
   oneof operation {
     GetModuleRegistrationStatusRequestV1 get_module_registration_status = 1;
@@ -498,6 +524,8 @@ message OwnerControlRequestV1 {
     UpsertSchedulerScheduleRequestV1 upsert_scheduler_schedule = 33;
     RestartSchedulerRuntimeRequestV1 restart_scheduler_runtime = 34;
     BeginBrowserPairingRequestV1 begin_browser_pairing = 35;
+    ExecuteMailRuntimeOwnerCommandRequestV1 execute_mail_runtime_owner_command = 37;
+    ExecuteCommunicationsRuntimeOwnerCommandRequestV1 execute_communications_runtime_owner_command = 38;
   }
 }
 
@@ -538,6 +566,8 @@ message OwnerControlResponseV1 {
     UpsertSchedulerScheduleResponseV1 upsert_scheduler_schedule = 34;
     RestartSchedulerRuntimeResponseV1 restart_scheduler_runtime = 35;
     BeginBrowserPairingResponseV1 begin_browser_pairing = 36;
+    ExecuteMailRuntimeOwnerCommandResponseV1 execute_mail_runtime_owner_command = 37;
+    ExecuteCommunicationsRuntimeOwnerCommandResponseV1 execute_communications_runtime_owner_command = 38;
   }
 
   // Sanitized stable code; details and private data remain local to Kernel.

@@ -1,5 +1,6 @@
 //! Request dispatch for owner-private control IPC.
 
+mod communications;
 mod platform;
 mod scheduler;
 
@@ -60,44 +61,70 @@ fn route(
     sessions: &mut OwnerControlSessions,
     request: OwnerControlRequestV1,
 ) -> Result<OwnerResult, String> {
+    let Some(operation) = request.operation else {
+        return Err("owner control operation is unavailable".to_owned());
+    };
+
+    route_operation(
+        store,
+        data_dir,
+        runtime_dir,
+        supervisor,
+        browser_pairing,
+        sessions,
+        operation,
+    )
+}
+
+fn route_operation(
+    store: &SqliteControlStore,
+    data_dir: &Path,
+    runtime_dir: &Path,
+    supervisor: &ManagedRuntimeSupervisor,
+    browser_pairing: Option<&BrowserPairingAdmissionV1>,
+    sessions: &mut OwnerControlSessions,
+    operation: hermes_gateway_protocol::v1::owner_control_request_v1::Operation,
+) -> Result<OwnerResult, String> {
     use hermes_gateway_protocol::v1::owner_control_request_v1::Operation;
 
-    match request.operation {
-        Some(Operation::GetModuleRegistrationStatus(request)) => status(store, request),
-        Some(Operation::ApproveModuleRegistration(request)) => approve(store, sessions, request),
-        Some(Operation::TransitionModuleRegistration(request)) => {
-            transition(store, sessions, request)
-        }
-        Some(Operation::BeginOwnerSession(_)) => begin(store, sessions),
-        Some(Operation::CompleteOwnerSession(request)) => complete(store, sessions, request),
-        Some(Operation::BeginBrowserPairing(request)) => {
+    match operation {
+        Operation::GetModuleRegistrationStatus(request) => status(store, request),
+        Operation::ApproveModuleRegistration(request) => approve(store, sessions, request),
+        Operation::TransitionModuleRegistration(request) => transition(store, sessions, request),
+        Operation::BeginOwnerSession(_) => begin(store, sessions),
+        Operation::CompleteOwnerSession(request) => complete(store, sessions, request),
+        Operation::BeginBrowserPairing(request) => {
             begin_browser_pairing(store, sessions, browser_pairing, request)
         }
-        Some(Operation::UpdateOperatorSettings(request)) => {
-            update_settings(store, sessions, request)
+        Operation::ExecuteMailRuntimeOwnerCommand(request) => {
+            communications::execute_mail_runtime_owner_command(store, sessions, request)
         }
-        Some(Operation::BindExternalRuntimeIdentity(request)) => {
+        Operation::ExecuteCommunicationsRuntimeOwnerCommand(request) => {
+            communications::execute_communications_runtime_owner_command(store, sessions, request)
+        }
+        Operation::UpdateOperatorSettings(request) => update_settings(store, sessions, request),
+        Operation::BindExternalRuntimeIdentity(request) => {
             bind_external_identity(store, sessions, request)
         }
-        Some(Operation::BindBundledManagedRelease(request)) => {
+        Operation::BindBundledManagedRelease(request) => {
             bind_managed_release(store, sessions, request)
         }
-        Some(Operation::StartBundledManagedRuntime(request)) => {
+        Operation::StartBundledManagedRuntime(request) => {
             start_managed_runtime(store, runtime_dir, supervisor, sessions, request)
         }
-        Some(Operation::ReserveBundledManagedRuntime(request)) => {
+        Operation::ReserveBundledManagedRuntime(request) => {
             reserve_managed_runtime(store, supervisor, sessions, request)
         }
-        Some(Operation::StartReservedSchedulerRuntime(request)) => {
+        Operation::StartReservedSchedulerRuntime(request) => {
             scheduler::start_reserved(store, runtime_dir, supervisor, sessions, request)
         }
-        Some(Operation::UpsertSchedulerSchedule(request)) => {
+        Operation::UpsertSchedulerSchedule(request) => {
             scheduler::upsert(store, supervisor, sessions, request)
         }
-        Some(Operation::RestartSchedulerRuntime(request)) => {
+        Operation::RestartSchedulerRuntime(request) => {
             scheduler::restart(store, runtime_dir, supervisor, sessions, request)
         }
-        Some(operation) => platform::route(
+        operation => platform::route(
             store,
             data_dir,
             runtime_dir,
@@ -105,7 +132,6 @@ fn route(
             sessions,
             operation,
         ),
-        None => Err("owner control operation is unavailable".to_owned()),
     }
 }
 

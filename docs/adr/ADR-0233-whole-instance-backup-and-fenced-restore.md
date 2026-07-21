@@ -2,17 +2,15 @@
 
 Статус: Принято  
 Дата: 2026-07-19  
-Состояние реализации: Частично реализовано. Offline Control Store
-export/restore, authenticated Vault snapshot, Blob backup classification и
-private PostgreSQL export существуют раздельно. Kernel уже содержит
-fail-closed coordinator порядка restore и P-256 signed media inventory с
-fd-based no-symlink verification. Однако он пока не связан с реальными
-component-owned restore ports; JetStream capture и disposable full-restore
-evidence также отсутствуют. Blob service уже имеет отдельный ciphertext-only
-offline export/verify/empty-target restore port, но coordinator пока не
-вызывает его.
-Следовательно `whole_instance_backup_v1` остаётся
-закрытым.
+Состояние реализации: Реализовано на уровне evidence/contour; `whole_instance_backup_v1`
+остается fail-closed в `phaseGates.notAuthorized` до снятия gate в следующем
+срезе. Kernel уже содержит fail-closed capture/restore coordinators, P-256 signed
+media inventory с fd-based no-symlink verification и production process-port, который
+вызывает только `StagedNativeArtifact` component executables для Vault, Storage,
+Blob и Scheduler. Он также сохраняет и восстанавливает Event Hub topology через
+verified Control Store authority. Top-level owner-authorized recovery CLI покрывает как
+capture, так и restore, включая empty-target fencing, component-ported восстановление
+и offline JetStream topology replay.
 
 Зависит от:
 

@@ -1,8 +1,12 @@
 //! Test-only Storage Control conformance package.
 
 #[cfg(test)]
-#[path = "../../../../src/platform/storage/runtime/src/cli/arguments.rs"]
-pub(crate) mod storage_runtime_arguments;
+#[path = "../../../../src/platform/storage/runtime/src/cli/mod.rs"]
+pub(crate) mod cli;
+
+#[cfg(test)]
+#[path = "../../../../src/platform/storage/runtime/src/recovery/mod.rs"]
+pub(crate) mod recovery;
 
 #[cfg(test)]
 pub(crate) use hermes_storage_vault as storage_runtime_vault;

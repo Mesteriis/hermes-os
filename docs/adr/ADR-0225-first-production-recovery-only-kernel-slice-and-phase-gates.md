@@ -530,6 +530,13 @@ StorageBundle, capabilities, dependencies и tests. Gate требует
 дополнительно требуется `blob_v1`; для owner с jobs, schedules или timers —
 `scheduler_v1` (который уже требует `clock_v1`).
 
+Единственное исключение до `client_gateway_v1` — exact read-only
+Mail/Communications package set, утверждённый ADR-0239. Оно записывается в
+`phaseGates.ownerAdmissionExceptions` с exact ADR, package inventory и уже
+открытыми prerequisites. Это не открывает `first_owner_v1`, не допускает
+другой owner package и не разрешает mutation, provider execution или generic
+owner admission.
+
 Если Scheduler state уже включён к моменту whole-instance backup,
 `whole_instance_backup_v1` условно зависит от `scheduler_v1` и обязан включить
 его PostgreSQL state, leases/fencing и restore order. Наличие schedules у

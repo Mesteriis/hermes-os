@@ -57,7 +57,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "gateway_runtime_foundation_v1",
+    "currentSlice": "gateway_runtime_plus_mail_communications_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -177,7 +177,17 @@
       {"name":"hermes-gateway-session","role":"api","owner":"gateway","surface":"implementation"},
       {"name":"hermes-scheduler-jetstream","role":"platform","owner":"scheduler","surface":"implementation"},
       {"name":"hermes-scheduler-runtime","role":"platform","owner":"scheduler","surface":"runtime"},
-      {"name":"hermes-gateway-runtime","role":"api","owner":"gateway","surface":"implementation"}
+      {"name":"hermes-gateway-runtime","role":"api","owner":"gateway","surface":"implementation"},
+      {"name":"hermes-mail-api","role":"integration","owner":"mail","surface":"contract"},
+      {"name":"hermes-mail-core","role":"integration","owner":"mail","surface":"implementation"},
+      {"name":"hermes-mail-imap","role":"integration","owner":"mail","surface":"implementation"},
+      {"name":"hermes-mail-persistence","role":"integration","owner":"mail","surface":"persistence"},
+      {"name":"hermes-mail-runtime","role":"integration","owner":"mail","surface":"runtime"},
+      {"name":"hermes-communications-ingress","role":"domain","owner":"communications","surface":"contract"},
+      {"name":"hermes-communications-api","role":"domain","owner":"communications","surface":"contract"},
+      {"name":"hermes-communications-domain","role":"domain","owner":"communications","surface":"implementation"},
+      {"name":"hermes-communications-persistence","role":"domain","owner":"communications","surface":"persistence"},
+      {"name":"hermes-communications-runtime","role":"domain","owner":"communications","surface":"runtime"}
     ],
     "workspaceDependencyAllowlist": {
       "hermes-events-protocol": [],
@@ -364,6 +374,7 @@
         {"name":"hermes-scheduler-jetstream","kind":"normal"},
         {"name":"hermes-scheduler-persistence","kind":"normal"},
         {"name":"hermes-scheduler-protocol","kind":"normal"},
+        {"name":"hermes-secure-file","kind":"normal"},
         {"name":"hermes-storage-vault","kind":"normal"}
       ],
       "hermes-gateway-runtime": [
@@ -377,6 +388,38 @@
           "name": "hermes-gateway-session-contract",
           "kind": "normal"
         }
+      ],
+      "hermes-mail-api": [],
+      "hermes-mail-core": [
+        { "name": "hermes-mail-api", "kind": "normal" },
+        { "name": "hermes-communications-ingress", "kind": "normal" }
+      ],
+      "hermes-mail-imap": [
+        { "name": "hermes-mail-core", "kind": "normal" }
+      ],
+      "hermes-mail-persistence": [
+        { "name": "hermes-mail-core", "kind": "normal" }
+      ],
+      "hermes-mail-runtime": [
+        { "name": "hermes-mail-api", "kind": "normal" },
+        { "name": "hermes-mail-core", "kind": "normal" },
+        { "name": "hermes-mail-imap", "kind": "normal" },
+        { "name": "hermes-mail-persistence", "kind": "normal" }
+      ],
+      "hermes-communications-ingress": [],
+      "hermes-communications-api": [],
+      "hermes-communications-domain": [
+        { "name": "hermes-communications-ingress", "kind": "normal" },
+        { "name": "hermes-communications-api", "kind": "normal" }
+      ],
+      "hermes-communications-persistence": [
+        { "name": "hermes-communications-domain", "kind": "normal" }
+      ],
+      "hermes-communications-runtime": [
+        { "name": "hermes-communications-ingress", "kind": "normal" },
+        { "name": "hermes-communications-api", "kind": "normal" },
+        { "name": "hermes-communications-domain", "kind": "normal" },
+        { "name": "hermes-communications-persistence", "kind": "normal" }
       ]
     },
     "thirdPartyDependencyAllowlist": {
@@ -643,6 +686,14 @@
           "features": []
         },
         {
+          "name": "chacha20poly1305",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": ["alloc", "zeroize"]
+        },
+        {
           "name": "quinn",
           "kind": "normal",
           "source": "crates_io",
@@ -668,6 +719,14 @@
           "kind": "normal",
           "source": "crates_io",
           "version": "=0.26.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
           "defaultFeatures": true,
           "features": []
         }
@@ -972,7 +1031,8 @@
       "hermes-scheduler-runtime": [
         {"name":"libc","kind":"normal","source":"crates_io","version":"=0.2.186","defaultFeatures":true,"features":[]},
         {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
-        {"name":"tokio","kind":"normal","source":"crates_io","version":"=1.52.4","defaultFeatures":false,"features":["net","rt-multi-thread","time"]}
+        {"name":"tokio","kind":"normal","source":"crates_io","version":"=1.52.4","defaultFeatures":false,"features":["net","rt-multi-thread","time"]},
+        {"name":"zeroize","kind":"normal","source":"crates_io","version":"=1.9.0","defaultFeatures":true,"features":[]}
       ],
       "hermes-gateway-runtime": [
         {"name":"base64","kind":"normal","source":"crates_io","version":"=0.22.1","defaultFeatures":true,"features":[]},
@@ -998,7 +1058,17 @@
         {"name":"serde_cbor_2","kind":"normal","source":"crates_io","version":"=0.13.0","defaultFeatures":true,"features":[]},
         {"name":"url","kind":"normal","source":"crates_io","version":"=2.5.8","defaultFeatures":true,"features":[]},
         {"name":"webauthn-rs-core","kind":"normal","source":"crates_io","version":"=0.5.5","defaultFeatures":true,"features":[]}
-      ]
+      ],
+      "hermes-mail-api": [],
+      "hermes-mail-core": [],
+      "hermes-mail-imap": [],
+      "hermes-mail-persistence": [],
+      "hermes-mail-runtime": [],
+      "hermes-communications-ingress": [],
+      "hermes-communications-api": [],
+      "hermes-communications-domain": [],
+      "hermes-communications-persistence": [],
+      "hermes-communications-runtime": []
     },
     "forbiddenDependencies": [
       "async-nats",
@@ -1107,7 +1177,17 @@
       "hermes-scheduler-runtime": { "primaryKind": "bin", "customBuildAllowed": false },
       "hermes-gateway-runtime": { "primaryKind": "lib", "customBuildAllowed": false },
       "hermes-gateway-session-contract": { "primaryKind": "lib", "customBuildAllowed": false },
-      "hermes-gateway-session": { "primaryKind": "lib", "customBuildAllowed": false }
+      "hermes-gateway-session": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-mail-api": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-mail-core": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-mail-imap": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-mail-persistence": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-mail-runtime": { "primaryKind": "bin", "customBuildAllowed": false },
+      "hermes-communications-ingress": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-communications-api": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-communications-domain": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-communications-persistence": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-communications-runtime": { "primaryKind": "bin", "customBuildAllowed": false }
     },
     "developmentProfile": {
       "id": "development_full_platform_v1",
@@ -1221,8 +1301,7 @@
     "transitionAuthority": "adr_policy_and_executable_evidence",
     "notAuthorized": [
       "client_gateway_v1",
-      "whole_instance_backup_v1",
-      "first_owner_v1"
+      "whole_instance_backup_v1"
     ],
     "requires": {
       "server_bootstrap_pairing_v1": [],
@@ -1275,26 +1354,12 @@
         "telemetry_v1",
         "storage_control_v1",
         "nats_data_plane_v1"
-      ],
-      "first_owner_v1": [
-        "module_control_plane_v1",
-        "managed_launch_trust_v1",
-        "vault_v1",
-        "telemetry_v1",
-        "storage_control_v1",
-        "nats_data_plane_v1",
-        "client_gateway_v1",
-        "whole_instance_backup_v1"
       ]
     },
     "conditionalRequires": {
       "whole_instance_backup_v1": {
         "blob_v1": "when_blob_state_is_enabled",
         "scheduler_v1": "when_scheduler_state_is_enabled"
-      },
-      "first_owner_v1": {
-        "blob_v1": "when_owner_declares_blob_capability",
-        "scheduler_v1": "when_owner_declares_jobs_schedules_or_timers"
       }
     },
     "requiredDecisionFields": {
@@ -1406,16 +1471,9 @@
         "http2_tls_remote_profile",
         "http3_fallback_and_zero_rtt_conformance",
         "abuse_privacy_and_redaction_tests"
-      ],
-      "first_owner_v1": [
-        "exact_owner_package_inventory",
-        "public_contracts",
-        "storage_bundle",
-        "capability_inventory",
-        "dependency_graph",
-        "owner_conformance_tests"
       ]
-    }
+    },
+    "ownerAdmissionExceptions": []
   },
   "aiContext": {
     "owner": "ai",

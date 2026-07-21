@@ -1263,6 +1263,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communications-api"
+version = "0.1.0"
+
+[[package]]
+name = "hermes-communications-domain"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-api",
+ "hermes-communications-ingress",
+]
+
+[[package]]
+name = "hermes-communications-ingress"
+version = "0.1.0"
+
+[[package]]
+name = "hermes-communications-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-domain",
+]
+
+[[package]]
+name = "hermes-communications-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-api",
+ "hermes-communications-domain",
+ "hermes-communications-ingress",
+ "hermes-communications-persistence",
+]
+
+[[package]]
 name = "hermes-development-kernel-operator"
 version = "0.1.0"
 dependencies = [
@@ -1418,6 +1451,7 @@ version = "0.1.0"
 name = "hermes-kernel"
 version = "0.1.0"
 dependencies = [
+ "chacha20poly1305",
  "clap",
  "directories",
  "getrandom 0.4.3",
@@ -1440,6 +1474,7 @@ dependencies = [
  "signal-hook",
  "tokio",
  "tokio-rustls",
+ "zeroize",
 ]
 
 [[package]]
@@ -1463,6 +1498,8 @@ name = "hermes-kernel-recovery-testkit"
 version = "0.1.0"
 dependencies = [
  "async-nats",
+ "base64 0.22.1",
+ "chacha20poly1305",
  "directories",
  "futures-util",
  "getrandom 0.4.3",
@@ -1506,6 +1543,56 @@ dependencies = [
  "tokio-rustls",
  "webauthn-rs-core",
  "zeroize",
+]
+
+[[package]]
+name = "hermes-mail-api"
+version = "0.1.0"
+
+[[package]]
+name = "hermes-mail-communications-slice-testkit"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-api",
+ "hermes-communications-domain",
+ "hermes-communications-ingress",
+ "hermes-communications-persistence",
+ "hermes-mail-api",
+ "hermes-mail-core",
+ "hermes-mail-imap",
+ "hermes-mail-persistence",
+]
+
+[[package]]
+name = "hermes-mail-core"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-ingress",
+ "hermes-mail-api",
+]
+
+[[package]]
+name = "hermes-mail-imap"
+version = "0.1.0"
+dependencies = [
+ "hermes-mail-core",
+]
+
+[[package]]
+name = "hermes-mail-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-mail-core",
+]
+
+[[package]]
+name = "hermes-mail-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-mail-api",
+ "hermes-mail-core",
+ "hermes-mail-imap",
+ "hermes-mail-persistence",
 ]
 
 [[package]]
@@ -1578,10 +1665,12 @@ dependencies = [
  "hermes-scheduler-jetstream",
  "hermes-scheduler-persistence",
  "hermes-scheduler-protocol",
+ "hermes-secure-file",
  "hermes-storage-vault",
  "libc",
  "prost 0.14.4",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

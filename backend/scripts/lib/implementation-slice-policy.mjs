@@ -237,6 +237,20 @@ const GATEWAY_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES = [
   { name: 'hermes-gateway-runtime', role: 'api', owner: 'gateway', surface: 'implementation' },
 ];
 
+const MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...GATEWAY_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-mail-api', role: 'integration', owner: 'mail', surface: 'contract' },
+  { name: 'hermes-mail-core', role: 'integration', owner: 'mail', surface: 'implementation' },
+  { name: 'hermes-mail-imap', role: 'integration', owner: 'mail', surface: 'implementation' },
+  { name: 'hermes-mail-persistence', role: 'integration', owner: 'mail', surface: 'persistence' },
+  { name: 'hermes-mail-runtime', role: 'integration', owner: 'mail', surface: 'runtime' },
+  { name: 'hermes-communications-ingress', role: 'domain', owner: 'communications', surface: 'contract' },
+  { name: 'hermes-communications-api', role: 'domain', owner: 'communications', surface: 'contract' },
+  { name: 'hermes-communications-domain', role: 'domain', owner: 'communications', surface: 'implementation' },
+  { name: 'hermes-communications-persistence', role: 'domain', owner: 'communications', surface: 'persistence' },
+  { name: 'hermes-communications-runtime', role: 'domain', owner: 'communications', surface: 'runtime' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -318,6 +332,7 @@ const SCHEDULER_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-scheduler-jetstream', kind: 'normal' },
     { name: 'hermes-scheduler-persistence', kind: 'normal' },
     { name: 'hermes-scheduler-protocol', kind: 'normal' },
+    { name: 'hermes-secure-file', kind: 'normal' },
     { name: 'hermes-storage-vault', kind: 'normal' },
   ],
 };
@@ -333,6 +348,42 @@ const GATEWAY_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-gateway-protocol', kind: 'normal' },
     { name: 'hermes-gateway-session', kind: 'normal' },
     { name: 'hermes-gateway-session-contract', kind: 'normal' },
+  ],
+};
+
+const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...GATEWAY_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-api': [],
+  'hermes-mail-core': [
+    { name: 'hermes-mail-api', kind: 'normal' },
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+  ],
+  'hermes-mail-imap': [
+    { name: 'hermes-mail-core', kind: 'normal' },
+  ],
+  'hermes-mail-persistence': [
+    { name: 'hermes-mail-core', kind: 'normal' },
+  ],
+  'hermes-mail-runtime': [
+    { name: 'hermes-mail-api', kind: 'normal' },
+    { name: 'hermes-mail-core', kind: 'normal' },
+    { name: 'hermes-mail-imap', kind: 'normal' },
+    { name: 'hermes-mail-persistence', kind: 'normal' },
+  ],
+  'hermes-communications-ingress': [],
+  'hermes-communications-api': [],
+  'hermes-communications-domain': [
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-communications-api', kind: 'normal' },
+  ],
+  'hermes-communications-persistence': [
+    { name: 'hermes-communications-domain', kind: 'normal' },
+  ],
+  'hermes-communications-runtime': [
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-communications-api', kind: 'normal' },
+    { name: 'hermes-communications-domain', kind: 'normal' },
+    { name: 'hermes-communications-persistence', kind: 'normal' },
   ],
 };
 
@@ -604,6 +655,7 @@ const SCHEDULER_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['net', 'rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -611,9 +663,11 @@ const GATEWAY_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...SCHEDULER_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-kernel': [
     ...SCHEDULER_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST['hermes-kernel'],
+    { name: 'chacha20poly1305', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: ['alloc', 'zeroize'] },
     { name: 'quinn', kind: 'normal', source: 'crates_io', version: '=0.11.7', defaultFeatures: true, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['net', 'rt-multi-thread', 'sync', 'time'] },
     { name: 'tokio-rustls', kind: 'normal', source: 'crates_io', version: '=0.26.4', defaultFeatures: true, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
   'hermes-gateway-runtime': [
     { name: 'base64', kind: 'normal', source: 'crates_io', version: '=0.22.1', defaultFeatures: true, features: [] },
@@ -632,6 +686,20 @@ const GATEWAY_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'tokio-rustls', kind: 'normal', source: 'crates_io', version: '=0.26.4', defaultFeatures: true, features: [] },
     { name: 'webauthn-rs-core', kind: 'normal', source: 'crates_io', version: '=0.5.5', defaultFeatures: true, features: [] },
   ],
+};
+
+const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...GATEWAY_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-api': [],
+  'hermes-mail-core': [],
+  'hermes-mail-imap': [],
+  'hermes-mail-persistence': [],
+  'hermes-mail-runtime': [],
+  'hermes-communications-ingress': [],
+  'hermes-communications-api': [],
+  'hermes-communications-domain': [],
+  'hermes-communications-persistence': [],
+  'hermes-communications-runtime': [],
 };
 
 const FORBIDDEN_DEPENDENCIES = [
@@ -1008,6 +1076,15 @@ function expectedSlice(currentSlice) {
   }
   if (currentSlice === 'gateway_runtime_foundation_v1') {
     return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: GATEWAY_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: GATEWAY_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: GATEWAY_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
+  }
+  if (currentSlice === 'gateway_runtime_plus_mail_communications_v1') {
+    return {
+      profile: MANAGED_LAUNCH_TRUST_PROFILE,
+      packages: MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES,
+      workspaceDependencies: MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
   }
   return null;
 }

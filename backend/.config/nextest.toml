@@ -13,6 +13,7 @@ success-output = "never"
 [profile.ci]
 inherits = "default"
 retries = { backoff = "fixed", count = 0, delay = "1s" }
+test-threads = 1
 
 [profile.integration]
 inherits = "default"

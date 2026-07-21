@@ -98,11 +98,21 @@ pub(super) fn tls_endpoints() -> (TlsAcceptor, TlsConnector) {
         .with_no_client_auth()
         .with_single_cert(vec![certificate.clone()], key)
         .expect("server configuration");
+    let server = {
+        let mut server = server;
+        server.alpn_protocols = vec![b"h2".to_vec()];
+        server
+    };
     let mut roots = RootCertStore::empty();
     roots.add(certificate).expect("test certificate root");
     let client = ClientConfig::builder()
         .with_root_certificates(roots)
         .with_no_client_auth();
+    let client = {
+        let mut client = client;
+        client.alpn_protocols = vec![b"h2".to_vec()];
+        client
+    };
     (
         TlsAcceptor::from(Arc::new(server)),
         TlsConnector::from(Arc::new(client)),

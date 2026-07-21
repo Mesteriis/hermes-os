@@ -83,22 +83,22 @@ test('requires fail-closed phase gates before expanding the recovery-only slice'
 
 
 
-test('requires exact evidence fields before authorizing every later phase', () => {
+test('requires exact evidence fields before authorizing general phases and reviewed owner exceptions', () => {
   const mutations = [
     (phaseGates) => { phaseGates.transitionAuthority = 'runtime_flag'; },
     (phaseGates) => { phaseGates.notAuthorized.shift(); },
     (phaseGates) => { phaseGates.notAuthorized.push('provider_v1'); },
     (phaseGates) => { phaseGates.requiredDecisionFields.nats_data_plane_v1.pop(); },
     (phaseGates) => { delete phaseGates.requiredDecisionFields.blob_v1; },
-    (phaseGates) => { phaseGates.requires.first_owner_v1 = []; },
     (phaseGates) => { phaseGates.requires.storage_control_v1.pop(); },
     (phaseGates) => { phaseGates.requires.nats_data_plane_v1.pop(); },
     (phaseGates) => { phaseGates.requires.scheduler_v1.pop(); },
     (phaseGates) => { phaseGates.requiredDecisionFields.browser_client_v1.pop(); },
     (phaseGates) => { phaseGates.requires.browser_client_v1.pop(); },
     (phaseGates) => { phaseGates.requires.client_gateway_v1.pop(); },
-    (phaseGates) => { delete phaseGates.conditionalRequires.first_owner_v1.scheduler_v1; },
     (phaseGates) => { delete phaseGates.conditionalRequires.whole_instance_backup_v1.scheduler_v1; },
+    (phaseGates) => { phaseGates.ownerAdmissionExceptions.push({ id: 'invalid-exception' }); },
+    (phaseGates) => { delete phaseGates.ownerAdmissionExceptions; },
     (phaseGates) => { phaseGates.overrideAllowed = true; },
   ];
 

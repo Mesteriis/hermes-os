@@ -16,6 +16,7 @@ surface = "runtime"
 [dependencies]
 hermes-clock-protocol = { path = "../../clock/protocol" }
 hermes-runtime-protocol = { path = "../../runtime_protocol" }
+hermes-secure-file = { path = "../../secure_file" }
 hermes-scheduler-jetstream = { path = "../jetstream" }
 hermes-scheduler-persistence = { path = "../persistence" }
 hermes-scheduler-protocol = { path = "../protocol" }
@@ -23,3 +24,4 @@ hermes-storage-vault = { path = "../../storage/vault" }
 libc = "=0.2.186"
 prost = "=0.14.4"
 tokio = { version = "=1.52.4", default-features = false, features = ["net", "rt-multi-thread", "time"] }
+zeroize = "=1.9.0"

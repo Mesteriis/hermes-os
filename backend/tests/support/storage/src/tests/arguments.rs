@@ -3,7 +3,7 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-use crate::storage_runtime_arguments::parse_serve_inherited_arguments;
+use crate::cli::parse_serve_inherited_arguments;
 
 #[test]
 fn optional_settings_schema_preserves_the_required_configuration_argument() {

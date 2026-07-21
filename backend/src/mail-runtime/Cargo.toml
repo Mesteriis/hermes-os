@@ -1,0 +1,20 @@
+[package]
+name = "hermes-mail-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[[bin]]
+name = "hermes-mail-runtime"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "integration"
+owner = "mail"
+surface = "runtime"
+
+[dependencies]
+hermes-mail-api = { path = "../mail-api" }
+hermes-mail-core = { path = "../mail-core" }
+hermes-mail-imap = { path = "../mail-imap" }
+hermes-mail-persistence = { path = "../mail-persistence" }

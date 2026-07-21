@@ -178,6 +178,22 @@ export function ownerBeginBrowserPairing(sessionId) {
   return field(35, text(1, sessionId));
 }
 
+export function ownerMailRuntimeCommand(sessionId, command, args = []) {
+  return field(37, Buffer.concat([
+    text(1, sessionId),
+    text(2, command),
+    ...args.map((arg) => text(3, arg)),
+  ]));
+}
+
+export function ownerCommunicationsRuntimeCommand(sessionId, command, args = []) {
+  return field(38, Buffer.concat([
+    text(1, sessionId),
+    text(2, command),
+    ...args.map((arg) => text(3, arg)),
+  ]));
+}
+
 export function ownerTelemetryDiagnostics(sessionId) {
   return field(14, text(1, sessionId));
 }

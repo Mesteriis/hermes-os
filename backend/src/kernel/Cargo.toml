@@ -15,6 +15,7 @@ surface = "runtime"
 components = ["supervisor", "module_registry", "capability_router", "core_gateway", "settings_registry"]
 
 [dependencies]
+chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc", "zeroize"] }
 clap = { version = "=4.6.2", default-features = false, features = ["derive", "error-context", "help", "std", "usage"] }
 directories = "=6.0.0"
 getrandom = { version = "=0.4.3", default-features = false }
@@ -37,3 +38,4 @@ signal-hook = "=0.3.18"
 libc = "=0.2.186"
 tokio = { version = "=1.52.4", default-features = false, features = ["net", "rt-multi-thread", "sync", "time"] }
 tokio-rustls = "=0.26.4"
+zeroize = "=1.9.0"

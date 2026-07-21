@@ -6,6 +6,7 @@ const PHASE_GATE_KEYS = [
   'requires',
   'conditionalRequires',
   'requiredDecisionFields',
+  'ownerAdmissionExceptions',
 ];
 
 const ALL_GATES = [
@@ -22,7 +23,6 @@ const ALL_GATES = [
   'browser_client_v1',
   'client_gateway_v1',
   'whole_instance_backup_v1',
-  'first_owner_v1',
 ];
 
 const NOT_AUTHORIZED = ALL_GATES.filter((gate) => ![
@@ -78,26 +78,12 @@ const REQUIRES = {
     'storage_control_v1',
     'nats_data_plane_v1',
   ],
-  first_owner_v1: [
-    'module_control_plane_v1',
-    'managed_launch_trust_v1',
-    'vault_v1',
-    'telemetry_v1',
-    'storage_control_v1',
-    'nats_data_plane_v1',
-    'client_gateway_v1',
-    'whole_instance_backup_v1',
-  ],
 };
 
 const CONDITIONAL_REQUIRES = {
   whole_instance_backup_v1: {
     blob_v1: 'when_blob_state_is_enabled',
     scheduler_v1: 'when_scheduler_state_is_enabled',
-  },
-  first_owner_v1: {
-    blob_v1: 'when_owner_declares_blob_capability',
-    scheduler_v1: 'when_owner_declares_jobs_schedules_or_timers',
   },
 };
 
@@ -211,15 +197,9 @@ const REQUIRED_DECISION_FIELDS = {
     'http3_fallback_and_zero_rtt_conformance',
     'abuse_privacy_and_redaction_tests',
   ],
-  first_owner_v1: [
-    'exact_owner_package_inventory',
-    'public_contracts',
-    'storage_bundle',
-    'capability_inventory',
-    'dependency_graph',
-    'owner_conformance_tests',
-  ],
 };
+
+const OWNER_ADMISSION_EXCEPTIONS = [];
 
 function hasExactKeys(value, expectedKeys) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -253,6 +233,19 @@ function isExactConditionalRequires(conditionalRequires) {
         && Object.entries(expected).every(([dependency, condition]) => (
           actual[dependency] === condition
         ));
+    });
+}
+
+function isExactOwnerAdmissionExceptions(exceptions) {
+  return Array.isArray(exceptions)
+    && exceptions.length === OWNER_ADMISSION_EXCEPTIONS.length
+    && exceptions.every((exception, index) => {
+      const expected = OWNER_ADMISSION_EXCEPTIONS[index];
+      return hasExactKeys(exception, ['id', 'adr', 'packages', 'requires'])
+        && exception.id === expected.id
+        && exception.adr === expected.adr
+        && isExactOrderedStringList(exception.packages, expected.packages)
+        && isExactOrderedStringList(exception.requires, expected.requires);
     });
 }
 
@@ -292,6 +285,7 @@ export function validatePhaseGatePolicy(policy) {
     && isExactOrderedStringList(phaseGates.notAuthorized, NOT_AUTHORIZED)
     && isExactRequires(phaseGates.requires)
     && isExactConditionalRequires(phaseGates.conditionalRequires)
+    && isExactOwnerAdmissionExceptions(phaseGates.ownerAdmissionExceptions)
     && isAcyclicGateGraph(phaseGates.requires, phaseGates.conditionalRequires)
     && hasExactKeys(decisionFields, ALL_GATES)
     && ALL_GATES.every((gate) => (

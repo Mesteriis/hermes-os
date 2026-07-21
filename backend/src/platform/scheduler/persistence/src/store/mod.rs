@@ -7,11 +7,12 @@ mod materialization;
 mod materialization_contract;
 mod pending;
 mod receipts;
+mod recovery;
 mod runs;
 mod schedules;
 
 pub use connection::{
-    SchedulerPostgresEndpointV1, SchedulerStoreConnectionErrorV1,
+    SchedulerPostgresEndpointV1, SchedulerRecoveryDatabaseV1, SchedulerStoreConnectionErrorV1,
     scheduler_storage_binding_from_runtime,
 };
 pub use dispatch::{SchedulerDispatchClaimErrorV1, SchedulerDispatchClaimV1};
@@ -28,6 +29,7 @@ pub use receipts::{
     SchedulerRunTerminalResultErrorV1, SchedulerRunTerminalResultOutcomeV1,
     SchedulerRunTerminalResultV1,
 };
+pub use recovery::{SchedulerRecoveryErrorV1, SchedulerRecoveryReplayReportV1};
 pub use runs::{
     FixedDelayCompletionOutcomeV1, RetryFailureOutcomeV1, SchedulerPostgresStoreV1,
     SchedulerRunClaimErrorV1, SchedulerRunClaimV1,

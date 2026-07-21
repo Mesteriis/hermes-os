@@ -16,23 +16,59 @@ use crate::platform::events::{
     authority::{binding::EVENTS_AUTHORITY_PROCESS_ID, status},
     catalog, topology,
 };
-use crate::runtime::lifecycle::supervisor::ManagedRuntimeRelayPort;
+use crate::runtime::lifecycle::supervisor::ManagedRuntimeRelay;
 
 pub(crate) fn apply(
     store: &SqliteControlStore,
-    relay: &ManagedRuntimeRelayPort,
+    relay: &dyn ManagedRuntimeRelay,
 ) -> Result<(u64, u32, u32), String> {
     let configuration = status::current_topology(store)?;
     let contracts = catalog::resolve_contracts(store)?;
     let plan = topology::plan(&contracts, &configuration)?;
     let request = request(configuration.revision(), &plan)?;
-    let response = relay.relay(EVENTS_AUTHORITY_PROCESS_ID, request.encode_to_vec())?;
+    apply_recovery_snapshot(&request.encode_to_vec(), relay)
+}
+
+pub(crate) fn apply_recovery_snapshot(
+    bytes: &[u8],
+    relay: &dyn ManagedRuntimeRelay,
+) -> Result<(u64, u32, u32), String> {
+    use hermes_runtime_protocol::validation::events_authority::validate_events_authority_runtime_control_request;
+
+    let request = EventsAuthorityRuntimeControlRequestV1::decode(bytes)
+        .map_err(|_| "Event Hub recovery topology is invalid".to_owned())?;
+    validate_events_authority_runtime_control_request(&request)
+        .map_err(|_| "Event Hub recovery topology is invalid".to_owned())?;
+    let revision = request_revision(&request)?;
+    let response = relay.relay(EVENTS_AUTHORITY_PROCESS_ID, bytes.to_vec())?;
     parse_response(
         response.as_slice(),
-        configuration.revision(),
+        revision,
         request_stream_count(&request)?,
         request_consumer_count(&request)?,
     )
+}
+
+pub(crate) fn recovery_snapshot(store: &SqliteControlStore) -> Result<Vec<u8>, String> {
+    let configuration = status::current_topology(store)?;
+    let contracts = catalog::resolve_contracts(store)?;
+    let plan = topology::plan(&contracts, &configuration)?;
+    Ok(request(configuration.revision(), &plan)?.encode_to_vec())
+}
+
+pub(crate) fn validate_recovery_snapshot(
+    store: &SqliteControlStore,
+    bytes: &[u8],
+) -> Result<(), String> {
+    use hermes_runtime_protocol::validation::events_authority::validate_events_authority_runtime_control_request;
+
+    let snapshot = EventsAuthorityRuntimeControlRequestV1::decode(bytes)
+        .map_err(|_| "Event Hub recovery topology is invalid".to_owned())?;
+    validate_events_authority_runtime_control_request(&snapshot)
+        .map_err(|_| "Event Hub recovery topology is invalid".to_owned())?;
+    (recovery_snapshot(store)? == bytes)
+        .then_some(())
+        .ok_or_else(|| "Event Hub recovery topology does not match restored authority".to_owned())
 }
 
 fn request(
@@ -127,6 +163,13 @@ fn request_consumer_count(request: &EventsAuthorityRuntimeControlRequestV1) -> R
     match &request.operation {
         Some(Operation::ReconcileTopology(value)) => u32::try_from(value.consumers.len())
             .map_err(|_| "Event Hub topology is oversized".to_owned()),
+        _ => Err("Event Hub reconciliation request is unavailable".to_owned()),
+    }
+}
+
+fn request_revision(request: &EventsAuthorityRuntimeControlRequestV1) -> Result<u64, String> {
+    match &request.operation {
+        Some(Operation::ReconcileTopology(value)) => Ok(value.topology_revision),
         _ => Err("Event Hub reconciliation request is unavailable".to_owned()),
     }
 }

@@ -95,6 +95,19 @@ pub fn verify_or_finalize(
     }
 }
 
+pub fn verify_committed_source(
+    record: &RecoveryFenceRecord,
+    store: &ControlStore,
+) -> Result<(), String> {
+    if record.state != STATE_COMMITTED
+        || record.instance_id != store.instance_id()
+        || !matches_store(record, store)
+    {
+        return Err("recovery fence does not match the Control Store".to_owned());
+    }
+    Ok(())
+}
+
 pub fn next(
     record: &RecoveryFenceRecord,
     current: Option<&ControlStore>,

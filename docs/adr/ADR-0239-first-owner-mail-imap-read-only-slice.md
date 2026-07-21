@@ -1,11 +1,12 @@
 # ADR-0239: First owner Mail/IMAP read-only vertical slice
 
-Статус: Предложено  
+Статус: Принято
 Дата: 2026-07-20  
-Состояние реализации: Не реализовано. Этот ADR выбирает целевой first-owner
-contract, но **не** authorizes создание production Mail/Communications
-packages, не открывает `first_owner_v1` и не изменяет active inventory до
-атомарного открытия всех prerequisite gates.
+Состояние реализации: Частично реализовано. Этот ADR authorizes только exact
+Mail/Communications exception из executable phase policy: он не открывает
+`first_owner_v1` для других owner packages и пока ограничен policy + inventory
+скелетом (контракты, `Cargo.toml`, точка входа рантаймов), а не полным
+runtime-диспетчером.
 
 Зависит от:
 
@@ -19,7 +20,10 @@ packages, не открывает `first_owner_v1` и не изменяет acti
 
 ## Решение
 
-После открытого `first_owner_v1` первым owner будет read-only Mail integration
+Mail/Communications read-only slice исключён из общего `first_owner_v1` gate,
+чтобы он мог дать конкретный owner contract для `client_gateway_v1`. Остальные
+owner packages по-прежнему требуют полного `first_owner_v1`. Первым exception
+owner будет read-only Mail integration
 с единственным IMAP adapter и её canonical evidence consumer — Communications.
 Это один vertical slice, а не разрешение общего email-клиента, generic provider
 framework или будущих POP3/SMTP capabilities.

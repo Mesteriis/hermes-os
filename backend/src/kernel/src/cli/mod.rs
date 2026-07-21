@@ -44,6 +44,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         operation: OfflineControlStoreCommand,
     },
+    WholeInstanceRecovery {
+        #[command(subcommand)]
+        operation: Box<WholeInstanceRecoveryCommand>,
+    },
 }
 
 /// Browser device enrollment is created only through the owner-private server
@@ -133,4 +137,82 @@ pub(crate) enum OfflineControlStoreCommand {
         source: PathBuf,
     },
     Reset,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum WholeInstanceRecoveryCommand {
+    Capture(WholeInstanceCaptureCli),
+    Restore(WholeInstanceRestoreCli),
+}
+
+#[derive(Args)]
+pub(crate) struct WholeInstanceCaptureCli {
+    #[arg(long)]
+    pub(crate) destination: PathBuf,
+    #[arg(long)]
+    pub(crate) media_encryption_key_file: PathBuf,
+    #[arg(long)]
+    pub(crate) media_signing_key_file: PathBuf,
+    #[arg(long)]
+    pub(crate) media_key_id: String,
+    #[arg(long)]
+    pub(crate) source_commit: String,
+    #[arg(long)]
+    pub(crate) cargo_lock_sha256: String,
+    #[arg(long)]
+    pub(crate) toolchain_sha256: String,
+    #[arg(long)]
+    pub(crate) policy_sha256: String,
+    #[arg(long)]
+    pub(crate) pg_dump: PathBuf,
+    #[arg(long)]
+    pub(crate) pg_restore: PathBuf,
+    #[arg(long)]
+    pub(crate) psql: PathBuf,
+    #[arg(long)]
+    pub(crate) postgres_host: String,
+    #[arg(long)]
+    pub(crate) postgres_port: u16,
+    #[arg(long)]
+    pub(crate) postgres_database: String,
+    #[arg(long)]
+    pub(crate) postgres_username: String,
+    #[arg(long)]
+    pub(crate) postgres_ssl_mode: String,
+    #[arg(long)]
+    pub(crate) postgres_password_file: PathBuf,
+    #[arg(long)]
+    pub(crate) include_blob: bool,
+    #[arg(long)]
+    pub(crate) include_scheduler: bool,
+}
+
+#[derive(Args)]
+pub(crate) struct WholeInstanceRestoreCli {
+    #[arg(long)]
+    pub(crate) source: PathBuf,
+    #[arg(long)]
+    pub(crate) media_key_id: String,
+    #[arg(long)]
+    pub(crate) media_public_key_file: PathBuf,
+    #[arg(long)]
+    pub(crate) media_decryption_key_file: PathBuf,
+    #[arg(long)]
+    pub(crate) vault_recovery_key_file: PathBuf,
+    #[arg(long)]
+    pub(crate) pg_restore: PathBuf,
+    #[arg(long)]
+    pub(crate) psql: PathBuf,
+    #[arg(long)]
+    pub(crate) postgres_host: String,
+    #[arg(long)]
+    pub(crate) postgres_port: u16,
+    #[arg(long)]
+    pub(crate) postgres_database: String,
+    #[arg(long)]
+    pub(crate) postgres_username: String,
+    #[arg(long)]
+    pub(crate) postgres_ssl_mode: String,
+    #[arg(long)]
+    pub(crate) postgres_password_file: PathBuf,
 }

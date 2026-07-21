@@ -3,6 +3,7 @@
 mod admin;
 mod cli;
 mod control;
+mod recovery;
 pub(crate) use hermes_storage_vault as vault;
 
 use std::path::Path;
@@ -19,6 +20,10 @@ fn main() -> Result<(), String> {
     let mut arguments = arguments.peekable();
     match command.as_deref() {
         Some(command) if command == "serve-inherited" => serve_inherited(&mut arguments),
+        Some(command) => recovery::execute(cli::parse_offline_recovery_command(
+            command,
+            &mut arguments,
+        )?),
         _ => Err("Storage runtime command is unavailable".to_owned()),
     }
 }

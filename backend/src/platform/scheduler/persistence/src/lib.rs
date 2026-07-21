@@ -11,6 +11,7 @@ pub use store::{
     SchedulerMaterializationSourceV1, SchedulerPendingFireErrorV1, SchedulerPendingFireOutcomeV1,
     SchedulerPendingFireV1, SchedulerPostgresEndpointV1, SchedulerPostgresStoreV1,
     SchedulerReceiptConsumeErrorV1, SchedulerReceiptConsumeOutcomeV1, SchedulerReceiptConsumerV1,
+    SchedulerRecoveryDatabaseV1, SchedulerRecoveryErrorV1, SchedulerRecoveryReplayReportV1,
     SchedulerRunAcceptanceErrorV1, SchedulerRunAcceptanceOutcomeV1, SchedulerRunAcceptanceV1,
     SchedulerRunClaimErrorV1, SchedulerRunClaimV1, SchedulerRunTerminalResultErrorV1,
     SchedulerRunTerminalResultOutcomeV1, SchedulerRunTerminalResultV1,

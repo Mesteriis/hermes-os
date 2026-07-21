@@ -33,6 +33,8 @@ mod identity {
 mod infrastructure {
     #[path = "../../../../../src/kernel/src/infrastructure/filesystem.rs"]
     pub(crate) mod filesystem;
+    #[path = "../../../../../src/kernel/src/infrastructure/paths.rs"]
+    pub(crate) mod paths;
 }
 
 #[cfg(test)]
@@ -84,6 +86,15 @@ mod platform {
 mod control;
 
 #[cfg(test)]
+#[path = "../../../../src/kernel/src/control_store/lifecycle.rs"]
+mod control_store_lifecycle;
+
+#[cfg(test)]
+mod control_store {
+    pub(crate) use crate::control_store_lifecycle as lifecycle;
+}
+
+#[cfg(test)]
 mod service;
 
 #[cfg(test)]
@@ -98,10 +109,16 @@ mod storage_control;
 
 #[cfg(test)]
 mod recovery {
+    #[path = "../../../../../src/kernel/src/recovery/capture_coordinator.rs"]
+    pub(crate) mod capture_coordinator;
+    #[path = "../../../../../src/kernel/src/recovery/control_store_media.rs"]
+    pub(crate) mod control_store_media;
     #[path = "../../../../../src/kernel/src/recovery/fence.rs"]
     pub(crate) mod fence;
-    #[path = "../../../../../src/kernel/src/recovery/media.rs"]
+    #[path = "../../../../../src/kernel/src/recovery/media/mod.rs"]
     pub(crate) mod media;
+    #[path = "../../../../../src/kernel/src/recovery/process_port.rs"]
+    pub(crate) mod process_port;
     #[path = "../../../../../src/kernel/src/recovery/restore_coordinator.rs"]
     pub(crate) mod restore_coordinator;
 }
@@ -120,8 +137,10 @@ mod tests {
     mod blob_service;
     mod browser_device_identity;
     mod browser_gateway_session;
+    mod capture_coordinator;
     mod common;
     mod control_plane_worker;
+    mod control_store_media;
     mod deployment_contract;
     mod descriptor_basics;
     mod distribution_bundle_fixture;
@@ -136,6 +155,7 @@ mod tests {
     mod external_storage_vault;
     mod external_storage_vault_process;
     mod gateway_http3;
+    mod gateway_realtime_frames;
     mod gateway_runtime;
     mod managed_event_credential;
     mod managed_runtime_supervision;
@@ -151,6 +171,7 @@ mod tests {
     mod part_06;
     mod part_07;
     mod platform_vault;
+    mod process_port;
     mod protocol_validation;
     mod recovery_fence;
     mod recovery_media;

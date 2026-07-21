@@ -2,6 +2,7 @@
 
 mod cli;
 mod control;
+mod recovery;
 
 use hermes_runtime_protocol::{
     v1::SchedulerRuntimeConfigurationV1,
@@ -18,6 +19,12 @@ fn main() -> Result<(), String> {
         Some(command) if command == "serve-inherited" => serve_inherited(&mut arguments),
         Some(command) if command == "export-storage-bundle" => {
             export_storage_bundle(&mut arguments)
+        }
+        Some(command) if command == "export-recovery-bundle" => {
+            recovery::export_storage_bundle(&cli::parse_export_bundle_arguments(&mut arguments)?)
+        }
+        Some(command) if command == "prepare-event-replay" => {
+            recovery::prepare_event_hub_replay(&cli::parse_recovery_arguments(&mut arguments)?)
         }
         _ => Err("Scheduler runtime command is unavailable".to_owned()),
     }

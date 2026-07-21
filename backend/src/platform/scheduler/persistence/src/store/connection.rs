@@ -7,7 +7,7 @@ use hermes_storage_protocol::{
     StorageBindingAccessV1, StorageBindingFencesV1, StorageBindingIdentityV1, StorageBindingV1,
     StorageEffectiveBudgetsV1,
 };
-use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgSslMode};
 
 use super::runs::SchedulerPostgresStoreV1;
 
@@ -18,6 +18,41 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 pub struct SchedulerPostgresEndpointV1 {
     host: String,
     port: u16,
+}
+
+/// Explicit non-secret endpoint for the offline recovery principal. It is not
+/// a runtime Storage binding and cannot be used by the live Scheduler path.
+#[derive(Clone, Debug)]
+pub struct SchedulerRecoveryDatabaseV1 {
+    host: String,
+    port: u16,
+    database: String,
+    username: String,
+    ssl_mode: PgSslMode,
+}
+
+impl SchedulerRecoveryDatabaseV1 {
+    pub fn new(
+        host: String,
+        port: u16,
+        database: String,
+        username: String,
+        ssl_mode: &str,
+    ) -> Result<Self, SchedulerStoreConnectionErrorV1> {
+        let ssl_mode = parse_ssl_mode(ssl_mode)?;
+        (valid_host(&host)
+            && port > 0
+            && valid_identifier(&database)
+            && valid_identifier(&username))
+        .then_some(Self {
+            host,
+            port,
+            database,
+            username,
+            ssl_mode,
+        })
+        .ok_or(SchedulerStoreConnectionErrorV1::InvalidEndpoint)
+    }
 }
 
 impl SchedulerPostgresEndpointV1 {
@@ -56,6 +91,31 @@ impl SchedulerPostgresStoreV1 {
             .max_connections(u32::from(
                 binding.access().effective_budgets().max_connections(),
             ))
+            .acquire_timeout(CONNECT_TIMEOUT)
+            .connect_with(options)
+            .await
+            .map_err(|_| SchedulerStoreConnectionErrorV1::Unavailable)?;
+        Ok(Self::new(pool))
+    }
+
+    /// Opens one single-connection pool for a stopped-instance recovery
+    /// command. The password is supplied in memory and never placed in a URL.
+    pub async fn connect_recovery(
+        database: &SchedulerRecoveryDatabaseV1,
+        password: &str,
+    ) -> Result<Self, SchedulerStoreConnectionErrorV1> {
+        if password.is_empty() {
+            return Err(SchedulerStoreConnectionErrorV1::CredentialUnavailable);
+        }
+        let options = PgConnectOptions::new()
+            .host(&database.host)
+            .port(database.port)
+            .database(&database.database)
+            .username(&database.username)
+            .password(password)
+            .ssl_mode(database.ssl_mode);
+        let pool = PgPoolOptions::new()
+            .max_connections(1)
             .acquire_timeout(CONNECT_TIMEOUT)
             .connect_with(options)
             .await
@@ -125,4 +185,24 @@ fn valid_host(value: &str) -> bool {
         && value.len() <= 255
         && value.is_ascii()
         && !value.contains(['/', '@', ':', '?', '#', ' '])
+}
+
+fn valid_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 127
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
+}
+
+fn parse_ssl_mode(value: &str) -> Result<PgSslMode, SchedulerStoreConnectionErrorV1> {
+    match value {
+        "disable" => Ok(PgSslMode::Disable),
+        "allow" => Ok(PgSslMode::Allow),
+        "prefer" => Ok(PgSslMode::Prefer),
+        "require" => Ok(PgSslMode::Require),
+        "verify-ca" => Ok(PgSslMode::VerifyCa),
+        "verify-full" => Ok(PgSslMode::VerifyFull),
+        _ => Err(SchedulerStoreConnectionErrorV1::InvalidEndpoint),
+    }
 }

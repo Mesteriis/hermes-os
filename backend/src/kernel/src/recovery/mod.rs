@@ -1,8 +1,12 @@
+pub(crate) mod capture_coordinator;
+pub(crate) mod control_store_media;
 mod dispatch;
 mod export;
 pub(crate) mod fence;
 mod framing;
 pub(crate) mod media;
+pub(crate) mod offline;
+pub(crate) mod process_port;
 pub(crate) mod restore_coordinator;
 
 use std::os::unix::fs::PermissionsExt;

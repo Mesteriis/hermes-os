@@ -1,0 +1,16 @@
+[package]
+name = "hermes-mail-persistence"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "integration"
+owner = "mail"
+surface = "persistence"
+
+[dependencies]
+hermes-mail-core = { path = "../mail-core" }

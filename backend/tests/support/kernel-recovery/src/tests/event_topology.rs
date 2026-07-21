@@ -8,7 +8,7 @@ use hermes_runtime_protocol::v1::ManagedRuntimeEventCredentialRequestV1;
 use std::sync::Arc;
 
 use super::common::unique_target_root;
-use crate::platform::events::{catalog, credential, topology};
+use crate::platform::events::{catalog, credential, reconciliation, topology};
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
 };
@@ -44,6 +44,31 @@ fn approved_catalog_builds_deterministic_exact_event_topology() {
         "hermes.event.v1.owner_notes.changed.v1"
     );
     assert!(first.consumers()[0].durable_name().starts_with("event-"));
+    std::fs::remove_dir_all(root).expect("remove fixture directory");
+}
+
+#[test]
+fn event_hub_recovery_snapshot_is_exact_and_bound_to_restored_control_state() {
+    let (root, store, _, _, _) = event_topology_fixture();
+    let snapshot = reconciliation::recovery_snapshot(&store).expect("capture topology");
+
+    reconciliation::validate_recovery_snapshot(&store, &snapshot).expect("validate exact topology");
+    let mut corrupt = snapshot.clone();
+    let last = corrupt.last_mut().expect("snapshot bytes");
+    *last ^= 1;
+    assert!(reconciliation::validate_recovery_snapshot(&store, &corrupt).is_err());
+
+    let replacement = PlatformEventHubTopologyV1::new(
+        2,
+        "nats://127.0.0.1:4222",
+        "hermes_event_hub",
+        2,
+        event_hub_topology().stream_budgets().to_vec(),
+    );
+    store
+        .record_platform_event_hub_topology(&replacement)
+        .expect("replace topology");
+    assert!(reconciliation::validate_recovery_snapshot(&store, &snapshot).is_err());
     std::fs::remove_dir_all(root).expect("remove fixture directory");
 }
 
