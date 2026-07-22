@@ -33,6 +33,8 @@ export type MailFolderRow = {
   expanded: boolean
 }
 
+type Translate = (key: string, params?: Record<string, string | number>) => string
+
 const folderPresentation: Record<MailFolderKind, MailFolderPresentation> = {
   archive: {
     icon: 'tabler:archive',
@@ -85,6 +87,26 @@ export const mailStandardFolders: readonly MailFolderModel[] = [
 
 export function mailFolderPresentation(folder: MailFolderModel): MailFolderPresentation {
   return folderPresentation[folder.kind]
+}
+
+export function mailFolderIsActive(folder: MailFolderModel, activeFolderId?: string): boolean {
+  return activeFolderId ? activeFolderId === folder.id : Boolean(folder.selected)
+}
+
+export function mailFolderDepthClass(row: MailFolderRow): string {
+  return `mail-folder-list__item--depth-${Math.min(row.depth, 4)}`
+}
+
+export function mailFolderToggleAriaLabel(row: MailFolderRow, t: Translate): string {
+  const action = row.expanded ? t('Collapse folder') : t('Expand folder')
+  return `${action}: ${t(row.folder.label)}`
+}
+
+export function mailFolderLocalizedAriaLabel(folder: MailFolderModel, t: Translate): string {
+  const parts = [t(folder.label)]
+  if (folder.unreadCount) parts.push(t('{count} unread', { count: folder.unreadCount }))
+  if (typeof folder.count === 'number') parts.push(t('{count} total', { count: folder.count }))
+  return parts.join(', ')
 }
 
 export function mailFolderExpandableIds(folders: readonly MailFolderModel[]): readonly string[] {

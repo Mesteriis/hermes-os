@@ -224,6 +224,11 @@ export function mailListItemStatusClass(item: MailListItemModel): string {
   return `mail-list-item__status-dot--${mailListItemStatus(item).badgeTone}`
 }
 
+export function mailListItemStatusChipClass(item: MailListItemModel): string {
+  if (item.workflowState !== 'new') return 'mail-list-item__status-chip'
+  return 'mail-list-item__status-chip mail-list-item__status-chip--visible'
+}
+
 export function mailListItemHasSignal(item: MailListItemModel): boolean {
   return Boolean(
     item.hasOpenAction ||
@@ -525,7 +530,8 @@ function tokenizeMailListSearchQuery(rawQuery: string): string[] {
 
 function parseMailListSearchMode(token: string): MailListSearchMatchMode | null {
   const [, value] = /^mode:(all|any)$/i.exec(token) ?? []
-  return value ? (value.toLowerCase() as MailListSearchMatchMode) : null
+  const normalized = value?.toLowerCase()
+  return normalized === 'all' || normalized === 'any' ? normalized : null
 }
 
 function parseMailListSearchFieldPredicate(token: string): MailListSearchPredicate | null {

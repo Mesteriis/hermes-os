@@ -1,0 +1,18 @@
+[package]
+name = "hermes-blob-client"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "platform"
+owner = "blob"
+surface = "implementation"
+
+[dependencies]
+hermes-blob-client-contract = { path = "../client-contract" }
+hermes-runtime-protocol = { path = "../../runtime_protocol" }
+prost = "=0.14.4"

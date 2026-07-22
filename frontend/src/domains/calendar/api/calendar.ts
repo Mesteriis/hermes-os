@@ -1,4 +1,5 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
+import { mapCalendarSearchResponse } from './calendarResponseMapping'
 import type {
   CalendarAccountsResponse,
   CalendarSourcesResponse,
@@ -11,7 +12,8 @@ import type {
   MeetingNotesResponse,
   MeetingOutcomesResponse,
   DeadlinesResponse,
-  CalendarFetchParams
+  CalendarFetchParams,
+  WeeklyBrief
 } from '../types/calendar'
 
 export async function fetchCalendarAccounts(provider?: string): Promise<CalendarAccountsResponse> {
@@ -139,16 +141,37 @@ export async function fetchCalendarWatchtower(): Promise<Record<string, unknown>
   )
 }
 
-export async function fetchWeeklyBrief(): Promise<Record<string, unknown>> {
-  return ApiClient.instance.get<Record<string, unknown>>(
+export async function fetchWeeklyBrief(): Promise<WeeklyBrief> {
+  const response = await ApiClient.instance.get<Record<string, unknown>>(
     '/api/v1/calendar/weekly-brief',
     'Weekly brief request failed'
   )
+  return mapWeeklyBrief(response)
 }
 
-export async function searchCalendarEvents(q: string): Promise<Record<string, unknown>> {
-  return ApiClient.instance.get<Record<string, unknown>>(
+export function mapWeeklyBrief(value: Record<string, unknown>): WeeklyBrief {
+  const upcomingEvents = finiteNumber(value.upcoming_events_this_week)
+  const overdueDeadlines = finiteNumber(value.overdue_deadlines)
+  const pastEventsWithoutNotes = finiteNumber(value.past_events_without_notes)
+  if (upcomingEvents === null || overdueDeadlines === null || pastEventsWithoutNotes === null) {
+    throw new Error('Calendar weekly brief has invalid required counters')
+  }
+  return {
+    ...value,
+    upcoming_events_this_week: upcomingEvents,
+    overdue_deadlines: overdueDeadlines,
+    past_events_without_notes: pastEventsWithoutNotes
+  }
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+export async function searchCalendarEvents(q: string): Promise<CalendarEvent[]> {
+  const response = await ApiClient.instance.get<Record<string, unknown>>(
     `/api/v1/calendar/search?q=${encodeURIComponent(q)}`,
     'Calendar search failed'
   )
+  return mapCalendarSearchResponse(response)
 }

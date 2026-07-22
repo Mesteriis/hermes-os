@@ -8,7 +8,8 @@ use std::sync::{Arc, Mutex, Weak};
 use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::runtime::lifecycle::control::{
-    ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation, ManagedRuntimeRelayRequest,
+    ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
+    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeRelayRequest,
     ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
@@ -24,6 +25,7 @@ const MANAGED_RUNTIME_READY_TIMEOUT: std::time::Duration = std::time::Duration::
 type ConfiguredRequestHandlers = (
     Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>,
     Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>,
+    Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>,
 );
 
 #[derive(Clone)]
@@ -45,6 +47,8 @@ struct Inner {
     workers: Mutex<HashMap<String, ActiveWorker>>,
     failures: Mutex<HashMap<String, String>>,
     event_credential_handler: Mutex<Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>>,
+    provider_credential_handler:
+        Mutex<Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>>,
     vault_route_handler: Mutex<Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>>,
 }
 
@@ -57,6 +61,7 @@ impl ManagedRuntimeSupervisor {
                 workers: Mutex::new(HashMap::new()),
                 failures: Mutex::new(HashMap::new()),
                 event_credential_handler: Mutex::new(None),
+                provider_credential_handler: Mutex::new(None),
                 vault_route_handler: Mutex::new(None),
             }),
         }
@@ -97,6 +102,17 @@ impl ManagedRuntimeSupervisor {
             &self.inner.event_credential_handler,
             handler,
             "managed runtime Event credential handler",
+        )
+    }
+
+    pub fn configure_provider_credential_handler(
+        &self,
+        handler: Arc<dyn ManagedRuntimeProviderCredentialHandler>,
+    ) -> Result<(), String> {
+        self.configure_before_launch(
+            &self.inner.provider_credential_handler,
+            handler,
+            "managed runtime provider credential handler",
         )
     }
 
@@ -191,7 +207,7 @@ impl ManagedRuntimeSupervisor {
             remove_staged_launch(staged_executable, contracts);
             return Err(error);
         }
-        let (vault_route_handler, event_credential_handler) =
+        let (vault_route_handler, event_credential_handler, provider_credential_handler) =
             match self.configured_request_handlers() {
                 Ok(handlers) => handlers,
                 Err(error) => {
@@ -210,6 +226,7 @@ impl ManagedRuntimeSupervisor {
             contracts,
             vault_route_handler,
             event_credential_handler,
+            provider_credential_handler,
         });
         workers.insert(registration_id, worker);
         Ok(())
@@ -219,6 +236,7 @@ impl ManagedRuntimeSupervisor {
         Ok((
             self.vault_route_handler()?,
             self.event_credential_handler()?,
+            self.provider_credential_handler()?,
         ))
     }
 
@@ -237,6 +255,16 @@ impl ManagedRuntimeSupervisor {
     ) -> Result<Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>, String> {
         self.inner
             .event_credential_handler
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
+            .map(|handler| handler.clone())
+    }
+
+    fn provider_credential_handler(
+        &self,
+    ) -> Result<Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>, String> {
+        self.inner
+            .provider_credential_handler
             .lock()
             .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
             .map(|handler| handler.clone())

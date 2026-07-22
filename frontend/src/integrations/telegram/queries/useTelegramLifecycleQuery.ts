@@ -3,6 +3,7 @@ import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import {
   fetchTelegramCommands,
   retryTelegramCommand,
+  TELEGRAM_LIFECYCLE_COMMAND_LIST_DEFAULT_LIMIT,
 } from '../api/telegramLifecycle'
 import type {
   TelegramProviderWriteCommand,
@@ -10,7 +11,7 @@ import type {
 
 export function useTelegramCommandsQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,
-  limit: MaybeRefOrGetter<number> = 25,
+  limit: MaybeRefOrGetter<number> = TELEGRAM_LIFECYCLE_COMMAND_LIST_DEFAULT_LIMIT,
   enabled: MaybeRefOrGetter<boolean> = true,
   filters?: {
     providerChatId?: MaybeRefOrGetter<string | null | undefined>

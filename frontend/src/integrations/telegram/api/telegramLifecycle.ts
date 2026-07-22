@@ -4,9 +4,11 @@ import type {
   TelegramProviderWriteCommand,
 } from '../types/telegram'
 
+export const TELEGRAM_LIFECYCLE_COMMAND_LIST_DEFAULT_LIMIT = 50
+
 export async function fetchTelegramCommands(
   accountId: string,
-  limit = 50,
+  limit = TELEGRAM_LIFECYCLE_COMMAND_LIST_DEFAULT_LIMIT,
   options?: {
     providerChatId?: string | null
     providerMessageId?: string | null

@@ -24,10 +24,12 @@ provider-companions = []
 tauri-build = { version = "2.6.2", features = [] }
 
 [dependencies]
+hermes-runtime-protocol = { path = "../../backend/src/platform/runtime_protocol" }
+hermes-whatsapp-api = { path = "../../backend/src/whatsapp-api" }
+prost = "=0.14.4"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.11.2", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
-ureq = { version = "3.3.0", default-features = false, features = ["json"] }

@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { handleRealtimeEvent } from './realtime'
+import { TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE } from '../../integrations/telegram/queries/telegramRuntimePanelActions'
 
 describe('telegram command realtime query filters', () => {
   it('inserts command rows only into matching filtered command caches', () => {
-    const matchingKey = ['integrations', 'telegram', 'commands', 'account-1', 20, 'chat-1', 'chat-1:42', 'mark_read|mark_unread']
-    const otherChatKey = ['integrations', 'telegram', 'commands', 'account-1', 20, 'chat-2', 'chat-1:42', 'mark_read|mark_unread']
-    const otherMessageKey = ['integrations', 'telegram', 'commands', 'account-1', 20, 'chat-1', 'chat-1:99', 'mark_read|mark_unread']
-    const otherKindKey = ['integrations', 'telegram', 'commands', 'account-1', 20, 'chat-1', 'chat-1:42', 'join|leave']
+    const matchingKey = ['integrations', 'telegram', 'commands', 'account-1', TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE, 'chat-1', 'chat-1:42', 'mark_read|mark_unread']
+    const otherChatKey = ['integrations', 'telegram', 'commands', 'account-1', TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE, 'chat-2', 'chat-1:42', 'mark_read|mark_unread']
+    const otherMessageKey = ['integrations', 'telegram', 'commands', 'account-1', TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE, 'chat-1', 'chat-1:99', 'mark_read|mark_unread']
+    const otherKindKey = ['integrations', 'telegram', 'commands', 'account-1', TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE, 'chat-1', 'chat-1:42', 'join|leave']
     const commands: Array<Record<string, unknown>> = []
 
     const setQueryData = vi.fn((queryKey, updater) =>

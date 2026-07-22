@@ -12,6 +12,7 @@ import type {
   WhatsappWebSession,
 } from '../types/whatsapp'
 import { whatsappQueryKeys } from './whatsappQueryKeys'
+import { WHATSAPP_RUNTIME_SESSIONS_PAGE_SIZE } from './useWhatsappRuntimeQuery'
 
 export { whatsappQueryKeys } from './whatsappQueryKeys'
 export * from './useWhatsappRuntimeQuery'
@@ -57,7 +58,7 @@ export function useWhatsappAccountCapabilitiesQuery(
 
 export function useWhatsappSessionsQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,
-  limit = 50
+  limit = WHATSAPP_RUNTIME_SESSIONS_PAGE_SIZE
 ) {
   return useQuery<WhatsappWebSession[]>({
     queryKey: computed(() => [

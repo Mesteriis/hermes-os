@@ -30,7 +30,7 @@ export function useMailSyncActions(store: CommunicationsStore, refetches: MailSy
     store.setIsMailSyncBusy(true)
     store.setMailSyncStatusMessage('Syncing...')
     try {
-      await runMailSyncNowMutation.mutateAsync(accountId)
+      await runMailSyncNowMutation.mutateAsync({ accountId })
       store.setMailSyncStatusMessage('Sync completed')
       await Promise.all([
         refetches.refetchMailList(),

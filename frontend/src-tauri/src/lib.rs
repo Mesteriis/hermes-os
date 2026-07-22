@@ -8,6 +8,8 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 #[cfg(feature = "provider-companions")]
 mod whatsapp_companion;
 #[cfg(feature = "provider-companions")]
+mod whatsapp_runtime_client;
+#[cfg(feature = "provider-companions")]
 mod yandex_telemost_companion;
 
 #[derive(Default)]
@@ -17,19 +19,6 @@ struct KernelSidecar {
 }
 
 const MAX_KERNEL_RESTARTS: u8 = 3;
-
-/// Legacy provider companions are not a Kernel bootstrap channel. A companion
-/// may use an explicitly provisioned local credential for its own deprecated
-/// loopback relay, but there is deliberately no shared fallback or sidecar
-/// environment forwarding.
-#[cfg(feature = "provider-companions")]
-pub(crate) fn legacy_companion_secret() -> Result<String, String> {
-    std::env::var("HERMES_WHATSAPP_COMPANION_LEGACY_SECRET")
-        .ok()
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "WhatsApp companion relay credential is not provisioned".to_owned())
-}
 
 impl KernelSidecar {
     fn stopping(&self) -> bool {
@@ -55,6 +44,9 @@ pub fn run() {
         whatsapp_companion::start_hidden_whatsapp_webview,
         whatsapp_companion::whatsapp_web_companion_manifest,
         whatsapp_companion::whatsapp_web_companion_relay_observation,
+        whatsapp_companion::whatsapp_web_companion_poll_commands,
+        whatsapp_companion::whatsapp_web_companion_report_command_failure,
+        whatsapp_companion::whatsapp_web_companion_report_command_result,
         yandex_telemost_companion::open_yandex_telemost_companion,
         yandex_telemost_companion::yandex_telemost_companion_manifest,
         yandex_telemost_companion::yandex_telemost_prepare_audio_device,

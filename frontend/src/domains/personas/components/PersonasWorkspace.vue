@@ -20,6 +20,7 @@ import PersonaProfileHero from './PersonaProfileHero.vue'
 import PersonaRelationshipsPanel from './PersonaRelationshipsPanel.vue'
 import PersonaSectionTabs from './PersonaSectionTabs.vue'
 import PersonaUnavailablePanel from './PersonaUnavailablePanel.vue'
+import { buildPersonaEntityLabels } from './personaWorkspacePresentation'
 
 const props = withDefaults(defineProps<{
   ownerPersona: PersonaPanelProfile | null
@@ -65,23 +66,11 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const entityLabels = computed<Record<string, string>>(() => {
-  const labels = new Map<string, string>()
-
-  for (const persona of props.filteredPersonas) {
-    labels.set(persona.persona_id, persona.display_name)
-  }
-
-  if (props.ownerPersona) {
-    labels.set(props.ownerPersona.persona_id, props.ownerPersona.display_name)
-  }
-
-  if (props.selectedPersona) {
-    labels.set(props.selectedPersona.persona_id, props.selectedPersona.display_name)
-  }
-
-  return Object.fromEntries(labels)
-})
+const entityLabels = computed(() => buildPersonaEntityLabels(
+  props.filteredPersonas,
+  props.ownerPersona,
+  props.selectedPersona,
+))
 
 function handleSetOwner(persona: EnrichedPersona): void {
   emit('setOwner', persona)

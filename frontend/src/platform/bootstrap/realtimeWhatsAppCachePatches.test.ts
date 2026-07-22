@@ -1,10 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
+import {
+  WHATSAPP_RUNTIME_COMMANDS_PAGE_SIZE,
+  WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE,
+} from '../../integrations/whatsapp/queries/useWhatsappRuntimeQuery'
 import { handleRealtimeEvent } from './realtime'
 import type { RealtimeQueryClient } from './realtime'
 
 describe('whatsapp realtime cache patch handling', () => {
+	const defaultSyncChunkSize = WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
+
 	it('patches cached whatsapp conversation rows for dialog lifecycle events', () => {
-		const conversationsKey = ['communications', 'whatsapp', 'conversations', 'account-1', 50]
+		const conversationsKey = ['communications', 'whatsapp', 'conversations', 'account-1', defaultSyncChunkSize]
 		const conversationDetailKey = ['communications', 'whatsapp', 'conversation-detail', 'wa-chat-1']
 		const conversations = [
 			{
@@ -91,7 +97,7 @@ describe('whatsapp realtime cache patch handling', () => {
 	})
 
 	it('patches cached whatsapp message reaction summary for reaction events', () => {
-		const messageKey = ['communications', 'whatsapp', 'messages', 'account-1', 'chat-1', 50]
+		const messageKey = ['communications', 'whatsapp', 'messages', 'account-1', 'chat-1', defaultSyncChunkSize]
 		const messages = [
 			{
 				message_id: 'wa-msg-1',
@@ -147,7 +153,7 @@ describe('whatsapp realtime cache patch handling', () => {
 	})
 
 	it('patches cached whatsapp session link-state and runtime metadata events', () => {
-		const sessionsKey = ['integrations', 'whatsapp', 'sessions', 'account-1', 50]
+		const sessionsKey = ['integrations', 'whatsapp', 'sessions', 'account-1', defaultSyncChunkSize]
 		const runtimeStatusKey = ['integrations', 'whatsapp', 'runtime', 'status', 'account-1']
 		const sessions = [
 			{
@@ -248,7 +254,7 @@ describe('whatsapp realtime cache patch handling', () => {
 	})
 
 	it('patches cached whatsapp provider commands for command status events', () => {
-		const commandsKey = ['integrations', 'whatsapp', 'commands', 'account-1', 25]
+		const commandsKey = ['integrations', 'whatsapp', 'commands', 'account-1', WHATSAPP_RUNTIME_COMMANDS_PAGE_SIZE]
 		const commands = [
 			{
 				command_id: 'wa-cmd-1',
@@ -323,8 +329,8 @@ describe('whatsapp realtime cache patch handling', () => {
 	})
 
 	it('patches cached whatsapp presence and call sync snapshots from direct runtime events', () => {
-		const presenceKey = ['integrations', 'whatsapp', 'runtime', 'sync-presence', 'account-1', 'chat-1', 8]
-		const callsKey = ['integrations', 'whatsapp', 'runtime', 'sync-calls', 'account-1', 'chat-1', 8]
+		const presenceKey = ['integrations', 'whatsapp', 'runtime', 'sync-presence', 'account-1', 'chat-1', defaultSyncChunkSize]
+		const callsKey = ['integrations', 'whatsapp', 'runtime', 'sync-calls', 'account-1', 'chat-1', defaultSyncChunkSize]
 		let presenceItems = [
 			{
 				identity_id: 'identity-1',
@@ -440,7 +446,7 @@ describe('whatsapp realtime cache patch handling', () => {
 	})
 
 	it('patches cached whatsapp status sync snapshots from direct status events', () => {
-		const statusesKey = ['integrations', 'whatsapp', 'runtime', 'sync-statuses', 'account-1', 8]
+		const statusesKey = ['integrations', 'whatsapp', 'runtime', 'sync-statuses', 'account-1', defaultSyncChunkSize]
 		const statusItems = [
 			{
 				message_id: 'status-msg-1',
@@ -547,8 +553,8 @@ describe('whatsapp realtime cache patch handling', () => {
 	})
 
 	it('patches cached whatsapp chat and member sync snapshots from dialog and participant events', () => {
-		const chatsKey = ['integrations', 'whatsapp', 'runtime', 'sync-chats', 'account-1', 8]
-		const membersKey = ['integrations', 'whatsapp', 'runtime', 'sync-members', 'account-1', 'chat-1', 8]
+		const chatsKey = ['integrations', 'whatsapp', 'runtime', 'sync-chats', 'account-1', defaultSyncChunkSize]
+		const membersKey = ['integrations', 'whatsapp', 'runtime', 'sync-members', 'account-1', 'chat-1', defaultSyncChunkSize]
 		const chatItems = [
 			{
 				conversation_id: 'conversation-1',
@@ -691,7 +697,7 @@ describe('whatsapp realtime cache patch handling', () => {
 	})
 
 	it('patches cached whatsapp contact sync snapshots from participant, presence and status events', () => {
-		const contactsKey = ['integrations', 'whatsapp', 'runtime', 'sync-contacts', 'account-1', 8]
+		const contactsKey = ['integrations', 'whatsapp', 'runtime', 'sync-contacts', 'account-1', defaultSyncChunkSize]
 		let contactItems = [
 			{
 				identity_id: 'identity-1',

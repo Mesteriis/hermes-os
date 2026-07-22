@@ -18,6 +18,7 @@ import type {
   SignatureDetection,
   SmartCcResponse,
   WorkflowActionRequest,
+  WorkflowActionKind,
   WorkflowActionResponse,
   WorkflowState,
   WorkflowStateTransitionResponse,
@@ -355,7 +356,7 @@ export async function runWorkflowActionConnect(
   return {
     command_id: response.commandId,
     event_id: response.eventId,
-    action: response.action as WorkflowActionResponse["action"],
+    action: normalizeWorkflowAction(response.action),
     status: response.status,
     target: {
       kind: response.target?.kind ?? "message",
@@ -368,6 +369,20 @@ export async function runWorkflowActionConnect(
       evidence: response.provenance?.evidence ?? [],
     },
   };
+}
+
+export function normalizeWorkflowAction(value: string): WorkflowActionKind {
+  if (
+    value === 'reply' ||
+    value === 'create_task' ||
+    value === 'create_note' ||
+    value === 'create_document' ||
+    value === 'create_event' ||
+    value === 'link_document' ||
+    value === 'create_persona' ||
+    value === 'archive'
+  ) return value
+  throw new Error(`Unsupported workflow action: ${value}`)
 }
 
 export async function fetchMessageExplainConnect(

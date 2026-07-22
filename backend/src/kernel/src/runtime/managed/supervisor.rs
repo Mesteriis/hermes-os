@@ -3,7 +3,8 @@
 use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::runtime::lifecycle::control::{
     self as managed_runtime_control, ManagedRuntimeEventCredentialHandler,
-    ManagedRuntimeExpectation, ManagedRuntimeVaultRouteHandler,
+    ManagedRuntimeExpectation, ManagedRuntimeProviderCredentialHandler,
+    ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::{
     self as bounded_managed_child_execution, ManagedChildExecutionPolicy,
@@ -39,6 +40,8 @@ pub struct ManagedChildRunInput<'a> {
     pub relay_requests: &'a Receiver<managed_runtime_control::ManagedRuntimeRelayRequest>,
     pub vault_route_handler: Option<&'a dyn ManagedRuntimeVaultRouteHandler>,
     pub event_credential_handler: Option<&'a dyn ManagedRuntimeEventCredentialHandler>,
+    pub provider_credential_handler:
+        Option<&'a dyn ManagedRuntimeProviderCredentialHandler>,
     pub ready_sender: &'a SyncSender<Result<(), String>>,
 }
 
@@ -124,6 +127,7 @@ fn wait_until_shutdown_with_relay(
             input.expectation,
             input.vault_route_handler,
             input.event_credential_handler,
+            input.provider_credential_handler,
         ) {
             Ok(true) => continue,
             Ok(false) => {}
@@ -145,6 +149,7 @@ fn process_typed_requests(
     expectation: &ManagedRuntimeExpectation,
     vault_route_handler: Option<&dyn ManagedRuntimeVaultRouteHandler>,
     event_credential_handler: Option<&dyn ManagedRuntimeEventCredentialHandler>,
+    provider_credential_handler: Option<&dyn ManagedRuntimeProviderCredentialHandler>,
 ) -> Result<bool, String> {
     if let Some(route) = managed_runtime_control::inbound::try_receive_vault_route(channel)? {
         let result = vault_route_handler
@@ -158,7 +163,25 @@ fn process_typed_requests(
         dispatch_event_credential(channel, expectation, event_credential_handler, request)?;
         return Ok(true);
     }
+    if let Some(request) =
+        managed_runtime_control::inbound::try_receive_provider_credential(channel)?
+    {
+        dispatch_provider_credential(channel, expectation, provider_credential_handler, request)?;
+        return Ok(true);
+    }
     Ok(false)
+}
+
+fn dispatch_provider_credential(
+    channel: &mut std::os::unix::net::UnixStream,
+    expectation: &ManagedRuntimeExpectation,
+    handler: Option<&dyn ManagedRuntimeProviderCredentialHandler>,
+    request: hermes_runtime_protocol::v1::ManagedRuntimeProviderCredentialRequestV1,
+) -> Result<(), String> {
+    let result = handler
+        .ok_or_else(|| "managed runtime provider credential route is not available".to_owned())?
+        .issue_provider_credential(expectation, request);
+    managed_runtime_control::inbound::respond_provider_credential(channel, result)
 }
 
 fn dispatch_event_credential(

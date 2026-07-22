@@ -58,7 +58,7 @@ describe('account setup form', () => {
 			mailbox: 'INBOX',
 			username: 'sender@example.com',
 			password: 'mailbox-password',
-			secret_kind: 'password',
+			secret_kind: 'imap_password_file',
 			smtp_host: 'smtp.example.com',
 			smtp_port: 587,
 			smtp_tls: false,

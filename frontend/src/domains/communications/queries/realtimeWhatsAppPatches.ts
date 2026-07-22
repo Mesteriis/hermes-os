@@ -30,7 +30,7 @@ export function applyWhatsAppRealtimePatch(
 	if (!eventType || !eventType.startsWith('whatsapp.')) return false
 
 	const payload = isRecord(envelope?.event?.payload)
-		? (envelope.event?.payload as WhatsAppEventPayload)
+		? envelope.event.payload
 		: undefined
 	const snapshot = whatsappMessageSnapshot(payload?.message)
 	const conversationSnapshot = whatsappConversationSnapshot(payload)

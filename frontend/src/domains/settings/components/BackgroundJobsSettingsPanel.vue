@@ -2,12 +2,21 @@
 import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
 import type { BackgroundJobsSettingsSurface } from '../queries/useBackgroundJobsSettingsSurface'
+import { useBackgroundJobsSettingsPanelController } from '../queries/useBackgroundJobsSettingsPanelController'
 
-defineProps<{
+const props = defineProps<{
   surface: BackgroundJobsSettingsSurface
 }>()
 
 const { t } = useI18n()
+
+const {
+  handleRefresh,
+  handleSelectJobFilter,
+  handleOpenControl,
+} = useBackgroundJobsSettingsPanelController({
+  surface: props.surface,
+})
 </script>
 
 <template>
@@ -22,7 +31,7 @@ const { t } = useI18n()
         class="icon-button"
         :title="t('Refresh job status')"
         :aria-label="t('Refresh job status')"
-        @click="surface.handleRefresh()"
+        @click="handleRefresh()"
       >
         <Icon icon="tabler:refresh" />
       </button>
@@ -57,7 +66,7 @@ const { t } = useI18n()
             class="settings-background-tab"
             :class="{ active: surface.activeJobFilter.value === tab.id }"
             :aria-pressed="surface.activeJobFilter.value === tab.id"
-            @click="surface.handleSelectJobFilter(tab.id)"
+            @click="handleSelectJobFilter(tab.id)"
           >
             <span>{{ t(tab.label) }}</span>
             <strong>{{ tab.count }}</strong>
@@ -92,7 +101,7 @@ const { t } = useI18n()
               class="icon-button"
               :title="t('Open control surface')"
               :aria-label="`${t('Open control surface')}: ${t(job.label)}`"
-              @click="surface.handleOpenControl(job.controlSection)"
+              @click="handleOpenControl(job.controlSection)"
             >
               <Icon icon="tabler:arrow-right" />
             </button>

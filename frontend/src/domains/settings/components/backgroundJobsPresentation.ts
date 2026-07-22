@@ -54,6 +54,14 @@ export interface BackgroundJobSummaryTile {
   tone: BackgroundJobTone
 }
 
+export function filterBackgroundJobRows(
+  rows: BackgroundJobRow[],
+  filter: BackgroundJobFilter
+): BackgroundJobRow[] {
+  if (filter === 'all') return rows
+  return rows.filter((row) => row.group === filter)
+}
+
 export interface BackgroundMailSyncStatusRow {
   accountId: string
   status: string

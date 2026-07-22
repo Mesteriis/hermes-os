@@ -499,15 +499,15 @@ export function parseJsonObject(
     return {};
   }
   try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed !== null &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    const parsed: unknown = JSON.parse(value);
+    return isJsonObject(parsed) ? parsed : {};
   } catch {
     return {};
   }
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export function textPreview(value: string, limit: number): string {

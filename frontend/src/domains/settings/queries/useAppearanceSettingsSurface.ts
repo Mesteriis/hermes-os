@@ -4,12 +4,10 @@ import {
   backgroundBrightnessValues,
   panelBlurValues,
   panelOpacityValues,
-  type BackgroundBrightness,
-  type PanelBlur,
-  type PanelOpacity,
   type ThemeSettings
 } from '../../../platform/theme/settings'
 import { useThemeStore } from '../../../shared/stores/theme'
+import { pickAllowedThemeNumber } from './appearanceSettingsPredicates'
 
 export function useAppearanceSettingsSurface() {
   const { t } = useI18n()
@@ -37,21 +35,21 @@ export function useAppearanceSettingsSurface() {
   }
 
   function updateBackgroundBrightness(value: number) {
-    const backgroundBrightness = pickAllowedNumber(value, backgroundBrightnessValues)
+    const backgroundBrightness = pickAllowedThemeNumber(value, backgroundBrightnessValues)
     if (backgroundBrightness !== null) {
       saveThemePatch({ backgroundBrightness })
     }
   }
 
   function updatePanelOpacity(value: number) {
-    const panelOpacity = pickAllowedNumber(value, panelOpacityValues)
+    const panelOpacity = pickAllowedThemeNumber(value, panelOpacityValues)
     if (panelOpacity !== null) {
       previewThemePatch({ panelOpacity })
     }
   }
 
   function updatePanelBlur(value: number) {
-    const panelBlur = pickAllowedNumber(value, panelBlurValues)
+    const panelBlur = pickAllowedThemeNumber(value, panelBlurValues)
     if (panelBlur !== null) {
       previewThemePatch({ panelBlur })
     }
@@ -78,11 +76,4 @@ export function useAppearanceSettingsSurface() {
     updatePanelBlur,
     resetTheme
   }
-}
-
-function pickAllowedNumber<T extends BackgroundBrightness | PanelOpacity | PanelBlur>(
-  value: number,
-  allowed: readonly T[]
-): T | null {
-  return allowed.includes(value as T) ? (value as T) : null
 }

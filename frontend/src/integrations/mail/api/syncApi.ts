@@ -3,6 +3,7 @@ import type {
   MailSyncStatusListResponse,
   MailSyncSettings,
   MailSyncSettingsUpdate,
+  MailSyncRunRequest,
   MailSyncRunResponse
 } from '../../../shared/mailSync/types'
 
@@ -31,18 +32,24 @@ export async function updateMailSyncSettings(
   )
 }
 
-export async function runMailSyncNow(accountId: string): Promise<MailSyncRunResponse> {
+export async function runMailSyncNow(
+  accountId: string,
+  request: MailSyncRunRequest = {}
+): Promise<MailSyncRunResponse> {
   return ApiClient.instance.post<MailSyncRunResponse>(
     `/api/v1/integrations/mail/accounts/${encodeURIComponent(accountId)}/sync-now`,
-    {},
+    request,
     'Mail sync request failed'
   )
 }
 
-export async function runMailFullResync(accountId: string): Promise<MailSyncRunResponse> {
+export async function runMailFullResync(
+  accountId: string,
+  request: MailSyncRunRequest = {}
+): Promise<MailSyncRunResponse> {
   return ApiClient.instance.post<MailSyncRunResponse>(
     `/api/v1/integrations/mail/accounts/${encodeURIComponent(accountId)}/sync-full-resync`,
-    {},
+    { ...request, full_resync: true },
     'Mail full resync request failed'
   )
 }

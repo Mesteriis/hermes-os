@@ -2,6 +2,7 @@ import { QueryClient } from '@tanstack/vue-query'
 import { describe, expect, it } from 'vitest'
 import type { TelegramProviderWriteCommand } from '../types/telegram'
 import { primeTelegramParticipantLifecycleCommandCache } from './useTelegramParticipantLifecycleQuery'
+import { TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE } from './telegramRuntimePanelActions'
 
 function queryClient() {
   return new QueryClient({
@@ -16,8 +17,8 @@ function queryClient() {
 describe('telegram participant lifecycle command cache priming', () => {
   it('inserts join command into matching account command caches before realtime reconciliation', () => {
     const client = queryClient()
-    const accountCommandsKey = ['integrations', 'telegram', 'commands', 'account-1', 10] as const
-    const otherAccountCommandsKey = ['integrations', 'telegram', 'commands', 'account-2', 10] as const
+    const accountCommandsKey = ['integrations', 'telegram', 'commands', 'account-1', TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE] as const
+    const otherAccountCommandsKey = ['integrations', 'telegram', 'commands', 'account-2', TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE] as const
 
     client.setQueryData<TelegramProviderWriteCommand[]>(accountCommandsKey, [])
     client.setQueryData<TelegramProviderWriteCommand[]>(otherAccountCommandsKey, [])
@@ -44,7 +45,7 @@ describe('telegram participant lifecycle command cache priming', () => {
 
   it('inserts leave command with current chat target metadata before reconciliation arrives', () => {
     const client = queryClient()
-    const accountCommandsKey = ['integrations', 'telegram', 'commands', 'account-1', 10] as const
+    const accountCommandsKey = ['integrations', 'telegram', 'commands', 'account-1', TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE] as const
 
     client.setQueryData<TelegramProviderWriteCommand[]>(accountCommandsKey, [])
 

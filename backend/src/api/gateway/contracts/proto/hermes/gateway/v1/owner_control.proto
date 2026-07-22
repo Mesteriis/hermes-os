@@ -487,6 +487,19 @@ message ExecuteCommunicationsRuntimeOwnerCommandResponseV1 {
   string stderr = 4;
 }
 
+message ExecuteWhatsAppRuntimeOwnerCommandRequestV1 {
+  string owner_session_id = 1;
+  string command = 2;
+  repeated string arg = 3;
+}
+
+message ExecuteWhatsAppRuntimeOwnerCommandResponseV1 {
+  string command = 1;
+  uint32 exit_code = 2;
+  string stdout = 3;
+  string stderr = 4;
+}
+
 message OwnerControlRequestV1 {
   oneof operation {
     GetModuleRegistrationStatusRequestV1 get_module_registration_status = 1;
@@ -526,6 +539,7 @@ message OwnerControlRequestV1 {
     BeginBrowserPairingRequestV1 begin_browser_pairing = 35;
     ExecuteMailRuntimeOwnerCommandRequestV1 execute_mail_runtime_owner_command = 37;
     ExecuteCommunicationsRuntimeOwnerCommandRequestV1 execute_communications_runtime_owner_command = 38;
+    ExecuteWhatsAppRuntimeOwnerCommandRequestV1 execute_whatsapp_runtime_owner_command = 39;
   }
 }
 
@@ -568,6 +582,7 @@ message OwnerControlResponseV1 {
     BeginBrowserPairingResponseV1 begin_browser_pairing = 36;
     ExecuteMailRuntimeOwnerCommandResponseV1 execute_mail_runtime_owner_command = 37;
     ExecuteCommunicationsRuntimeOwnerCommandResponseV1 execute_communications_runtime_owner_command = 38;
+    ExecuteWhatsAppRuntimeOwnerCommandResponseV1 execute_whatsapp_runtime_owner_command = 39;
   }
 
   // Sanitized stable code; details and private data remain local to Kernel.

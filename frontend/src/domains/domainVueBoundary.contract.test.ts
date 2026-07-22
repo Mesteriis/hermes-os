@@ -79,11 +79,11 @@ describe('Domain Vue boundary contract', () => {
       'utf8'
     )
 
-    expect(settingsPageSource).toContain("useSettingsPageSurface")
-    expect(settingsPageSource).toContain('@select-section="store.selectSection"')
+    expect(settingsPageSource).toContain("useSettingsPageController")
+    expect(settingsPageSource).toContain('@select-section="selectSection"')
     expect(settingsPageSource).not.toContain("useSettingsStore")
     expect(settingsPageSource).not.toContain("useApplicationSettingsQuery")
-    expect(settingsNavigationSource).toContain("emit('selectSection', item.id)")
+    expect(settingsNavigationSource).toContain("handleSectionSelect(item.id)")
 
     expect(communicationsEmptyPageSource).toContain("communications.empty.title")
     expect(communicationsEmptyPageSource).not.toContain('fetch(')

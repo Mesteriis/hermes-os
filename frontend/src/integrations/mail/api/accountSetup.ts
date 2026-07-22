@@ -1,12 +1,13 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
 
-export type EmailAccountSetupSecretKind = 'app_password' | 'password' | 'oauth_token'
+export type EmailAccountSetupSecretKind = 'app_password' | 'oauth_token' | 'imap_password_file'
 export type EmailAccountSetupStoreKind =
 	| 'host_vault'
 	| 'os_keychain'
 	| 'encrypted_vault'
 	| 'database_encrypted_vault'
 	| 'external_vault'
+	| 'runtime_secret_store'
 	| string
 
 export type GmailOAuthStartRequest = {
@@ -36,7 +37,7 @@ export type ImapEmailAccountSetupRequest = {
 	mailbox: string
 	username: string
 	password: string
-	secret_kind: 'app_password' | 'password'
+	secret_kind: 'app_password' | 'imap_password_file'
 	smtp_host?: string
 	smtp_port?: number
 	smtp_tls?: boolean

@@ -41,23 +41,56 @@ import type {
   SignalHubRuntimeState
 } from '../types/signalHub'
 import {
-  buildSignalConsumerGraphRoute,
-  buildSignalGraphTabs,
-  buildSignalInventoryTabs,
-  buildSignalInventoryRow,
-  sourceControlState,
-  SIGNAL_HUB_REPLAY_PROJECTION_TARGETS
-} from '../components/signalHubSettingsPresentation'
+  activeProfile as activeSignalHubProfile,
+  buildSignalConsumerGraph,
+  buildSignalInventory,
+  countActiveRuntimeStates,
+  countConnectedConnections,
+  countPendingReplayRequests,
+  countReplaySources,
+  countRunningSources,
+  countRuntimeSources,
+  countUnhealthyHealthItems,
+  filterConnectionsForScope,
+  filterConnectionsForSource,
+  filterSignalConsumerGraph,
+  filterSignalInventory,
+  filterSignalSources,
+  findSelectedProfile,
+  findSelectedSource,
+  graphTabs,
+  inventoryTabs,
+  replayTargetConsumers,
+  replayTargetProjections,
+  SIGNAL_HUB_TABS,
+  signalCategories,
+  signalViewTabs as buildSignalViewTabs,
+  sourceCapabilities,
+  visibleSignalSources,
+  type SignalHubTab
+} from './signalHubSettingsSelectors'
+import {
+  buildSignalHubSourcePolicyRequest,
+  clearSignalHubPolicy,
+  createSignalHubPolicy,
+  type SignalHubPolicyDraft
+} from './signalHubPolicyActions'
+import {
+  buildSignalHubProfilePolicy,
+  buildSignalHubProfileSaveRequest
+} from './signalHubProfileRequests'
+import {
+  removeSignalHubProfile,
+  saveSignalHubProfile
+} from './signalHubProfileActions'
+import {
+  buildSignalHubConnectionCreateRequest,
+  buildSignalHubConnectionStatusRequest,
+  buildSignalHubHealthCheckRequest,
+  buildSignalHubRuntimeStateRequest
+} from './signalHubOperationalRequests'
 
-export type SignalHubTab =
-  | 'sources'
-  | 'profiles'
-  | 'connections'
-  | 'runtime'
-  | 'policies'
-  | 'health'
-  | 'replay'
-
+export type { SignalHubTab } from './signalHubSettingsSelectors'
 export type SignalHubSettingsView = 'graph' | 'inventory'
 
 export function useSignalHubSettingsSurface() {
@@ -127,20 +160,8 @@ export function useSignalHubSettingsSurface() {
   const replayFromTime = ref('')
   const replayToTime = ref('')
 
-  const tabs: Array<{ id: SignalHubTab; label: string; icon: string }> = [
-    { id: 'sources', label: 'Sources', icon: 'tabler:database-import' },
-    { id: 'profiles', label: 'Profiles', icon: 'tabler:layout-dashboard' },
-    { id: 'connections', label: 'Connections', icon: 'tabler:plug-connected' },
-    { id: 'runtime', label: 'Runtime', icon: 'tabler:player-play' },
-    { id: 'policies', label: 'Policies', icon: 'tabler:shield-cog' },
-    { id: 'health', label: 'Health', icon: 'tabler:activity-heartbeat' },
-    { id: 'replay', label: 'Replay', icon: 'tabler:player-track-next' }
-  ]
-
   const allSources = computed(() => sourcesData.value?.items ?? [])
-  const sources = computed(() =>
-    allSources.value.filter((source) => source.category !== 'test')
-  )
+  const sources = computed(() => visibleSignalSources(allSources.value))
   const policies = computed(() => policiesData.value?.items ?? [])
   const profiles = computed(() => profilesData.value?.items ?? [])
   const capabilityItems = computed(() => capabilitiesData.value?.items ?? [])
@@ -148,140 +169,68 @@ export function useSignalHubSettingsSurface() {
   const runtimeStates = computed(() => runtimeData.value?.items ?? [])
   const healthItems = computed(() => healthData.value?.items ?? [])
   const replayRequests = computed(() => replayData.value?.items ?? [])
-  const replayTargetConsumers = computed(() =>
-    Array.from(
-      new Set(
-        runtimeStates.value
-          .map((runtime) => runtime.runtime_kind.trim())
-          .filter((runtimeKind) => runtimeKind.length > 0)
-      )
-    ).sort()
+  const replayTargetConsumerOptions = computed(() => replayTargetConsumers(runtimeStates.value))
+  const replayTargetProjectionOptions = computed(() => replayTargetProjections(replayRequests.value))
+  const categories = computed(() => signalCategories(sources.value))
+  const filteredSources = computed(() =>
+    filterSignalSources(sources.value, sourceSearch.value, sourceCategory.value)
   )
-  const replayTargetProjections = computed(() =>
-    Array.from(
-      new Set([
-        ...SIGNAL_HUB_REPLAY_PROJECTION_TARGETS,
-        ...replayRequests.value
-          .map((request) => request.target_projection?.trim() ?? '')
-          .filter((target) => target.length > 0)
-      ])
-    ).sort()
-  )
-  const categories = computed(() => {
-    const values = new Set(sources.value.map((source) => source.category))
-    return ['all', ...Array.from(values).sort()]
-  })
-  const filteredSources = computed(() => {
-    const search = sourceSearch.value.trim().toLowerCase()
-    return sources.value.filter((source) => {
-      const matchesCategory =
-        sourceCategory.value === 'all' || source.category === sourceCategory.value
-      const matchesSearch =
-        search.length === 0 ||
-        source.code.toLowerCase().includes(search) ||
-        source.display_name.toLowerCase().includes(search)
-      return matchesCategory && matchesSearch
-    })
-  })
   const connectionCapableSources = computed(() =>
     sources.value.filter((source) => source.supports_connections)
   )
   const policyScopeConnections = computed(() =>
-    connections.value.filter((connection) =>
-      policyScope.value === 'connection' && policySourceCode.value.trim().length > 0
-        ? connection.source_code === policySourceCode.value
-        : true
-    )
+    filterConnectionsForScope(connections.value, policyScope.value, policySourceCode.value)
   )
   const profileScopeConnections = computed(() =>
-    connections.value.filter((connection) =>
-      profilePolicyScope.value === 'connection' && profilePolicySourceCode.value.trim().length > 0
-        ? connection.source_code === profilePolicySourceCode.value
-        : true
-    )
+    filterConnectionsForScope(connections.value, profilePolicyScope.value, profilePolicySourceCode.value)
   )
   const replayScopedConnections = computed(() =>
-    connections.value.filter((connection) =>
-      replaySourceCode.value.trim().length > 0 ? connection.source_code === replaySourceCode.value : true
-    )
+    filterConnectionsForSource(connections.value, replaySourceCode.value)
   )
   const selectedSource = computed(() => {
     const selectedCode = selectedSourceCode.value
-    if (!selectedCode) return filteredSources.value[0] ?? null
-    return sources.value.find((source) => source.code === selectedCode) ?? null
+    return findSelectedSource(sources.value, filteredSources.value, selectedCode)
   })
   const selectedProfile = computed(() => {
     const selectedCode = selectedProfileCode.value
-    if (!selectedCode) return null
-    return profiles.value.find((profile) => profile.code === selectedCode) ?? null
+    return findSelectedProfile(profiles.value, selectedCode)
   })
   const selectedSourceCapabilities = computed(() =>
-    selectedSource.value
-      ? capabilityItems.value.filter(
-          (capability) =>
-            capability.source_code === selectedSource.value?.code && capability.connection_id === null
-        )
-      : []
+    sourceCapabilities(capabilityItems.value, selectedSource.value)
   )
-  const enabledCount = computed(
-    () => sources.value.filter((source) => sourceControlState(policies.value, source) === 'running').length
-  )
-  const runtimeCount = computed(() => sources.value.filter((source) => source.supports_runtime).length)
-  const activeRuntimeCount = computed(
-    () => runtimeStates.value.filter((runtime) => runtime.state === 'running').length
-  )
-  const replayCount = computed(() => sources.value.filter((source) => source.supports_replay).length)
-  const connectedCount = computed(
-    () => connections.value.filter((connection) => connection.status === 'connected').length
-  )
-  const activeProfile = computed(() => profiles.value.find((profile) => profile.is_active) ?? null)
-  const unhealthyCount = computed(() => healthItems.value.filter((item) => item.level !== 'healthy').length)
-  const replayPendingCount = computed(
-    () =>
-      replayRequests.value.filter(
-        (request) => request.status !== 'completed' && request.status !== 'failed'
-      ).length
-  )
+  const enabledCount = computed(() => countRunningSources(sources.value, policies.value))
+  const runtimeCount = computed(() => countRuntimeSources(sources.value))
+  const activeRuntimeCount = computed(() => countActiveRuntimeStates(runtimeStates.value))
+  const replayCount = computed(() => countReplaySources(sources.value))
+  const connectedCount = computed(() => countConnectedConnections(connections.value))
+  const activeProfile = computed(() => activeSignalHubProfile(profiles.value))
+  const unhealthyCount = computed(() => countUnhealthyHealthItems(healthItems.value))
+  const replayPendingCount = computed(() => countPendingReplayRequests(replayRequests.value))
   const signalConsumerGraph = computed(() =>
-    allSources.value.map((source) =>
-      buildSignalConsumerGraphRoute(source, policies.value, runtimeStates.value, replayRequests.value)
-    )
+    buildSignalConsumerGraph(allSources.value, policies.value, runtimeStates.value, replayRequests.value)
   )
-  const graphSourceCodes = computed(() => new Set(signalConsumerGraph.value.map((route) => route.source.code)))
-  const graphSourceTabs = computed(() => buildSignalGraphTabs(signalConsumerGraph.value))
-  const filteredSignalConsumerGraph = computed(() => {
-    const selectedSource = selectedGraphSourceCode.value
-    if (selectedSource === 'all' || !graphSourceCodes.value.has(selectedSource)) {
-      return signalConsumerGraph.value
-    }
-    return signalConsumerGraph.value.filter((route) => route.source.code === selectedSource)
-  })
+  const graphSourceTabs = computed(() => graphTabs(signalConsumerGraph.value))
+  const filteredSignalConsumerGraph = computed(() =>
+    filterSignalConsumerGraph(signalConsumerGraph.value, selectedGraphSourceCode.value)
+  )
   const signalInventoryRows = computed(() =>
-    allSources.value.map((source) =>
-      buildSignalInventoryRow(
-        source,
-        policies.value,
-        connections.value,
-        runtimeStates.value,
-        healthItems.value,
-        capabilityItems.value,
-        replayRequests.value
-      )
+    buildSignalInventory(
+      allSources.value,
+      policies.value,
+      connections.value,
+      runtimeStates.value,
+      healthItems.value,
+      capabilityItems.value,
+      replayRequests.value
     )
   )
-  const inventorySourceCodes = computed(() => new Set(signalInventoryRows.value.map((row) => row.source.code)))
-  const inventorySourceTabs = computed(() => buildSignalInventoryTabs(signalInventoryRows.value))
-  const filteredSignalInventoryRows = computed(() => {
-    const selectedSource = selectedInventorySourceCode.value
-    if (selectedSource === 'all' || !inventorySourceCodes.value.has(selectedSource)) {
-      return signalInventoryRows.value
-    }
-    return signalInventoryRows.value.filter((row) => row.source.code === selectedSource)
-  })
-  const signalViewTabs = computed(() => [
-    { id: 'graph' as const, label: 'Graph', count: signalConsumerGraph.value.length },
-    { id: 'inventory' as const, label: 'Inventory', count: signalInventoryRows.value.length }
-  ])
+  const inventorySourceTabs = computed(() => inventoryTabs(signalInventoryRows.value))
+  const filteredSignalInventoryRows = computed(() =>
+    filterSignalInventory(signalInventoryRows.value, selectedInventorySourceCode.value)
+  )
+  const signalViewTabs = computed(() =>
+    buildSignalViewTabs(signalConsumerGraph.value, signalInventoryRows.value)
+  )
   const isApplyingProfile = computed(() => applyProfile.isPending.value)
   const isSavingProfile = computed(() => createProfile.isPending.value || updateProfile.isPending.value)
   const isRemovingProfile = computed(() => removeProfile.isPending.value)
@@ -342,19 +291,14 @@ export function useSignalHubSettingsSurface() {
   function addDraftProfilePolicy() {
     profileDraftPolicies.value = [
       ...profileDraftPolicies.value,
-      {
+      buildSignalHubProfilePolicy({
         scope: profilePolicyScope.value,
-        source_code:
-          profilePolicyScope.value === 'source' || profilePolicyScope.value === 'connection'
-            ? profilePolicySourceCode.value
-            : null,
-        connection_id:
-          profilePolicyScope.value === 'connection' ? profilePolicyConnectionId.value || null : null,
-        event_pattern:
-          profilePolicyScope.value === 'event_pattern' ? profilePolicyEventPattern.value : null,
+        sourceCode: profilePolicySourceCode.value,
+        connectionId: profilePolicyConnectionId.value,
+        eventPattern: profilePolicyEventPattern.value,
         mode: profilePolicyMode.value,
         reason: profilePolicyReason.value
-      }
+      })
     ]
   }
 
@@ -363,31 +307,31 @@ export function useSignalHubSettingsSurface() {
   }
 
   async function handleSaveProfile() {
-    const request = {
-      display_name: profileDisplayNameInput.value,
-      description: profileDescriptionInput.value,
-      source_policies: profileDraftPolicies.value
-    }
+    const request = buildSignalHubProfileSaveRequest(
+      profileDisplayNameInput.value,
+      profileDescriptionInput.value,
+      profileDraftPolicies.value
+    )
 
-    if (selectedProfile.value) {
-      await updateProfile.mutateAsync({ profileCode: selectedProfile.value.code, request })
-      return
-    }
-
-    await createProfile.mutateAsync({ code: profileCodeInput.value, ...request })
+    await saveSignalHubProfile(selectedProfile.value?.code ?? null, profileCodeInput.value, request, {
+      update: (variables) => updateProfile.mutateAsync(variables),
+      create: (createRequest) => createProfile.mutateAsync(createRequest)
+    })
   }
 
   async function handleRemoveProfile(profileCode: string) {
-    await removeProfile.mutateAsync(profileCode)
-    resetProfileEditor()
+    await removeSignalHubProfile(profileCode, {
+      remove: (code) => removeProfile.mutateAsync(code),
+      resetEditor: resetProfileEditor
+    })
   }
 
   async function handleRunHealthCheck(sourceCode: string, connectionId?: string | null) {
-    await runHealthCheck.mutateAsync({ source_code: sourceCode, connection_id: connectionId ?? null })
+    await runHealthCheck.mutateAsync(buildSignalHubHealthCheckRequest(sourceCode, connectionId))
   }
 
   async function handleCreatePolicy() {
-    const request = {
+    const request: SignalHubPolicyDraft = {
       scope: policyScope.value,
       source_code:
         policyScope.value === 'source' || policyScope.value === 'connection' ? policySourceCode.value : null,
@@ -396,24 +340,21 @@ export function useSignalHubSettingsSurface() {
       reason: policyReason.value
     }
 
-    if (policyMode.value === 'paused') return pauseSignals.mutateAsync(request)
-    if (policyMode.value === 'muted') return muteSignals.mutateAsync(request)
-    if (policyMode.value === 'disabled' && policyScope.value === 'source') {
-      return disableSource.mutateAsync(policySourceCode.value)
-    }
-    if (policyMode.value === 'disabled') return disableSignals.mutateAsync(request)
-
-    await createPolicy.mutateAsync({ ...request, mode: policyMode.value })
+    await createSignalHubPolicy(request, policyMode.value, {
+      pause: (draft) => pauseSignals.mutateAsync(draft),
+      mute: (draft) => muteSignals.mutateAsync(draft),
+      disableSource: (sourceCode) => disableSource.mutateAsync(sourceCode),
+      disable: (draft) => disableSignals.mutateAsync(draft),
+      create: (draft) => createPolicy.mutateAsync(draft)
+    })
   }
 
   async function handleCreateConnection() {
-    await createConnection.mutateAsync({
-      source_code: connectionSourceCode.value,
-      display_name: connectionDisplayName.value,
-      status: 'connected',
-      profile: connectionProfile.value,
-      settings: {}
-    })
+    await createConnection.mutateAsync(buildSignalHubConnectionCreateRequest(
+      connectionSourceCode.value,
+      connectionDisplayName.value,
+      connectionProfile.value
+    ))
   }
 
   async function handleCreateReplayRequest() {
@@ -434,7 +375,10 @@ export function useSignalHubSettingsSurface() {
   }
 
   async function handleSetConnectionStatus(connectionId: string, status: string) {
-    await updateConnection.mutateAsync({ connectionId, request: { status } })
+    await updateConnection.mutateAsync({
+      connectionId,
+      request: buildSignalHubConnectionStatusRequest(status)
+    })
   }
 
   async function handleRemoveConnection(connectionId: string) {
@@ -442,12 +386,7 @@ export function useSignalHubSettingsSurface() {
   }
 
   async function handleSetRuntimeState(runtime: SignalHubRuntimeState, state: string) {
-    await updateRuntime.mutateAsync({
-      source_code: runtime.source_code,
-      runtime_kind: runtime.runtime_kind,
-      state,
-      metadata: runtime.metadata
-    })
+    await updateRuntime.mutateAsync(buildSignalHubRuntimeStateRequest(runtime, state))
   }
 
   async function handleEnableSource(sourceCode: string) {
@@ -459,58 +398,36 @@ export function useSignalHubSettingsSurface() {
   }
 
   async function handlePauseSourceSignals(sourceCode: string) {
-    await pauseSignals.mutateAsync({
-      scope: 'source',
-      source_code: sourceCode,
-      reason: 'settings signal inventory pause'
-    })
+    await pauseSignals.mutateAsync(buildSignalHubSourcePolicyRequest(
+      sourceCode, 'settings signal inventory pause'
+    ))
   }
 
   async function handleResumeSourceSignals(sourceCode: string) {
-    await resumeSignals.mutateAsync({
-      scope: 'source',
-      source_code: sourceCode,
-      reason: 'settings signal inventory resume'
-    })
+    await resumeSignals.mutateAsync(buildSignalHubSourcePolicyRequest(
+      sourceCode, 'settings signal inventory resume'
+    ))
   }
 
   async function handleMuteSourceSignals(sourceCode: string) {
-    await muteSignals.mutateAsync({
-      scope: 'source',
-      source_code: sourceCode,
-      reason: 'settings signal inventory mute'
-    })
+    await muteSignals.mutateAsync(buildSignalHubSourcePolicyRequest(
+      sourceCode, 'settings signal inventory mute'
+    ))
   }
 
   async function handleUnmuteSourceSignals(sourceCode: string) {
-    await unmuteSignals.mutateAsync({
-      scope: 'source',
-      source_code: sourceCode,
-      reason: 'settings signal inventory unmute'
-    })
+    await unmuteSignals.mutateAsync(buildSignalHubSourcePolicyRequest(
+      sourceCode, 'settings signal inventory unmute'
+    ))
   }
 
-  async function handleClearPolicy(policy: {
-    scope: SignalHubPolicyScope
-    mode: SignalHubPolicyMode
-    source_code: string | null
-    connection_id: string | null
-    event_pattern: string | null
-    reason: string
-  }) {
-    const request = {
-      scope: policy.scope,
-      source_code: policy.source_code,
-      connection_id: policy.connection_id,
-      event_pattern: policy.event_pattern,
-      reason: policy.reason
-    }
-    if (policy.mode === 'paused') return resumeSignals.mutateAsync(request)
-    if (policy.mode === 'muted') return unmuteSignals.mutateAsync(request)
-    if (policy.mode === 'disabled' && policy.scope === 'source' && policy.source_code) {
-      return enableSource.mutateAsync(policy.source_code)
-    }
-    if (policy.mode === 'disabled') return enableSignals.mutateAsync(request)
+  async function handleClearPolicy(policy: SignalHubPolicyDraft & { mode: SignalHubPolicyMode }) {
+    await clearSignalHubPolicy(policy, {
+      resume: (draft) => resumeSignals.mutateAsync(draft),
+      unmute: (draft) => unmuteSignals.mutateAsync(draft),
+      enableSource: (sourceCode) => enableSource.mutateAsync(sourceCode),
+      enable: (draft) => enableSignals.mutateAsync(draft)
+    })
   }
 
   return {
@@ -602,8 +519,8 @@ export function useSignalHubSettingsSurface() {
     replaySelectorMode,
     replaySourceCode,
     replayTargetConsumer,
-    replayTargetConsumers,
-    replayTargetProjections,
+    replayTargetConsumers: replayTargetConsumerOptions,
+    replayTargetProjections: replayTargetProjectionOptions,
     replayTargetProjection,
     replayToPosition,
     replayToTime,
@@ -624,7 +541,7 @@ export function useSignalHubSettingsSurface() {
     sourceCategory,
     sourceSearch,
     sources,
-    tabs,
+    tabs: SIGNAL_HUB_TABS,
     unhealthyCount
   }
 }

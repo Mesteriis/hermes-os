@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
-import type { MailProviderSemanticRole } from '../../../shared/mailSync/providerResources'
 import type { CommunicationsSettingsSurface } from '../queries/useCommunicationsSettingsSurface'
+import {
+  MAX_MAIL_POLL_INTERVAL_SECONDS,
+  MIN_MAIL_POLL_INTERVAL_SECONDS,
+  MAX_MAIL_SYNC_WINDOWS,
+  MAX_MAIL_BATCH_SIZE,
+} from '../../../shared/mailSync/types'
+import { useCommunicationsSettingsPanelController } from '../queries/useCommunicationsSettingsPanelController'
 
 const props = defineProps<{
   surface: CommunicationsSettingsSurface
@@ -10,17 +16,43 @@ const props = defineProps<{
 
 const { t } = useI18n()
 
-function eventValue(event: Event): string {
-  return event.target instanceof HTMLInputElement
-    || event.target instanceof HTMLSelectElement
-    || event.target instanceof HTMLTextAreaElement
-    ? event.target.value
-    : ''
-}
-
-function eventChecked(event: Event): boolean {
-  return event.target instanceof HTMLInputElement ? event.target.checked : false
-}
+const {
+  handleDegradationThresholdInput,
+  handleTelegramReadReceiptReportsChange,
+  handleSelectMailAccount,
+  handleSelectedMailSyncToggle,
+  handleBatchSizeDraftInput,
+  handlePollIntervalDraftInput,
+  handleWindowsDraftInput,
+  handleContentEgressBodyToggle,
+  handleContentEgressAttachmentsToggle,
+  handleContentEgressExtractedTextToggle,
+  handlePolicySelection,
+  handleNewPolicy,
+  handlePolicyNameInput,
+  handleDeliveryAccountInput,
+  handleRecipientInput,
+  handleSeverityInput,
+  handleMaxSendsInput,
+  handleQuietHoursStartInput,
+  handleQuietHoursEndInput,
+  handleExpiryInput,
+  handlePolicyEnabledInput,
+  handleIncludeMessageBodyInput,
+  handleIncludeAttachmentsInput,
+  handleSubjectTemplateInput,
+  handleBodyTemplateInput,
+  handleResourceRoleInput,
+  handleResourceLocalFolderInput,
+  handleRefreshCommandDiagnostics,
+  handleRetryCommand,
+  handleSaveDegradationThreshold,
+  handleSaveSelectedMailSyncSettings,
+  handleSaveSensitiveForwardingPolicy,
+  handleRemoveSelectedSensitiveForwardingPolicy,
+} = useCommunicationsSettingsPanelController({
+  surface: props.surface,
+})
 
 function commandCount(status: string): number {
   return props.surface.commandDiagnostics.value?.counts.find((item) => item.status === status)?.count ?? 0
@@ -32,7 +64,7 @@ function formatTimestamp(value: string | null): string {
   return Number.isFinite(date.getTime()) ? date.toLocaleString() : value
 }
 
-const semanticRoles: Array<{ value: MailProviderSemanticRole; label: string }> = [
+const semanticRoles: Array<{ value: string; label: string }> = [
   { value: 'inbox', label: 'Inbox' },
   { value: 'sent', label: 'Sent' },
   { value: 'drafts', label: 'Drafts' },
@@ -44,16 +76,6 @@ const semanticRoles: Array<{ value: MailProviderSemanticRole; label: string }> =
   { value: 'important', label: 'Important' },
   { value: 'user', label: 'User label' },
 ]
-
-function semanticRoleValue(event: Event): MailProviderSemanticRole | null {
-  const value = event.target instanceof HTMLSelectElement ? event.target.value : ''
-  return semanticRoles.some((role) => role.value === value) ? value as MailProviderSemanticRole : null
-}
-
-function localFolderValue(event: Event): string | null {
-  const value = event.target instanceof HTMLSelectElement ? event.target.value : ''
-  return value || null
-}
 
 function mappingSourceLabel(source: string): string {
   return source === 'manual' ? t('Manual override') : t('Discovered')
@@ -93,7 +115,7 @@ function mappingSourceLabel(source: string): string {
             min="1"
             max="10"
             :value="surface.degradationThresholdDraft.value"
-            @input="surface.updateDegradationThreshold(eventValue($event))"
+            @input="handleDegradationThresholdInput"
           />
         </label>
         <p>{{ t(surface.degradationThresholdSetting.value.description) }}</p>
@@ -101,7 +123,7 @@ function mappingSourceLabel(source: string): string {
           type="button"
           class="primary-button"
           :disabled="!surface.degradationThresholdSetting.value.is_editable || !surface.degradationThresholdSetting.value || !surface.degradationThresholdDraft.value"
-          @click="surface.saveDegradationThreshold()"
+          @click="handleSaveDegradationThreshold()"
         >
           {{ t('Save policy') }}
         </button>
@@ -122,7 +144,7 @@ function mappingSourceLabel(source: string): string {
             type="checkbox"
             :checked="surface.telegramReadReceiptReportsSetting.value.value === true"
             :disabled="!surface.telegramReadReceiptReportsSetting.value.is_editable"
-            @change="surface.updateTelegramReadReceiptReports(eventChecked($event))"
+            @change="handleTelegramReadReceiptReportsChange"
           />
           <span>{{ t('Send read reports to Telegram') }}</span>
         </label>
@@ -149,7 +171,7 @@ function mappingSourceLabel(source: string): string {
           type="button"
           class="settings-choice"
           :class="{ active: surface.selectedMailAccount.value?.account_id === account.account_id }"
-          @click="surface.selectMailAccount(account.account_id)"
+          @click="handleSelectMailAccount(account.account_id)"
         >
           <Icon icon="tabler:mail" />
           <span>
@@ -171,7 +193,7 @@ function mappingSourceLabel(source: string): string {
                 type="checkbox"
                 :checked="surface.selectedSyncSettings.value.sync_enabled"
                 :disabled="surface.syncSaving.value"
-                @change="surface.toggleSelectedMailSync(eventChecked($event))"
+                @change="handleSelectedMailSyncToggle"
               />
               <span>{{ surface.selectedSyncSettings.value.sync_enabled ? t('Sync enabled') : t('Sync paused') }}</span>
             </label>
@@ -185,14 +207,41 @@ function mappingSourceLabel(source: string): string {
           <div class="settings-communications-fields">
             <label>
               <span>{{ t('Batch size') }}</span>
-              <input type="number" min="1" :value="surface.batchSizeDraft.value" @input="surface.batchSizeDraft.value = eventValue($event)" />
+              <input
+                type="number"
+                min="1"
+                :max="MAX_MAIL_BATCH_SIZE"
+                :value="surface.batchSizeDraft.value"
+                @input="handleBatchSizeDraftInput"
+              />
+            </label>
+            <label>
+              <span>{{ t('Sync windows') }}</span>
+              <input
+                type="number"
+                min="1"
+                :max="MAX_MAIL_SYNC_WINDOWS"
+                :value="surface.windowsDraft.value"
+                @input="handleWindowsDraftInput"
+              />
             </label>
             <label>
               <span>{{ t('Poll interval (seconds)') }}</span>
-              <input type="number" min="1" :value="surface.pollIntervalDraft.value" @input="surface.pollIntervalDraft.value = eventValue($event)" />
+              <input
+                type="number"
+                :min="MIN_MAIL_POLL_INTERVAL_SECONDS"
+                :max="MAX_MAIL_POLL_INTERVAL_SECONDS"
+                :value="surface.pollIntervalDraft.value"
+                @input="handlePollIntervalDraftInput"
+              />
             </label>
           </div>
-          <button type="button" class="primary-button" :disabled="surface.syncSaving.value" @click="surface.saveSelectedMailSyncSettings()">
+          <button
+            type="button"
+            class="primary-button"
+            :disabled="surface.syncSaving.value"
+            @click="handleSaveSelectedMailSyncSettings()"
+          >
             {{ t('Save mail settings') }}
           </button>
 
@@ -214,7 +263,7 @@ function mappingSourceLabel(source: string): string {
                   type="checkbox"
                   :checked="surface.selectedContentEgress.value.body"
                   :disabled="surface.contentEgressSaving.value"
-                  @change="surface.updateSelectedMailContentEgress('body', eventChecked($event))"
+                  @change="handleContentEgressBodyToggle"
                 />
                 <span>{{ t('Message body') }}</span>
               </label>
@@ -223,7 +272,7 @@ function mappingSourceLabel(source: string): string {
                   type="checkbox"
                   :checked="surface.selectedContentEgress.value.attachments"
                   :disabled="surface.contentEgressSaving.value"
-                  @change="surface.updateSelectedMailContentEgress('attachments', eventChecked($event))"
+                  @change="handleContentEgressAttachmentsToggle"
                 />
                 <span>{{ t('Attachments') }}</span>
               </label>
@@ -232,7 +281,7 @@ function mappingSourceLabel(source: string): string {
                   type="checkbox"
                   :checked="surface.selectedContentEgress.value.extracted_text"
                   :disabled="surface.contentEgressSaving.value"
-                  @change="surface.updateSelectedMailContentEgress('extracted_text', eventChecked($event))"
+                  @change="handleContentEgressExtractedTextToggle"
                 />
                 <span>{{ t('Extracted text') }}</span>
               </label>
@@ -259,12 +308,12 @@ function mappingSourceLabel(source: string): string {
                   type="button"
                   class="settings-choice"
                   :class="{ active: surface.selectedSensitiveForwardingPolicyId.value === policy.policy_id }"
-                  @click="surface.selectSensitiveForwardingPolicy(policy.policy_id)"
+                  @click="handlePolicySelection(policy.policy_id)"
                 >
                   <Icon :icon="policy.enabled ? 'tabler:shield-check' : 'tabler:shield-off'" />
                   <span><strong>{{ policy.name }}</strong><small>{{ policy.minimum_severity }} · {{ policy.fixed_recipients.length }} recipients</small></span>
                 </button>
-                <button type="button" class="secondary-button" @click="surface.createSensitiveForwardingPolicy()">
+                <button type="button" class="secondary-button" @click="handleNewPolicy">
                   <Icon icon="tabler:plus" />
                   {{ t('New policy') }}
                 </button>
@@ -273,63 +322,63 @@ function mappingSourceLabel(source: string): string {
               <div class="settings-communications-fields">
                 <label>
                   <span>{{ t('Policy name') }}</span>
-                  <input :value="surface.sensitiveForwardingDraft.value.name" @input="surface.updateSensitiveForwardingDraft({ name: eventValue($event) })" />
+                  <input :value="surface.sensitiveForwardingDraft.value.name" @input="handlePolicyNameInput" />
                 </label>
                 <label>
                   <span>{{ t('Delivery account') }}</span>
-                  <select :value="surface.sensitiveForwardingDraft.value.delivery_account_id" @change="surface.updateSensitiveForwardingDraft({ delivery_account_id: eventValue($event) })">
+                  <select :value="surface.sensitiveForwardingDraft.value.delivery_account_id" @change="handleDeliveryAccountInput">
                     <option v-for="account in surface.mailAccounts.value" :key="account.account_id" :value="account.account_id">{{ account.display_name }}</option>
                   </select>
                 </label>
                 <label>
                   <span>{{ t('Fixed recipients') }}</span>
-                  <input :value="surface.sensitiveForwardingDraft.value.fixed_recipients.join(', ')" :placeholder="t('security@example.com, owner@example.com')" @input="surface.updateSensitiveForwardingRecipients(eventValue($event))" />
+                  <input :value="surface.sensitiveForwardingDraft.value.fixed_recipients.join(', ')" :placeholder="t('security@example.com, owner@example.com')" @input="handleRecipientInput" />
                 </label>
                 <label>
                   <span>{{ t('Minimum severity') }}</span>
-                  <select :value="surface.sensitiveForwardingDraft.value.minimum_severity" @change="surface.updateSensitiveForwardingDraft({ minimum_severity: eventValue($event) as 'low' | 'medium' | 'high' | 'critical' })">
+                  <select :value="surface.sensitiveForwardingDraft.value.minimum_severity" @change="handleSeverityInput">
                     <option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="critical">critical</option>
                   </select>
                 </label>
                 <label>
                   <span>{{ t('Maximum sends per hour') }}</span>
-                  <input type="number" min="1" :value="surface.sensitiveForwardingDraft.value.max_sends_per_hour" @input="surface.updateSensitiveForwardingDraft({ max_sends_per_hour: Number(eventValue($event)) })" />
+                  <input type="number" min="1" :value="surface.sensitiveForwardingDraft.value.max_sends_per_hour" @input="handleMaxSendsInput" />
                 </label>
                 <label>
                   <span>{{ t('Quiet hours start (UTC)') }}</span>
-                  <input type="time" :value="surface.sensitiveForwardingQuietHour('start')" @input="surface.updateSensitiveForwardingQuietHours(eventValue($event), surface.sensitiveForwardingQuietHour('end'))" />
+                  <input type="time" :value="surface.sensitiveForwardingQuietHour('start')" @input="handleQuietHoursStartInput" />
                 </label>
                 <label>
                   <span>{{ t('Quiet hours end (UTC)') }}</span>
-                  <input type="time" :value="surface.sensitiveForwardingQuietHour('end')" @input="surface.updateSensitiveForwardingQuietHours(surface.sensitiveForwardingQuietHour('start'), eventValue($event))" />
+                  <input type="time" :value="surface.sensitiveForwardingQuietHour('end')" @input="handleQuietHoursEndInput" />
                 </label>
                 <label>
                   <span>{{ t('Policy expiry (UTC)') }}</span>
-                  <input type="datetime-local" :value="surface.sensitiveForwardingExpiryValue()" @input="surface.updateSensitiveForwardingExpiry(eventValue($event))" />
+                  <input type="datetime-local" :value="surface.sensitiveForwardingExpiryValue()" @input="handleExpiryInput" />
                 </label>
                 <label class="settings-switch">
-                  <input type="checkbox" :checked="surface.sensitiveForwardingDraft.value.enabled" @change="surface.updateSensitiveForwardingDraft({ enabled: eventChecked($event) })" />
+                  <input type="checkbox" :checked="surface.sensitiveForwardingDraft.value.enabled" @change="handlePolicyEnabledInput" />
                   <span>{{ t('Policy enabled') }}</span>
                 </label>
                 <label class="settings-switch">
-                  <input type="checkbox" :checked="surface.sensitiveForwardingDraft.value.include_message_body" @change="surface.updateSensitiveForwardingDraft({ include_message_body: eventChecked($event) })" />
+                  <input type="checkbox" :checked="surface.sensitiveForwardingDraft.value.include_message_body" @change="handleIncludeMessageBodyInput" />
                   <span>{{ t('Include message body when source content access is enabled') }}</span>
                 </label>
                 <label class="settings-switch">
-                  <input type="checkbox" :checked="surface.sensitiveForwardingDraft.value.include_attachments" @change="surface.updateSensitiveForwardingDraft({ include_attachments: eventChecked($event) })" />
+                  <input type="checkbox" :checked="surface.sensitiveForwardingDraft.value.include_attachments" @change="handleIncludeAttachmentsInput" />
                   <span>{{ t('Include clean attachments when source attachment access is enabled') }}</span>
                 </label>
               </div>
               <label class="settings-communications-policy-template">
                 <span>{{ t('Notification subject template') }}</span>
-                <input :value="surface.sensitiveForwardingDraft.value.subject_template" @input="surface.updateSensitiveForwardingDraft({ subject_template: eventValue($event) })" />
+                <input :value="surface.sensitiveForwardingDraft.value.subject_template" @input="handleSubjectTemplateInput" />
               </label>
               <label class="settings-communications-policy-template">
                 <span>{{ t('Notification body template') }}</span>
-                <textarea rows="3" :value="surface.sensitiveForwardingDraft.value.body_template" @input="surface.updateSensitiveForwardingDraft({ body_template: eventValue($event) })" />
+                <textarea rows="3" :value="surface.sensitiveForwardingDraft.value.body_template" @input="handleBodyTemplateInput" />
               </label>
               <div class="settings-communications-policy-actions">
-                <button type="button" class="primary-button" :disabled="surface.sensitiveForwardingSaving.value" @click="surface.saveSensitiveForwardingPolicy()">
+                <button type="button" class="primary-button" :disabled="surface.sensitiveForwardingSaving.value" @click="handleSaveSensitiveForwardingPolicy">
                   {{ t('Save sensitive forwarding policy') }}
                 </button>
                 <button
@@ -337,7 +386,7 @@ function mappingSourceLabel(source: string): string {
                   type="button"
                   class="secondary-button"
                   :disabled="surface.sensitiveForwardingDeleting.value"
-                  @click="surface.removeSelectedSensitiveForwardingPolicy()"
+                  @click="handleRemoveSelectedSensitiveForwardingPolicy"
                 >
                   {{ t('Delete policy') }}
                 </button>
@@ -383,7 +432,7 @@ function mappingSourceLabel(source: string): string {
             <select
               :value="resource.semantic_role ?? ''"
               :disabled="!resource.writable || surface.providerResourcesSaving.value"
-              @change="surface.updateProviderResourceRole(resource, semanticRoleValue($event))"
+              @change="handleResourceRoleInput(resource, $event)"
             >
               <option value="">{{ t('Unassigned') }}</option>
               <option v-for="role in semanticRoles" :key="role.value" :value="role.value">{{ t(role.label) }}</option>
@@ -394,7 +443,7 @@ function mappingSourceLabel(source: string): string {
             <select
               :value="resource.local_folder_id ?? ''"
               :disabled="!resource.writable || surface.providerResourcesSaving.value || surface.localFoldersLoading.value"
-              @change="surface.updateProviderResourceLocalFolder(resource, localFolderValue($event))"
+              @change="handleResourceLocalFolderInput(resource, $event)"
             >
               <option value="">{{ t('No local folder') }}</option>
               <option v-for="folder in surface.localFolders.value" :key="folder.folder_id" :value="folder.folder_id">
@@ -417,7 +466,7 @@ function mappingSourceLabel(source: string): string {
           type="button"
           class="secondary-button"
           :disabled="surface.commandDiagnosticsRefreshing.value || !surface.selectedMailAccount.value"
-          @click="surface.refreshCommandDiagnostics()"
+          @click="handleRefreshCommandDiagnostics"
         >
           <Icon :icon="surface.commandDiagnosticsRefreshing.value ? 'tabler:loader-2' : 'tabler:refresh'" />
           {{ t('Refresh') }}
@@ -478,7 +527,7 @@ function mappingSourceLabel(source: string): string {
                   type="button"
                   class="secondary-button"
                   :disabled="surface.commandDiagnosticsRetrying.value"
-                  @click="surface.retryMailProviderCommand(command.command_id)"
+                  @click="handleRetryCommand(command.command_id)"
                 >
                   <Icon :icon="surface.commandDiagnosticsRetrying.value ? 'tabler:loader-2' : 'tabler:refresh'" />
                   {{ t('Retry') }}

@@ -147,6 +147,13 @@ export function messengerComposerPlainText(html: string): string {
     .trim()
 }
 
+export function messengerComposerCapabilityCanOpenFile(
+  capability: Pick<MessengerComposerCapability, 'id'>,
+  isActionRunning: boolean
+): boolean {
+  return capability.id === 'telegram-file' && !isActionRunning
+}
+
 export function localizedMessengerRichTextActions(
   actions: readonly RichTextEditorToolbarAction[],
   translate: (key: string) => string

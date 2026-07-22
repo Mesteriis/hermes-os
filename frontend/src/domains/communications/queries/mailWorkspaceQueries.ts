@@ -196,7 +196,7 @@ export function useCommunicationFoldersQuery(accountId?: QueryParam<string>) {
     queryKey: computed(() => ['communications-folders', toValue(accountId)]),
     initialPageParam: null,
     queryFn: async ({ pageParam }) => {
-      return fetchCommunicationFolders(toValue(accountId), 500, pageParam)
+      return fetchCommunicationFolders(toValue(accountId), undefined, pageParam)
     },
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),

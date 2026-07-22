@@ -4,6 +4,7 @@ import { useI18n } from '@/platform/i18n'
 import { Button, ButtonGroup, Spacer, SplitButton, ToolbarGroup } from '@/shared/ui'
 import type { CommunicationMessageActionGroupModel } from '../communicationDomainElements'
 import {
+  mailActionGroupDefaultAction,
   mailActionResponseControls,
   mailActionToolbarSections,
   type MailActionMenuGroup
@@ -44,8 +45,7 @@ function handleSelectAction(actionId: string | undefined): void {
 }
 
 function handleSelectGroupAction(group: MailActionMenuGroup): void {
-  if (group.tone === 'danger') return
-  handleSelectAction(group.items.find((item) => !item.disabled)?.id)
+  handleSelectAction(mailActionGroupDefaultAction(group))
 }
 </script>
 

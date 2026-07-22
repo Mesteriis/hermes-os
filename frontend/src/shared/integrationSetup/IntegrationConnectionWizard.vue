@@ -9,6 +9,11 @@ import type { StepsItem } from '../ui/Steps.types'
 import type { SelectedIntegrationAccount } from './queries/useIntegrationConnectionWizardSurface'
 import { useIntegrationConnectionWizardSurface } from './queries/useIntegrationConnectionWizardSurface'
 import type { ConnectionProviderId } from '../stores/integrationConnectionWizard'
+import {
+  canAdvanceIntegrationConnectionWizard,
+  integrationCheckIcon,
+  integrationProviderIconTone,
+} from './integrationConnectionWizardPresentation'
 
 const props = defineProps<{
   open: boolean
@@ -39,13 +44,12 @@ const providerSteps = computed<StepsItem[]>(() => [
   { title: surface.t('Сервисы') },
 ])
 
-const canMoveForward = computed(() => {
-  if (currentStep.value === 1) return surface.canSubmit.value
-  if (currentStep.value === 2 && surface.selectedProvider.value.id === 'telegram') {
-    return surface.showSelectedProviderChecks.value
-  }
-  return true
-})
+const canMoveForward = computed(() => canAdvanceIntegrationConnectionWizard(
+  currentStep.value,
+  surface.canSubmit.value,
+  surface.selectedProvider.value.id,
+  surface.showSelectedProviderChecks.value,
+))
 const providerTitle = computed(() => surface.t(surface.selectedProvider.value.label))
 
 watch(() => props.open, (isOpen) => {
@@ -68,10 +72,6 @@ function closeWizard(): void {
   surface.closeWizard()
   currentStep.value = 1
   emit('close')
-}
-
-function providerIconTone(providerId: ConnectionProviderId): string {
-  return `app-connection-wizard__provider-icon--${providerId}`
 }
 
 function chooseProvider(providerId: ConnectionProviderId): void {
@@ -107,11 +107,6 @@ function goBack(): void {
   }
 }
 
-function checkIcon(status: 'ready' | 'pending' | 'blocked'): string {
-  if (status === 'ready') return 'tabler:check'
-  if (status === 'blocked') return 'tabler:alert-triangle'
-  return 'tabler:clock'
-}
 </script>
 
 <template>
@@ -141,7 +136,7 @@ function checkIcon(status: 'ready' | 'pending' | 'blocked'): string {
             :class="{ active: provider.id === surface.selectedProvider.value.id }"
             @click="chooseProvider(provider.id)"
           >
-            <i class="app-connection-wizard__provider-icon" :class="providerIconTone(provider.id)" aria-hidden="true">
+            <i class="app-connection-wizard__provider-icon" :class="integrationProviderIconTone(provider.id)" aria-hidden="true">
               <Icon :icon="provider.icon" />
             </i>
             <span>
@@ -355,7 +350,7 @@ function checkIcon(status: 'ready' | 'pending' | 'blocked'): string {
             class="app-connection-wizard__check"
             :class="`is-${check.status}`"
           >
-            <Icon :icon="checkIcon(check.status)" />
+              <Icon :icon="integrationCheckIcon(check.status)" />
             <span>
               <strong>{{ check.label }}</strong>
               <small>{{ check.description }}</small>

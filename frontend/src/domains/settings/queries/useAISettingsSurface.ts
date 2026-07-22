@@ -5,13 +5,22 @@ import { useSettingsStore } from '../stores/settings'
 import {
   DEFAULT_API_PROVIDER_PRESETS,
   DEFAULT_OPENAI_BASE_URL,
-  SLOT_DESCRIPTIONS,
-  SLOT_LABELS,
 } from './aiSettingsCatalog'
+import {
+  errorMessage,
+  modelStateKey,
+  mergedApiPresets,
+  buildAiModelRouteRows,
+  modelDownloadProgressLabel as formatModelDownloadProgressLabel,
+  modelRouteUsageCount as countModelRouteUsage,
+  providerBaseUrl as resolveProviderBaseUrl,
+} from './aiSettingsPresentation'
+import {
+  metadataBoolean,
+  providerIsBuiltInOllama
+} from './aiSettingsPredicates'
 import type {
-  AiCapabilitySlot,
   AiModelCatalogItem,
-  AiModelRoute,
   AiProviderAuthStartResponse,
   AiProviderAuthStatusResponse,
   AiProviderAccount,
@@ -34,23 +43,27 @@ import {
   useUpdateAiProviderConsentMutation,
   useUpdateAiProviderMutation,
 } from './useAISettingsQuery'
+import {
+  syncAiProviderModels,
+  testAiProvider,
+  toggleAiProvider,
+  updateAiProviderConsent
+} from './aiProviderActions'
+import { updateAiModelAvailability } from './aiModelActions'
+import { updateAiRouteSelection } from './aiRouteActions'
+import { downloadAiModel } from './aiModelDownloadActions'
+import {
+  buildAiProviderAuthStartRequest,
+  buildAiProviderCallbackUrl
+} from './aiProviderAuthRequests'
+import { buildAiApiProviderCreateRequest } from './aiProviderRequests'
+import {
+  refreshAiProviderAuthStatus,
+  startAiProviderAuth
+} from './aiProviderAuthActions'
+import { parseAiProviderCallbackMessage } from './aiProviderCallback'
 
-export interface AiModelRouteRow {
-  slot: AiCapabilitySlot
-  label: string
-  description: string
-  selectedValue: string
-  selectedModelLabel: string
-  options: AiModelRouteOption[]
-}
 
-export interface AiModelRouteOption {
-  value: string
-  label: string
-  detail: string
-}
-
-const ROUTE_OPTION_SEPARATOR = '|'
 const LOCAL_AUTH_POLL_INTERVAL_MS = 2500
 const DOWNLOAD_PROGRESS_MAX_BEFORE_COMPLETION = 92
 
@@ -103,22 +116,14 @@ export function useAISettingsSurface() {
     if (!provider) return []
     return models.value.filter((model) => model.provider_id === provider.provider_id)
   })
-  const routeRows = computed<AiModelRouteRow[]>(() => {
-    return capabilitySlots.value.map((slot) => {
-      const route = routeForSlot(slot.slot)
-      const options = routeOptionsForSlot(slot)
-      const selectedValue = route ? routeOptionValue(route.provider_id, route.model_key) : ''
-      return {
-        slot,
-        label: t(SLOT_LABELS[slot.slot] ?? slot.label),
-        description: t(SLOT_DESCRIPTIONS[slot.slot] ?? slot.description),
-        selectedValue,
-        selectedModelLabel: route ? modelLabel(route.provider_id, route.model_key) : t('Not routed'),
-        options,
-      }
-    })
-  })
-  const apiPresets = computed(() => mergedApiPresets(providerPresets.value))
+  const routeRows = computed(() => buildAiModelRouteRows(
+    capabilitySlots.value,
+    routes.value,
+    providers.value,
+    models.value,
+    t
+  ))
+  const apiPresets = computed(() => mergedApiPresets(DEFAULT_API_PROVIDER_PRESETS, providerPresets.value))
   const apiPresetOptions = computed<SelectOption[]>(() =>
     apiPresets.value.map((preset) => ({
       value: preset.provider_key,
@@ -189,16 +194,13 @@ export function useAISettingsSurface() {
     }
 
     try {
-      const provider = await createProvider.mutateAsync({
-        provider_kind: 'api',
-        provider_key: providerKey,
-        display_name: displayName,
-        base_url: baseUrl,
-        capabilities: ['chat', 'reasoning', 'summarization', 'embeddings'],
-        enabled: true,
-        remote_context_consent: apiConsent.value,
-        api_key: token,
-      })
+      const provider = await createProvider.mutateAsync(buildAiApiProviderCreateRequest({
+        providerKey,
+        displayName,
+        baseUrl,
+        token,
+        remoteContextConsent: apiConsent.value
+      }))
       apiToken.value = ''
       selectedProviderId.value = provider.provider_id
       await overviewQuery.refetch()
@@ -211,25 +213,19 @@ export function useAISettingsSurface() {
   }
 
   async function handleConnectLocalPreset(preset: AiProviderPreset) {
-    try {
-      const response = await startProviderAuth.mutateAsync({
-        provider_kind: preset.provider_kind,
-        provider_key: preset.provider_key,
-        display_name: preset.display_name,
-        callback_url: aiProviderCallbackBaseUrl(),
-      })
-      activeLocalAuth.value = response
-      if (response.provider) {
-        selectedProviderId.value = response.provider.provider_id
-        stopLocalAuthPolling()
-        store.setActionMessage(t('AI provider connected'))
-        return
-      }
-      startLocalAuthPolling(response.setup_id)
-      store.setActionMessage(response.message || t('AI provider callback started'))
-    } catch (error) {
-      store.setError(errorMessage(error, t('AI provider callback start failed')))
-    }
+    await startAiProviderAuth(preset, {
+      startAuth: (selectedPreset) => startProviderAuth.mutateAsync(buildAiProviderAuthStartRequest(
+        selectedPreset,
+        aiProviderCallbackBaseUrl()
+      )),
+      setActiveAuth: (response) => { activeLocalAuth.value = response },
+      setSelectedProvider: (providerId) => { selectedProviderId.value = providerId },
+      stopPolling: stopLocalAuthPolling,
+      startPolling: startLocalAuthPolling,
+      setActionMessage: (message) => store.setActionMessage(message),
+      setError: (message) => store.setError(message),
+      t
+    })
   }
 
   async function handleRefreshLocalAuth() {
@@ -247,122 +243,81 @@ export function useAISettingsSurface() {
   }
 
   async function handleToggleProvider(provider: AiProviderAccount, enabled: boolean) {
-    try {
-      const updated = await updateProvider.mutateAsync({
-        providerId: provider.provider_id,
-        request: { enabled },
-      })
-      selectedProviderId.value = updated.provider_id
-      store.setActionMessage(enabled ? t('AI provider enabled') : t('AI provider disabled'))
-    } catch (error) {
-      store.setError(errorMessage(error, t('AI provider update failed')))
-    }
+    await toggleAiProvider(provider, enabled, {
+      updateProvider: (variables) => updateProvider.mutateAsync(variables),
+      setSelectedProvider: (providerId) => { selectedProviderId.value = providerId },
+      setActionMessage: (message) => store.setActionMessage(message),
+      setError: (message) => store.setError(message),
+      t
+    })
   }
 
   async function handleGrantConsent(provider: AiProviderAccount, consented: boolean) {
-    try {
-      const updated = await updateConsent.mutateAsync({
-        providerId: provider.provider_id,
-        request: { consented },
-      })
-      selectedProviderId.value = updated.provider_id
-      store.setActionMessage(consented ? t('Remote context consent granted') : t('Remote context consent revoked'))
-    } catch (error) {
-      store.setError(errorMessage(error, t('AI provider consent update failed')))
-    }
+    await updateAiProviderConsent(provider, consented, {
+      updateConsent: (variables) => updateConsent.mutateAsync(variables),
+      setSelectedProvider: (providerId) => { selectedProviderId.value = providerId },
+      setActionMessage: (message) => store.setActionMessage(message),
+      setError: (message) => store.setError(message),
+      t
+    })
   }
 
   async function handleTestProvider(provider: AiProviderAccount): Promise<AiProviderCommandResponse | null> {
-    try {
-      const response = await testProvider.mutateAsync(provider.provider_id)
-      store.setActionMessage(response.message || t('AI provider test completed'))
-      return response
-    } catch (error) {
-      store.setError(errorMessage(error, t('AI provider test failed')))
-      return null
-    }
+    return testAiProvider(provider, {
+      execute: (providerId) => testProvider.mutateAsync(providerId),
+      setActionMessage: (message) => store.setActionMessage(message),
+      setError: (message) => store.setError(message),
+      t
+    })
   }
 
   async function handleSyncModels(provider: AiProviderAccount): Promise<AiProviderCommandResponse | null> {
-    try {
-      const response = await syncModels.mutateAsync(provider.provider_id)
-      await overviewQuery.refetch()
-      store.setActionMessage(response.message || t('AI models synchronized'))
-      return response
-    } catch (error) {
-      store.setError(errorMessage(error, t('AI model sync failed')))
-      return null
-    }
+    return syncAiProviderModels(provider, {
+      execute: (providerId) => syncModels.mutateAsync(providerId),
+      refreshOverview: () => overviewQuery.refetch(),
+      setActionMessage: (message) => store.setActionMessage(message),
+      setError: (message) => store.setError(message),
+      t
+    })
   }
 
   async function handleModelAvailability(
     model: AiModelCatalogItem,
     isAvailable: boolean
   ): Promise<AiModelCatalogItem | null> {
-    try {
-      const updated = await updateModelAvailability.mutateAsync({
-        provider_id: model.provider_id,
-        model_key: model.model_key,
-        is_available: isAvailable,
-      })
-      await overviewQuery.refetch()
-      store.setActionMessage(isAvailable ? t('AI model enabled') : t('AI model disabled'))
-      return updated
-    } catch (error) {
-      store.setError(errorMessage(error, t('AI model availability update failed')))
-      return null
-    }
+    return updateAiModelAvailability(model, isAvailable, {
+      updateAvailability: (request) => updateModelAvailability.mutateAsync(request),
+      refreshOverview: () => overviewQuery.refetch(),
+      setActionMessage: (message) => store.setActionMessage(message),
+      setError: (message) => store.setError(message),
+      t
+    })
   }
 
   async function handleModelDownload(model: AiModelCatalogItem): Promise<AiModelCatalogItem | null> {
     const key = modelStateKey(model)
-    if (downloadingModelProgress.value[key] !== undefined) return null
-
-    startModelDownloadProgress(key)
-    try {
-      const updated = await downloadModel.mutateAsync({
-        provider_id: model.provider_id,
-        model_key: model.model_key,
-      })
-      finishModelDownloadProgress(key)
-      await overviewQuery.refetch()
-      store.setActionMessage(t('AI model downloaded'))
-      return updated
-    } catch (error) {
-      clearModelDownloadProgress(key)
-      store.setError(errorMessage(error, t('AI model download failed')))
-      return null
-    }
+    return downloadAiModel(model, key, {
+      isDownloading: (modelKey) => downloadingModelProgress.value[modelKey] !== undefined,
+      startProgress: startModelDownloadProgress,
+      finishProgress: finishModelDownloadProgress,
+      clearProgress: clearModelDownloadProgress,
+      download: (request) => downloadModel.mutateAsync(request),
+      refreshOverview: () => overviewQuery.refetch(),
+      setActionMessage: (message) => store.setActionMessage(message),
+      setError: (message) => store.setError(message),
+      t
+    })
   }
 
   async function handleRouteSelection(slot: string, value: string) {
-    if (!value) {
-      try {
-        await deleteRoute.mutateAsync(slot)
-        await overviewQuery.refetch()
-        store.setActionMessage(t('AI model route cleared'))
-      } catch (error) {
-        store.setError(errorMessage(error, t('AI model route delete failed')))
-      }
-      return
-    }
-
-    const parsed = parseRouteOptionValue(value)
-    if (!parsed) return
-
-    try {
-      await updateRoute.mutateAsync({
-        slot,
-        request: {
-          provider_id: parsed.providerId,
-          model_key: parsed.modelKey,
-        },
-      })
-      await overviewQuery.refetch()
-      store.setActionMessage(t('AI model route updated'))
-    } catch (error) {
-      store.setError(errorMessage(error, t('AI model route update failed')))
-    }
+    await updateAiRouteSelection(slot, value, {
+      updateRoute: (variables) => updateRoute.mutateAsync(variables),
+      deleteRoute: (routeSlot) => deleteRoute.mutateAsync(routeSlot),
+      refreshOverview: () => overviewQuery.refetch(),
+      setActionMessage: (message) => store.setActionMessage(message),
+      setError: (message) => store.setError(message),
+      t
+    })
   }
 
   async function handleRefreshModelRoutes() {
@@ -373,20 +328,6 @@ export function useAISettingsSurface() {
   async function handleRefreshUsageStats() {
     await usageStatsQuery.refetch()
     store.setActionMessage(t('AI Hub usage stats refreshed'))
-  }
-
-  function routeForSlot(slot: string): AiModelRoute | null {
-    return routes.value.find((route) => route.capability_slot === slot) ?? null
-  }
-
-  function routeOptionsForSlot(slot: AiCapabilitySlot): AiModelRouteOption[] {
-    return models.value
-      .filter((model) => modelUsableForSlot(model, slot))
-      .map((model) => ({
-        value: routeOptionValue(model.provider_id, model.model_key),
-        label: modelLabel(model.provider_id, model.model_key),
-        detail: `${model.privacy} · ${model.category}`,
-      }))
   }
 
   function modelRequiresDownload(model: AiModelCatalogItem): boolean {
@@ -400,11 +341,7 @@ export function useAISettingsSurface() {
 
   function modelDownloadProgressLabel(model: AiModelCatalogItem): string | null {
     const progress = modelDownloadProgressValue(model)
-    if (progress === null) return null
-    if (progress >= 100) return t('Finalizing model')
-    if (progress >= 70) return t('Preparing model for routing')
-    if (progress >= 30) return t('Downloading model')
-    return t('Starting download')
+    return formatModelDownloadProgressLabel(progress, t)
   }
 
   function modelIsDownloading(model: AiModelCatalogItem): boolean {
@@ -412,48 +349,28 @@ export function useAISettingsSurface() {
   }
 
   function modelRouteUsageCount(model: AiModelCatalogItem): number {
-    let count = 0
-    for (const route of routes.value) {
-      if (route.provider_id === model.provider_id && route.model_key === model.model_key) count += 1
-    }
-    return count
+    return countModelRouteUsage(model, routes.value)
   }
 
   function modelIsUsedByRoute(model: AiModelCatalogItem): boolean {
     return modelRouteUsageCount(model) > 0
   }
 
-  function modelLabel(providerId: string, modelKey: string): string {
-    const provider = providers.value.find((item) => item.provider_id === providerId)
-    const model = models.value.find((item) => item.provider_id === providerId && item.model_key === modelKey)
-    const providerName = provider?.display_name ?? providerId
-    const modelName = model?.display_name ?? modelKey
-    return `${providerName} / ${modelName}`
-  }
-
   function providerBaseUrl(provider: AiProviderAccount): string {
-    const value = provider.config.base_url
-    return typeof value === 'string' ? value : ''
+    return resolveProviderBaseUrl(provider)
   }
 
   async function refreshLocalAuthStatus(setupId: string, notify: boolean) {
-    if (fetchProviderAuthStatus.isPending.value) return
-    try {
-      const response = await fetchProviderAuthStatus.mutateAsync(setupId)
-      activeLocalAuth.value = response
-      if (response.provider) {
-        selectedProviderId.value = response.provider.provider_id
-        stopLocalAuthPolling()
-        store.setActionMessage(t('AI provider connected'))
-        return
-      }
-      if (notify) {
-        store.setActionMessage(response.message || t('AI provider callback still waiting'))
-      }
-    } catch (error) {
-      stopLocalAuthPolling()
-      store.setError(errorMessage(error, t('AI provider callback status failed')))
-    }
+    await refreshAiProviderAuthStatus(setupId, notify, {
+      isPending: () => fetchProviderAuthStatus.isPending.value,
+      fetchStatus: (authSetupId) => fetchProviderAuthStatus.mutateAsync(authSetupId),
+      setActiveAuth: (response) => { activeLocalAuth.value = response },
+      setSelectedProvider: (providerId) => { selectedProviderId.value = providerId },
+      stopPolling: stopLocalAuthPolling,
+      setActionMessage: (message) => store.setActionMessage(message),
+      setError: (message) => store.setError(message),
+      t
+    })
   }
 
   function startLocalAuthPolling(setupId: string) {
@@ -523,25 +440,13 @@ export function useAISettingsSurface() {
   }
 
   function aiProviderCallbackBaseUrl(): string {
-    return `${frontendConfig.apiBaseUrl.replace(/\/+$/, '')}/api/v1/ai/provider-auth/callback`
+    return buildAiProviderCallbackUrl(frontendConfig.apiBaseUrl)
   }
 
   function handleProviderCallbackMessage(event: MessageEvent) {
-    const data = event.data
-    if (
-      typeof data !== 'object' ||
-      data === null ||
-      !('type' in data) ||
-      data.type !== 'hermes:ai-provider-connected'
-    ) {
-      return
-    }
-    const providerId = 'providerId' in data && typeof data.providerId === 'string'
-      ? data.providerId
-      : null
-    if (providerId) {
-      selectedProviderId.value = providerId
-    }
+    const callback = parseAiProviderCallbackMessage(event.data)
+    if (!callback) return
+    if (callback.providerId) selectedProviderId.value = callback.providerId
     stopLocalAuthPolling()
     void overviewQuery.refetch()
     store.setActionMessage(t('AI provider connected'))
@@ -633,62 +538,3 @@ export function useAISettingsSurface() {
 }
 
 export type AISettingsSurface = ReturnType<typeof useAISettingsSurface>
-
-function routeOptionValue(providerId: string, modelKey: string): string {
-  return `${encodeURIComponent(providerId)}${ROUTE_OPTION_SEPARATOR}${encodeURIComponent(modelKey)}`
-}
-
-function parseRouteOptionValue(value: string): { providerId: string; modelKey: string } | null {
-  const [providerId, modelKey] = value.split(ROUTE_OPTION_SEPARATOR)
-  if (!providerId || !modelKey) return null
-  return {
-    providerId: decodeURIComponent(providerId),
-    modelKey: decodeURIComponent(modelKey),
-  }
-}
-
-function modelUsableForSlot(model: AiModelCatalogItem, slot: AiCapabilitySlot): boolean {
-  if (!model.is_available) return false
-  if (slot.requires_embedding_dimension && model.embedding_dimension !== slot.requires_embedding_dimension) {
-    return false
-  }
-  if (slot.slot === 'embeddings') {
-    return model.category === 'embeddings' || model.capabilities.includes('embeddings')
-  }
-  if (model.category === 'embeddings' || model.capabilities.includes('embeddings')) return false
-  if (slot.slot === 'reasoning') {
-    return model.category === 'reasoning' || model.capabilities.includes('reasoning')
-  }
-  if (slot.slot === 'summarization') {
-    return model.capabilities.includes('summarization') || model.capabilities.includes('chat')
-  }
-  if (slot.slot === 'extraction') {
-    return model.capabilities.includes('extraction') || model.capabilities.includes('chat')
-  }
-  return model.capabilities.includes('chat') || model.category === 'chat' || model.category === 'reasoning'
-}
-
-function mergedApiPresets(providerPresets: AiProviderPreset[]): AiProviderPreset[] {
-  const presetsByKey = new Map<string, AiProviderPreset>()
-  for (const preset of DEFAULT_API_PROVIDER_PRESETS) {
-    presetsByKey.set(preset.provider_key, preset)
-  }
-  for (const preset of providerPresets) {
-    if (preset.provider_kind === 'api') {
-      presetsByKey.set(preset.provider_key, preset)
-    }
-  }
-  return Array.from(presetsByKey.values())
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error) return error.message
-  const message = typeof error === 'object' && error !== null && 'message' in error ? error.message : null
-  return typeof message === 'string' ? message : fallback
-}
-
-function metadataBoolean(metadata: Record<string, unknown>, key: string): boolean { return metadata[key] === true }
-
-function modelStateKey(model: AiModelCatalogItem): string { return `${model.provider_id}:${model.model_key}` }
-
-function providerIsBuiltInOllama(providerId: string): boolean { return providerId === 'provider:built_in:ollama' }

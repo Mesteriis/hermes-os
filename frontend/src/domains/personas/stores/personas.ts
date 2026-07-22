@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { PersonaDossier, PersonaIdentityCandidate, PersonaIdentity, Relationship } from '../types/persona'
+import type {
+  PersonaDossier,
+  PersonaIdentityCandidate,
+  PersonaIdentity,
+  PersonaIdentityReviewState,
+  Relationship
+} from '../types/persona'
 import { reviewIdentityCandidate, assignIdentityTrace, reviewRelationship } from '../api/personas'
 
 export function formatIdentityTraceKind(kind: string): string {
@@ -111,11 +117,18 @@ export const usePersonasStore = defineStore('personas', () => {
   }
 
   async function reviewCandidate(candidate: PersonaIdentityCandidate, state: PersonaIdentityCandidate['review_state']) {
+    if (!isReviewableIdentityCandidateState(state)) return
     try {
-      await reviewIdentityCandidate(candidate.identity_candidate_id, state as any)
+      await reviewIdentityCandidate(candidate.identity_candidate_id, state)
     } catch (e: any) {
       identityCandidatesError.value = e.message || 'Review failed'
-    }
+}
+
+function isReviewableIdentityCandidateState(
+  state: PersonaIdentityCandidate['review_state']
+): state is PersonaIdentityReviewState {
+  return state === 'user_confirmed' || state === 'user_rejected'
+}
   }
 
   async function assignTraceToPersona(trace: PersonaIdentity, personaId: string) {

@@ -4,6 +4,7 @@ import { useI18n } from '@/platform/i18n'
 import { Badge, Button, EntityIcon, Icon, ScoreGauge } from '@/shared/ui'
 import '../communicationDomainElements.css'
 import type { MailInspectorModel } from './mailInspector'
+import { communicationInspectorScoreUnit } from '../communicationInspectorScorePresentation'
 
 const props = defineProps<{
   model: MailInspectorModel
@@ -11,7 +12,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 
-const scoreUnit = computed(() => `/${props.model.intelligence.maxScore}`)
+const scoreUnit = computed(() => communicationInspectorScoreUnit(props.model.intelligence.maxScore))
 </script>
 
 <template>

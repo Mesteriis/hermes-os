@@ -17,9 +17,11 @@ import type {
   CommunicationFolderUpdate
 } from '../types/folders'
 
+const DEFAULT_COMMUNICATIONS_FOLDER_LIMIT = 1000
+
 export async function fetchCommunicationFolders(
   accountId?: string,
-  limit = 500,
+  limit = DEFAULT_COMMUNICATIONS_FOLDER_LIMIT,
   cursor?: string | null
 ): Promise<CommunicationFolderListResponse> {
   return fetchCommunicationFoldersConnect(accountId, limit, cursor ?? undefined)

@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use hermes_communications_ingress::CommunicationObservationDraft;
 use hermes_mail_api::{
     DEFAULT_WINDOW, MAX_PLAIN_TEXT_BYTES, MAX_WINDOWS, MailContractError::WindowLimitExceeded,
-    SYNC_DEADLINE_SECONDS, WINDOW_DEADLINE_SECONDS, valid_host, valid_message_bytes,
-    valid_plain_text_bytes, valid_port, valid_window,
+    SYNC_DEADLINE_SECONDS, WINDOW_DEADLINE_SECONDS, valid_host, valid_message_bytes, valid_port,
+    valid_window,
 };
 
 pub use hermes_mail_api::{
@@ -124,7 +124,7 @@ pub fn validate_sync_request(
     if !valid_port(port) {
         return Err(MailContractError::InvalidPort);
     }
-    if !valid_plain_text_bytes(body_bytes) {
+    if body_bytes > MAX_PLAIN_TEXT_BYTES {
         return Err(MailContractError::InvalidPayload);
     }
     if !valid_message_bytes(body_bytes) {
@@ -138,15 +138,17 @@ pub fn draft_ingress_observation(
     source_kind: impl Into<String>,
     source_id: impl Into<String>,
     body_bytes: usize,
+    preview: Option<String>,
 ) -> Result<CommunicationObservationDraft, MailContractError> {
     if body_bytes > MAX_PLAIN_TEXT_BYTES {
         return Err(MailContractError::InvalidPayload);
     }
+    let text_preview = preview.filter(|value| !value.trim().is_empty());
     Ok(CommunicationObservationDraft {
         operation_id: operation_id.to_string(),
         source_id: source_id.into(),
         source_kind: source_kind.into(),
-        text_preview: None,
+        text_preview,
         has_body: body_bytes > 0,
         is_final_window: true,
     })

@@ -141,15 +141,18 @@ function parseJsonErrorBody(body: string | undefined): { code?: string; message?
 	if (!body) return null
 	try {
 		const parsed: unknown = JSON.parse(body)
-		if (!parsed || typeof parsed !== 'object') return null
-		const record = parsed as Record<string, unknown>
+		if (!isRecord(parsed)) return null
 		return {
-			code: stringValue(record.error) ?? stringValue(record.code),
-			message: stringValue(record.message),
+			code: stringValue(parsed.error) ?? stringValue(parsed.code),
+			message: stringValue(parsed.message),
 		}
 	} catch {
 		return null
 	}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function stringValue(value: unknown): string | undefined {

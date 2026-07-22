@@ -1,64 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, useId, watch } from 'vue'
+import { ref, useId } from 'vue'
 import { useI18n } from '@/platform/i18n'
-import {
-  Button,
-  Combobox,
-  DropdownMenu,
-  DropdownMenuItem,
-  Icon,
-  NoSearchResultsState,
-  Popover,
-  ToggleGroup,
-  TreeSelect,
-  type TreeSelectOption
-} from '@/shared/ui'
+import { Button, Combobox, DropdownMenu, DropdownMenuItem, Icon, NoSearchResultsState, Popover, ToggleGroup, TreeSelect } from '@/shared/ui'
 import '../communicationDomainElements.css'
 import MailListItem from './MailListItem.vue'
 import MailSyncProgress from './MailSyncProgress.vue'
-import type { MailSyncStatus } from '../../types/communications'
-import {
-  mailListDensityToggleItems,
-  type MailListItemDensity,
-  type MailListItemModel
-} from './mailElements'
-import {
-  createMailListSearchBuilderState,
-  mailListSearchBuilderAddClause,
-  mailListSearchBuilderCanAdd,
-  mailListSearchBuilderCanApply,
-  mailListSearchBuilderClauseViews,
-  mailListSearchBuilderClear,
-  mailListSearchBuilderQuery,
-  mailListSearchBuilderRemoveClause,
-  mailListSearchBuilderSetField,
-  mailListSearchBuilderSetMatchMode,
-  mailListSearchBuilderSetOperator,
-  mailListSearchBuilderSetValue,
-  mailListSearchBuilderOperatorItems,
-  mailListSearchBuilderPresetItems,
-  mailListSearchLocalizedToggleItems,
-  mailListSearchFieldGroups,
-  mailListSearchFieldItem,
-  mailListSearchMatchModeItems,
-  mailListItemsForSearch,
-  type MailListSearchBuilderClause,
-  type MailListSearchBuilderState
-} from './mailSearchBuilder'
-import { mailListSearchBuilderValueSuggestions } from './mailSearchSuggestions'
-import {
-  isMailListViewId,
-  mailListItemIds,
-  mailListItemsForView,
-  mailListTreeSelectOptions,
-  type MailListViewId
-} from './mailListViews'
+import { mailListDensityToggleItems, type MailListItemModel } from './mailElements'
+import { useMailListController, type MailListControllerActions } from '../../queries/useMailListController'
 
-type MailListSavedFilter = {
-  id: string
-  name: string
-  state: MailListSearchBuilderState
-}
+import type { MailSyncStatus } from '../../types/communications'
 
 const props = defineProps<{
   items: readonly MailListItemModel[]
@@ -80,239 +30,94 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const loadMoreScrollThresholdPx = 320
 const plainSearchInputId = `mail-plain-search-${useId()}`
 const searchBuilderValueInputId = `mail-search-builder-value-${useId()}`
 const searchBuilderFilterNameInputId = `mail-search-builder-filter-name-${useId()}`
-const activeDensity = ref<MailListItemDensity>('comfortable')
-const activeMailViewId = ref<MailListViewId | string>('mail:all')
-const activeSearchBuilderGroupId = ref(mailListSearchFieldGroups[0]?.id ?? 'text')
-const isSearchBuilderOpen = ref(false)
-const isPlainSearchOpen = ref(Boolean(props.searchQuery?.trim()))
-const syncProgressVisible = ref(false)
-const searchBuilderState = ref<MailListSearchBuilderState>(createMailListSearchBuilderState())
-const savedFilterName = ref('')
-const savedFilters = ref<MailListSavedFilter[]>([])
-const nextSavedFilterId = ref(1)
 const mailImportInput = ref<HTMLInputElement | null>(null)
+const controller = useMailListController(
+  props,
+  {
+    loadMore: () => emit('load-more'),
+    refresh: () => emit('refresh'),
+    importMailFile: (file) => emit('import-mail-file', file),
+    selectItem: (item) => emit('select-item', item),
+    updateSearchQuery: (query) => emit('update-search-query', query),
+    visibleItemsChange: (itemIds) => emit('visible-items-change', itemIds),
+  } satisfies MailListControllerActions,
+)
 
-const plainSearchQuery = computed(() => props.searchQuery ?? '')
-const plainSearchIsActive = computed(() => plainSearchQuery.value.trim().length > 0)
-const plainSearchButtonClass = computed(() => {
-  const base = 'mail-list-view-select-row__search hermes-icon-button'
-  return plainSearchIsActive.value ? `${base} mail-list-view-select-row__search--active` : base
-})
-const builderSearchQuery = computed(() => mailListSearchBuilderQuery(searchBuilderState.value))
-const listItems = computed(() => props.items)
-const viewItems = computed(() => mailListItemsForView(listItems.value, activeMailViewId.value))
-const visibleItems = computed(() => mailListItemsForSearch(viewItems.value, builderSearchQuery.value))
-const mailViewOptions = computed<TreeSelectOption[]>(() => {
-  const savedFilterOptions: TreeSelectOption[] = []
-
-  for (const filter of savedFilters.value) {
-    savedFilterOptions.push({
-      value: filter.id,
-      label: filter.name,
-      icon: 'tabler:filter-check'
-    })
-  }
-
-  if (savedFilterOptions.length === 0) {
-    savedFilterOptions.push({
-      value: 'saved-filters:empty',
-      label: t('No saved filters yet'),
-      icon: 'tabler:circle-dashed',
-      disabled: true
-    })
-  }
-
-  return mailListTreeSelectOptions(listItems.value, savedFilterOptions, t, Boolean(props.hasMoreItems))
-})
-const searchBuilderCanAdd = computed(() => mailListSearchBuilderCanAdd(searchBuilderState.value))
-const searchBuilderCanApply = computed(() => mailListSearchBuilderCanApply(searchBuilderState.value))
-const searchBuilderCanSave = computed(() => searchBuilderCanApply.value && savedFilterName.value.trim().length > 0)
-const searchBuilderClauseViews = computed(() => mailListSearchBuilderClauseViews(searchBuilderState.value))
-const searchBuilderFieldGroups = computed(() => mailListSearchFieldGroups)
-const activeSearchBuilderFieldGroup = computed(() => {
-  return searchBuilderFieldGroups.value.find((group) => group.id === activeSearchBuilderGroupId.value)
-    ?? searchBuilderFieldGroups.value[0]
-})
-const localizedSearchMatchModeItems = computed(() => mailListSearchLocalizedToggleItems(mailListSearchMatchModeItems, t))
-const searchBuilderOperatorOptions = computed(() => {
-  return mailListSearchLocalizedToggleItems(mailListSearchBuilderOperatorItems(searchBuilderState.value), t)
-})
-const searchBuilderPresetOptions = computed(() => {
-  return mailListSearchLocalizedToggleItems(mailListSearchBuilderPresetItems(searchBuilderState.value), t)
-})
-const searchBuilderValuePlaceholder = computed(() => t(mailListSearchFieldItem(searchBuilderState.value.field).placeholder))
-const searchBuilderValueSuggestions = computed(() => {
-  return mailListSearchBuilderValueSuggestions(viewItems.value, searchBuilderState.value)
-})
-
-watch(
+const {
+  activeDensity,
+  activeMailViewId,
+  activeSearchBuilderGroupId,
+  isSearchBuilderOpen,
+  isPlainSearchOpen,
+  syncProgressVisible,
+  searchBuilderState,
+  savedFilterName,
+  searchBuilderCanAdd,
+  searchBuilderCanApply,
+  searchBuilderCanSave,
+  searchBuilderClauseViews,
+  searchBuilderFieldGroups,
+  activeSearchBuilderFieldGroup,
+  searchBuilderOperatorOptions,
+  searchBuilderPresetOptions,
+  searchBuilderValuePlaceholder,
+  searchBuilderValueSuggestions,
   visibleItems,
-  (items) => {
-    emit('visible-items-change', mailListItemIds(items))
-  },
-  { immediate: true }
-)
-
-watch(
-  () => props.searchQuery,
-  (query) => {
-    if (query?.trim()) isPlainSearchOpen.value = true
-  }
-)
-
-function selectDensity(value: MailListItemDensity): void {
-  activeDensity.value = value
-}
-
-function densityIsActive(value: MailListItemDensity): boolean {
-  return activeDensity.value === value
-}
-
-function densityMenuItemClass(value: MailListItemDensity): string {
-  if (densityIsActive(value)) {
-    return 'mail-list-settings-menu__item mail-list-settings-menu__item--active'
-  }
-
-  return 'mail-list-settings-menu__item'
-}
-
-function updateSearchBuilderMatchMode(value: string | string[]): void {
-  searchBuilderState.value = mailListSearchBuilderSetMatchMode(searchBuilderState.value, value)
-}
-
-function updateSearchBuilderField(value: string | string[]): void {
-  searchBuilderState.value = mailListSearchBuilderSetField(searchBuilderState.value, value)
-}
-
-function selectSearchBuilderFieldGroup(groupId: string): void {
-  activeSearchBuilderGroupId.value = groupId
-}
-
-function selectSearchBuilderField(groupId: string, value: string): void {
-  activeSearchBuilderGroupId.value = groupId
-  updateSearchBuilderField(value)
-}
-
-function searchBuilderFieldIsActive(value: string): boolean {
-  return searchBuilderState.value.field === value
-}
-
-function updateSearchBuilderOperator(value: string | string[]): void {
-  searchBuilderState.value = mailListSearchBuilderSetOperator(searchBuilderState.value, value)
-}
-
-function updateSearchBuilderValue(value: string): void {
-  searchBuilderState.value = mailListSearchBuilderSetValue(searchBuilderState.value, value)
-}
-
-function selectSearchBuilderPreset(value: string): void {
-  updateSearchBuilderValue(value)
-}
-
-function addSearchBuilderClause(): void {
-  searchBuilderState.value = mailListSearchBuilderAddClause(searchBuilderState.value)
-}
-
-function removeSearchBuilderClause(clauseId: string): void {
-  searchBuilderState.value = mailListSearchBuilderRemoveClause(searchBuilderState.value, clauseId)
-}
-
-function clearSearchBuilder(): void {
-  searchBuilderState.value = mailListSearchBuilderClear()
-}
-
-function togglePlainSearch(): void {
-  isPlainSearchOpen.value = !isPlainSearchOpen.value
-}
+  plainSearchQuery,
+  plainSearchIsActive,
+  plainSearchButtonClass,
+  mailViewOptions,
+  localizedSearchMatchModeItems,
+  densityMenuItemClass,
+  selectDensity,
+  updateSearchBuilderMatchMode,
+  updateSearchBuilderField,
+  selectSearchBuilderFieldGroup,
+  selectSearchBuilderField,
+  searchBuilderFieldIsActive,
+  updateSearchBuilderOperator,
+  updateSearchBuilderValue,
+  selectSearchBuilderPreset,
+  addSearchBuilderClause,
+  removeSearchBuilderClause,
+  clearSearchBuilder,
+  togglePlainSearch,
+  handleBodyScroll,
+  handleSyncProgressVisibilityChange,
+  applySearchBuilder,
+  saveSearchBuilderFilter,
+  selectMailView,
+  updateSearchQuery,
+  clearSearchQuery,
+  selectItem,
+  refresh,
+  loadMore,
+  importMailFile,
+  builderSearchQuery,
+} = controller
 
 function requestMailImport(): void {
   mailImportInput.value?.click()
 }
 
 function handleMailImportFile(event: Event): void {
-  const input = event.target as HTMLInputElement
+  if (!(event.target instanceof HTMLInputElement)) return
+  const input = event.target
   const file = input.files?.[0]
   input.value = ''
-  if (file) emit('import-mail-file', file)
+  if (file) importMailFile(file)
 }
 
 function updatePlainSearchQuery(event: Event): void {
-  emit('update-search-query', (event.target as HTMLInputElement).value)
+  if (!(event.target instanceof HTMLInputElement)) return
+  updateSearchQuery(event.target.value)
 }
 
 function clearPlainSearchQuery(): void {
-  emit('update-search-query', '')
-}
-
-function handleBodyScroll(event: Event): void {
-  if (!props.hasMoreItems || props.isLoadingMore) return
-
-  const target = event.currentTarget
-  if (!(target instanceof HTMLElement)) return
-
-  const remainingScrollPx = target.scrollHeight - target.scrollTop - target.clientHeight
-  if (remainingScrollPx <= loadMoreScrollThresholdPx) emit('load-more')
-}
-
-function handleSyncProgressVisibilityChange(isVisible: boolean): void {
-  syncProgressVisible.value = isVisible
-}
-
-function committedSearchBuilderState(state: MailListSearchBuilderState): MailListSearchBuilderState {
-  if (!mailListSearchBuilderCanAdd(state)) return state
-  return mailListSearchBuilderAddClause(state)
-}
-
-function cloneSearchBuilderState(state: MailListSearchBuilderState): MailListSearchBuilderState {
-  const clauses: MailListSearchBuilderClause[] = []
-  for (const clause of state.clauses) {
-    clauses.push({ ...clause })
-  }
-  return { ...state, clauses }
-}
-
-function applySearchBuilder(): void {
-  if (!searchBuilderCanApply.value) return
-  searchBuilderState.value = committedSearchBuilderState(searchBuilderState.value)
-  isSearchBuilderOpen.value = false
-}
-
-function saveSearchBuilderFilter(): void {
-  const name = savedFilterName.value.trim()
-  if (!name || !searchBuilderCanApply.value) return
-
-  const committedState = committedSearchBuilderState(searchBuilderState.value)
-  const filterId = `saved-filter:${nextSavedFilterId.value}`
-  nextSavedFilterId.value += 1
-  searchBuilderState.value = committedState
-  savedFilters.value = [
-    ...savedFilters.value,
-    {
-      id: filterId,
-      name,
-      state: cloneSearchBuilderState(committedState)
-    }
-  ]
-  activeMailViewId.value = filterId
-  savedFilterName.value = ''
-}
-
-function selectMailView(option: TreeSelectOption): void {
-  if (typeof option.value === 'string' && isMailListViewId(option.value)) {
-    activeMailViewId.value = option.value
-    return
-  }
-
-  for (const filter of savedFilters.value) {
-    if (filter.id === option.value) {
-      searchBuilderState.value = cloneSearchBuilderState(filter.state)
-      return
-    }
-  }
+  clearSearchQuery()
 }
 </script>
 
@@ -340,15 +145,15 @@ function selectMailView(option: TreeSelectOption): void {
 					:title="t('Import EML or MBOX')"
 					@click="requestMailImport"
 				/>
-				<Button
-					class="mail-list-action-card__tool hermes-icon-button"
-					variant="outline"
-					size="sm"
-					icon="tabler:refresh"
-					:aria-label="t('Refresh')"
-					:title="t('Refresh')"
-					@click="emit('refresh')"
-				/>
+						<Button
+							class="mail-list-action-card__tool hermes-icon-button"
+							variant="outline"
+							size="sm"
+							icon="tabler:refresh"
+							:aria-label="t('Refresh')"
+							:title="t('Refresh')"
+							@click="refresh"
+						/>
 				<DropdownMenu
 					align="end"
 					:side-offset="8"
@@ -608,13 +413,13 @@ function selectMailView(option: TreeSelectOption): void {
 			</header>
 			<div class="communication-workspace-panel__body" @scroll="handleBodyScroll">
 				<div v-if="visibleItems.length" class="communication-inbox-list">
-					<MailListItem
-						v-for="item in visibleItems"
-						:key="item.id"
-						:item="item"
-						:density="activeDensity"
-						@select="emit('select-item', $event)"
-					/>
+							<MailListItem
+								v-for="item in visibleItems"
+								:key="item.id"
+								:item="item"
+								:density="activeDensity"
+								@select="selectItem"
+							/>
 				</div>
 				<NoSearchResultsState
 					v-else
@@ -628,13 +433,13 @@ function selectMailView(option: TreeSelectOption): void {
 					class="mail-list-load-more"
 					aria-live="polite"
 				>
-					<Button
-						v-if="hasMoreItems && !isLoadingMore"
-						variant="ghost"
-						size="sm"
-						icon="tabler:chevrons-down"
-						@click="emit('load-more')"
-					>
+						<Button
+							v-if="hasMoreItems && !isLoadingMore"
+							variant="ghost"
+							size="sm"
+							icon="tabler:chevrons-down"
+							@click="loadMore"
+						>
 						{{ t('Load more') }}
 					</Button>
 					<span v-else class="mail-list-load-more__status">

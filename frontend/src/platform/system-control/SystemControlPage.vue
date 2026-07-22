@@ -2,14 +2,7 @@
 import { computed, ref } from 'vue'
 import Icon from '../../shared/ui/Icon.vue'
 import ToggleGroup from '../../shared/ui/ToggleGroup.vue'
-import {
-	ClientSurfaceAvailabilityStateV1,
-} from '../../gen/hermes/gateway/v1/client_bootstrap_pb'
-import {
-	clientSurfaceCatalog,
-	hasCompiledClientSurfaceAdapter,
-	type ClientSurfaceRouteId,
-} from '../client-runtime/clientSurfaces'
+import { clientSurfaceCatalog } from '../client-runtime/clientSurfaces'
 import { recoveryClientBootstrap, type ClientBootstrapSnapshot } from '../gateway/clientBootstrap'
 import {
 	eventComponents,
@@ -17,6 +10,12 @@ import {
 	schedulerComponents,
 	systemControlComponentRows,
 } from './systemControlComponents'
+import {
+  systemControlAvailableSurfaceCount,
+  systemControlModuleRows,
+  systemControlSurfaceRows,
+  systemControlSurfaceStateLabel,
+} from './systemControlPresentation'
 
 const props = withDefaults(defineProps<{
 	bootstrap?: ClientBootstrapSnapshot
@@ -30,39 +29,13 @@ type SystemControlSection = 'system' | 'registry' | 'scheduler' | 'events' | 'co
 
 const selectedSection = ref<SystemControlSection>('system')
 const bootstrap = computed(() => props.bootstrap ?? recoveryClientBootstrap())
-const availableSurfaceCount = computed(() => clientSurfaceCatalog.filter((surface) => surface.routeId === 'settings' || bootstrap.value.get(surface.routeId)?.available).length)
-const compositionRows = computed(() => clientSurfaceCatalog.map((surface) => {
-	const availability = surface.routeId === 'settings'
-		? { available: true, reasonCode: '', state: ClientSurfaceAvailabilityStateV1.AVAILABLE }
-		: bootstrap.value.get(surface.routeId) ?? {
-			available: false,
-			reasonCode: 'bootstrap_unavailable',
-			state: ClientSurfaceAvailabilityStateV1.UNAVAILABLE,
-		}
-	return { ...surface, ...availability, compiledAdapterReady: hasCompiledClientSurfaceAdapter(surface) }
-}))
-const moduleRows = computed(() => bootstrap.value.modules.map((module) => ({
-	registrationId: module.registrationId,
-	moduleId: module.moduleId,
-	grantEpoch: module.grantEpoch.toString(),
-	capabilityCount: module.capabilityIds.length,
-	sectionsEnabled: module.sectionsEnabled,
-	applyState: module.settings?.applyState ?? null,
-	reasonCode: module.settings?.sanitizedReasonCode ?? '',
-})))
+const availableSurfaceCount = computed(() => systemControlAvailableSurfaceCount(bootstrap.value))
+const compositionRows = computed(() => systemControlSurfaceRows(bootstrap.value))
+const moduleRows = computed(() => systemControlModuleRows(bootstrap.value.modules))
 const schedulerRows = computed(() => systemControlComponentRows(schedulerComponents, bootstrap.value.systemStatus))
 const eventRows = computed(() => systemControlComponentRows(eventComponents, bootstrap.value.systemStatus))
 const publicSettingsRows = computed(() => publicModuleSettingRows(bootstrap.value.modules))
 
-function surfaceStateLabel(routeId: ClientSurfaceRouteId, state: ClientSurfaceAvailabilityStateV1, available: boolean): string {
-	if (routeId === 'settings') return 'Recovery available'
-	if (available) return 'Available'
-	if (state === ClientSurfaceAvailabilityStateV1.AVAILABLE) return 'Adapter unavailable'
-	if (state === ClientSurfaceAvailabilityStateV1.STARTING) return 'Starting'
-	if (state === ClientSurfaceAvailabilityStateV1.BLOCKED) return 'Blocked'
-	if (state === ClientSurfaceAvailabilityStateV1.UNAVAILABLE) return 'Unavailable'
-	return 'Not admitted'
-}
 </script>
 
 <template>
@@ -102,7 +75,7 @@ function surfaceStateLabel(routeId: ClientSurfaceRouteId, state: ClientSurfaceAv
 				</section>
 				<section v-else-if="selectedSection === 'composition'" class="settings-section">
 					<header class="settings-section-toolbar"><h3>Client surfaces</h3></header>
-					<div class="settings-service-list" aria-label="Client surface admission"><article v-for="surface in compositionRows" :key="surface.routeId" class="settings-service-row" :class="{ disabled: !surface.available || !surface.compiledAdapterReady }"><Icon :icon="surface.icon" /><span><strong>{{ surface.label }}</strong><small>{{ surface.available ? (surface.compiledAdapterReady ? 'Ready for compiled route load' : 'client_route_adapter_unavailable') : surface.reasonCode || 'not_admitted' }}</small></span><strong>{{ surfaceStateLabel(surface.routeId, surface.state, surface.available && surface.compiledAdapterReady) }}</strong></article></div>
+					<div class="settings-service-list" aria-label="Client surface admission"><article v-for="surface in compositionRows" :key="surface.routeId" class="settings-service-row" :class="{ disabled: !surface.available || !surface.compiledAdapterReady }"><Icon :icon="surface.icon" /><span><strong>{{ surface.label }}</strong><small>{{ surface.available ? (surface.compiledAdapterReady ? 'Ready for compiled route load' : 'client_route_adapter_unavailable') : surface.reasonCode || 'not_admitted' }}</small></span><strong>{{ systemControlSurfaceStateLabel(surface.routeId, surface.state, surface.available && surface.compiledAdapterReady) }}</strong></article></div>
 					<h4 class="settings-subsection-title">Module Control Plane</h4>
 					<div v-if="moduleRows.length" class="settings-service-list" aria-label="Approved module composition"><article v-for="module in moduleRows" :key="module.registrationId" class="settings-service-row" :class="{ disabled: !module.sectionsEnabled }"><Icon icon="tabler:package" /><span><strong>{{ module.moduleId }}</strong><small>{{ module.registrationId }} · grants {{ module.capabilityCount }} · epoch {{ module.grantEpoch }}<template v-if="module.reasonCode"> · {{ module.reasonCode }}</template></small></span><strong>{{ module.sectionsEnabled ? (module.applyState ?? 'current') : (module.applyState ?? 'blocked_config') }}</strong></article></div>
 					<div v-else class="settings-empty-state">No approved modules</div>

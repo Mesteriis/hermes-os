@@ -21,52 +21,27 @@ import type {
 } from '../../../shared/mailSync/providerResources'
 import type {
   MailContentEgressSettings,
-  MailSensitiveForwardingPolicy,
   MailSensitiveForwardingPolicyInput,
 } from '../../../shared/mailSync/types'
 import { findSetting } from './useSettingsQuery'
-import { isMailProvider } from './integrationAccountPresentation'
+import { isMailProvider } from './integrationAccountPredicates'
 import { useSettingsStore } from '../stores/settings'
 import type { useApplicationSettingsSurface } from './useApplicationSettingsSurface'
 import type { useIntegrationsSettingsSurface } from './useIntegrationsSettingsSurface'
+import { saveMailSyncSettings, toggleMailSync } from './communicationsMailSyncActions'
+import { updateMailContentEgress } from './communicationsContentEgressActions'
+import {
+  deleteSensitiveForwardingPolicyAction,
+  saveSensitiveForwardingPolicyAction,
+} from './communicationsForwardingActions'
+import { saveProviderResourceMappingAction } from './communicationsResourceMappingActions'
+import {
+  newSensitiveForwardingPolicyDraft,
+  sensitiveForwardingPolicyInput,
+} from './communicationsForwardingPresentation'
 
 const MAIL_DEGRADATION_THRESHOLD_KEY = 'communications.mail.consecutive_failures_before_degraded'
 const TELEGRAM_READ_RECEIPT_REPORTS_ENABLED_KEY = 'communications.telegram.read_receipt_reports_enabled'
-
-function newSensitiveForwardingPolicyDraft(deliveryAccountId: string): MailSensitiveForwardingPolicyInput {
-  return {
-    delivery_account_id: deliveryAccountId,
-    name: 'Sensitive mail notification',
-    enabled: false,
-    include_message_body: false,
-    include_attachments: false,
-    fixed_recipients: [],
-    minimum_severity: 'high',
-    subject_template: 'Sensitive mail alert: {{severity}}',
-    body_template: 'Hermes detected a sensitive message. Reference: {{message_id}}\n{{attachment_notice}}',
-    max_sends_per_hour: 3,
-    quiet_hours: {},
-    expires_at: null,
-  }
-}
-
-function sensitiveForwardingPolicyInput(policy: MailSensitiveForwardingPolicy): MailSensitiveForwardingPolicyInput {
-  return {
-    policy_id: policy.policy_id,
-    delivery_account_id: policy.delivery_account_id,
-    name: policy.name,
-    enabled: policy.enabled,
-    include_message_body: policy.include_message_body,
-    include_attachments: policy.include_attachments,
-    fixed_recipients: [...policy.fixed_recipients],
-    minimum_severity: policy.minimum_severity,
-    subject_template: policy.subject_template,
-    body_template: policy.body_template,
-    max_sends_per_hour: policy.max_sends_per_hour,
-    quiet_hours: { ...policy.quiet_hours },
-    expires_at: policy.expires_at,
-  }
-}
 
 type ApplicationSettingsSurface = ReturnType<typeof useApplicationSettingsSurface>
 type IntegrationsSettingsSurface = ReturnType<typeof useIntegrationsSettingsSurface>
@@ -84,6 +59,7 @@ export function useCommunicationsSettingsSurface({
   const selectedMailAccountId = ref<string | null>(null)
   const batchSizeDraft = ref('')
   const pollIntervalDraft = ref('')
+  const windowsDraft = ref('')
   const commandDiagnosticsStatus = ref('')
   const syncSettingsQuery = useMailSyncSettingsQuery(() => selectedMailAccountId.value)
   const contentEgressQuery = useMailContentEgressSettingsQuery(() => selectedMailAccountId.value)
@@ -103,6 +79,32 @@ export function useCommunicationsSettingsSurface({
   const upsertSensitiveForwardingPolicy = useUpsertMailSensitiveForwardingPolicyMutation()
   const deleteSensitiveForwardingPolicy = useDeleteMailSensitiveForwardingPolicyMutation()
   const updateProviderResourceMapping = useUpdateMailProviderResourceMappingMutation()
+  const mailSyncActionDependencies = {
+    t: (key: string) => key,
+    clearMessages: () => store.clearMessages(),
+    setActionMessage: (message: string) => store.setActionMessage(message),
+    setError: (message: string) => store.setError(message),
+    updateSyncSettings: updateSyncSettings.mutateAsync,
+  }
+  const contentEgressActionDependencies = {
+    clearMessages: () => store.clearMessages(),
+    setActionMessage: (message: string) => store.setActionMessage(message),
+    setError: (message: string) => store.setError(message),
+    updateContentEgressSettings: updateContentEgressSettings.mutateAsync,
+  }
+  const forwardingActionDependencies = {
+    clearMessages: () => store.clearMessages(),
+    setActionMessage: (message: string) => store.setActionMessage(message),
+    setError: (message: string) => store.setError(message),
+    upsertPolicy: upsertSensitiveForwardingPolicy.mutateAsync,
+    deletePolicy: deleteSensitiveForwardingPolicy.mutateAsync,
+  }
+  const resourceMappingActionDependencies = {
+    clearMessages: () => store.clearMessages(),
+    setActionMessage: (message: string) => store.setActionMessage(message),
+    setError: (message: string) => store.setError(message),
+    updateProviderResourceMapping: updateProviderResourceMapping.mutateAsync,
+  }
 
   const mailAccounts = computed(() =>
     integrationsSettings.accounts.value.filter((account) => isMailProvider(account.provider_kind))
@@ -146,6 +148,7 @@ export function useCommunicationsSettingsSurface({
   watch(selectedSyncSettings, (settings) => {
     batchSizeDraft.value = settings ? String(settings.batch_size) : ''
     pollIntervalDraft.value = settings ? String(settings.poll_interval_seconds) : ''
+    windowsDraft.value = settings ? String(settings.windows) : ''
   }, { immediate: true })
 
   watch([selectedMailAccount, sensitiveForwardingPolicies], ([account, policies]) => {
@@ -181,72 +184,35 @@ export function useCommunicationsSettingsSurface({
   }
 
   async function saveSelectedMailSyncSettings() {
-    const account = selectedMailAccount.value
-    const settings = selectedSyncSettings.value
-    if (!account || !settings) return
-
-    const batchSize = Number.parseInt(batchSizeDraft.value, 10)
-    const pollIntervalSeconds = Number.parseInt(pollIntervalDraft.value, 10)
-    if (!Number.isInteger(batchSize) || batchSize < 1 || !Number.isInteger(pollIntervalSeconds) || pollIntervalSeconds < 1) {
-      store.setError('Mail sync batch size and poll interval must be positive integers.')
-      return
-    }
-
-    store.clearMessages()
-    try {
-      await updateSyncSettings.mutateAsync({
-        accountId: account.account_id,
-        settings: {
-          sync_enabled: settings.sync_enabled,
-          batch_size: batchSize,
-          poll_interval_seconds: pollIntervalSeconds,
-          failure_threshold: settings.failure_threshold ?? 3,
-        },
-      })
-      store.setActionMessage('Mail sync settings saved')
-    } catch (error) {
-      store.setError(error instanceof Error ? error.message : 'Mail sync settings update failed')
-    }
+    await saveMailSyncSettings(
+      selectedMailAccount.value?.account_id ?? null,
+      selectedSyncSettings.value,
+      batchSizeDraft.value,
+      pollIntervalDraft.value,
+      windowsDraft.value,
+      mailSyncActionDependencies
+    )
   }
 
   async function toggleSelectedMailSync(enabled: boolean) {
-    const account = selectedMailAccount.value
-    const settings = selectedSyncSettings.value
-    if (!account || !settings) return
-
-    store.clearMessages()
-    try {
-      await updateSyncSettings.mutateAsync({
-        accountId: account.account_id,
-        settings: {
-          ...settings,
-          sync_enabled: enabled,
-          failure_threshold: settings.failure_threshold ?? 3,
-        },
-      })
-      store.setActionMessage(enabled ? 'Mail sync enabled' : 'Mail sync paused')
-    } catch (error) {
-      store.setError(error instanceof Error ? error.message : 'Mail sync settings update failed')
-    }
+    await toggleMailSync(
+      selectedMailAccount.value?.account_id ?? null,
+      selectedSyncSettings.value,
+      enabled,
+      mailSyncActionDependencies
+    )
   }
 
   async function updateSelectedMailContentEgress(
     permission: keyof MailContentEgressSettings,
     enabled: boolean
   ) {
-    const account = selectedMailAccount.value
-    if (!account) return
-
-    store.clearMessages()
-    try {
-      await updateContentEgressSettings.mutateAsync({
-        accountId: account.account_id,
-        settings: { [permission]: enabled },
-      })
-      store.setActionMessage('Mail content access preference saved')
-    } catch (error) {
-      store.setError(error instanceof Error ? error.message : 'Mail content access preference update failed')
-    }
+    await updateMailContentEgress(
+      selectedMailAccount.value?.account_id ?? null,
+      permission,
+      enabled,
+      contentEgressActionDependencies
+    )
   }
 
   function selectSensitiveForwardingPolicy(policyId: string) {
@@ -302,48 +268,32 @@ export function useCommunicationsSettingsSurface({
   }
 
   async function saveSensitiveForwardingPolicy() {
-    const account = selectedMailAccount.value
     const draft = sensitiveForwardingDraft.value
-    if (!account) return
-    if (!draft.delivery_account_id || !draft.name.trim() || draft.fixed_recipients.length === 0) {
-      store.setError('Sensitive forwarding requires a delivery account, name and fixed recipients.')
-      return
-    }
-    if (!Number.isInteger(draft.max_sends_per_hour) || draft.max_sends_per_hour < 1) {
-      store.setError('Sensitive forwarding rate limit must be a positive integer.')
-      return
-    }
-
-    store.clearMessages()
-    try {
-      const policies = await upsertSensitiveForwardingPolicy.mutateAsync({
-        accountId: account.account_id,
-        policy: draft,
-      })
+    const policies = await saveSensitiveForwardingPolicyAction(
+      selectedMailAccount.value?.account_id ?? null,
+      draft,
+      forwardingActionDependencies
+    )
+    if (policies) {
       const saved = policies.find((policy) => policy.policy_id === draft.policy_id) ?? policies[0]
       if (saved) {
         selectedSensitiveForwardingPolicyId.value = saved.policy_id
         sensitiveForwardingDraft.value = sensitiveForwardingPolicyInput(saved)
       }
-      store.setActionMessage('Sensitive forwarding policy saved')
-    } catch (error) {
-      store.setError(error instanceof Error ? error.message : 'Sensitive forwarding policy update failed')
     }
   }
 
   async function removeSelectedSensitiveForwardingPolicy() {
-    const account = selectedMailAccount.value
+    const accountId = selectedMailAccount.value?.account_id ?? null
     const policyId = selectedSensitiveForwardingPolicyId.value
-    if (!account || !policyId) return
-
-    store.clearMessages()
-    try {
-      await deleteSensitiveForwardingPolicy.mutateAsync({ accountId: account.account_id, policyId })
+    const deleted = await deleteSensitiveForwardingPolicyAction(
+      accountId,
+      policyId,
+      forwardingActionDependencies
+    )
+    if (deleted && accountId) {
       selectedSensitiveForwardingPolicyId.value = null
-      sensitiveForwardingDraft.value = newSensitiveForwardingPolicyDraft(account.account_id)
-      store.setActionMessage('Sensitive forwarding policy deleted')
-    } catch (error) {
-      store.setError(error instanceof Error ? error.message : 'Sensitive forwarding policy deletion failed')
+      sensitiveForwardingDraft.value = newSensitiveForwardingPolicyDraft(accountId)
     }
   }
 
@@ -359,20 +309,12 @@ export function useCommunicationsSettingsSurface({
     resource: MailProviderResource,
     update: MailProviderResourceMappingUpdate
   ) {
-    const account = selectedMailAccount.value
-    if (!account || !resource.writable) return
-
-    store.clearMessages()
-    try {
-      await updateProviderResourceMapping.mutateAsync({
-        accountId: account.account_id,
-        mappingId: resource.mapping_id,
-        update,
-      })
-      store.setActionMessage('Mail provider mapping saved')
-    } catch (error) {
-      store.setError(error instanceof Error ? error.message : 'Mail provider mapping update failed')
-    }
+    await saveProviderResourceMappingAction(
+      selectedMailAccount.value?.account_id ?? null,
+      resource,
+      update,
+      resourceMappingActionDependencies
+    )
   }
 
   async function updateProviderResourceRole(
@@ -398,6 +340,7 @@ export function useCommunicationsSettingsSurface({
   return {
     batchSizeDraft,
     commandDiagnostics,
+    windowsDraft,
     commandDiagnosticsStatus,
     degradationThresholdDraft,
     degradationThresholdSetting,

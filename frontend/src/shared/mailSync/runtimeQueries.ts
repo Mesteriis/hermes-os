@@ -35,6 +35,7 @@ import type {
   MailContentEgressSettings,
   MailSensitiveForwardingPolicy,
   MailSensitiveForwardingPolicyInput,
+  MailSyncRunRequest,
   MailSyncRunResponse,
   MailSyncSettings,
   MailSyncSettingsUpdate,
@@ -253,8 +254,16 @@ export function useUpdateMailSyncSettingsMutation() {
 
 export function useRunMailSyncNowMutation() {
   const queryClient = useQueryClient()
-  return useMutation<MailSyncRunResponse, Error, string>({
-    mutationFn: async (accountId) => runMailSyncNow(accountId),
+  return useMutation<
+    MailSyncRunResponse,
+    Error,
+    string | { accountId: string; request?: MailSyncRunRequest }
+  >({
+    mutationFn: async (input) => {
+      const variables =
+        typeof input === 'string' ? { accountId: input } : input
+      return runMailSyncNow(variables.accountId, variables.request)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['communications-list'] })
       queryClient.invalidateQueries({ queryKey: ['communications-state-counts'] })
@@ -266,8 +275,16 @@ export function useRunMailSyncNowMutation() {
 
 export function useRunMailFullResyncMutation() {
   const queryClient = useQueryClient()
-  return useMutation<MailSyncRunResponse, Error, string>({
-    mutationFn: async (accountId) => runMailFullResync(accountId),
+  return useMutation<
+    MailSyncRunResponse,
+    Error,
+    string | { accountId: string; request?: MailSyncRunRequest }
+  >({
+    mutationFn: async (input) => {
+      const variables =
+        typeof input === 'string' ? { accountId: input } : input
+      return runMailFullResync(variables.accountId, variables.request)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['communications-list'] })
       queryClient.invalidateQueries({ queryKey: ['communications-state-counts'] })

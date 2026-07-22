@@ -51,8 +51,9 @@ export function applyWhatsAppRuntimeRealtimePatch(
 	const eventType = stringValue(envelope?.event?.event_type)
 	if (!eventType || !eventType.startsWith('whatsapp.')) return false
 
-	const payload = isRecord(envelope?.event?.payload)
-		? (envelope.event?.payload as WhatsAppRuntimeEventPayload)
+	const eventPayload = envelope?.event?.payload
+	const payload = isRecord(eventPayload)
+		? eventPayload
 		: undefined
 	if (!payload) return false
 

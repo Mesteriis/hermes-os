@@ -78,10 +78,11 @@ Vault lock and replay failure deny admission without a fallback path.
 writes отсутствуют и не advertised in descriptor/capabilities.
 
 One protocol step has a 10-second deadline; entire sync has a 5-minute
-deadline. Each configuration has at most one concurrent sync, and runtime has
-four globally. Initial window is 100 UIDs; later work is at most 500 messages
-across ten windows. Mail owns cursor, retry, provider locator/source mapping
-and its outbox.
+deadline. Each configuration has at most one concurrent sync, and this applies
+globally. Each sync uses a configurable window of up to 1,000,000 UIDs per window,
+with up to 1,000,000 windows per sync (default 5,000). Retry is bounded to 255
+attempts per adapter request. Mail owns cursor, retry, provider locator/source
+mapping and its outbox.
 
 Raw message is bounded to 1 MiB; only decoded `text/plain` up to 256 KiB may
 be persisted. HTML, attachments and raw MIME are neither stored nor emitted.
@@ -89,6 +90,11 @@ Oversized or no-text input yields metadata-only evidence. On UIDVALIDITY reset,
 source record may be reused only for an unambiguous `(Message-ID,
 INTERNALDATE, content digest)` match; otherwise a new evidence identity is
 created.
+
+Retry execution is driven by an adapter-local retry policy object inside
+`hermes-mail-imap`, not by ad-hoc hardcoded literals in the loop. This keeps
+`max_attempts` and per-attempt delay independently tunable and test-covered.
+Current implementation uses `MAX_SYNC_ATTEMPTS = 255` and `RETRY_DELAY_MILLIS = 120`.
 
 ### Communications and Blob boundary
 

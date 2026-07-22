@@ -46,6 +46,7 @@ import type {
   TranslationResponse,
   WorkflowStateTransitionResponse
 } from '../types/communications'
+import type { MailSyncRunRequest } from '../../../shared/mailSync/types'
 import type { ThreadTranslationResponse } from '../types/multilingual'
 
 function invalidateMessageViews(queryClient: ReturnType<typeof useQueryClient>, messageId: string) {
@@ -249,16 +250,30 @@ export function useExtractMessageNotesMutation() {
 
 export function useRunMailSyncNowMutation() {
   const queryClient = useQueryClient()
-  return useMutation<MailSyncRunResponse, Error, string>({
-    mutationFn: async (accountId) => runMailSyncNow(accountId),
+  return useMutation<
+    MailSyncRunResponse,
+    Error,
+    string | { accountId: string; request?: MailSyncRunRequest }
+  >({
+    mutationFn: async (input) => {
+      const variables = typeof input === 'string' ? { accountId: input } : input
+      return runMailSyncNow(variables.accountId, variables.request)
+    },
     onSuccess: () => invalidateSyncViews(queryClient)
   })
 }
 
 export function useRunMailFullResyncMutation() {
   const queryClient = useQueryClient()
-  return useMutation<MailSyncRunResponse, Error, string>({
-    mutationFn: async (accountId) => runMailFullResync(accountId),
+  return useMutation<
+    MailSyncRunResponse,
+    Error,
+    string | { accountId: string; request?: MailSyncRunRequest }
+  >({
+    mutationFn: async (input) => {
+      const variables = typeof input === 'string' ? { accountId: input } : input
+      return runMailFullResync(variables.accountId, variables.request)
+    },
     onSuccess: () => invalidateSyncViews(queryClient)
   })
 }

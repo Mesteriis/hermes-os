@@ -40,6 +40,10 @@ import type {
 } from '../types/whatsapp'
 import { whatsappQueryKeys } from './whatsappQueryKeys'
 
+export const WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE = 50
+export const WHATSAPP_RUNTIME_COMMANDS_PAGE_SIZE = 50
+export const WHATSAPP_RUNTIME_SESSIONS_PAGE_SIZE = 100
+
 export function useWhatsappRuntimeStatusQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>
 ) {
@@ -142,7 +146,7 @@ export function useRemoveWhatsappRuntimeMutation() {
 
 export function useWhatsappProviderCommandsQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,
-  limit = 25
+  limit = WHATSAPP_RUNTIME_COMMANDS_PAGE_SIZE
 ) {
   return useQuery<WhatsAppProviderCommand[]>({
     queryKey: computed(() => [
@@ -166,7 +170,7 @@ export function useWhatsappProviderCommandsQuery(
 
 export function useWhatsappSyncChatsQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,
-  limit = 12
+  limit = WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
 ) {
   return useQuery<WhatsAppChatSyncItem[]>({
     queryKey: computed(() => [
@@ -190,7 +194,7 @@ export function useWhatsappSyncChatsQuery(
 export function useWhatsappSyncHistoryQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,
   providerChatId: MaybeRefOrGetter<string | null | undefined>,
-  limit = 12
+  limit = WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
 ) {
   return useQuery<WhatsappWebMessage[]>({
     queryKey: computed(() => [
@@ -217,7 +221,7 @@ export function useWhatsappSyncHistoryQuery(
 export function useWhatsappSyncMembersQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,
   providerChatId: MaybeRefOrGetter<string | null | undefined>,
-  limit = 12
+  limit = WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
 ) {
   return useQuery<WhatsAppMembersSyncItem[]>({
     queryKey: computed(() => [
@@ -244,7 +248,7 @@ export function useWhatsappSyncMembersQuery(
 export function useWhatsappSyncPresenceQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,
   providerChatId: MaybeRefOrGetter<string | null | undefined> = null,
-  limit = 12
+  limit = WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
 ) {
   return useQuery<WhatsAppPresenceSyncItem[]>({
     queryKey: computed(() => [
@@ -269,7 +273,7 @@ export function useWhatsappSyncPresenceQuery(
 
 export function useWhatsappSyncStatusesQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,
-  limit = 12
+  limit = WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
 ) {
   return useQuery<WhatsappWebMessage[]>({
     queryKey: computed(() => [
@@ -293,7 +297,7 @@ export function useWhatsappSyncStatusesQuery(
 export function useWhatsappSyncCallsQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,
   providerChatId: MaybeRefOrGetter<string | null | undefined> = null,
-  limit = 12
+  limit = WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
 ) {
   return useQuery<WhatsAppCallSyncItem[]>({
     queryKey: computed(() => [
@@ -318,7 +322,7 @@ export function useWhatsappSyncCallsQuery(
 
 export function useWhatsappSyncContactsQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,
-  limit = 12
+  limit = WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
 ) {
   return useQuery<WhatsAppContactSyncItem[]>({
     queryKey: computed(() => [
@@ -342,7 +346,7 @@ export function useWhatsappSyncContactsQuery(
 export function useWhatsappSyncMediaQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,
   providerChatId: MaybeRefOrGetter<string | null | undefined> = null,
-  limit = 12
+  limit = WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
 ) {
   return useQuery<WhatsAppMediaSyncItem[]>({
     queryKey: computed(() => [

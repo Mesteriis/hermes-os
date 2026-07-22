@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClient } from '../../platform/api/ApiClient'
+import { MAX_MAIL_BATCH_SIZE } from './types'
 import {
   fetchMailProviderCommandDiagnostics,
   retryMailProviderCommand,
@@ -38,7 +39,7 @@ describe('mail provider command diagnostics API', () => {
 
     expect(result.items[0]?.command_kind).toBe('mark_read')
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      'http://127.0.0.1:8080/api/v1/communications/provider-commands/diagnostics?account_id=account-1&limit=50&status=retrying'
+      `http://127.0.0.1:8080/api/v1/communications/provider-commands/diagnostics?account_id=account-1&limit=${MAX_MAIL_BATCH_SIZE}&status=retrying`
     )
   })
 

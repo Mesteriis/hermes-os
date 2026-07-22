@@ -694,6 +694,18 @@ describe('Signal Hub settings API', () => {
     expect(fetchMock.mock.calls[0][1].method).toBe('POST')
   })
 
+  it('rejects an unsupported policy scope instead of asserting it into the domain model', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ items: [{ scope: 'future_scope', mode: 'muted', reason: 'test' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchSignalHubPolicies()).rejects.toThrow('Unsupported Signal Hub policy scope: future_scope')
+  })
+
   it('updates Signal Hub runtime states through the protected API client', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

@@ -11,13 +11,14 @@ import {
   communicationWorkflowStatusPresentation
 } from './communicationDomainElements'
 import './communicationDomainElements.css'
+import { communicationConversationActiveMessage } from './communicationConversationPresentation'
 
 const props = defineProps<{
   conversation: CommunicationConversationModel
 }>()
 
 const { t } = useI18n()
-const activeMailMessage = computed(() => props.conversation.messages[props.conversation.messages.length - 1])
+const activeMailMessage = computed(() => communicationConversationActiveMessage(props.conversation.messages))
 </script>
 
 <template>

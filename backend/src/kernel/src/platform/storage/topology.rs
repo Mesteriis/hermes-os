@@ -171,3 +171,37 @@ pub fn to_runtime(topology: &PlatformStorageTopology) -> Result<StorageRuntimeTo
         .map_err(|_| "Storage topology is invalid".to_owned())?;
     Ok(runtime)
 }
+
+pub fn to_managed_runtime_configuration(
+    topology: &PlatformStorageTopology,
+    binding: &PlatformStorageBindingV1,
+    vault_instance_id: &str,
+    vault_runtime_generation: u64,
+    vault_hpke_public_key_x25519: &[u8; 32],
+) -> Result<hermes_runtime_protocol::v1::ManagedStorageRuntimeConfigurationV1, String> {
+    let topology_runtime = to_runtime(topology)?;
+    let binding_runtime = to_runtime_binding(&topology_runtime, binding)?;
+    let budgets = binding_runtime.access().effective_budgets();
+    let configuration = hermes_runtime_protocol::v1::ManagedStorageRuntimeConfigurationV1 {
+        database_id: binding_runtime.identity().database_id().to_owned(),
+        pgbouncer_host: topology_runtime.pgbouncer_host,
+        pgbouncer_port: topology_runtime.pgbouncer_port,
+        runtime_principal: binding_runtime.access().runtime_principal().to_owned(),
+        storage_generation: binding_runtime.fences().storage_generation(),
+        credential_revision: binding_runtime.fences().credential_lease_revision(),
+        storage_instance_id: binding_runtime.identity().storage_instance_id().to_owned(),
+        owner: binding_runtime.identity().owner().to_owned(),
+        role_epoch: binding_runtime.fences().role_epoch(),
+        pool_alias: binding_runtime.access().pool_alias().to_owned(),
+        max_connections: u32::from(budgets.max_connections()),
+        statement_timeout_millis: budgets.statement_timeout_millis(),
+        storage_bundle_revision: binding_runtime.fences().storage_bundle_revision(),
+        storage_bundle_digest: binding_runtime.access().storage_bundle_digest().to_vec(),
+        vault_instance_id: vault_instance_id.to_owned(),
+        vault_runtime_generation,
+        vault_hpke_public_key_x25519: vault_hpke_public_key_x25519.to_vec(),
+        runtime_instance_id: binding_runtime.identity().runtime_instance_id().to_owned(),
+        logical_owner_id: binding_runtime.identity().owner().to_owned(),
+    };
+    Ok(configuration)
+}

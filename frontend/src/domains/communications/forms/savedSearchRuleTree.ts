@@ -323,7 +323,7 @@ function parseSavedSearchRuleField(value: string): SavedSearchRuleField | null {
   const normalized = value.trim().toLowerCase()
   if (normalized === 'from') return 'sender'
   if (normalized === 'subject' || normalized === 'body' || normalized === 'sender' || normalized === 'all') {
-    return normalized as SavedSearchRuleField
+    return normalized
   }
   return null
 }

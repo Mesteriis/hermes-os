@@ -20,7 +20,6 @@ import {
 import {
   TELEGRAM_TYPING_TTL_MS,
   type TelegramEventPayload,
-  type TelegramStoredEventEnvelope,
   chatQueryScope,
   eventSubjectId,
   insertChatByRecency,
@@ -51,18 +50,18 @@ export function applyTelegramRealtimePatch(
   const { getQueriesData, setQueryData } = queryClient
   if (!getQueriesData || !setQueryData) return false
 
-  const envelope = storedEventEnvelope(eventData) as TelegramStoredEventEnvelope | null
+	const envelope = storedEventEnvelope(eventData)
   const eventType = stringValue(envelope?.event?.event_type)
   if (!eventType || !eventType.startsWith('telegram.')) return false
 
   const occurredAt = stringValue(envelope?.event?.occurred_at)
-  const subjectId = eventSubjectId(envelope?.event?.subject)
-  const payload = isRecord(envelope?.event?.payload)
-    ? (envelope?.event?.payload as TelegramEventPayload)
-    : undefined
-  const metadata = isRecord(envelope?.event?.metadata)
-    ? (envelope?.event?.metadata as Record<string, unknown>)
-    : undefined
+	const subjectId = eventSubjectId(envelope?.event?.subject)
+	const payload = isRecord(envelope?.event?.payload)
+	    ? envelope.event.payload
+	    : undefined
+	const metadata = isRecord(envelope?.event?.metadata)
+	    ? envelope.event.metadata
+	    : undefined
   const snapshot = telegramMessageSnapshot(payload?.message)
   const chatSnapshot = telegramChatSnapshot(payload?.chat)
 
@@ -185,8 +184,8 @@ function patchMessageQueryData(
   payload: TelegramEventPayload | undefined,
   snapshot: TelegramMessage | null
 ): unknown {
-  if (Array.isArray(data)) {
-    return patchMessageList(queryKey, data as TelegramMessage[], eventType, subjectId, payload, snapshot)
+  if (isTelegramMessageList(data)) {
+    return patchMessageList(queryKey, data, eventType, subjectId, payload, snapshot)
   }
   if (!isTelegramInfiniteMessageData(data)) return data
 
@@ -210,6 +209,10 @@ function patchMessageQueryData(
     return { ...page, items }
   })
   return changed ? { ...data, pages } : data
+}
+
+function isTelegramMessageList(value: unknown): value is TelegramMessage[] {
+  return Array.isArray(value) && value.every((item) => telegramMessageSnapshot(item) !== null)
 }
 
 function isTelegramInfiniteMessageData(value: unknown): value is TelegramInfiniteMessageData {
@@ -294,7 +297,7 @@ function patchMessageList(
       const currentMetadata = snapshot?.metadata ?? message.metadata
       const currentSummary = isRecord(currentMetadata.reaction_summary)
         ? currentMetadata.reaction_summary
-        : { reactions: [] as Array<Record<string, unknown>> }
+        : { reactions: [] }
       const currentReactions = Array.isArray(currentSummary.reactions) ? currentSummary.reactions : []
       const existingIndex = currentReactions.findIndex(
         (item) => isRecord(item) && stringValue(item.reaction_emoji) === reactionEmoji

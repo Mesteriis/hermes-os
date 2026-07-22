@@ -1,4 +1,11 @@
-use hermes_mail_api::{IMAP_PORT, MAX_MESSAGE_BYTES, MAX_PLAIN_TEXT_BYTES};
+use hermes_mail_api::{
+    IMAP_PORT,
+    MAX_MESSAGE_BYTES,
+    MAX_PLAIN_TEXT_BYTES,
+    DEFAULT_WINDOW,
+    MAX_WINDOW,
+    MAX_WINDOWS,
+};
 use hermes_mail_core::{
     ConnectionTracker, MailConnection, MailConnectionState, MailOperation, MailStatePolicy,
     bounded_window, draft_ingress_observation, validate_sync_request,
@@ -6,10 +13,11 @@ use hermes_mail_core::{
 
 #[test]
 fn sync_plan_bounds() {
-    assert!(bounded_window(100, 1).is_ok());
-    assert!(bounded_window(500, 10).is_ok());
-    assert!(bounded_window(501, 10).is_err());
-    assert!(bounded_window(100, 11).is_err());
+    assert!(bounded_window(DEFAULT_WINDOW, 1).is_ok());
+    assert!(bounded_window(DEFAULT_WINDOW, MAX_WINDOWS).is_ok());
+    assert!(bounded_window(MAX_WINDOW, 1).is_ok());
+    assert!(bounded_window(MAX_WINDOW + 1, 1).is_err());
+    assert!(bounded_window(DEFAULT_WINDOW, MAX_WINDOWS + 1).is_err());
     assert!(bounded_window(0, 1).is_err());
 }
 
@@ -33,7 +41,7 @@ fn tracker_updates_state() {
     let operation = MailOperation {
         operation_id: "op-1".to_owned(),
         state: MailConnectionState::Syncing,
-        window_size: 100,
+        window_size: DEFAULT_WINDOW,
     };
     tracker.set_syncing("conn-1", operation.clone());
     assert_eq!(
@@ -68,19 +76,26 @@ fn sync_request_validation() {
 
 #[test]
 fn ingress_observation_validation() {
-    let draft = draft_ingress_observation("op-1", "mail-imap", "source", 100).unwrap();
+    let draft = draft_ingress_observation("op-1", "mail-imap", "source", 200, None).unwrap();
     assert_eq!(draft.operation_id, "op-1");
     assert_eq!(draft.source_id, "source");
     assert_eq!(draft.source_kind, "mail-imap");
     assert!(draft.has_body);
 
     assert!(
-        draft_ingress_observation("op-2", "mail-imap", "source", MAX_PLAIN_TEXT_BYTES + 1).is_err()
+        draft_ingress_observation(
+            "op-2",
+            "mail-imap",
+            "source",
+            MAX_PLAIN_TEXT_BYTES + 1,
+            None
+        )
+        .is_err()
     );
 }
 
 #[test]
 fn policy_defaults_are_stable() {
     let policy = MailStatePolicy::new();
-    assert_eq!(policy.max_sync_windows, 10);
+    assert_eq!(policy.max_sync_windows, MAX_WINDOWS);
 }

@@ -4,6 +4,7 @@ import {
   fetchTelegramCommands,
   retryTelegramCommand,
 } from './telegramLifecycle'
+import { TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE } from '../queries/telegramRuntimePanelActions'
 
 describe('telegram lifecycle reference API', () => {
   beforeEach(() => {
@@ -17,6 +18,7 @@ describe('telegram lifecycle reference API', () => {
   })
 
   it('fetches account command rows', async () => {
+    const defaultCommandsChunkSize = TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(JSON.stringify({ items: [] }), {
         status: 200,
@@ -25,13 +27,13 @@ describe('telegram lifecycle reference API', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await fetchTelegramCommands('acct-1', 25, {
+    await fetchTelegramCommands('acct-1', defaultCommandsChunkSize, {
       providerChatId: 'chat-42',
       providerMessageId: 'chat-42:77',
       commandKinds: ['mark_read', 'mark_unread'],
     })
 
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/commands?account_id=acct-1&limit=25')
+    expect(fetchMock.mock.calls[0][0]).toContain(`/api/v1/integrations/telegram/commands?account_id=acct-1&limit=${defaultCommandsChunkSize}`)
     expect(fetchMock.mock.calls[0][0]).toContain('provider_chat_id=chat-42')
     expect(fetchMock.mock.calls[0][0]).toContain('provider_message_id=chat-42%3A77')
     expect(fetchMock.mock.calls[0][0]).toContain('command_kinds=mark_read%2Cmark_unread')

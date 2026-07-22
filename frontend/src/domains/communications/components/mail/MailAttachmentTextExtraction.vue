@@ -1,55 +1,30 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from '@/platform/i18n'
 import { Button } from '@/shared/ui'
 import type { CommunicationConversationAttachmentModel } from '../communicationDomainElements'
-import {
-  useAttachmentExtractedTextQuery,
-  useExtractAttachmentTextMutation,
-  useTranslateAttachmentMutation
-} from '../../queries/mailWorkspaceQueries'
-import {
-  canExtractMailAttachmentText,
-  extractionStatusLabel
-} from './mailAttachmentTextExtractionPresentation'
+import { useMailAttachmentTextExtractionController } from '../../queries/useMailAttachmentTextExtractionController'
 
 const props = defineProps<{
   attachment: CommunicationConversationAttachmentModel
 }>()
 
 const { t } = useI18n()
-const requested = ref(false)
-const requestFailed = ref(false)
-const targetLanguage = ref('en')
-const extractionMutation = useExtractAttachmentTextMutation()
-const translationMutation = useTranslateAttachmentMutation()
-const extractedTextQuery = useAttachmentExtractedTextQuery(
-  () => props.attachment.id,
-  () => requested.value && extractionMutation.data.value?.status === 'completed'
+const controller = useMailAttachmentTextExtractionController(
+  computed(() => props.attachment),
 )
-const canExtract = computed(() => canExtractMailAttachmentText(props.attachment))
-const extractionStatus = computed(() => {
-  const status = extractionMutation.data.value?.status
-  return status ? extractionStatusLabel(status) : null
-})
-
-async function extractText(): Promise<void> {
-  requestFailed.value = false
-
-  try {
-    await extractionMutation.mutateAsync({ attachmentId: props.attachment.id })
-    requested.value = true
-  } catch {
-    requestFailed.value = true
-  }
-}
-
-async function translateExtractedText(): Promise<void> {
-  await translationMutation.mutateAsync({
-    attachmentId: props.attachment.id,
-    request: { target_language: targetLanguage.value }
-  })
-}
+const {
+  requested,
+  requestFailed,
+  targetLanguage,
+  extractionMutation,
+  translationMutation,
+  extractedTextQuery,
+  canExtract,
+  extractionStatus,
+  extractText,
+  translateExtractedText,
+} = controller
 </script>
 
 <template>

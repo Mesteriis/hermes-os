@@ -1,4 +1,5 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
+import type { MailSyncSettings } from '../../../shared/mailSync/types'
 import type {
   CalendarAccount,
   ProviderAccount,
@@ -107,10 +108,11 @@ export async function importMailAccountSettings(
       external_account_id: string
       config?: Record<string, unknown>
     }
-    sync_settings?: {
+    sync_settings?: Partial<MailSyncSettings> & {
       sync_enabled?: boolean
       batch_size?: number
       poll_interval_seconds?: number
+      windows?: number
     }
   }
 ): Promise<{ account: unknown; capabilities: unknown; sync_settings: unknown }> {

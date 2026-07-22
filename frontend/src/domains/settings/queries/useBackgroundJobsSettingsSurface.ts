@@ -6,6 +6,7 @@ import {
   buildBackgroundJobSummaryTiles,
   buildBackgroundJobTabs,
   buildMailSyncStatusRows,
+  filterBackgroundJobRows,
   type BackgroundJobFilter
 } from '../components/backgroundJobsPresentation'
 import type { AISettingsSurface } from './useAISettingsSurface'
@@ -60,10 +61,9 @@ export function useBackgroundJobsSettingsSurface({
     })
   )
   const backgroundJobTabs = computed(() => buildBackgroundJobTabs(backgroundJobRows.value))
-  const filteredBackgroundJobRows = computed(() => {
-    if (activeJobFilter.value === 'all') return backgroundJobRows.value
-    return backgroundJobRows.value.filter((row) => row.group === activeJobFilter.value)
-  })
+  const filteredBackgroundJobRows = computed(() =>
+    filterBackgroundJobRows(backgroundJobRows.value, activeJobFilter.value)
+  )
   const summaryTiles = computed(() => buildBackgroundJobSummaryTiles(backgroundJobRows.value))
   const mailStatusRows = computed(() => buildMailSyncStatusRows(mailStatuses.value))
   const isLoading = computed(

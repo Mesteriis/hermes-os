@@ -168,6 +168,8 @@
       {"name":"hermes-events-authority-runtime-control","role":"platform","owner":"events","surface":"implementation"},
       {"name":"hermes-events-authority-runtime","role":"platform","owner":"events","surface":"runtime"},
       {"name":"hermes-blob-protocol","role":"platform","owner":"blob","surface":"contract"},
+      {"name":"hermes-blob-client-contract","role":"platform","owner":"blob","surface":"contract"},
+      {"name":"hermes-blob-client","role":"platform","owner":"blob","surface":"implementation"},
       {"name":"hermes-blob-runtime","role":"platform","owner":"blob","surface":"implementation"},
       {"name":"hermes-blob-service","role":"platform","owner":"blob","surface":"runtime"},
       {"name":"hermes-scheduler-protocol","role":"platform","owner":"scheduler","surface":"contract"},
@@ -183,6 +185,15 @@
       {"name":"hermes-mail-imap","role":"integration","owner":"mail","surface":"implementation"},
       {"name":"hermes-mail-persistence","role":"integration","owner":"mail","surface":"persistence"},
       {"name":"hermes-mail-runtime","role":"integration","owner":"mail","surface":"runtime"},
+      {"name":"hermes-telegram-api","role":"integration","owner":"telegram","surface":"contract"},
+      {"name":"hermes-telegram-core","role":"integration","owner":"telegram","surface":"implementation"},
+      {"name":"hermes-telegram-tdlib","role":"integration","owner":"telegram","surface":"implementation"},
+      {"name":"hermes-telegram-persistence","role":"integration","owner":"telegram","surface":"persistence"},
+      {"name":"hermes-telegram-runtime","role":"integration","owner":"telegram","surface":"runtime"},
+      {"name":"hermes-whatsapp-api","role":"integration","owner":"whatsapp","surface":"contract"},
+      {"name":"hermes-whatsapp-core","role":"integration","owner":"whatsapp","surface":"implementation"},
+      {"name":"hermes-whatsapp-persistence","role":"integration","owner":"whatsapp","surface":"persistence"},
+      {"name":"hermes-whatsapp-runtime","role":"integration","owner":"whatsapp","surface":"runtime"},
       {"name":"hermes-communications-ingress","role":"domain","owner":"communications","surface":"contract"},
       {"name":"hermes-communications-api","role":"domain","owner":"communications","surface":"contract"},
       {"name":"hermes-communications-domain","role":"domain","owner":"communications","surface":"implementation"},
@@ -336,6 +347,13 @@
         {"name":"hermes-runtime-protocol","kind":"normal"}
       ],
       "hermes-blob-protocol": [],
+      "hermes-blob-client-contract": [
+        { "name": "hermes-runtime-protocol", "kind": "normal" }
+      ],
+      "hermes-blob-client": [
+        { "name": "hermes-blob-client-contract", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" }
+      ],
       "hermes-blob-runtime": [
         {"name":"hermes-blob-protocol","kind":"normal"},
         {"name":"hermes-runtime-protocol","kind":"normal"},
@@ -405,6 +423,55 @@
         { "name": "hermes-mail-core", "kind": "normal" },
         { "name": "hermes-mail-imap", "kind": "normal" },
         { "name": "hermes-mail-persistence", "kind": "normal" }
+      ],
+      "hermes-telegram-api": [
+        { "name": "serde", "kind": "normal" }
+      ],
+      "hermes-telegram-core": [
+        { "name": "hermes-telegram-api", "kind": "normal" },
+        { "name": "hermes-communications-ingress", "kind": "normal" },
+        { "name": "hermes-vault-protocol", "kind": "normal" }
+      ],
+      "hermes-telegram-tdlib": [
+        { "name": "hermes-telegram-api", "kind": "normal" }
+      ],
+      "hermes-telegram-persistence": [
+        { "name": "hermes-communications-ingress", "kind": "normal" },
+        { "name": "hermes-telegram-api", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" },
+        { "name": "serde_json", "kind": "normal" },
+        { "name": "sqlx", "kind": "normal" }
+      ],
+      "hermes-telegram-runtime": [
+        { "name": "hermes-blob-client-contract", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" },
+        { "name": "hermes-storage-vault", "kind": "normal" },
+        { "name": "hermes-telegram-api", "kind": "normal" },
+        { "name": "hermes-telegram-core", "kind": "normal" },
+        { "name": "hermes-telegram-persistence", "kind": "normal" },
+        { "name": "hermes-telegram-tdlib", "kind": "normal" },
+        { "name": "hermes-vault-protocol", "kind": "normal" },
+        { "name": "serde_json", "kind": "normal" },
+        { "name": "tokio", "kind": "normal" }
+      ],
+      "hermes-whatsapp-api": [],
+      "hermes-whatsapp-core": [
+        { "name": "hermes-whatsapp-api", "kind": "normal" }
+      ],
+      "hermes-whatsapp-persistence": [
+        { "name": "hermes-whatsapp-api", "kind": "normal" },
+        { "name": "hermes-whatsapp-core", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
+      ],
+      "hermes-whatsapp-runtime": [
+        { "name": "hermes-runtime-protocol", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" },
+        { "name": "hermes-storage-vault", "kind": "normal" },
+        { "name": "hermes-vault-protocol", "kind": "normal" },
+        { "name": "hermes-whatsapp-api", "kind": "normal" },
+        { "name": "hermes-whatsapp-core", "kind": "normal" },
+        { "name": "hermes-whatsapp-persistence", "kind": "normal" }
       ],
       "hermes-communications-ingress": [],
       "hermes-communications-api": [],
@@ -993,6 +1060,10 @@
         {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]}
       ],
       "hermes-blob-protocol": [],
+      "hermes-blob-client-contract": [],
+      "hermes-blob-client": [
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]}
+      ],
       "hermes-blob-runtime": [
         {"name":"chacha20poly1305","kind":"normal","source":"crates_io","version":"=0.11.0","defaultFeatures":false,"features":["alloc","zeroize"]},
         {"name":"getrandom","kind":"normal","source":"crates_io","version":"=0.4.3","defaultFeatures":false,"features":[]},
@@ -1064,6 +1135,50 @@
       "hermes-mail-imap": [],
       "hermes-mail-persistence": [],
       "hermes-mail-runtime": [],
+      "hermes-telegram-api": [
+        {"name":"serde","kind":"normal","source":"crates_io","version":"=1.0.228","defaultFeatures":false,"features":["derive"]}
+      ],
+      "hermes-telegram-core": [],
+      "hermes-telegram-tdlib": [
+        {"name":"base64","kind":"normal","source":"crates_io","version":"=0.22.1","defaultFeatures":true,"features":[]},
+        {"name":"libloading","kind":"normal","source":"crates_io","version":"=0.8.9","defaultFeatures":true,"features":[]},
+        {"name":"serde_json","kind":"normal","source":"crates_io","version":"=1.0.150","defaultFeatures":true,"features":[]},
+        {"name":"zeroize","kind":"normal","source":"crates_io","version":"=1.9.0","defaultFeatures":true,"features":[]}
+      ],
+      "hermes-telegram-persistence": [
+        {"name":"serde_json","kind":"normal","source":"crates_io","version":"=1.0.150","defaultFeatures":true,"features":[]},
+        {"name":"sqlx","kind":"normal","source":"crates_io","version":"=0.8.6","defaultFeatures":false,"features":["json","postgres","runtime-tokio-rustls"]}
+      ],
+      "hermes-telegram-runtime": [
+        {"name":"getrandom","kind":"normal","source":"crates_io","version":"=0.4.3","defaultFeatures":false,"features":[]},
+        {"name":"libc","kind":"normal","source":"crates_io","version":"=0.2.186","defaultFeatures":true,"features":[]},
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
+        {"name":"serde_json","kind":"normal","source":"crates_io","version":"=1.0.150","defaultFeatures":true,"features":[]},
+        {"name":"tokio","kind":"normal","source":"crates_io","version":"=1.52.4","defaultFeatures":false,"features":["rt","rt-multi-thread","time"]},
+        {"name":"zeroize","kind":"normal","source":"crates_io","version":"=1.9.0","defaultFeatures":true,"features":[]}
+      ],
+      "hermes-whatsapp-api": [
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
+        {"name":"prost-build","kind":"build","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
+        {"name":"protoc-bin-vendored","kind":"build","source":"crates_io","version":"=3.2.0","defaultFeatures":true,"features":[]},
+        {"name":"serde","kind":"normal","source":"crates_io","version":"=1.0.228","defaultFeatures":false,"features":["derive"]}
+      ],
+      "hermes-whatsapp-core": [
+        {"name":"serde","kind":"normal","source":"crates_io","version":"=1.0.228","defaultFeatures":false,"features":["derive"]}
+      ],
+      "hermes-whatsapp-persistence": [
+        {"name":"serde","kind":"normal","source":"crates_io","version":"=1.0.228","defaultFeatures":false,"features":["derive"]},
+        {"name":"serde_json","kind":"normal","source":"crates_io","version":"=1.0.150","defaultFeatures":true,"features":[]},
+        {"name":"sqlx","kind":"normal","source":"crates_io","version":"=0.8.6","defaultFeatures":false,"features":["json","postgres","runtime-tokio-rustls"]}
+      ],
+      "hermes-whatsapp-runtime": [
+        {"name":"getrandom","kind":"normal","source":"crates_io","version":"=0.4.3","defaultFeatures":false,"features":[]},
+        {"name":"libc","kind":"normal","source":"crates_io","version":"=0.2.186","defaultFeatures":true,"features":[]},
+        {"name":"prost","kind":"normal","source":"crates_io","version":"=0.14.4","defaultFeatures":true,"features":[]},
+        {"name":"serde_json","kind":"normal","source":"crates_io","version":"=1.0.150","defaultFeatures":true,"features":[]},
+        {"name":"tokio","kind":"normal","source":"crates_io","version":"=1.52.4","defaultFeatures":false,"features":["rt","rt-multi-thread","time"]},
+        {"name":"zeroize","kind":"normal","source":"crates_io","version":"=1.9.0","defaultFeatures":true,"features":[]}
+      ],
       "hermes-communications-ingress": [],
       "hermes-communications-api": [],
       "hermes-communications-domain": [],
@@ -1168,6 +1283,8 @@
       "hermes-events-authority-runtime-control": { "primaryKind": "lib", "customBuildAllowed": false },
       "hermes-events-authority-runtime": { "primaryKind": "bin", "customBuildAllowed": false },
       "hermes-blob-protocol": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-blob-client-contract": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-blob-client": { "primaryKind": "lib", "customBuildAllowed": false },
       "hermes-blob-runtime": { "primaryKind": "lib", "customBuildAllowed": false },
       "hermes-blob-service": { "primaryKind": "bin", "customBuildAllowed": false },
       "hermes-scheduler-protocol": { "primaryKind": "lib", "customBuildAllowed": true },
@@ -1183,6 +1300,15 @@
       "hermes-mail-imap": { "primaryKind": "lib", "customBuildAllowed": false },
       "hermes-mail-persistence": { "primaryKind": "lib", "customBuildAllowed": false },
       "hermes-mail-runtime": { "primaryKind": "bin", "customBuildAllowed": false },
+      "hermes-telegram-api": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-telegram-core": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-telegram-tdlib": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-telegram-persistence": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-telegram-runtime": { "primaryKind": "bin", "customBuildAllowed": false },
+      "hermes-whatsapp-api": { "primaryKind": "lib", "customBuildAllowed": true },
+      "hermes-whatsapp-core": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-whatsapp-persistence": { "primaryKind": "lib", "customBuildAllowed": false },
+      "hermes-whatsapp-runtime": { "primaryKind": "bin", "customBuildAllowed": false },
       "hermes-communications-ingress": { "primaryKind": "lib", "customBuildAllowed": false },
       "hermes-communications-api": { "primaryKind": "lib", "customBuildAllowed": false },
       "hermes-communications-domain": { "primaryKind": "lib", "customBuildAllowed": false },

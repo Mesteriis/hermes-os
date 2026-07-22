@@ -132,7 +132,9 @@ export function mailListSearchFieldItem(field: MailListSearchBuilderField): Mail
 
 export function mailListSearchBuilderOperatorItems(state: MailListSearchBuilderState): readonly MailListSearchBuilderToggleItem[] {
   const allowed = new Set(mailListSearchFieldItem(state.field).operators)
-  return mailListSearchOperatorItems.filter((item) => allowed.has(item.value as MailListSearchBuilderOperator))
+  return mailListSearchOperatorItems.filter((item) =>
+    isMailListSearchBuilderOperator(item.value) && allowed.has(item.value)
+  )
 }
 
 export function mailListSearchBuilderPresetItems(state: MailListSearchBuilderState): readonly MailListSearchBuilderToggleItem[] {
@@ -205,6 +207,21 @@ export function mailListSearchBuilderCanAdd(state: MailListSearchBuilderState): 
 
 export function mailListSearchBuilderCanApply(state: MailListSearchBuilderState): boolean {
   return mailListSearchBuilderEffectiveClauses(state).length > 0
+}
+
+export function mailListSearchBuilderCanSave(
+  state: MailListSearchBuilderState,
+  name: string
+): boolean {
+  return mailListSearchBuilderCanApply(state) && name.trim().length > 0
+}
+
+export function mailListSearchBuilderActiveFieldGroup(
+  groupId: string,
+  fallbackGroupId = mailListSearchFieldGroups[0]?.id
+): MailListSearchBuilderFieldGroup | undefined {
+  return mailListSearchFieldGroups.find((group) => group.id === groupId)
+    ?? mailListSearchFieldGroups.find((group) => group.id === fallbackGroupId)
 }
 
 export function mailListSearchBuilderAddClause(state: MailListSearchBuilderState): MailListSearchBuilderState {
@@ -399,7 +416,8 @@ function tokenizeMailListSearchQuery(rawQuery: string): string[] {
 
 function parseMailListSearchMode(token: string): MailListSearchMatchMode | null {
   const [, value] = /^mode:(all|any)$/i.exec(token) ?? []
-  return value ? (value.toLowerCase() as MailListSearchMatchMode) : null
+  const normalized = value?.toLowerCase()
+  return normalized === 'all' || normalized === 'any' ? normalized : null
 }
 
 function parseMailListSearchFieldPredicate(token: string): MailListSearchPredicate | null {
@@ -424,9 +442,7 @@ function parseMailListSearchField(field: string): MailListSearchField | null {
   const normalized = field.toLowerCase()
   if (normalized === 'sender') return 'from'
   if (normalized === 'to' || normalized === 'cc') return 'recipients'
-  return mailListSearchFieldItems().some((item) => item.value === normalized)
-    ? normalized as MailListSearchField
-    : null
+  return isMailListSearchBuilderField(normalized) ? normalized : null
 }
 
 function parseMailListSearchOperator(

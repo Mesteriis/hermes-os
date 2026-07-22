@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch, type Ref } from 'vue'
-import { useI18n } from '../../../platform/i18n'
+import { computed } from 'vue'
 import Button from '../../../shared/ui/primitives/Button.vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import SearchableSelect from '../../../shared/ui/SearchableSelect.vue'
 import Steps from '../../../shared/ui/Steps.vue'
-import type { StepsItem } from '../../../shared/ui/Steps.types'
 import type { AISettingsSurface } from '../queries/useAISettingsSurface'
-import type { AiModelCatalogItem, AiProviderAccount } from '../types/aiControlCenter'
+import { modelDetail } from './aiModelCatalogPresentation'
+import { useAIProviderConnectionWizardController } from '../queries/useAIProviderConnectionWizardController'
 
 const props = withDefaults(defineProps<{
   open?: boolean
@@ -20,20 +19,6 @@ const emit = defineEmits<{
   'update:open': [value: boolean]
 }>()
 
-const { t } = useI18n()
-const currentStep = ref(1)
-const connectedProviderId = ref<string | null>(null)
-const verificationStatus = ref('')
-const verificationMessage = ref('')
-const syncStatus = ref('')
-const syncMessage = ref('')
-
-const wizardSteps = computed<StepsItem[]>(() => [
-  { title: t('Параметры API') },
-  { title: t('Проверка') },
-  { title: t('Модели Hermes') },
-])
-
 const wizardOpen = computed({
   get: () => props.open,
   set: (value: boolean) => {
@@ -41,138 +26,34 @@ const wizardOpen = computed({
   },
 })
 
-const connectedProvider = computed<AiProviderAccount | null>(() => {
-  for (const provider of props.surface.providers.value) {
-    if (provider.provider_id === connectedProviderId.value) return provider
-  }
-
-  return null
+const controller = useAIProviderConnectionWizardController({
+  open: computed(() => props.open),
+  surface: props.surface,
+  close: () => emit('update:open', false),
 })
-
-const connectedProviderModels = computed<AiModelCatalogItem[]>(() => {
-  const providerId = connectedProviderId.value
-  const models: AiModelCatalogItem[] = []
-  if (!providerId) return models
-
-  for (const model of props.surface.models.value) {
-    if (model.provider_id === providerId) models.push(model)
-  }
-
-  return models
-})
-
-const nextLabel = computed(() => {
-  if (currentStep.value === 1) return t('Подключить')
-  if (currentStep.value === 2) return t('Проверить')
-  return t('Готово')
-})
-
-function eventValue(event: Event): string {
-  return event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement
-    ? event.target.value
-    : ''
-}
-
-function eventChecked(event: Event): boolean {
-  return event.target instanceof HTMLInputElement ? event.target.checked : false
-}
-
-function updateText(target: Ref<string>, event: Event): void {
-  target.value = eventValue(event)
-}
-
-function updateBoolean(target: Ref<boolean>, event: Event): void {
-  target.value = eventChecked(event)
-}
-
-function selectApiProvider(providerKey: string): void {
-  props.surface.handlePresetSelect(providerKey)
-}
-
-function resetWizard(): void {
-  currentStep.value = 1
-  connectedProviderId.value = null
-  verificationStatus.value = ''
-  verificationMessage.value = ''
-  syncStatus.value = ''
-  syncMessage.value = ''
-}
-
-function closeWizard(): void {
-  emit('update:open', false)
-}
-
-function goBack(): void {
-  if (currentStep.value > 1) {
-    currentStep.value -= 1
-  }
-}
-
-async function goNext(): Promise<void> {
-  if (currentStep.value === 1) {
-    await submitConnection()
-    return
-  }
-  if (currentStep.value === 2) {
-    await verifyConnection()
-    return
-  }
-  closeWizard()
-}
-
-async function submitConnection(): Promise<void> {
-  const provider = await props.surface.handleCreateApiProvider()
-  if (!provider) return
-
-  connectedProviderId.value = provider.provider_id
-  verificationStatus.value = ''
-  verificationMessage.value = ''
-  currentStep.value = 2
-}
-
-async function verifyConnection(): Promise<void> {
-  const provider = connectedProvider.value
-  if (!provider) return
-
-  const response = await props.surface.handleTestProvider(provider)
-  if (!response) return
-
-  verificationStatus.value = response.status
-  verificationMessage.value = response.message
-  if (response.status === 'ok') {
-    currentStep.value = 3
-  }
-}
-
-async function syncModels(): Promise<void> {
-  const provider = connectedProvider.value
-  if (!provider) return
-
-  const response = await props.surface.handleSyncModels(provider)
-  if (!response) return
-
-  syncStatus.value = response.status
-  syncMessage.value = response.message
-}
-
-function toggleModel(model: AiModelCatalogItem, event: Event): void {
-  void props.surface.handleModelAvailability(model, eventChecked(event))
-}
-
-function modelDetail(model: AiModelCatalogItem): string {
-  const details = [`${model.model_key}`, model.category, model.privacy]
-  if (model.context_window) {
-    details.push(`${model.context_window} ctx`)
-  }
-  if (model.embedding_dimension) {
-    details.push(`${model.embedding_dimension} dim`)
-  }
-  return details.join(' · ')
-}
-
-watch(() => props.open, (isOpen) => {
-  if (isOpen) resetWizard()
-})
+const {
+  t,
+  currentStep,
+  verificationStatus,
+  verificationMessage,
+  syncStatus,
+  syncMessage,
+  wizardSteps,
+  connectedProvider,
+  connectedModels,
+  nextLabel,
+  handleUpdateApiProviderDisplayName,
+  handleUpdateApiProviderKey,
+  handleUpdateApiBaseUrl,
+  handleUpdateApiToken,
+  handleUpdateApiConsent,
+  handleSelectApiProvider,
+  handleGoBack,
+  handleGoNext,
+  handleSyncModels,
+  handleToggleModelFromEvent,
+  handleSetCurrentStep,
+} = controller
 </script>
 
 <template>
@@ -201,7 +82,7 @@ watch(() => props.open, (isOpen) => {
           :empty-label="t('Ничего не найдено')"
           :clearable="false"
           :aria-label="t('AI провайдер')"
-          @update:model-value="selectApiProvider"
+          @update:model-value="handleSelectApiProvider"
         />
 
         <div class="settings-form-grid settings-ai-wizard-form">
@@ -211,7 +92,7 @@ watch(() => props.open, (isOpen) => {
               type="text"
               autocomplete="off"
               :value="surface.apiDisplayName.value"
-              @input="updateText(surface.apiDisplayName, $event)"
+            @input="handleUpdateApiProviderDisplayName"
             >
           </label>
           <label>
@@ -220,7 +101,7 @@ watch(() => props.open, (isOpen) => {
               type="text"
               autocomplete="off"
               :value="surface.apiProviderKey.value"
-              @input="updateText(surface.apiProviderKey, $event)"
+              @input="handleUpdateApiProviderKey"
             >
           </label>
           <label class="settings-ai-wizard-form__wide">
@@ -229,7 +110,7 @@ watch(() => props.open, (isOpen) => {
               type="url"
               autocomplete="off"
               :value="surface.apiBaseUrl.value"
-              @input="updateText(surface.apiBaseUrl, $event)"
+              @input="handleUpdateApiBaseUrl"
             >
           </label>
           <label class="settings-ai-wizard-form__wide">
@@ -238,7 +119,7 @@ watch(() => props.open, (isOpen) => {
               type="password"
               autocomplete="off"
               :value="surface.apiToken.value"
-              @input="updateText(surface.apiToken, $event)"
+              @input="handleUpdateApiToken"
             >
           </label>
         </div>
@@ -247,7 +128,7 @@ watch(() => props.open, (isOpen) => {
           <input
             type="checkbox"
             :checked="surface.apiConsent.value"
-            @change="updateBoolean(surface.apiConsent, $event)"
+            @change="handleUpdateApiConsent"
           >
           <span />
           <strong>{{ t('Разрешить приватный контекст') }}</strong>
@@ -276,13 +157,13 @@ watch(() => props.open, (isOpen) => {
         <div class="settings-ai-wizard-toolbar">
           <div>
             <strong>{{ connectedProvider?.display_name ?? t('Провайдер') }}</strong>
-            <small>{{ connectedProviderModels.length }} {{ t('моделей') }}</small>
+            <small>{{ connectedModels.length }} {{ t('моделей') }}</small>
           </div>
           <Button
             variant="secondary"
             icon="tabler:refresh"
             :disabled="surface.isBusy.value || !connectedProvider"
-            @click="syncModels"
+            @click="handleSyncModels"
           >
             {{ t('Синхронизировать модели') }}
           </Button>
@@ -293,9 +174,9 @@ watch(() => props.open, (isOpen) => {
           <span>{{ syncMessage }}</span>
         </div>
 
-        <div v-if="connectedProviderModels.length" class="settings-ai-wizard-model-list">
+        <div v-if="connectedModels.length" class="settings-ai-wizard-model-list">
           <label
-            v-for="model in connectedProviderModels"
+            v-for="model in connectedModels"
             :key="`${model.provider_id}:${model.model_key}`"
             class="settings-ai-wizard-model"
           >
@@ -303,7 +184,7 @@ watch(() => props.open, (isOpen) => {
               type="checkbox"
               :checked="model.is_available"
               :disabled="surface.isBusy.value"
-              @change="toggleModel(model, $event)"
+              @change="handleToggleModelFromEvent(model, $event)"
             >
             <span>
               <strong>{{ model.display_name }}</strong>
@@ -327,25 +208,25 @@ watch(() => props.open, (isOpen) => {
           icon="tabler:arrow-left"
           :aria-label="t('Назад')"
           :disabled="currentStep === 1 || surface.isBusy.value"
-          @click="goBack"
+          @click="handleGoBack"
         />
         <nav class="hermes-steps__dots" :aria-label="t('Шаги мастера')">
           <button
-            v-for="item in wizardSteps"
+            v-for="(item, index) in wizardSteps"
             :key="item.title"
             class="hermes-steps__dot"
-            :class="{ 'hermes-steps__dot--active': wizardSteps.indexOf(item) + 1 === currentStep }"
+            :class="{ 'hermes-steps__dot--active': index + 1 === currentStep }"
             type="button"
-            :aria-current="wizardSteps.indexOf(item) + 1 === currentStep ? 'step' : undefined"
+            :aria-current="index + 1 === currentStep ? 'step' : undefined"
             :aria-label="item.title"
             :disabled="surface.isBusy.value"
-            @click="currentStep = wizardSteps.indexOf(item) + 1"
+            @click="handleSetCurrentStep(index + 1)"
           />
         </nav>
         <Button
           class="hermes-steps__dock-next"
           :loading="surface.isBusy.value"
-          @click="goNext"
+          @click="handleGoNext"
         >
           {{ nextLabel }}
         </Button>

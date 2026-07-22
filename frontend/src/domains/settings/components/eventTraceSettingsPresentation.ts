@@ -9,6 +9,22 @@ export type TraceLookupMode = 'event' | 'trace'
 export type TraceDataTab = 'trace-events' | 'recent-seeds'
 export type TraceNodeTone = 'root' | 'normal' | 'warn' | 'bad'
 
+export interface TraceModeOption<T extends string> {
+  id: T
+  label: string
+  icon: string
+}
+
+export const traceLookupModes: readonly TraceModeOption<TraceLookupMode>[] = [
+  { id: 'event', label: 'Event ID', icon: 'tabler:timeline-event' },
+  { id: 'trace', label: 'Trace ID', icon: 'tabler:route' },
+]
+
+export const traceDataTabs: readonly TraceModeOption<TraceDataTab>[] = [
+  { id: 'trace-events', label: 'Trace events', icon: 'tabler:timeline' },
+  { id: 'recent-seeds', label: 'Event log seeds', icon: 'tabler:list-search' },
+]
+
 export interface TraceGraphNode {
   eventId: string
   eventType: string

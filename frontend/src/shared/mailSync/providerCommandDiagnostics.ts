@@ -1,4 +1,5 @@
 import { ApiClient } from '../../platform/api/ApiClient'
+import { MAX_MAIL_BATCH_SIZE } from './types'
 
 export type MailProviderCommandDiagnostic = {
   command_id: string
@@ -27,11 +28,13 @@ export type MailProviderCommandRetryResponse = Pick<
   'command_id' | 'status' | 'retry_count' | 'max_retries' | 'reconciliation_status' | 'next_attempt_at'
 >
 
+const PROVIDER_COMMAND_DIAGNOSTICS_LIMIT = MAX_MAIL_BATCH_SIZE
+
 export async function fetchMailProviderCommandDiagnostics(
   accountId: string,
   status?: string
 ): Promise<MailProviderCommandDiagnostics> {
-  const params = new URLSearchParams({ account_id: accountId, limit: '50' })
+  const params = new URLSearchParams({ account_id: accountId, limit: PROVIDER_COMMAND_DIAGNOSTICS_LIMIT.toString() })
   if (status?.trim()) params.set('status', status.trim())
   return ApiClient.instance.get<MailProviderCommandDiagnostics>(
     `/api/v1/communications/provider-commands/diagnostics?${params.toString()}`,

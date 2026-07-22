@@ -10,29 +10,15 @@ import { useLanguageSettingsSurface } from './useLanguageSettingsSurface'
 import { useMaintenanceSettingsSurface } from './useMaintenanceSettingsSurface'
 import { useSignalHubSettingsSurface } from './useSignalHubSettingsSurface'
 import { useTraceLogsSettingsSurface } from './useTraceLogsSettingsSurface'
-import { useSettingsStore, type SettingsSection } from '../stores/settings'
-
-export type SettingsTreeItem = {
-  id: SettingsSection
-  label: string
-  description: string
-  icon: string
-  meta?: string
-}
-
-export type SettingsTreeGroup = {
-  label: string
-  items: SettingsTreeItem[]
-}
-
-export type SettingsOverviewCard = {
-  id: 'realtime' | 'sources' | 'registry' | 'ai'
-  icon: string
-  label: string
-  value: string
-  detail: string
-  tone: 'neutral' | 'success' | 'warning' | 'danger'
-}
+import { useSettingsStore } from '../stores/settings'
+import {
+  buildSettingsOverviewCards,
+  buildSettingsTreeGroups,
+  findSelectedSettingsTreeItem,
+  type SettingsOverviewCard,
+  type SettingsTreeGroup,
+  type SettingsTreeItem
+} from './settingsPagePresentation'
 
 export function useSettingsPageSurface() {
   const { t } = useI18n()
@@ -60,125 +46,35 @@ export function useSettingsPageSurface() {
   const backgroundJobCount = computed(() => backgroundJobsSettings.backgroundJobRows.value.length)
   const traceSpanCount = computed(() => traceLogsSettings.traceEventRows.value.length)
 
-  const settingsTreeGroups = computed<SettingsTreeGroup[]>(() => [
-    {
-      label: 'Workspace',
-      items: [
-        {
-          id: 'accounts',
-          label: 'Accounts',
-          description: 'Provider identities and service capabilities',
-          icon: 'tabler:id',
-          meta: String(integrationCount.value)
-        },
-        {
-          id: 'communications',
-          label: 'Communications',
-          description: 'Mail sync reliability and provider polling settings',
-          icon: 'tabler:mail-cog',
-          meta: String(communicationsSettings.mailAccounts.value.length)
-        },
-        {
-          id: 'application',
-          label: 'Application',
-          description: 'Runtime flags and declared workspace preferences',
-          icon: 'tabler:adjustments-horizontal',
-          meta: String(applicationSettingsCount.value)
-        },
-        {
-          id: 'background-jobs',
-          label: 'Background Jobs',
-          description: 'Schedulers, workers and projection consumers',
-          icon: 'tabler:clock-cog',
-          meta: backgroundJobsSettings.isLoading.value ? t('Loading...') : String(backgroundJobCount.value)
-        },
-        {
-          id: 'logs-traces',
-          label: 'Logs & Traces',
-          description: 'Event log spans and causal trace graph',
-          icon: 'tabler:timeline-event',
-          meta: traceLogsSettings.isLoading.value ? t('Loading...') : String(traceSpanCount.value)
-        },
-        {
-          id: 'maintenance',
-          label: 'Maintenance',
-          description: 'Cleanup, backups and local storage sizes',
-          icon: 'tabler:tool',
-          meta: maintenanceSettings.isLoading.value ? t('Loading...') : maintenanceSettings.totalSizeLabel.value
-        },
-        {
-          id: 'language',
-          label: 'Language',
-          description: 'Interface language and locale preference',
-          icon: 'tabler:language'
-        }
-      ]
-    },
-    {
-      label: 'Hub',
-      items: [
-        {
-          id: 'ai',
-          label: 'AI Hub',
-          description: 'Providers, downloads, model catalog and action routing',
-          icon: 'tabler:sparkles',
-          meta: String(aiProviderCount.value)
-        },
-        {
-          id: 'signal-hub',
-          label: 'Signal Hub',
-          description: 'Observed signals, profiles and replay operations',
-          icon: 'tabler:database-import',
-          meta: signalHubSettings.isLoading.value ? t('Loading...') : String(signalSourceCount.value)
-        }
-      ]
-    }
-  ])
+  const settingsTreeGroups = computed<SettingsTreeGroup[]>(() => buildSettingsTreeGroups({
+    integrationCount: integrationCount.value,
+    communicationsAccountCount: communicationsSettings.mailAccounts.value.length,
+    applicationSettingsCount: applicationSettingsCount.value,
+    backgroundJobCount: backgroundJobCount.value,
+    backgroundJobsLoading: backgroundJobsSettings.isLoading.value,
+    traceSpanCount: traceSpanCount.value,
+    traceLogsLoading: traceLogsSettings.isLoading.value,
+    maintenanceTotalSizeLabel: maintenanceSettings.totalSizeLabel.value,
+    maintenanceLoading: maintenanceSettings.isLoading.value,
+    aiProviderCount: aiProviderCount.value,
+    signalSourceCount: signalSourceCount.value,
+    signalHubLoading: signalHubSettings.isLoading.value
+  }, t))
 
   const selectedTreeItem = computed<SettingsTreeItem | null>(() => {
-    for (const group of settingsTreeGroups.value) {
-      const item = group.items.find((candidate) => candidate.id === store.selectedSection)
-      if (item) return item
-    }
-    return null
+    return findSelectedSettingsTreeItem(settingsTreeGroups.value, store.selectedSection)
   })
 
-  const settingsOverviewCards = computed<SettingsOverviewCard[]>(() => [
-    {
-      id: 'realtime',
-      icon: realtimeStatus.realtimeStatusTone === 'success' ? 'tabler:cloud-check' : 'tabler:cloud-exclamation',
-      label: 'Realtime',
-      value: t(realtimeStatus.realtimeStatusLabel),
-      detail: realtimeStatus.status.error
-        ? t('Realtime connection is retrying. Diagnostics keep the transport details.')
-        : t('Replay cursor and UI cache updates are monitored by the local runtime.'),
-      tone: realtimeStatus.realtimeStatusTone
-    },
-    {
-      id: 'sources',
-      icon: 'tabler:plug-connected',
-      label: 'Sources',
-      value: String(integrationCount.value),
-      detail: t('Provider accounts connected to the local workspace'),
-      tone: integrationCount.value > 0 ? 'success' : 'neutral'
-    },
-    {
-      id: 'registry',
-      icon: 'tabler:list-check',
-      label: 'Settings registry',
-      value: applicationSettings.isLoading.value ? t('Loading...') : String(applicationSettingsCount.value),
-      detail: t('Declared application settings available for review'),
-      tone: applicationSettingsCount.value > 0 ? 'success' : 'neutral'
-    },
-    {
-      id: 'ai',
-      icon: 'tabler:sparkles',
-      label: 'AI providers',
-      value: aiSettings.isLoading.value ? t('Loading...') : String(aiProviderCount.value),
-      detail: t('Provider accounts, model inventory and routes are owned by AI Hub'),
-      tone: aiProviderCount.value > 0 ? 'success' : 'neutral'
-    }
-  ])
+  const settingsOverviewCards = computed<SettingsOverviewCard[]>(() => buildSettingsOverviewCards({
+    realtimeStatusLabel: realtimeStatus.realtimeStatusLabel,
+    realtimeStatusTone: realtimeStatus.realtimeStatusTone,
+    realtimeHasError: Boolean(realtimeStatus.status.error),
+    integrationCount: integrationCount.value,
+    applicationSettingsCount: applicationSettingsCount.value,
+    applicationSettingsLoading: applicationSettings.isLoading.value,
+    aiProviderCount: aiProviderCount.value,
+    aiLoading: aiSettings.isLoading.value
+  }, t))
 
   return {
     aiSettings,

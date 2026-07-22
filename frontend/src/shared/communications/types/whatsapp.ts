@@ -97,7 +97,17 @@ export type WhatsAppWebCompanionCommandChannel = {
   kind: string
   claim_path: string
   failure_path: string
+  result_path?: string
   completion_rule: string
+}
+
+export type WhatsAppWebCompanionCommandResultRequest = {
+  account_id: string
+  operation_id: string
+  provider_event_id: string
+  provider_request_id?: string | null
+  succeeded: boolean
+  observed_at: string
 }
 
 export type WhatsAppWebCompanionExtractorContract = {
@@ -168,7 +178,7 @@ export type WhatsAppWebCompanionRelayObservationReceipt = {
   sanitized_metadata: Record<string, unknown>
   runtime_event_kind: string
   import_batch_id: string
-  runtime_bridge_http_status: number
+  runtime_bridge_status: string
   event_flow: string
   completion_rule: string
 }

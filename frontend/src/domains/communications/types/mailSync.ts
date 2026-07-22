@@ -1,11 +1,9 @@
-export type MailSyncSettings = {
-  account_id: string
-  sync_enabled: boolean
-  batch_size: number
-  poll_interval_seconds: number
-  failure_threshold?: number
-  updated_at: string
-}
+import type {
+  MailSyncSettings as SharedMailSyncSettings,
+  MailSyncSettingsUpdate as SharedMailSyncSettingsUpdate
+} from '../../../shared/mailSync/types'
+
+export type MailSyncSettings = SharedMailSyncSettings
 
 export type MailReadSyncStatus =
   | 'queued'
@@ -16,12 +14,7 @@ export type MailReadSyncStatus =
   | 'synced'
   | 'superseded'
 
-export type MailSyncSettingsUpdate = {
-  sync_enabled: boolean
-  batch_size: number
-  poll_interval_seconds: number
-  failure_threshold?: number
-}
+export type MailSyncSettingsUpdate = SharedMailSyncSettingsUpdate
 
 export type MailSyncStatus = {
   account_id: string

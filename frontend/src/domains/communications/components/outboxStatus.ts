@@ -1,4 +1,5 @@
 import type { CommunicationOutboxItem } from '../types/communications'
+import { isRecord } from '../../../shared/communications/queries/realtimePatchShared'
 
 export type OutboxStatusTone = 'neutral' | 'success' | 'warning' | 'danger' | 'muted'
 
@@ -172,8 +173,7 @@ export function visibleOutboxStatusItems(
 
 function objectField(value: JsonObject, field: string): JsonObject | null {
   const nested = value[field]
-  if (!nested || typeof nested !== 'object' || Array.isArray(nested)) return null
-  return nested as JsonObject
+  return isRecord(nested) ? nested : null
 }
 
 function stringField(value: JsonObject | null, field: string): string | null {

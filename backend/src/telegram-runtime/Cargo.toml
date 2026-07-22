@@ -1,0 +1,36 @@
+[package]
+name = "hermes-telegram-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+name = "hermes_telegram_runtime"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermes-telegram-runtime"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "integration"
+owner = "telegram"
+surface = "runtime"
+
+[dependencies]
+hermes-blob-client-contract = { path = "../platform/blob/client-contract" }
+hermes-blob-client = { path = "../platform/blob/client" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+hermes-storage-vault = { path = "../platform/storage/vault" }
+hermes-telegram-core = { path = "../telegram-core" }
+hermes-telegram-api = { path = "../telegram-api" }
+hermes-telegram-persistence = { path = "../telegram-persistence" }
+hermes-telegram-tdlib = { path = "../telegram-tdlib" }
+hermes-vault-protocol = { path = "../platform/vault/protocol" }
+getrandom = { version = "=0.4.3", default-features = false }
+libc = "=0.2.186"
+prost = "=0.14.4"
+serde_json = "=1.0.150"
+tokio = { version = "=1.52.4", default-features = false, features = ["rt", "rt-multi-thread", "time"] }
+zeroize = "=1.9.0"

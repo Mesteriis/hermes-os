@@ -1,5 +1,6 @@
 use hermes_mail_api::{
-    MAX_HOST_LEN, valid_host, valid_message_bytes, valid_plain_text_bytes, valid_port, valid_window,
+    MAX_HOST_LEN, MAX_WINDOW, MAX_WINDOWS, valid_host, valid_message_bytes, valid_plain_text_bytes,
+    valid_port, valid_window, DEFAULT_WINDOW,
 };
 
 #[test]
@@ -33,10 +34,12 @@ fn port_validation() {
 
 #[test]
 fn window_and_payload_limits() {
-    assert!(valid_window(100, 1));
-    assert!(valid_window(500, 10));
-    assert!(!valid_window(501, 10));
-    assert!(!valid_window(100, 0));
+    assert!(valid_window(MAX_WINDOW / 2, 1));
+    assert!(valid_window(MAX_WINDOW, MAX_WINDOWS / 2));
+    assert!(valid_window(MAX_WINDOW, MAX_WINDOWS));
+    assert!(!valid_window(MAX_WINDOW + 1, MAX_WINDOWS / 2));
+    assert!(!valid_window(DEFAULT_WINDOW, 0));
+    assert!(!valid_window(DEFAULT_WINDOW, MAX_WINDOWS + 1));
     assert!(!valid_window(0, 1));
     assert!(valid_message_bytes(1024 * 1024));
     assert!(!valid_message_bytes(1024 * 1024 + 1));

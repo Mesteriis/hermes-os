@@ -1,20 +1,47 @@
-use std::time::Duration;
-
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use hermes_whatsapp_api::host_bridge::{
+    HOST_BRIDGE_PROTOCOL_MAJOR, HOST_BRIDGE_PROTOCOL_REVISION,
+    WhatsAppHostBridgeEnvelopeV1, WhatsAppHostObservationV1,
+};
+use hermes_whatsapp_api::WhatsAppProviderCommand;
 
 const PROVIDER_SHAPE: &str = "whatsapp_web_companion";
 const RUNTIME_KIND: &str = "webview_companion";
 const WINDOW_LABEL_PREFIX: &str = "whatsapp-companion";
 const WHATSAPP_WEB_URL: &str = "https://web.whatsapp.com/";
-const DEFAULT_BACKEND_HTTP_ADDR: &str = "127.0.0.1:8080";
 const RUNTIME_EVENTS_BRIDGE_PATH: &str =
-    "/api/v1/integrations/whatsapp/runtime-bridge/runtime-events";
+    "whatsapp.client://observation/runtime-events";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub(crate) struct WhatsAppWebCompanionRequest {
     pub(crate) account_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub(crate) struct WhatsAppWebCompanionCommandPollRequest {
+    pub(crate) account_id: String,
+    pub(crate) host_claim_id: String,
+    pub(crate) limit: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub(crate) struct WhatsAppWebCompanionCommandFailureRequest {
+    pub(crate) account_id: String,
+    pub(crate) operation_id: String,
+    pub(crate) host_claim_id: String,
+    pub(crate) reason: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub(crate) struct WhatsAppWebCompanionCommandResultRequest {
+    pub(crate) account_id: String,
+    pub(crate) operation_id: String,
+    pub(crate) provider_event_id: String,
+    pub(crate) provider_request_id: Option<String>,
+    pub(crate) succeeded: bool,
+    pub(crate) observed_at: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -67,6 +94,7 @@ pub(crate) struct WhatsAppWebCompanionCommandChannel {
     pub(crate) kind: &'static str,
     pub(crate) claim_path: &'static str,
     pub(crate) failure_path: &'static str,
+    pub(crate) result_path: &'static str,
     pub(crate) completion_rule: &'static str,
 }
 
@@ -107,7 +135,7 @@ pub(crate) struct WhatsAppWebCompanionRelayObservationReceipt {
     pub(crate) sanitized_metadata: Value,
     pub(crate) runtime_event_kind: String,
     pub(crate) import_batch_id: String,
-    pub(crate) runtime_bridge_http_status: u16,
+    pub(crate) runtime_bridge_status: String,
     pub(crate) event_flow: &'static str,
     pub(crate) completion_rule: &'static str,
 }
@@ -151,8 +179,8 @@ pub(crate) async fn whatsapp_web_companion_relay_observation(
     webview_window: WebviewWindow,
     request: WhatsAppWebCompanionRelayObservationRequest,
 ) -> Result<WhatsAppWebCompanionRelayObservationReceipt, String> {
-    let account_id = required_account_id(&request.account_id)?;
-    let expected_window_label = companion_window_label(account_id)?;
+    let account_id = required_account_id(&request.account_id)?.to_owned();
+    let expected_window_label = companion_window_label(&account_id)?;
     if webview_window.label() != expected_window_label {
         return Err(format!(
             "WhatsApp companion relay rejected caller window {} for account {}",
@@ -163,26 +191,24 @@ pub(crate) async fn whatsapp_web_companion_relay_observation(
 
     let event_family = required_ascii_slug("event_family", &request.event_family)?;
     let provider_event_id = required_ascii_slug("provider_event_id", &request.provider_event_id)?;
-    let observed_at = required_observed_at(&request.observed_at)?;
+    let observed_at_unix_seconds = required_observed_at(&request.observed_at)?;
     let typed_runtime_bridge_path =
         runtime_bridge_path_for_event_family(event_family).ok_or_else(|| {
             format!("unsupported WhatsApp companion relay event family {event_family}")
         })?;
     let sanitized_metadata = sanitize_relay_metadata(request.metadata);
     let runtime_event_kind = format!("webview_companion.{event_family}.observed");
-    let import_batch_id = runtime_bridge_import_batch_id(account_id, provider_event_id);
-    let runtime_event_payload = runtime_bridge_runtime_event_payload(
-        account_id,
-        event_family,
-        provider_event_id,
-        observed_at,
-        typed_runtime_bridge_path,
-        &runtime_event_kind,
-        &import_batch_id,
-        sanitized_metadata.clone(),
-    );
-    let runtime_bridge_http_status = tauri::async_runtime::spawn_blocking(move || {
-        dispatch_runtime_bridge_runtime_event(runtime_event_payload)
+    let import_batch_id = runtime_bridge_import_batch_id(&account_id, provider_event_id);
+    let envelope = WhatsAppHostBridgeEnvelopeV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+        account_id: account_id.to_owned(),
+        provider_event_id: provider_event_id.to_owned(),
+        observed_at_unix_seconds,
+        observation: host_observation_for_event_family(event_family, &sanitized_metadata)?,
+    };
+    let runtime_bridge_status = tauri::async_runtime::spawn_blocking(move || {
+        crate::whatsapp_runtime_client::dispatch_host_observation(envelope)
     })
     .await
     .map_err(|error| format!("WhatsApp companion relay dispatch task failed: {error}"))??;
@@ -197,15 +223,97 @@ pub(crate) async fn whatsapp_web_companion_relay_observation(
         observed_at: observed_at.to_owned(),
         target_runtime_bridge_path: RUNTIME_EVENTS_BRIDGE_PATH,
         typed_runtime_bridge_path,
-        relay_state: "dispatched_to_backend_runtime_bridge_runtime_event",
-        relay_channel: "tauri_allowlisted_companion_runtime_bridge_dispatch",
+        relay_state: "accepted_by_whatsapp_runtime",
+        relay_channel: "tauri_versioned_whatsapp_host_bridge_unix_socket",
         sanitized_metadata,
         runtime_event_kind,
         import_batch_id,
-        runtime_bridge_http_status,
-        event_flow: "hidden_webview_companion -> tauri_allowlisted_relay_preflight -> protected_runtime_bridge -> raw_evidence -> signal_hub_accepted -> projection_reconciliation",
+        runtime_bridge_status,
+        event_flow: "hidden_webview_companion -> tauri_versioned_host_bridge -> whatsapp_runtime -> provider_observation_projection",
         completion_rule: "provider_observed_event_reconciliation_required",
     })
+}
+
+#[tauri::command]
+pub(crate) async fn whatsapp_web_companion_poll_commands(
+    webview_window: WebviewWindow,
+    request: WhatsAppWebCompanionCommandPollRequest,
+) -> Result<Vec<WhatsAppProviderCommand>, String> {
+    let account_id = required_account_id(&request.account_id)?.to_owned();
+    let host_claim_id = required_ascii_slug("host_claim_id", &request.host_claim_id)?.to_owned();
+    let expected_window_label = companion_window_label(&account_id)?;
+    if webview_window.label() != expected_window_label {
+        return Err(format!(
+            "WhatsApp command poll rejected caller window {} for account {}",
+            webview_window.label(), account_id
+        ));
+    }
+    if request.limit == 0 || request.limit > 50 {
+        return Err("WhatsApp command poll limit must be between 1 and 50".to_owned());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::whatsapp_runtime_client::poll_pending_commands(account_id, host_claim_id, request.limit)
+    })
+    .await
+    .map_err(|error| format!("WhatsApp command poll task failed: {error}"))?
+}
+
+#[tauri::command]
+pub(crate) async fn whatsapp_web_companion_report_command_failure(
+    webview_window: WebviewWindow,
+    request: WhatsAppWebCompanionCommandFailureRequest,
+) -> Result<(), String> {
+    let account_id = required_account_id(&request.account_id)?.to_owned();
+    let expected_window_label = companion_window_label(&account_id)?;
+    if webview_window.label() != expected_window_label {
+        return Err("WhatsApp command failure caller window is not admitted".to_owned());
+    }
+    let operation_id = required_ascii_slug("operation_id", &request.operation_id)?.to_owned();
+    let host_claim_id = required_ascii_slug("host_claim_id", &request.host_claim_id)?.to_owned();
+    let reason = request.reason.trim().to_owned();
+    if reason.is_empty() || reason.len() > 512 {
+        return Err("WhatsApp command failure reason is invalid".to_owned());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::whatsapp_runtime_client::report_command_failure(operation_id, host_claim_id, reason)
+    })
+    .await
+    .map_err(|error| format!("WhatsApp command failure task failed: {error}"))?
+}
+
+#[tauri::command]
+pub(crate) async fn whatsapp_web_companion_report_command_result(
+    webview_window: WebviewWindow,
+    request: WhatsAppWebCompanionCommandResultRequest,
+) -> Result<String, String> {
+    let account_id = required_account_id(&request.account_id)?.to_owned();
+    let expected_window_label = companion_window_label(&account_id)?;
+    if webview_window.label() != expected_window_label {
+        return Err("WhatsApp command result caller window is not admitted".to_owned());
+    }
+    let operation_id = required_ascii_slug("operation_id", &request.operation_id)?.to_owned();
+    let provider_event_id = required_ascii_slug("provider_event_id", &request.provider_event_id)?.to_owned();
+    let observed_at_unix_seconds = required_observed_at(&request.observed_at)?;
+    if let Some(provider_request_id) = request.provider_request_id.as_deref() {
+        required_ascii_slug("provider_request_id", provider_request_id)?;
+    }
+    let envelope = WhatsAppHostBridgeEnvelopeV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+        account_id,
+        provider_event_id,
+        observed_at_unix_seconds,
+        observation: WhatsAppHostObservationV1::CommandResult {
+            operation_id,
+            provider_request_id: request.provider_request_id,
+            succeeded: request.succeeded,
+        },
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::whatsapp_runtime_client::dispatch_host_observation(envelope)
+    })
+    .await
+    .map_err(|error| format!("WhatsApp command result dispatch task failed: {error}"))?
 }
 
 fn manifest_for_account(
@@ -232,8 +340,8 @@ fn manifest_for_account(
             script_scope: "main_frame_only",
             origin_guard: "https://web.whatsapp.com",
             navigation_guard: "https://web.whatsapp.com_only",
-            relay_channel: "tauri_allowlisted_companion_runtime_bridge_dispatch",
-            runtime_bridge_dispatch: "runtime_events_bridge_wired_smoke_pending",
+        relay_channel: "tauri_versioned_whatsapp_host_bridge_unix_socket",
+        runtime_bridge_dispatch: "versioned_whatsapp_runtime_socket_wired",
             allowed_observations: vec![
                 "runtime_lifecycle_metadata",
                 "sync_lifecycle_metadata",
@@ -259,34 +367,35 @@ fn manifest_for_account(
             next_gate: "manual_live_smoke_before_public_availability",
         },
         bridge_routes: WhatsAppWebCompanionBridgeRoutes {
-            authorized_session_path: "/api/v1/integrations/whatsapp/runtime-bridge/sessions/authorized",
-            runtime_event_path: "/api/v1/integrations/whatsapp/runtime-bridge/runtime-events",
-            sync_lifecycle_path: "/api/v1/integrations/whatsapp/runtime-bridge/sync-lifecycle",
+            authorized_session_path: "whatsapp.client://observation/sessions/authorized",
+            runtime_event_path: "whatsapp.client://observation/runtime-events",
+            sync_lifecycle_path: "whatsapp.client://observation/sync-lifecycle",
             message_paths: vec![
-                "/api/v1/integrations/whatsapp/runtime-bridge/messages",
-                "/api/v1/integrations/whatsapp/runtime-bridge/message-updates",
-                "/api/v1/integrations/whatsapp/runtime-bridge/message-deletes",
-                "/api/v1/integrations/whatsapp/runtime-bridge/receipts",
-                "/api/v1/integrations/whatsapp/runtime-bridge/reactions",
-                "/api/v1/integrations/whatsapp/runtime-bridge/statuses",
-                "/api/v1/integrations/whatsapp/runtime-bridge/status-views",
-                "/api/v1/integrations/whatsapp/runtime-bridge/status-deletes",
+                "whatsapp.client://observation/messages",
+                "whatsapp.client://observation/message-updates",
+                "whatsapp.client://observation/message-deletes",
+                "whatsapp.client://observation/receipts",
+                "whatsapp.client://observation/reactions",
+                "whatsapp.client://observation/statuses",
+                "whatsapp.client://observation/status-views",
+                "whatsapp.client://observation/status-deletes",
             ],
             conversation_paths: vec![
-                "/api/v1/integrations/whatsapp/runtime-bridge/dialogs",
-                "/api/v1/integrations/whatsapp/runtime-bridge/participants",
-                "/api/v1/integrations/whatsapp/runtime-bridge/presence",
-                "/api/v1/integrations/whatsapp/runtime-bridge/calls",
+                "whatsapp.client://observation/dialogs",
+                "whatsapp.client://observation/participants",
+                "whatsapp.client://observation/presence",
+                "whatsapp.client://observation/calls",
             ],
             media_paths: vec![
-                "/api/v1/integrations/whatsapp/runtime-bridge/media",
-                "/api/v1/integrations/whatsapp/runtime-bridge/media-lifecycle",
+                "whatsapp.client://observation/media",
+                "whatsapp.client://observation/media-lifecycle",
             ],
         },
         command_channel: WhatsAppWebCompanionCommandChannel {
             kind: "durable_outbox",
-            claim_path: "/api/v1/integrations/whatsapp/runtime-bridge/commands/claim",
-            failure_path: "/api/v1/integrations/whatsapp/runtime-bridge/commands/{command_id}/failed",
+            claim_path: "whatsapp.client://observation/commands/claim",
+            failure_path: "whatsapp.client://observation/commands/{command_id}/failed",
+            result_path: "whatsapp.client://observation/commands/{command_id}/result",
             completion_rule: "provider_observed_event_reconciliation_required",
         },
         secret_policy: WhatsAppWebCompanionSecretPolicy {
@@ -326,8 +435,8 @@ fn companion_initialization_script(account_id: &str, window_label: &str) -> Resu
     account_id: {account_id_json},
     window_label: {window_label_json},
     relay_command: "whatsapp_web_companion_relay_observation",
-    relay_channel: "tauri_allowlisted_companion_runtime_bridge_dispatch",
-    runtime_bridge_dispatch: "runtime_events_bridge_wired_smoke_pending",
+    relay_channel: "tauri_versioned_whatsapp_host_bridge_unix_socket",
+    runtime_bridge_dispatch: "versioned_whatsapp_runtime_socket_wired",
     payload_policy: "metadata_only_no_private_content_or_secret_material"
   }});
 
@@ -353,106 +462,113 @@ fn companion_initialization_script(account_id: &str, window_label: &str) -> Resu
 
 fn runtime_bridge_path_for_event_family(event_family: &str) -> Option<&'static str> {
     match event_family {
-        "runtime_lifecycle" => Some("/api/v1/integrations/whatsapp/runtime-bridge/runtime-events"),
-        "sync_lifecycle" => Some("/api/v1/integrations/whatsapp/runtime-bridge/sync-lifecycle"),
-        "message" => Some("/api/v1/integrations/whatsapp/runtime-bridge/messages"),
-        "message_update" => Some("/api/v1/integrations/whatsapp/runtime-bridge/message-updates"),
-        "message_delete" => Some("/api/v1/integrations/whatsapp/runtime-bridge/message-deletes"),
-        "receipt" => Some("/api/v1/integrations/whatsapp/runtime-bridge/receipts"),
-        "reaction" => Some("/api/v1/integrations/whatsapp/runtime-bridge/reactions"),
-        "dialog" => Some("/api/v1/integrations/whatsapp/runtime-bridge/dialogs"),
-        "participant" => Some("/api/v1/integrations/whatsapp/runtime-bridge/participants"),
-        "presence" => Some("/api/v1/integrations/whatsapp/runtime-bridge/presence"),
-        "call_metadata" => Some("/api/v1/integrations/whatsapp/runtime-bridge/calls"),
-        "status" => Some("/api/v1/integrations/whatsapp/runtime-bridge/statuses"),
-        "status_view" => Some("/api/v1/integrations/whatsapp/runtime-bridge/status-views"),
-        "status_delete" => Some("/api/v1/integrations/whatsapp/runtime-bridge/status-deletes"),
-        "media" => Some("/api/v1/integrations/whatsapp/runtime-bridge/media"),
-        "media_lifecycle" => Some("/api/v1/integrations/whatsapp/runtime-bridge/media-lifecycle"),
+        "runtime_lifecycle" => Some("whatsapp.client://observation/runtime-events"),
+        "sync_lifecycle" => Some("whatsapp.client://observation/sync-lifecycle"),
+        "message" => Some("whatsapp.client://observation/messages"),
+        "message_update" => Some("whatsapp.client://observation/message-updates"),
+        "message_delete" => Some("whatsapp.client://observation/message-deletes"),
+        "receipt" => Some("whatsapp.client://observation/receipts"),
+        "reaction" => Some("whatsapp.client://observation/reactions"),
+        "dialog" => Some("whatsapp.client://observation/dialogs"),
+        "participant" => Some("whatsapp.client://observation/participants"),
+        "presence" => Some("whatsapp.client://observation/presence"),
+        "call_metadata" => Some("whatsapp.client://observation/calls"),
+        "status" => Some("whatsapp.client://observation/statuses"),
+        "status_view" => Some("whatsapp.client://observation/status-views"),
+        "status_delete" => Some("whatsapp.client://observation/status-deletes"),
+        "media" => Some("whatsapp.client://observation/media"),
+        "media_lifecycle" => Some("whatsapp.client://observation/media-lifecycle"),
         _ => None,
     }
 }
 
-fn runtime_bridge_runtime_event_payload(
-    account_id: &str,
+fn host_observation_for_event_family(
     event_family: &str,
-    provider_event_id: &str,
-    observed_at: &str,
-    typed_runtime_bridge_path: &str,
-    runtime_event_kind: &str,
-    import_batch_id: &str,
-    sanitized_metadata: Value,
-) -> Value {
-    json!({
-        "account_id": account_id,
-        "provider_event_id": provider_event_id,
-        "runtime_event_kind": runtime_event_kind,
-        "runtime_status": "observed",
-        "lifecycle_state": "provider_observed_metadata",
-        "severity": "info",
-        "metadata": {
-            "source": "webview_companion_allowlisted_relay",
-            "provider_shape": PROVIDER_SHAPE,
-            "runtime_kind": RUNTIME_KIND,
-            "event_family": event_family,
-            "typed_runtime_bridge_path": typed_runtime_bridge_path,
-            "payload_policy": "sanitized_metadata_only_no_message_bodies_or_media_bytes",
-            "projection_policy": "runtime_event_evidence_only_until_richer_typed_payload",
-            "sanitized_metadata": sanitized_metadata,
-        },
-        "import_batch_id": import_batch_id,
-        "observed_at": observed_at,
-    })
-}
-
-fn dispatch_runtime_bridge_runtime_event(payload: Value) -> Result<u16, String> {
-    let url = local_backend_runtime_bridge_url(RUNTIME_EVENTS_BRIDGE_PATH)?;
-    let secret = crate::legacy_companion_secret()?;
-    let config = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(5)))
-        .build();
-    let agent = ureq::Agent::new_with_config(config);
-    match agent
-        .post(&url)
-        .header("X-Hermes-Secret", &secret)
-        .send_json(&payload)
-    {
-        Ok(response) => Ok(response.status().as_u16()),
-        Err(ureq::Error::StatusCode(status)) => Err(format!(
-            "WhatsApp companion relay backend dispatch rejected runtime event with HTTP status {status}"
-        )),
-        Err(error) => Err(format!(
-            "WhatsApp companion relay backend dispatch failed: {error}"
-        )),
+    metadata: &Value,
+) -> Result<WhatsAppHostObservationV1, String> {
+    let required = |key: &str| metadata_string(metadata, key);
+    match event_family {
+        "runtime_lifecycle" | "sync_lifecycle" | "media_lifecycle" => {
+            Ok(WhatsAppHostObservationV1::RuntimeState { state: required("state")? })
+        }
+        "message" => Ok(WhatsAppHostObservationV1::MessageIdentity {
+            provider_chat_id: required("provider_chat_id")?,
+            provider_message_id: required("provider_message_id")?,
+            sender_id: required("sender_id")?,
+        }),
+        "message_update" => Ok(WhatsAppHostObservationV1::MessageUpdated {
+            provider_chat_id: required("provider_chat_id")?,
+            provider_message_id: required("provider_message_id")?,
+        }),
+        "message_delete" => Ok(WhatsAppHostObservationV1::MessageDeleted {
+            provider_chat_id: required("provider_chat_id")?,
+            provider_message_id: required("provider_message_id")?,
+        }),
+        "receipt" => Ok(WhatsAppHostObservationV1::Receipt {
+            provider_chat_id: required("provider_chat_id")?,
+            provider_message_id: required("provider_message_id")?,
+            delivery_state: required("delivery_state")?,
+        }),
+        "reaction" => Ok(WhatsAppHostObservationV1::Reaction {
+            provider_chat_id: required("provider_chat_id")?,
+            provider_message_id: required("provider_message_id")?,
+            actor_id: required("actor_id")?,
+            emoji: metadata.get("emoji").and_then(Value::as_str).map(str::to_owned),
+            is_active: metadata
+                .get("is_active")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| "is_active metadata is required for WhatsApp reaction".to_owned())?,
+        }),
+        "dialog" => Ok(WhatsAppHostObservationV1::Dialog {
+            provider_chat_id: required("provider_chat_id")?,
+            title: required("title")?,
+            kind: required("kind")?,
+        }),
+        "participant" => Ok(WhatsAppHostObservationV1::Participant {
+            provider_chat_id: required("provider_chat_id")?,
+            provider_identity_id: required("provider_identity_id")?,
+            display_name: required("display_name")?,
+        }),
+        "presence" => Ok(WhatsAppHostObservationV1::Presence {
+            provider_chat_id: required("provider_chat_id")?,
+            provider_identity_id: required("provider_identity_id")?,
+            state: required("state")?,
+        }),
+        "call_metadata" => Ok(WhatsAppHostObservationV1::CallMetadata {
+            provider_call_id: required("provider_call_id")?,
+            provider_chat_id: required("provider_chat_id")?,
+            direction: required("direction")?,
+            state: required("state")?,
+        }),
+        "status" => Ok(WhatsAppHostObservationV1::StatusMetadata {
+            provider_status_id: required("provider_status_id")?,
+            sender_id: required("sender_id")?,
+        }),
+        "status_view" => Ok(WhatsAppHostObservationV1::StatusViewMetadata {
+            provider_status_id: required("provider_status_id")?,
+            viewer_id: required("viewer_id")?,
+        }),
+        "status_delete" => Ok(WhatsAppHostObservationV1::StatusDeletedMetadata {
+            provider_status_id: required("provider_status_id")?,
+        }),
+        "media" => Ok(WhatsAppHostObservationV1::MediaMetadata {
+            provider_chat_id: required("provider_chat_id")?,
+            provider_message_id: required("provider_message_id")?,
+            provider_media_id: required("provider_media_id")?,
+            media_kind: required("media_kind")?,
+        }),
+        _ => Err(format!("unsupported WhatsApp host observation family: {event_family}")),
     }
 }
 
-fn local_backend_runtime_bridge_url(path: &str) -> Result<String, String> {
-    if !path.starts_with("/api/v1/integrations/whatsapp/runtime-bridge/") {
-        return Err("WhatsApp companion relay target must be a runtime-bridge path".to_owned());
-    }
-    let raw_addr = std::env::var("HERMES_HTTP_ADDR")
-        .ok()
-        .map(|value| value.trim().to_owned())
+fn metadata_string(metadata: &Value, key: &str) -> Result<String, String> {
+    metadata
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| DEFAULT_BACKEND_HTTP_ADDR.to_owned());
-    let base_url = if raw_addr.starts_with("http://") {
-        raw_addr
-    } else {
-        format!("http://{raw_addr}")
-    };
-    if !is_allowed_local_backend_url(&base_url) {
-        return Err(
-            "WhatsApp companion relay backend dispatch requires a loopback HTTP address".to_owned(),
-        );
-    }
-    Ok(format!("{}{}", base_url.trim_end_matches('/'), path))
-}
-
-fn is_allowed_local_backend_url(url: &str) -> bool {
-    url.starts_with("http://127.0.0.1:")
-        || url.starts_with("http://localhost:")
-        || url.starts_with("http://[::1]:")
+        .map(str::to_owned)
+        .ok_or_else(|| format!("{key} metadata is required for WhatsApp host observation"))
 }
 
 fn runtime_bridge_import_batch_id(account_id: &str, provider_event_id: &str) -> String {
@@ -477,12 +593,14 @@ fn required_ascii_slug<'a>(field_name: &str, value: &'a str) -> Result<&'a str, 
     Ok(value)
 }
 
-fn required_observed_at(observed_at: &str) -> Result<&str, String> {
+fn required_observed_at(observed_at: &str) -> Result<i64, String> {
     let observed_at = observed_at.trim();
     if observed_at.is_empty() {
         return Err("observed_at is required for WhatsApp companion relay".to_owned());
     }
-    Ok(observed_at)
+    observed_at.parse::<i64>().map_err(|_| {
+        "observed_at must be Unix seconds for WhatsApp host bridge v1".to_owned()
+    })
 }
 
 fn sanitize_relay_metadata(value: Value) -> Value {
@@ -613,11 +731,11 @@ mod tests {
         );
         assert_eq!(
             manifest.event_extractor.relay_channel,
-            "tauri_allowlisted_companion_runtime_bridge_dispatch"
+            "tauri_versioned_whatsapp_host_bridge_unix_socket"
         );
         assert_eq!(
             manifest.event_extractor.runtime_bridge_dispatch,
-            "runtime_events_bridge_wired_smoke_pending"
+            "versioned_whatsapp_runtime_socket_wired"
         );
         assert!(
             manifest
@@ -631,14 +749,14 @@ mod tests {
         );
         assert_eq!(
             manifest.bridge_routes.authorized_session_path,
-            "/api/v1/integrations/whatsapp/runtime-bridge/sessions/authorized"
+            "whatsapp.client://observation/sessions/authorized"
         );
         assert!(
             manifest
                 .bridge_routes
                 .message_paths
                 .iter()
-                .all(|path| { path.starts_with("/api/v1/integrations/whatsapp/runtime-bridge/") })
+                .all(|path| { path.starts_with("whatsapp.client://observation/") })
         );
         assert_eq!(
             manifest.secret_policy.cookies,
@@ -659,7 +777,7 @@ mod tests {
         assert!(script.contains("window.location.origin !== allowedOrigin"));
         assert!(script.contains("__HERMES_WHATSAPP_COMPANION__"));
         assert!(script.contains("whatsapp_web_companion_relay_observation"));
-        assert!(script.contains("tauri_allowlisted_companion_runtime_bridge_dispatch"));
+        assert!(script.contains("tauri_versioned_whatsapp_host_bridge_unix_socket"));
         assert!(script.contains("metadata_only_no_private_content_or_secret_material"));
         for forbidden in [
             "document.cookie",
@@ -718,73 +836,33 @@ mod tests {
     fn relay_event_family_contract_maps_only_supported_runtime_bridge_paths() {
         assert_eq!(
             runtime_bridge_path_for_event_family("message"),
-            Some("/api/v1/integrations/whatsapp/runtime-bridge/messages")
+            Some("whatsapp.client://observation/messages")
         );
         assert_eq!(
             runtime_bridge_path_for_event_family("media_lifecycle"),
-            Some("/api/v1/integrations/whatsapp/runtime-bridge/media-lifecycle")
+            Some("whatsapp.client://observation/media-lifecycle")
         );
         assert_eq!(runtime_bridge_path_for_event_family("unknown"), None);
     }
 
     #[test]
-    fn relay_runtime_event_payload_is_metadata_only_and_targets_runtime_events() {
+    fn relay_host_observation_is_typed_and_metadata_only() {
         let sanitized_metadata = sanitize_relay_metadata(serde_json::json!({
             "provider_chat_id": "chat-1",
-            "message_body": "private",
-            "receipt_state": "read"
+            "provider_message_id": "message-1",
+            "sender_id": "sender-1",
+            "message_body": "private"
         }));
-        let payload = runtime_bridge_runtime_event_payload(
-            "wa-1",
-            "message",
-            "provider-event-1",
-            "2026-06-26T20:00:00Z",
-            "/api/v1/integrations/whatsapp/runtime-bridge/messages",
-            "webview_companion.message.observed",
-            "whatsapp-webview-companion:wa-1:provider-event-1",
-            sanitized_metadata,
-        );
-
+        let observation = host_observation_for_event_family("message", &sanitized_metadata)
+            .expect("typed observation");
         assert_eq!(
-            RUNTIME_EVENTS_BRIDGE_PATH,
-            payload_target_runtime_event_path()
+            observation,
+            WhatsAppHostObservationV1::MessageIdentity {
+                provider_chat_id: "chat-1".to_owned(),
+                provider_message_id: "message-1".to_owned(),
+                sender_id: "sender-1".to_owned(),
+            }
         );
-        assert_eq!(
-            payload["runtime_event_kind"],
-            serde_json::json!("webview_companion.message.observed")
-        );
-        assert_eq!(
-            payload["metadata"]["typed_runtime_bridge_path"],
-            serde_json::json!("/api/v1/integrations/whatsapp/runtime-bridge/messages")
-        );
-        assert_eq!(
-            payload["metadata"]["sanitized_metadata"]["provider_chat_id"],
-            serde_json::json!("chat-1")
-        );
-        assert_eq!(
-            payload["metadata"]["sanitized_metadata"]["receipt_state"],
-            serde_json::json!("read")
-        );
-        assert!(
-            payload["metadata"]["sanitized_metadata"]
-                .get("message_body")
-                .is_none()
-        );
-        assert!(!payload.to_string().contains("private"));
+        assert!(!serde_json::to_string(&observation).unwrap().contains("private"));
     }
-
-    #[test]
-    fn relay_backend_dispatch_is_loopback_only() {
-        assert!(is_allowed_local_backend_url("http://127.0.0.1:8080"));
-        assert!(is_allowed_local_backend_url("http://localhost:8080"));
-        assert!(is_allowed_local_backend_url("http://[::1]:8080"));
-        assert!(!is_allowed_local_backend_url("https://127.0.0.1:8080"));
-        assert!(!is_allowed_local_backend_url("http://192.168.1.10:8080"));
-        assert!(!is_allowed_local_backend_url("https://web.whatsapp.com"));
-    }
-}
-
-#[cfg(test)]
-fn payload_target_runtime_event_path() -> &'static str {
-    RUNTIME_EVENTS_BRIDGE_PATH
 }

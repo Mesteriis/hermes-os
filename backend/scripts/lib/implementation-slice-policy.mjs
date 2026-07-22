@@ -193,6 +193,8 @@ const BLOB_FOUNDATION_PRODUCTION_PACKAGES = [
 
 const BLOB_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES = [
   ...BLOB_FOUNDATION_PRODUCTION_PACKAGES,
+  { name: 'hermes-blob-client-contract', role: 'platform', owner: 'blob', surface: 'contract' },
+  { name: 'hermes-blob-client', role: 'platform', owner: 'blob', surface: 'implementation' },
   { name: 'hermes-blob-runtime', role: 'platform', owner: 'blob', surface: 'implementation' },
   { name: 'hermes-blob-service', role: 'platform', owner: 'blob', surface: 'runtime' },
 ];
@@ -244,6 +246,12 @@ const MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES = [
   { name: 'hermes-mail-imap', role: 'integration', owner: 'mail', surface: 'implementation' },
   { name: 'hermes-mail-persistence', role: 'integration', owner: 'mail', surface: 'persistence' },
   { name: 'hermes-mail-runtime', role: 'integration', owner: 'mail', surface: 'runtime' },
+  { name: 'hermes-telegram-api', role: 'integration', owner: 'telegram', surface: 'contract' },
+  { name: 'hermes-telegram-core', role: 'integration', owner: 'telegram', surface: 'implementation' },
+  { name: 'hermes-telegram-tdlib', role: 'integration', owner: 'telegram', surface: 'implementation' },
+  { name: 'hermes-telegram-persistence', role: 'integration', owner: 'telegram', surface: 'persistence' },
+  { name: 'hermes-telegram-runtime', role: 'integration', owner: 'telegram', surface: 'runtime' },
+  { name: 'hermes-whatsapp-api', role: 'integration', owner: 'whatsapp', surface: 'contract' },
   { name: 'hermes-communications-ingress', role: 'domain', owner: 'communications', surface: 'contract' },
   { name: 'hermes-communications-api', role: 'domain', owner: 'communications', surface: 'contract' },
   { name: 'hermes-communications-domain', role: 'domain', owner: 'communications', surface: 'implementation' },
@@ -258,6 +266,13 @@ const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
 
 const BLOB_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-blob-client-contract': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-blob-client': [
+    { name: 'hermes-blob-client-contract', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
   'hermes-blob-runtime': [
     { name: 'hermes-blob-protocol', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
@@ -370,6 +385,34 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-mail-imap', kind: 'normal' },
     { name: 'hermes-mail-persistence', kind: 'normal' },
   ],
+  'hermes-telegram-api': [
+    { name: 'serde', kind: 'normal' },
+  ],
+  'hermes-telegram-core': [
+    { name: 'hermes-telegram-api', kind: 'normal' },
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+  ],
+  'hermes-telegram-tdlib': [
+    { name: 'hermes-telegram-api', kind: 'normal' },
+  ],
+  'hermes-telegram-persistence': [
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-telegram-api', kind: 'normal' },
+    { name: 'serde_json', kind: 'normal' },
+    { name: 'sqlx', kind: 'normal' },
+  ],
+  'hermes-telegram-runtime': [
+    { name: 'hermes-blob-client-contract', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-telegram-api', kind: 'normal' },
+    { name: 'hermes-telegram-core', kind: 'normal' },
+    { name: 'hermes-telegram-persistence', kind: 'normal' },
+    { name: 'hermes-telegram-tdlib', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+    { name: 'serde_json', kind: 'normal' },
+  ],
+  'hermes-whatsapp-api': [],
   'hermes-communications-ingress': [],
   'hermes-communications-api': [],
   'hermes-communications-domain': [
@@ -580,6 +623,10 @@ const BLOB_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
 
 const BLOB_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...BLOB_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-blob-client-contract': [],
+  'hermes-blob-client': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+  ],
   'hermes-blob-runtime': [
     { name: 'chacha20poly1305', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: ['alloc', 'zeroize'] },
     { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
@@ -690,11 +737,37 @@ const GATEWAY_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
 
 const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...GATEWAY_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-blob-client-contract': [],
+  'hermes-blob-client': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+  ],
   'hermes-mail-api': [],
   'hermes-mail-core': [],
   'hermes-mail-imap': [],
   'hermes-mail-persistence': [],
   'hermes-mail-runtime': [],
+  'hermes-telegram-api': [
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive'] },
+  ],
+  'hermes-telegram-core': [],
+  'hermes-telegram-tdlib': [
+    { name: 'base64', kind: 'normal', source: 'crates_io', version: '=0.22.1', defaultFeatures: true, features: [] },
+    { name: 'libloading', kind: 'normal', source: 'crates_io', version: '=0.8.9', defaultFeatures: true, features: [] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-telegram-persistence': [
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.8.6', defaultFeatures: false, features: ['json', 'postgres', 'runtime-tokio-rustls'] },
+  ],
+  'hermes-telegram-runtime': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-whatsapp-api': [],
   'hermes-communications-ingress': [],
   'hermes-communications-api': [],
   'hermes-communications-domain': [],

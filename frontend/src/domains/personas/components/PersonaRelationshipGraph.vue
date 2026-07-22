@@ -8,6 +8,7 @@ import PersonaRelationshipEdge from './PersonaRelationshipEdge.vue'
 import {
   buildRelationshipGraphEdges,
   buildRelationshipGraphNodes,
+  relationshipGraphEdgeData,
   relationshipGraphEdgeDetail,
   relationshipGraphNodeDetail,
   type RelationshipEdgeData,
@@ -88,7 +89,8 @@ function showNodeDetail(data: RelationshipNodeData): void {
 
 function showEdgeDetail(event: EdgeMouseEvent): void {
   event.event.stopPropagation()
-  const data = event.edge.data as RelationshipEdgeData
+  const data = relationshipGraphEdgeData(event.edge.data)
+  if (!data) return
 
   showEdgeData(data)
 }

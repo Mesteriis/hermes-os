@@ -184,14 +184,14 @@ function attachmentMatchesPayload(
 ): boolean {
   const payloadAttachmentId = stringValue(payload.attachment_id) ?? stringValue(payload.provider_attachment_id)
   const attachmentId =
-    stringValue((attachment as Record<string, unknown>).attachment_id)
-    ?? stringValue((attachment as Record<string, unknown>).provider_attachment_id)
+    stringValue('attachment_id' in attachment ? attachment.attachment_id : undefined)
+    ?? stringValue(attachment.provider_attachment_id)
   if (payloadAttachmentId && attachmentId) return payloadAttachmentId === attachmentId
 
   const payloadTdlibFileId = typeof payload.tdlib_file_id === 'number' ? payload.tdlib_file_id : null
   const attachmentTdlibFileId =
-    typeof (attachment as Record<string, unknown>).tdlib_file_id === 'number'
-      ? ((attachment as Record<string, unknown>).tdlib_file_id as number)
+    typeof attachment.tdlib_file_id === 'number'
+      ? attachment.tdlib_file_id
       : null
   return payloadTdlibFileId !== null && attachmentTdlibFileId === payloadTdlibFileId
 }

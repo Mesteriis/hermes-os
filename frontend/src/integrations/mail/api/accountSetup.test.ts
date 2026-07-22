@@ -56,9 +56,9 @@ describe('account setup API', () => {
 			new Response(
 				JSON.stringify({
 					account_id: 'mail-imap-user-example-com',
-					secret_ref: 'secret:provider-account:mail-imap-user-example-com:imap_password',
-					secret_kind: 'password',
-					store_kind: 'host_vault'
+					secret_ref: 'secret://mail/mail-imap-user-example-com',
+					secret_kind: 'imap_password_file',
+					store_kind: 'runtime_secret_store'
 				}),
 				{ status: 200, headers: { 'Content-Type': 'application/json' } }
 			)
@@ -76,7 +76,7 @@ describe('account setup API', () => {
 			mailbox: 'INBOX',
 			username: 'user@example.com',
 			password: 'mailbox-password',
-			secret_kind: 'password'
+			secret_kind: 'imap_password_file'
 		})
 
 		expect(response.account_id).toBe('mail-imap-user-example-com')
@@ -88,7 +88,7 @@ describe('account setup API', () => {
 			account_id: 'mail-imap-user-example-com',
 			provider_kind: 'imap',
 			password: 'mailbox-password',
-			secret_kind: 'password'
+			secret_kind: 'imap_password_file'
 		})
 	})
 })

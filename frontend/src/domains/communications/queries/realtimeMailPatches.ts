@@ -30,9 +30,6 @@ import {
 	savedSearchValue,
 	storedEventEnvelope,
 	stringValue,
-	type DraftPatchPayload,
-	type FolderMessagePatchPayload,
-	type CommunicationMessagePatchPayload,
 	type MailRealtimePatchQueryClient,
 	type OutboxPatchPayload
 } from './realtimePatchShared'
@@ -103,7 +100,7 @@ function applyFolderMessageRealtimePatch(
 		return false
 	}
 
-	const payload = event?.payload as FolderMessagePatchPayload | undefined
+	const payload = isRecord(event?.payload) ? event.payload : undefined
 	const folderMessage = folderMessageValue(payload?.message)
 	const messageId = stringValue(payload?.message_id)
 	if (!folderMessage || !messageId) return false
@@ -383,7 +380,7 @@ function applyDraftRealtimePatch(
 	const event = envelope?.event
 	if (event?.event_type !== 'mail.draft.deleted') return false
 
-	const payload = event.payload as DraftPatchPayload | undefined
+	const payload = isRecord(event.payload) ? event.payload : undefined
 	const draftId = stringValue(payload?.draft_id)
 	if (!draftId) return false
 
@@ -424,7 +421,7 @@ function applyOutboxRealtimePatch(
 		return false
 	}
 
-	const payload = event?.payload as OutboxPatchPayload | undefined
+	const payload = isRecord(event?.payload) ? event.payload : undefined
 	const outboxId = stringValue(payload?.outbox_id)
 	if (!outboxId) return false
 
@@ -550,7 +547,7 @@ function bulkActionRequestFromEvent(eventData: string): BulkMessageActionRequest
 	const eventType = event?.event_type
 	if (typeof eventType !== 'string' || !eventType.startsWith('mail.message.')) return null
 
-	const payload = event?.payload as CommunicationMessagePatchPayload | undefined
+	const payload = isRecord(event?.payload) ? event.payload : undefined
 	const action = normalizeBulkAction(payload?.action)
 	const messageIds = normalizeMessageIds(payload?.message_ids)
 	if (!action || messageIds.length === 0) return null

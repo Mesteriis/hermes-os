@@ -32,17 +32,32 @@ message ManagedRuntimeEventCredentialDeliveryV1 {
   bytes ciphertext = 2;
   bytes tag = 3;
 }
+message ManagedRuntimeProviderCredentialRequestV1 {
+  bytes request_id = 1;
+  string purpose_id = 2;
+  uint64 credential_revision = 3;
+  uint32 ttl_seconds = 4;
+  uint32 secret_class = 5;
+  bytes recipient_public_key_x25519 = 6;
+}
+message ManagedRuntimeProviderCredentialDeliveryV1 {
+  bytes encapped_key = 1;
+  bytes ciphertext = 2;
+  bytes tag = 3;
+}
 message ManagedRuntimeControlRequestV1 {
   oneof operation {
     DescribeManagedRuntimeRequestV1 describe = 1;
     ManagedRuntimeReadyRequestV1 ready = 2;
     ManagedRuntimeEventCredentialRequestV1 issue_event_credential = 3;
+    ManagedRuntimeProviderCredentialRequestV1 issue_provider_credential = 4;
   }
 }
 message ManagedRuntimeControlResponseV1 {
   oneof result {
     DescribeManagedRuntimeResponseV1 describe = 1;
     ManagedRuntimeEventCredentialDeliveryV1 event_credential_delivery = 2;
+    ManagedRuntimeProviderCredentialDeliveryV1 provider_credential_delivery = 3;
   }
   string error_code = 15;
 }

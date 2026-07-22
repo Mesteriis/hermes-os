@@ -14,6 +14,7 @@ import {
   mailListItemMarkers,
   mailListItemSourceKind,
   mailListItemStatus,
+  mailListItemStatusChipClass,
 } from "./mailElements";
 
 const props = withDefaults(
@@ -38,10 +39,6 @@ function handleSelect(): void {
   emit("select", props.item);
 }
 
-function statusChipClass(item: MailListItemModel): string {
-  if (item.workflowState !== "new") return "mail-list-item__status-chip";
-  return "mail-list-item__status-chip mail-list-item__status-chip--visible";
-}
 </script>
 
 <template>
@@ -117,7 +114,7 @@ function statusChipClass(item: MailListItemModel): string {
               </template>
             </Tooltip>
             <Badge
-              :class="statusChipClass(item)"
+              :class="mailListItemStatusChipClass(item)"
               :variant="mailListItemStatus(item).badgeTone"
             >
               {{ mailListItemStatus(item).label }}

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { handleRealtimeEvent } from './realtime'
+import { TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE } from '../../integrations/telegram/queries/telegramRuntimePanelActions'
 
 describe('telegram command realtime cache patch handling', () => {
   it('patches cached telegram command rows for retry scheduling and dead-letter fields', () => {
@@ -317,7 +318,7 @@ describe('telegram command realtime cache patch handling', () => {
   })
 
   it('inserts a queued send_media command row when media upload starts before command query refetch', () => {
-    const commandsKey = ['integrations', 'telegram', 'commands', 'account-1', 20]
+    const commandsKey = ['integrations', 'telegram', 'commands', 'account-1', TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE]
     const commands: Array<Record<string, unknown>> = []
     const setQueryData = vi.fn((queryKey, updater) =>
       typeof updater === 'function' ? updater(commands) : updater
@@ -486,7 +487,7 @@ describe('telegram command realtime cache patch handling', () => {
   })
 
   it('inserts a queued join command row when lifecycle status arrives before command query refetch', () => {
-    const commandsKey = ['integrations', 'telegram', 'commands', 'account-1', 20]
+    const commandsKey = ['integrations', 'telegram', 'commands', 'account-1', TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE]
     const commands: Array<Record<string, unknown>> = []
     const setQueryData = vi.fn((queryKey, updater) =>
       typeof updater === 'function' ? updater(commands) : updater
@@ -538,7 +539,7 @@ describe('telegram command realtime cache patch handling', () => {
   })
 
   it('inserts a queued edit command row when lifecycle status arrives before command query refetch', () => {
-    const commandsKey = ['integrations', 'telegram', 'commands', 'account-1', 20]
+    const commandsKey = ['integrations', 'telegram', 'commands', 'account-1', TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE]
     const commands: Array<Record<string, unknown>> = []
     const setQueryData = vi.fn((queryKey, updater) =>
       typeof updater === 'function' ? updater(commands) : updater
@@ -598,7 +599,7 @@ describe('telegram command realtime cache patch handling', () => {
   })
 
   it('inserts a queued delete command row with tombstone metadata before command query refetch', () => {
-    const commandsKey = ['integrations', 'telegram', 'commands', 'account-1', 20]
+    const commandsKey = ['integrations', 'telegram', 'commands', 'account-1', TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE]
     const commands: Array<Record<string, unknown>> = []
     const setQueryData = vi.fn((queryKey, updater) =>
       typeof updater === 'function' ? updater(commands) : updater

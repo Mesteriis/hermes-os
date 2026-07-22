@@ -2,8 +2,7 @@ import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
 import {
   bilingualReplyToneOptions,
-  type BilingualReplyFlowRequest,
-  type BilingualReplyTone
+  type BilingualReplyFlowRequest
 } from '../types/bilingualReplyFlow'
 
 export { bilingualReplyToneOptions }
@@ -34,6 +33,6 @@ export function bilingualReplyFlowFormToRequest(
   const parsed = bilingualReplyFlowFormSchema.parse(values)
   return {
     reply_text_ru: parsed.replyTextRu,
-    tone: parsed.tone as BilingualReplyTone
+    tone: parsed.tone
   }
 }

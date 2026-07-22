@@ -24,6 +24,10 @@ import {
   startWhatsappRuntime,
   stopWhatsappRuntime,
 } from './whatsapp'
+import {
+  WHATSAPP_RUNTIME_COMMANDS_PAGE_SIZE,
+  WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE,
+} from '../queries/useWhatsappRuntimeQuery'
 
 describe('whatsapp runtime API', () => {
   beforeEach(() => {
@@ -101,6 +105,7 @@ describe('whatsapp runtime API', () => {
   })
 
   it('loads provider commands and posts retry/dead-letter actions', async () => {
+    const defaultCommandsChunkSize = WHATSAPP_RUNTIME_COMMANDS_PAGE_SIZE
     const ok = (body: unknown) =>
       new Response(JSON.stringify(body), {
         status: 200,
@@ -199,7 +204,7 @@ describe('whatsapp runtime API', () => {
       account_id: 'wa-1',
       provider_chat_id: 'chat-1',
       command_kinds: ['send_text', 'send_media'],
-      limit: 20,
+      limit: defaultCommandsChunkSize,
     })
     await retryWhatsappProviderCommand('wa-cmd-1')
     await deadLetterWhatsappProviderCommand({
@@ -212,7 +217,7 @@ describe('whatsapp runtime API', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('account_id=wa-1')
     expect(fetchMock.mock.calls[0][0]).toContain('provider_chat_id=chat-1')
     expect(fetchMock.mock.calls[0][0]).toContain('command_kinds=send_text%2Csend_media')
-    expect(fetchMock.mock.calls[0][0]).toContain('limit=20')
+    expect(fetchMock.mock.calls[0][0]).toContain(`limit=${defaultCommandsChunkSize}`)
     expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/integrations/whatsapp/commands/wa-cmd-1/retry')
     expect(fetchMock.mock.calls[1][1].method).toBe('POST')
     expect(fetchMock.mock.calls[2][0]).toContain('/api/v1/integrations/whatsapp/commands/wa-cmd-2/dead-letter')
@@ -223,6 +228,8 @@ describe('whatsapp runtime API', () => {
   })
 
   it('posts projected sync snapshot routes for chats, history, members, statuses, presence, calls, contacts and media', async () => {
+    const defaultSyncChunkSize = WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
+
     const ok = (body: unknown) =>
       new Response(JSON.stringify(body), {
         status: 200,
@@ -240,14 +247,14 @@ describe('whatsapp runtime API', () => {
       .mockResolvedValueOnce(ok({ account_id: 'wa-1', provider_chat_id: 'chat-1', content_type: 'image/', runtime_kind: 'synthetic', status: 'synced', synced_count: 1, has_more: false, items: [] }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await fetchWhatsappSyncChats({ account_id: 'wa-1', limit: 8 })
-    await fetchWhatsappSyncHistory({ account_id: 'wa-1', provider_chat_id: 'chat-1', limit: 8 })
-    await fetchWhatsappSyncMembers({ account_id: 'wa-1', provider_chat_id: 'chat-1', limit: 8 })
-    await fetchWhatsappSyncStatuses({ account_id: 'wa-1', limit: 8 })
-    await fetchWhatsappSyncPresence({ account_id: 'wa-1', provider_chat_id: 'chat-1', limit: 8 })
-    await fetchWhatsappSyncCalls({ account_id: 'wa-1', provider_chat_id: 'chat-1', limit: 8 })
-    await fetchWhatsappSyncContacts({ account_id: 'wa-1', limit: 8 })
-    await fetchWhatsappSyncMedia({ account_id: 'wa-1', provider_chat_id: 'chat-1', content_type: 'image/', limit: 8 })
+    await fetchWhatsappSyncChats({ account_id: 'wa-1', limit: defaultSyncChunkSize })
+    await fetchWhatsappSyncHistory({ account_id: 'wa-1', provider_chat_id: 'chat-1', limit: defaultSyncChunkSize })
+    await fetchWhatsappSyncMembers({ account_id: 'wa-1', provider_chat_id: 'chat-1', limit: defaultSyncChunkSize })
+    await fetchWhatsappSyncStatuses({ account_id: 'wa-1', limit: defaultSyncChunkSize })
+    await fetchWhatsappSyncPresence({ account_id: 'wa-1', provider_chat_id: 'chat-1', limit: defaultSyncChunkSize })
+    await fetchWhatsappSyncCalls({ account_id: 'wa-1', provider_chat_id: 'chat-1', limit: defaultSyncChunkSize })
+    await fetchWhatsappSyncContacts({ account_id: 'wa-1', limit: defaultSyncChunkSize })
+    await fetchWhatsappSyncMedia({ account_id: 'wa-1', provider_chat_id: 'chat-1', content_type: 'image/', limit: defaultSyncChunkSize })
 
     expect(fetchMock).toHaveBeenCalledTimes(8)
     expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/whatsapp/provider-sync/chats')
@@ -268,40 +275,40 @@ describe('whatsapp runtime API', () => {
     expect(fetchMock.mock.calls[7][1].method).toBe('POST')
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
       account_id: 'wa-1',
-      limit: 8,
+      limit: defaultSyncChunkSize,
     })
     expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({
       account_id: 'wa-1',
       provider_chat_id: 'chat-1',
-      limit: 8,
+      limit: defaultSyncChunkSize,
     })
     expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).toEqual({
       account_id: 'wa-1',
-      limit: 8,
+      limit: defaultSyncChunkSize,
     })
     expect(JSON.parse(fetchMock.mock.calls[3][1].body as string)).toEqual({
       account_id: 'wa-1',
-      limit: 8,
+      limit: defaultSyncChunkSize,
     })
     expect(JSON.parse(fetchMock.mock.calls[4][1].body as string)).toEqual({
       account_id: 'wa-1',
       provider_chat_id: 'chat-1',
-      limit: 8,
+      limit: defaultSyncChunkSize,
     })
     expect(JSON.parse(fetchMock.mock.calls[5][1].body as string)).toEqual({
       account_id: 'wa-1',
       provider_chat_id: 'chat-1',
-      limit: 8,
+      limit: defaultSyncChunkSize,
     })
     expect(JSON.parse(fetchMock.mock.calls[6][1].body as string)).toEqual({
       account_id: 'wa-1',
-      limit: 8,
+      limit: defaultSyncChunkSize,
     })
     expect(JSON.parse(fetchMock.mock.calls[7][1].body as string)).toEqual({
       account_id: 'wa-1',
       provider_chat_id: 'chat-1',
       content_type: 'image/',
-      limit: 8,
+      limit: defaultSyncChunkSize,
     })
   })
 

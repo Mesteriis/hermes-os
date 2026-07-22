@@ -1,5 +1,34 @@
 import type { ConnectionProviderId } from '../../../shared/stores/integrationConnectionWizard'
 import type { CalendarAccount, ProviderAccount } from '../types/settings'
+import {
+  communicationProviderBrand,
+  providerBrandClass,
+} from '../components/providerBranding'
+import type { TranslateFn } from './integrationAccountPredicates'
+import {
+  accountConfigBoolean,
+  accountConfigString,
+  accountContactsRemoteWriteEnabled,
+  accountContactsSyncDirection,
+  accountContactsSyncEnabled,
+  accountCredentialRequiresReauthorization,
+  accountHasGoogleContactsWriteScope,
+  accountSupportsContacts,
+  canOpenSetupAction as canOpenSetupActionForProviderKind,
+  isExceptionOnlyProvider,
+  isExceptionRouteProvider,
+  isManagedRuntimeProvider,
+  isMailProvider,
+  isTelegramProvider,
+  isWhatsappProvider,
+  isYandexTelemostProvider,
+  isZulipProvider,
+  isZoomProvider,
+  matchesCalendarAccount,
+  providerAccountEnabled,
+  selectedAccountEmail,
+  supportsCalendar,
+} from './integrationAccountPredicates'
 
 export interface IntegrationAccountRow {
   account: ProviderAccount
@@ -16,6 +45,10 @@ export interface IntegrationAccountRow {
 export interface IntegrationGroup {
   label: string
   items: IntegrationAccountRow[]
+}
+
+export interface MailSyncSettingsSnapshot {
+  sync_enabled?: boolean
 }
 
 export interface SelectedIntegrationSummary {
@@ -57,6 +90,18 @@ export interface AccountServiceRow {
   isBusy: boolean
 }
 
+export interface AccountServiceRowsInput {
+  account: ProviderAccount
+  selectedMailSyncSettings: MailSyncSettingsSnapshot | null
+  calendarAccount: CalendarAccount | null
+  activeMailActionAccountId: string | null
+  isMailSyncUpdatePending: boolean
+  isCalendarUpdatePending: boolean
+  isProviderUpdatePending: boolean
+  isRunAddressBookSyncNowPending: boolean
+  t: TranslateFn
+}
+
 const PROVIDER_LABELS: Record<string, string> = {
   gmail: 'Gmail',
   icloud: 'iCloud',
@@ -68,105 +113,6 @@ const PROVIDER_LABELS: Record<string, string> = {
   zoom_server_to_server: 'Zoom (Server-to-Server)',
   yandex_telemost_user: 'Yandex Telemost',
   zulip_bot: 'Zulip Bot',
-}
-
-export function isMailProvider(providerKind: string): boolean {
-  return providerKind === 'gmail' || providerKind === 'icloud' || providerKind === 'imap'
-}
-
-export function supportsCalendar(providerKind: string): boolean {
-  return providerKind === 'gmail' || providerKind === 'icloud'
-}
-
-export function isZoomProvider(providerKind: string): boolean {
-  return providerKind === 'zoom_user' || providerKind === 'zoom_server_to_server'
-}
-
-export function isTelegramProvider(providerKind: string): boolean {
-  return providerKind === 'telegram_user' || providerKind === 'telegram_bot'
-}
-
-export function isWhatsappProvider(providerKind: string): boolean {
-  return providerKind === 'whatsapp_web'
-}
-
-export function isYandexTelemostProvider(providerKind: string): boolean {
-  return providerKind === 'yandex_telemost_user'
-}
-
-export function isZulipProvider(providerKind: string): boolean {
-  return providerKind === 'zulip_bot'
-}
-
-export function isExceptionOnlyProvider(providerKind: string): boolean {
-  return providerKind === 'icloud' || providerKind === 'imap'
-}
-
-export function isExceptionRouteProvider(providerKind: string): boolean {
-  return isZulipProvider(providerKind)
-}
-
-export function isManagedRuntimeProvider(providerKind: string): boolean {
-  return (
-    isZoomProvider(providerKind) ||
-    isTelegramProvider(providerKind) ||
-    isWhatsappProvider(providerKind) ||
-    isYandexTelemostProvider(providerKind) ||
-    isZulipProvider(providerKind)
-  )
-}
-
-function accountConnectedServices(account: ProviderAccount): string[] {
-  const raw = account.config?.connected_services
-  if (!Array.isArray(raw)) return []
-  return raw.filter((service): service is string => typeof service === 'string')
-}
-
-export function accountConfigBoolean(account: ProviderAccount, key: string): boolean | null {
-  const value = account.config?.[key]
-  return typeof value === 'boolean' ? value : null
-}
-
-export function accountContactsSyncEnabled(account: ProviderAccount): boolean {
-  return accountConfigBoolean(account, 'address_book_sync_enabled') ?? true
-}
-
-export function accountCredentialRequiresReauthorization(account: ProviderAccount): boolean {
-  return (
-    account.credential_state?.status === 'expired' &&
-    account.credential_state.requires_reauthorization === true
-  )
-}
-
-export function accountConfigString(account: ProviderAccount, key: string): string | null {
-  const value = account.config?.[key]
-  return typeof value === 'string' ? value : null
-}
-
-export function accountSupportsContacts(account: ProviderAccount): boolean {
-  return accountConnectedServices(account).includes('contacts')
-}
-
-export function accountContactsSyncDirection(
-  account: ProviderAccount
-): 'read_only' | 'bidirectional' {
-  return accountConfigString(account, 'address_book_sync_direction') === 'bidirectional'
-    ? 'bidirectional'
-    : 'read_only'
-}
-
-export function accountContactsRemoteWriteEnabled(account: ProviderAccount): boolean {
-  return accountConfigBoolean(account, 'address_book_remote_write_enabled') ?? false
-}
-
-function accountRequestedScopes(account: ProviderAccount): string[] {
-  const raw = account.config?.requested_scopes
-  if (!Array.isArray(raw)) return []
-  return raw.filter((scope): scope is string => typeof scope === 'string')
-}
-
-export function accountHasGoogleContactsWriteScope(account: ProviderAccount): boolean {
-  return accountRequestedScopes(account).includes('https://www.googleapis.com/auth/contacts')
 }
 
 export function providerLabel(providerKind: string): string {
@@ -182,16 +128,6 @@ export function providerDisplayName(account: ProviderAccount): string {
     account.external_account_id ||
     account.account_id
   )
-}
-
-export function selectedAccountEmail(account: ProviderAccount): string {
-  return account.email || (typeof account.config?.email === 'string' ? account.config.email : '')
-}
-
-export function providerAccountEnabled(account: ProviderAccount): boolean {
-  if (typeof account.is_authenticated === 'boolean' && !account.is_authenticated) return false
-  if (typeof account.is_active === 'boolean') return account.is_active
-  return account.config?.auth_state !== 'logged_out'
 }
 
 export function defaultProviderIdFromAccount(
@@ -215,28 +151,275 @@ export function defaultProviderIdFromAccount(
   }
 }
 
-export function downloadJson(filename: string, value: unknown): void {
-  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
+export function providerFlowLabel(providerKind: string, t: TranslateFn): string {
+  if (providerKind === 'gmail') return t('Browser callback')
+  if (isTelegramProvider(providerKind)) return t('QR companion')
+  if (isExceptionOnlyProvider(providerKind)) return t('Exception-only recovery')
+  if (isWhatsappProvider(providerKind)) return t('QR companion')
+  if (isExceptionRouteProvider(providerKind)) return t('Exception route')
+  if (isZoomProvider(providerKind) || isYandexTelemostProvider(providerKind)) {
+    return t('Browser callback')
+  }
+  return t('Managed flow')
 }
 
-export function matchesCalendarAccount(
+export function nextStepLabel(providerKind: string, t: TranslateFn): string {
+  if (providerKind === 'gmail') return t('Resume in browser callback flow')
+  if (isTelegramProvider(providerKind)) return t('Start or resume Telegram QR login')
+  if (isExceptionOnlyProvider(providerKind)) {
+    return t('Handle only through explicit exception recovery')
+  }
+  if (isWhatsappProvider(providerKind)) return t('Resume hidden WhatsApp runtime')
+  if (isExceptionRouteProvider(providerKind)) {
+    return t('Continue in dedicated runtime')
+  }
+  if (isZoomProvider(providerKind) || isYandexTelemostProvider(providerKind)) {
+    return t('Resume through the workspace callback route')
+  }
+  return t('Use managed setup flow')
+}
+
+export function statusText(account: ProviderAccount, t: TranslateFn): string {
+  if (typeof account.is_authenticated === 'boolean' && !account.is_authenticated) {
+    return t('Not authenticated')
+  }
+  if (typeof account.is_active === 'boolean' && !account.is_active) return t('Inactive')
+  if (isManagedRuntimeProvider(account.provider_kind)) return t('Configured')
+  return t('Active')
+}
+
+export function statusClass(account: ProviderAccount): string {
+  if (typeof account.is_authenticated === 'boolean' && !account.is_authenticated) {
+    return 'unauthenticated'
+  }
+  if (typeof account.is_active === 'boolean' && !account.is_active) return 'inactive'
+  if (isManagedRuntimeProvider(account.provider_kind)) return 'configured'
+  return 'active'
+}
+
+export function selectedInspectorActionLabel(account: ProviderAccount | null, t: TranslateFn): string {
+  if (!account) return t('Open connection wizard')
+  if (isWhatsappProvider(account.provider_kind)) return t('Resume QR companion')
+  if (isTelegramProvider(account.provider_kind)) return t('Resume Telegram QR login')
+  if (account.provider_kind === 'gmail') return t('Resume browser callback')
+  if (isExceptionRouteProvider(account.provider_kind)) return t('View exception route')
+  if (isExceptionOnlyProvider(account.provider_kind)) return t('No self-serve setup route')
+  return t('Review managed route')
+}
+
+export function canOpenSetupAction(account: ProviderAccount): boolean {
+  return canOpenSetupActionForProviderKind(account.provider_kind)
+}
+
+export function toIntegrationAccountRow(
   account: ProviderAccount,
-  calendarAccount: CalendarAccount
-): boolean {
-  const accountEmail = selectedAccountEmail(account).toLowerCase()
-  const calendarEmail = calendarAccount.email?.toLowerCase() ?? ''
-  return (
-    calendarAccount.account_id === account.account_id ||
-    calendarAccount.account_id === account.external_account_id ||
-    calendarAccount.account_name === account.display_name ||
-    (accountEmail.length > 0 && calendarEmail === accountEmail)
-  )
+  selectedIntegrationId: string | null,
+  t: TranslateFn
+): IntegrationAccountRow {
+  const brand = communicationProviderBrand(account.provider_kind)
+  return {
+    account,
+    displayName: providerDisplayName(account),
+    icon: brand.icon,
+    iconTone: providerBrandClass(brand),
+    providerLabel: providerLabel(account.provider_kind),
+    flowLabel: providerFlowLabel(account.provider_kind, t),
+    statusText: statusText(account, t),
+    statusClass: statusClass(account),
+    isSelected: selectedIntegrationId === account.account_id,
+  }
+}
+
+export function toIntegrationGroups(
+  accounts: ProviderAccount[],
+  selectedIntegrationId: string | null,
+  t: TranslateFn
+): IntegrationGroup[] {
+  const groups = [
+    {
+      label: t('Mail accounts'),
+      items: accounts.filter((account) => isMailProvider(account.provider_kind)),
+    },
+    {
+      label: t('Telegram accounts'),
+      items: accounts.filter((account) => isTelegramProvider(account.provider_kind)),
+    },
+    {
+      label: t('WhatsApp accounts'),
+      items: accounts.filter((account) => isWhatsappProvider(account.provider_kind)),
+    },
+    {
+      label: t('Zoom accounts'),
+      items: accounts.filter((account) => isZoomProvider(account.provider_kind)),
+    },
+    {
+      label: t('Yandex Telemost accounts'),
+      items: accounts.filter((account) => isYandexTelemostProvider(account.provider_kind)),
+    },
+    {
+      label: t('Zulip accounts'),
+      items: accounts.filter((account) => isZulipProvider(account.provider_kind)),
+    },
+    {
+      label: t('Other accounts'),
+      items: accounts.filter((account) =>
+        !isMailProvider(account.provider_kind) &&
+        !isTelegramProvider(account.provider_kind) &&
+        !isWhatsappProvider(account.provider_kind) &&
+        !isZoomProvider(account.provider_kind) &&
+        !isYandexTelemostProvider(account.provider_kind) &&
+        !isZulipProvider(account.provider_kind)
+      ),
+    },
+  ]
+
+  const nonEmptyGroups = groups
+    .filter((group) => group.items.length > 0)
+    .map((group) => ({
+      label: group.label,
+      items: group.items.map((account) => toIntegrationAccountRow(account, selectedIntegrationId, t)),
+    }))
+
+  if (nonEmptyGroups.length > 0) return nonEmptyGroups
+  return [
+    { label: t('Accounts'), items: accounts.map((account) => toIntegrationAccountRow(account, selectedIntegrationId, t)) },
+  ]
+}
+
+export function toIntegrationServiceRows(input: AccountServiceRowsInput): AccountServiceRow[] {
+  const rows: AccountServiceRow[] = []
+  const { account, selectedMailSyncSettings, calendarAccount, activeMailActionAccountId } = input
+  const { isMailSyncUpdatePending, isCalendarUpdatePending, isProviderUpdatePending, isRunAddressBookSyncNowPending, t } = input
+
+  if (isMailProvider(account.provider_kind)) {
+    rows.push({
+      id: 'mail',
+      label: t('Mail'),
+      icon: 'tabler:mail',
+      enabled: selectedMailSyncSettings?.sync_enabled ?? providerAccountEnabled(account),
+      statusText: selectedMailSyncSettings?.sync_enabled ? t('Sync enabled') : t('Sync paused'),
+      detail: selectedMailSyncSettings
+        ? t('Uses backend mail sync settings for this account.')
+        : t('Waiting for mail sync settings from the backend.'),
+      canToggle: Boolean(selectedMailSyncSettings),
+      canRunNow: false,
+      disabledReason: selectedMailSyncSettings ? undefined : t('Sync settings are still loading.'),
+      isBusy: isMailSyncUpdatePending && activeMailActionAccountId === account.account_id,
+    })
+  }
+
+  if (supportsCalendar(account.provider_kind) || calendarAccount) {
+    const enabled = Boolean(calendarAccount && calendarAccount.sync_status !== 'paused' && calendarAccount.sync_status !== 'disabled')
+    rows.push({
+      id: 'calendar',
+      label: t('Calendar'),
+      icon: 'tabler:calendar',
+      enabled,
+      statusText: calendarAccount ? calendarAccount.sync_status : t('Not configured'),
+      detail: calendarAccount
+        ? t('Uses the Calendar account sync_status contract.')
+        : t('No matching Calendar account exists for this provider account.'),
+      canToggle: Boolean(calendarAccount),
+      canRunNow: false,
+      disabledReason: calendarAccount ? undefined : t('Calendar account endpoint has no linked account yet.'),
+      isBusy: isCalendarUpdatePending,
+    })
+  }
+
+  const contactsSupported = accountSupportsContacts(account)
+  const contactsEnabled = contactsSupported && accountContactsSyncEnabled(account)
+  const contactsUnsupportedReason = accountConfigString(account, 'address_book_sync_unsupported_reason')
+  const contactsDirection = accountContactsSyncDirection(account)
+  const contactsRemoteWriteEnabled = accountContactsRemoteWriteEnabled(account)
+  const contactsCanWrite = account.provider_kind === 'gmail' && accountHasGoogleContactsWriteScope(account)
+  const contactsDetail = contactsSupported
+    ? contactsUnsupportedReason
+      ? t('Contacts sync is disabled for this account because the provider adapter is not available.')
+      : contactsDirection === 'bidirectional'
+        ? contactsRemoteWriteEnabled
+          ? t('Two-way sync with provider contacts is enabled.')
+          : contactsCanWrite
+            ? t('Two-way sync is selected, but provider write is paused.')
+            : t('Two-way sync is selected, but this account needs Contacts write permission before Hermes can push changes.')
+        : t('Contacts sync reads provider contacts into Personas. Local changes are not pushed.')
+    : t('Contacts are not provided by this integration.')
+  rows.push({
+    id: 'contacts',
+    label: t('Contacts'),
+    icon: 'tabler:address-book',
+    enabled: contactsEnabled,
+    statusText: contactsSupported
+      ? contactsEnabled
+        ? contactsDirection === 'bidirectional'
+          ? t('Two-way sync')
+          : t('Read-only sync')
+        : contactsUnsupportedReason
+          ? t('Not supported')
+          : t('Sync paused')
+      : t('Not provided'),
+    detail: contactsDetail,
+    canToggle: contactsSupported && !contactsUnsupportedReason,
+    canRunNow: contactsSupported && !contactsUnsupportedReason,
+    runNowLabel: t('Sync now'),
+    modeActionLabel: contactsDirection === 'bidirectional' ? undefined : t('Enable two-way'),
+    canRunModeAction: contactsSupported && !contactsUnsupportedReason && contactsDirection !== 'bidirectional',
+    disabledReason: contactsSupported
+      ? contactsUnsupportedReason
+        ? t('Contacts sync is disabled for this account because the provider adapter is not available.')
+        : undefined
+      : t('Contacts are not provided by this integration.'),
+    isBusy: (isProviderUpdatePending || isRunAddressBookSyncNowPending) && activeMailActionAccountId === account.account_id,
+  })
+
+  if (isTelegramProvider(account.provider_kind) || isWhatsappProvider(account.provider_kind)) {
+    rows.push({
+      id: 'messenger',
+      label: t('Messenger'),
+      icon: isWhatsappProvider(account.provider_kind) ? 'tabler:brand-whatsapp' : 'tabler:brand-telegram',
+      enabled: providerAccountEnabled(account),
+      statusText: statusText(account, t),
+      detail: t('Runtime-owned messaging service; setup continues through the managed route.'),
+      canToggle: false,
+      canRunNow: false,
+      disabledReason: t('Messenger runtime toggles are not exposed through Settings yet.'),
+      isBusy: false,
+    })
+  }
+
+  if (isZoomProvider(account.provider_kind) || isYandexTelemostProvider(account.provider_kind)) {
+    rows.push({
+      id: 'meetings',
+      label: t('Meetings'),
+      icon: 'tabler:video',
+      enabled: providerAccountEnabled(account),
+      statusText: statusText(account, t),
+      detail: t('Meeting integration is runtime-owned and managed through its provider flow.'),
+      canToggle: false,
+      canRunNow: false,
+      disabledReason: t('Meeting runtime toggle is not exposed through Settings yet.'),
+      isBusy: false,
+    })
+  }
+
+  return rows
+}
+
+export {
+  accountConfigBoolean,
+  accountContactsRemoteWriteEnabled,
+  accountContactsSyncDirection,
+  accountContactsSyncEnabled,
+  accountConfigString,
+  accountCredentialRequiresReauthorization,
+  accountSupportsContacts,
+  accountHasGoogleContactsWriteScope,
+  isMailProvider,
+  isTelegramProvider,
+  isWhatsappProvider,
+  isZoomProvider,
+  isYandexTelemostProvider,
+  isZulipProvider,
+  matchesCalendarAccount,
+  providerAccountEnabled,
+  selectedAccountEmail,
 }

@@ -1,17 +1,18 @@
 //! Mail runtime composition for ADR-0239.
 
 use std::collections::HashMap;
+use std::fs;
+use std::io;
 use std::path::Path;
 use std::process::Command;
 
 use hermes_mail_api::{
-    BeginImapConnection, CompleteImapConnection, GetConnection, GetOperationStatus, MailConnection,
-    MailConnectionId, MailConnectionState, MailOperation, MailOperationId, SyncNow,
+    BeginImapConnection, CompleteImapConnection, DEFAULT_WINDOW, GetConnection, GetOperationStatus,
+    MailConnection, MailConnectionState, MailOperation, MailOperationId, SyncNow,
 };
 use hermes_mail_core::{
-    ConnectionTracker, SyncPlan, bounded_window, draft_ingress_observation, validate_sync_request,
+    ConnectionTracker, bounded_window, draft_ingress_observation, validate_sync_request,
 };
-use hermes_mail_imap::synthetic_inbox;
 use hermes_mail_persistence::{MailPersistence, PersistedMailConnection};
 
 const COMMUNICATIONS_RUNTIME_PROCESS_ID: &str = "hermes-communications-runtime";
@@ -21,6 +22,17 @@ struct RuntimeState {
     persistence: MailPersistence,
     tracker: ConnectionTracker,
     operations: HashMap<MailOperationId, MailOperation>,
+}
+
+struct SyncNowRequestContext<'a> {
+    request: SyncNow,
+    host: Option<String>,
+    username: Option<String>,
+    port: Option<u16>,
+    password: &'a str,
+    window: u32,
+    windows: u32,
+    emit_observations: bool,
 }
 
 impl RuntimeState {
@@ -60,52 +72,74 @@ impl RuntimeState {
         Ok(connection)
     }
 
-    fn sync_now(&mut self, request: SyncNow) -> Result<String, String> {
-        self.sync_now_with_observations(request, false)
-    }
-
     fn sync_now_with_observations(
         &mut self,
-        request: SyncNow,
-        emit_observations: bool,
+        context: SyncNowRequestContext<'_>,
     ) -> Result<String, String> {
-        let connection = self
+        let connection = if let Some(connection) = self
             .persistence
-            .get_connection(&request.connection_id)
-            .ok_or_else(|| "connection is not provisioned".to_owned())?;
-        let plan = bounded_window(100, 1).map_err(|_| "invalid sync plan".to_owned())?;
+            .get_connection(&context.request.connection_id)
+        {
+            connection.clone()
+        } else {
+            let host = context
+                .host
+                .ok_or_else(|| "connection is not provisioned".to_owned())?;
+            let username = context
+                .username
+                .ok_or_else(|| "connection is not provisioned".to_owned())?;
+            let port = context.port.unwrap_or(hermes_mail_api::IMAP_PORT);
+            PersistedMailConnection {
+                id: context.request.connection_id.clone(),
+                host,
+                username,
+                port,
+            }
+        };
+        let windows = context.windows.max(1);
+        let plan =
+            bounded_window(context.window, windows).map_err(|_| "invalid sync plan".to_owned())?;
         let operation = MailOperation {
-            operation_id: request.operation_id.clone(),
+            operation_id: context.request.operation_id.clone(),
             state: MailConnectionState::Syncing,
             window_size: plan.window,
         };
         self.tracker
-            .set_syncing(&request.connection_id, operation.clone());
+            .set_syncing(&context.request.connection_id, operation.clone());
         self.operations
-            .insert(request.operation_id.clone(), operation.clone());
-        let synthetic = synthetic_inbox(&connection.host, plan.window, 1);
-        if emit_observations {
+            .insert(context.request.operation_id.clone(), operation.clone());
+        let sync_plan = plan.windows;
+        let sync_result = hermes_mail_imap::sync_inbox(
+            &connection.host,
+            connection.port,
+            &connection.username,
+            Some(context.password),
+            plan.window,
+            sync_plan,
+        )?;
+        if context.emit_observations {
             self.emit_ingress_observations(
-                &request.operation_id,
+                &context.request.operation_id,
                 &connection.id,
-                &synthetic.messages,
+                &sync_result.messages,
             )?;
         } else {
             draft_ingress_observation(
-                &request.operation_id,
+                &context.request.operation_id,
                 "mail-imap",
                 connection.id.clone(),
-                synthetic.messages.len(),
+                sync_result.messages.len(),
+                None,
             )
             .map_err(|_| "invalid ingress draft".to_owned())?;
         }
-        self.tracker.set_ready(&request.connection_id);
+        self.tracker.set_ready(&context.request.connection_id);
         Ok(format!(
             "sync_started op={} host={} window={} messages={}",
-            request.operation_id,
+            context.request.operation_id,
             connection.host,
             plan.window,
-            synthetic.messages.len()
+            sync_result.messages.len()
         ))
     }
 
@@ -120,7 +154,6 @@ impl RuntimeState {
         }
 
         let binary = runtime_binary(COMMUNICATIONS_RUNTIME_PROCESS_ID)?;
-        let mut emitted = 0usize;
         for message in messages.iter().take(DEFAULT_COMMUNICATION_INGEST_LIMIT) {
             let body_is_readable = if message.has_plain_text {
                 message.snippet.len()
@@ -132,6 +165,7 @@ impl RuntimeState {
                 "mail-imap",
                 connection_id.to_owned(),
                 body_is_readable,
+                Some(message.snippet.clone()),
             )
             .map_err(|_| "invalid ingress draft".to_owned())?;
             let preview = observation.text_preview.unwrap_or_default();
@@ -150,10 +184,6 @@ impl RuntimeState {
             if !status.status.success() {
                 return Err("communication ingress command failed".to_owned());
             }
-            emitted += 1;
-        }
-        if emitted == 0 {
-            return Err("no observations emitted".to_owned());
         }
         Ok(())
     }
@@ -162,13 +192,11 @@ impl RuntimeState {
         self.tracker.set_ready(&request.connection_id);
         if let Some(op) = self.operations.get_mut(&request.operation_id) {
             op.state = MailConnectionState::Ready;
-            Ok(format!(
-                "connection_ready id={} op={}",
-                request.connection_id, request.operation_id
-            ))
-        } else {
-            Err("operation id is unknown".to_owned())
         }
+        Ok(format!(
+            "connection_ready id={} op={}",
+            request.connection_id, request.operation_id
+        ))
     }
 
     fn get_connection(&self, request: GetConnection) -> Result<String, String> {
@@ -197,6 +225,17 @@ impl RuntimeState {
             })
             .ok_or_else(|| "operation is unknown".to_owned())
     }
+
+    fn sync_credentials(&self, password_file: Option<&str>) -> Result<String, String> {
+        if let Some(path) = password_file {
+            let password = read_trimmed_secret_file(path)?;
+            if !password.is_empty() {
+                return Ok(password);
+            }
+        }
+
+        Err("mail sync requires password".to_owned())
+    }
 }
 
 fn connection_to_persistence(connection: MailConnection) -> PersistedMailConnection {
@@ -206,6 +245,34 @@ fn connection_to_persistence(connection: MailConnection) -> PersistedMailConnect
         port: connection.port,
         username: connection.username,
     }
+}
+
+fn read_trimmed_secret_file(path: &str) -> Result<String, String> {
+    let secret = fs::read_to_string(path).map_err(|_| "password file is unavailable".to_owned())?;
+    validate_secret(secret).map_err(|_| "mail password file is invalid".to_owned())
+}
+
+fn parse_imap_port(raw_port: Option<String>) -> Result<u16, String> {
+    raw_port
+        .map(|value| {
+            value
+                .parse::<u16>()
+                .map_err(|_| "port is invalid".to_owned())
+        })
+        .unwrap_or(Ok(hermes_mail_api::IMAP_PORT))
+}
+
+fn validate_secret(mut value: String) -> Result<String, io::Error> {
+    if value.ends_with('\n') {
+        let _ = value.pop();
+        if value.ends_with('\r') {
+            let _ = value.pop();
+        }
+    }
+    if value.is_empty() || value.len() > 1024 || value.contains(['\0', '\r', '\n']) {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid secret"));
+    }
+    Ok(value)
 }
 
 fn main() -> Result<(), String> {
@@ -218,7 +285,6 @@ fn main() -> Result<(), String> {
         Some("complete") => handle_complete(&mut state, &mut args),
         Some("get-connection") => handle_get_connection(&state, &mut args),
         Some("get-operation") => handle_get_operation(&state, &mut args),
-        Some("simulate") => handle_simulate(&mut state),
         Some(command) => Err(format!("mail runtime command is unavailable: {command}")),
         None => Err("mail runtime command is unavailable".to_owned()),
     }
@@ -243,10 +309,7 @@ where
     let connection_id = next_arg(args, "connection_id")?;
     let host = next_arg(args, "host")?;
     let username = next_arg(args, "username")?;
-    let port = args
-        .next()
-        .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(hermes_mail_api::IMAP_PORT);
+    let port = parse_imap_port(args.next())?;
     let connection = state.begin_connection(BeginImapConnection {
         connection_id,
         host,
@@ -267,33 +330,82 @@ where
 {
     let connection_id = next_arg(args, "connection_id")?;
     let operation_id = next_arg(args, "operation_id")?;
-    let emit_observations = if let Some(value) = args.next() {
+    let mut emit_observations = false;
+    let mut window = None;
+    let mut windows = None;
+    let mut password_file = None;
+    let mut host = None;
+    let mut username = None;
+    let mut port = None;
+    while let Some(value) = args.next() {
         match value.as_str() {
-            "--emit-observations" => true,
+            "--host" => {
+                host = Some(
+                    args.next()
+                        .ok_or_else(|| "--host requires a value".to_owned())?,
+                );
+            }
+            "--username" => {
+                username = Some(
+                    args.next()
+                        .ok_or_else(|| "--username requires a value".to_owned())?,
+                );
+            }
+            "--port" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--port requires a value".to_owned())?;
+                let parsed = value
+                    .parse::<u16>()
+                    .map_err(|_| "sync port is invalid".to_owned())?;
+                port = Some(parsed);
+            }
+            "--emit-observations" => {
+                emit_observations = true;
+            }
+            "--full-resync" => {}
+            "--password-file" => {
+                password_file = Some(
+                    args.next()
+                        .ok_or_else(|| "--password-file requires a value".to_owned())?,
+                );
+            }
+            "--window" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--window requires a value".to_owned())?;
+                let parsed = value
+                    .parse::<u32>()
+                    .map_err(|_| "sync window is invalid".to_owned())?;
+                window = Some(parsed);
+            }
+            "--windows" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--windows requires a value".to_owned())?;
+                let parsed = value
+                    .parse::<u32>()
+                    .map_err(|_| "sync windows is invalid".to_owned())?;
+                windows = Some(parsed);
+            }
             other => return Err(format!("unknown sync argument: {other}")),
         }
-    } else {
-        false
-    };
-    if args.next().is_some() {
-        return Err("too many sync arguments".to_owned());
     }
-    if state.persistence.get_connection(&connection_id).is_none() {
-        state.begin_connection(BeginImapConnection {
-            connection_id: connection_id.clone(),
-            host: "mail.example.com".to_owned(),
-            port: hermes_mail_api::IMAP_PORT,
-            username: "auto".to_owned(),
-            use_tls: true,
-        })?;
-    }
-    let response = state.sync_now_with_observations(
-        SyncNow {
+
+    let password = state.sync_credentials(password_file.as_deref())?;
+    let response = state.sync_now_with_observations(SyncNowRequestContext {
+        request: SyncNow {
             connection_id,
             operation_id,
         },
+        host,
+        username,
+        port,
+        password: &password,
+        window: window.unwrap_or(DEFAULT_WINDOW),
+        windows: windows.unwrap_or_else(|| state.persistence.policy().max_sync_windows.max(1)),
         emit_observations,
-    )?;
+    })?;
     println!("{response}");
     Ok(())
 }
@@ -335,35 +447,6 @@ where
     Ok(())
 }
 
-fn handle_simulate(state: &mut RuntimeState) -> Result<(), String> {
-    let plan = bounded_window(100, 1).map_err(|_| "invalid sync window".to_owned())?;
-    run_simulated_sync(plan, state, "conn".to_owned())
-}
-
-fn run_simulated_sync(
-    plan: SyncPlan,
-    state: &mut RuntimeState,
-    connection_id: MailConnectionId,
-) -> Result<(), String> {
-    if plan.window > 500 {
-        return Err("window is not supported".to_owned());
-    }
-    state.begin_connection(BeginImapConnection {
-        connection_id: connection_id.clone(),
-        host: "mail.example.com".to_owned(),
-        port: hermes_mail_api::IMAP_PORT,
-        username: "sim-user".to_owned(),
-        use_tls: true,
-    })?;
-    let sync_now = SyncNow {
-        connection_id,
-        operation_id: "sim-op".to_owned(),
-    };
-    let response = state.sync_now(sync_now)?;
-    println!("{response}");
-    Ok(())
-}
-
 fn runtime_binary(process_id: &str) -> Result<String, String> {
     if let Ok(binary) = std::env::var(format!("CARGO_BIN_EXE_{}", process_id.replace('-', "_"))) {
         return Ok(binary);
@@ -384,4 +467,146 @@ fn runtime_binary(process_id: &str) -> Result<String, String> {
         return Ok(fallback);
     }
     Err("communication runtime binary missing".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::io::Write;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use hermes_mail_api::MAX_WINDOWS;
+
+    use super::{parse_imap_port, validate_secret};
+
+    #[test]
+    fn validate_secret_rejects_invalid_chars_and_long_values() {
+        assert!(validate_secret("bad\nsecret".to_owned()).is_err());
+        assert!(validate_secret("bad\rsecret".to_owned()).is_err());
+        let mut long_secret = String::new();
+        long_secret.push_str(&"a".repeat(1025));
+        assert!(validate_secret(long_secret).is_err());
+    }
+
+    #[test]
+    fn parse_imap_port_requires_valid_number_or_defaults() {
+        assert_eq!(
+            parse_imap_port(None).expect("default"),
+            hermes_mail_api::IMAP_PORT
+        );
+        assert_eq!(
+            parse_imap_port(Some("1143".to_owned())).expect("explicit"),
+            1143
+        );
+        assert!(parse_imap_port(Some("invalid-port".to_owned())).is_err());
+    }
+
+    #[test]
+    fn sync_credentials_rejects_invalid_file_secret() {
+        let state = super::RuntimeState::new();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        let path = format!("/tmp/hermes-mail-secret-{nanos}.txt");
+        {
+            let mut file = fs::File::create(&path).expect("create secret file");
+            file.write_all(b"line\nbreak").expect("write secret file");
+        }
+        assert!(state.sync_credentials(Some(&path)).is_err());
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn handle_sync_rejects_invalid_window_argument() {
+        let mut state = super::RuntimeState::new();
+        let args = vec![
+            "account-id".to_owned(),
+            "op-id".to_owned(),
+            "--window".to_owned(),
+            "invalid".to_owned(),
+        ];
+        let mut args = args.into_iter();
+        let err = super::handle_sync(&mut state, &mut args).unwrap_err();
+        assert_eq!(err, "sync window is invalid");
+    }
+
+    #[test]
+    fn handle_sync_rejects_unknown_argument() {
+        let mut state = super::RuntimeState::new();
+        let args = vec![
+            "account-id".to_owned(),
+            "op-id".to_owned(),
+            "--mystery-flag".to_owned(),
+            "value".to_owned(),
+        ];
+        let mut args = args.into_iter();
+        let err = super::handle_sync(&mut state, &mut args).unwrap_err();
+        assert!(err.contains("unknown sync argument"));
+    }
+
+    #[test]
+    fn handle_sync_rejects_invalid_windows_argument() {
+        let mut state = super::RuntimeState::new();
+        let args = vec![
+            "account-id".to_owned(),
+            "op-id".to_owned(),
+            "--windows".to_owned(),
+            "invalid".to_owned(),
+        ];
+        let mut args = args.into_iter();
+        let err = super::handle_sync(&mut state, &mut args).unwrap_err();
+        assert_eq!(err, "sync windows is invalid");
+    }
+
+    #[test]
+    fn handle_sync_accepts_max_windows_but_rejects_windows_over_limit() {
+        let mut state = super::RuntimeState::new();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        let path = format!("/tmp/hermes-mail-secret-{}-accept.txt", nanos);
+        {
+            let mut file = fs::File::create(&path).expect("create secret file");
+            file.write_all(b"secret-pass").expect("write secret file");
+        }
+
+        let args = vec![
+            "account-id".to_owned(),
+            "op-id".to_owned(),
+            "--windows".to_owned(),
+            MAX_WINDOWS.to_string(),
+            "--password-file".to_owned(),
+            path.clone(),
+        ];
+        let mut args = args.into_iter();
+        assert_eq!(
+            super::handle_sync(&mut state, &mut args).unwrap_err(),
+            "connection is not provisioned"
+        );
+
+        let begin_result = state.begin_connection(super::BeginImapConnection {
+            connection_id: "account-id".to_owned(),
+            host: "localhost".to_owned(),
+            port: 993,
+            username: "alice".to_owned(),
+            use_tls: true,
+        });
+        assert!(begin_result.is_ok());
+
+        let args = vec![
+            "account-id".to_owned(),
+            "op-id".to_owned(),
+            "--windows".to_owned(),
+            (MAX_WINDOWS + 1).to_string(),
+            "--password-file".to_owned(),
+            path.clone(),
+        ];
+        let mut args = args.into_iter();
+        let err = super::handle_sync(&mut state, &mut args).unwrap_err();
+        assert_eq!(err, "invalid sync plan");
+
+        let _ = fs::remove_file(&path);
+    }
 }

@@ -8,11 +8,10 @@ import type {
 	MessengerInspectorModel,
 	MessengerListItemModel,
 } from '../components/messengers/messengerElements'
-import type { TelegramChat, TelegramMessage } from '@/shared/communications/types/telegram'
 import type {
-	TelegramConversationRuntimeAction,
-	TelegramConversationRuntimeActionRunner,
-} from '@/shared/communications/types/telegramRuntimeActions'
+	MessengerConversationRuntimeAction,
+	MessengerConversationRuntimeActionRunner,
+} from '@/shared/communications/types/messengerRuntimeActions'
 
 export type CommunicationsPageModel =
 	| {
@@ -34,25 +33,17 @@ export type CommunicationsPageModel =
 		syncStatus: MailSyncStatus | null
 	}
 	| {
-		channel: 'telegram'
+		channel: 'telegram' | 'whatsapp'
 		items: readonly MessengerListItemModel[]
 		conversation: MessengerConversationModel
 		inspector: MessengerInspectorModel
-		isActionRunning: boolean
-		isListLoading: boolean
-		isListRefreshing: boolean
-		isLoadingOlder: boolean
-		listError: string
+		isActionRunning?: boolean
+		isListLoading?: boolean
+		isListRefreshing?: boolean
+		isLoadingOlder?: boolean
+		listError?: string
 		selectedMessageId?: string
-		telegramChat: TelegramChat | null
-		telegramMessage: TelegramMessage | null
-		runtimeActionRunner?: TelegramConversationRuntimeActionRunner
-	}
-	| {
-		channel: 'whatsapp'
-		items: readonly MessengerListItemModel[]
-		conversation: MessengerConversationModel
-		inspector: MessengerInspectorModel
+		runtimeActionRunner?: MessengerConversationRuntimeActionRunner
 	}
 
 export type CommunicationsPageActions = {
@@ -70,13 +61,12 @@ export type CommunicationsPageActions = {
 	updateMailSearch(query: string): void
 	updateCompose(partial: Partial<ComposeFormModel>): void
 	setVisibleMailItemIds(itemIds: string[]): void
-	runTelegramAction(action: TelegramConversationRuntimeAction, file?: File, caption?: string): void | Promise<void>
-	refreshTelegram(): void | Promise<void>
-	selectTelegramConversation(item: MessengerListItemModel): void
-	selectTelegramMessage(messageId: string): void
-	submitTelegram(value: string): void | Promise<void>
-	downloadTelegramAttachment(attachment: MessengerAttachmentModel): void | Promise<void>
-	loadOlderTelegram(): void | Promise<void>
-	markTelegramMessagesVisible(): void | Promise<void>
-	selectWhatsappConversation(item: MessengerListItemModel): void
+	runMessengerAction(action: MessengerConversationRuntimeAction, file?: File, caption?: string): void | Promise<void>
+	refreshMessengerConversation(): void | Promise<void>
+	selectMessengerConversation(item: MessengerListItemModel): void
+	selectMessengerMessage(messageId: string): void
+	submitMessengerMessage(value: string): void | Promise<void>
+	downloadMessengerAttachment(attachment: MessengerAttachmentModel): void | Promise<void>
+	loadOlderMessengerMessages(): void | Promise<void>
+	markMessengerMessagesVisible(): void | Promise<void>
 }

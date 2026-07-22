@@ -1,6 +1,6 @@
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
-import type { AttachmentScanStatus, AttachmentSearchRequest } from '../types/attachments'
+import type { AttachmentSearchRequest } from '../types/attachments'
 
 export const attachmentScanStatusOptions = [
   'not_scanned',
@@ -37,6 +37,6 @@ export function attachmentSearchFormToRequest(
   if (accountId?.trim()) request.account_id = accountId.trim()
   if (parsed.query) request.q = parsed.query
   if (parsed.content_type) request.content_type = parsed.content_type
-  if (parsed.scan_status) request.scan_status = parsed.scan_status as AttachmentScanStatus
+  if (parsed.scan_status) request.scan_status = parsed.scan_status
   return request
 }

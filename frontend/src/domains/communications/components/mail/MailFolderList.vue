@@ -4,7 +4,16 @@ import { useI18n } from '@/platform/i18n'
 import { Badge, Icon } from '@/shared/ui'
 import '../communicationDomainElements.css'
 import type { MailFolderModel, MailFolderRow } from './mailFolders'
-import { mailFolderExpandableIds, mailFolderExpandedIds, mailFolderPresentation, mailFolderRows } from './mailFolders'
+import {
+  mailFolderDepthClass,
+  mailFolderExpandableIds,
+  mailFolderExpandedIds,
+  mailFolderIsActive,
+  mailFolderLocalizedAriaLabel,
+  mailFolderPresentation,
+  mailFolderRows,
+  mailFolderToggleAriaLabel,
+} from './mailFolders'
 
 const props = withDefaults(defineProps<{
   folders: readonly MailFolderModel[]
@@ -28,10 +37,6 @@ watch(
     expandedFolderIds.value = mailFolderExpandableIds(folders)
   }
 )
-
-function folderIsActive(folder: MailFolderModel): boolean {
-  return props.activeFolderId ? props.activeFolderId === folder.id : Boolean(folder.selected)
-}
 
 function selectFolder(folder: MailFolderModel): void {
   emit('select', folder)
@@ -57,21 +62,6 @@ function handleFolderKeydown(row: MailFolderRow, event: KeyboardEvent): void {
   }
 }
 
-function folderDepthClass(row: MailFolderRow): string {
-  return `mail-folder-list__item--depth-${Math.min(row.depth, 4)}`
-}
-
-function folderToggleAriaLabel(row: MailFolderRow): string {
-  const action = row.expanded ? t('Collapse folder') : t('Expand folder')
-  return `${action}: ${t(row.folder.label)}`
-}
-
-function folderAriaLabel(folder: MailFolderModel): string {
-  const parts = [t(folder.label)]
-  if (folder.unreadCount) parts.push(t('{count} unread', { count: folder.unreadCount }))
-  if (typeof folder.count === 'number') parts.push(t('{count} total', { count: folder.count }))
-  return parts.join(', ')
-}
 </script>
 
 <template>
@@ -86,21 +76,21 @@ function folderAriaLabel(folder: MailFolderModel): string {
 				:key="row.folder.id"
 				:class="[
 					'mail-folder-list__item',
-					folderDepthClass(row),
+					mailFolderDepthClass(row),
 					row.hasChildren && 'mail-folder-list__item--parent',
-					folderIsActive(row.folder) && 'mail-folder-list__item--active'
+					mailFolderIsActive(row.folder, activeFolderId) && 'mail-folder-list__item--active'
 				]"
 				role="treeitem"
-				:aria-current="folderIsActive(row.folder) ? 'page' : undefined"
+				:aria-current="mailFolderIsActive(row.folder, activeFolderId) ? 'page' : undefined"
 				:aria-expanded="row.hasChildren ? row.expanded : undefined"
-				:aria-label="folderAriaLabel(row.folder)"
+				:aria-label="mailFolderLocalizedAriaLabel(row.folder, t)"
 				:aria-level="row.depth"
 			>
 				<button
 					v-if="row.hasChildren"
 					type="button"
 					class="mail-folder-list__toggle"
-					:aria-label="folderToggleAriaLabel(row)"
+					:aria-label="mailFolderToggleAriaLabel(row, t)"
 					:aria-expanded="row.expanded"
 					@click.stop="toggleFolder(row)"
 				>
@@ -110,7 +100,7 @@ function folderAriaLabel(folder: MailFolderModel): string {
 				<button
 					type="button"
 					class="mail-folder-list__select"
-					:aria-label="folderAriaLabel(row.folder)"
+					:aria-label="mailFolderLocalizedAriaLabel(row.folder, t)"
 					@click="selectFolder(row.folder)"
 					@keydown="handleFolderKeydown(row, $event)"
 				>

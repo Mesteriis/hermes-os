@@ -3,6 +3,7 @@ import type {
   WhatsAppWebCompanionManifest,
   WhatsAppWebCompanionRelayObservationReceipt,
   WhatsAppWebCompanionRelayObservationRequest,
+  WhatsAppWebCompanionCommandResultRequest,
 } from '../../../shared/communications/types/whatsapp'
 
 type WhatsAppWebCompanionRequest = {
@@ -40,6 +41,18 @@ export async function relayWhatsappWebCompanionObservation(
       },
     }
   )
+}
+
+export async function reportWhatsappWebCompanionCommandResult(
+  accountId: string,
+  result: Omit<WhatsAppWebCompanionCommandResultRequest, 'account_id'>
+): Promise<string> {
+  return invoke<string>('whatsapp_web_companion_report_command_result', {
+    request: {
+      ...result,
+      account_id: companionAccountId(accountId),
+    },
+  })
 }
 
 function companionRequest(accountId: string): { request: WhatsAppWebCompanionRequest } {

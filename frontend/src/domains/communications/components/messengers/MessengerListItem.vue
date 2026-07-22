@@ -7,6 +7,7 @@ import type { MessengerListItemDensity, MessengerListItemModel } from './messeng
 import {
   messengerListItemAriaLabel,
   messengerListItemHasSignal,
+  messengerListItemHasSecondarySignals,
   messengerListItemProfile,
 } from './messengerElements'
 
@@ -26,12 +27,7 @@ const { t } = useI18n()
 const avatarStoryOpen = ref(false)
 const profile = computed(() => messengerListItemProfile(props.item))
 const profileStoryItems = computed(() => profile.value.storyItems ?? [])
-const hasSecondarySignals = computed(() => Boolean(
-  props.item.mentionCount
-  || props.item.attachmentCount
-  || props.item.hermesSignalCount
-  || props.item.pinned
-))
+const hasSecondarySignals = computed(() => messengerListItemHasSecondarySignals(props.item))
 const isSelected = computed(() => props.selected ?? Boolean(props.item.selected))
 const itemClasses = computed(() => [
   'messenger-list-item',

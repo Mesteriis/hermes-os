@@ -3,6 +3,7 @@ import { ApiClient } from '../../../platform/api/ApiClient'
 import {
   searchTelegramProviderMessages,
 } from './telegramSearch'
+import { TELEGRAM_RUNTIME_PROVIDER_SEARCH_CHUNK_SIZE } from '../queries/telegramRuntimePanelActions'
 
 describe('telegram search API', () => {
   beforeEach(() => {
@@ -16,12 +17,13 @@ describe('telegram search API', () => {
   })
 
   it('builds Telegram provider search trigger requests with required account scope', async () => {
+    const defaultProviderSearchChunkSize = TELEGRAM_RUNTIME_PROVIDER_SEARCH_CHUNK_SIZE
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
         account_id: 'telegram-account-1',
         provider_chat_id: 'chat-42',
         query: 'project alpha',
-        limit: 25,
+        limit: defaultProviderSearchChunkSize,
         status: 'queued',
         error: null,
       }), {
@@ -35,7 +37,7 @@ describe('telegram search API', () => {
       q: 'project alpha',
       account_id: 'telegram-account-1',
       provider_chat_id: 'chat-42',
-      limit: 25,
+      limit: defaultProviderSearchChunkSize,
     })
 
     expect(fetchMock).toHaveBeenCalledOnce()
@@ -47,7 +49,7 @@ describe('telegram search API', () => {
       q: 'project alpha',
       account_id: 'telegram-account-1',
       provider_chat_id: 'chat-42',
-      limit: 25,
+      limit: defaultProviderSearchChunkSize,
     })
   })
 })

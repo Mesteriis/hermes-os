@@ -18,6 +18,7 @@ import {
 	fetchAiRun,
 	fetchAiRuns
 } from '../api/agents'
+import { isRecord } from '../../../shared/communications/queries/realtimePatchShared'
 
 export const useAgentsStore = defineStore('agents-ui', () => {
 	const aiStatus = ref<AiStatus | null>(null)
@@ -262,14 +263,11 @@ export function safeCitations(value: unknown): AiCitation[] {
 }
 
 function isAiCitation(value: unknown): value is AiCitation {
-	return (
-		typeof value === 'object' &&
-		value !== null &&
-		typeof (value as Record<string, unknown>).source_kind === 'string' &&
-		typeof (value as Record<string, unknown>).source_id === 'string' &&
-		typeof (value as Record<string, unknown>).title === 'string' &&
-		typeof (value as Record<string, unknown>).excerpt === 'string'
-	)
+	return isRecord(value) &&
+		typeof value.source_kind === 'string' &&
+		typeof value.source_id === 'string' &&
+		typeof value.title === 'string' &&
+		typeof value.excerpt === 'string'
 }
 
 function aiAnswerResponseFromRun(run: AiRun): AiAnswerResponse {

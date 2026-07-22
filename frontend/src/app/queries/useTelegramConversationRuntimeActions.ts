@@ -21,6 +21,8 @@ import {
 import { useSyncTelegramChatMembersMutation } from '../../integrations/telegram/queries/useTelegramMembersQuery'
 import { useJoinTelegramChatMutation, useLeaveTelegramChatMutation } from '../../integrations/telegram/queries/useTelegramParticipantLifecycleQuery'
 
+const TELEGRAM_HISTORY_SYNC_CHUNK_SIZE = 200
+
 export function useTelegramConversationRuntimeActions() {
   const queryClient = useQueryClient()
   const archive = useArchiveTelegramChatMutation()
@@ -117,7 +119,7 @@ export function useTelegramConversationRuntimeActions() {
           provider_chat_id: request.providerChatId,
           mode: 'older',
           from_message_id: request.historyFromMessageId,
-          limit: 100,
+          limit: TELEGRAM_HISTORY_SYNC_CHUNK_SIZE,
         })
         break
       case 'sync_full':
@@ -125,7 +127,7 @@ export function useTelegramConversationRuntimeActions() {
           account_id: request.accountId,
           provider_chat_id: request.providerChatId,
           mode: 'full',
-          limit: 100,
+          limit: TELEGRAM_HISTORY_SYNC_CHUNK_SIZE,
         })
         break
       case 'unarchive':

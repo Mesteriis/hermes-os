@@ -15,6 +15,7 @@ use hermes_runtime_protocol::v1::{
     DescribeManagedRuntimeResponseV1, ManagedRuntimeControlRequestV1,
     ManagedRuntimeControlResponseV1, ManagedRuntimeEventCredentialDeliveryV1,
     ManagedRuntimeEventCredentialRequestV1, ManagedRuntimeVaultRouteRequestV1,
+    ManagedRuntimeProviderCredentialDeliveryV1, ManagedRuntimeProviderCredentialRequestV1,
     VaultCiphertextResponseV1, VaultCiphertextRouteV1,
 };
 use hermes_runtime_protocol::validation::descriptor::{
@@ -44,6 +45,14 @@ pub trait ManagedRuntimeEventCredentialHandler: Send + Sync {
         expectation: &ManagedRuntimeExpectation,
         request: ManagedRuntimeEventCredentialRequestV1,
     ) -> Result<ManagedRuntimeEventCredentialDeliveryV1, String>;
+}
+
+pub trait ManagedRuntimeProviderCredentialHandler: Send + Sync {
+    fn issue_provider_credential(
+        &self,
+        expectation: &ManagedRuntimeExpectation,
+        request: ManagedRuntimeProviderCredentialRequestV1,
+    ) -> Result<ManagedRuntimeProviderCredentialDeliveryV1, String>;
 }
 
 pub struct ManagedRuntimeRelayRequest {

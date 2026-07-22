@@ -2,6 +2,17 @@ import { computed, ref } from 'vue'
 import { useApplicationSettingsQuery, groupSettingsByCategory, useSaveApplicationSettingMutation } from './useSettingsQuery'
 import { useSettingsStore } from '../stores/settings'
 import type { ApplicationSetting } from '../types/settings'
+import { isPublicApplicationSetting, settingHasChanged } from './applicationSettingsPredicates'
+import {
+  categoryLabel,
+  settingAllowedValues,
+  settingControlType,
+  settingDraftValue,
+  settingMetadataFlag,
+  settingMetadataText,
+} from './applicationSettingsPresentation'
+import { coerceApplicationSettingValue } from './applicationSettingsValue'
+import { saveApplicationSettingValue } from './applicationSettingsActions'
 
 export function useApplicationSettingsSurface() {
   const store = useSettingsStore()
@@ -17,64 +28,23 @@ export function useApplicationSettingsSurface() {
   const allApplicationSettings = computed(() => appSettingsData.value?.items ?? [])
   const settingsByCategory = computed(() => groupSettingsByCategory(applicationSettings.value))
 
-  function settingDraftValue(setting: ApplicationSetting): string {
-    const draft = settingDrafts.value[setting.setting_key]
-    if (draft !== undefined) return draft
-    return String(setting.value ?? '')
-  }
-
-  function settingHasChanged(setting: ApplicationSetting): boolean {
-    const draft = settingDrafts.value[setting.setting_key]
-    if (draft === undefined) return false
-    return draft !== String(setting.value)
-  }
-
-  function settingControlType(setting: ApplicationSetting): string {
-    const allowedValues = setting.metadata?.allowed_values
-    if (Array.isArray(allowedValues) && allowedValues.length > 0) return 'select'
-    if (setting.value_kind === 'boolean') return 'checkbox'
-    if (setting.value_kind === 'integer') return 'number'
-    return 'text'
-  }
-
-  function settingAllowedValues(setting: ApplicationSetting): string[] {
-    const values = setting.metadata?.allowed_values
-    return Array.isArray(values) ? values.map(String) : []
-  }
-
-  function settingMetadataFlag(setting: ApplicationSetting, key: string): boolean {
-    return Boolean(setting.metadata?.[key])
-  }
-
-  function settingMetadataText(setting: ApplicationSetting, key: string): string {
-    const value = setting.metadata?.[key]
-    return typeof value === 'string' ? value : ''
-  }
-
-  function categoryLabel(category: string): string {
-    const labels: Record<string, string> = {
-      general: 'General',
-      frontend: 'Interface',
-      ai: 'AI',
-      privacy: 'Privacy',
-      notifications: 'Notifications'
-    }
-    return labels[category] ?? category
-  }
+  const settingDraftValueForSurface = (setting: ApplicationSetting): string =>
+    settingDraftValue(setting, settingDrafts.value)
+  const settingHasChangedForSurface = (setting: ApplicationSetting): boolean =>
+    settingHasChanged(setting, settingDrafts.value)
 
   async function handleSave(setting: ApplicationSetting) {
-    savingSettingKey.value = setting.setting_key
-    store.clearMessages()
-    try {
-      const draftValue = settingDrafts.value[setting.setting_key]
-      const valueToSave = draftValue !== undefined ? coerceValue(draftValue, setting.value_kind) : setting.value
-      await saveSetting.mutateAsync({ settingKey: setting.setting_key, value: valueToSave })
-      store.setActionMessage(`Saved ${setting.label}`)
-    } catch (error) {
-      store.setError(error instanceof Error ? error.message : 'Failed to save setting')
-    } finally {
-      savingSettingKey.value = null
-    }
+    const draftValue = settingDrafts.value[setting.setting_key]
+    const valueToSave = draftValue !== undefined
+      ? coerceApplicationSettingValue(draftValue, setting.value_kind)
+      : setting.value
+    await saveApplicationSettingValue(setting.setting_key, setting.label, valueToSave, {
+      save: (variables) => saveSetting.mutateAsync(variables),
+      clearMessages: () => store.clearMessages(),
+      setActionMessage: (message) => store.setActionMessage(message),
+      setError: (message) => store.setError(message),
+      setSavingKey: (key) => { savingSettingKey.value = key }
+    })
   }
 
   function handleInput(setting: ApplicationSetting, value: string) {
@@ -93,34 +63,9 @@ export function useApplicationSettingsSurface() {
     handleSave,
     settingAllowedValues,
     settingControlType,
-    settingDraftValue,
-    settingHasChanged,
+    settingDraftValue: settingDraftValueForSurface,
+    settingHasChanged: settingHasChangedForSurface,
     settingMetadataFlag,
     settingMetadataText
-  }
-}
-
-function isPublicApplicationSetting(setting: ApplicationSetting): boolean {
-  return (
-    setting.category !== 'ai' &&
-    setting.category !== 'communications' &&
-    !setting.setting_key.startsWith('ai.')
-  )
-}
-
-function coerceValue(draft: string, kind: string): ApplicationSetting['value'] {
-  switch (kind) {
-    case 'boolean':
-      return draft === 'true'
-    case 'integer':
-      return parseInt(draft, 10) || 0
-    case 'json':
-      try {
-        return JSON.parse(draft)
-      } catch {
-        return draft
-      }
-    default:
-      return draft
   }
 }

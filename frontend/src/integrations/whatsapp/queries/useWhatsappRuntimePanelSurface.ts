@@ -25,6 +25,9 @@ import {
   useWhatsappRuntimeHealthQuery,
   useWhatsappRuntimeStatusQuery,
   useWhatsappSessionsQuery,
+  WHATSAPP_RUNTIME_COMMANDS_PAGE_SIZE,
+  WHATSAPP_RUNTIME_SESSIONS_PAGE_SIZE,
+  WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE,
   useWhatsappSyncChatsQuery,
   useWhatsappSyncCallsQuery,
   useWhatsappSyncContactsQuery,
@@ -58,7 +61,7 @@ export function useWhatsappRuntimePanelSurface() {
     ?? accounts.value[0]?.account_id
     ?? null
   )
-  const sessionsQuery = useWhatsappSessionsQuery(selectedAccountId, 100)
+  const sessionsQuery = useWhatsappSessionsQuery(selectedAccountId, WHATSAPP_RUNTIME_SESSIONS_PAGE_SIZE)
   const sessions = computed(() => sessionsQuery.data.value ?? [])
   const selectedAccountSummary = computed<WhatsappAccountSummary | null>(() =>
     accounts.value.find((account) => account.account_id === selectedAccountId.value) ?? null
@@ -66,21 +69,41 @@ export function useWhatsappRuntimePanelSurface() {
   const accountCapabilitiesQuery = useWhatsappAccountCapabilitiesQuery(selectedAccountId)
   const runtimeStatusQuery = useWhatsappRuntimeStatusQuery(selectedAccountId)
   const runtimeHealthQuery = useWhatsappRuntimeHealthQuery(selectedAccountId)
-  const providerCommandsQuery = useWhatsappProviderCommandsQuery(selectedAccountId, 25)
-  const chatsSyncQuery = useWhatsappSyncChatsQuery(selectedAccountId, 8)
+  const providerCommandsQuery = useWhatsappProviderCommandsQuery(selectedAccountId, WHATSAPP_RUNTIME_COMMANDS_PAGE_SIZE)
+  const chatsSyncQuery = useWhatsappSyncChatsQuery(selectedAccountId, WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE)
   const chatItems = computed(() => chatsSyncQuery.data.value ?? [])
   const selectedSyncChatIdResolved = computed(() =>
     selectedSyncChatId.value
     ?? chatItems.value[0]?.provider_chat_id
     ?? null
   )
-  const historySyncQuery = useWhatsappSyncHistoryQuery(selectedAccountId, selectedSyncChatIdResolved, 8)
-  const membersSyncQuery = useWhatsappSyncMembersQuery(selectedAccountId, selectedSyncChatIdResolved, 8)
-  const statusesSyncQuery = useWhatsappSyncStatusesQuery(selectedAccountId, 8)
-  const presenceSyncQuery = useWhatsappSyncPresenceQuery(selectedAccountId, selectedSyncChatIdResolved, 8)
-  const callsSyncQuery = useWhatsappSyncCallsQuery(selectedAccountId, selectedSyncChatIdResolved, 8)
-  const contactsSyncQuery = useWhatsappSyncContactsQuery(selectedAccountId, 8)
-  const mediaSyncQuery = useWhatsappSyncMediaQuery(selectedAccountId, selectedSyncChatIdResolved, 8)
+  const historySyncQuery = useWhatsappSyncHistoryQuery(
+    selectedAccountId,
+    selectedSyncChatIdResolved,
+    WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
+  )
+  const membersSyncQuery = useWhatsappSyncMembersQuery(
+    selectedAccountId,
+    selectedSyncChatIdResolved,
+    WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
+  )
+  const statusesSyncQuery = useWhatsappSyncStatusesQuery(selectedAccountId, WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE)
+  const presenceSyncQuery = useWhatsappSyncPresenceQuery(
+    selectedAccountId,
+    selectedSyncChatIdResolved,
+    WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
+  )
+  const callsSyncQuery = useWhatsappSyncCallsQuery(
+    selectedAccountId,
+    selectedSyncChatIdResolved,
+    WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
+  )
+  const contactsSyncQuery = useWhatsappSyncContactsQuery(selectedAccountId, WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE)
+  const mediaSyncQuery = useWhatsappSyncMediaQuery(
+    selectedAccountId,
+    selectedSyncChatIdResolved,
+    WHATSAPP_RUNTIME_SYNC_CHUNK_SIZE
+  )
 
   const startRuntimeMutation = useStartWhatsappRuntimeMutation()
   const stopRuntimeMutation = useStopWhatsappRuntimeMutation()

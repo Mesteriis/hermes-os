@@ -2,14 +2,14 @@ import type { CommunicationAiStateRecord } from '../types/aiState'
 import type { MailSyncStatus } from '../types/communications'
 import {
   aiStateValue,
+  isRecord,
   nullableNumberValue,
   nullableStringValue,
   numberValue,
   storedEventEnvelope,
-  stringValue,
-  type AiStatePatchPayload,
-  type MailRealtimePatchQueryClient,
-  type SyncPatchPayload,
+	stringValue,
+	type MailRealtimePatchQueryClient,
+	type SyncPatchPayload,
 } from './realtimePatchShared'
 
 type AvailableMailRealtimePatchQueryClient = Required<
@@ -23,7 +23,7 @@ export function applyAiStateRealtimePatch(
   const envelope = storedEventEnvelope(eventData)
   if (envelope?.event?.event_type !== 'mail.ai_state.changed') return false
 
-  const payload = envelope.event.payload as AiStatePatchPayload | undefined
+	const payload = isRecord(envelope.event.payload) ? envelope.event.payload : undefined
   const messageId = stringValue(payload?.message_id)
   const aiState = aiStateValue(payload?.ai_state)
   if (!messageId || !aiState) return false
@@ -75,7 +75,7 @@ export function applySyncRealtimePatch(
     return false
   }
 
-  const payload = event?.payload as SyncPatchPayload | undefined
+	const payload = isRecord(event?.payload) ? event.payload : undefined
   const accountId = stringValue(payload?.account_id)
   if (!accountId) return false
 

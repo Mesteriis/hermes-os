@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   mailListItemAiIndicator,
+  mailListItemStatusChipClass,
   type MailListItemModel,
 } from './mailElements'
 
@@ -27,5 +28,13 @@ describe('mailListItemAiIndicator', () => {
       tone: 'warning',
     })
     expect(indicator?.detail).toContain('retry or review state')
+  })
+})
+
+describe('mailListItemStatusChipClass', () => {
+  it('only shows the workflow chip for new items', () => {
+    expect(mailListItemStatusChipClass(failedAiItem())).toContain('--visible')
+    expect(mailListItemStatusChipClass({ ...failedAiItem(), workflowState: 'done' }))
+      .toBe('mail-list-item__status-chip')
   })
 })

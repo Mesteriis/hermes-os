@@ -9,7 +9,7 @@ import {
   rawSignalPattern,
   SIGNAL_HUB_RAW_SIGNAL_CONSUMER,
   sourceControlState
-} from './signalHubSettingsPresentation'
+} from './signalHubRoutePresentation'
 import type {
   SignalHubCapability,
   SignalHubConnection,

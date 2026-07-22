@@ -5,10 +5,10 @@ describe('SystemControlPage bootstrap boundary', () => {
 	it('renders typed module composition without claiming unavailable platform health', () => {
 		const source = readFileSync(new URL('./SystemControlPage.vue', import.meta.url), 'utf8')
 
-		expect(source).toContain('bootstrap.value.modules.map')
+		expect(source).toContain('systemControlModuleRows')
 		expect(source).toContain('Module Control Plane')
-		expect(source).toContain('module.settings?.applyState')
-		expect(source).toContain('module.settings?.sanitizedReasonCode')
+		expect(source).toContain('module.applyState')
+		expect(source).toContain('module.reasonCode')
 		expect(source).toContain('Developer mode')
 		expect(source).toContain('Settings registry')
 		expect(source).toContain('Public module settings')

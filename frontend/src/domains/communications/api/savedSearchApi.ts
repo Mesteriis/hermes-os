@@ -12,10 +12,12 @@ import type {
   CommunicationSavedSearch
 } from '../types/savedSearches'
 
+const DEFAULT_COMMUNICATIONS_SEARCH_LIMIT = 1000
+
 export async function fetchSavedSearches(
   smartFolder?: boolean,
   accountId?: string,
-  limit = 500,
+  limit = DEFAULT_COMMUNICATIONS_SEARCH_LIMIT,
   cursor?: string | null
 ): Promise<SavedSearchListResponse> {
   return fetchCommunicationSavedSearchesConnect(smartFolder, accountId, limit, cursor ?? undefined)

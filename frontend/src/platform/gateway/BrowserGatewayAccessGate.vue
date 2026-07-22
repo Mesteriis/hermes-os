@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import Icon from '../../shared/ui/Icon.vue'
-import { BrowserGatewayAuthenticator } from './browserGatewayAuth'
 import { readBrowserGatewayCredentialId, storeBrowserGatewayCredentialId } from './browserGatewayCredential'
-import { BrowserGatewayEnrollment, decodeBrowserCredentialId } from './browserGatewayEnrollment'
+import {
+  authenticateBrowserGateway,
+  browserGatewayAccessError,
+  enrollBrowserGateway,
+} from './browserGatewayAccess'
 
 const emit = defineEmits<{ authenticated: [] }>()
 const pairingId = ref('')
@@ -15,23 +18,21 @@ const canAuthenticate = computed(() => Boolean(credentialId.value))
 async function enroll(): Promise<void> {
 	busy.value = true; error.value = ''
 	try {
-		const value = await new BrowserGatewayEnrollment().enroll(pairingId.value.trim())
+		const value = await enrollBrowserGateway(pairingId.value)
 		storeBrowserGatewayCredentialId(value)
 		credentialId.value = value
 		await authenticate()
-	} catch (reason) { error.value = message(reason) } finally { busy.value = false }
+	} catch (reason) { error.value = browserGatewayAccessError(reason) } finally { busy.value = false }
 }
 
 async function authenticate(): Promise<void> {
 	if (!credentialId.value) return
 	busy.value = true; error.value = ''
 	try {
-		await new BrowserGatewayAuthenticator().authenticate(decodeBrowserCredentialId(credentialId.value))
+		await authenticateBrowserGateway(credentialId.value)
 		emit('authenticated')
-	} catch (reason) { error.value = message(reason) } finally { busy.value = false }
+	} catch (reason) { error.value = browserGatewayAccessError(reason) } finally { busy.value = false }
 }
-
-function message(reason: unknown): string { return reason instanceof Error ? reason.message : 'browser access failed' }
 </script>
 
 <template>

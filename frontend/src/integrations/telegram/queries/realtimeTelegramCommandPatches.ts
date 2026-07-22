@@ -4,15 +4,13 @@ import {
   storedEventEnvelope,
   stringValue,
 } from '../../../shared/communications/queries/realtimePatchShared'
-import type { TelegramProviderWriteCommand } from '../types/telegram'
+import type {
+  TelegramCommandKind,
+  TelegramCommandStatus,
+  TelegramProviderWriteCommand
+} from '../types/telegram'
 
 type TelegramEventPayload = Record<string, unknown>
-type TelegramStoredEventEnvelope = {
-  event?: {
-    event_type?: unknown
-    payload?: unknown
-  }
-}
 
 export type TelegramCommandRealtimePatchQueryClient = {
   getQueriesData?: <TData>(filters: { queryKey: readonly unknown[] }) => Array<
@@ -31,13 +29,13 @@ export function applyTelegramCommandRealtimePatch(
   const { getQueriesData, setQueryData } = queryClient
   if (!getQueriesData || !setQueryData) return false
 
-  const envelope = storedEventEnvelope(eventData) as TelegramStoredEventEnvelope | null
+	const envelope = storedEventEnvelope(eventData)
   const eventType = stringValue(envelope?.event?.event_type)
   if (!eventType || !eventType.startsWith('telegram.')) return false
 
-  const payload = isRecord(envelope?.event?.payload)
-    ? (envelope?.event?.payload as TelegramEventPayload)
-    : undefined
+	const payload = isRecord(envelope?.event?.payload)
+		? envelope.event.payload
+		: undefined
 
   let patched = false
   for (const [queryKey, data] of getQueriesData<TelegramProviderWriteCommand[]>({
@@ -83,7 +81,7 @@ export function patchTelegramCommandList(
   const payloadAccountId = stringValue(payload.account_id)
   if (queryAccountId && payloadAccountId && payloadAccountId !== queryAccountId) return commands
   const commandId = stringValue(payload.command_id)
-  const newStatus = stringValue(payload.status)
+	const newStatus = telegramCommandStatusValue(payload.status)
   if (!commandId || !newStatus) return commands
 
   const payloadProviderChatId = stringValue(payload.provider_chat_id)
@@ -123,7 +121,7 @@ export function patchTelegramCommandList(
 
   const nextCommand = {
     ...matchedCommand,
-    status: newStatus as TelegramProviderWriteCommand['status'],
+    status: newStatus,
     retry_count: numberValue(payload.retry_count) ?? matchedCommand.retry_count,
     max_retries: numberValue(payload.max_retries) ?? matchedCommand.max_retries,
     last_error: normalizeNullableString(payload.last_error, matchedCommand.last_error),
@@ -157,7 +155,7 @@ function insertCommand(
   commands: TelegramProviderWriteCommand[],
   accountId: string,
   commandId: string,
-  status: string,
+	status: TelegramCommandStatus,
   eventType: string,
   payload: TelegramEventPayload
 ): TelegramProviderWriteCommand[] {
@@ -180,7 +178,7 @@ function insertCommand(
     capability_state: capabilityStateValue(payload.capability_state),
     action_class: actionClassValue(payload.action_class),
     confirmation_decision: confirmationDecisionValue(payload.confirmation_decision),
-    status: status as TelegramProviderWriteCommand['status'],
+    status,
     retry_count: numberValue(payload.retry_count) ?? 0,
     max_retries: numberValue(payload.max_retries) ?? 0,
     last_error: normalizeNullableString(payload.last_error, null),
@@ -234,14 +232,60 @@ function insertedCommandKind(
   }
 
   const explicitKind = stringValue(payload.command_kind)
-  if (explicitKind) return explicitKind as TelegramProviderWriteCommand['command_kind']
+	if (explicitKind && isTelegramCommandKind(explicitKind)) return explicitKind
 
   const action = stringValue(payload.action)
   if (action === 'join' || action === 'leave') {
-    return action as TelegramProviderWriteCommand['command_kind']
+		return action
   }
 
   return null
+}
+
+function telegramCommandStatusValue(value: unknown): TelegramCommandStatus | null {
+	const normalized = stringValue(value)
+	return normalized === 'queued' ||
+		normalized === 'executing' ||
+		normalized === 'completed' ||
+		normalized === 'failed' ||
+		normalized === 'retrying' ||
+		normalized === 'cancelled' ||
+		normalized === 'dead_letter'
+		? normalized
+		: null
+}
+
+function isTelegramCommandKind(value: string): value is TelegramCommandKind {
+	switch (value) {
+		case 'send_text':
+		case 'send_media':
+		case 'edit':
+		case 'delete':
+		case 'restore_visibility':
+		case 'mark_read':
+		case 'mark_unread':
+		case 'pin':
+		case 'unpin':
+		case 'archive':
+		case 'unarchive':
+		case 'mute':
+		case 'unmute':
+		case 'folder_add':
+		case 'folder_remove':
+		case 'react':
+		case 'unreact':
+		case 'reply':
+		case 'forward':
+		case 'join':
+		case 'leave':
+		case 'topic_create':
+		case 'topic_close':
+		case 'topic_reopen':
+		case 'admin_action':
+			return true
+		default:
+			return false
+	}
 }
 
 function capabilityStateValue(value: unknown): TelegramProviderWriteCommand['capability_state'] {

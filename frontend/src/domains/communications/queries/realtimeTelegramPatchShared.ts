@@ -102,17 +102,20 @@ export function telegramChatSnapshot(value: unknown): TelegramChat | null {
   const syncState = stringValue(value.sync_state)
   const createdAt = stringValue(value.created_at)
   const updatedAt = stringValue(value.updated_at)
-  if (!telegramChatId || !accountId || !providerChatId || !chatKind || !title || !syncState || !createdAt || !updatedAt) {
+  if (
+    !telegramChatId || !accountId || !providerChatId || !title || !syncState || !createdAt || !updatedAt ||
+    !isTelegramChatKind(chatKind)
+  ) {
     return null
   }
   return {
     telegram_chat_id: telegramChatId,
     account_id: accountId,
     provider_chat_id: providerChatId,
-    chat_kind: chatKind as TelegramChat['chat_kind'],
+    chat_kind: chatKind,
     title,
     username: stringValue(value.username),
-    sync_state: syncState as TelegramChat['sync_state'],
+    sync_state: syncState,
     last_message_at: stringValue(value.last_message_at),
     metadata: isRecord(value.metadata) ? value.metadata : {},
     created_at: createdAt,
@@ -130,7 +133,10 @@ export function telegramMessageSnapshot(value: unknown): TelegramMessage | null 
   const projectedAt = stringValue(value.projected_at)
   const channelKind = stringValue(value.channel_kind)
   const deliveryState = stringValue(value.delivery_state)
-  if (!messageId || !accountId || !providerMessageId || !chatTitle || !sender || !projectedAt || !channelKind || !deliveryState) {
+  if (
+    !messageId || !accountId || !providerMessageId || !chatTitle || !sender || !projectedAt || !deliveryState ||
+    !isTelegramProviderKind(channelKind)
+  ) {
     return null
   }
   return {
@@ -145,7 +151,7 @@ export function telegramMessageSnapshot(value: unknown): TelegramMessage | null 
     text: stringValue(value.text) ?? '',
     occurred_at: stringValue(value.occurred_at),
     projected_at: projectedAt,
-    channel_kind: channelKind as TelegramMessage['channel_kind'],
+    channel_kind: channelKind,
     delivery_state: deliveryState,
     metadata: isRecord(value.metadata) ? value.metadata : {},
   }
@@ -154,14 +160,25 @@ export function telegramMessageSnapshot(value: unknown): TelegramMessage | null 
 export function messageQueryScope(queryKey: readonly unknown[]): [string | null, string | null, number | null] {
   if (queryKey[0] !== 'communications' || queryKey[1] !== 'telegram' || queryKey[2] !== 'messages') return [null, null, null]
   const offset = queryKey[3] === 'infinite' ? 1 : 0
-  const accountId = typeof queryKey[3 + offset] === 'string' && queryKey[3 + offset] !== 'all' && queryKey[3 + offset] !== 'none'
-    ? queryKey[3 + offset] as string
+  const accountValue = queryKey[3 + offset]
+  const accountId = typeof accountValue === 'string' && accountValue !== 'all' && accountValue !== 'none'
+    ? accountValue
     : null
-  const providerChatId = typeof queryKey[4 + offset] === 'string' && queryKey[4 + offset] !== 'all' && queryKey[4 + offset] !== 'none'
-    ? queryKey[4 + offset] as string
+  const providerChatValue = queryKey[4 + offset]
+  const providerChatId = typeof providerChatValue === 'string' && providerChatValue !== 'all' && providerChatValue !== 'none'
+    ? providerChatValue
     : null
-  const limit = typeof queryKey[5 + offset] === 'number' ? queryKey[5 + offset] as number : null
+  const limitValue = queryKey[5 + offset]
+  const limit = typeof limitValue === 'number' ? limitValue : null
   return [accountId, providerChatId, limit]
+}
+
+function isTelegramChatKind(value: string | null): value is TelegramChat['chat_kind'] {
+  return value === 'private' || value === 'group' || value === 'channel' || value === 'bot'
+}
+
+function isTelegramProviderKind(value: string | null): value is TelegramMessage['channel_kind'] {
+  return value === 'telegram_user' || value === 'telegram_bot'
 }
 
 export function chatQueryScope(queryKey: readonly unknown[]): [string | null, number | null] {

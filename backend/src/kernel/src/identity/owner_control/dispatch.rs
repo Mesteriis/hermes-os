@@ -102,6 +102,15 @@ fn route_operation(
         Operation::ExecuteCommunicationsRuntimeOwnerCommand(request) => {
             communications::execute_communications_runtime_owner_command(store, sessions, request)
         }
+        Operation::ExecuteWhatsAppRuntimeOwnerCommand(request) => {
+            communications::execute_whatsapp_runtime_owner_command(
+                store,
+                runtime_dir,
+                supervisor,
+                sessions,
+                request,
+            )
+        }
         Operation::UpdateOperatorSettings(request) => update_settings(store, sessions, request),
         Operation::BindExternalRuntimeIdentity(request) => {
             bind_external_identity(store, sessions, request)

@@ -2,27 +2,35 @@
 import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
 import type { TraceLogsSettingsSurface } from '../queries/useTraceLogsSettingsSurface'
-import type { TraceDataTab, TraceLookupMode } from './eventTraceSettingsPresentation'
+import { useTraceLogsSettingsPanelController } from '../queries/useTraceLogsSettingsPanelController'
+import {
+  traceDataTabs,
+  traceLookupModes as lookupModes,
+} from './eventTraceSettingsPresentation'
 
-defineProps<{
+const props = defineProps<{
   surface: TraceLogsSettingsSurface
 }>()
 
 const { t } = useI18n()
 
-const lookupModes: Array<{ id: TraceLookupMode; label: string; icon: string }> = [
-  { id: 'event', label: 'Event ID', icon: 'tabler:timeline-event' },
-  { id: 'trace', label: 'Trace ID', icon: 'tabler:route' }
-]
-
-const traceDataTabs: Array<{ id: TraceDataTab; label: string; icon: string }> = [
-  { id: 'trace-events', label: 'Trace events', icon: 'tabler:timeline' },
-  { id: 'recent-seeds', label: 'Event log seeds', icon: 'tabler:list-search' }
-]
-
-function eventValue(event: Event): string {
-  return event.target instanceof HTMLInputElement ? event.target.value : ''
-}
+const {
+  handleLookupInput,
+  handleTraceEventSearch,
+  handleRecentEventSearch,
+  handleSubmitLookup,
+  handleLookupModeChange,
+  handleRefresh,
+  handleSelectTraceNode,
+  handleTraceDataTabChange,
+  handleUseRecentEvent,
+  handleTraceEventsPreviousPage,
+  handleTraceEventsNextPage,
+  handleRecentEventsPreviousPage,
+  handleRecentEventsNextPage,
+} = useTraceLogsSettingsPanelController({
+  surface: props.surface,
+})
 </script>
 
 <template>
@@ -37,7 +45,7 @@ function eventValue(event: Event): string {
         class="icon-button"
         :title="t('Refresh traces')"
         :aria-label="t('Refresh traces')"
-        @click="surface.handleRefresh()"
+        @click="handleRefresh()"
       >
         <Icon icon="tabler:refresh" />
       </button>
@@ -66,7 +74,7 @@ function eventValue(event: Event): string {
         <small>{{ t('Event envelopes are rendered as spans; correlation_id is the trace id.') }}</small>
       </header>
 
-      <form class="settings-trace-lookup" @submit.prevent="surface.handleSubmitLookup()">
+      <form class="settings-trace-lookup" @submit.prevent="handleSubmitLookup()">
         <div class="settings-trace-mode-tabs" :aria-label="t('Lookup mode')">
           <button
             v-for="mode in lookupModes"
@@ -75,7 +83,7 @@ function eventValue(event: Event): string {
             class="settings-trace-mode-tab"
             :class="{ active: surface.lookupMode.value === mode.id }"
             :aria-pressed="surface.lookupMode.value === mode.id"
-            @click="surface.handleLookupModeChange(mode.id)"
+            @click="handleLookupModeChange(mode.id)"
           >
             <Icon :icon="mode.icon" />
             <span>{{ t(mode.label) }}</span>
@@ -86,7 +94,7 @@ function eventValue(event: Event): string {
           :value="surface.lookupInput.value"
           :placeholder="surface.lookupMode.value === 'event' ? t('Paste event_id') : t('Paste correlation_id')"
           autocomplete="off"
-          @input="surface.handleLookupInput(eventValue($event))"
+          @input="handleLookupInput"
         >
         <button type="submit" class="primary-button">
           <Icon icon="tabler:search" />
@@ -141,9 +149,9 @@ function eventValue(event: Event): string {
               :transform="`translate(${node.x} ${node.y})`"
               role="button"
               tabindex="0"
-              @click="surface.handleSelectTraceNode(node.eventId)"
-              @keydown.enter.prevent="surface.handleSelectTraceNode(node.eventId)"
-              @keydown.space.prevent="surface.handleSelectTraceNode(node.eventId)"
+              @click="handleSelectTraceNode(node.eventId)"
+              @keydown.enter.prevent="handleSelectTraceNode(node.eventId)"
+              @keydown.space.prevent="handleSelectTraceNode(node.eventId)"
             >
               <rect :width="node.width" :height="node.height" rx="8" />
               <text class="settings-trace-node__title" x="14" y="25">{{ node.title }}</text>
@@ -226,7 +234,7 @@ function eventValue(event: Event): string {
             class="settings-trace-data-tab"
             :class="{ active: surface.activeTraceDataTab.value === tab.id }"
             :aria-pressed="surface.activeTraceDataTab.value === tab.id"
-            @click="surface.handleTraceDataTabChange(tab.id)"
+            @click="handleTraceDataTabChange(tab.id)"
           >
             <Icon :icon="tab.icon" />
             <span>{{ t(tab.label) }}</span>
@@ -247,7 +255,7 @@ function eventValue(event: Event): string {
             :placeholder="t('Search events in trace')"
             :aria-label="t('Search events in trace')"
             autocomplete="off"
-            @input="surface.handleTraceEventSearch(eventValue($event))"
+            @input="handleTraceEventSearch"
           >
           <input
             v-else
@@ -256,7 +264,7 @@ function eventValue(event: Event): string {
             :placeholder="t('Search loaded event seeds')"
             :aria-label="t('Search loaded event seeds')"
             autocomplete="off"
-            @input="surface.handleRecentEventSearch(eventValue($event))"
+            @input="handleRecentEventSearch"
           >
         </label>
       </div>
@@ -287,7 +295,7 @@ function eventValue(event: Event): string {
                 v-for="row in surface.pagedTraceEventRows.value.rows"
                 :key="row.eventId"
                 :class="`tone-${row.tone}`"
-                @click="surface.handleSelectTraceNode(row.eventId)"
+                @click="handleSelectTraceNode(row.eventId)"
               >
                 <td><strong>#{{ row.position }}</strong></td>
                 <td>
@@ -321,7 +329,7 @@ function eventValue(event: Event): string {
               :title="t('Previous page')"
               :aria-label="t('Previous page')"
               :disabled="!surface.pagedTraceEventRows.value.hasPrevious"
-              @click="surface.handleTraceEventsPreviousPage()"
+              @click="handleTraceEventsPreviousPage()"
             >
               <Icon icon="tabler:chevron-left" />
             </button>
@@ -334,7 +342,7 @@ function eventValue(event: Event): string {
               :title="t('Next page')"
               :aria-label="t('Next page')"
               :disabled="!surface.pagedTraceEventRows.value.hasNext"
-              @click="surface.handleTraceEventsNextPage()"
+              @click="handleTraceEventsNextPage()"
             >
               <Icon icon="tabler:chevron-right" />
             </button>
@@ -357,7 +365,7 @@ function eventValue(event: Event): string {
             :key="row.eventId"
             type="button"
             class="settings-trace-seed"
-            @click="surface.handleUseRecentEvent(row.eventId)"
+            @click="handleUseRecentEvent(row.eventId)"
           >
             <span>
               <strong>{{ row.eventType }}</strong>
@@ -379,7 +387,7 @@ function eventValue(event: Event): string {
               :title="t('Previous page')"
               :aria-label="t('Previous page')"
               :disabled="surface.recentEventsPage.value <= 1"
-              @click="surface.handleRecentEventsPreviousPage()"
+              @click="handleRecentEventsPreviousPage()"
             >
               <Icon icon="tabler:chevron-left" />
             </button>
@@ -390,7 +398,7 @@ function eventValue(event: Event): string {
               :title="t('Load next page')"
               :aria-label="t('Load next page')"
               :disabled="!surface.recentEventsHasMore.value || surface.recentEventsIsFetching.value"
-              @click="surface.handleRecentEventsNextPage()"
+              @click="handleRecentEventsNextPage()"
             >
               <Icon icon="tabler:chevron-right" />
             </button>

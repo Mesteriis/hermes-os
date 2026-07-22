@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useI18n } from '../../../platform/i18n'
 import Dialog from '../../../shared/ui/Dialog.vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import type { AISettingsSurface } from '../queries/useAISettingsSurface'
-import type { AiModelCatalogItem } from '../types/aiControlCenter'
-import { modelCapabilityBadges, modelDetail, modelRuntimeFacts } from './aiModelCatalogPresentation'
+import {
+  modelCapabilityBadges,
+  modelDetail,
+  modelRuntimeFacts,
+} from './aiModelCatalogPresentation'
+import { useAIModelPickerController } from '../queries/useAIModelPickerController'
 
 const props = defineProps<{
   open: boolean
@@ -16,30 +18,25 @@ const emit = defineEmits<{
   'update:open': [value: boolean]
 }>()
 
-const { t } = useI18n()
-
-const selectedAvailableModelCount = computed(() => {
-  let count = 0
-  for (const model of props.surface.selectedProviderModels.value) {
-    if (model.is_available) count += 1
-  }
-  return count
+const {
+  selectedAvailableModelCount,
+  modelPickerDescription,
+  t,
+  modelProgress,
+  handleDownloadModel,
+  handleSyncModels,
+  handleToggleModelAvailability,
+  modelProgressLabel,
+} = useAIModelPickerController({
+  surface: props.surface,
 })
 
-const modelPickerDescription = computed(() => {
-  const provider = props.surface.selectedProvider.value
-  if (!provider) return t('Select a provider before choosing models.')
-  return `${provider.display_name} · ${selectedAvailableModelCount.value}/${props.surface.selectedProviderModels.value.length} ${t('available')}`
-})
-
-function toggleModelAvailability(model: AiModelCatalogItem, event: Event) {
-  const target = event.target
-  if (!(target instanceof HTMLInputElement)) return
-  void props.surface.handleModelAvailability(model, target.checked)
+function handleUpdateOpen(value: boolean): void {
+  emit('update:open', value)
 }
 
-function modelProgressLabel(model: AiModelCatalogItem): string {
-  return props.surface.modelDownloadProgressLabel(model) ?? t('Downloading model')
+function handleCloseDialog(): void {
+  emit('update:open', false)
 }
 </script>
 
@@ -50,7 +47,7 @@ function modelProgressLabel(model: AiModelCatalogItem): string {
     :description="modelPickerDescription"
     :close-label="t('Close model picker')"
     content-class="settings-ai-model-picker-dialog"
-    @update:open="(value) => emit('update:open', value)"
+    @update:open="handleUpdateOpen"
   >
     <section class="settings-ai-model-picker">
       <header
@@ -71,7 +68,7 @@ function modelProgressLabel(model: AiModelCatalogItem): string {
           type="button"
           class="secondary-button"
           :disabled="surface.isBusy.value"
-          @click="surface.selectedProvider.value && surface.handleSyncModels(surface.selectedProvider.value)"
+          @click="handleSyncModels"
         >
           <Icon icon="tabler:refresh" />
           {{ t('Sync models') }}
@@ -104,7 +101,7 @@ function modelProgressLabel(model: AiModelCatalogItem): string {
                 type="button"
                 class="secondary-button"
                 :disabled="surface.isBusy.value"
-                @click="surface.handleModelDownload(model)"
+                @click="handleDownloadModel(model)"
               >
                 <Icon icon="tabler:download" />
                 {{ t('Download') }}
@@ -116,7 +113,7 @@ function modelProgressLabel(model: AiModelCatalogItem): string {
                   type="checkbox"
                   :checked="model.is_available"
                   :disabled="surface.isBusy.value"
-                  @change="toggleModelAvailability(model, $event)"
+                  @change="handleToggleModelAvailability(model, $event)"
                 >
                 <span>
                   <strong>
@@ -149,7 +146,7 @@ function modelProgressLabel(model: AiModelCatalogItem): string {
               <progress
                 class="settings-ai-model-progress-bar"
                 max="100"
-                :value="surface.modelDownloadProgressValue(model) ?? 0"
+                :value="modelProgress(model)"
                 :aria-label="modelProgressLabel(model)"
               />
               <small>{{ modelProgressLabel(model) }}</small>
@@ -190,7 +187,7 @@ function modelProgressLabel(model: AiModelCatalogItem): string {
       <button
         type="button"
         class="primary-button"
-        @click="emit('update:open', false)"
+        @click="handleCloseDialog"
       >
         {{ t('Done') }}
       </button>

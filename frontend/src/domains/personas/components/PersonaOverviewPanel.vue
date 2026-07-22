@@ -10,6 +10,12 @@ import type {
 } from '../types/persona'
 import PersonaRelationshipGraph from './PersonaRelationshipGraph.vue'
 import {
+  canAssignIdentityTraceToOwner,
+  canAssignIdentityTraceToPersona,
+  isAssigningIdentityTrace,
+  isReviewingIdentityCandidate,
+} from './personaOverviewPresentation'
+import {
   candidateKindLabel,
   candidateTitle,
   formatDateTime,
@@ -45,20 +51,20 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-function canAssignToSelected(trace: PersonaIdentity): boolean {
-  return trace.persona_id !== props.selectedPersona.persona_id
-}
-
-function canAssignToOwner(trace: PersonaIdentity): boolean {
-  return Boolean(props.ownerPersona && trace.persona_id !== props.ownerPersona.persona_id)
-}
-
 function isReviewingCandidate(candidateId: string): boolean {
-  return props.reviewingCandidateId === candidateId
+  return isReviewingIdentityCandidate(candidateId, props.reviewingCandidateId)
 }
 
 function isAssigningTrace(traceId: string): boolean {
-  return props.assigningTraceId === traceId
+  return isAssigningIdentityTrace(traceId, props.assigningTraceId)
+}
+
+function canAssignToSelected(trace: PersonaIdentity): boolean {
+  return canAssignIdentityTraceToPersona(trace, props.selectedPersona.persona_id)
+}
+
+function canAssignToOwner(trace: PersonaIdentity): boolean {
+  return canAssignIdentityTraceToOwner(trace, props.ownerPersona?.persona_id ?? null)
 }
 
 function candidateId(candidate: PersonaIdentityCandidate): string {

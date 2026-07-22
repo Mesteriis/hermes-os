@@ -25,6 +25,7 @@ import {
   unmuteTelegramChat,
   unpinTelegramChat,
 } from './telegram'
+import { TELEGRAM_RUNTIME_CALLS_PAGE_SIZE } from '../queries/telegramRuntimePanelActions'
 
 describe('telegram dialog action API', () => {
   beforeEach(() => {
@@ -120,6 +121,7 @@ describe('telegram dialog action API', () => {
   })
 
   it('loads projected call metadata and transcript routes', async () => {
+    const defaultCallsChunkSize = TELEGRAM_RUNTIME_CALLS_PAGE_SIZE
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -136,11 +138,11 @@ describe('telegram dialog action API', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    await fetchTelegramCalls('acc-1', 10)
+    await fetchTelegramCalls('acc-1', defaultCallsChunkSize)
     await fetchTelegramCallTranscript('call-1')
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/calls?limit=10&account_id=acc-1')
+    expect(fetchMock.mock.calls[0][0]).toContain(`/api/v1/calls?limit=${defaultCallsChunkSize}&account_id=acc-1`)
     expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/calls/call-1/transcript')
     expect(fetchMock.mock.calls[0][1].method).toBe('GET')
     expect(fetchMock.mock.calls[1][1].method).toBe('GET')

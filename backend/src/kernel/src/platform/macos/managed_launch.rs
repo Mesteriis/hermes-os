@@ -3,11 +3,15 @@
 use std::path::Path;
 use std::time::Duration;
 
-use hermes_kernel_control_store::ManagedLaunchRecord;
+use hermes_kernel_control_store::{ManagedLaunchRecord, PlatformStorageBindingStateV1};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
+use hermes_runtime_protocol::v1::ManagedStorageRuntimeConfigurationV1;
+use prost::Message;
 
 use crate::infrastructure::filesystem::new_instance_id;
 use crate::platform::macos::native_launch;
+use crate::platform::{storage, vault::status as vault_status};
+use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::runtime::lifecycle::control::ManagedRuntimeExpectation;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
@@ -92,6 +96,95 @@ pub fn start(
     let runtime_generation = reservation.runtime_generation();
     let (registration_id, expectation, policy) = reservation.into_launch_parts();
     supervisor.start(registration_id, staged, expectation, policy)?;
+    Ok(runtime_generation)
+}
+
+pub fn start_with_storage_configuration(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    registration_id: &str,
+) -> Result<u64, String> {
+    let reservation = reserve(supervisor, store, registration_id)?;
+    let storage_binding = store
+        .platform_storage_bindings()
+        .map_err(|_| "managed runtime Storage binding is unavailable".to_owned())?
+        .into_iter()
+        .find(|binding| {
+            binding.registration_id() == registration_id
+                && binding.state() == PlatformStorageBindingStateV1::Active
+        })
+        .ok_or_else(|| "managed runtime Storage binding is unavailable".to_owned())?;
+    let topology = storage::topology::current(store)?;
+    let vault = vault_status::read_current(store, &supervisor.relay_port())?;
+    let configuration = storage::topology::to_managed_runtime_configuration(
+        &topology,
+        &storage_binding,
+        store.snapshot().instance_id(),
+        vault.runtime_generation(),
+        vault.hpke_public_key_x25519(),
+    )?;
+    start_staged_with_configuration(
+        supervisor,
+        store,
+        runtime_dir,
+        reservation,
+        configuration,
+    )
+}
+
+fn start_staged_with_configuration(
+    supervisor: &ManagedRuntimeSupervisor,
+    _store: &SqliteControlStore,
+    runtime_dir: &Path,
+    reservation: ManagedLaunchReservation,
+    configuration: ManagedStorageRuntimeConfigurationV1,
+) -> Result<u64, String> {
+    let kernel_executable =
+        std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())?;
+    let prepared = native_launch::prepare_bound_managed_runtime(
+        &kernel_executable,
+        reservation.binding(),
+        &runtime_dir
+            .join("managed")
+            .join(format!("launch-{}", reservation.runtime_generation())),
+    )?;
+    let contracts = StagedRuntimeContracts::stage_with_runtime_configuration(
+        &runtime_dir
+            .join("managed")
+            .join(format!("launch-{}", reservation.runtime_generation()))
+            .join("contracts"),
+        prepared.descriptor_bytes(),
+        prepared.settings_schema_bytes(),
+        Some(&configuration.encode_to_vec()),
+    )?;
+    let mut arguments = vec![
+        "serve-inherited".to_owned(),
+        "--descriptor-path".to_owned(),
+        contracts.descriptor_path().display().to_string(),
+    ];
+    let settings_schema_path = contracts
+        .settings_schema_path()
+        .ok_or_else(|| "managed runtime settings schema is unavailable".to_owned())?;
+    arguments.push("--settings-schema-path".to_owned());
+    arguments.push(settings_schema_path.display().to_string());
+    let configuration_path = contracts
+        .runtime_configuration_path()
+        .ok_or_else(|| "managed runtime configuration is unavailable".to_owned())?;
+    arguments.push("--runtime-configuration-path".to_owned());
+    arguments.push(configuration_path.display().to_string());
+    arguments.push("--runtime-instance-id".to_owned());
+    arguments.push(reservation.runtime_instance_id().to_owned());
+    let runtime_generation = reservation.runtime_generation();
+    let (registration_id, expectation, policy) = reservation.into_launch_parts();
+    supervisor.start_with_arguments_and_contracts(
+        registration_id,
+        prepared.into_staged_executable(),
+        arguments,
+        expectation,
+        policy,
+        contracts,
+    )?;
     Ok(runtime_generation)
 }
 

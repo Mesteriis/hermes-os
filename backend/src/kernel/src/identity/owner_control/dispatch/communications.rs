@@ -6,14 +6,18 @@ use std::process::Command;
 use hermes_gateway_protocol::v1::{
     ExecuteCommunicationsRuntimeOwnerCommandRequestV1,
     ExecuteCommunicationsRuntimeOwnerCommandResponseV1, ExecuteMailRuntimeOwnerCommandRequestV1,
-    ExecuteMailRuntimeOwnerCommandResponseV1,
+    ExecuteMailRuntimeOwnerCommandResponseV1, ExecuteWhatsAppRuntimeOwnerCommandRequestV1,
+    ExecuteWhatsAppRuntimeOwnerCommandResponseV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
+use crate::platform::macos::managed_launch as macos_managed_runtime_launch;
+use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 use super::{OwnerControlSessions, OwnerResult};
 
 const MAIL_RUNTIME_PROCESS_ID: &str = "hermes-mail-runtime";
 const COMMUNICATIONS_RUNTIME_PROCESS_ID: &str = "hermes-communications-runtime";
+const WHATSAPP_RUNTIME_PROCESS_ID: &str = "hermes-whatsapp-runtime";
 
 const ALLOWED_MAIL_COMMANDS: &[&str] = &[
     "status",
@@ -24,6 +28,7 @@ const ALLOWED_MAIL_COMMANDS: &[&str] = &[
     "get-operation",
 ];
 const ALLOWED_COMMUNICATIONS_COMMANDS: &[&str] = &["ingest", "status"];
+const ALLOWED_WHATSAPP_COMMANDS: &[&str] = &["status", "start", "stop"];
 
 pub(super) fn execute_mail_runtime_owner_command(
     store: &SqliteControlStore,
@@ -65,6 +70,52 @@ pub(super) fn execute_communications_runtime_owner_command(
     )?;
     Ok(OwnerResult::ExecuteCommunicationsRuntimeOwnerCommand(
         ExecuteCommunicationsRuntimeOwnerCommandResponseV1 {
+            command,
+            exit_code,
+            stdout,
+            stderr,
+        },
+    ))
+}
+
+pub(super) fn execute_whatsapp_runtime_owner_command(
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    supervisor: &ManagedRuntimeSupervisor,
+    sessions: &mut OwnerControlSessions,
+    request: ExecuteWhatsAppRuntimeOwnerCommandRequestV1,
+) -> Result<OwnerResult, String> {
+    if request.command == "start" {
+        sessions.authorize(store, &request.owner_session_id)?;
+        if !request.arg.is_empty() {
+            return Err("WhatsApp managed start does not accept runtime arguments".to_owned());
+        }
+        let runtime_generation = macos_managed_runtime_launch::start_with_storage_configuration(
+            supervisor,
+            store,
+            runtime_dir,
+            WHATSAPP_RUNTIME_PROCESS_ID,
+        )?;
+        return Ok(OwnerResult::ExecuteWhatsAppRuntimeOwnerCommand(
+            ExecuteWhatsAppRuntimeOwnerCommandResponseV1 {
+                command: request.command,
+                exit_code: 0,
+                stdout: format!("whatsapp_runtime launch_state=accepted runtime_generation={runtime_generation}"),
+                stderr: String::new(),
+            },
+        ));
+    }
+    let (command, exit_code, stdout, stderr) = run_allowed_runtime_command(
+        store,
+        sessions,
+        &request.owner_session_id,
+        WHATSAPP_RUNTIME_PROCESS_ID,
+        &request.command,
+        &request.arg,
+        ALLOWED_WHATSAPP_COMMANDS,
+    )?;
+    Ok(OwnerResult::ExecuteWhatsAppRuntimeOwnerCommand(
+        ExecuteWhatsAppRuntimeOwnerCommandResponseV1 {
             command,
             exit_code,
             stdout,

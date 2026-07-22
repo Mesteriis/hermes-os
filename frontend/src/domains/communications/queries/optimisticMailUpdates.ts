@@ -11,19 +11,6 @@ import type {
 	WorkflowState
 } from '../types/communications'
 
-const WORKFLOW_STATES = new Set<WorkflowState>([
-	'new',
-	'reviewed',
-	'needs_action',
-	'waiting',
-	'done',
-	'archived',
-	'muted',
-	'spam'
-])
-
-const LOCAL_STATES = new Set<LocalMessageState>(['active', 'trash', 'all'])
-
 type MailListFilters = {
 	workflowState?: WorkflowState
 	localState?: LocalMessageState
@@ -274,9 +261,13 @@ function isVisibleInMailList(
 }
 
 function isWorkflowState(value: unknown): value is WorkflowState {
-	return typeof value === 'string' && WORKFLOW_STATES.has(value as WorkflowState)
+	return typeof value === 'string' && (
+		value === 'new' || value === 'reviewed' || value === 'needs_action' ||
+		value === 'waiting' || value === 'done' || value === 'archived' ||
+		value === 'muted' || value === 'spam'
+	)
 }
 
 function isLocalState(value: unknown): value is LocalMessageState {
-	return typeof value === 'string' && LOCAL_STATES.has(value as LocalMessageState)
+	return typeof value === 'string' && (value === 'active' || value === 'trash' || value === 'all')
 }

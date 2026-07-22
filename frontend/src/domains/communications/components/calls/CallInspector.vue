@@ -3,26 +3,20 @@ import { computed } from 'vue'
 import { Badge, Button, EntityIcon, Icon, ScoreGauge } from '@/shared/ui'
 import '../communicationDomainElements.css'
 import type { CommunicationCallInspectorModel } from '../communicationDomainElements'
+import {
+  communicationInspectorScoreTone,
+  communicationInspectorScoreUnit,
+} from '../communicationInspectorScorePresentation'
 
 const props = defineProps<{
   model: CommunicationCallInspectorModel
 }>()
 
-const scoreUnit = computed(() => `/${props.model.intelligence.maxScore}`)
-
-const scoreTone = computed(() => {
-  const ratio = props.model.intelligence.score / props.model.intelligence.maxScore
-
-  if (ratio >= 0.8) {
-    return 'success'
-  }
-
-  if (ratio >= 0.6) {
-    return 'warning'
-  }
-
-  return 'danger'
-})
+const scoreUnit = computed(() => communicationInspectorScoreUnit(props.model.intelligence.maxScore))
+const scoreTone = computed(() => communicationInspectorScoreTone(
+  props.model.intelligence.score,
+  props.model.intelligence.maxScore,
+))
 </script>
 
 <template>

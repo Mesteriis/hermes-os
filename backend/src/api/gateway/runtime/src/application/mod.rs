@@ -22,11 +22,21 @@ use crate::{
     SharedBrowserGatewaySessionService,
 };
 
+mod mail;
+
 const AUTHENTICATION_PREFIX: &str = "/browser/v1/authentication/";
 const PAIRING_PREFIX: &str = "/browser/v1/pairing/";
 const REALTIME_PATH: &str = "/api/realtime/v1/events";
 const SESSION_STATUS_PATH: &str = "/hermes.gateway.v1.BrowserSessionService/GetStatus";
 const CLIENT_BOOTSTRAP_PATH: &str = "/hermes.gateway.v1.ClientBootstrapService/GetBootstrap";
+const MAIL_COMMUNICATIONS_LIST_PATH: &str = "/api/v1/communications/email/accounts";
+const MAIL_INTEGRATIONS_PATH_PREFIX: &str = "/api/v1/integrations/mail/";
+const TELEGRAM_INTEGRATIONS_PATH_PREFIX: &str = "/api/v1/integrations/telegram/";
+const WHATSAPP_INTEGRATIONS_PATH_PREFIX: &str = "/api/v1/integrations/whatsapp/";
+const TELEGRAM_INTEGRATIONS_PATH_ROOT: &str = "/api/v1/integrations/telegram";
+const WHATSAPP_INTEGRATIONS_PATH_ROOT: &str = "/api/v1/integrations/whatsapp";
+const MAIL_GMAIL_OAUTH_CALLBACK_PATH: &str =
+    "/api/v1/integrations/mail/accounts/gmail/oauth/callback";
 
 /// Composes technical health, browser authentication and client-safe realtime
 /// without adding an owner API or mounting a listener.
@@ -38,6 +48,7 @@ pub struct GatewayApplicationRouter<A, S> {
     browser_session_status: BrowserSessionStatusRouter<A>,
     client_bootstrap: ClientBootstrapRouter<A>,
     browser_realtime: BrowserRealtimeRouter<A, S>,
+    mail: mail::MailGatewayIntegrationRouter,
     lan_development_policy: Option<LanDevelopmentRequestPolicyV1>,
 }
 
@@ -57,6 +68,7 @@ impl<A, S> Clone for GatewayApplicationRouter<A, S> {
             browser_session_status: self.browser_session_status.clone(),
             client_bootstrap: self.client_bootstrap.clone(),
             browser_realtime: self.browser_realtime.clone(),
+            mail: self.mail.clone(),
             lan_development_policy: self.lan_development_policy.clone(),
         }
     }
@@ -77,6 +89,7 @@ where
             browser_session_status: BrowserSessionStatusRouter::from_shared(service.clone()),
             client_bootstrap: ClientBootstrapRouter::from_shared(service.clone()),
             browser_realtime: BrowserRealtimeRouter::new(service, source),
+            mail: mail::MailGatewayIntegrationRouter::new(),
             lan_development_policy: None,
         }
     }
@@ -110,7 +123,8 @@ where
         B: Body<Data = Bytes>,
         B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     {
-        let route = route_class(request.uri().path());
+        let path = request.uri().path();
+        let route = route_class(path);
         let method = request.method().clone();
         if let Some(policy) = &self.lan_development_policy
             && !policy.admits(&request)
@@ -140,10 +154,13 @@ where
         B: Body<Data = Bytes>,
         B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     {
-        if request.uri().query().is_some() {
+        let path = request.uri().path();
+        if let Some(provider) = unsupported_integration_provider(path) {
+            return unsupported_integration_response(provider);
+        }
+        if request.uri().query().is_some() && path != MAIL_GMAIL_OAUTH_CALLBACK_PATH {
             return self.technical.route(request.method(), "");
         }
-        let path = request.uri().path();
         if path == "/" || path.starts_with("/assets/") {
             return match &self.browser_bootstrap {
                 Some(router) => router.route(request.method(), path),
@@ -152,6 +169,12 @@ where
         }
         if is_technical_path(path) {
             return self.technical.route(request.method(), path);
+        }
+        if path.starts_with(MAIL_INTEGRATIONS_PATH_PREFIX) {
+            return self.mail.route(request).await;
+        }
+        if path == MAIL_COMMUNICATIONS_LIST_PATH {
+            return self.mail.route(request).await;
         }
         if path == REALTIME_PATH {
             return self.browser_realtime.route(request);
@@ -233,7 +256,51 @@ fn route_class(path: &str) -> &'static str {
         CLIENT_BOOTSTRAP_PATH => "client_bootstrap",
         path if path.starts_with(AUTHENTICATION_PREFIX) => "browser_authentication",
         path if path.starts_with(PAIRING_PREFIX) => "browser_pairing",
+        path if path.starts_with(MAIL_INTEGRATIONS_PATH_PREFIX) => "mail",
+        path if path == MAIL_COMMUNICATIONS_LIST_PATH => "mail",
+        path if path == TELEGRAM_INTEGRATIONS_PATH_ROOT => {
+            unsupported_integration_response_class(path, "telegram")
+        }
+        path if path == WHATSAPP_INTEGRATIONS_PATH_ROOT => {
+            unsupported_integration_response_class(path, "whatsapp")
+        }
+        path if path.starts_with(TELEGRAM_INTEGRATIONS_PATH_PREFIX) => {
+            unsupported_integration_response_class(path, "telegram")
+        }
+        path if path.starts_with(WHATSAPP_INTEGRATIONS_PATH_PREFIX) => {
+            unsupported_integration_response_class(path, "whatsapp")
+        }
         _ => "unknown",
+    }
+}
+
+fn unsupported_integration_provider(path: &str) -> Option<&'static str> {
+    if path == TELEGRAM_INTEGRATIONS_PATH_ROOT || path.starts_with(TELEGRAM_INTEGRATIONS_PATH_PREFIX) {
+        Some("telegram")
+    } else if path == WHATSAPP_INTEGRATIONS_PATH_ROOT
+        || path.starts_with(WHATSAPP_INTEGRATIONS_PATH_PREFIX)
+    {
+        Some("whatsapp")
+    } else {
+        None
+    }
+}
+
+fn unsupported_integration_response(provider: &str) -> GatewayHttpResponse {
+    Response::builder()
+        .status(StatusCode::NOT_IMPLEMENTED)
+        .header("cache-control", "no-store")
+        .body(crate::full_gateway_body(Bytes::from(format!(
+            "integration {provider} is not migrated in clean-room backend yet; endpoint remains reserved for external provider runtime\n"
+        ))))
+        .expect("Gateway response for unsupported provider integration is valid")
+}
+
+fn unsupported_integration_response_class(path: &str, provider: &str) -> &'static str {
+    if path == TELEGRAM_INTEGRATIONS_PATH_ROOT || path == WHATSAPP_INTEGRATIONS_PATH_ROOT {
+        "communications_integrations_legacy"
+    } else {
+        provider
     }
 }
 

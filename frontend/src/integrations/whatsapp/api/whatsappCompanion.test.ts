@@ -43,7 +43,7 @@ describe('whatsapp WebView companion Tauri bridge', () => {
     })
     expect(result.target_url).toBe('https://web.whatsapp.com/')
     expect(result.bridge_routes.authorized_session_path).toBe(
-      '/api/v1/integrations/whatsapp/runtime-bridge/sessions/authorized'
+      'whatsapp.client://observation/sessions/authorized'
     )
     expect(result.command_channel.completion_rule).toBe(
       'provider_observed_event_reconciliation_required'
@@ -53,10 +53,10 @@ describe('whatsapp WebView companion Tauri bridge', () => {
     )
     expect(result.event_extractor.origin_guard).toBe('https://web.whatsapp.com')
     expect(result.event_extractor.relay_channel).toBe(
-      'tauri_allowlisted_companion_runtime_bridge_dispatch'
+      'tauri_versioned_whatsapp_host_bridge_unix_socket'
     )
     expect(result.event_extractor.runtime_bridge_dispatch).toBe(
-      'runtime_events_bridge_wired_smoke_pending'
+      'versioned_whatsapp_runtime_socket_wired'
     )
     expect(result.event_extractor.forbidden_reads).toContain('message_bodies')
     expect(result.event_extractor.forbidden_reads).toContain('media_bytes')
@@ -75,48 +75,46 @@ describe('whatsapp WebView companion Tauri bridge', () => {
       window_label: 'whatsapp-companion-wa-live-1',
       event_family: 'message',
       provider_event_id: 'provider-event-1',
-      observed_at: '2026-06-26T20:00:00Z',
+      observed_at: '1782504000',
       target_runtime_bridge_path:
-        '/api/v1/integrations/whatsapp/runtime-bridge/runtime-events',
+        'whatsapp.client://observation/runtime-events',
       typed_runtime_bridge_path:
-        '/api/v1/integrations/whatsapp/runtime-bridge/messages',
-      relay_state: 'dispatched_to_backend_runtime_bridge_runtime_event',
-      relay_channel: 'tauri_allowlisted_companion_runtime_bridge_dispatch',
+        'whatsapp.client://observation/messages',
+      relay_state: 'accepted_by_whatsapp_runtime',
+      relay_channel: 'tauri_versioned_whatsapp_host_bridge_unix_socket',
       sanitized_metadata: { provider_chat_id: 'chat-1' },
       runtime_event_kind: 'webview_companion.message.observed',
       import_batch_id: 'whatsapp-webview-companion:wa-live-1:provider-event-1',
-      runtime_bridge_http_status: 200,
+      runtime_bridge_status: 'accepted',
       event_flow:
-        'hidden_webview_companion -> tauri_allowlisted_relay_preflight -> protected_runtime_bridge -> raw_evidence -> signal_hub_accepted -> projection_reconciliation',
+        'hidden_webview_companion -> tauri_versioned_host_bridge -> whatsapp_runtime -> provider_observation_projection',
       completion_rule: 'provider_observed_event_reconciliation_required',
     })
 
     const result = await relayWhatsappWebCompanionObservation(' wa-live-1 ', {
       event_family: 'message',
       provider_event_id: 'provider-event-1',
-      observed_at: '2026-06-26T20:00:00Z',
+      observed_at: '1782504000',
       metadata: {
         provider_chat_id: 'chat-1',
       },
     })
 
-    expect(result.relay_state).toBe(
-      'dispatched_to_backend_runtime_bridge_runtime_event'
-    )
+    expect(result.relay_state).toBe('accepted_by_whatsapp_runtime')
     expect(result.target_runtime_bridge_path).toBe(
-      '/api/v1/integrations/whatsapp/runtime-bridge/runtime-events'
+      'whatsapp.client://observation/runtime-events'
     )
     expect(result.typed_runtime_bridge_path).toBe(
-      '/api/v1/integrations/whatsapp/runtime-bridge/messages'
+      'whatsapp.client://observation/messages'
     )
     expect(result.runtime_event_kind).toBe('webview_companion.message.observed')
-    expect(result.runtime_bridge_http_status).toBe(200)
+    expect(result.runtime_bridge_status).toBe('accepted')
     expect(invokeMock).toHaveBeenCalledWith('whatsapp_web_companion_relay_observation', {
       request: {
         account_id: 'wa-live-1',
         event_family: 'message',
         provider_event_id: 'provider-event-1',
-        observed_at: '2026-06-26T20:00:00Z',
+        observed_at: '1782504000',
         metadata: {
           provider_chat_id: 'chat-1',
         },
@@ -156,8 +154,8 @@ function companionManifest(overrides: Partial<{ opened_window: boolean }>) {
       script_scope: 'main_frame_only',
       origin_guard: 'https://web.whatsapp.com',
       navigation_guard: 'https://web.whatsapp.com_only',
-      relay_channel: 'tauri_allowlisted_companion_runtime_bridge_dispatch',
-      runtime_bridge_dispatch: 'runtime_events_bridge_wired_smoke_pending',
+      relay_channel: 'tauri_versioned_whatsapp_host_bridge_unix_socket',
+      runtime_bridge_dispatch: 'versioned_whatsapp_runtime_socket_wired',
       allowed_observations: [
         'runtime_lifecycle_metadata',
         'message_identity_metadata',
@@ -176,18 +174,18 @@ function companionManifest(overrides: Partial<{ opened_window: boolean }>) {
     },
     bridge_routes: {
       authorized_session_path:
-        '/api/v1/integrations/whatsapp/runtime-bridge/sessions/authorized',
-      runtime_event_path: '/api/v1/integrations/whatsapp/runtime-bridge/runtime-events',
-      sync_lifecycle_path: '/api/v1/integrations/whatsapp/runtime-bridge/sync-lifecycle',
-      message_paths: ['/api/v1/integrations/whatsapp/runtime-bridge/messages'],
-      conversation_paths: ['/api/v1/integrations/whatsapp/runtime-bridge/dialogs'],
-      media_paths: ['/api/v1/integrations/whatsapp/runtime-bridge/media'],
+        'whatsapp.client://observation/sessions/authorized',
+      runtime_event_path: 'whatsapp.client://observation/runtime-events',
+      sync_lifecycle_path: 'whatsapp.client://observation/sync-lifecycle',
+      message_paths: ['whatsapp.client://observation/messages'],
+      conversation_paths: ['whatsapp.client://observation/dialogs'],
+      media_paths: ['whatsapp.client://observation/media'],
     },
     command_channel: {
       kind: 'durable_outbox',
-      claim_path: '/api/v1/integrations/whatsapp/runtime-bridge/commands/claim',
+      claim_path: 'whatsapp.client://observation/commands/claim',
       failure_path:
-        '/api/v1/integrations/whatsapp/runtime-bridge/commands/{command_id}/failed',
+        'whatsapp.client://observation/commands/{command_id}/failed',
       completion_rule: 'provider_observed_event_reconciliation_required',
     },
     secret_policy: {

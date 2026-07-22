@@ -1,4 +1,5 @@
 import { getSignalHubConnectClient } from '../../../platform/connect/signalHubClient'
+import { isRecord } from '../../../shared/communications/queries/realtimePatchShared'
 import type {
   SignalHubCapabilitiesResponse,
   SignalHubCapability,
@@ -398,11 +399,11 @@ export async function fetchSignalHubPolicies(): Promise<SignalHubPoliciesRespons
   const response = await getSignalHubConnectClient().listPolicies({})
   return {
     items: response.items.map((item) => ({
-      scope: item.scope as SignalHubPoliciesResponse['items'][number]['scope'],
+      scope: parseSignalHubPolicyScope(item.scope),
       source_code: item.sourceCode ?? null,
       connection_id: item.connectionId ?? null,
       event_pattern: item.eventPattern ?? null,
-      mode: item.mode as SignalHubPoliciesResponse['items'][number]['mode'],
+      mode: parseSignalHubPolicyMode(item.mode),
       reason: item.reason,
       expires_at: item.expiresAt ?? null
     }))
@@ -543,13 +544,23 @@ export async function resumeSignalHubSignals(
 function parseJsonObject(value: string | undefined): Record<string, unknown> {
   if (!value) return {}
   try {
-    const parsed = JSON.parse(value)
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {}
+    const parsed: unknown = JSON.parse(value)
+    return isRecord(parsed) ? parsed : {}
   } catch {
     return {}
   }
+}
+
+function parseSignalHubPolicyScope(value: string): SignalHubPoliciesResponse['items'][number]['scope'] {
+  if (value === 'global' || value === 'source' || value === 'connection' || value === 'event_pattern' || value === 'profile') {
+    return value
+  }
+  throw new Error(`Unsupported Signal Hub policy scope: ${value}`)
+}
+
+function parseSignalHubPolicyMode(value: string): SignalHubPoliciesResponse['items'][number]['mode'] {
+  if (value.trim().length > 0) return value
+  throw new Error('Signal Hub policy mode must not be empty')
 }
 
 function mapProfile(

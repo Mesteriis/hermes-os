@@ -81,6 +81,8 @@ export type StoredEventEnvelope = {
 	event?: {
 		event_type?: unknown
 		occurred_at?: unknown
+		metadata?: unknown
+		subject?: unknown
 		payload?: unknown
 	}
 }
@@ -161,46 +163,13 @@ export type ProviderCommandPatchPayload = {
 	dead_lettered_at?: unknown
 }
 
-const AI_STATES = new Set<CommunicationAiState>([
-	'NEW',
-	'PROCESSING',
-	'PROCESSED',
-	'REVIEW_REQUIRED',
-	'FAILED',
-	'ARCHIVED'
-])
-
-const WORKFLOW_STATES = new Set<WorkflowState>([
-	'new',
-	'reviewed',
-	'needs_action',
-	'waiting',
-	'done',
-	'archived',
-	'muted',
-	'spam'
-])
-
-const LOCAL_MESSAGE_STATES = new Set<LocalMessageState>(['active', 'trash', 'all'])
-
-const BULK_ACTIONS = new Set<BulkMessageAction>([
-	'mark_read',
-	'mark_unread',
-	'archive',
-	'trash',
-	'restore',
-	'pin',
-	'unpin',
-	'important',
-	'not_important',
-	'add_label',
-	'remove_label',
-	'snooze'
-])
-
 export function storedEventEnvelope(eventData: string): StoredEventEnvelope | null {
 	try {
-		return JSON.parse(eventData) as StoredEventEnvelope
+		const parsed: unknown = JSON.parse(eventData)
+		if (!isRecord(parsed)) return null
+		return {
+			event: isRecord(parsed.event) ? parsed.event : undefined
+		}
 	} catch {
 		return null
 	}
@@ -242,23 +211,45 @@ export function outboxStatusValue(value: unknown): CommunicationOutboxItem['stat
 
 export function aiStateValue(value: unknown): CommunicationAiState | null {
 	if (typeof value !== 'string') return null
-	return AI_STATES.has(value as CommunicationAiState) ? (value as CommunicationAiState) : null
+	return isCommunicationAiState(value) ? value : null
 }
 
 function workflowStateValue(value: unknown): WorkflowState | null {
 	if (value === null || typeof value === 'undefined') return null
 	if (typeof value !== 'string') return null
-	return WORKFLOW_STATES.has(value as WorkflowState) ? (value as WorkflowState) : null
+	return isWorkflowState(value) ? value : null
 }
 
 function localMessageStateValue(value: unknown): LocalMessageState | null {
 	if (typeof value !== 'string') return null
-	return LOCAL_MESSAGE_STATES.has(value as LocalMessageState) ? (value as LocalMessageState) : null
+	return isLocalMessageState(value) ? value : null
 }
 
 export function normalizeBulkAction(value: unknown): BulkMessageAction | null {
 	if (typeof value !== 'string') return null
-	return BULK_ACTIONS.has(value as BulkMessageAction) ? (value as BulkMessageAction) : null
+	return isBulkMessageAction(value) ? value : null
+}
+
+function isCommunicationAiState(value: string): value is CommunicationAiState {
+	return value === 'NEW' || value === 'PROCESSING' || value === 'PROCESSED' ||
+		value === 'REVIEW_REQUIRED' || value === 'FAILED' || value === 'ARCHIVED'
+}
+
+function isWorkflowState(value: string): value is WorkflowState {
+	return value === 'new' || value === 'reviewed' || value === 'needs_action' ||
+		value === 'waiting' || value === 'done' || value === 'archived' ||
+		value === 'muted' || value === 'spam'
+}
+
+function isLocalMessageState(value: string): value is LocalMessageState {
+	return value === 'active' || value === 'trash' || value === 'all'
+}
+
+function isBulkMessageAction(value: string): value is BulkMessageAction {
+	return value === 'mark_read' || value === 'mark_unread' || value === 'archive' ||
+		value === 'trash' || value === 'restore' || value === 'pin' || value === 'unpin' ||
+		value === 'important' || value === 'not_important' || value === 'add_label' ||
+		value === 'remove_label' || value === 'snooze'
 }
 
 export function normalizeMessageIds(value: unknown): string[] {

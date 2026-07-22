@@ -120,6 +120,13 @@ const communicationSidebarSectionIds: CommunicationSidebarSectionId[] = [
   'mail', 'telegram', 'whatsapp', 'calls', 'meetings'
 ]
 
+function isCommunicationSidebarSectionId(
+  value: string
+): value is CommunicationSidebarSectionId {
+  return value === 'mail' || value === 'telegram' || value === 'whatsapp' ||
+    value === 'calls' || value === 'meetings'
+}
+
 function communicationSidebarItemId(sectionId: CommunicationSidebarSectionId): CommunicationSidebarItemId {
   return `communications.${sectionId}`
 }
@@ -133,9 +140,10 @@ function sidebarGroupRootId(groupId: string): `group:${string}` {
 }
 
 function defaultSidebarSettings(): SidebarSettings {
-  const communicationSectionsInSidebar = communicationSections.filter((s) =>
-    communicationSidebarSectionIds.includes(s.id as CommunicationSidebarSectionId)
-  ) as Array<CommunicationSection & { id: CommunicationSidebarSectionId }>
+  const communicationSectionsInSidebar = communicationSections.filter(
+    (section): section is CommunicationSection & { id: CommunicationSidebarSectionId } =>
+      isCommunicationSidebarSectionId(section.id)
+  )
 
   const defaultCommunicationsGroup: SidebarNavGroup = {
     id: 'communications',
@@ -143,7 +151,7 @@ function defaultSidebarSettings(): SidebarSettings {
     icon: 'tabler:messages',
     itemIds: [
       ...communicationSectionsInSidebar.map((s) => communicationSidebarItemId(s.id)),
-      'timeline' as SidebarPrimaryItemId
+      'timeline'
     ],
     separatorBeforeItemIds: []
   }
@@ -153,8 +161,8 @@ function defaultSidebarSettings(): SidebarSettings {
   const defaultRootItemIds: SidebarRootItemId[] = primaryWorkspaceNav.flatMap((item) =>
     item.id === 'communications'
       ? [sidebarGroupRootId(defaultCommunicationsGroup.id)]
-      : !communicationGroupPrimaryItemIds.includes(item.id as SidebarPrimaryItemId)
-        ? [item.id as SidebarPrimaryItemId]
+      : !communicationGroupPrimaryItemIds.includes(item.id)
+        ? [item.id]
         : []
   )
 
@@ -167,15 +175,40 @@ function defaultSidebarSettings(): SidebarSettings {
 }
 
 function normalizeLegacySidebarItemId(itemId: string): SidebarItemId {
-  if (itemId === 'persons') return 'personas'
-
-  return itemId as SidebarItemId
+  const normalized = itemId === 'persons' ? 'personas' : itemId
+  if (isSidebarItemId(normalized)) return normalized
+  throw new Error(`Unsupported sidebar item id: ${itemId}`)
 }
 
 function normalizeLegacySidebarRootId(rootId: string): SidebarRootItemId {
-  if (rootId === 'persons') return 'personas'
+  const normalized = rootId === 'persons' ? 'personas' : rootId
+  if (isSidebarRootItemId(normalized)) return normalized
+  throw new Error(`Unsupported sidebar root id: ${rootId}`)
+}
 
-  return rootId as SidebarRootItemId
+function isSidebarPrimaryItemId(value: string): value is SidebarPrimaryItemId {
+  return primaryWorkspaceNav.some((item) => item.id === value && item.id !== 'communications')
+}
+
+function isCommunicationSidebarItemId(value: string): value is CommunicationSidebarItemId {
+  return value.startsWith('communications.') &&
+    isCommunicationSidebarSectionId(value.slice('communications.'.length))
+}
+
+function isSidebarItemId(value: string): value is SidebarItemId {
+  return isSidebarPrimaryItemId(value) || isCommunicationSidebarItemId(value)
+}
+
+function isSidebarRootId(value: string): value is SidebarRootItemId {
+  return isSidebarPrimaryItemId(value)
+}
+
+function isSidebarGroupRootId(value: string): value is `group:${string}` {
+  return value.startsWith('group:') && value.slice('group:'.length).length > 0
+}
+
+function isSidebarRootItemId(value: string): value is SidebarRootItemId {
+  return isSidebarRootId(value) || isSidebarGroupRootId(value)
 }
 
 function normalizeSidebarSettings(settings: SidebarSettings): SidebarSettings {
@@ -195,9 +228,9 @@ function normalizeSidebarSettings(settings: SidebarSettings): SidebarSettings {
 function resolveSidebarItem(itemId: SidebarItemId): ResolvedSidebarItem | null {
   // Check if it's a primary nav item
   const primaryItem = primaryWorkspaceNav.find((p) => p.id === itemId)
-  if (primaryItem) {
+  if (primaryItem && primaryItem.id !== 'communications') {
     return {
-      itemId: itemId as SidebarPrimaryItemId,
+      itemId: primaryItem.id,
       label: primaryItem.label,
       icon: primaryItem.icon,
       isCommunication: false
@@ -206,9 +239,9 @@ function resolveSidebarItem(itemId: SidebarItemId): ResolvedSidebarItem | null {
 
   // Check if it's a communication sidebar item
   if (itemId.startsWith('communications.')) {
-    const sectionId = itemId.slice('communications.'.length) as CommunicationSidebarSectionId
+    const sectionId = itemId.slice('communications.'.length)
     const section = communicationSections.find((s) => s.id === sectionId)
-    if (section && communicationSidebarSectionIds.includes(sectionId)) {
+    if (section && isCommunicationSidebarSectionId(sectionId)) {
       return {
         itemId,
         label: section.label,
@@ -237,7 +270,8 @@ export const useSidebarStore = defineStore('sidebar', () => {
     for (const rootId of settings.rootItemIds) {
       // Check if it's a primary item
       if (!rootId.startsWith('group:')) {
-        const primaryId = rootId as SidebarPrimaryItemId
+        if (!isSidebarPrimaryItemId(rootId)) continue
+        const primaryId = rootId
         const resolved = resolveSidebarItem(primaryId)
         if (resolved) {
           entries.push({ kind: 'item', rootId: primaryId, item: resolved })
@@ -246,6 +280,7 @@ export const useSidebarStore = defineStore('sidebar', () => {
       }
 
       // It's a group
+      if (!isSidebarGroupRootId(rootId)) continue
       const groupId = rootId.slice('group:'.length)
       const group = settings.groups.find((g) => normalizeGroupId(g.id) === groupId)
       if (!group) continue
@@ -260,7 +295,7 @@ export const useSidebarStore = defineStore('sidebar', () => {
 
       entries.push({
         kind: 'group',
-        rootId: rootId as `group:${string}`,
+        rootId,
         group: { ...group, items }
       })
     }
@@ -319,9 +354,10 @@ export const useSidebarStore = defineStore('sidebar', () => {
 
   function updateSidebarDraft(update: (draft: SidebarSettings) => SidebarSettings): void {
     if (!sidebarDraft.value) {
-      sidebarDraft.value = JSON.parse(JSON.stringify(sidebarSettings.value))
+      sidebarDraft.value = structuredClone(sidebarSettings.value)
     }
-    const draft = sidebarDraft.value as SidebarSettings
+    const draft = sidebarDraft.value
+    if (!draft) return
     sidebarDraft.value = update(draft)
   }
 
@@ -398,8 +434,9 @@ export const useSidebarStore = defineStore('sidebar', () => {
   }
 
   function moveSidebarRootItem(rootId: string, direction: -1 | 1): void {
+    if (!isSidebarRootItemId(rootId)) return
     updateSidebarDraft((draft) => {
-      const idx = draft.rootItemIds.indexOf(rootId as SidebarRootItemId)
+      const idx = draft.rootItemIds.indexOf(rootId)
       if (idx < 0) return draft
       const newIdx = idx + direction
       if (newIdx < 0 || newIdx >= draft.rootItemIds.length) return draft

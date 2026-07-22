@@ -58,6 +58,13 @@ export type MailActionToolbarSection = {
   groups: MailActionMenuGroup[]
 }
 
+export function mailActionGroupDefaultAction(
+  group: MailActionMenuGroup
+): string | undefined {
+  if (group.tone === 'danger') return undefined
+  return group.items.find((item) => !item.disabled)?.id
+}
+
 const mailActionSectionDefinitions: readonly MailActionSectionDefinition[] = [
   {
     id: 'routing',

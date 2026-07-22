@@ -1,6 +1,5 @@
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
-import type { LocalMessageState, WorkflowState } from '../types/communications'
 import type { CommunicationSavedSearch, SavedSearchInput } from '../types/savedSearches'
 import type { SavedSearchMatchMode, SavedSearchRule, SavedSearchRuleField, SavedSearchRuleOperator } from './savedSearchRuleTree'
 import {
@@ -151,8 +150,8 @@ export function savedSearchFormToInput(
     description: parsed.description || null,
     account_id: accountId?.trim() || null,
     query: parsed.query,
-    workflow_state: parsed.workflow_state as WorkflowState | null,
-    local_state: parsed.local_state as LocalMessageState,
+    workflow_state: parsed.workflow_state,
+    local_state: parsed.local_state,
     channel_kind: parsed.channel_kind || null,
     is_smart_folder: parsed.is_smart_folder
   }

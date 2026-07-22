@@ -4,6 +4,7 @@ import {
   primeTelegramUploadCommandQueues,
   telegramMediaTypeForFile,
 } from './useTelegramMediaUploadWorkflow'
+import { TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE } from '../../integrations/telegram/queries/telegramRuntimePanelActions'
 
 describe('telegramMediaTypeForFile', () => {
   it('maps common desktop files to supported Telegram upload kinds', () => {
@@ -15,7 +16,7 @@ describe('telegramMediaTypeForFile', () => {
   })
 
   it('primes current command queues with a synthetic send_media row after upload success', () => {
-    const commandsKey = ['integrations', 'telegram', 'commands', 'account-1', 20]
+    const commandsKey = ['integrations', 'telegram', 'commands', 'account-1', TELEGRAM_RUNTIME_COMMANDS_PAGE_SIZE]
     const commands: Array<Record<string, unknown>> = []
     const setQueryData = vi.fn()
     const queryClient = {

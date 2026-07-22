@@ -7,6 +7,7 @@ use std::os::unix::net::UnixStream;
 use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeEventCredentialDeliveryV1, ManagedRuntimeEventCredentialRequestV1,
+    ManagedRuntimeProviderCredentialDeliveryV1, ManagedRuntimeProviderCredentialRequestV1,
     ManagedRuntimeReadyRequestV1, ManagedRuntimeVaultRouteRequestV1,
     ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1, VaultCiphertextRouteV1,
     managed_runtime_control_request_v1::Operation,
@@ -19,6 +20,7 @@ use super::{MAX_FRAME_BYTES, read_frame, write_frame};
 const VAULT_ROUTE_FIELD_TAG: u8 = 0x0a;
 const READY_FIELD_TAG: u8 = 0x12;
 const EVENT_CREDENTIAL_FIELD_TAG: u8 = 0x1a;
+const PROVIDER_CREDENTIAL_FIELD_TAG: u8 = 0x22;
 
 pub(crate) fn try_receive_vault_route(
     channel: &mut UnixStream,
@@ -111,6 +113,44 @@ pub(crate) fn respond_event_credential(
     write_frame(channel, &response.encode_to_vec())
 }
 
+pub(crate) fn try_receive_provider_credential(
+    channel: &mut UnixStream,
+) -> Result<Option<ManagedRuntimeProviderCredentialRequestV1>, String> {
+    let Some(frame) = peek_complete_frame(channel)? else {
+        return Ok(None);
+    };
+    if frame.first() != Some(&PROVIDER_CREDENTIAL_FIELD_TAG) {
+        return Ok(None);
+    }
+    let request = ManagedRuntimeControlRequestV1::decode(frame.as_slice())
+        .map_err(|_| "managed runtime provider credential request is invalid".to_owned())?;
+    let Some(Operation::IssueProviderCredential(value)) = request.operation else {
+        return Err("managed runtime provider credential request is invalid".to_owned());
+    };
+    valid_provider_credential_request(&value)
+        .then_some(())
+        .ok_or_else(|| "managed runtime provider credential request is invalid".to_owned())?;
+    read_frame(channel)?;
+    Ok(Some(value))
+}
+
+pub(crate) fn respond_provider_credential(
+    channel: &mut UnixStream,
+    result: Result<ManagedRuntimeProviderCredentialDeliveryV1, String>,
+) -> Result<(), String> {
+    let response = match result {
+        Ok(delivery) => ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::ProviderCredentialDelivery(delivery)),
+            error_code: String::new(),
+        },
+        Err(_) => ManagedRuntimeControlResponseV1 {
+            result: None,
+            error_code: "managed_provider_credential_denied".to_owned(),
+        },
+    };
+    write_frame(channel, &response.encode_to_vec())
+}
+
 fn peek_complete_frame(channel: &mut UnixStream) -> Result<Option<Vec<u8>>, String> {
     let mut header = [0_u8; 5];
     let header_length = match peek(channel, &mut header) {
@@ -179,5 +219,18 @@ fn valid_event_credential_request(value: &ManagedRuntimeEventCredentialRequestV1
         && value.request_id.iter().any(|byte| *byte != 0)
         && value.credential_revision > 0
         && (1..=600).contains(&value.ttl_seconds)
+        && value.recipient_public_key_x25519.len() == 32
+}
+
+fn valid_provider_credential_request(
+    value: &ManagedRuntimeProviderCredentialRequestV1,
+) -> bool {
+    value.request_id.len() == 16
+        && value.request_id.iter().any(|byte| *byte != 0)
+        && !value.purpose_id.trim().is_empty()
+        && value.purpose_id.len() <= 128
+        && value.credential_revision > 0
+        && (1..=600).contains(&value.ttl_seconds)
+        && (1..=5).contains(&value.secret_class)
         && value.recipient_public_key_x25519.len() == 32
 }

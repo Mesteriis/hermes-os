@@ -2,10 +2,10 @@ import type { MailProviderCommandDiagnostics } from '../../../shared/mailSync/pr
 import {
 	nullableStringValue,
 	numberValue,
+	isRecord,
 	storedEventEnvelope,
 	stringValue,
 	type MailRealtimePatchQueryClient,
-	type ProviderCommandPatchPayload
 } from './realtimePatchShared'
 
 type AvailableQueryClient = Required<
@@ -23,7 +23,7 @@ export function applyMailProviderCommandDiagnosticsRealtimePatch(
 		return false
 	}
 
-	const payload = event?.payload as ProviderCommandPatchPayload | undefined
+	const payload = isRecord(event?.payload) ? event.payload : undefined
 	const commandId = stringValue(payload?.command_id)
 	const accountId = stringValue(payload?.account_id)
 	const status = stringValue(payload?.status)

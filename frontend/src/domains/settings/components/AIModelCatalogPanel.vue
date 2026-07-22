@@ -1,125 +1,48 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
 import SearchInput from '../../../shared/ui/SearchInput.vue'
 import type { AISettingsSurface } from '../queries/useAISettingsSurface'
-import type { AiModelCatalogItem, AiProviderAccount } from '../types/aiControlCenter'
 import {
   modelCapabilityBadges,
   modelDetail,
-  modelMatchesSearch,
   modelRuntimeFacts,
 } from './aiModelCatalogPresentation'
-import { aiProviderBrand, providerBrandClass } from './providerBranding'
-
-interface AiProviderModelGroup {
-  provider: AiProviderAccount
-  models: AiModelCatalogItem[]
-  availableCount: number
-}
+import { providerIcon, providerIconTone } from './aiModelCatalogPanelPresentation'
+import { useAIModelCatalogController } from '../queries/useAIModelCatalogController'
 
 const props = defineProps<{
   surface: AISettingsSurface
 }>()
 
-const { t } = useI18n()
-const activeModelProviderId = ref<string | null>(null)
-const modelCatalogSearch = ref('')
-const showAvailableModelsOnly = ref(false)
-
-const providerModelGroups = computed<AiProviderModelGroup[]>(() => {
-  const groups: AiProviderModelGroup[] = []
-
-  for (const provider of props.surface.providers.value) {
-    const models: AiModelCatalogItem[] = []
-    let availableCount = 0
-
-    for (const model of props.surface.models.value) {
-      if (model.provider_id !== provider.provider_id) continue
-
-      models.push(model)
-      if (model.is_available) availableCount += 1
-    }
-
-    groups.push({ provider, models, availableCount })
-  }
-
-  return groups
+const {
+  t,
+  providerModelGroups,
+  selectedModelGroup,
+  selectedModelGroupModels,
+  handleAvailableModelsFilterChange,
+  handleSyncModels,
+  handleSelectModelProvider,
+  handleDownloadModel,
+  handleToggleModelAvailability,
+  modelProgress,
+  modelProgressLabel,
+  modelCatalogSearch,
+  showAvailableModelsOnly,
+} = useAIModelCatalogController({
+  surface: props.surface,
 })
-
-const selectedModelGroup = computed<AiProviderModelGroup | null>(() => {
-  const groups = providerModelGroups.value
-  if (!groups.length) return null
-  return groups.find((group) => group.provider.provider_id === activeModelProviderId.value) ?? groups[0]
-})
-
-const normalizedModelCatalogSearch = computed(() => modelCatalogSearch.value.trim().toLowerCase())
-
-const selectedModelGroupModels = computed<AiModelCatalogItem[]>(() => {
-  const group = selectedModelGroup.value
-  if (!group) return []
-  const query = normalizedModelCatalogSearch.value
-  const models: AiModelCatalogItem[] = []
-  for (const model of group.models) {
-    if (showAvailableModelsOnly.value && !model.is_available) continue
-    if (!query || modelMatchesSearch(model, group.provider, query)) models.push(model)
-  }
-  return models
-})
-
-function providerIcon(providerKind: string, providerKey?: string): string {
-  return aiProviderBrand(providerKind, providerKey).icon
-}
-
-function providerIconTone(providerKind: string, providerKey?: string): string {
-  return providerBrandClass(aiProviderBrand(providerKind, providerKey))
-}
-
-function eventChecked(event: Event): boolean {
-  return event.target instanceof HTMLInputElement ? event.target.checked : false
-}
-
-function updateAvailableModelsFilter(event: Event): void {
-  showAvailableModelsOnly.value = eventChecked(event)
-}
-
-function syncModels(provider: AiProviderAccount) {
-  void props.surface.handleSyncModels(provider)
-}
-
-function toggleModelAvailability(model: AiModelCatalogItem, event: Event) {
-  void props.surface.handleModelAvailability(model, eventChecked(event))
-}
-
-function downloadModel(model: AiModelCatalogItem) {
-  void props.surface.handleModelDownload(model)
-}
-
-function modelProgress(model: AiModelCatalogItem): number {
-  return props.surface.modelDownloadProgressValue(model) ?? 0
-}
-
-function modelProgressLabel(model: AiModelCatalogItem): string {
-  return props.surface.modelDownloadProgressLabel(model) ?? t('Downloading model')
-}
-
-function selectModelProvider(providerId: string): void {
-  activeModelProviderId.value = providerId
-  modelCatalogSearch.value = ''
-}
 </script>
 
 <template>
   <div v-if="providerModelGroups.length" class="settings-ai-model-catalog">
     <aside class="settings-ai-model-provider-tabs" :aria-label="t('Model providers')">
-      <button
-        v-for="group in providerModelGroups"
-        :key="group.provider.provider_id"
-        type="button"
-        class="settings-ai-model-provider-tab"
-        :class="{ active: selectedModelGroup?.provider.provider_id === group.provider.provider_id }"
-        @click="selectModelProvider(group.provider.provider_id)"
+        <button
+          v-for="group in providerModelGroups"
+          :key="group.provider.provider_id"
+          type="button"
+          class="settings-ai-model-provider-tab"
+          :class="{ active: selectedModelGroup?.provider.provider_id === group.provider.provider_id }"
+          @click="handleSelectModelProvider(group.provider.provider_id)"
       >
         <i
           class="settings-provider-icon"
@@ -163,7 +86,7 @@ function selectModelProvider(providerId: string): void {
               type="checkbox"
               :aria-label="t('Show only available models')"
               :checked="showAvailableModelsOnly"
-              @change="updateAvailableModelsFilter"
+              @change="handleAvailableModelsFilterChange"
             >
           </label>
           <button
@@ -172,7 +95,7 @@ function selectModelProvider(providerId: string): void {
             :title="t('Sync models')"
             :aria-label="t('Sync models')"
             :disabled="surface.isBusy.value"
-            @click="syncModels(selectedModelGroup.provider)"
+            @click="handleSyncModels"
           >
             <Icon icon="tabler:refresh" />
           </button>
@@ -201,11 +124,11 @@ function selectModelProvider(providerId: string): void {
                 <strong>{{ t('Not downloaded') }}</strong>
                 <small>{{ t('Download this local model before Hermes can route work to it.') }}</small>
               </span>
-              <button
-                type="button"
-                class="secondary-button"
-                :disabled="surface.isBusy.value"
-                @click="downloadModel(model)"
+                <button
+                  type="button"
+                  class="secondary-button"
+                  :disabled="surface.isBusy.value"
+                  @click="handleDownloadModel(model)"
               >
                 <Icon icon="tabler:download" />
                 {{ t('Download') }}
@@ -217,7 +140,7 @@ function selectModelProvider(providerId: string): void {
                   type="checkbox"
                   :checked="model.is_available"
                   :disabled="surface.isBusy.value"
-                  @change="toggleModelAvailability(model, $event)"
+                  @change="handleToggleModelAvailability(model, $event)"
                 >
                 <span>
                   <strong>

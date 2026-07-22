@@ -12,6 +12,10 @@ import {
   useMaintenanceOverviewQuery,
   useRunMaintenanceActionMutation
 } from './useMaintenanceQuery'
+import {
+  canRunMaintenanceAction,
+  runSelectedMaintenanceAction
+} from './maintenanceSettingsActions'
 
 export function useMaintenanceSettingsSurface() {
   const store = useSettingsStore()
@@ -34,12 +38,11 @@ export function useMaintenanceSettingsSurface() {
   const selectedAction = computed(() =>
     actionRows.value.find((action) => action.id === selectedActionId.value) ?? null
   )
-  const canRunSelectedAction = computed(() => {
-    const action = selectedAction.value
-    if (!action?.enabled || runActionMutation.isPending.value) return false
-    if (!action.requires_confirmation) return true
-    return confirmationDraft.value === action.confirmation_phrase
-  })
+  const canRunSelectedAction = computed(() => canRunMaintenanceAction(
+    selectedAction.value,
+    confirmationDraft.value,
+    runActionMutation.isPending.value
+  ))
   const isLoading = computed(() => overviewQuery.isLoading.value)
   const isBusy = computed(() => runActionMutation.isPending.value)
   const errorMessage = computed(() => {
@@ -63,20 +66,17 @@ export function useMaintenanceSettingsSurface() {
   }
 
   async function handleRunSelectedAction() {
-    const action = selectedAction.value
-    if (!action || !canRunSelectedAction.value) return
-    try {
-      const result = await runActionMutation.mutateAsync({
-        actionId: action.id,
-        request: {
-          confirmation: action.requires_confirmation ? confirmationDraft.value : undefined
-        }
-      })
-      store.setActionMessage(result.message)
-      confirmationDraft.value = ''
-    } catch (error) {
-      store.setError(error instanceof Error ? error.message : 'Maintenance action failed')
-    }
+    await runSelectedMaintenanceAction(
+      selectedAction.value,
+      confirmationDraft.value,
+      canRunSelectedAction.value,
+      {
+        runAction: (variables) => runActionMutation.mutateAsync(variables),
+        setActionMessage: (message) => store.setActionMessage(message),
+        setError: (message) => store.setError(message),
+        clearConfirmation: () => { confirmationDraft.value = '' }
+      }
+    )
   }
 
   return {

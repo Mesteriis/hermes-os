@@ -66,8 +66,7 @@ export function useCalendarWeeklyBriefQuery() {
   return useQuery<WeeklyBrief | null>({
     queryKey: calendarQueryKeys.weeklyBrief,
     queryFn: async () => {
-      const brief = await fetchWeeklyBrief()
-      return brief as WeeklyBrief
+      return fetchWeeklyBrief()
     },
   })
 }
@@ -117,8 +116,7 @@ export function useCalendarEventAgendaQuery(
 export function useSearchCalendarEventsMutation() {
   return useMutation({
     mutationFn: async (query: string) => {
-      const response = await searchCalendarEvents(query)
-      return (response.results as CalendarEvent[]) ?? []
+      return searchCalendarEvents(query)
     },
   })
 }

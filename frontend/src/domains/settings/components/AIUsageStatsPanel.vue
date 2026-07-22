@@ -1,53 +1,25 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
 import type { AISettingsSurface } from '../queries/useAISettingsSurface'
-import {
-  formatCompactNumber,
-  formatCurrency,
-  formatLatency,
-  hourlyChartBuckets,
-} from './aiUsageStatsPresentation'
-import { aiProviderBrand, providerBrandClass } from './providerBranding'
+import { useAIUsageStatsPanelController } from '../queries/useAIUsageStatsPanelController'
 
 const props = defineProps<{
   surface: AISettingsSurface
 }>()
 
-const { t } = useI18n()
-const usageBuckets = computed(() => hourlyChartBuckets(props.surface.hourlyUsageRows.value))
-const maxHourlyRequests = computed(() => {
-  let maxRequests = 1
-  for (const bucket of usageBuckets.value) {
-    if (bucket.requestCount > maxRequests) maxRequests = bucket.requestCount
-  }
-  return maxRequests
+const {
+  t,
+  usageBuckets,
+  maxHourlyRequests,
+  compact,
+  currency,
+  latency,
+  providerIcon,
+  providerIconTone,
+  handleRefreshUsageStats,
+} = useAIUsageStatsPanelController({
+  surface: props.surface,
 })
-
-function unknownLabel(): string {
-  return t('Unknown')
-}
-
-function compact(value: number | null | undefined): string {
-  return formatCompactNumber(value, unknownLabel())
-}
-
-function currency(value: number | null | undefined): string {
-  return formatCurrency(value, unknownLabel())
-}
-
-function latency(value: number | null | undefined): string {
-  return formatLatency(value, unknownLabel())
-}
-
-function providerIcon(providerKind: string, providerKey?: string): string {
-  return aiProviderBrand(providerKind, providerKey).icon
-}
-
-function providerIconTone(providerKind: string, providerKey?: string): string {
-  return providerBrandClass(aiProviderBrand(providerKind, providerKey))
-}
 </script>
 
 <template>
@@ -63,7 +35,7 @@ function providerIconTone(providerKind: string, providerKey?: string): string {
           type="button"
           class="secondary-button"
           :disabled="surface.usageStatsQuery.isFetching.value"
-          @click="surface.handleRefreshUsageStats"
+          @click="handleRefreshUsageStats"
         >
           <Icon icon="tabler:refresh" />
           {{ t('Refresh') }}

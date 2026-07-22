@@ -1,4 +1,5 @@
 use hermes_mail_persistence::{MailPersistence, PersistedMailConnection, PersistedMailOperation};
+use hermes_mail_api::{DEFAULT_WINDOW, MAX_WINDOWS};
 
 #[test]
 fn stores_and_reads_connection_and_operation() {
@@ -17,9 +18,9 @@ fn stores_and_reads_connection_and_operation() {
 
     let operation = PersistedMailOperation {
         operation_id: "op-1".to_owned(),
-        window_size: 100,
+        window_size: DEFAULT_WINDOW,
     };
     persistence.put_operation(operation);
     assert_eq!(persistence.operation_count(), 1);
-    assert_eq!(persistence.policy().max_sync_windows, 10);
+    assert_eq!(persistence.policy().max_sync_windows, MAX_WINDOWS);
 }

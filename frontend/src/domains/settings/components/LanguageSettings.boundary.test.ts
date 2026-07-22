@@ -7,23 +7,28 @@ describe('LanguageSettings boundary', () => {
       new URL('../views/SettingsPage.vue', import.meta.url),
       'utf8'
     )
+    const panel = readFileSync(
+      new URL('./LanguageSettingsPanel.vue', import.meta.url),
+      'utf8'
+    )
     const surface = readFileSync(
       new URL('../queries/useLanguageSettingsSurface.ts', import.meta.url),
       'utf8'
     )
 
-    expect(existsSync(new URL('./LanguageSettings.vue', import.meta.url))).toBe(false)
-    expect(page).not.toContain('import LanguageSettings')
-    expect(page).not.toContain('<LanguageSettings')
-    expect(page).toContain("store.selectedSection === 'language'")
-    expect(page).toContain('languageSettings.handleLocaleChange')
-    expect(page).toContain('languageSettings.localeOptions')
+    expect(existsSync(new URL('./LanguageSettingsPanel.vue', import.meta.url))).toBe(true)
+    expect(page).toContain('import LanguageSettingsPanel')
+    expect(page).toContain('<LanguageSettingsPanel')
+    expect(page).toContain("selectedSection === 'language'")
+    expect(page).toContain(':surface="languageSettings"')
+    expect(panel).toContain('useLanguageSettingsPanelController')
+    expect(panel).toContain('handleLocaleSelection')
+    expect(panel).not.toContain('handleLocaleChange(localeOption.value)')
 
     expect(surface).toContain('useSaveFrontendLocaleMutation')
     expect(surface).toContain('localeOptions')
     expect(surface).toContain('handleLocaleChange')
     expect(surface).toContain('setLocale')
-    expect(surface).not.toContain('useLanguageSettingsController')
     expect(surface).not.toContain('../api/')
     expect(surface).not.toContain('saveApplicationSetting')
     expect(surface).not.toContain('FRONTEND_LOCALE_SETTING_KEY')

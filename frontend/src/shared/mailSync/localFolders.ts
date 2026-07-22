@@ -1,4 +1,5 @@
 import { getCommunicationsConnectClient } from '../../platform/connect/communicationsClient'
+import { MAX_MAIL_BATCH_SIZE } from './types'
 
 export type MailLocalFolder = {
   folder_id: string
@@ -8,7 +9,7 @@ export type MailLocalFolder = {
 export async function fetchMailLocalFolders(accountId: string): Promise<MailLocalFolder[]> {
   const response = await getCommunicationsConnectClient().listFolders({
     accountId,
-    page: { limit: 500, cursor: '' },
+    page: { limit: MAX_MAIL_BATCH_SIZE, cursor: '' },
   })
 
   return response.items

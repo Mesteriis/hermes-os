@@ -2,16 +2,22 @@
 import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
 import type { MaintenanceSettingsSurface } from '../queries/useMaintenanceSettingsSurface'
+import { useMaintenanceSettingsPanelController } from '../queries/useMaintenanceSettingsPanelController'
 
-defineProps<{
+const props = defineProps<{
   surface: MaintenanceSettingsSurface
 }>()
 
 const { t } = useI18n()
 
-function eventValue(event: Event): string {
-  return event.target instanceof HTMLInputElement ? event.target.value : ''
-}
+const {
+  handleRefresh,
+  handleSelectAction,
+  handleConfirmationInput,
+  handleRunSelectedAction,
+} = useMaintenanceSettingsPanelController({
+  surface: props.surface,
+})
 </script>
 
 <template>
@@ -26,7 +32,7 @@ function eventValue(event: Event): string {
         class="icon-button"
         :title="t('Refresh maintenance overview')"
         :aria-label="t('Refresh maintenance overview')"
-        @click="surface.handleRefresh()"
+        @click="handleRefresh()"
       >
         <Icon icon="tabler:refresh" />
       </button>
@@ -157,7 +163,7 @@ function eventValue(event: Event): string {
               class="settings-maintenance-action"
               :class="[`tone-${action.tone}`, { active: surface.selectedActionId.value === action.id }]"
               :disabled="surface.isBusy.value"
-              @click="surface.handleSelectAction(action.id)"
+              @click="handleSelectAction(action.id)"
             >
               <Icon :icon="action.icon" />
               <span>
@@ -171,7 +177,7 @@ function eventValue(event: Event): string {
           <form
             v-if="surface.selectedAction.value"
             class="settings-maintenance-confirm"
-            @submit.prevent="surface.handleRunSelectedAction()"
+            @submit.prevent="handleRunSelectedAction()"
           >
             <label>
               <span>{{ t('Confirmation') }}</span>
@@ -181,7 +187,7 @@ function eventValue(event: Event): string {
                 :placeholder="surface.selectedAction.value.confirmation_phrase ?? t('No confirmation required')"
                 :disabled="!surface.selectedAction.value.enabled || surface.isBusy.value"
                 autocomplete="off"
-                @input="surface.handleConfirmationInput(eventValue($event))"
+                @input="handleConfirmationInput"
               >
             </label>
             <button

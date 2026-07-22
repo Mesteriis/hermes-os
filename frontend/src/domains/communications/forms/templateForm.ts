@@ -1,5 +1,6 @@
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
+import { isRecord } from '../../../shared/communications/queries/realtimePatchShared'
 import type { CommunicationTemplate, RichTemplateUpsertRequest } from '../types/templates'
 
 export type TemplateFormValues = z.infer<typeof templateFormSchema>
@@ -226,22 +227,21 @@ function normalizeTemplateMailMergePreviewRow(
   value: unknown,
   index: number
 ): TemplateMailMergePreviewRowInput {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error(`Mail merge preview row ${index + 1} must be an object`)
   }
 
-  const record = value as Record<string, unknown>
-  const rowId = typeof record.row_id === 'string' && record.row_id.trim()
-    ? record.row_id.trim()
+  const rowId = typeof value.row_id === 'string' && value.row_id.trim()
+    ? value.row_id.trim()
     : `row-${index + 1}`
 
-  const variablesSource = 'variables' in record ? record.variables : record
-  if (!variablesSource || typeof variablesSource !== 'object' || Array.isArray(variablesSource)) {
+  const variablesSource = 'variables' in value ? value.variables : value
+  if (!isRecord(variablesSource)) {
     throw new Error(`Mail merge preview row ${index + 1} must provide an object of variables`)
   }
 
   const variables: Record<string, string> = {}
-  for (const [key, rawVariableValue] of Object.entries(variablesSource as Record<string, unknown>)) {
+  for (const [key, rawVariableValue] of Object.entries(variablesSource)) {
     if (key === 'row_id') continue
     if (rawVariableValue === null || rawVariableValue === undefined) {
       variables[key] = ''

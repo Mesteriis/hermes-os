@@ -1,7 +1,16 @@
+export const DEFAULT_MAIL_BATCH_SIZE = 50_000
+export const MAX_MAIL_BATCH_SIZE = 1_000_000
+export const DEFAULT_MAIL_POLL_INTERVAL_SECONDS = 300
+export const MIN_MAIL_POLL_INTERVAL_SECONDS = 60
+export const MAX_MAIL_POLL_INTERVAL_SECONDS = 86_400
+export const DEFAULT_MAIL_SYNC_WINDOWS = 5_000
+export const MAX_MAIL_SYNC_WINDOWS = 1_000_000
+
 export type MailSyncSettings = {
   account_id: string
   sync_enabled: boolean
   batch_size: number
+  windows: number
   poll_interval_seconds: number
   failure_threshold?: number
   updated_at: string
@@ -45,8 +54,14 @@ export type MailSensitiveForwardingPolicyListResponse = {
 export type MailSyncSettingsUpdate = {
   sync_enabled: boolean
   batch_size: number
+  windows: number
   poll_interval_seconds: number
   failure_threshold?: number
+}
+
+export type MailSyncRunRequest = {
+  full_resync?: boolean
+  emit_observations?: boolean
 }
 
 export type MailSyncStatus = {

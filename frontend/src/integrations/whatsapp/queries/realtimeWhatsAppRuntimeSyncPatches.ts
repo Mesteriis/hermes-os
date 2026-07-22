@@ -255,7 +255,7 @@ export function patchChatsList(
 		is_broadcast: booleanValue(payload.is_broadcast) ?? false,
 		is_newsletter: booleanValue(payload.is_newsletter) ?? false,
 		avatar_metadata: isRecord(payload.avatar_metadata)
-			? { ...(payload.avatar_metadata as Record<string, unknown>) }
+			? { ...payload.avatar_metadata }
 			: {},
 		provider_labels: stringArray(payload.provider_labels) ?? [],
 	}

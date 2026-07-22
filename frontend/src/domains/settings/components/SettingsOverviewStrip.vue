@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
-import type { SettingsOverviewCard } from '../queries/useSettingsPageSurface'
+import type { SettingsOverviewCard } from '../queries/settingsPagePresentation'
 
 defineProps<{
   cards: SettingsOverviewCard[]
@@ -13,6 +13,10 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+function handleReconnect(): void {
+  emit('reconnect')
+}
 </script>
 
 <template>
@@ -31,7 +35,7 @@ const { t } = useI18n()
         type="button"
         class="icon-button"
         :aria-label="t('Reconnect')"
-        @click="emit('reconnect')"
+        @click="handleReconnect"
       >
         <Icon icon="tabler:refresh" />
       </button>

@@ -17,12 +17,14 @@ fn main() {
         .compile_protos(
             &[
                 "proto/hermes/runtime/v1/recovery.proto",
+                "proto/hermes/runtime/v1/module_client.proto",
                 "proto/hermes/runtime/v1/deployment.proto",
                 "proto/hermes/runtime/v1/distribution.proto",
                 "proto/hermes/runtime/v1/telemetry_runtime.proto",
                 "proto/hermes/runtime/v1/blob_runtime.proto",
                 "proto/hermes/runtime/v1/events_authority_runtime.proto",
                 "proto/hermes/runtime/v1/scheduler_runtime.proto",
+                "proto/hermes/runtime/v1/managed_storage_runtime.proto",
                 "proto/hermes/runtime/v1/vault_runtime.proto",
                 "proto/hermes/runtime/v1/managed_runtime_control.proto",
             ],

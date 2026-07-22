@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package hermes.runtime.v1;
+
+import "hermes/runtime/v1/recovery.proto";
+
+// Internal module-client routing envelope. The router validates identity and
+// contract metadata only; request_payload is owned and decoded by the target
+// integration contract.
+message ModuleClientRequestV1 {
+  uint32 protocol_major = 1;
+  string module_id = 2;
+  string owner_id = 3;
+  ContractReferenceV1 contract = 4;
+  uint64 request_id = 5;
+  bytes request_payload = 6;
+}
+
+message ModuleClientResponseV1 {
+  uint32 protocol_major = 1;
+  uint64 request_id = 2;
+  bytes response_payload = 3;
+  string error_code = 4;
+}

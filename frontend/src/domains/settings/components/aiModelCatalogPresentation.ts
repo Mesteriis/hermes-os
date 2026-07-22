@@ -1,4 +1,5 @@
 import type { AiModelCatalogItem, AiProviderAccount } from '../types/aiControlCenter'
+import { isRecord } from '../../../shared/communications/queries/realtimePatchShared'
 
 type Translate = (key: string) => string
 
@@ -20,6 +21,10 @@ export function modelMatchesSearch(
   query: string
 ): boolean {
   return modelSearchTokens(model, provider).some((token) => token.toLowerCase().includes(query))
+}
+
+export function countAvailableModels(models: AiModelCatalogItem[]): number {
+  return models.filter((model) => model.is_available).length
 }
 
 export function modelCapabilityBadges(
@@ -193,8 +198,7 @@ function metadataRecord(
 ): Record<string, unknown> | null {
   if (!metadata) return null
   const value = metadata[key]
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
-  return value as Record<string, unknown>
+  return isRecord(value) ? value : null
 }
 
 function metadataString(metadata: Record<string, unknown> | null, key: string): string {

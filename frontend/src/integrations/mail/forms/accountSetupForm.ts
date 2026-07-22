@@ -107,7 +107,7 @@ export function accountSetupFormToImapRequest(
 		mailbox: parsed.mailbox,
 		username: parsed.username || parsed.email,
 		password: parsed.password,
-		secret_kind: parsed.provider_kind === 'icloud' ? 'app_password' : 'password'
+		secret_kind: parsed.provider_kind === 'icloud' ? 'app_password' : 'imap_password_file'
 	}
 
 	if (parsed.smtp_host || parsed.smtp_username) {

@@ -1,18 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
 import { useI18n } from '@/platform/i18n'
 import { Button, DropdownMenu, DropdownMenuItem, Icon, NoSearchResultsState, TreeSelect } from '@/shared/ui'
 import '../communicationDomainElements.css'
 import MessengerListItem from './MessengerListItem.vue'
-import {
-  messengerItemsForSearch,
-  messengerItemsForView,
-  messengerListDensityOptions,
-  messengerListViewOptions,
-  messengerProviderViewId,
-  type MessengerListItemDensity,
-  type MessengerListItemModel
-} from './messengerElements'
+import { useMessengerListController, type MessengerListControllerActions } from '../../queries/useMessengerListController'
+import type { MessengerListItemModel } from './messengerElements'
 
 const props = defineProps<{
   errorMessage?: string
@@ -28,31 +20,29 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const activeDensity = ref<MessengerListItemDensity>('comfortable')
-const activeViewId = ref(messengerProviderViewId('all'))
-const searchValue = ref('')
 
-const viewOptions = computed(() => messengerListViewOptions(props.items, t))
-const visibleItems = computed(() => messengerItemsForSearch(
-	messengerItemsForView(props.items, activeViewId.value),
-	searchValue.value
-))
+const controller = useMessengerListController(
+  props,
+  {
+    refresh: () => emit('refresh'),
+    selectItem: (item) => emit('select', item),
+  } satisfies MessengerListControllerActions,
+)
 
-function selectDensity(value: MessengerListItemDensity): void {
-  activeDensity.value = value
-}
-
-function densityIsActive(value: MessengerListItemDensity): boolean {
-  return activeDensity.value === value
-}
-
-function densityMenuItemClass(value: MessengerListItemDensity): string {
-  if (densityIsActive(value)) {
-    return 'mail-list-settings-menu__item mail-list-settings-menu__item--active'
-  }
-
-  return 'mail-list-settings-menu__item'
-}
+const {
+  activeDensity,
+  activeViewId,
+  searchValue,
+  viewOptions,
+  visibleItems,
+  messengerListDensityOptions,
+  densityMenuItemClass,
+  selectDensity,
+  densityIsActive,
+  handleRefresh,
+  handleSelect,
+  clearSearch,
+} = controller
 </script>
 
 <template>
@@ -74,7 +64,7 @@ function densityMenuItemClass(value: MessengerListItemDensity): string {
 					type="button"
 					:aria-label="t('Clear search')"
 					:title="t('Clear search')"
-					@click="searchValue = ''"
+                    @click="clearSearch"
 				>
 					<Icon icon="tabler:x" size="1rem" />
 				</button>
@@ -88,7 +78,7 @@ function densityMenuItemClass(value: MessengerListItemDensity): string {
 					:aria-label="t('Refresh')"
 					:disabled="isRefreshing"
 					:title="t('Refresh')"
-					@click="emit('refresh')"
+						@click="handleRefresh"
 				/>
 				<DropdownMenu align="end" :side-offset="8" class="mail-list-settings-menu">
 					<template #trigger>
@@ -142,7 +132,7 @@ function densityMenuItemClass(value: MessengerListItemDensity): string {
 						:item="item"
 						:density="activeDensity"
 						:selected="selectedId ? item.id === selectedId : item.selected"
-						@select="emit('select', $event)"
+						@select="handleSelect"
 					/>
 				</div>
 				<p v-else-if="isLoading" class="messenger-list-empty" role="status">
@@ -150,7 +140,7 @@ function densityMenuItemClass(value: MessengerListItemDensity): string {
 				</p>
 				<div v-else-if="errorMessage" class="messenger-list-empty" role="alert">
 					<p>{{ t('Could not load dialogs') }}</p>
-					<Button size="sm" variant="outline" @click="emit('refresh')">{{ t('Retry') }}</Button>
+					<Button size="sm" variant="outline" @click="handleRefresh">{{ t('Retry') }}</Button>
 				</div>
 				<NoSearchResultsState
 					v-else

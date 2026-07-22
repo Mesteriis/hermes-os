@@ -1,4 +1,5 @@
 import type { CommunicationFolder } from '../types/folders'
+import { isRecord } from '../../../shared/communications/queries/realtimePatchShared'
 
 export const MAIL_FOLDER_REORDER_DRAG_TYPE = 'application/x-hermes-mail-folder-reorder'
 const SORT_ORDER_STEP = 1000
@@ -24,7 +25,8 @@ export function parseCommunicationFolderReorderPayload(value: string): Communica
   if (!value.trim()) return null
 
   try {
-    const parsed = JSON.parse(value) as Partial<CommunicationFolderReorderPayload>
+    const parsed: unknown = JSON.parse(value)
+    if (!isRecord(parsed)) return null
     if (parsed.kind !== 'mail-folder-reorder') return null
     if (typeof parsed.folder_id !== 'string' || !parsed.folder_id.trim()) return null
     return {

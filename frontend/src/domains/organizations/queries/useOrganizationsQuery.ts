@@ -7,7 +7,7 @@ export function useOrganizationsQuery() {
     queryKey: ['organizations', 'list'],
     queryFn: async () => {
       const res = await fetchOrganizations(50)
-      return res.items as Organization[]
+      return res.items
     }
   })
 }

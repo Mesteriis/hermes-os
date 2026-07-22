@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
-import type { SettingsTreeGroup } from '../queries/useSettingsPageSurface'
+import type { SettingsTreeGroup } from '../queries/settingsPagePresentation'
 import type { SettingsSection } from '../stores/settings'
 
 defineProps<{
@@ -14,6 +14,10 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+function handleSectionSelect(section: SettingsSection): void {
+  emit('selectSection', section)
+}
 </script>
 
 <template>
@@ -34,7 +38,7 @@ const { t } = useI18n()
         :key="item.id"
         type="button"
         :class="{ active: selectedSection === item.id }"
-        @click="emit('selectSection', item.id)"
+        @click="handleSectionSelect(item.id)"
       >
         <Icon class="tree-icon" :icon="item.icon" />
         <span class="settings-tree-copy">

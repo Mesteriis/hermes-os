@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   messengerItemsForView,
+  messengerConversationIsEmpty,
+  messengerConversationIsTelegramEmpty,
+  messengerListItemHasSecondarySignals,
   messengerListViewOptions,
+  type MessengerConversationModel,
   type MessengerListItemModel,
 } from './messengerElements'
 
@@ -40,3 +44,26 @@ describe('messenger saved filters', () => {
     expect(messengerItemsForView(items, 'messenger-filter:archived').map((item) => item.id)).toEqual(['archived'])
   })
 })
+
+describe('messenger presentation selectors', () => {
+  it('projects secondary signals and Telegram empty state', () => {
+  expect(messengerListItemHasSecondarySignals({ ...items[0], attachmentCount: 1 })).toBe(true)
+  expect(messengerListItemHasSecondarySignals({ ...items[0], unreadCount: undefined })).toBe(false)
+  expect(messengerConversationIsTelegramEmpty(emptyTelegramConversation())).toBe(true)
+  expect(messengerConversationIsEmpty(emptyWhatsAppConversation())).toBe(true)
+  })
+})
+
+function emptyTelegramConversation(): MessengerConversationModel {
+  return {
+    id: 'telegram:empty', channelKind: 'telegram', kind: 'direct', title: '', subtitle: '',
+    workflowState: 'reviewed', participantsLabel: '', facts: [], messages: [], draftPreview: '',
+  }
+}
+
+function emptyWhatsAppConversation(): MessengerConversationModel {
+  return {
+    id: 'whatsapp:empty', channelKind: 'whatsapp', kind: 'direct', title: '', subtitle: '',
+    workflowState: 'reviewed', participantsLabel: '', facts: [], messages: [], draftPreview: '',
+  }
+}

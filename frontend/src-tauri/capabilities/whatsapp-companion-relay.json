@@ -12,6 +12,9 @@
     "whatsapp-companion-*"
   ],
   "permissions": [
-    "allow-whatsapp-web-companion-relay-observation"
+    "allow-whatsapp-web-companion-relay-observation",
+    "allow-whatsapp-web-companion-poll-commands",
+    "allow-whatsapp-web-companion-report-command-failure",
+    "allow-whatsapp-web-companion-report-command-result"
   ]
 }

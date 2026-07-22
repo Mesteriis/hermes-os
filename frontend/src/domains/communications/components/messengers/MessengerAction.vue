@@ -1,25 +1,46 @@
 <script setup lang="ts">
 import { useI18n } from '@/platform/i18n'
 import { Button, ButtonGroup, DropdownMenu, DropdownMenuItem, Spacer } from '@/shared/ui'
-import type { TelegramConversationRuntimeAction } from '@/shared/communications/types/telegramRuntimeActions'
+import type { MessengerConversationRuntimeAction } from '@/shared/communications/types/messengerRuntimeActions'
+import { useMessengerActionController } from '../../queries/useMessengerActionController'
 import '../communicationDomainElements.css'
 
-withDefaults(defineProps<{
-  channelKind?: 'signal' | 'telegram' | 'whatsapp'
+const emit = defineEmits<{
+  'conversation-action': [action: MessengerConversationRuntimeAction]
+  'toggle-inspector': []
+}>()
+
+const props = withDefaults(defineProps<{
   inspectorVisible?: boolean
   isActionRunning?: boolean
   showInspectorToggle?: boolean
 }>(), {
-  channelKind: 'signal',
   inspectorVisible: true,
   isActionRunning: false,
   showInspectorToggle: true
 })
 
-const emit = defineEmits<{
-  'conversation-action': [action: TelegramConversationRuntimeAction]
-  'toggle-inspector': []
-}>()
+const controller = useMessengerActionController(
+  props,
+  {
+    conversationAction: (action) => emit('conversation-action', action),
+    toggleInspector: () => emit('toggle-inspector'),
+  },
+)
+
+const {
+  handleMarkRead,
+  handleMarkUnread,
+  handlePin,
+  handleUnpin,
+  handleMute,
+  handleUnmute,
+  handleArchive,
+  handleUnarchive,
+  handleSyncLatest,
+  handleSyncOlder,
+  handleToggleInspector,
+} = controller
 
 const { t } = useI18n()
 </script>
@@ -27,7 +48,6 @@ const { t } = useI18n()
 <template>
 	<nav class="messenger-action-bar" :aria-label="t('Messenger conversation actions')">
 		<ButtonGroup
-			v-if="channelKind === 'telegram'"
 			:aria-label="t('Conversation state actions')"
 			class="messenger-action-bar__button-group"
 		>
@@ -39,7 +59,7 @@ const { t } = useI18n()
 				:aria-label="t('Mark read')"
 				:disabled="isActionRunning"
 				:title="t('Mark read')"
-				@click="emit('conversation-action', 'mark_read')"
+				@click="handleMarkRead"
 			/>
 			<DropdownMenu align="start" :side-offset="8">
 				<template #trigger>
@@ -53,33 +73,32 @@ const { t } = useI18n()
 						:title="t('Open state actions')"
 					/>
 				</template>
-				<DropdownMenuItem icon="tabler:mail" :disabled="isActionRunning" @click="emit('conversation-action', 'mark_unread')">
+				<DropdownMenuItem icon="tabler:mail" :disabled="isActionRunning" @click="handleMarkUnread">
 					{{ t('Mark unread') }}
 				</DropdownMenuItem>
-				<DropdownMenuItem icon="tabler:pin" :disabled="isActionRunning" @click="emit('conversation-action', 'pin')">
+				<DropdownMenuItem icon="tabler:pin" :disabled="isActionRunning" @click="handlePin">
 					{{ t('Pin') }}
 				</DropdownMenuItem>
-				<DropdownMenuItem icon="tabler:pinned-off" :disabled="isActionRunning" @click="emit('conversation-action', 'unpin')">
+				<DropdownMenuItem icon="tabler:pinned-off" :disabled="isActionRunning" @click="handleUnpin">
 					{{ t('Unpin') }}
 				</DropdownMenuItem>
-				<DropdownMenuItem icon="tabler:bell-off" :disabled="isActionRunning" @click="emit('conversation-action', 'mute')">
+				<DropdownMenuItem icon="tabler:bell-off" :disabled="isActionRunning" @click="handleMute">
 					{{ t('Mute') }}
 				</DropdownMenuItem>
-				<DropdownMenuItem icon="tabler:bell" :disabled="isActionRunning" @click="emit('conversation-action', 'unmute')">
+				<DropdownMenuItem icon="tabler:bell" :disabled="isActionRunning" @click="handleUnmute">
 					{{ t('Unmute') }}
 				</DropdownMenuItem>
-				<DropdownMenuItem icon="tabler:archive" :disabled="isActionRunning" @click="emit('conversation-action', 'archive')">
+				<DropdownMenuItem icon="tabler:archive" :disabled="isActionRunning" @click="handleArchive">
 					{{ t('Archive') }}
 				</DropdownMenuItem>
-				<DropdownMenuItem icon="tabler:archive-off" :disabled="isActionRunning" @click="emit('conversation-action', 'unarchive')">
+				<DropdownMenuItem icon="tabler:archive-off" :disabled="isActionRunning" @click="handleUnarchive">
 					{{ t('Unarchive') }}
 				</DropdownMenuItem>
 			</DropdownMenu>
 		</ButtonGroup>
 
 		<ButtonGroup
-			v-if="channelKind === 'telegram'"
-			:aria-label="t('Telegram synchronization actions')"
+			:aria-label="t('Synchronization actions')"
 			class="messenger-action-bar__button-group"
 		>
 			<Button
@@ -90,7 +109,7 @@ const { t } = useI18n()
 				:aria-label="t('Sync latest history')"
 				:disabled="isActionRunning"
 				:title="t('Sync latest history')"
-				@click="emit('conversation-action', 'sync_latest')"
+				@click="handleSyncLatest"
 			/>
 			<DropdownMenu align="start" :side-offset="8">
 				<template #trigger>
@@ -104,9 +123,9 @@ const { t } = useI18n()
 						:title="t('Open synchronization actions')"
 					/>
 				</template>
-				<DropdownMenuItem icon="tabler:history" :disabled="isActionRunning" @click="emit('conversation-action', 'sync_older')">
-					{{ t('Sync older history') }}
-				</DropdownMenuItem>
+					<DropdownMenuItem icon="tabler:history" :disabled="isActionRunning" @click="handleSyncOlder">
+						{{ t('Sync older history') }}
+					</DropdownMenuItem>
 			</DropdownMenu>
 		</ButtonGroup>
 
@@ -120,7 +139,7 @@ const { t } = useI18n()
 			icon="tabler:layout-sidebar-right"
 			:aria-label="inspectorVisible ? t('Hide Hermes inspector') : t('Show Hermes inspector')"
 			:title="inspectorVisible ? t('Hide Hermes inspector') : t('Show Hermes inspector')"
-			@click="emit('toggle-inspector')"
+			@click="handleToggleInspector"
 		/>
 	</nav>
 </template>

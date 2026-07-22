@@ -94,7 +94,10 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
     account_id: string
     sync_enabled: boolean
     batch_size: number
+    windows: number
     poll_interval_seconds: number
+    failure_threshold?: number
+    updated_at: string
   } | null>(null)
   const lastMailSyncRuns = ref<Record<string, unknown>[]>([])
   const isMailSyncBusy = ref(false)

@@ -1,5 +1,6 @@
-import { ref, type Ref } from 'vue'
+import { ref } from 'vue'
 import type { TelegramChat } from '@/shared/communications/types/telegram'
+import { isRecord } from '@/shared/communications/queries/realtimePatchShared'
 import {
   fetchTelegramBusinessChatAvatar,
   syncTelegramBusinessChatAvatar,
@@ -47,12 +48,12 @@ export function createTelegramChatAvatarSynchronizer() {
     sources.value = {}
   }
 
-  return { dispose, sourceFor, sync, sources: sources as Ref<Record<string, string>> }
+  return { dispose, sourceFor, sync, sources }
 }
 
 function hasProviderAvatar(chat: TelegramChat): boolean {
   const avatar = chat.metadata.avatar
-  if (typeof avatar !== 'object' || avatar === null) return false
-  const fileId = (avatar as Record<string, unknown>).tdlib_file_id
+  if (!isRecord(avatar)) return false
+  const fileId = avatar.tdlib_file_id
   return typeof fileId === 'number' && Number.isSafeInteger(fileId) && fileId > 0
 }

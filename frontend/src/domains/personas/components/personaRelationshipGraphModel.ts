@@ -30,6 +30,36 @@ export type RelationshipGraphDetail = {
   rows: Array<{ label: string; value: string }>
 }
 
+export function relationshipGraphEdgeData(value: unknown): RelationshipEdgeData | null {
+  if (!isRecord(value)) return null
+  const data = value
+  if (
+    typeof data.relationshipId !== 'string' ||
+    typeof data.type !== 'string' ||
+    typeof data.state !== 'string' ||
+    typeof data.confidence !== 'number' ||
+    typeof data.sourceTitle !== 'string' ||
+    typeof data.targetTitle !== 'string' ||
+    typeof data.icon !== 'string' ||
+    typeof data.iconLabel !== 'string'
+  ) return null
+
+  return {
+    relationshipId: data.relationshipId,
+    type: data.type,
+    state: data.state,
+    confidence: data.confidence,
+    sourceTitle: data.sourceTitle,
+    targetTitle: data.targetTitle,
+    icon: data.icon,
+    iconLabel: data.iconLabel,
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
 const graphRootPosition = { x: 300, y: 190 }
 
 export function buildRelationshipGraphNodes(params: {

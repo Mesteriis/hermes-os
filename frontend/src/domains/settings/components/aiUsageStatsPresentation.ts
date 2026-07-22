@@ -33,6 +33,16 @@ export function hourlyChartBuckets(
   return hours
 }
 
+export function maxHourlyRequestCount(
+  buckets: AiHubHourlyChartBucket[]
+): number {
+  let maxRequests = 1
+  for (const bucket of buckets) {
+    if (bucket.requestCount > maxRequests) maxRequests = bucket.requestCount
+  }
+  return maxRequests
+}
+
 export function formatCompactNumber(
   value: number | null | undefined,
   unknownLabel: string

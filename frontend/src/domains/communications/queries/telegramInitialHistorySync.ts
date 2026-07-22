@@ -10,7 +10,7 @@ type TelegramInitialHistorySyncOptions = {
   setSyncing: (value: boolean) => void
 }
 
-const PROJECTION_RETRY_COUNT = 10
+const PROJECTION_RETRY_COUNT = 20_000
 const PROJECTION_RETRY_DELAY_MS = 250
 
 type TelegramProjectionWaitOptions = {

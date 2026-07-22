@@ -27,9 +27,9 @@ pub const IMAP_PORT: u16 = 993;
 pub const MAX_HOST_LEN: usize = 253;
 pub const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 pub const MAX_PLAIN_TEXT_BYTES: usize = 256 * 1024;
-pub const DEFAULT_WINDOW: u32 = 100;
-pub const MAX_WINDOW: u32 = 500;
-pub const MAX_WINDOWS: u32 = 10;
+pub const DEFAULT_WINDOW: u32 = 5_000;
+pub const MAX_WINDOW: u32 = 1_000_000;
+pub const MAX_WINDOWS: u32 = 1_000_000;
 pub const SYNC_DEADLINE_SECONDS: u64 = 300;
 pub const WINDOW_DEADLINE_SECONDS: u64 = 10;
 

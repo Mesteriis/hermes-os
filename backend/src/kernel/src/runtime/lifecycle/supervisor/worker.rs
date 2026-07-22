@@ -8,7 +8,8 @@ use std::thread::JoinHandle;
 use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::runtime::lifecycle::control::{
-    ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation, ManagedRuntimeRelayRequest,
+    ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
+    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeRelayRequest,
     ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
@@ -33,6 +34,8 @@ pub(super) struct ActiveWorkerInput {
     pub(super) contracts: Option<StagedRuntimeContracts>,
     pub(super) vault_route_handler: Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>,
     pub(super) event_credential_handler: Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>,
+    pub(super) provider_credential_handler:
+        Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>,
 }
 
 pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
@@ -46,6 +49,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
         contracts,
         vault_route_handler,
         event_credential_handler,
+        provider_credential_handler,
     } = input;
     let shutdown_requested = Arc::clone(&inner.shutdown_requested);
     let stop_requested = Arc::new(AtomicBool::new(false));
@@ -67,6 +71,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
                     relay_requests: &relay_requests,
                     vault_route_handler: vault_route_handler.as_deref(),
                     event_credential_handler: event_credential_handler.as_deref(),
+                    provider_credential_handler: provider_credential_handler.as_deref(),
                     ready_sender: &ready_sender,
                 },
             )

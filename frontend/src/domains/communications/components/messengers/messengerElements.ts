@@ -315,13 +315,16 @@ export function messengerItemsForView(
   viewId: string
 ): readonly MessengerListItemModel[] {
   if (viewId.startsWith('messenger-provider:')) {
-    const channelKind = viewId.replace('messenger-provider:', '') as MessengerChannelKind | 'all'
+    const channelKind = viewId.replace('messenger-provider:', '')
     if (channelKind === 'all') return items
+    if (!isMessengerChannelKind(channelKind)) return items
     return items.filter((item) => item.channelKind === channelKind)
   }
 
   if (viewId.startsWith('messenger-account:')) {
-    const [, channelKind, accountId] = viewId.split(':') as [string, MessengerChannelKind, string]
+    const [, rawChannelKind, accountId] = viewId.split(':')
+    if (!accountId || !isMessengerChannelKind(rawChannelKind)) return items
+    const channelKind = rawChannelKind
     return items.filter((item) => item.channelKind === channelKind && messengerAccountId(item) === accountId)
   }
 
@@ -349,9 +352,18 @@ export function messengerItemsForView(
     return items.filter((item) => item.workflowState === 'needs_action' || (item.hermesSignalCount ?? 0) > 0)
   }
 
-  const kind = viewId.replace('messenger:', '') as MessengerConversationKind | 'all'
+  const kind = viewId.replace('messenger:', '')
   if (kind === 'all') return items
+  if (!isMessengerConversationKind(kind)) return items
   return items.filter((item) => item.conversationKind === kind)
+}
+
+function isMessengerChannelKind(value: string | undefined): value is MessengerChannelKind {
+  return value === 'telegram' || value === 'whatsapp' || value === 'signal'
+}
+
+function isMessengerConversationKind(value: string): value is MessengerConversationKind {
+  return value === 'direct' || value === 'group' || value === 'channel'
 }
 
 export function messengerItemsForSearch(
@@ -374,6 +386,18 @@ export function messengerItemsForSearch(
 
 export function messengerListItemHasSignal(item: MessengerListItemModel): boolean {
   return Boolean(item.unreadCount || item.mentionCount || item.hermesSignalCount || item.workflowState === 'needs_action')
+}
+
+export function messengerListItemHasSecondarySignals(item: MessengerListItemModel): boolean {
+  return Boolean(item.mentionCount || item.attachmentCount || item.hermesSignalCount || item.pinned)
+}
+
+export function messengerConversationIsEmpty(conversation: MessengerConversationModel): boolean {
+  return conversation.id.endsWith(':empty')
+}
+
+export function messengerConversationIsTelegramEmpty(conversation: MessengerConversationModel): boolean {
+  return conversation.channelKind === 'telegram' && conversation.id === 'telegram:empty'
 }
 
 export function messengerListItemAriaLabel(item: MessengerListItemModel): string {

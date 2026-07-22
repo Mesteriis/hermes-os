@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useI18n } from '@/platform/i18n'
+import { ref } from 'vue'
 import { AlertDialog, Dialog, Icon, RichTextEditor } from '@/shared/ui'
 import type { CommunicationConversationModel } from '../communicationDomainElements'
 import type {
@@ -8,21 +7,14 @@ import type {
   ComposeFormModel,
   MailSyncStatus
 } from '../../types/communications'
-import { htmlToComposePlainText, plainTextToComposeHtml } from '../richComposeHtml'
-import { composeAttachmentSendError } from '../../forms/composeAttachmentUpload'
 import '../communicationDomainElements.css'
+import { useMailWorkspaceController } from '../../queries/useMailWorkspaceController'
 import MailInspector from './MailInspector.vue'
 import MailList from './MailList.vue'
 import MailMessage from './MailMessage.vue'
 import type { MailListItemModel } from './mailElements'
-import {
-  composeAccountOptionSignature,
-  composeAiPanelActions,
-  composeContextPanelSections,
-  sendCapableComposeAccounts,
-  type ComposeEdgePanelId
-} from './mailComposeOptions'
 import type { MailInspectorModel } from './mailInspector'
+import { composeAccountOptionLabel, formatComposeAttachmentSize } from './mailComposePresentation'
 
 const props = defineProps<{
   items: readonly MailListItemModel[]
@@ -60,177 +52,54 @@ const emit = defineEmits<{
   'update-compose': [partial: Partial<ComposeFormModel>]
 }>()
 
-const { t } = useI18n()
-const isInspectorVisible = ref(true)
-const isAiComposePanelOpen = ref(false)
-const isContextComposePanelOpen = ref(false)
-const isComposeCloseConfirmOpen = ref(false)
-const isCcVisible = ref(false)
-const isBccVisible = ref(false)
-const isComposeDropActive = ref(false)
 const composeAttachmentInput = ref<HTMLInputElement | null>(null)
-const activeMessage = computed(() => props.conversation.messages[props.conversation.messages.length - 1])
-const composeAccountOptions = computed(() => props.composeAccountOptions ?? [])
-const composeSendAccountOptions = computed(() =>
-  sendCapableComposeAccounts(composeAccountOptions.value)
-)
-const composeAiActions = computed(() => composeAiPanelActions())
-const composeContextSections = computed(() => composeContextPanelSections(composeAccountOptions.value))
-const composeAccountOptionKey = computed(() =>
-  composeAccountOptionSignature(composeAccountOptions.value)
-)
-const composeEditorHtml = computed(() => {
-  const form = props.composeForm
-  if (!form) return '<p></p>'
-  return form.bodyHtml?.trim() ? form.bodyHtml : plainTextToComposeHtml(form.body)
+const controller = useMailWorkspaceController(props, {
+  closeCompose: () => emit('close-compose'),
+  saveCompose: () => emit('save-compose'),
+  toggleInspector: () => emit('toggle-inspector'),
+  updateCompose: (partial) => emit('update-compose', partial),
+  attachComposeFiles: (files) => emit('attach-compose-files', files),
 })
-const composeAttachments = computed(() => props.composeForm?.attachments ?? [])
-const composeAttachmentsError = computed(() => composeAttachmentSendError(composeAttachments.value))
-const isComposeDialogOpen = computed(() => Boolean(props.composeOpen && props.composeForm))
-const composeTitle = computed(() => {
-  switch (props.composeForm?.mode) {
-    case 'reply': return t('Reply')
-    case 'forward': return t('Forward')
-    default: return t('Compose')
-  }
-})
-const composeActivePanelState = computed(() => {
-  const openPanels: ComposeEdgePanelId[] = []
-  if (isAiComposePanelOpen.value) openPanels.push('ai')
-  if (isContextComposePanelOpen.value) openPanels.push('context')
-  return openPanels.join(' ') || 'none'
-})
-
-watch(
-  () => ({
-    isOpen: Boolean(props.composeOpen),
-    accountId: props.composeForm?.accountId ?? '',
-    optionKey: composeAccountOptionKey.value
-  }),
-  ({ isOpen, accountId }) => {
-    if (!isOpen || composeSendAccountOptions.value.length === 0) return
-    const normalizedAccountId = accountId.trim()
-    if (
-      normalizedAccountId &&
-      composeSendAccountOptions.value.some((account) => account.account_id === normalizedAccountId)
-    ) {
-      return
-    }
-    emit('update-compose', { accountId: composeSendAccountOptions.value[0].account_id })
-  },
-  { immediate: true }
-)
-
-watch(
-  () => ({
-    isOpen: isComposeDialogOpen.value,
-    ccText: props.composeForm?.ccText ?? '',
-    bccText: props.composeForm?.bccText ?? ''
-  }),
-  ({ isOpen, ccText, bccText }) => {
-    if (!isOpen) {
-      isCcVisible.value = false
-      isBccVisible.value = false
-      isComposeCloseConfirmOpen.value = false
-      return
-    }
-    if (ccText.trim()) isCcVisible.value = true
-    if (bccText.trim()) isBccVisible.value = true
-  },
-  { immediate: true }
-)
-
-function handleToggleInspector(): void {
-  isInspectorVisible.value = !isInspectorVisible.value
-  emit('toggle-inspector')
-}
-
-function handleComposeDialogOpenChange(open: boolean): void {
-  if (open) return
-  requestComposeClose()
-}
-
-function toggleComposeEdgePanel(panelId: ComposeEdgePanelId): void {
-  if (panelId === 'ai') {
-    isAiComposePanelOpen.value = !isAiComposePanelOpen.value
-    return
-  }
-  isContextComposePanelOpen.value = !isContextComposePanelOpen.value
-}
-
-function closeComposeEdgePanels(): void {
-  isAiComposePanelOpen.value = false
-  isContextComposePanelOpen.value = false
-}
-
-function showCcField(): void {
-  isCcVisible.value = true
-}
-
-function showBccField(): void {
-  isBccVisible.value = true
-}
-
-function handleComposeEscape(): void {
-  if (isAiComposePanelOpen.value || isContextComposePanelOpen.value) {
-    closeComposeEdgePanels()
-    return
-  }
-  requestComposeClose()
-}
-
-function composeFormHasTypedContent(): boolean {
-  const form = props.composeForm
-  if (!form) return false
-  const bodyText = htmlToComposePlainText(form.bodyHtml ?? form.body)
-  return [
-    form.toText,
-    form.ccText,
-    form.bccText,
-    form.subject,
-    form.body,
-    bodyText,
-    form.attachments.length > 0 ? 'attachment' : ''
-  ].some((value) => value.trim().length > 0)
-}
-
-function requestComposeClose(): void {
-  if (composeFormHasTypedContent()) {
-    isComposeCloseConfirmOpen.value = true
-    return
-  }
-  closeComposeNow()
-}
-
-function closeComposeNow(): void {
-  isComposeCloseConfirmOpen.value = false
-  closeComposeEdgePanels()
-  emit('close-compose')
-}
-
-function handleComposeCloseConfirmOpenChange(open: boolean): void {
-  isComposeCloseConfirmOpen.value = open
-}
-
-function handleDiscardComposeDraft(): void {
-  closeComposeNow()
-}
-
-function handleSaveComposeDraftAndClose(): void {
-  emit('save-compose')
-  closeComposeNow()
-}
+const {
+  t,
+  isInspectorVisible,
+  isAiComposePanelOpen,
+  isContextComposePanelOpen,
+  isComposeCloseConfirmOpen,
+  isCcVisible,
+  isBccVisible,
+  isComposeDropActive,
+  activeMessage,
+  composeAccountOptions,
+  composeAiActions,
+  composeContextSections,
+  composeEditorContent,
+  composeAttachments,
+  composeAttachmentsError,
+  isComposeDialogOpen,
+  composeDialogTitle,
+  composeActivePanelState,
+  handleToggleInspector,
+  toggleComposeEdgePanel,
+  showCcField,
+  showBccField,
+  handleComposeDialogOpenChange,
+  handleComposeEscape,
+  requestComposeClose,
+  handleComposeCloseConfirmOpenChange,
+  handleDiscardComposeDraft,
+  handleSaveComposeDraftAndClose,
+  handleComposeBodyHtmlChange,
+  handleComposeDrop: handleDroppedFiles,
+} = controller
 
 function inputValue(event: Event): string {
-  return (event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value
-}
-
-function handleComposeBodyHtmlChange(bodyHtml: string): void {
-  emit('update-compose', {
-    body: htmlToComposePlainText(bodyHtml),
-    bodyHtml,
-    bodyFormat: 'html'
-  })
+  const target = event.target
+  return target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || target instanceof HTMLSelectElement
+    ? target.value
+    : ''
 }
 
 function openComposeAttachmentPicker(): void {
@@ -238,33 +107,16 @@ function openComposeAttachmentPicker(): void {
 }
 
 function handleComposeAttachmentInput(event: Event): void {
-  const input = event.target as HTMLInputElement
-  emitComposeFiles(input.files)
+  if (!(event.target instanceof HTMLInputElement)) return
+  const input = event.target
+  handleDroppedFiles(input.files)
   input.value = ''
 }
 
 function handleComposeDrop(event: DragEvent): void {
-  isComposeDropActive.value = false
-  emitComposeFiles(event.dataTransfer?.files)
+  handleDroppedFiles(event.dataTransfer?.files)
 }
 
-function emitComposeFiles(files?: FileList | null): void {
-  const selected = files ? Array.from(files) : []
-  if (selected.length > 0) emit('attach-compose-files', selected)
-}
-
-function formatAttachmentSize(sizeBytes: number): string {
-  if (sizeBytes < 1024) return `${sizeBytes} B`
-  if (sizeBytes < 1024 * 1024) return `${Math.ceil(sizeBytes / 1024)} KiB`
-  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MiB`
-}
-
-function composeAccountOptionLabel(account: CommunicationAccountOption): string {
-  const label = account.email && account.email !== account.label
-    ? `${account.label} · ${account.email}`
-    : account.label
-  return account.can_send ? label : `${label} · ${t('Read only')}`
-}
 </script>
 
 <template>
@@ -304,7 +156,7 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 		<MailInspector v-if="isInspectorVisible" :model="inspector" />
 		<Dialog
 			:open="isComposeDialogOpen"
-			:title="composeTitle"
+			:title="composeDialogTitle"
 			:close-label="t('Close compose')"
 			:close-on-interact-outside="false"
 			content-class="mail-compose-dialog"
@@ -423,7 +275,7 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 					@dragleave.self="isComposeDropActive = false"
 					@drop.prevent="handleComposeDrop"
 			>
-				<section class="mail-compose-panel mail-compose-card" :aria-label="composeTitle">
+				<section class="mail-compose-panel mail-compose-card" :aria-label="composeDialogTitle">
 					<div v-if="composeStatus" class="mail-compose-panel__status-row">
 						<span v-if="composeStatus" class="mail-compose-panel__status">{{ composeStatus }}</span>
 					</div>
@@ -442,7 +294,7 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 									:value="account.account_id"
 									:disabled="!account.can_send"
 								>
-									{{ composeAccountOptionLabel(account) }}
+									{{ composeAccountOptionLabel(account, t) }}
 								</option>
 							</select>
 						</label>
@@ -546,7 +398,7 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 											size="1rem"
 										/>
 										<span class="mail-compose-attachment__name">{{ attachment.filename }}</span>
-										<small>{{ formatAttachmentSize(attachment.sizeBytes) }} · {{ attachment.scanStatus }}</small>
+										<small>{{ formatComposeAttachmentSize(attachment.sizeBytes) }} · {{ attachment.scanStatus }}</small>
 										<button
 											type="button"
 											:aria-label="`${t('Remove')} ${attachment.filename}`"
@@ -562,7 +414,7 @@ function composeAccountOptionLabel(account: CommunicationAccountOption): string 
 							<div class="mail-compose-panel__body-field">
 							<RichTextEditor
 								class="mail-compose-panel__editor"
-								:model-value="composeEditorHtml"
+								:model-value="composeEditorContent"
 								:label="t('Body')"
 								:placeholder="t('Write email')"
 								:toolbar-label="t('Mail formatting')"

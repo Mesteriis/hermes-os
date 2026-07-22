@@ -2,26 +2,19 @@
 import { AttachmentChip, Badge, Button, Icon, MessageBubble } from '@/shared/ui'
 import {
   communicationChannelProviderIconName,
-  type CommunicationConversationMessageModel,
   type CommunicationChannelWorkspaceModel
 } from '../communicationDomainElements'
+import {
+  channelMessageAuthor,
+  channelMessageMeta,
+  channelMessageTimestamp,
+} from './channelMessagePresentation'
 import '../communicationDomainElements.css'
 
 defineProps<{
   workspace: CommunicationChannelWorkspaceModel
 }>()
 
-function channelMessageAuthor(message: CommunicationConversationMessageModel): string | undefined {
-  return message.direction === 'system' ? undefined : message.author
-}
-
-function channelMessageTimestamp(message: CommunicationConversationMessageModel): string | undefined {
-  return message.direction === 'system' ? undefined : message.timestamp
-}
-
-function channelMessageMeta(message: CommunicationConversationMessageModel): string | undefined {
-  return message.direction === 'system' ? undefined : message.meta
-}
 </script>
 
 <template>

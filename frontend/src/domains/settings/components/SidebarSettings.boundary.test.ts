@@ -20,7 +20,7 @@ describe('SidebarSettings boundary', () => {
 
     expect(page).not.toContain('import SidebarSettings')
     expect(page).not.toContain('<SidebarSettings')
-    expect(page).not.toContain("store.selectedSection === 'sidebar'")
+    expect(page).not.toContain("selectedSection === 'sidebar'")
     expect(page).not.toContain('sidebarSettings.')
     expect(page).not.toContain('store.newSidebarGroupLabel')
     expect(page).not.toContain('store.updateNewSidebarGroupLabel')

@@ -1,3 +1,5 @@
+import { isRecord } from '../../../shared/communications/queries/realtimePatchShared'
+
 export const MAIL_MESSAGE_DRAG_TYPE = 'application/x-hermes-mail-message-selection'
 
 export type CommunicationMessageDragPayload = {
@@ -20,13 +22,15 @@ export function parseCommunicationMessageDragPayload(value: string): Communicati
   if (!value.trim()) return null
 
   try {
-    const parsed = JSON.parse(value) as Partial<CommunicationMessageDragPayload>
+    const parsed: unknown = JSON.parse(value)
+    if (!isRecord(parsed)) return null
     if (parsed.kind !== 'mail-message-selection') return null
     if (typeof parsed.message_id !== 'string' || !parsed.message_id.trim()) return null
-    if (parsed.message_ids !== undefined && !validMessageIdList(parsed.message_ids)) return null
+    const rawMessageIds = parsed.message_ids
+    if (rawMessageIds !== undefined && !validMessageIdList(rawMessageIds)) return null
     const messageIds = uniqueNonBlankIds([
       parsed.message_id,
-      ...(parsed.message_ids ?? [])
+      ...(rawMessageIds ?? [])
     ])
     return {
       kind: 'mail-message-selection',

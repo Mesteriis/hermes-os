@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getCommunicationsConnectClient } from '../../platform/connect/communicationsClient'
+import { MAX_MAIL_BATCH_SIZE } from './types'
 import { fetchMailLocalFolders } from './localFolders'
 
 vi.mock('../../platform/connect/communicationsClient', () => ({
@@ -30,7 +31,7 @@ describe('mail local folders', () => {
     ])
     expect(listFolders).toHaveBeenCalledWith({
       accountId: 'mail-account:1',
-      page: { limit: 500, cursor: '' },
+      page: { limit: MAX_MAIL_BATCH_SIZE, cursor: '' },
     })
   })
 })
