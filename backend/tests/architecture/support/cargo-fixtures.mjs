@@ -198,7 +198,7 @@ export function storagePackages({
       {
         role: 'platform',
         owner: 'storage',
-        surface: 'implementation',
+        surface: 'contract',
         ...overrides.vault,
       },
       vaultDependencies,

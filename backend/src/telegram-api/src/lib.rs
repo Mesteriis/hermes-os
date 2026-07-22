@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod client_wire;
+#[allow(clippy::large_enum_variant)]
 pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/hermes.telegram.v1.rs"));
 }
@@ -371,6 +372,7 @@ pub enum TelegramDeliveryState {
     SendFailed,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum TelegramProviderEvent {
     MessageCreated(TelegramMessageObservation),
@@ -473,10 +475,20 @@ pub fn provider_event_account_id(event: &TelegramProviderEvent) -> &str {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum TelegramMessageMutation {
-    Edit { text: Option<String>, observed_at_unix_seconds: i64 },
-    Delete { is_permanent: bool },
-    Pin { is_pinned: bool },
-    Reaction { emoji: Option<String>, is_active: bool },
+    Edit {
+        text: Option<String>,
+        observed_at_unix_seconds: i64,
+    },
+    Delete {
+        is_permanent: bool,
+    },
+    Pin {
+        is_pinned: bool,
+    },
+    Reaction {
+        emoji: Option<String>,
+        is_active: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -944,18 +956,26 @@ pub struct TelegramCommandRecord {
 pub enum TelegramClientRequest {
     Command(TelegramProviderCommand),
     Query(TelegramProviderQuery),
-    ProvisionAccount { setup: TelegramAccountSetup },
+    ProvisionAccount {
+        setup: TelegramAccountSetup,
+    },
     RetryCommand {
         operation_id: TelegramOperationId,
         now_unix_seconds: u64,
         next_attempt_at_unix_seconds: u64,
     },
     ListAccounts,
-    GetAccount { account_id: TelegramAccountId },
-    RetireAccount { account_id: TelegramAccountId },
+    GetAccount {
+        account_id: TelegramAccountId,
+    },
+    RetireAccount {
+        account_id: TelegramAccountId,
+    },
     RegisterMediaSession(TelegramMediaSessionRegistration),
     AuthorizationStatus,
-    SubmitAuthorizationPassword { password: String },
+    SubmitAuthorizationPassword {
+        password: String,
+    },
     StartAccount {
         account_id: TelegramAccountId,
         topology: String,
@@ -990,19 +1010,43 @@ pub fn validate_provider_query(query: &TelegramProviderQuery) -> Result<(), Tele
     let (account_id, limit) = match query {
         TelegramProviderQuery::LoadChats { account_id, limit }
         | TelegramProviderQuery::CachedChats { account_id, limit }
-        | TelegramProviderQuery::SearchChats { account_id, limit, .. }
-        | TelegramProviderQuery::ListTopics { account_id, limit, .. }
-        | TelegramProviderQuery::ListParticipants { account_id, limit, .. }
+        | TelegramProviderQuery::SearchChats {
+            account_id, limit, ..
+        }
+        | TelegramProviderQuery::ListTopics {
+            account_id, limit, ..
+        }
+        | TelegramProviderQuery::ListParticipants {
+            account_id, limit, ..
+        }
         | TelegramProviderQuery::Operations { account_id, limit }
-        | TelegramProviderQuery::Commands { account_id, limit, .. }
-        | TelegramProviderQuery::TopicMessageIds { account_id, limit, .. } => (account_id, *limit),
-        TelegramProviderQuery::LoadHistory { account_id, limit, .. }
-        | TelegramProviderQuery::CachedMessages { account_id, limit, .. } => (account_id, *limit),
-        TelegramProviderQuery::RecentMessages { account_id, limit, .. }
-        | TelegramProviderQuery::PinnedMessages { account_id, limit, .. }
-        | TelegramProviderQuery::SearchTopics { account_id, limit, .. }
-        | TelegramProviderQuery::ReplyChain { account_id, limit, .. }
-        | TelegramProviderQuery::ForwardChain { account_id, limit, .. } => (account_id, *limit),
+        | TelegramProviderQuery::Commands {
+            account_id, limit, ..
+        }
+        | TelegramProviderQuery::TopicMessageIds {
+            account_id, limit, ..
+        } => (account_id, *limit),
+        TelegramProviderQuery::LoadHistory {
+            account_id, limit, ..
+        }
+        | TelegramProviderQuery::CachedMessages {
+            account_id, limit, ..
+        } => (account_id, *limit),
+        TelegramProviderQuery::RecentMessages {
+            account_id, limit, ..
+        }
+        | TelegramProviderQuery::PinnedMessages {
+            account_id, limit, ..
+        }
+        | TelegramProviderQuery::SearchTopics {
+            account_id, limit, ..
+        }
+        | TelegramProviderQuery::ReplyChain {
+            account_id, limit, ..
+        }
+        | TelegramProviderQuery::ForwardChain {
+            account_id, limit, ..
+        } => (account_id, *limit),
         TelegramProviderQuery::MessageById { account_id, .. }
         | TelegramProviderQuery::MessagesByIds { account_id, .. }
         | TelegramProviderQuery::MessageVersions { account_id, .. }
@@ -1021,7 +1065,9 @@ pub fn validate_provider_query(query: &TelegramProviderQuery) -> Result<(), Tele
         | TelegramProviderQuery::BasicGroupParticipants { account_id, .. }
         | TelegramProviderQuery::ChatFolder { account_id, .. }
         | TelegramProviderQuery::ChatFolders { account_id, .. } => (account_id, 1),
-        TelegramProviderQuery::SearchMessages { account_id, limit, .. } => (account_id, *limit),
+        TelegramProviderQuery::SearchMessages {
+            account_id, limit, ..
+        } => (account_id, *limit),
         TelegramProviderQuery::Reactions { account_id, .. }
         | TelegramProviderQuery::ReactionSummary { account_id, .. } => (account_id, 1),
     };
@@ -1048,21 +1094,34 @@ pub fn validate_provider_query(query: &TelegramProviderQuery) -> Result<(), Tele
             }
             Ok(())
         }
-        TelegramProviderQuery::CachedMessages { provider_chat_id, .. }
-        | TelegramProviderQuery::RecentMessages { provider_chat_id: Some(provider_chat_id), .. }
-        | TelegramProviderQuery::ListParticipants { provider_chat_id, .. }
-        | TelegramProviderQuery::BasicGroupParticipants { provider_chat_id, .. }
-        | TelegramProviderQuery::ListTopics { provider_chat_id, .. }
-        | TelegramProviderQuery::ChatPositions { provider_chat_id, .. }
-        | TelegramProviderQuery::ChatOperationalState { provider_chat_id, .. }
-        | TelegramProviderQuery::SearchTopics { provider_chat_id, .. }
-        | TelegramProviderQuery::PinnedMessages { provider_chat_id, .. }
-        | TelegramProviderQuery::Reactions { provider_chat_id, .. }
-        | TelegramProviderQuery::ReactionSummary { provider_chat_id, .. } => {
-            validate_id(provider_chat_id)
+        TelegramProviderQuery::CachedMessages {
+            provider_chat_id, ..
         }
-        TelegramProviderQuery::Chat { provider_chat_id, .. } => validate_id(provider_chat_id),
-        TelegramProviderQuery::ChatAvatar { provider_chat_id, .. } => validate_id(provider_chat_id),
+        | TelegramProviderQuery::RecentMessages {
+            provider_chat_id: Some(provider_chat_id),
+            ..
+        }
+        | TelegramProviderQuery::ListParticipants {
+            provider_chat_id, ..
+        }
+        | TelegramProviderQuery::ListTopics {
+            provider_chat_id, ..
+        }
+        | TelegramProviderQuery::PinnedMessages {
+            provider_chat_id, ..
+        }
+        | TelegramProviderQuery::Reactions {
+            provider_chat_id, ..
+        }
+        | TelegramProviderQuery::ReactionSummary {
+            provider_chat_id, ..
+        } => validate_id(provider_chat_id),
+        TelegramProviderQuery::Chat {
+            provider_chat_id, ..
+        } => validate_id(provider_chat_id),
+        TelegramProviderQuery::ChatAvatar {
+            provider_chat_id, ..
+        } => validate_id(provider_chat_id),
         TelegramProviderQuery::Topic {
             provider_chat_id,
             provider_topic_id,
@@ -1079,7 +1138,10 @@ pub fn validate_provider_query(query: &TelegramProviderQuery) -> Result<(), Tele
             validate_id(provider_chat_id)?;
             validate_id(provider_topic_id)
         }
-        TelegramProviderQuery::RecentMessages { provider_chat_id: None, .. } => Ok(()),
+        TelegramProviderQuery::RecentMessages {
+            provider_chat_id: None,
+            ..
+        } => Ok(()),
         TelegramProviderQuery::MessageById { message_id, .. } => validate_id(message_id),
         TelegramProviderQuery::MessagesByIds { message_ids, .. } => {
             if message_ids.is_empty() {
@@ -1119,8 +1181,14 @@ pub fn validate_provider_query(query: &TelegramProviderQuery) -> Result<(), Tele
             validate_id(provider_chat_id)?;
             validate_id(provider_message_id)
         }
-        TelegramProviderQuery::File { provider_file_id, .. } => validate_id(provider_file_id),
-        TelegramProviderQuery::SearchMessages { provider_chat_id, query, .. } => {
+        TelegramProviderQuery::File {
+            provider_file_id, ..
+        } => validate_id(provider_file_id),
+        TelegramProviderQuery::SearchMessages {
+            provider_chat_id,
+            query,
+            ..
+        } => {
             if let Some(provider_chat_id) = provider_chat_id {
                 validate_id(provider_chat_id)?;
             }
@@ -1128,11 +1196,15 @@ pub fn validate_provider_query(query: &TelegramProviderQuery) -> Result<(), Tele
         }
         TelegramProviderQuery::SearchChats { query, .. } => validate_text(query),
         TelegramProviderQuery::SearchTopics { query, .. } => validate_text(query),
-        TelegramProviderQuery::ChatState { provider_chat_id, .. } => validate_id(provider_chat_id),
-        TelegramProviderQuery::ChatPositions { provider_chat_id, .. } => validate_id(provider_chat_id),
-        TelegramProviderQuery::ChatOperationalState { provider_chat_id, .. } => {
-            validate_id(provider_chat_id)
-        }
+        TelegramProviderQuery::ChatState {
+            provider_chat_id, ..
+        } => validate_id(provider_chat_id),
+        TelegramProviderQuery::ChatPositions {
+            provider_chat_id, ..
+        } => validate_id(provider_chat_id),
+        TelegramProviderQuery::ChatOperationalState {
+            provider_chat_id, ..
+        } => validate_id(provider_chat_id),
         TelegramProviderQuery::BasicGroupParticipants {
             provider_chat_id,
             basic_group_id,
@@ -1149,7 +1221,8 @@ pub fn validate_provider_query(query: &TelegramProviderQuery) -> Result<(), Tele
             .then_some(())
             .ok_or(TelegramContractError::InvalidPageSize),
         TelegramProviderQuery::ChatFolders {
-            provider_folder_ids, ..
+            provider_folder_ids,
+            ..
         } => provider_folder_ids
             .iter()
             .all(|provider_folder_id| *provider_folder_id > 0)
@@ -1238,30 +1311,124 @@ pub fn validate_provider_command(
             &command.account_id,
             &command.provider_file_id,
         ),
-        TelegramProviderCommand::Reply { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::Forward { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::Edit { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::Delete { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::RestoreVisibility { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::Reaction { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::Pin { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::MarkUnread { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::Archive { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::Mute { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::Join { operation_id, account_id, provider_chat_id }
-        | TelegramProviderCommand::Leave { operation_id, account_id, provider_chat_id }
-        | TelegramProviderCommand::AddChatToFolder { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::RemoveChatFromFolder { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::SearchMessages { operation_id, account_id, provider_chat_id: Some(provider_chat_id), .. } =>
-            (operation_id, account_id, provider_chat_id),
-        TelegramProviderCommand::SearchMessages { operation_id, account_id, provider_chat_id: None, .. } =>
-            (operation_id, account_id, account_id),
-        TelegramProviderCommand::ListParticipants { operation_id, account_id, provider_chat_id, .. } =>
-            (operation_id, account_id, provider_chat_id),
-        TelegramProviderCommand::ListTopics { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::CreateTopic { operation_id, account_id, provider_chat_id, .. }
-        | TelegramProviderCommand::SetTopicClosed { operation_id, account_id, provider_chat_id, .. } =>
-            (operation_id, account_id, provider_chat_id),
+        TelegramProviderCommand::Reply {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::Forward {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::Edit {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::Delete {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::RestoreVisibility {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::Reaction {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::Pin {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::MarkUnread {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::Archive {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::Mute {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::Join {
+            operation_id,
+            account_id,
+            provider_chat_id,
+        }
+        | TelegramProviderCommand::Leave {
+            operation_id,
+            account_id,
+            provider_chat_id,
+        }
+        | TelegramProviderCommand::AddChatToFolder {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::RemoveChatFromFolder {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::SearchMessages {
+            operation_id,
+            account_id,
+            provider_chat_id: Some(provider_chat_id),
+            ..
+        } => (operation_id, account_id, provider_chat_id),
+        TelegramProviderCommand::SearchMessages {
+            operation_id,
+            account_id,
+            provider_chat_id: None,
+            ..
+        } => (operation_id, account_id, account_id),
+        TelegramProviderCommand::ListParticipants {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        } => (operation_id, account_id, provider_chat_id),
+        TelegramProviderCommand::ListTopics {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::CreateTopic {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        }
+        | TelegramProviderCommand::SetTopicClosed {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            ..
+        } => (operation_id, account_id, provider_chat_id),
     };
     validate_id(operation_id)?;
     validate_id(account_id)?;
@@ -1284,22 +1451,38 @@ pub fn validate_provider_command(
             }
             Ok(())
         }
-        TelegramProviderCommand::Reply { text, reply_to_provider_message_id, .. } => {
+        TelegramProviderCommand::Reply {
+            text,
+            reply_to_provider_message_id,
+            ..
+        } => {
             validate_text(text)?;
             validate_id(reply_to_provider_message_id)
         }
-        TelegramProviderCommand::Forward { from_provider_chat_id, from_provider_message_id, .. } => {
+        TelegramProviderCommand::Forward {
+            from_provider_chat_id,
+            from_provider_message_id,
+            ..
+        } => {
             validate_id(from_provider_chat_id)?;
             validate_id(from_provider_message_id)
         }
-        TelegramProviderCommand::Edit { text, provider_message_id, .. } => {
+        TelegramProviderCommand::Edit {
+            text,
+            provider_message_id,
+            ..
+        } => {
             validate_text(text)?;
             validate_id(provider_message_id)
         }
-        TelegramProviderCommand::Delete { provider_message_id, .. }
-        | TelegramProviderCommand::Pin { provider_message_id, .. } => {
-            validate_id(provider_message_id)
+        TelegramProviderCommand::Delete {
+            provider_message_id,
+            ..
         }
+        | TelegramProviderCommand::Pin {
+            provider_message_id,
+            ..
+        } => validate_id(provider_message_id),
         TelegramProviderCommand::RestoreVisibility {
             provider_message_id,
             reason,
@@ -1308,7 +1491,11 @@ pub fn validate_provider_command(
             validate_id(provider_message_id)?;
             validate_text(reason)
         }
-        TelegramProviderCommand::Reaction { provider_message_id, emoji, .. } => {
+        TelegramProviderCommand::Reaction {
+            provider_message_id,
+            emoji,
+            ..
+        } => {
             validate_id(provider_message_id)?;
             validate_text(emoji)
         }
@@ -1319,7 +1506,9 @@ pub fn validate_provider_command(
         TelegramProviderCommand::ListParticipants { limit, .. } => validate_page_size(*limit),
         TelegramProviderCommand::ListTopics { limit, .. } => validate_page_size(*limit),
         TelegramProviderCommand::CreateTopic { title, .. } => validate_text(title),
-        TelegramProviderCommand::SetTopicClosed { provider_topic_id, .. } => validate_id(provider_topic_id),
+        TelegramProviderCommand::SetTopicClosed {
+            provider_topic_id, ..
+        } => validate_id(provider_topic_id),
         _ => Ok(()),
     }
 }
@@ -1451,7 +1640,9 @@ pub fn provider_command_kind(command: &TelegramProviderCommand) -> TelegramComma
         TelegramProviderCommand::Join { .. } => TelegramCommandKind::Join,
         TelegramProviderCommand::Leave { .. } => TelegramCommandKind::Leave,
         TelegramProviderCommand::AddChatToFolder { .. } => TelegramCommandKind::AddChatToFolder,
-        TelegramProviderCommand::RemoveChatFromFolder { .. } => TelegramCommandKind::RemoveChatFromFolder,
+        TelegramProviderCommand::RemoveChatFromFolder { .. } => {
+            TelegramCommandKind::RemoveChatFromFolder
+        }
         TelegramProviderCommand::SearchMessages { .. } => TelegramCommandKind::SearchMessages,
         TelegramProviderCommand::ListParticipants { .. } => TelegramCommandKind::ListParticipants,
         TelegramProviderCommand::ListTopics { .. } => TelegramCommandKind::ListTopics,
@@ -1473,37 +1664,89 @@ pub fn provider_command_chat_id(command: &TelegramProviderCommand) -> Option<&st
             provider_chat_id: Some(provider_chat_id),
             ..
         } => Some(provider_chat_id),
-        TelegramProviderCommand::Reply { provider_chat_id, .. }
-        | TelegramProviderCommand::Forward { provider_chat_id, .. }
-        | TelegramProviderCommand::Edit { provider_chat_id, .. }
-        | TelegramProviderCommand::Delete { provider_chat_id, .. }
-        | TelegramProviderCommand::RestoreVisibility { provider_chat_id, .. }
-        | TelegramProviderCommand::Reaction { provider_chat_id, .. }
-        | TelegramProviderCommand::Pin { provider_chat_id, .. }
-        | TelegramProviderCommand::MarkUnread { provider_chat_id, .. }
-        | TelegramProviderCommand::Archive { provider_chat_id, .. }
-        | TelegramProviderCommand::Mute { provider_chat_id, .. }
-        | TelegramProviderCommand::Join { provider_chat_id, .. }
-        | TelegramProviderCommand::Leave { provider_chat_id, .. }
-        | TelegramProviderCommand::AddChatToFolder { provider_chat_id, .. }
-        | TelegramProviderCommand::RemoveChatFromFolder { provider_chat_id, .. }
-        | TelegramProviderCommand::ListParticipants { provider_chat_id, .. }
-        | TelegramProviderCommand::ListTopics { provider_chat_id, .. }
-        | TelegramProviderCommand::CreateTopic { provider_chat_id, .. }
-        | TelegramProviderCommand::SetTopicClosed { provider_chat_id, .. } => Some(provider_chat_id),
+        TelegramProviderCommand::Reply {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::Forward {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::Edit {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::Delete {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::RestoreVisibility {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::Reaction {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::Pin {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::MarkUnread {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::Archive {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::Mute {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::Join {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::Leave {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::AddChatToFolder {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::RemoveChatFromFolder {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::ListParticipants {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::ListTopics {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::CreateTopic {
+            provider_chat_id, ..
+        }
+        | TelegramProviderCommand::SetTopicClosed {
+            provider_chat_id, ..
+        } => Some(provider_chat_id),
     }
 }
 
 pub fn provider_command_message_id(command: &TelegramProviderCommand) -> Option<&str> {
     match command {
-        TelegramProviderCommand::Reply { reply_to_provider_message_id, .. } => {
-            Some(reply_to_provider_message_id)
+        TelegramProviderCommand::Reply {
+            reply_to_provider_message_id,
+            ..
+        } => Some(reply_to_provider_message_id),
+        TelegramProviderCommand::Edit {
+            provider_message_id,
+            ..
         }
-        TelegramProviderCommand::Edit { provider_message_id, .. }
-        | TelegramProviderCommand::Delete { provider_message_id, .. }
-        | TelegramProviderCommand::RestoreVisibility { provider_message_id, .. }
-        | TelegramProviderCommand::Reaction { provider_message_id, .. }
-        | TelegramProviderCommand::Pin { provider_message_id, .. } => Some(provider_message_id),
+        | TelegramProviderCommand::Delete {
+            provider_message_id,
+            ..
+        }
+        | TelegramProviderCommand::RestoreVisibility {
+            provider_message_id,
+            ..
+        }
+        | TelegramProviderCommand::Reaction {
+            provider_message_id,
+            ..
+        }
+        | TelegramProviderCommand::Pin {
+            provider_message_id,
+            ..
+        } => Some(provider_message_id),
         _ => None,
     }
 }

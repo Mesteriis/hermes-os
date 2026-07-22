@@ -180,7 +180,10 @@ pub fn to_managed_runtime_configuration(
     vault_hpke_public_key_x25519: &[u8; 32],
 ) -> Result<hermes_runtime_protocol::v1::ManagedStorageRuntimeConfigurationV1, String> {
     let topology_runtime = to_runtime(topology)?;
-    let binding_runtime = to_runtime_binding(&topology_runtime, binding)?;
+    let binding_message = to_runtime_binding(&topology_runtime, binding)?;
+    let binding_runtime =
+        hermes_storage_protocol::validation::storage_binding_from_message(&binding_message)
+            .map_err(|_| "Storage binding is invalid".to_owned())?;
     let budgets = binding_runtime.access().effective_budgets();
     let configuration = hermes_runtime_protocol::v1::ManagedStorageRuntimeConfigurationV1 {
         database_id: binding_runtime.identity().database_id().to_owned(),

@@ -5,7 +5,9 @@ use hermes_telegram_tdlib::TdJsonLibrary;
 use std::path::PathBuf;
 
 fn main() -> Result<(), String> {
-    let command = std::env::args().nth(1).unwrap_or_else(|| "status".to_owned());
+    let command = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "status".to_owned());
     match command.as_str() {
         "status" => {
             let tdlib_path = std::env::var_os("HERMES_TELEGRAM_TDJSON_PATH").map(PathBuf::from);

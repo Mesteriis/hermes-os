@@ -2,26 +2,24 @@
 
 mod durable;
 
-pub use durable::{TelegramDurablePersistence, TelegramDurablePersistenceError, TELEGRAM_SCHEMA_V1};
+pub use durable::{
+    TELEGRAM_SCHEMA_V1, TelegramDurablePersistence, TelegramDurablePersistenceError,
+};
 
 use std::collections::{HashMap, HashSet};
 
 use hermes_communications_ingress::CommunicationObservationDraft;
 use hermes_telegram_api::{
-    TelegramAccount, TelegramAccountId, TelegramChat, TelegramChatAvatar, TelegramChatFolder, TelegramChatPosition,
-    TelegramChatOperationalState,
-    TelegramChatStateProjection,
-    TelegramCredentialBinding, TelegramDeliveryState, TelegramFileSnapshot, TelegramMessageMutation,
-    TelegramMessageProjection, TelegramOperation, TelegramOperationId, TelegramOperationState,
-    TelegramParticipant, TelegramReconciliationState,
-    TelegramProviderCommand, TelegramCommandRecord,
-    TelegramTopic,
-    TelegramAttachmentProjection, TelegramMessageTombstone, TelegramMessageVersion,
-    TelegramReactionObservation,
-    TelegramReactionSummary,
-    TelegramQrLoginSession, TelegramRealtimeFrame, TelegramRuntimeLease,
-    TelegramRuntimeLeaseState, TelegramSetupId, provider_command_chat_id,
-    provider_command_kind, provider_command_message_id,
+    TelegramAccount, TelegramAccountId, TelegramAttachmentProjection, TelegramChat,
+    TelegramChatAvatar, TelegramChatFolder, TelegramChatOperationalState, TelegramChatPosition,
+    TelegramChatStateProjection, TelegramCommandRecord, TelegramCredentialBinding,
+    TelegramDeliveryState, TelegramFileSnapshot, TelegramMessageMutation,
+    TelegramMessageProjection, TelegramMessageReferences, TelegramMessageTombstone,
+    TelegramMessageVersion, TelegramOperation, TelegramOperationId, TelegramOperationState,
+    TelegramParticipant, TelegramProviderCommand, TelegramQrLoginSession,
+    TelegramReactionObservation, TelegramReactionSummary, TelegramRealtimeFrame,
+    TelegramReconciliationState, TelegramRuntimeLease, TelegramRuntimeLeaseState, TelegramSetupId,
+    TelegramTopic, provider_command_chat_id, provider_command_kind, provider_command_message_id,
 };
 
 pub const PACKAGE: &str = "hermes-telegram-persistence";
@@ -72,11 +70,7 @@ impl TelegramPersistence {
         accounts
     }
 
-    pub fn put_credentials(
-        &mut self,
-        account_id: &str,
-        bindings: Vec<TelegramCredentialBinding>,
-    ) {
+    pub fn put_credentials(&mut self, account_id: &str, bindings: Vec<TelegramCredentialBinding>) {
         self.credentials.insert(account_id.to_owned(), bindings);
     }
 
@@ -86,8 +80,7 @@ impl TelegramPersistence {
     }
 
     pub fn chat(&self, account_id: &str, provider_chat_id: &str) -> Option<&TelegramChat> {
-        self.chats
-            .get(&format!("{account_id}:{provider_chat_id}"))
+        self.chats.get(&format!("{account_id}:{provider_chat_id}"))
     }
 
     pub fn put_chat_avatar(&mut self, avatar: TelegramChatAvatar) {
@@ -147,8 +140,7 @@ impl TelegramPersistence {
         self.chat_positions
             .values()
             .filter(|position| {
-                position.account_id == account_id
-                    && position.provider_chat_id == provider_chat_id
+                position.account_id == account_id && position.provider_chat_id == provider_chat_id
             })
             .cloned()
             .collect()
@@ -217,7 +209,11 @@ impl TelegramPersistence {
             right
                 .is_pinned
                 .cmp(&left.is_pinned)
-                .then_with(|| right.last_message_at_unix_seconds.cmp(&left.last_message_at_unix_seconds))
+                .then_with(|| {
+                    right
+                        .last_message_at_unix_seconds
+                        .cmp(&left.last_message_at_unix_seconds)
+                })
                 .then_with(|| left.provider_topic_id.cmp(&right.provider_topic_id))
         });
         topics.truncate(limit as usize);
@@ -243,10 +239,7 @@ impl TelegramPersistence {
         self.messages.get(message_id)
     }
 
-    pub fn message_references(
-        &self,
-        message_id: &str,
-    ) -> Option<TelegramMessageReferences> {
+    pub fn message_references(&self, message_id: &str) -> Option<TelegramMessageReferences> {
         self.messages
             .get(message_id)
             .map(|message| message.references.clone())
@@ -284,11 +277,14 @@ impl TelegramPersistence {
                 break;
             }
             current = next.and_then(|reference| {
-                self.messages.values().find(|candidate| {
-                    candidate.account_id == account_id
-                        && candidate.provider_chat_id == reference.provider_chat_id
-                        && candidate.provider_message_id == reference.provider_message_id
-                }).cloned()
+                self.messages
+                    .values()
+                    .find(|candidate| {
+                        candidate.account_id == account_id
+                            && candidate.provider_chat_id == reference.provider_chat_id
+                            && candidate.provider_message_id == reference.provider_message_id
+                    })
+                    .cloned()
             });
         }
         chain
@@ -320,22 +316,29 @@ impl TelegramPersistence {
             if !visited.insert(key) || chain.len() >= 128 {
                 break;
             }
-            let next = message.references.forward_origin.as_ref().and_then(|origin| {
-                Some((
-                    origin.provider_chat_id.as_ref()?.clone(),
-                    origin.provider_message_id.as_ref()?.clone(),
-                ))
-            });
+            let next = message
+                .references
+                .forward_origin
+                .as_ref()
+                .and_then(|origin| {
+                    Some((
+                        origin.provider_chat_id.as_ref()?.clone(),
+                        origin.provider_message_id.as_ref()?.clone(),
+                    ))
+                });
             chain.push(message);
             if chain.len() >= limit as usize {
                 break;
             }
             current = next.and_then(|(chat_id, message_id)| {
-                self.messages.values().find(|candidate| {
-                    candidate.account_id == account_id
-                        && candidate.provider_chat_id == chat_id
-                        && candidate.provider_message_id == message_id
-                }).cloned()
+                self.messages
+                    .values()
+                    .find(|candidate| {
+                        candidate.account_id == account_id
+                            && candidate.provider_chat_id == chat_id
+                            && candidate.provider_message_id == message_id
+                    })
+                    .cloned()
             });
         }
         chain
@@ -472,12 +475,7 @@ impl TelegramPersistence {
         messages
     }
 
-    pub fn search_chats(
-        &self,
-        account_id: &str,
-        query: &str,
-        limit: u32,
-    ) -> Vec<TelegramChat> {
+    pub fn search_chats(&self, account_id: &str, query: &str, limit: u32) -> Vec<TelegramChat> {
         let query = query.to_lowercase();
         let mut chats = self
             .chats
@@ -532,10 +530,11 @@ impl TelegramPersistence {
         provider_message_id: &str,
         mutation: TelegramMessageMutation,
     ) {
-        let key = format!(
-            "telegram:{account_id}:{provider_chat_id}:{provider_message_id}"
-        );
-        self.message_mutations.entry(key).or_default().push(mutation);
+        let key = format!("telegram:{account_id}:{provider_chat_id}:{provider_message_id}");
+        self.message_mutations
+            .entry(key)
+            .or_default()
+            .push(mutation);
     }
 
     pub fn message_mutations(&self, message_id: &str) -> Option<&[TelegramMessageMutation]> {
@@ -594,7 +593,7 @@ impl TelegramPersistence {
         self.message_tombstones
             .get(message_id)
             .and_then(|tombstones| tombstones.last())
-            .map_or(true, |tombstone| tombstone.is_locally_visible)
+            .is_none_or(|tombstone| tombstone.is_locally_visible)
     }
 
     pub fn put_attachment(&mut self, attachment: TelegramAttachmentProjection) {
@@ -797,12 +796,14 @@ impl TelegramPersistence {
                     return None;
                 }
                 let command = self.commands.get(&operation.operation_id)?;
-                if provider_chat_id.is_some_and(|value| provider_command_chat_id(command) != Some(value))
-                    || provider_message_id.is_some_and(|value| provider_command_message_id(command) != Some(value))
+                if provider_chat_id
+                    .is_some_and(|value| provider_command_chat_id(command) != Some(value))
+                    || provider_message_id
+                        .is_some_and(|value| provider_command_message_id(command) != Some(value))
                     || (!command_kinds.is_empty()
-                        && !command_kinds.iter().any(|kind| {
-                            provider_command_kind(command).as_str() == kind
-                        }))
+                        && !command_kinds
+                            .iter()
+                            .any(|kind| provider_command_kind(command).as_str() == kind))
                 {
                     return None;
                 }
@@ -812,7 +813,11 @@ impl TelegramPersistence {
                 })
             })
             .collect::<Vec<_>>();
-        records.sort_by(|left, right| left.operation.operation_id.cmp(&right.operation.operation_id));
+        records.sort_by(|left, right| {
+            left.operation
+                .operation_id
+                .cmp(&right.operation.operation_id)
+        });
         records.truncate(limit as usize);
         records
     }
@@ -943,11 +948,7 @@ impl TelegramPersistence {
             .collect()
     }
 
-    pub fn reconcile_operation(
-        &mut self,
-        operation_id: &str,
-        observed: bool,
-    ) -> bool {
+    pub fn reconcile_operation(&mut self, operation_id: &str, observed: bool) -> bool {
         let Some(operation) = self.operations.get_mut(operation_id) else {
             return false;
         };
@@ -992,7 +993,10 @@ impl TelegramPersistence {
 
     pub fn put_participants(&mut self, page: &hermes_telegram_api::TelegramParticipantPage) {
         self.participants.insert(
-            format!("{}:{}:{:?}", page.account_id, page.provider_chat_id, page.filter),
+            format!(
+                "{}:{}:{:?}",
+                page.account_id, page.provider_chat_id, page.filter
+            ),
             page.items.clone(),
         );
     }
@@ -1130,11 +1134,15 @@ mod tests {
         );
         assert_eq!(updated, 1);
         assert_eq!(
-            persistence.attachment("attachment-1").map(|attachment| attachment.state),
+            persistence
+                .attachment("attachment-1")
+                .map(|attachment| attachment.state),
             Some(hermes_telegram_api::TelegramAttachmentDownloadState::Downloaded)
         );
         assert_eq!(
-            persistence.attachment("attachment-1").and_then(|attachment| attachment.size_bytes),
+            persistence
+                .attachment("attachment-1")
+                .and_then(|attachment| attachment.size_bytes),
             Some(42)
         );
     }

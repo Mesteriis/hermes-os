@@ -103,10 +103,14 @@ async fn install_schema(pool: &PgPool) {
         .await
         .expect("fresh lease schema");
     for step in scheduler_storage_bundle_v1().steps {
-        sqlx::raw_sql(std::str::from_utf8(&step.forward_sql_utf8).expect("migration UTF-8"))
-            .execute(pool)
-            .await
-            .expect("migration");
+        sqlx::raw_sql(sqlx::AssertSqlSafe(
+            std::str::from_utf8(&step.forward_sql_utf8)
+                .expect("migration UTF-8")
+                .to_owned(),
+        ))
+        .execute(pool)
+        .await
+        .expect("migration");
     }
 }
 

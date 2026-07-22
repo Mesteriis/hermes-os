@@ -339,6 +339,10 @@ describe('Communication domain elements', () => {
       new URL('./mail/mailSearchBuilder.ts', import.meta.url),
       'utf8'
     )
+    const mailSearchFieldsSource = readFileSync(
+      new URL('./mail/mailSearchBuilderFields.ts', import.meta.url),
+      'utf8'
+    )
     const mailSearchSuggestionSource = readFileSync(
       new URL('./mail/mailSearchSuggestions.ts', import.meta.url),
       'utf8'
@@ -952,14 +956,14 @@ describe('Communication domain elements', () => {
     expect(mailElementsSource).toContain('importanceScore')
     expect(mailElementsSource).toContain('aiState')
     expect(mailSearchSource).toContain('mailListSearchFieldGroups')
-    expect(mailSearchSource).toContain('Mail attrs')
-    expect(mailSearchSource).toContain('Hermes')
-    expect(mailSearchSource).toContain("'workflow'")
-    expect(mailSearchSource).toContain("'attachment'")
-    expect(mailSearchSource).toContain("'entity'")
-    expect(mailSearchSource).toContain("'importance'")
-    expect(mailSearchSource).toContain("'ai_category'")
-    expect(mailSearchSource).toContain("'task'")
+    expect(mailSearchFieldsSource).toContain('Mail attrs')
+    expect(mailSearchFieldsSource).toContain('Hermes')
+    expect(mailSearchFieldsSource).toContain("'workflow'")
+    expect(mailSearchFieldsSource).toContain("'attachment'")
+    expect(mailSearchFieldsSource).toContain("'entity'")
+    expect(mailSearchFieldsSource).toContain("'importance'")
+    expect(mailSearchFieldsSource).toContain("'ai_category'")
+    expect(mailSearchFieldsSource).toContain("'task'")
     expect(mailSearchSource).toContain('mode:(all|any)')
     expect(mailSearchSuggestionSource).toContain(
       'mailListSearchBuilderValueSuggestions'

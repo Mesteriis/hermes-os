@@ -1,6 +1,6 @@
 //! Idempotent role reconciliation with no credential handling.
 
-use sqlx::{query, query_scalar};
+use sqlx::{AssertSqlSafe, query, query_scalar};
 use zeroize::Zeroizing;
 
 use crate::{PostgresAdapterErrorV1, PostgresAdminConnectorV1};
@@ -84,7 +84,7 @@ async fn execute_bootstrap_statement(
     connector: &PostgresAdminConnectorV1,
     statement: &str,
 ) -> Result<(), PostgresAdapterErrorV1> {
-    query(statement)
+    query(AssertSqlSafe(statement))
         .execute(connector.pool())
         .await
         .map_err(|_| PostgresAdapterErrorV1::Bootstrap)?;
@@ -103,7 +103,7 @@ async fn ensure_role(
             .await
             .map_err(|_| PostgresAdapterErrorV1::Query)?;
     if !exists {
-        query(&create_sql)
+        query(AssertSqlSafe(create_sql))
             .execute(connector.pool())
             .await
             .map_err(|_| PostgresAdapterErrorV1::Bootstrap)?;
@@ -120,7 +120,7 @@ async fn set_runtime_limits(
         spec.runtime_principal(),
         spec.max_connections(),
     );
-    query(&statement)
+    query(AssertSqlSafe(statement))
         .execute(connector.pool())
         .await
         .map_err(|_| PostgresAdapterErrorV1::Bootstrap)?;
@@ -129,7 +129,7 @@ async fn set_runtime_limits(
         spec.runtime_principal(),
         spec.statement_timeout_millis(),
     );
-    query(&timeout)
+    query(AssertSqlSafe(timeout))
         .execute(connector.pool())
         .await
         .map_err(|_| PostgresAdapterErrorV1::Bootstrap)?;
@@ -137,7 +137,7 @@ async fn set_runtime_limits(
         "ALTER ROLE {} SET search_path = pg_catalog",
         spec.runtime_principal()
     );
-    query(&search_path)
+    query(AssertSqlSafe(search_path))
         .execute(connector.pool())
         .await
         .map_err(|_| PostgresAdapterErrorV1::Bootstrap)?;

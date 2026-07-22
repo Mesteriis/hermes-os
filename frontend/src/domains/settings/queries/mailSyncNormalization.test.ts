@@ -4,6 +4,7 @@ import { normalizeMailSyncSettingsValues } from './mailSyncNormalization'
 import {
   DEFAULT_MAIL_SYNC_WINDOWS,
   MAX_MAIL_SYNC_WINDOWS,
+  type MailSyncSettings,
 } from '../../../shared/mailSync/types'
 
 describe('mail sync settings normalization', () => {
@@ -46,7 +47,7 @@ describe('mail sync settings normalization', () => {
       updated_at: '2026-07-21T00:00:00Z',
     }
 
-    const normalized = normalizeMailSyncSettingsValues(raw as typeof raw)
+    const normalized = normalizeMailSyncSettingsValues(raw as unknown as MailSyncSettings)
 
     expect(normalized.windows).toBe(DEFAULT_MAIL_SYNC_WINDOWS)
   })

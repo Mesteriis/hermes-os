@@ -9,12 +9,12 @@ use std::time::{Duration, Instant};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use hermes_telegram_api::{
-    TelegramChat, TelegramChatAvatar, TelegramDownloadFile, TelegramFileSnapshot, TelegramMediaKind,
-    TelegramMessageMedia, TelegramMessageObservation, TelegramParticipant, TelegramParticipantFilter,
-    TelegramParticipantPage, TelegramProviderCommand, TelegramSendMessage, TelegramProviderEvent,
-    TelegramChatFolder, TelegramChatPosition, TelegramForwardOrigin, TelegramMessageReferences,
-    TelegramReplyReference, TelegramTopic, TelegramTypingState,
-    provider_command_operation_id, validate_provider_command,
+    TelegramChat, TelegramChatAvatar, TelegramChatFolder, TelegramChatPosition,
+    TelegramDownloadFile, TelegramFileSnapshot, TelegramForwardOrigin, TelegramMediaKind,
+    TelegramMessageMedia, TelegramMessageObservation, TelegramMessageReferences,
+    TelegramParticipant, TelegramParticipantFilter, TelegramParticipantPage,
+    TelegramProviderCommand, TelegramProviderEvent, TelegramReplyReference, TelegramSendMessage,
+    TelegramTopic, TelegramTypingState, provider_command_operation_id, validate_provider_command,
 };
 use hermes_telegram_api::{TelegramChatKind, validate_page_size, validate_text};
 use libloading::Library;
@@ -83,10 +83,16 @@ pub fn set_tdlib_parameters_request(
     parameters: &TdlibAuthorizationParameters,
 ) -> Result<Value, TdlibError> {
     if parameters.api_id <= 0 || parameters.api_hash.trim().is_empty() {
-        return Err(TdlibError::Protocol("TDLib application credentials are invalid".to_owned()));
+        return Err(TdlibError::Protocol(
+            "TDLib application credentials are invalid".to_owned(),
+        ));
     }
     let database_directory = parameters.database_directory.to_string_lossy().into_owned();
-    let files_directory = parameters.database_directory.join("files").to_string_lossy().into_owned();
+    let files_directory = parameters
+        .database_directory
+        .join("files")
+        .to_string_lossy()
+        .into_owned();
     let encryption_key = parameters
         .session_encryption_key
         .as_deref()
@@ -134,7 +140,9 @@ pub fn request_qr_code_authentication() -> Value {
 
 pub fn check_authentication_password(password: &str) -> Result<Value, TdlibError> {
     if password.is_empty() {
-        return Err(TdlibError::Protocol("Telegram password is empty".to_owned()));
+        return Err(TdlibError::Protocol(
+            "Telegram password is empty".to_owned(),
+        ));
     }
     Ok(json!({
         "@type": "checkAuthenticationPassword",
@@ -159,14 +167,23 @@ pub fn parse_authorization_update(payload: &Value) -> Result<TdlibAuthorizationU
         "authorizationStateWaitEncryptionKey" => TdlibAuthorizationUpdate::WaitingEncryptionKey,
         "authorizationStateWaitOtherDeviceConfirmation" => TdlibAuthorizationUpdate::WaitingQrScan,
         "authorizationStateWaitPassword" => TdlibAuthorizationUpdate::WaitingPassword {
-            hint: payload.get("password_hint").and_then(Value::as_str).map(ToOwned::to_owned),
+            hint: payload
+                .get("password_hint")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
         },
         "authorizationStateReady" => TdlibAuthorizationUpdate::Ready,
-        "authorizationStateClosing" | "authorizationStateLoggingOut" => TdlibAuthorizationUpdate::Closing,
+        "authorizationStateClosing" | "authorizationStateLoggingOut" => {
+            TdlibAuthorizationUpdate::Closing
+        }
         "authorizationStateClosed" => TdlibAuthorizationUpdate::Closed,
         "error" => TdlibAuthorizationUpdate::Error {
             code: payload.get("code").and_then(Value::as_i64),
-            message: payload.get("message").and_then(Value::as_str).unwrap_or("TDLib error").to_owned(),
+            message: payload
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("TDLib error")
+                .to_owned(),
         },
         other => TdlibAuthorizationUpdate::Other(other.to_owned()),
     })
@@ -174,7 +191,10 @@ pub fn parse_authorization_update(payload: &Value) -> Result<TdlibAuthorizationU
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TdlibRequest {
-    LoadChats { account_id: String, limit: u32 },
+    LoadChats {
+        account_id: String,
+        limit: u32,
+    },
     LoadHistory {
         account_id: String,
         provider_chat_id: String,
@@ -226,7 +246,8 @@ pub enum TdlibResponse {
 }
 
 pub fn get_chats_request(account_id: &str, limit: u32) -> Result<TdlibRequest, TdlibError> {
-    validate_page_size(limit).map_err(|_| TdlibError::Protocol("invalid chat page size".to_owned()))?;
+    validate_page_size(limit)
+        .map_err(|_| TdlibError::Protocol("invalid chat page size".to_owned()))?;
     if account_id.trim().is_empty() {
         return Err(TdlibError::Protocol("account id is empty".to_owned()));
     }
@@ -257,7 +278,8 @@ pub fn get_history_request_with_options(
     mode: hermes_telegram_api::TelegramHistorySyncMode,
     limit: u32,
 ) -> Result<TdlibRequest, TdlibError> {
-    validate_page_size(limit).map_err(|_| TdlibError::Protocol("invalid history page size".to_owned()))?;
+    validate_page_size(limit)
+        .map_err(|_| TdlibError::Protocol("invalid history page size".to_owned()))?;
     provider_chat_id
         .parse::<i64>()
         .map_err(|_| TdlibError::Protocol("provider chat id is not an integer".to_owned()))?;
@@ -329,9 +351,10 @@ pub fn encode_request(request: &TdlibRequest) -> Result<Value, TdlibError> {
         TdlibRequest::SendMedia(_) => Err(TdlibError::Protocol(
             "Telegram media request requires an authorized Blob materializer".to_owned(),
         )),
-        TdlibRequest::SendMediaMaterialized { command, materialized_path } => {
-            encode_send_media_materialized(command, materialized_path)
-        }
+        TdlibRequest::SendMediaMaterialized {
+            command,
+            materialized_path,
+        } => encode_send_media_materialized(command, materialized_path),
         TdlibRequest::DownloadFile(command) => Ok(json!({
             "@type": "downloadFile",
             "file_id": provider_id(&command.provider_file_id)?,
@@ -396,12 +419,21 @@ pub fn encode_provider_command(command: &TelegramProviderCommand) -> Result<Valu
     validate_provider_command(command)
         .map_err(|_| TdlibError::Protocol("Telegram provider command is invalid".to_owned()))?;
     match command {
-        TelegramProviderCommand::SendText(command) => encode_request(&TdlibRequest::SendMessage(command.clone())),
+        TelegramProviderCommand::SendText(command) => {
+            encode_request(&TdlibRequest::SendMessage(command.clone()))
+        }
         TelegramProviderCommand::SendMedia(_) => Err(TdlibError::Protocol(
             "Telegram media command requires an authorized Blob materializer".to_owned(),
         )),
-        TelegramProviderCommand::DownloadFile(command) => encode_request(&TdlibRequest::DownloadFile(command.clone())),
-        TelegramProviderCommand::ListTopics { operation_id, account_id, provider_chat_id, limit } => {
+        TelegramProviderCommand::DownloadFile(command) => {
+            encode_request(&TdlibRequest::DownloadFile(command.clone()))
+        }
+        TelegramProviderCommand::ListTopics {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            limit,
+        } => {
             let request = TdlibRequest::ListTopics {
                 account_id: account_id.clone(),
                 provider_chat_id: provider_chat_id.clone(),
@@ -411,14 +443,25 @@ pub fn encode_provider_command(command: &TelegramProviderCommand) -> Result<Valu
             encoded["@extra"] = json!(operation_id);
             Ok(encoded)
         }
-        TelegramProviderCommand::CreateTopic { operation_id, provider_chat_id, title, .. } => Ok(json!({
+        TelegramProviderCommand::CreateTopic {
+            operation_id,
+            provider_chat_id,
+            title,
+            ..
+        } => Ok(json!({
             "@type": "createForumTopic",
             "chat_id": provider_id(provider_chat_id)?,
             "name": title,
             "icon": {"@type": "messageForumTopicIcon", "color": 7322096, "custom_emoji_id": ""},
             "@extra": operation_id,
         })),
-        TelegramProviderCommand::SetTopicClosed { operation_id, provider_chat_id, provider_topic_id, is_closed, .. } => Ok(json!({
+        TelegramProviderCommand::SetTopicClosed {
+            operation_id,
+            provider_chat_id,
+            provider_topic_id,
+            is_closed,
+            ..
+        } => Ok(json!({
             "@type": "toggleForumTopicIsClosed",
             "chat_id": provider_id(provider_chat_id)?,
             "message_thread_id": provider_id(provider_topic_id)?,
@@ -524,26 +567,34 @@ pub fn encode_provider_command(command: &TelegramProviderCommand) -> Result<Valu
             read_through_provider_message_id,
             ..
         } => {
-            if !unread {
-                if let Some(message_id) = read_through_provider_message_id {
-                    return Ok(json!({
-                        "@type": "viewMessages", "chat_id": provider_id(provider_chat_id)?,
-                        "message_ids": [provider_id(message_id)?], "source": null,
-                        "force_read": true, "@extra": operation_id
-                    }));
-                }
+            if !unread && let Some(message_id) = read_through_provider_message_id {
+                return Ok(json!({
+                    "@type": "viewMessages", "chat_id": provider_id(provider_chat_id)?,
+                    "message_ids": [provider_id(message_id)?], "source": null,
+                    "force_read": true, "@extra": operation_id
+                }));
             }
             Ok(json!({
                 "@type": "toggleChatIsMarkedAsUnread", "chat_id": provider_id(provider_chat_id)?,
                 "is_marked_as_unread": unread, "@extra": operation_id
             }))
         }
-        TelegramProviderCommand::Archive { operation_id, provider_chat_id, archived, .. } => Ok(json!({
+        TelegramProviderCommand::Archive {
+            operation_id,
+            provider_chat_id,
+            archived,
+            ..
+        } => Ok(json!({
             "@type": "addChatToList", "chat_id": provider_id(provider_chat_id)?,
             "chat_list": {"@type": if *archived { "chatListArchive" } else { "chatListMain" }},
             "@extra": operation_id
         })),
-        TelegramProviderCommand::Mute { operation_id, provider_chat_id, muted, .. } => Ok(json!({
+        TelegramProviderCommand::Mute {
+            operation_id,
+            provider_chat_id,
+            muted,
+            ..
+        } => Ok(json!({
             "@type": "setChatNotificationSettings", "chat_id": provider_id(provider_chat_id)?,
             "notification_settings": {"@type": "chatNotificationSettings", "use_default_mute_for": !muted,
                 "mute_for": if *muted { 31_708_800 } else { 0 }, "use_default_sound": true,
@@ -557,24 +608,47 @@ pub fn encode_provider_command(command: &TelegramProviderCommand) -> Result<Valu
                 "disable_mention_notifications": false},
             "@extra": operation_id
         })),
-        TelegramProviderCommand::Join { operation_id, provider_chat_id, .. } => Ok(json!({
+        TelegramProviderCommand::Join {
+            operation_id,
+            provider_chat_id,
+            ..
+        } => Ok(json!({
             "@type": "joinChat", "chat_id": provider_id(provider_chat_id)?, "@extra": operation_id
         })),
-        TelegramProviderCommand::Leave { operation_id, provider_chat_id, .. } => Ok(json!({
+        TelegramProviderCommand::Leave {
+            operation_id,
+            provider_chat_id,
+            ..
+        } => Ok(json!({
             "@type": "leaveChat", "chat_id": provider_id(provider_chat_id)?, "@extra": operation_id
         })),
-        TelegramProviderCommand::AddChatToFolder { operation_id, provider_chat_id, provider_folder_id, .. } => Ok(json!({
+        TelegramProviderCommand::AddChatToFolder {
+            operation_id,
+            provider_chat_id,
+            provider_folder_id,
+            ..
+        } => Ok(json!({
             "@type": "addChatToList",
             "chat_id": provider_id(provider_chat_id)?,
             "chat_list": {"@type": "chatListFolder", "chat_folder_id": provider_folder_id},
             "@extra": operation_id
         })),
-        TelegramProviderCommand::RemoveChatFromFolder { operation_id, provider_folder_id, .. } => Ok(json!({
+        TelegramProviderCommand::RemoveChatFromFolder {
+            operation_id,
+            provider_folder_id,
+            ..
+        } => Ok(json!({
             "@type": "getChatFolder",
             "chat_folder_id": provider_folder_id,
             "@extra": format!("{operation_id}:get")
         })),
-        TelegramProviderCommand::SearchMessages { operation_id, provider_chat_id, query, limit, .. } => {
+        TelegramProviderCommand::SearchMessages {
+            operation_id,
+            provider_chat_id,
+            query,
+            limit,
+            ..
+        } => {
             let query = query.trim();
             if let Some(chat_id) = provider_chat_id {
                 Ok(json!({
@@ -592,7 +666,14 @@ pub fn encode_provider_command(command: &TelegramProviderCommand) -> Result<Valu
                 }))
             }
         }
-        TelegramProviderCommand::ListParticipants { operation_id, account_id, provider_chat_id, filter, offset, limit } => {
+        TelegramProviderCommand::ListParticipants {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            filter,
+            offset,
+            limit,
+        } => {
             let request = TdlibRequest::ListParticipants {
                 account_id: account_id.clone(),
                 provider_chat_id: provider_chat_id.clone(),
@@ -620,7 +701,9 @@ pub fn encode_send_media_materialized(
         TelegramMediaKind::VoiceNote => "inputMessageVoiceNote",
     };
     let file_field = match command.media_kind {
-        TelegramMediaKind::Photo | TelegramMediaKind::Video | TelegramMediaKind::Animation => "photo",
+        TelegramMediaKind::Photo | TelegramMediaKind::Video | TelegramMediaKind::Animation => {
+            "photo"
+        }
         TelegramMediaKind::Audio => "audio",
         TelegramMediaKind::Document => "document",
         TelegramMediaKind::VoiceNote => "voice_note",
@@ -631,7 +714,9 @@ pub fn encode_send_media_materialized(
         "caption": {"@type": "formattedText", "text": caption, "entities": []},
     });
     if materialized_path.trim().is_empty() {
-        return Err(TdlibError::Protocol("Telegram media materialization path is empty".to_owned()));
+        return Err(TdlibError::Protocol(
+            "Telegram media materialization path is empty".to_owned(),
+        ));
     }
     content[file_field] = json!({"@type": "inputFileLocal", "path": materialized_path});
     Ok(json!({
@@ -709,8 +794,7 @@ pub fn parse_chat(account_id: &str, payload: &Value) -> Result<TelegramChat, Tdl
 
 fn parse_chat_avatar(account_id: &str, payload: &Value) -> Result<TelegramChatAvatar, TdlibError> {
     let photo = payload.get("photo").filter(|value| !value.is_null());
-    let file = photo
-        .and_then(|value| value.get("small").or_else(|| value.get("big")));
+    let file = photo.and_then(|value| value.get("small").or_else(|| value.get("big")));
     Ok(TelegramChatAvatar {
         account_id: account_id.to_owned(),
         provider_chat_id: required_string(payload, "chat_id")?,
@@ -743,15 +827,16 @@ pub fn parse_message_observation(
         account_id: account_id.to_owned(),
         provider_chat_id,
         provider_message_id,
-        provider_topic_id: payload
-            .get("message_thread_id")
-            .and_then(value_id_optional),
+        provider_topic_id: payload.get("message_thread_id").and_then(value_id_optional),
         sender_id: sender.to_string(),
         sender_display_name: None,
         text,
         media,
         references,
-        observed_at_unix_seconds: payload.get("date").and_then(Value::as_i64).unwrap_or_default(),
+        observed_at_unix_seconds: payload
+            .get("date")
+            .and_then(Value::as_i64)
+            .unwrap_or_default(),
     })
 }
 
@@ -760,7 +845,9 @@ fn parse_message_references(payload: &Value) -> Result<TelegramMessageReferences
         None => None,
         Some(reply) => {
             if reply.get("@type").and_then(Value::as_str) != Some("messageReplyToMessage") {
-                return Err(TdlibError::Protocol("TDLib reply reference type is unsupported".to_owned()));
+                return Err(TdlibError::Protocol(
+                    "TDLib reply reference type is unsupported".to_owned(),
+                ));
             }
             Some(TelegramReplyReference {
                 provider_chat_id: required_string(reply, "chat_id")?,
@@ -771,39 +858,32 @@ fn parse_message_references(payload: &Value) -> Result<TelegramMessageReferences
     let forward_origin = match payload.get("forward_info") {
         None => None,
         Some(forward_info) => {
-            let origin = forward_info
-                .get("origin")
-                .ok_or_else(|| TdlibError::Protocol("TDLib forward origin is missing".to_owned()))?;
-            let origin_type = origin
-                .get("@type")
-                .and_then(Value::as_str)
-                .ok_or_else(|| TdlibError::Protocol("TDLib forward origin type is missing".to_owned()))?;
+            let origin = forward_info.get("origin").ok_or_else(|| {
+                TdlibError::Protocol("TDLib forward origin is missing".to_owned())
+            })?;
+            let origin_type = origin.get("@type").and_then(Value::as_str).ok_or_else(|| {
+                TdlibError::Protocol("TDLib forward origin type is missing".to_owned())
+            })?;
             let provider_sender_id = match origin_type {
-                "messageOriginUser" => Some(value_id(origin.get("sender_user_id").ok_or_else(|| {
-                    TdlibError::Protocol("TDLib forward user origin is missing".to_owned())
-                })?)?),
-                "messageOriginChat" => Some(value_id(origin.get("sender_chat_id").ok_or_else(|| {
-                    TdlibError::Protocol("TDLib forward chat origin is missing".to_owned())
-                })?)?),
+                "messageOriginUser" => Some(value_id(origin.get("sender_user_id").ok_or_else(
+                    || TdlibError::Protocol("TDLib forward user origin is missing".to_owned()),
+                )?)?),
+                "messageOriginChat" => Some(value_id(origin.get("sender_chat_id").ok_or_else(
+                    || TdlibError::Protocol("TDLib forward chat origin is missing".to_owned()),
+                )?)?),
                 "messageOriginHiddenUser" | "messageOriginMessageImport" => None,
                 other => {
                     return Err(TdlibError::Protocol(format!(
                         "TDLib forward origin type is unsupported: {other}"
-                    )))
+                    )));
                 }
             };
             let sender_name = origin
                 .get("sender_name")
                 .and_then(Value::as_str)
                 .map(ToOwned::to_owned);
-            let provider_chat_id = forward_info
-                .get("chat_id")
-                .map(value_id)
-                .transpose()?;
-            let provider_message_id = forward_info
-                .get("message_id")
-                .map(value_id)
-                .transpose()?;
+            let provider_chat_id = forward_info.get("chat_id").map(value_id).transpose()?;
+            let provider_message_id = forward_info.get("message_id").map(value_id).transpose()?;
             Some(TelegramForwardOrigin {
                 provider_chat_id,
                 provider_message_id,
@@ -813,7 +893,10 @@ fn parse_message_references(payload: &Value) -> Result<TelegramMessageReferences
             })
         }
     };
-    Ok(TelegramMessageReferences { reply_to, forward_origin })
+    Ok(TelegramMessageReferences {
+        reply_to,
+        forward_origin,
+    })
 }
 
 pub fn parse_file_snapshot(
@@ -821,7 +904,9 @@ pub fn parse_file_snapshot(
     payload: &Value,
 ) -> Result<TelegramFileSnapshot, TdlibError> {
     if payload.get("@type").and_then(Value::as_str) != Some("file") {
-        return Err(TdlibError::Protocol("TDLib file payload is invalid".to_owned()));
+        return Err(TdlibError::Protocol(
+            "TDLib file payload is invalid".to_owned(),
+        ));
     }
     let provider_file_id = required_string(payload, "id")?;
     let local = payload.get("local");
@@ -858,19 +943,23 @@ pub fn parse_participant_page(
     let members = payload
         .get("members")
         .and_then(Value::as_array)
-        .ok_or_else(|| TdlibError::Protocol("TDLib participant list is missing members".to_owned()))?;
+        .ok_or_else(|| {
+            TdlibError::Protocol("TDLib participant list is missing members".to_owned())
+        })?;
     let items = members
         .iter()
         .map(|member| {
-            let member_id = member
-                .get("member_id")
-                .ok_or_else(|| TdlibError::Protocol("TDLib participant id is missing".to_owned()))?;
+            let member_id = member.get("member_id").ok_or_else(|| {
+                TdlibError::Protocol("TDLib participant id is missing".to_owned())
+            })?;
             let (member_kind, member_id) = if let Some(user_id) = member_id.get("user_id") {
                 ("user", value_id(user_id)?)
             } else if let Some(chat_id) = member_id.get("chat_id") {
                 ("chat", value_id(chat_id)?)
             } else {
-                return Err(TdlibError::Protocol("TDLib participant sender kind is unsupported".to_owned()));
+                return Err(TdlibError::Protocol(
+                    "TDLib participant sender kind is unsupported".to_owned(),
+                ));
             };
             let status_kind = member
                 .get("status")
@@ -878,7 +967,10 @@ pub fn parse_participant_page(
                 .and_then(Value::as_str)
                 .unwrap_or("chatMemberStatusUnknown")
                 .to_owned();
-            let is_admin = matches!(status_kind.as_str(), "chatMemberStatusAdministrator" | "chatMemberStatusCreator");
+            let is_admin = matches!(
+                status_kind.as_str(),
+                "chatMemberStatusAdministrator" | "chatMemberStatusCreator"
+            );
             let is_owner = status_kind == "chatMemberStatusCreator";
             Ok(TelegramParticipant {
                 account_id: account_id.to_owned(),
@@ -956,21 +1048,34 @@ fn parse_topic_info(
             .and_then(Value::as_str)
             .filter(|value| !value.is_empty() && *value != "0")
             .map(ToOwned::to_owned),
-        is_pinned: info.get("is_pinned").and_then(Value::as_bool).unwrap_or(false),
-        is_closed: info.get("is_closed").and_then(Value::as_bool).unwrap_or(false),
+        is_pinned: info
+            .get("is_pinned")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        is_closed: info
+            .get("is_closed")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         unread_count: 0,
         last_message_at_unix_seconds: None,
     })
 }
 
-fn parse_typing_state(account_id: &str, payload: &Value) -> Result<TelegramTypingState, TdlibError> {
+fn parse_typing_state(
+    account_id: &str,
+    payload: &Value,
+) -> Result<TelegramTypingState, TdlibError> {
     let sender = payload
         .get("sender_id")
         .ok_or_else(|| TdlibError::Protocol("TDLib typing sender is missing".to_owned()))?;
     let sender_id = match sender.get("@type").and_then(Value::as_str) {
         Some("messageSenderUser") => format!("user:{}", required_string(sender, "user_id")?),
         Some("messageSenderChat") => format!("chat:{}", required_string(sender, "chat_id")?),
-        _ => return Err(TdlibError::Protocol("TDLib typing sender kind is unsupported".to_owned())),
+        _ => {
+            return Err(TdlibError::Protocol(
+                "TDLib typing sender kind is unsupported".to_owned(),
+            ));
+        }
     };
     let action = payload
         .get("action")
@@ -987,7 +1092,10 @@ fn parse_typing_state(account_id: &str, payload: &Value) -> Result<TelegramTypin
     })
 }
 
-fn parse_chat_position(account_id: &str, payload: &Value) -> Result<TelegramChatPosition, TdlibError> {
+fn parse_chat_position(
+    account_id: &str,
+    payload: &Value,
+) -> Result<TelegramChatPosition, TdlibError> {
     let position = payload
         .get("position")
         .ok_or_else(|| TdlibError::Protocol("TDLib chat position is missing".to_owned()))?;
@@ -1005,19 +1113,32 @@ fn parse_chat_position(account_id: &str, payload: &Value) -> Result<TelegramChat
             "folder".to_owned(),
             list.get("chat_folder_id").and_then(Value::as_i64),
         ),
-        _ => return Err(TdlibError::Protocol("unsupported Telegram chat list".to_owned())),
+        _ => {
+            return Err(TdlibError::Protocol(
+                "unsupported Telegram chat list".to_owned(),
+            ));
+        }
     };
     Ok(TelegramChatPosition {
         account_id: account_id.to_owned(),
         provider_chat_id: required_string(payload, "chat_id")?,
         list_kind,
         provider_folder_id,
-        order: position.get("order").and_then(Value::as_i64).unwrap_or_default(),
-        is_pinned: position.get("is_pinned").and_then(Value::as_bool).unwrap_or(false),
+        order: position
+            .get("order")
+            .and_then(Value::as_i64)
+            .unwrap_or_default(),
+        is_pinned: position
+            .get("is_pinned")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
     })
 }
 
-fn parse_chat_folders(account_id: &str, payload: &Value) -> Result<Vec<TelegramChatFolder>, TdlibError> {
+fn parse_chat_folders(
+    account_id: &str,
+    payload: &Value,
+) -> Result<Vec<TelegramChatFolder>, TdlibError> {
     payload
         .get("chat_folders")
         .and_then(Value::as_array)
@@ -1026,7 +1147,9 @@ fn parse_chat_folders(account_id: &str, payload: &Value) -> Result<Vec<TelegramC
         .map(|folder| {
             Ok(TelegramChatFolder {
                 account_id: account_id.to_owned(),
-                provider_folder_id: required_string(folder, "id")?.parse().map_err(|_| TdlibError::Protocol("Telegram folder id is invalid".to_owned()))?,
+                provider_folder_id: required_string(folder, "id")?.parse().map_err(|_| {
+                    TdlibError::Protocol("Telegram folder id is invalid".to_owned())
+                })?,
                 title: folder
                     .get("name")
                     .and_then(|name| name.get("text"))
@@ -1058,7 +1181,9 @@ fn folder_id_list(folder: &Value, field: &str) -> Result<Vec<String>, TdlibError
                 .as_i64()
                 .map(|id| id.to_string())
                 .or_else(|| value.as_str().map(ToOwned::to_owned))
-                .ok_or_else(|| TdlibError::Protocol("Telegram folder chat id is invalid".to_owned()))
+                .ok_or_else(|| {
+                    TdlibError::Protocol("Telegram folder chat id is invalid".to_owned())
+                })
         })
         .collect()
 }
@@ -1073,17 +1198,19 @@ pub fn parse_provider_events(
         .ok_or_else(|| TdlibError::Protocol("TDLib update type is missing".to_owned()))?;
     let event = match event_type {
         "updateNewMessage" => {
-            let message = payload
-                .get("message")
-                .ok_or_else(|| TdlibError::Protocol("updateNewMessage has no message".to_owned()))?;
+            let message = payload.get("message").ok_or_else(|| {
+                TdlibError::Protocol("updateNewMessage has no message".to_owned())
+            })?;
             TelegramProviderEvent::MessageCreated(parse_message_observation(account_id, message)?)
         }
-        "updateUserChatAction" => TelegramProviderEvent::TypingChanged(parse_typing_state(account_id, payload)?),
+        "updateUserChatAction" => {
+            TelegramProviderEvent::TypingChanged(parse_typing_state(account_id, payload)?)
+        }
         "updateForumTopicInfo" => {
             let chat_id = required_string(payload, "chat_id")?;
-            let info = payload
-                .get("info")
-                .ok_or_else(|| TdlibError::Protocol("updateForumTopicInfo has no info".to_owned()))?;
+            let info = payload.get("info").ok_or_else(|| {
+                TdlibError::Protocol("updateForumTopicInfo has no info".to_owned())
+            })?;
             TelegramProviderEvent::TopicChanged(parse_topic_info(account_id, &chat_id, info)?)
         }
         "updateMessageSendFailed" => TelegramProviderEvent::MessageSendFailed {
@@ -1096,9 +1223,9 @@ pub fn parse_provider_events(
                 .and_then(Value::as_i64),
         },
         "updateMessageSendSucceeded" => {
-            let message = payload
-                .get("message")
-                .ok_or_else(|| TdlibError::Protocol("updateMessageSendSucceeded has no message".to_owned()))?;
+            let message = payload.get("message").ok_or_else(|| {
+                TdlibError::Protocol("updateMessageSendSucceeded has no message".to_owned())
+            })?;
             TelegramProviderEvent::MessageSendSucceeded {
                 account_id: account_id.to_owned(),
                 provider_chat_id: required_string(payload, "chat_id")?,
@@ -1106,15 +1233,17 @@ pub fn parse_provider_events(
                 provider_message_id: required_string(message, "id")?,
             }
         }
-        "updateChatPosition" => TelegramProviderEvent::ChatPositionChanged(parse_chat_position(account_id, payload)?),
+        "updateChatPosition" => {
+            TelegramProviderEvent::ChatPositionChanged(parse_chat_position(account_id, payload)?)
+        }
         "updateChatFolders" => TelegramProviderEvent::ChatFoldersChanged {
             account_id: account_id.to_owned(),
             folders: parse_chat_folders(account_id, payload)?,
         },
         "updateChatNotificationSettings" => {
-            let settings = payload
-                .get("notification_settings")
-                .ok_or_else(|| TdlibError::Protocol("TDLib notification settings are missing".to_owned()))?;
+            let settings = payload.get("notification_settings").ok_or_else(|| {
+                TdlibError::Protocol("TDLib notification settings are missing".to_owned())
+            })?;
             TelegramProviderEvent::ChatNotificationChanged {
                 account_id: account_id.to_owned(),
                 provider_chat_id: required_string(payload, "chat_id")?,
@@ -1122,15 +1251,20 @@ pub fn parse_provider_events(
                     .get("use_default_mute_for")
                     .and_then(Value::as_bool)
                     .unwrap_or(true),
-                mute_for_seconds: settings.get("mute_for").and_then(Value::as_i64).unwrap_or_default(),
+                mute_for_seconds: settings
+                    .get("mute_for")
+                    .and_then(Value::as_i64)
+                    .unwrap_or_default(),
             }
         }
-        "updateChatPhoto" => TelegramProviderEvent::ChatAvatarChanged(parse_chat_avatar(account_id, payload)?),
+        "updateChatPhoto" => {
+            TelegramProviderEvent::ChatAvatarChanged(parse_chat_avatar(account_id, payload)?)
+        }
         "updateChatMember" => {
             let provider_chat_id = required_string(payload, "chat_id")?;
-            let member = payload
-                .get("new_chat_member")
-                .ok_or_else(|| TdlibError::Protocol("updateChatMember has no new_chat_member".to_owned()))?;
+            let member = payload.get("new_chat_member").ok_or_else(|| {
+                TdlibError::Protocol("updateChatMember has no new_chat_member".to_owned())
+            })?;
             let page = parse_participant_page(
                 account_id,
                 &provider_chat_id,
@@ -1138,16 +1272,16 @@ pub fn parse_provider_events(
                 0,
                 &json!({"members": [member]}),
             )?;
-            let participant = page
-                .items
-                .into_iter()
-                .next()
-                .ok_or_else(|| TdlibError::Protocol("updateChatMember has no participant".to_owned()))?;
+            let participant = page.items.into_iter().next().ok_or_else(|| {
+                TdlibError::Protocol("updateChatMember has no participant".to_owned())
+            })?;
             TelegramProviderEvent::ParticipantChanged(participant)
         }
         "updateFile" => TelegramProviderEvent::FileChanged(parse_file_snapshot(
             account_id,
-            payload.get("file").ok_or_else(|| TdlibError::Protocol("updateFile has no file".to_owned()))?,
+            payload
+                .get("file")
+                .ok_or_else(|| TdlibError::Protocol("updateFile has no file".to_owned()))?,
         )?),
         "updateMessageContent" => TelegramProviderEvent::MessageEdited {
             account_id: account_id.to_owned(),
@@ -1190,7 +1324,9 @@ pub fn parse_provider_events(
             let message_ids = payload
                 .get("message_ids")
                 .and_then(Value::as_array)
-                .ok_or_else(|| TdlibError::Protocol("deleted message ids are missing".to_owned()))?;
+                .ok_or_else(|| {
+                    TdlibError::Protocol("deleted message ids are missing".to_owned())
+                })?;
             return message_ids
                 .iter()
                 .map(|message_id| {
@@ -1248,7 +1384,12 @@ fn parse_message_media(content: Option<&Value>) -> Option<TelegramMessageMedia> 
     let (kind, file) = match content_type {
         "messagePhoto" => (
             TelegramMediaKind::Photo,
-            content.get("photo")?.get("sizes")?.as_array()?.last()?.get("photo"),
+            content
+                .get("photo")?
+                .get("sizes")?
+                .as_array()?
+                .last()?
+                .get("photo"),
         ),
         "messageVideo" => (
             TelegramMediaKind::Video,
@@ -1260,15 +1401,21 @@ fn parse_message_media(content: Option<&Value>) -> Option<TelegramMessageMedia> 
         ),
         "messageDocument" => (
             TelegramMediaKind::Document,
-            content.get("document").and_then(|value| value.get("document")),
+            content
+                .get("document")
+                .and_then(|value| value.get("document")),
         ),
         "messageAnimation" => (
             TelegramMediaKind::Animation,
-            content.get("animation").and_then(|value| value.get("animation")),
+            content
+                .get("animation")
+                .and_then(|value| value.get("animation")),
         ),
         "messageVoiceNote" => (
             TelegramMediaKind::VoiceNote,
-            content.get("voice_note").and_then(|value| value.get("voice")),
+            content
+                .get("voice_note")
+                .and_then(|value| value.get("voice")),
         ),
         _ => return None,
     };
@@ -1365,13 +1512,17 @@ fn parse_reaction_observations(
             let sender = reaction
                 .get("sender_id")
                 .and_then(|sender| sender.get("user_id").or_else(|| sender.get("chat_id")))
-                .ok_or_else(|| TdlibError::Protocol("TDLib reaction sender is missing".to_owned()))?;
+                .ok_or_else(|| {
+                    TdlibError::Protocol("TDLib reaction sender is missing".to_owned())
+                })?;
             let emoji = reaction
                 .get("type")
                 .and_then(|kind| kind.get("emoji"))
                 .and_then(Value::as_str)
                 .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| TdlibError::Protocol("TDLib reaction emoji is missing".to_owned()))?;
+                .ok_or_else(|| {
+                    TdlibError::Protocol("TDLib reaction emoji is missing".to_owned())
+                })?;
             Ok(hermes_telegram_api::TelegramReactionObservation {
                 sender_id: value_id(sender)?,
                 emoji: emoji.to_owned(),
@@ -1399,7 +1550,12 @@ fn required_string(payload: &Value, field: &str) -> Result<String, TdlibError> {
         .get(field)
         .and_then(Value::as_i64)
         .map(|value| value.to_string())
-        .or_else(|| payload.get(field).and_then(Value::as_str).map(ToOwned::to_owned))
+        .or_else(|| {
+            payload
+                .get(field)
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        })
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| TdlibError::Protocol(format!("TDLib payload field `{field}` is missing")))
 }
@@ -1409,7 +1565,9 @@ fn chat_kind(value: &str) -> Result<TelegramChatKind, TdlibError> {
         "chatTypePrivate" => Ok(TelegramChatKind::Private),
         "chatTypeBasicGroup" | "chatTypeSupergroup" => Ok(TelegramChatKind::Group),
         "chatTypeSecret" => Ok(TelegramChatKind::Private),
-        other => Err(TdlibError::Protocol(format!("unsupported TDLib chat type `{other}`"))),
+        other => Err(TdlibError::Protocol(format!(
+            "unsupported TDLib chat type `{other}`"
+        ))),
     }
 }
 
@@ -1507,8 +1665,14 @@ mod tests {
             "/tmp/report.pdf",
         )
         .expect("valid materialized media command");
-        assert_eq!(encoded["input_message_content"]["@type"], "inputMessageDocument");
-        assert_eq!(encoded["input_message_content"]["document"]["path"], "/tmp/report.pdf");
+        assert_eq!(
+            encoded["input_message_content"]["@type"],
+            "inputMessageDocument"
+        );
+        assert_eq!(
+            encoded["input_message_content"]["document"]["path"],
+            "/tmp/report.pdf"
+        );
         assert!(encode_provider_command(&media).is_err());
 
         let participants = TelegramProviderCommand::ListParticipants {
@@ -1521,7 +1685,10 @@ mod tests {
         };
         let encoded = encode_provider_command(&participants).expect("valid participant command");
         assert_eq!(encoded["@type"], "getSupergroupMembers");
-        assert_eq!(encoded["filter"]["@type"], "chatMembersFilterAdministrators");
+        assert_eq!(
+            encoded["filter"]["@type"],
+            "chatMembersFilterAdministrators"
+        );
         assert_eq!(encoded["@extra"], "op-members");
     }
 
@@ -1671,7 +1838,10 @@ mod tests {
         .expect("notification update");
         assert!(matches!(
             &notification[0],
-            TelegramProviderEvent::ChatNotificationChanged { mute_for_seconds: 3600, .. }
+            TelegramProviderEvent::ChatNotificationChanged {
+                mute_for_seconds: 3600,
+                ..
+            }
         ));
     }
 
@@ -1753,9 +1923,14 @@ impl TdJsonLibrary {
     pub fn create_client(self) -> Result<TdJsonClient, TdlibError> {
         let client = unsafe { (self.create)() };
         if client.is_null() {
-            return Err(TdlibError::Transport("td_json_client_create returned null".to_owned()));
+            return Err(TdlibError::Transport(
+                "td_json_client_create returned null".to_owned(),
+            ));
         }
-        Ok(TdJsonClient { client, library: self })
+        Ok(TdJsonClient {
+            client,
+            library: self,
+        })
     }
 }
 
@@ -1806,9 +1981,16 @@ fn parse_response(response: *const c_char) -> Result<Option<Value>, TdlibError> 
         .map_err(|error| TdlibError::Protocol(format!("invalid TDLib JSON: {error}")))
 }
 
-fn load_symbol<T: Copy>(library: &Library, name: &'static [u8], candidate: &Path) -> Result<T, TdlibError> {
+fn load_symbol<T: Copy>(
+    library: &Library,
+    name: &'static [u8],
+    candidate: &Path,
+) -> Result<T, TdlibError> {
     let symbol = unsafe { library.get::<T>(name) }.map_err(|error| {
-        TdlibError::Transport(format!("libtdjson `{}` is missing symbol: {error}", candidate.display()))
+        TdlibError::Transport(format!(
+            "libtdjson `{}` is missing symbol: {error}",
+            candidate.display()
+        ))
     })?;
     Ok(*symbol)
 }
@@ -1819,11 +2001,11 @@ fn library_candidates(configured_path: Option<&Path>) -> Vec<PathBuf> {
     }
     #[cfg(target_os = "macos")]
     {
-        return vec![
+        vec![
             PathBuf::from("libtdjson.dylib"),
             PathBuf::from("/opt/homebrew/opt/tdlib/lib/libtdjson.dylib"),
             PathBuf::from("/usr/local/opt/tdlib/lib/libtdjson.dylib"),
-        ];
+        ]
     }
     #[cfg(target_os = "linux")]
     {
@@ -1858,7 +2040,9 @@ impl TdJsonTransport {
     pub fn new(client: TdJsonClient, account_id: impl Into<String>) -> Result<Self, TdlibError> {
         let account_id = account_id.into();
         if account_id.trim().is_empty() {
-            return Err(TdlibError::Protocol("Telegram account id is empty".to_owned()));
+            return Err(TdlibError::Protocol(
+                "Telegram account id is empty".to_owned(),
+            ));
         }
         Ok(Self {
             client,
@@ -1875,7 +2059,9 @@ impl TdJsonTransport {
         request_timeout: Duration,
     ) -> Result<Self, TdlibError> {
         if !(0.0..=10.0).contains(&receive_timeout_seconds) || request_timeout.is_zero() {
-            return Err(TdlibError::Protocol("TDLib transport timeout is invalid".to_owned()));
+            return Err(TdlibError::Protocol(
+                "TDLib transport timeout is invalid".to_owned(),
+            ));
         }
         self.receive_timeout_seconds = receive_timeout_seconds;
         self.request_timeout = request_timeout;
@@ -1960,7 +2146,8 @@ impl TdlibTransport for TdJsonTransport {
                 "@extra": group_extra,
             }))?;
             let _group = self.receive_correlated(&group_extra)?;
-            let full_info_extra = format!("telegram-basic-group-full-info-{account_id}-{basic_group_id}");
+            let full_info_extra =
+                format!("telegram-basic-group-full-info-{account_id}-{basic_group_id}");
             self.client.send_json(&json!({
                 "@type": "getBasicGroupFullInfo",
                 "basic_group_id": basic_group_id,
@@ -1981,7 +2168,9 @@ impl TdlibTransport for TdJsonTransport {
             let ids = response
                 .get("chat_ids")
                 .and_then(Value::as_array)
-                .ok_or_else(|| TdlibError::Protocol("TDLib getChats response is missing chat_ids".to_owned()))?;
+                .ok_or_else(|| {
+                    TdlibError::Protocol("TDLib getChats response is missing chat_ids".to_owned())
+                })?;
             let mut chats = Vec::with_capacity(ids.len());
             for id in ids.iter().take(*limit as usize) {
                 let provider_chat_id = value_id(id)?;
@@ -2098,7 +2287,9 @@ fn parse_response_for_request(
             let messages = response
                 .get("messages")
                 .and_then(Value::as_array)
-                .ok_or_else(|| TdlibError::Protocol("TDLib history response is missing messages".to_owned()))?;
+                .ok_or_else(|| {
+                    TdlibError::Protocol("TDLib history response is missing messages".to_owned())
+                })?;
             Ok(TdlibResponse::History(
                 messages
                     .iter()
@@ -2106,25 +2297,48 @@ fn parse_response_for_request(
                     .collect::<Result<Vec<_>, _>>()?,
             ))
         }
-        TdlibRequest::ListParticipants { provider_chat_id, filter, .. } => Ok(TdlibResponse::Participants(
-            parse_participant_page(account_id, provider_chat_id, *filter, 0, &response)?,
-        )),
-        TdlibRequest::ListBasicGroupParticipants { provider_chat_id, .. } => Ok(TdlibResponse::Participants(
-            parse_participant_page(account_id, provider_chat_id, TelegramParticipantFilter::Recent, 0, &response)?,
-        )),
-        TdlibRequest::ListTopics { provider_chat_id, .. } => {
-            Ok(TdlibResponse::Topics(parse_topic_list(account_id, provider_chat_id, &response)?))
-        }
-        TdlibRequest::GetChatFolder { .. } => Ok(TdlibResponse::ChatFolders(
-            parse_chat_folders(account_id, &json!({"chat_folders": [response]}))?,
-        )),
-        TdlibRequest::DownloadFile { .. } => Ok(TdlibResponse::File(parse_file_snapshot(account_id, &response)?)),
+        TdlibRequest::ListParticipants {
+            provider_chat_id,
+            filter,
+            ..
+        } => Ok(TdlibResponse::Participants(parse_participant_page(
+            account_id,
+            provider_chat_id,
+            *filter,
+            0,
+            &response,
+        )?)),
+        TdlibRequest::ListBasicGroupParticipants {
+            provider_chat_id, ..
+        } => Ok(TdlibResponse::Participants(parse_participant_page(
+            account_id,
+            provider_chat_id,
+            TelegramParticipantFilter::Recent,
+            0,
+            &response,
+        )?)),
+        TdlibRequest::ListTopics {
+            provider_chat_id, ..
+        } => Ok(TdlibResponse::Topics(parse_topic_list(
+            account_id,
+            provider_chat_id,
+            &response,
+        )?)),
+        TdlibRequest::GetChatFolder { .. } => Ok(TdlibResponse::ChatFolders(parse_chat_folders(
+            account_id,
+            &json!({"chat_folders": [response]}),
+        )?)),
+        TdlibRequest::DownloadFile { .. } => Ok(TdlibResponse::File(parse_file_snapshot(
+            account_id, &response,
+        )?)),
         TdlibRequest::SendMessage(command) => sent_response(&command.operation_id, &response),
         TdlibRequest::SendMedia(command) => sent_response(&command.operation_id, &response),
-        TdlibRequest::SendMediaMaterialized { command, .. } => sent_response(&command.operation_id, &response),
-        TdlibRequest::ProviderCommand(TelegramProviderCommand::SearchMessages { .. }) => {
-            Ok(TdlibResponse::History(parse_message_list_response(account_id, &response)?))
+        TdlibRequest::SendMediaMaterialized { command, .. } => {
+            sent_response(&command.operation_id, &response)
         }
+        TdlibRequest::ProviderCommand(TelegramProviderCommand::SearchMessages { .. }) => Ok(
+            TdlibResponse::History(parse_message_list_response(account_id, &response)?),
+        ),
         TdlibRequest::ProviderCommand(command) => {
             if response.get("@type").and_then(Value::as_str) == Some("message") {
                 sent_response(provider_command_operation_id(command), &response)
@@ -2134,7 +2348,9 @@ fn parse_response_for_request(
                 })
             }
         }
-        TdlibRequest::LoadChats { .. } => unreachable!("LoadChats is handled by TdJsonTransport::request"),
+        TdlibRequest::LoadChats { .. } => {
+            unreachable!("LoadChats is handled by TdJsonTransport::request")
+        }
     }
 }
 
@@ -2145,7 +2361,9 @@ fn parse_message_list_response(
     let messages = response
         .get("messages")
         .and_then(Value::as_array)
-        .ok_or_else(|| TdlibError::Protocol("TDLib search response is missing messages".to_owned()))?;
+        .ok_or_else(|| {
+            TdlibError::Protocol("TDLib search response is missing messages".to_owned())
+        })?;
     messages
         .iter()
         .map(|message| parse_message_observation(account_id, message))
@@ -2164,8 +2382,15 @@ fn sent_response(operation_id: &str, response: &Value) -> Result<TdlibResponse, 
 }
 
 fn tdlib_error(payload: &Value) -> TdlibError {
-    let code = payload.get("code").and_then(Value::as_i64).map(|value| value.to_string()).unwrap_or_else(|| "unknown".to_owned());
-    let message = payload.get("message").and_then(Value::as_str).unwrap_or("TDLib returned an error");
+    let code = payload
+        .get("code")
+        .and_then(Value::as_i64)
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "unknown".to_owned());
+    let message = payload
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or("TDLib returned an error");
     TdlibError::Protocol(format!("TDLib error {code}: {message}"))
 }
 

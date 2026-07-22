@@ -2,7 +2,7 @@
 
 use hermes_storage_control::{StorageFenceOutcomeV1, StoragePostgresFencePortV1};
 use hermes_storage_protocol::StorageBindingV1;
-use sqlx::{query, query_scalar};
+use sqlx::{AssertSqlSafe, query, query_scalar};
 use std::future::Future;
 
 use crate::{PostgresAdapterErrorV1, PostgresAdminConnectorV1};
@@ -78,7 +78,7 @@ async fn disable_new_logins(
     spec: &StorageRoleSpecV1,
 ) -> Result<(), PostgresAdapterErrorV1> {
     let statement = format!("ALTER ROLE {} NOLOGIN", spec.runtime_principal());
-    query(&statement)
+    query(AssertSqlSafe(statement))
         .execute(connector.pool())
         .await
         .map_err(login_fence_error)?;
@@ -148,7 +148,7 @@ async fn execute_fence_statement(
     connector: &PostgresAdminConnectorV1,
     statement: &str,
 ) -> Result<(), PostgresAdapterErrorV1> {
-    query(statement)
+    query(AssertSqlSafe(statement))
         .execute(connector.pool())
         .await
         .map_err(|_| PostgresAdapterErrorV1::SessionFence)?;

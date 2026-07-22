@@ -27,6 +27,27 @@ impl<T> StorageVaultLeaseAdapterV1<T> {
     }
 }
 
+impl<T> StorageVaultLeaseAdapterV1<T>
+where
+    T: StorageVaultRoutePortV1 + Send,
+{
+    pub async fn revoke_runtime_credential(
+        &mut self,
+        binding: &StorageBindingV1,
+    ) -> Result<(), StorageVaultRouteFailureV1> {
+        let prepared = prepare_storage_credential(
+            binding,
+            &self.context,
+            &VaultTransportCommandV1::RevokeAudience,
+        )
+        .map_err(|_| StorageVaultRouteFailureV1::Rejected)?;
+        let outcome = execute(&mut self.route_port, prepared).await?;
+        (outcome.as_slice() == [1])
+            .then_some(())
+            .ok_or(StorageVaultRouteFailureV1::Rejected)
+    }
+}
+
 pub(super) struct PreparedVaultCommandV1 {
     route: VaultCiphertextRouteV1,
     recipient: VaultResponseRecipientV1,

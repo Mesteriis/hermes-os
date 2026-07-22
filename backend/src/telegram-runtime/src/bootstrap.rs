@@ -1,17 +1,15 @@
 //! Clean-room Telegram process admission and provider session bootstrap.
 
-use std::path::PathBuf;
 use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 
 use hermes_runtime_protocol::v1::ManagedStorageRuntimeConfigurationV1;
 use hermes_storage_protocol::{
-    StorageBindingAccessV1, StorageBindingFencesV1, StorageBindingIdentityV1,
-    StorageBindingV1, StorageEffectiveBudgetsV1,
+    StorageBindingAccessV1, StorageBindingFencesV1, StorageBindingIdentityV1, StorageBindingV1,
+    StorageEffectiveBudgetsV1,
 };
 use hermes_storage_vault::StorageVaultRouteContextV1;
-use hermes_telegram_api::{
-    TelegramAccountSetup, TelegramCredentialPurpose, TelegramProviderKind,
-};
+use hermes_telegram_api::{TelegramAccountSetup, TelegramCredentialPurpose, TelegramProviderKind};
 use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::{TdJsonLibrary, TdlibAuthorizationParameters, TdlibError};
 use zeroize::Zeroizing;
@@ -43,6 +41,7 @@ pub struct TelegramAdmittedRuntime {
     pub durable: TelegramDurablePersistence,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn open_admitted_runtime(
     library: TdJsonLibrary,
     descriptor_bytes: Vec<u8>,
@@ -80,8 +79,9 @@ pub async fn open_admitted_runtime(
     let mut api_hash: Option<Zeroizing<Vec<u8>>> = None;
     let mut session_encryption_key: Option<Zeroizing<Vec<u8>>> = None;
     for lease_binding in &admission.credential_leases {
-        let secret = resolve_credential_lease(&mut control_channel, vault_context, &lease_binding.lease)
-            .map_err(TelegramBootstrapError::CredentialRoute)?;
+        let secret =
+            resolve_credential_lease(&mut control_channel, vault_context, &lease_binding.lease)
+                .map_err(TelegramBootstrapError::CredentialRoute)?;
         match lease_binding.binding.purpose {
             TelegramCredentialPurpose::ApiHash => {
                 if api_hash.replace(secret).is_some() {
@@ -112,16 +112,19 @@ pub async fn open_admitted_runtime(
     )
     .map_err(|_| TelegramBootstrapError::InvalidStorageTopology)?;
     let storage_password = resolve_storage_credential(
-        control_channel
-            .try_clone()
-            .map_err(|_| TelegramBootstrapError::CredentialRoute(TelegramCredentialRouteError::Unavailable))?,
+        control_channel.try_clone().map_err(|_| {
+            TelegramBootstrapError::CredentialRoute(TelegramCredentialRouteError::Unavailable)
+        })?,
         &storage_binding,
         storage_vault_context,
     )
     .await
-    .map_err(|_| TelegramBootstrapError::CredentialRoute(TelegramCredentialRouteError::Unavailable))?;
-    let storage_password = std::str::from_utf8(&storage_password)
-        .map_err(|_| TelegramBootstrapError::CredentialRoute(TelegramCredentialRouteError::Rejected))?;
+    .map_err(|_| {
+        TelegramBootstrapError::CredentialRoute(TelegramCredentialRouteError::Unavailable)
+    })?;
+    let storage_password = std::str::from_utf8(&storage_password).map_err(|_| {
+        TelegramBootstrapError::CredentialRoute(TelegramCredentialRouteError::Rejected)
+    })?;
     let durable = TelegramDurablePersistence::connect_runtime(
         &storage_binding,
         &storage_configuration.database_id,
@@ -154,12 +157,9 @@ pub async fn open_admitted_runtime(
             .collect(),
         qr_authorized: false,
     };
-    let mut composition = TelegramRuntimeComposition::new_with_account_setup(
-        library,
-        account_setup,
-        parameters,
-    )
-        .map_err(TelegramBootstrapError::Provider)?;
+    let mut composition =
+        TelegramRuntimeComposition::new_with_account_setup(library, account_setup, parameters)
+            .map_err(TelegramBootstrapError::Provider)?;
     composition.set_admission(admission.clone());
     Ok(TelegramAdmittedRuntime {
         identity,
@@ -203,11 +203,9 @@ fn storage_binding_from_configuration(
     .map_err(|_| TelegramBootstrapError::InvalidStorageTopology)?;
     let max_connections = u16::try_from(configuration.max_connections)
         .map_err(|_| TelegramBootstrapError::InvalidStorageTopology)?;
-    let budgets = StorageEffectiveBudgetsV1::new(
-        max_connections,
-        configuration.statement_timeout_millis,
-    )
-    .map_err(|_| TelegramBootstrapError::InvalidStorageTopology)?;
+    let budgets =
+        StorageEffectiveBudgetsV1::new(max_connections, configuration.statement_timeout_millis)
+            .map_err(|_| TelegramBootstrapError::InvalidStorageTopology)?;
     let digest: [u8; 32] = configuration
         .storage_bundle_digest
         .as_slice()

@@ -14,8 +14,8 @@ use hermes_kernel_control_store::{
 use hermes_runtime_protocol::v1::{
     DescribeManagedRuntimeResponseV1, ManagedRuntimeControlRequestV1,
     ManagedRuntimeControlResponseV1, ManagedRuntimeEventCredentialDeliveryV1,
-    ManagedRuntimeEventCredentialRequestV1, ManagedRuntimeVaultRouteRequestV1,
-    ManagedRuntimeProviderCredentialDeliveryV1, ManagedRuntimeProviderCredentialRequestV1,
+    ManagedRuntimeEventCredentialRequestV1, ManagedRuntimeProviderCredentialDeliveryV1,
+    ManagedRuntimeProviderCredentialRequestV1, ManagedRuntimeVaultRouteRequestV1,
     VaultCiphertextResponseV1, VaultCiphertextRouteV1,
 };
 use hermes_runtime_protocol::validation::descriptor::{

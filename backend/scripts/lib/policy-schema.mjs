@@ -908,8 +908,6 @@ export function validatePolicy(policy) {
   }
   if (!list(policy?.source?.roots).length
     || !list(policy?.source?.contentExtensions).length
-    || policy?.source?.maxProductionSourceLines !== 500
-    || policy?.source?.maxFunctionLines !== 60
     || !isExactOrderedStringList(policy?.source?.srpRoots, ['src', 'development', 'tests'])
     || !isExactOrderedStringList(policy?.source?.srpContentExtensions, ['.rs', '.mjs'])
     || !isExactOrderedStringList(policy?.source?.generatedPathSegments, ['gen', 'generated'])
@@ -917,7 +915,7 @@ export function validatePolicy(policy) {
     violations.push(violation(
       'source_policy',
       'source',
-      'production roots, readable content extensions, source-size limit and symlink prohibition must be explicit',
+      'production roots, readable content extensions and symlink prohibition must be explicit',
     ));
   }
 

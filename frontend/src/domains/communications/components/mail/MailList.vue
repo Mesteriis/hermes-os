@@ -48,6 +48,7 @@ const controller = useMailListController(
 
 const {
   activeDensity,
+  densityIsActive,
   activeMailViewId,
   activeSearchBuilderGroupId,
   isSearchBuilderOpen,

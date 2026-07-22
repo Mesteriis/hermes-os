@@ -1,10 +1,10 @@
+use hermes_mail_api::MAX_WINDOWS;
+use hermes_mail_imap::MAX_ATTEMPTS;
 use std::fs;
 use std::io::Write;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, path::PathBuf};
-use hermes_mail_api::MAX_WINDOWS;
-use hermes_mail_imap::MAX_ATTEMPTS;
 
 fn runtime_binary_name(name: &str) -> String {
     if let Ok(binary) = env::var(format!("CARGO_BIN_EXE_{name}")) {
@@ -268,14 +268,8 @@ fn sync_retries_until_imap_attempt_limit() {
     };
     assert!(output_text.contains("imap sync failed:"));
     assert!(output_text.contains("imap sync attempt 1 failed"));
-    assert!(output_text.contains(&format!(
-        "imap sync attempt {} failed",
-        MAX_ATTEMPTS - 1
-    )));
-    assert!(output_text.contains(&format!(
-        "imap sync attempt {} failed",
-        MAX_ATTEMPTS
-    )));
+    assert!(output_text.contains(&format!("imap sync attempt {} failed", MAX_ATTEMPTS - 1)));
+    assert!(output_text.contains(&format!("imap sync attempt {} failed", MAX_ATTEMPTS)));
     let _ = fs::remove_file(password_file);
 }
 

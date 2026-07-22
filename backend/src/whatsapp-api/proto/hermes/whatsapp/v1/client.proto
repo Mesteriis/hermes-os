@@ -171,6 +171,8 @@ message WhatsAppProviderQueryV1 {
     PendingCommandsQuery pending_commands = 6;
     ClaimPendingCommandsQuery claim_pending_commands = 7;
     EventsQuery events = 8;
+    RuntimeStatusQuery runtime_status = 10;
+  }
 }
 
 enum ProviderEventKind {
@@ -191,7 +193,6 @@ enum ProviderEventKind {
   PROVIDER_EVENT_KIND_MEDIA = 14;
   PROVIDER_EVENT_KIND_SESSION = 15;
   PROVIDER_EVENT_KIND_COMMAND_RESULT = 16;
-}
 }
 
 message AccountQuery { string account_id = 1; }

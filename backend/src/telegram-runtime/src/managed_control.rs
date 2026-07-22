@@ -36,7 +36,12 @@ impl TelegramManagedRuntimeIdentity {
             return Err("Telegram managed-runtime channel is unavailable".to_owned());
         }
         let channel = unsafe { UnixStream::from_raw_fd(duplicated as RawFd) };
-        Self::authenticate(channel, descriptor_bytes, settings_schema_bytes, runtime_instance_id)
+        Self::authenticate(
+            channel,
+            descriptor_bytes,
+            settings_schema_bytes,
+            runtime_instance_id,
+        )
     }
 
     pub fn authenticate(
@@ -66,8 +71,9 @@ impl TelegramManagedRuntimeIdentity {
             }
             .encode_to_vec(),
         )?;
-        let response = ManagedRuntimeControlResponseV1::decode(read_frame(&mut channel)?.as_slice())
-            .map_err(|_| "Telegram managed-runtime describe response is invalid".to_owned())?;
+        let response =
+            ManagedRuntimeControlResponseV1::decode(read_frame(&mut channel)?.as_slice())
+                .map_err(|_| "Telegram managed-runtime describe response is invalid".to_owned())?;
         let (registration_id, runtime_generation, grant_epoch) = match response.result {
             Some(ControlResult::Describe(value))
                 if response.error_code.is_empty()
@@ -75,7 +81,11 @@ impl TelegramManagedRuntimeIdentity {
                     && value.runtime_generation != 0
                     && value.grant_epoch != 0 =>
             {
-                (value.registration_id, value.runtime_generation, value.grant_epoch)
+                (
+                    value.registration_id,
+                    value.runtime_generation,
+                    value.grant_epoch,
+                )
             }
             _ => return Err("Telegram managed-runtime descriptor was rejected".to_owned()),
         };

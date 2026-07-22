@@ -1,10 +1,5 @@
 use hermes_mail_api::{
-    IMAP_PORT,
-    MAX_MESSAGE_BYTES,
-    MAX_PLAIN_TEXT_BYTES,
-    DEFAULT_WINDOW,
-    MAX_WINDOW,
-    MAX_WINDOWS,
+    DEFAULT_WINDOW, IMAP_PORT, MAX_MESSAGE_BYTES, MAX_PLAIN_TEXT_BYTES, MAX_WINDOW, MAX_WINDOWS,
 };
 use hermes_mail_core::{
     ConnectionTracker, MailConnection, MailConnectionState, MailOperation, MailStatePolicy,

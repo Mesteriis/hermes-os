@@ -1,15 +1,13 @@
 //! Long-lived Telegram process orchestration around the provider runtime.
 
-use std::os::unix::net::UnixStream;
 use std::os::unix::net::UnixListener;
+use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Duration;
 
-use hermes_telegram_persistence::{
-    TelegramDurablePersistence, TelegramDurablePersistenceError,
-};
-use hermes_telegram_tdlib::{TdlibAuthorizationEvent, TdlibError};
+use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::TdlibAuthorizationUpdate;
+use hermes_telegram_tdlib::{TdlibAuthorizationEvent, TdlibError};
 
 use crate::{
     TelegramDurableProjectionError, TelegramRuntimeComposition,
@@ -60,7 +58,9 @@ impl TelegramProcessLoop {
     }
 
     #[must_use]
-    pub fn authorization_status(&self) -> Option<&hermes_telegram_api::TelegramAuthorizationStatus> {
+    pub fn authorization_status(
+        &self,
+    ) -> Option<&hermes_telegram_api::TelegramAuthorizationStatus> {
         self.authorization_status.as_ref()
     }
 
@@ -94,13 +94,18 @@ impl TelegramProcessLoop {
             if let Some(event) = &event {
                 self.authorization_status = Some(authorization_status(event));
             }
-            return Ok(event.map(TelegramProcessTick::Authorization).unwrap_or(TelegramProcessTick::Idle));
+            return Ok(event
+                .map(|value| TelegramProcessTick::Authorization(Some(value)))
+                .unwrap_or(TelegramProcessTick::Idle));
         }
         if self.composition.has_runtime() {
             let frames = self
                 .composition
                 .poll_runtime_events(self.provider_cursor.clone())?;
-            if let Some(cursor) = frames.last().and_then(|frame| frame.provider_cursor.clone()) {
+            if let Some(cursor) = frames
+                .last()
+                .and_then(|frame| frame.provider_cursor.clone())
+            {
                 self.provider_cursor = Some(cursor);
             }
             return Ok(TelegramProcessTick::Runtime {
@@ -124,7 +129,9 @@ impl TelegramProcessLoop {
             if let Some(event) = &event {
                 self.authorization_status = Some(authorization_status(event));
             }
-            return Ok(event.map(TelegramProcessTick::Authorization).unwrap_or(TelegramProcessTick::Idle));
+            return Ok(event
+                .map(|value| TelegramProcessTick::Authorization(Some(value)))
+                .unwrap_or(TelegramProcessTick::Idle));
         }
         if self.composition.has_runtime() {
             let frames = self
@@ -143,7 +150,10 @@ impl TelegramProcessLoop {
                         .map_err(TelegramDurableProcessError::Projection)?;
                 }
             }
-            if let Some(cursor) = frames.last().and_then(|frame| frame.provider_cursor.clone()) {
+            if let Some(cursor) = frames
+                .last()
+                .and_then(|frame| frame.provider_cursor.clone())
+            {
                 self.provider_cursor = Some(cursor);
             }
             return Ok(TelegramProcessTick::Runtime {
@@ -214,8 +224,8 @@ pub fn serve_admitted_runtime(
         .map_err(|error| format!("failed to build Telegram runtime executor: {error}"))?;
     let mut restored = false;
 
-        loop {
-            match listener.accept() {
+    loop {
+        match listener.accept() {
             Ok((stream, _)) => {
                 if process.composition().has_runtime() {
                     process
@@ -265,7 +275,9 @@ fn authorization_status(
                 TdlibAuthorizationUpdate::WaitingParameters => ("waiting_parameters", None),
                 TdlibAuthorizationUpdate::WaitingEncryptionKey => ("waiting_encryption_key", None),
                 TdlibAuthorizationUpdate::WaitingQrScan => ("waiting_qr_scan", None),
-                TdlibAuthorizationUpdate::WaitingPassword { hint } => ("waiting_password", hint.clone()),
+                TdlibAuthorizationUpdate::WaitingPassword { hint } => {
+                    ("waiting_password", hint.clone())
+                }
                 TdlibAuthorizationUpdate::Ready => ("ready", None),
                 TdlibAuthorizationUpdate::Closing => ("closing", None),
                 TdlibAuthorizationUpdate::Closed => ("closed", None),

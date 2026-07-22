@@ -8,20 +8,20 @@ function codes(violations) {
   return new Set(violations.map(({ code }) => code));
 }
 
-test('rejects production or test source files over 500 lines', () => {
+test('does not infer responsibility from source line count', () => {
   const content = Array.from({ length: 501 }, () => '// line').join('\n');
   const violations = validateSrpEntries(canonicalPolicyForTests(), [
     { path: 'tests/example.test.mjs', content },
   ]);
-  assert.ok(codes(violations).has('srp_file_too_large'));
+  assert.deepEqual(violations, []);
 });
 
-test('rejects named functions over 60 lines', () => {
+test('does not infer responsibility from function line count', () => {
   const body = Array.from({ length: 60 }, () => '  let value = 1;').join('\n');
   const violations = validateSrpEntries(canonicalPolicyForTests(), [
     { path: 'src/example.rs', content: `fn oversized() {\n${body}\n}` },
   ]);
-  assert.ok(codes(violations).has('srp_function_too_large'));
+  assert.deepEqual(violations, []);
 });
 
 test('excludes generated source paths only', () => {

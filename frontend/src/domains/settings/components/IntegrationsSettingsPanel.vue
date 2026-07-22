@@ -73,7 +73,7 @@ const {
           </button>
         </template>
 
-        <div v-if="!hasAccounts.value" class="settings-empty-state">
+        <div v-if="!hasAccounts" class="settings-empty-state">
           <Icon icon="tabler:id-off" />
           <strong>{{ t('No accounts yet') }}</strong>
           <span>{{ t('Start the wizard to create a backend-managed account setup.') }}</span>
@@ -200,7 +200,7 @@ const {
               v-if="selectedAccountSummary.canManageMail"
               type="button"
               class="secondary-button"
-              :disabled="activeMailAction.value === selectedAccountSummary.account.account_id"
+              :disabled="activeMailAction === selectedAccountSummary.account.account_id"
               @click="handleExportAccount(selectedAccountSummary.account.account_id)"
             >
               <Icon icon="tabler:download" />
@@ -210,7 +210,7 @@ const {
               v-if="selectedAccountSummary.canManageMail"
               type="button"
               class="secondary-button"
-              :disabled="activeMailAction.value === selectedAccountSummary.account.account_id"
+              :disabled="activeMailAction === selectedAccountSummary.account.account_id"
               @click="handleLogoutAccount(selectedAccountSummary.account.account_id)"
             >
               <Icon icon="tabler:logout" />
@@ -220,7 +220,7 @@ const {
               v-if="selectedAccountSummary.canManageMail"
               type="button"
               class="danger-button"
-              :disabled="activeMailAction.value === selectedAccountSummary.account.account_id"
+              :disabled="activeMailAction === selectedAccountSummary.account.account_id"
               @click="handleDeleteAccount(selectedAccountSummary.account.account_id)"
             >
               <Icon icon="tabler:trash" />
@@ -238,9 +238,9 @@ const {
     </div>
 
     <IntegrationConnectionWizard
-      :default-provider-id="connectWizardProviderId.value"
-      :open="isConnectWizardOpen.value"
-      :selected-account="connectWizardSelectedAccount.value"
+      :default-provider-id="connectWizardProviderId"
+      :open="isConnectWizardOpen"
+      :selected-account="connectWizardSelectedAccount"
       @close="handleCloseConnectWizard"
     />
   </section>

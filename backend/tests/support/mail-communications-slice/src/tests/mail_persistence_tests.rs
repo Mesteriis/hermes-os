@@ -1,5 +1,5 @@
-use hermes_mail_persistence::{MailPersistence, PersistedMailConnection, PersistedMailOperation};
 use hermes_mail_api::{DEFAULT_WINDOW, MAX_WINDOWS};
+use hermes_mail_persistence::{MailPersistence, PersistedMailConnection, PersistedMailOperation};
 
 #[test]
 fn stores_and_reads_connection_and_operation() {

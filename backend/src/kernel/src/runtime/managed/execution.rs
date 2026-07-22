@@ -77,7 +77,16 @@ pub fn run(
 ) -> Result<ManagedChildExecutionResult, String> {
     for attempt in 1..=policy.max_attempts {
         let mut child = spawn(staged_executable, arguments, Stdio::null())?;
-        let status = wait(&mut child, policy.max_runtime)?;
+        let status = match wait(&mut child, policy.max_runtime) {
+            Ok(status) => status,
+            Err(error) if error == "managed child exceeded its bounded runtime" => {
+                if attempt == policy.max_attempts {
+                    return Err(error);
+                }
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         if status.success() {
             return Ok(ManagedChildExecutionResult::succeeded(
                 attempt,

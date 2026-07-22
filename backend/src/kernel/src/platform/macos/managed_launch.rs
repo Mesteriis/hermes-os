@@ -8,10 +8,10 @@ use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::ManagedStorageRuntimeConfigurationV1;
 use prost::Message;
 
+use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::infrastructure::filesystem::new_instance_id;
 use crate::platform::macos::native_launch;
 use crate::platform::{storage, vault::status as vault_status};
-use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::runtime::lifecycle::control::ManagedRuntimeExpectation;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
@@ -124,13 +124,7 @@ pub fn start_with_storage_configuration(
         vault.runtime_generation(),
         vault.hpke_public_key_x25519(),
     )?;
-    start_staged_with_configuration(
-        supervisor,
-        store,
-        runtime_dir,
-        reservation,
-        configuration,
-    )
+    start_staged_with_configuration(supervisor, store, runtime_dir, reservation, configuration)
 }
 
 fn start_staged_with_configuration(

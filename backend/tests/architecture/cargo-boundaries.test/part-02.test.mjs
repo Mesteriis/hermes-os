@@ -47,7 +47,7 @@ test('allows PostgreSQL and AST clients only in their exact Storage packages', (
   );
 });
 
-test('allows only the explicit Scheduler ciphertext route exception outside Storage', () => {
+test('allows public Storage Vault contracts while rejecting private Storage implementations', () => {
   const allowed = [
     kernel([dependency('hermes-storage-protocol')]),
     workspacePackage('hermes-scheduler-runtime', {
@@ -64,7 +64,7 @@ test('allows only the explicit Scheduler ciphertext route exception outside Stor
       role: 'platform',
       owner: 'scheduler',
       surface: 'runtime',
-    }, [dependency('hermes-storage-vault')]),
+    }, [dependency('hermes-storage-control')]),
     ...storagePackages(),
   ];
   assert.ok(

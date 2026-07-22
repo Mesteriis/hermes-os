@@ -1,6 +1,6 @@
 //! Owner-local data grants reconciled from PostgreSQL's authoritative catalog.
 
-use sqlx::{query, query_scalar};
+use sqlx::{AssertSqlSafe, query, query_scalar};
 
 use crate::{PostgresAdapterErrorV1, PostgresAdminConnectorV1};
 
@@ -125,7 +125,7 @@ async fn execute_grant(
     connector: &PostgresAdminConnectorV1,
     statement: &str,
 ) -> Result<(), PostgresAdapterErrorV1> {
-    query(statement)
+    query(AssertSqlSafe(statement))
         .execute(connector.pool())
         .await
         .map_err(|_| PostgresAdapterErrorV1::Bootstrap)?;

@@ -374,10 +374,12 @@ test('accepts the intended isolated Storage Control dependency graph', () => {
     runtimeProtocol(),
     ...vaultPackages(),
     ...storagePackages({
-      controlDependencies: [dependency('hermes-storage-protocol')],
+      controlDependencies: [
+        dependency('hermes-storage-protocol'),
+        dependency('hermes-storage-vault'),
+      ],
       vaultDependencies: [
         dependency('hermes-storage-protocol'),
-        dependency('hermes-storage-control'),
         dependency('hermes-runtime-protocol'),
         dependency('hermes-vault-protocol'),
       ],

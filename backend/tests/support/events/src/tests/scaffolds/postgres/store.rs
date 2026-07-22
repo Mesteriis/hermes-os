@@ -4,7 +4,7 @@ use hermes_events_protocol::delivery::{
     InboxDecisionV1, OutboxEntryV1, OutboxPublishReceiptV1, OutboxRecordV1, OutboxRelayErrorV1,
     OwnerOutboxStorePortV1,
 };
-use sqlx::{PgPool, Row};
+use sqlx::{AssertSqlSafe, PgPool, Row};
 
 use super::super::OwnerDeliveryScaffoldV1;
 use super::schema;
@@ -20,7 +20,7 @@ impl PostgresOwnerDeliveryStore {
     }
 
     pub(super) async fn install(&self) -> Result<(), OutboxRelayErrorV1> {
-        sqlx::raw_sql(&schema::install(self.scaffold))
+        sqlx::raw_sql(AssertSqlSafe(schema::install(self.scaffold)))
             .execute(&self.pool)
             .await
             .map(|_| ())
@@ -32,7 +32,7 @@ impl PostgresOwnerDeliveryStore {
         outbox_id: &str,
         record: &OutboxRecordV1,
     ) -> Result<(), OutboxRelayErrorV1> {
-        sqlx::query(&schema::insert_outbox(self.scaffold))
+        sqlx::query(AssertSqlSafe(schema::insert_outbox(self.scaffold)))
             .bind(outbox_id)
             .bind(record.message_id().as_slice())
             .bind(record.envelope_sha256().as_slice())
@@ -47,7 +47,7 @@ impl PostgresOwnerDeliveryStore {
         &self,
         record: &OutboxRecordV1,
     ) -> Result<InboxDecisionV1, OutboxRelayErrorV1> {
-        let inserted = sqlx::query(&schema::insert_inbox(self.scaffold))
+        let inserted = sqlx::query(AssertSqlSafe(schema::insert_inbox(self.scaffold)))
             .bind(record.message_id().as_slice())
             .bind(record.envelope_sha256().as_slice())
             .execute(&self.pool)
@@ -64,7 +64,7 @@ impl PostgresOwnerDeliveryStore {
         &self,
         record: &OutboxRecordV1,
     ) -> Result<InboxDecisionV1, OutboxRelayErrorV1> {
-        let row = sqlx::query(&schema::inbox_hash(self.scaffold))
+        let row = sqlx::query(AssertSqlSafe(schema::inbox_hash(self.scaffold)))
             .bind(record.message_id().as_slice())
             .fetch_optional(&self.pool)
             .await
@@ -88,7 +88,7 @@ impl OwnerOutboxStorePortV1 for PostgresOwnerDeliveryStore {
     ) -> impl std::future::Future<Output = Result<Option<OutboxEntryV1>, OutboxRelayErrorV1>> + Send
     {
         async move {
-            let row = sqlx::query(&schema::next_pending(self.scaffold))
+            let row = sqlx::query(AssertSqlSafe(schema::next_pending(self.scaffold)))
                 .fetch_optional(&self.pool)
                 .await
                 .map_err(|_| OutboxRelayErrorV1::Persistence)?;
@@ -103,7 +103,7 @@ impl OwnerOutboxStorePortV1 for PostgresOwnerDeliveryStore {
         receipt: &OutboxPublishReceiptV1,
     ) -> impl std::future::Future<Output = Result<(), OutboxRelayErrorV1>> + Send {
         async move {
-            let result = sqlx::query(&schema::mark_published(self.scaffold))
+            let result = sqlx::query(AssertSqlSafe(schema::mark_published(self.scaffold)))
                 .bind(entry.outbox_id())
                 .bind(receipt.stream())
                 .bind(

@@ -23,7 +23,7 @@ hermes-scheduler-protocol = { path = "../../../src/platform/scheduler/protocol" 
 hermes-runtime-protocol = { path = "../../../src/platform/runtime_protocol" }
 hermes-storage-migrations = { path = "../../../src/platform/storage/migrations" }
 hermes-storage-protocol = { path = "../../../src/platform/storage/protocol" }
-sqlx = { version = "=0.8.6", default-features = false, features = ["postgres", "runtime-tokio-rustls"] }
+sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring"] }
 prost = "=0.14.4"
 prost-types = "=0.14.4"
 nats-jwt = "=0.3.0"

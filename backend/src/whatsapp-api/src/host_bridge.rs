@@ -3,8 +3,9 @@
 //! The host may submit sanitized provider metadata only. It cannot submit
 //! credentials, browser state, message bodies, media bytes, or command results.
 
-use serde::{Deserialize, Serialize};
+use crate::wire;
 use prost::Message;
+use serde::{Deserialize, Serialize};
 
 pub const HOST_BRIDGE_PROTOCOL_MAJOR: u32 = 1;
 pub const HOST_BRIDGE_PROTOCOL_REVISION: u32 = 2;
@@ -21,7 +22,9 @@ pub struct WhatsAppHostBridgeEnvelopeV1 {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum WhatsAppHostObservationV1 {
-    RuntimeState { state: String },
+    RuntimeState {
+        state: String,
+    },
     MessageIdentity {
         provider_chat_id: String,
         provider_message_id: String,
@@ -169,24 +172,142 @@ fn observation_to_wire(
     use wire::whats_app_host_bridge_request_v1::Observation;
     match observation {
         WhatsAppHostObservationV1::RuntimeState { state } => {
-            Observation::RuntimeState(wire::RuntimeState { state: state.clone() })
+            Observation::RuntimeState(wire::RuntimeState {
+                state: state.clone(),
+            })
         }
-        WhatsAppHostObservationV1::MessageIdentity { provider_chat_id, provider_message_id, sender_id } => Observation::MessageIdentity(wire::MessageIdentity { provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), sender_id: sender_id.clone() }),
-        WhatsAppHostObservationV1::MessageUpdated { provider_chat_id, provider_message_id } => Observation::MessageUpdated(wire::MessageUpdated { provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone() }),
-        WhatsAppHostObservationV1::MessageDeleted { provider_chat_id, provider_message_id } => Observation::MessageDeleted(wire::MessageDeleted { provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone() }),
-        WhatsAppHostObservationV1::Receipt { provider_chat_id, provider_message_id, delivery_state } => Observation::Receipt(wire::Receipt { provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), delivery_state: delivery_state.clone() }),
-        WhatsAppHostObservationV1::Reaction { provider_chat_id, provider_message_id, actor_id, emoji, is_active } => Observation::Reaction(wire::Reaction { provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), actor_id: actor_id.clone(), emoji: emoji.clone(), is_active: *is_active }),
-        WhatsAppHostObservationV1::Dialog { provider_chat_id, title, kind } => Observation::Dialog(wire::Dialog { provider_chat_id: provider_chat_id.clone(), title: title.clone(), kind: kind.clone() }),
-        WhatsAppHostObservationV1::Participant { provider_chat_id, provider_identity_id, display_name } => Observation::Participant(wire::Participant { provider_chat_id: provider_chat_id.clone(), provider_identity_id: provider_identity_id.clone(), display_name: display_name.clone() }),
-        WhatsAppHostObservationV1::Presence { provider_chat_id, provider_identity_id, state } => Observation::Presence(wire::Presence { provider_chat_id: provider_chat_id.clone(), provider_identity_id: provider_identity_id.clone(), state: state.clone() }),
-        WhatsAppHostObservationV1::MediaMetadata { provider_chat_id, provider_message_id, provider_media_id, media_kind } => Observation::MediaMetadata(wire::MediaMetadata { provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), provider_media_id: provider_media_id.clone(), media_kind: media_kind.clone() }),
-        WhatsAppHostObservationV1::CallMetadata { provider_call_id, provider_chat_id, direction, state } => Observation::CallMetadata(wire::CallMetadata { provider_call_id: provider_call_id.clone(), provider_chat_id: provider_chat_id.clone(), direction: direction.clone(), state: state.clone() }),
-        WhatsAppHostObservationV1::StatusMetadata { provider_status_id, sender_id } => Observation::StatusMetadata(wire::StatusMetadata { provider_status_id: provider_status_id.clone(), sender_id: sender_id.clone() }),
-        WhatsAppHostObservationV1::StatusViewMetadata { provider_status_id, viewer_id } => Observation::StatusViewMetadata(wire::StatusViewMetadata { provider_status_id: provider_status_id.clone(), viewer_id: viewer_id.clone() }),
-        WhatsAppHostObservationV1::StatusDeletedMetadata { provider_status_id } => Observation::StatusDeletedMetadata(wire::StatusDeletedMetadata { provider_status_id: provider_status_id.clone() }),
-        WhatsAppHostObservationV1::SessionLinked { secret_ref, revision } => Observation::SessionLinked(wire::SessionLinkedMetadata { secret_ref: secret_ref.clone(), revision: *revision }),
-        WhatsAppHostObservationV1::SessionRevoked => Observation::SessionRevoked(wire::SessionRevokedMetadata {}),
-        WhatsAppHostObservationV1::CommandResult { operation_id, provider_request_id, succeeded } => Observation::CommandResult(wire::CommandResultMetadata { operation_id: operation_id.clone(), provider_request_id: provider_request_id.clone(), succeeded: *succeeded }),
+        WhatsAppHostObservationV1::MessageIdentity {
+            provider_chat_id,
+            provider_message_id,
+            sender_id,
+        } => Observation::MessageIdentity(wire::MessageIdentity {
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            sender_id: sender_id.clone(),
+        }),
+        WhatsAppHostObservationV1::MessageUpdated {
+            provider_chat_id,
+            provider_message_id,
+        } => Observation::MessageUpdated(wire::MessageUpdated {
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+        }),
+        WhatsAppHostObservationV1::MessageDeleted {
+            provider_chat_id,
+            provider_message_id,
+        } => Observation::MessageDeleted(wire::MessageDeleted {
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+        }),
+        WhatsAppHostObservationV1::Receipt {
+            provider_chat_id,
+            provider_message_id,
+            delivery_state,
+        } => Observation::Receipt(wire::Receipt {
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            delivery_state: delivery_state.clone(),
+        }),
+        WhatsAppHostObservationV1::Reaction {
+            provider_chat_id,
+            provider_message_id,
+            actor_id,
+            emoji,
+            is_active,
+        } => Observation::Reaction(wire::Reaction {
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            actor_id: actor_id.clone(),
+            emoji: emoji.clone(),
+            is_active: *is_active,
+        }),
+        WhatsAppHostObservationV1::Dialog {
+            provider_chat_id,
+            title,
+            kind,
+        } => Observation::Dialog(wire::Dialog {
+            provider_chat_id: provider_chat_id.clone(),
+            title: title.clone(),
+            kind: kind.clone(),
+        }),
+        WhatsAppHostObservationV1::Participant {
+            provider_chat_id,
+            provider_identity_id,
+            display_name,
+        } => Observation::Participant(wire::Participant {
+            provider_chat_id: provider_chat_id.clone(),
+            provider_identity_id: provider_identity_id.clone(),
+            display_name: display_name.clone(),
+        }),
+        WhatsAppHostObservationV1::Presence {
+            provider_chat_id,
+            provider_identity_id,
+            state,
+        } => Observation::Presence(wire::Presence {
+            provider_chat_id: provider_chat_id.clone(),
+            provider_identity_id: provider_identity_id.clone(),
+            state: state.clone(),
+        }),
+        WhatsAppHostObservationV1::MediaMetadata {
+            provider_chat_id,
+            provider_message_id,
+            provider_media_id,
+            media_kind,
+        } => Observation::MediaMetadata(wire::MediaMetadata {
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            provider_media_id: provider_media_id.clone(),
+            media_kind: media_kind.clone(),
+        }),
+        WhatsAppHostObservationV1::CallMetadata {
+            provider_call_id,
+            provider_chat_id,
+            direction,
+            state,
+        } => Observation::CallMetadata(wire::CallMetadata {
+            provider_call_id: provider_call_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            direction: direction.clone(),
+            state: state.clone(),
+        }),
+        WhatsAppHostObservationV1::StatusMetadata {
+            provider_status_id,
+            sender_id,
+        } => Observation::StatusMetadata(wire::StatusMetadata {
+            provider_status_id: provider_status_id.clone(),
+            sender_id: sender_id.clone(),
+        }),
+        WhatsAppHostObservationV1::StatusViewMetadata {
+            provider_status_id,
+            viewer_id,
+        } => Observation::StatusViewMetadata(wire::StatusViewMetadata {
+            provider_status_id: provider_status_id.clone(),
+            viewer_id: viewer_id.clone(),
+        }),
+        WhatsAppHostObservationV1::StatusDeletedMetadata { provider_status_id } => {
+            Observation::StatusDeletedMetadata(wire::StatusDeletedMetadata {
+                provider_status_id: provider_status_id.clone(),
+            })
+        }
+        WhatsAppHostObservationV1::SessionLinked {
+            secret_ref,
+            revision,
+        } => Observation::SessionLinked(wire::SessionLinkedMetadata {
+            secret_ref: secret_ref.clone(),
+            revision: *revision,
+        }),
+        WhatsAppHostObservationV1::SessionRevoked => {
+            Observation::SessionRevoked(wire::SessionRevokedMetadata {})
+        }
+        WhatsAppHostObservationV1::CommandResult {
+            operation_id,
+            provider_request_id,
+            succeeded,
+        } => Observation::CommandResult(wire::CommandResultMetadata {
+            operation_id: operation_id.clone(),
+            provider_request_id: provider_request_id.clone(),
+            succeeded: *succeeded,
+        }),
     }
 }
 
@@ -195,23 +316,84 @@ fn observation_from_wire(
 ) -> Result<WhatsAppHostObservationV1, WhatsAppHostBridgeError> {
     use wire::whats_app_host_bridge_request_v1::Observation;
     Ok(match observation {
-        Observation::RuntimeState(value) => WhatsAppHostObservationV1::RuntimeState { state: value.state },
-        Observation::MessageIdentity(value) => WhatsAppHostObservationV1::MessageIdentity { provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, sender_id: value.sender_id },
-        Observation::MessageUpdated(value) => WhatsAppHostObservationV1::MessageUpdated { provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id },
-        Observation::MessageDeleted(value) => WhatsAppHostObservationV1::MessageDeleted { provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id },
-        Observation::Receipt(value) => WhatsAppHostObservationV1::Receipt { provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, delivery_state: value.delivery_state },
-        Observation::Reaction(value) => WhatsAppHostObservationV1::Reaction { provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, actor_id: value.actor_id, emoji: value.emoji, is_active: value.is_active },
-        Observation::Dialog(value) => WhatsAppHostObservationV1::Dialog { provider_chat_id: value.provider_chat_id, title: value.title, kind: value.kind },
-        Observation::Participant(value) => WhatsAppHostObservationV1::Participant { provider_chat_id: value.provider_chat_id, provider_identity_id: value.provider_identity_id, display_name: value.display_name },
-        Observation::Presence(value) => WhatsAppHostObservationV1::Presence { provider_chat_id: value.provider_chat_id, provider_identity_id: value.provider_identity_id, state: value.state },
-        Observation::MediaMetadata(value) => WhatsAppHostObservationV1::MediaMetadata { provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, provider_media_id: value.provider_media_id, media_kind: value.media_kind },
-        Observation::CallMetadata(value) => WhatsAppHostObservationV1::CallMetadata { provider_call_id: value.provider_call_id, provider_chat_id: value.provider_chat_id, direction: value.direction, state: value.state },
-        Observation::StatusMetadata(value) => WhatsAppHostObservationV1::StatusMetadata { provider_status_id: value.provider_status_id, sender_id: value.sender_id },
-        Observation::StatusViewMetadata(value) => WhatsAppHostObservationV1::StatusViewMetadata { provider_status_id: value.provider_status_id, viewer_id: value.viewer_id },
-        Observation::StatusDeletedMetadata(value) => WhatsAppHostObservationV1::StatusDeletedMetadata { provider_status_id: value.provider_status_id },
-        Observation::SessionLinked(value) => WhatsAppHostObservationV1::SessionLinked { secret_ref: value.secret_ref, revision: value.revision },
-        Observation::SessionRevoked => WhatsAppHostObservationV1::SessionRevoked,
-        Observation::CommandResult(value) => WhatsAppHostObservationV1::CommandResult { operation_id: value.operation_id, provider_request_id: value.provider_request_id, succeeded: value.succeeded },
+        Observation::RuntimeState(value) => {
+            WhatsAppHostObservationV1::RuntimeState { state: value.state }
+        }
+        Observation::MessageIdentity(value) => WhatsAppHostObservationV1::MessageIdentity {
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            sender_id: value.sender_id,
+        },
+        Observation::MessageUpdated(value) => WhatsAppHostObservationV1::MessageUpdated {
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+        },
+        Observation::MessageDeleted(value) => WhatsAppHostObservationV1::MessageDeleted {
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+        },
+        Observation::Receipt(value) => WhatsAppHostObservationV1::Receipt {
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            delivery_state: value.delivery_state,
+        },
+        Observation::Reaction(value) => WhatsAppHostObservationV1::Reaction {
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            actor_id: value.actor_id,
+            emoji: value.emoji,
+            is_active: value.is_active,
+        },
+        Observation::Dialog(value) => WhatsAppHostObservationV1::Dialog {
+            provider_chat_id: value.provider_chat_id,
+            title: value.title,
+            kind: value.kind,
+        },
+        Observation::Participant(value) => WhatsAppHostObservationV1::Participant {
+            provider_chat_id: value.provider_chat_id,
+            provider_identity_id: value.provider_identity_id,
+            display_name: value.display_name,
+        },
+        Observation::Presence(value) => WhatsAppHostObservationV1::Presence {
+            provider_chat_id: value.provider_chat_id,
+            provider_identity_id: value.provider_identity_id,
+            state: value.state,
+        },
+        Observation::MediaMetadata(value) => WhatsAppHostObservationV1::MediaMetadata {
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            provider_media_id: value.provider_media_id,
+            media_kind: value.media_kind,
+        },
+        Observation::CallMetadata(value) => WhatsAppHostObservationV1::CallMetadata {
+            provider_call_id: value.provider_call_id,
+            provider_chat_id: value.provider_chat_id,
+            direction: value.direction,
+            state: value.state,
+        },
+        Observation::StatusMetadata(value) => WhatsAppHostObservationV1::StatusMetadata {
+            provider_status_id: value.provider_status_id,
+            sender_id: value.sender_id,
+        },
+        Observation::StatusViewMetadata(value) => WhatsAppHostObservationV1::StatusViewMetadata {
+            provider_status_id: value.provider_status_id,
+            viewer_id: value.viewer_id,
+        },
+        Observation::StatusDeletedMetadata(value) => {
+            WhatsAppHostObservationV1::StatusDeletedMetadata {
+                provider_status_id: value.provider_status_id,
+            }
+        }
+        Observation::SessionLinked(value) => WhatsAppHostObservationV1::SessionLinked {
+            secret_ref: value.secret_ref,
+            revision: value.revision,
+        },
+        Observation::SessionRevoked(_) => WhatsAppHostObservationV1::SessionRevoked,
+        Observation::CommandResult(value) => WhatsAppHostObservationV1::CommandResult {
+            operation_id: value.operation_id,
+            provider_request_id: value.provider_request_id,
+            succeeded: value.succeeded,
+        },
     })
 }
 
@@ -224,7 +406,11 @@ fn validate_observation(
             provider_chat_id,
             provider_message_id,
             sender_id,
-        } => vec![provider_chat_id.as_str(), provider_message_id.as_str(), sender_id.as_str()],
+        } => vec![
+            provider_chat_id.as_str(),
+            provider_message_id.as_str(),
+            sender_id.as_str(),
+        ],
         WhatsAppHostObservationV1::MessageUpdated {
             provider_chat_id,
             provider_message_id,
@@ -237,13 +423,21 @@ fn validate_observation(
             provider_chat_id,
             provider_message_id,
             delivery_state,
-        } => vec![provider_chat_id.as_str(), provider_message_id.as_str(), delivery_state.as_str()],
+        } => vec![
+            provider_chat_id.as_str(),
+            provider_message_id.as_str(),
+            delivery_state.as_str(),
+        ],
         WhatsAppHostObservationV1::Reaction {
             provider_chat_id,
             provider_message_id,
             actor_id,
             ..
-        } => vec![provider_chat_id.as_str(), provider_message_id.as_str(), actor_id.as_str()],
+        } => vec![
+            provider_chat_id.as_str(),
+            provider_message_id.as_str(),
+            actor_id.as_str(),
+        ],
         WhatsAppHostObservationV1::Dialog {
             provider_chat_id,
             title,
@@ -253,24 +447,42 @@ fn validate_observation(
             provider_chat_id,
             provider_identity_id,
             display_name,
-        } => vec![provider_chat_id.as_str(), provider_identity_id.as_str(), display_name.as_str()],
+        } => vec![
+            provider_chat_id.as_str(),
+            provider_identity_id.as_str(),
+            display_name.as_str(),
+        ],
         WhatsAppHostObservationV1::Presence {
             provider_chat_id,
             provider_identity_id,
             state,
-        } => vec![provider_chat_id.as_str(), provider_identity_id.as_str(), state.as_str()],
+        } => vec![
+            provider_chat_id.as_str(),
+            provider_identity_id.as_str(),
+            state.as_str(),
+        ],
         WhatsAppHostObservationV1::MediaMetadata {
             provider_chat_id,
             provider_message_id,
             provider_media_id,
             media_kind,
-        } => vec![provider_chat_id.as_str(), provider_message_id.as_str(), provider_media_id.as_str(), media_kind.as_str()],
+        } => vec![
+            provider_chat_id.as_str(),
+            provider_message_id.as_str(),
+            provider_media_id.as_str(),
+            media_kind.as_str(),
+        ],
         WhatsAppHostObservationV1::CallMetadata {
             provider_call_id,
             provider_chat_id,
             direction,
             state,
-        } => vec![provider_call_id.as_str(), provider_chat_id.as_str(), direction.as_str(), state.as_str()],
+        } => vec![
+            provider_call_id.as_str(),
+            provider_chat_id.as_str(),
+            direction.as_str(),
+            state.as_str(),
+        ],
         WhatsAppHostObservationV1::StatusMetadata {
             provider_status_id,
             sender_id,
@@ -284,15 +496,17 @@ fn validate_observation(
         }
         WhatsAppHostObservationV1::SessionLinked { secret_ref, .. } => vec![secret_ref.as_str()],
         WhatsAppHostObservationV1::SessionRevoked => Vec::new(),
-        WhatsAppHostObservationV1::CommandResult { operation_id, .. } => vec![operation_id.as_str()],
+        WhatsAppHostObservationV1::CommandResult { operation_id, .. } => {
+            vec![operation_id.as_str()]
+        }
     };
     if fields.iter().any(|value| value.trim().is_empty()) {
         return Err(WhatsAppHostBridgeError::EmptyField);
     }
-    if let WhatsAppHostObservationV1::SessionLinked { revision, .. } = observation {
-        if *revision == 0 {
-            return Err(WhatsAppHostBridgeError::ForbiddenContent);
-        }
+    if let WhatsAppHostObservationV1::SessionLinked { revision, .. } = observation
+        && *revision == 0
+    {
+        return Err(WhatsAppHostBridgeError::ForbiddenContent);
     }
     Ok(())
 }

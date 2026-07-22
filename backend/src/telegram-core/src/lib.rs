@@ -2,15 +2,13 @@
 
 use hermes_communications_ingress::SourceEnvelope;
 use hermes_telegram_api::{
-    TelegramAccount, TelegramAccountState, TelegramContractError, TelegramCredentialBinding,
-    TelegramChatStateProjection, TelegramDeliveryState, TelegramMessageMutation,
+    TelegramAccount, TelegramAccountState, TelegramChatStateProjection, TelegramContractError,
+    TelegramCredentialBinding, TelegramDeliveryState, TelegramMessageMutation,
     TelegramMessageObservation, TelegramMessageProjection, TelegramOperation,
-    TelegramOperationState, TelegramProviderCommand, TelegramProviderEvent,
-    TelegramQrLoginSession, TelegramQrLoginState,
-    TelegramReconciliationState, TelegramRuntimeLease, TelegramRuntimeLeaseState,
-    provider_command_account_id, provider_command_kind,
-    provider_command_operation_id,
-    TelegramRuntimeState, validate_text,
+    TelegramOperationState, TelegramProviderCommand, TelegramProviderEvent, TelegramQrLoginSession,
+    TelegramQrLoginState, TelegramReconciliationState, TelegramRuntimeLease,
+    TelegramRuntimeLeaseState, TelegramRuntimeState, provider_command_account_id,
+    provider_command_kind, provider_command_operation_id, validate_text,
 };
 use hermes_vault_protocol::{
     CredentialLeaseV1, DEFAULT_LEASE_TTL_SECONDS, SecretClassV1, VaultActionV1,
@@ -58,6 +56,7 @@ pub fn credential_lease_purposes(
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn validate_credential_lease(
     account_id: &str,
     logical_owner_id: &str,
@@ -71,12 +70,8 @@ pub fn validate_credential_lease(
     lease: &CredentialLeaseV1,
     now_unix_seconds: u64,
 ) -> Result<(), TelegramContractError> {
-    let expected_purpose = credential_lease_purpose(
-        account_id,
-        configuration_instance_id,
-        binding,
-    )
-    .map_err(|_| TelegramContractError::CredentialLeaseRejected)?;
+    let expected_purpose = credential_lease_purpose(account_id, configuration_instance_id, binding)
+        .map_err(|_| TelegramContractError::CredentialLeaseRejected)?;
     let request = lease.request();
     let audience = request.audience();
     let purpose = request.purpose();
@@ -215,7 +210,10 @@ impl TelegramLifecycle {
         })
     }
 
-    pub fn retire(&self, account: &TelegramAccount) -> Result<TelegramAccount, TelegramContractError> {
+    pub fn retire(
+        &self,
+        account: &TelegramAccount,
+    ) -> Result<TelegramAccount, TelegramContractError> {
         if account.state == TelegramAccountState::Retired {
             return Err(TelegramContractError::AccountRetired);
         }
@@ -272,7 +270,10 @@ pub fn operation_completed(operation: &TelegramOperation) -> TelegramOperation {
     }
 }
 
-pub fn operation_failed(operation: &TelegramOperation, error: impl Into<String>) -> TelegramOperation {
+pub fn operation_failed(
+    operation: &TelegramOperation,
+    error: impl Into<String>,
+) -> TelegramOperation {
     TelegramOperation {
         state: TelegramOperationState::Failed,
         last_error: Some(error.into()),
@@ -418,7 +419,9 @@ pub fn event_message_mutation(
     }
 }
 
-pub fn event_chat_state(event: &TelegramProviderEvent) -> Option<(&str, &str, TelegramChatStateProjection)> {
+pub fn event_chat_state(
+    event: &TelegramProviderEvent,
+) -> Option<(&str, &str, TelegramChatStateProjection)> {
     match event {
         TelegramProviderEvent::ChatUnreadChanged {
             account_id,
@@ -456,7 +459,9 @@ pub fn provider_event_draft(
     event: &TelegramProviderEvent,
 ) -> Result<Option<CommunicationObservationDraft>, TelegramContractError> {
     match event {
-        TelegramProviderEvent::MessageCreated(observation) => observation_draft(observation.clone()).map(Some),
+        TelegramProviderEvent::MessageCreated(observation) => {
+            observation_draft(observation.clone()).map(Some)
+        }
         TelegramProviderEvent::MessageEdited {
             account_id,
             provider_chat_id,
@@ -502,18 +507,36 @@ pub fn provider_event_draft(
             ),
             None,
         ),
-        TelegramProviderEvent::MessageSendFailed { account_id, provider_chat_id, old_provider_message_id, .. }
-        | TelegramProviderEvent::MessageSendSucceeded { account_id, provider_chat_id, old_provider_message_id, .. } => event_draft(
-            &format!("telegram:event:send-state:{account_id}:{provider_chat_id}:{old_provider_message_id}"),
+        TelegramProviderEvent::MessageSendFailed {
+            account_id,
+            provider_chat_id,
+            old_provider_message_id,
+            ..
+        }
+        | TelegramProviderEvent::MessageSendSucceeded {
+            account_id,
+            provider_chat_id,
+            old_provider_message_id,
+            ..
+        } => event_draft(
+            &format!(
+                "telegram:event:send-state:{account_id}:{provider_chat_id}:{old_provider_message_id}"
+            ),
             None,
         ),
-        TelegramProviderEvent::ChatUnreadChanged { account_id, provider_chat_id, .. }
-        | TelegramProviderEvent::ChatMarkedUnreadChanged { account_id, provider_chat_id, .. } => {
-            event_draft(
-                &format!("telegram:event:chat-state:{account_id}:{provider_chat_id}"),
-                None,
-            )
+        TelegramProviderEvent::ChatUnreadChanged {
+            account_id,
+            provider_chat_id,
+            ..
         }
+        | TelegramProviderEvent::ChatMarkedUnreadChanged {
+            account_id,
+            provider_chat_id,
+            ..
+        } => event_draft(
+            &format!("telegram:event:chat-state:{account_id}:{provider_chat_id}"),
+            None,
+        ),
         TelegramProviderEvent::TypingChanged(state) => event_draft(
             &format!(
                 "telegram:event:typing:{}:{}:{}",
@@ -535,10 +558,9 @@ pub fn provider_event_draft(
             ),
             None,
         ),
-        TelegramProviderEvent::ChatFoldersChanged { account_id, .. } => event_draft(
-            &format!("telegram:event:chat-folders:{account_id}"),
-            None,
-        ),
+        TelegramProviderEvent::ChatFoldersChanged { account_id, .. } => {
+            event_draft(&format!("telegram:event:chat-folders:{account_id}"), None)
+        }
         TelegramProviderEvent::ChatNotificationChanged {
             account_id,
             provider_chat_id,
@@ -564,7 +586,10 @@ pub fn provider_event_draft(
             None,
         ),
         TelegramProviderEvent::FileChanged(file) => event_draft(
-            &format!("telegram:event:file:{}:{}", file.account_id, file.provider_file_id),
+            &format!(
+                "telegram:event:file:{}:{}",
+                file.account_id, file.provider_file_id
+            ),
             None,
         ),
     }
@@ -641,7 +666,10 @@ mod tests {
         let binding = &account_setup().credentials[0];
         let purpose = credential_lease_purpose("telegram-account", "cfg-1", binding)
             .expect("valid Telegram Vault purpose");
-        assert_eq!(purpose.allowed_secret_classes(), &[SecretClassV1::ProviderCredential]);
+        assert_eq!(
+            purpose.allowed_secret_classes(),
+            &[SecretClassV1::ProviderCredential]
+        );
         assert_eq!(purpose.actions(), &[VaultActionV1::Resolve]);
     }
 
@@ -650,13 +678,9 @@ mod tests {
         let binding = &account_setup().credentials[0];
         let purpose = credential_lease_purpose("telegram-account", "cfg-1", binding)
             .expect("valid Telegram Vault purpose");
-        let audience = LeaseAudienceV1::new(
-            "registration-1".to_owned(),
-            "runtime-1".to_owned(),
-            4,
-            9,
-        )
-        .expect("valid lease audience");
+        let audience =
+            LeaseAudienceV1::new("registration-1".to_owned(), "runtime-1".to_owned(), 4, 9)
+                .expect("valid lease audience");
         let request = VaultLeaseIssueRequestV1::new(
             "vault-1".to_owned(),
             7,

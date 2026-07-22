@@ -3,23 +3,24 @@
 use prost::Message;
 
 use crate::{
-    TelegramAccount, TelegramAccountSetup, TelegramAuthorizationStatus, TelegramCredentialBinding,
-    TelegramCredentialPurpose, TelegramMediaSessionRegistration, TelegramProviderKind,
-    TelegramChat, TelegramChatAvatar, TelegramChatKind, TelegramClientResponse,
-    TelegramCommandRecord,
-    TelegramChatFolder, TelegramChatOperationalState, TelegramChatPosition,
-    TelegramChatStateProjection,
-    TelegramDownloadFile, TelegramFileSnapshot, TelegramHistoryPage, TelegramMediaKind,
-    TelegramMessageMedia, TelegramMessageMutation, TelegramMessageObservation, TelegramMessageProjection,
-    TelegramMessageReferences, TelegramMessageTombstone, TelegramMessageVersion,
-    TelegramMessageVersionSource, TelegramOperation,
-    TelegramParticipant, TelegramParticipantFilter, TelegramParticipantPage,
-    TelegramProviderCommand, TelegramProviderQuery,
-    TelegramHistorySyncMode, TelegramSendMedia, TelegramSendMessage,
+    TelegramAccount, TelegramAccountSetup, TelegramAttachmentDownloadState,
+    TelegramAttachmentProjection, TelegramAuthorizationStatus, TelegramChat, TelegramChatAvatar,
+    TelegramChatFolder, TelegramChatKind, TelegramChatOperationalState, TelegramChatPosition,
+    TelegramChatStateProjection, TelegramClientResponse, TelegramCommandRecord,
+    TelegramCredentialBinding, TelegramCredentialPurpose, TelegramDownloadFile,
+    TelegramFileSnapshot, TelegramHistoryPage, TelegramHistorySyncMode, TelegramMediaKind,
+    TelegramMediaSessionRegistration, TelegramMessageMedia, TelegramMessageMutation,
+    TelegramMessageObservation, TelegramMessageProjection, TelegramMessageReferences,
+    TelegramMessageTombstone, TelegramMessageVersion, TelegramMessageVersionSource,
+    TelegramOperation, TelegramParticipant, TelegramParticipantFilter, TelegramParticipantPage,
+    TelegramProviderCommand, TelegramProviderEvent, TelegramProviderKind, TelegramProviderQuery,
     TelegramProviderQueryResponse, TelegramReactionObservation, TelegramReactionSummary,
-    TelegramAttachmentDownloadState, TelegramAttachmentProjection, TelegramTombstoneReason,
-    TelegramTopic, TelegramProviderEvent, TelegramRealtimeFrame, TelegramTypingState,
-    wire::{self, telegram_authorization_request_v1::Request, telegram_authorization_response_v1::Response},
+    TelegramRealtimeFrame, TelegramSendMedia, TelegramSendMessage, TelegramTombstoneReason,
+    TelegramTopic, TelegramTypingState,
+    wire::{
+        self, telegram_authorization_request_v1::Request,
+        telegram_authorization_response_v1::Response,
+    },
 };
 
 fn media_kind_name(kind: TelegramMediaKind) -> &'static str {
@@ -52,7 +53,9 @@ fn participant_filter_name(filter: TelegramParticipantFilter) -> &'static str {
     }
 }
 
-fn parse_participant_filter(value: &str) -> Result<TelegramParticipantFilter, TelegramAuthorizationWireError> {
+fn parse_participant_filter(
+    value: &str,
+) -> Result<TelegramParticipantFilter, TelegramAuthorizationWireError> {
     match value {
         "recent" => Ok(TelegramParticipantFilter::Recent),
         "administrators" => Ok(TelegramParticipantFilter::Administrators),
@@ -64,163 +67,742 @@ pub fn encode_command(command: &TelegramProviderCommand) -> Vec<u8> {
     use wire::telegram_provider_command_v1::Command;
     let command = match command {
         TelegramProviderCommand::SendText(value) => Command::SendText(wire::SendTextCommand {
-            operation_id: value.operation_id.clone(), account_id: value.account_id.clone(),
-            provider_chat_id: value.provider_chat_id.clone(), text: value.text.clone(),
+            operation_id: value.operation_id.clone(),
+            account_id: value.account_id.clone(),
+            provider_chat_id: value.provider_chat_id.clone(),
+            text: value.text.clone(),
         }),
         TelegramProviderCommand::SendMedia(value) => Command::SendMedia(wire::SendMediaCommand {
-            operation_id: value.operation_id.clone(), account_id: value.account_id.clone(),
-            provider_chat_id: value.provider_chat_id.clone(), media_kind: media_kind_name(value.media_kind).to_owned(),
-            blob_ref: value.blob_ref.clone(), caption: value.caption.clone(), filename: value.filename.clone(),
+            operation_id: value.operation_id.clone(),
+            account_id: value.account_id.clone(),
+            provider_chat_id: value.provider_chat_id.clone(),
+            media_kind: media_kind_name(value.media_kind).to_owned(),
+            blob_ref: value.blob_ref.clone(),
+            caption: value.caption.clone(),
+            filename: value.filename.clone(),
         }),
-        TelegramProviderCommand::DownloadFile(value) => Command::DownloadFile(wire::DownloadFileCommand {
-            operation_id: value.operation_id.clone(), account_id: value.account_id.clone(),
-            provider_file_id: value.provider_file_id.clone(), priority: value.priority,
+        TelegramProviderCommand::DownloadFile(value) => {
+            Command::DownloadFile(wire::DownloadFileCommand {
+                operation_id: value.operation_id.clone(),
+                account_id: value.account_id.clone(),
+                provider_file_id: value.provider_file_id.clone(),
+                priority: value.priority,
+            })
+        }
+        TelegramProviderCommand::Reply {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            reply_to_provider_message_id,
+            text,
+        } => Command::Reply(wire::ReplyCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            reply_to_provider_message_id: reply_to_provider_message_id.clone(),
+            text: text.clone(),
         }),
-        TelegramProviderCommand::Reply { operation_id, account_id, provider_chat_id, reply_to_provider_message_id, text } => Command::Reply(wire::ReplyCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(),
-            reply_to_provider_message_id: reply_to_provider_message_id.clone(), text: text.clone(),
+        TelegramProviderCommand::Forward {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            from_provider_chat_id,
+            from_provider_message_id,
+        } => Command::Forward(wire::ForwardCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            from_provider_chat_id: from_provider_chat_id.clone(),
+            from_provider_message_id: from_provider_message_id.clone(),
         }),
-        TelegramProviderCommand::Forward { operation_id, account_id, provider_chat_id, from_provider_chat_id, from_provider_message_id } => Command::Forward(wire::ForwardCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(),
-            from_provider_chat_id: from_provider_chat_id.clone(), from_provider_message_id: from_provider_message_id.clone(),
+        TelegramProviderCommand::Edit {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            text,
+        } => Command::Edit(wire::EditCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            text: text.clone(),
         }),
-        TelegramProviderCommand::Edit { operation_id, account_id, provider_chat_id, provider_message_id, text } => Command::Edit(wire::EditCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(),
-            provider_message_id: provider_message_id.clone(), text: text.clone(),
+        TelegramProviderCommand::Delete {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            revoke,
+        } => Command::Delete(wire::DeleteCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            revoke: *revoke,
         }),
-        TelegramProviderCommand::Delete { operation_id, account_id, provider_chat_id, provider_message_id, revoke } => Command::Delete(wire::DeleteCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(),
-            provider_message_id: provider_message_id.clone(), revoke: *revoke,
+        TelegramProviderCommand::RestoreVisibility {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            reason,
+        } => Command::RestoreVisibility(wire::RestoreVisibilityCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            reason: reason.clone(),
         }),
-        TelegramProviderCommand::RestoreVisibility { operation_id, account_id, provider_chat_id, provider_message_id, reason } => Command::RestoreVisibility(wire::RestoreVisibilityCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(),
-            provider_message_id: provider_message_id.clone(), reason: reason.clone(),
+        TelegramProviderCommand::Reaction {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            emoji,
+            active,
+        } => Command::Reaction(wire::ReactionCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            emoji: emoji.clone(),
+            active: *active,
         }),
-        TelegramProviderCommand::Reaction { operation_id, account_id, provider_chat_id, provider_message_id, emoji, active } => Command::Reaction(wire::ReactionCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(),
-            provider_message_id: provider_message_id.clone(), emoji: emoji.clone(), active: *active,
+        TelegramProviderCommand::Pin {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            active,
+        } => Command::Pin(wire::PinCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            active: *active,
         }),
-        TelegramProviderCommand::Pin { operation_id, account_id, provider_chat_id, provider_message_id, active } => Command::Pin(wire::PinCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(),
-            provider_message_id: provider_message_id.clone(), active: *active,
-        }),
-        TelegramProviderCommand::MarkUnread { operation_id, account_id, provider_chat_id, unread, read_through_provider_message_id } => Command::MarkUnread(wire::MarkUnreadCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), unread: *unread,
+        TelegramProviderCommand::MarkUnread {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            unread,
+            read_through_provider_message_id,
+        } => Command::MarkUnread(wire::MarkUnreadCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            unread: *unread,
             read_through_provider_message_id: read_through_provider_message_id.clone(),
         }),
-        TelegramProviderCommand::Archive { operation_id, account_id, provider_chat_id, archived } => Command::Archive(wire::ArchiveCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), archived: *archived,
+        TelegramProviderCommand::Archive {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            archived,
+        } => Command::Archive(wire::ArchiveCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            archived: *archived,
         }),
-        TelegramProviderCommand::Mute { operation_id, account_id, provider_chat_id, muted } => Command::Mute(wire::MuteCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), muted: *muted,
+        TelegramProviderCommand::Mute {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            muted,
+        } => Command::Mute(wire::MuteCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            muted: *muted,
         }),
-        TelegramProviderCommand::Join { operation_id, account_id, provider_chat_id } => Command::Join(wire::JoinCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(),
+        TelegramProviderCommand::Join {
+            operation_id,
+            account_id,
+            provider_chat_id,
+        } => Command::Join(wire::JoinCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
         }),
-        TelegramProviderCommand::Leave { operation_id, account_id, provider_chat_id } => Command::Leave(wire::LeaveCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(),
+        TelegramProviderCommand::Leave {
+            operation_id,
+            account_id,
+            provider_chat_id,
+        } => Command::Leave(wire::LeaveCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
         }),
-        TelegramProviderCommand::AddChatToFolder { operation_id, account_id, provider_chat_id, provider_folder_id } => Command::AddChatToFolder(wire::FolderCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_folder_id: *provider_folder_id,
+        TelegramProviderCommand::AddChatToFolder {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_folder_id,
+        } => Command::AddChatToFolder(wire::FolderCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_folder_id: *provider_folder_id,
         }),
-        TelegramProviderCommand::RemoveChatFromFolder { operation_id, account_id, provider_chat_id, provider_folder_id } => Command::RemoveChatFromFolder(wire::FolderCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_folder_id: *provider_folder_id,
+        TelegramProviderCommand::RemoveChatFromFolder {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_folder_id,
+        } => Command::RemoveChatFromFolder(wire::FolderCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_folder_id: *provider_folder_id,
         }),
-        TelegramProviderCommand::SearchMessages { operation_id, account_id, provider_chat_id, query, limit } => Command::SearchMessages(wire::SearchMessagesCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), query: query.clone(), limit: *limit,
+        TelegramProviderCommand::SearchMessages {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            query,
+            limit,
+        } => Command::SearchMessages(wire::SearchMessagesCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            query: query.clone(),
+            limit: *limit,
         }),
-        TelegramProviderCommand::ListParticipants { operation_id, account_id, provider_chat_id, filter, offset, limit } => Command::ListParticipants(wire::ListParticipantsCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), filter: participant_filter_name(*filter).to_owned(), offset: *offset, limit: *limit,
+        TelegramProviderCommand::ListParticipants {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            filter,
+            offset,
+            limit,
+        } => Command::ListParticipants(wire::ListParticipantsCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            filter: participant_filter_name(*filter).to_owned(),
+            offset: *offset,
+            limit: *limit,
         }),
-        TelegramProviderCommand::ListTopics { operation_id, account_id, provider_chat_id, limit } => Command::ListTopics(wire::ListTopicsCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), limit: *limit,
+        TelegramProviderCommand::ListTopics {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            limit,
+        } => Command::ListTopics(wire::ListTopicsCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            limit: *limit,
         }),
-        TelegramProviderCommand::CreateTopic { operation_id, account_id, provider_chat_id, title } => Command::CreateTopic(wire::CreateTopicCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), title: title.clone(),
+        TelegramProviderCommand::CreateTopic {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            title,
+        } => Command::CreateTopic(wire::CreateTopicCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            title: title.clone(),
         }),
-        TelegramProviderCommand::SetTopicClosed { operation_id, account_id, provider_chat_id, provider_topic_id, is_closed } => Command::SetTopicClosed(wire::SetTopicClosedCommand {
-            operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_topic_id: provider_topic_id.clone(), is_closed: *is_closed,
+        TelegramProviderCommand::SetTopicClosed {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_topic_id,
+            is_closed,
+        } => Command::SetTopicClosed(wire::SetTopicClosedCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_topic_id: provider_topic_id.clone(),
+            is_closed: *is_closed,
         }),
     };
-    wire::TelegramProviderCommandV1 { command: Some(command) }.encode_to_vec()
+    wire::TelegramProviderCommandV1 {
+        command: Some(command),
+    }
+    .encode_to_vec()
 }
 
-pub fn decode_command(bytes: &[u8]) -> Result<TelegramProviderCommand, TelegramAuthorizationWireError> {
+pub fn decode_command(
+    bytes: &[u8],
+) -> Result<TelegramProviderCommand, TelegramAuthorizationWireError> {
     use wire::telegram_provider_command_v1::Command;
     let message = wire::TelegramProviderCommandV1::decode(bytes)
         .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
-    match message.command.ok_or(TelegramAuthorizationWireError::MissingVariant)? {
+    match message
+        .command
+        .ok_or(TelegramAuthorizationWireError::MissingVariant)?
+    {
         Command::SendText(value) => Ok(TelegramProviderCommand::SendText(TelegramSendMessage {
-            operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, text: value.text,
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            text: value.text,
         })),
         Command::SendMedia(value) => Ok(TelegramProviderCommand::SendMedia(TelegramSendMedia {
-            operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id,
-            media_kind: parse_media_kind(&value.media_kind)?, blob_ref: value.blob_ref, caption: value.caption, filename: value.filename,
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            media_kind: parse_media_kind(&value.media_kind)?,
+            blob_ref: value.blob_ref,
+            caption: value.caption,
+            filename: value.filename,
         })),
-        Command::DownloadFile(value) => Ok(TelegramProviderCommand::DownloadFile(TelegramDownloadFile {
-            operation_id: value.operation_id, account_id: value.account_id, provider_file_id: value.provider_file_id, priority: value.priority,
-        })),
-        Command::Reply(value) => Ok(TelegramProviderCommand::Reply { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, reply_to_provider_message_id: value.reply_to_provider_message_id, text: value.text }),
-        Command::Forward(value) => Ok(TelegramProviderCommand::Forward { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, from_provider_chat_id: value.from_provider_chat_id, from_provider_message_id: value.from_provider_message_id }),
-        Command::Edit(value) => Ok(TelegramProviderCommand::Edit { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, text: value.text }),
-        Command::Delete(value) => Ok(TelegramProviderCommand::Delete { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, revoke: value.revoke }),
-        Command::RestoreVisibility(value) => Ok(TelegramProviderCommand::RestoreVisibility { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, reason: value.reason }),
-        Command::Reaction(value) => Ok(TelegramProviderCommand::Reaction { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, emoji: value.emoji, active: value.active }),
-        Command::Pin(value) => Ok(TelegramProviderCommand::Pin { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, active: value.active }),
-        Command::MarkUnread(value) => Ok(TelegramProviderCommand::MarkUnread { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, unread: value.unread, read_through_provider_message_id: value.read_through_provider_message_id }),
-        Command::Archive(value) => Ok(TelegramProviderCommand::Archive { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, archived: value.archived }),
-        Command::Mute(value) => Ok(TelegramProviderCommand::Mute { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, muted: value.muted }),
-        Command::Join(value) => Ok(TelegramProviderCommand::Join { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id }),
-        Command::Leave(value) => Ok(TelegramProviderCommand::Leave { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id }),
-        Command::AddChatToFolder(value) => Ok(TelegramProviderCommand::AddChatToFolder { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_folder_id: value.provider_folder_id }),
-        Command::RemoveChatFromFolder(value) => Ok(TelegramProviderCommand::RemoveChatFromFolder { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_folder_id: value.provider_folder_id }),
-        Command::SearchMessages(value) => Ok(TelegramProviderCommand::SearchMessages { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, query: value.query, limit: value.limit }),
-        Command::ListParticipants(value) => Ok(TelegramProviderCommand::ListParticipants { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, filter: parse_participant_filter(&value.filter)?, offset: value.offset, limit: value.limit }),
-        Command::ListTopics(value) => Ok(TelegramProviderCommand::ListTopics { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, limit: value.limit }),
-        Command::CreateTopic(value) => Ok(TelegramProviderCommand::CreateTopic { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, title: value.title }),
-        Command::SetTopicClosed(value) => Ok(TelegramProviderCommand::SetTopicClosed { operation_id: value.operation_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_topic_id: value.provider_topic_id, is_closed: value.is_closed }),
+        Command::DownloadFile(value) => Ok(TelegramProviderCommand::DownloadFile(
+            TelegramDownloadFile {
+                operation_id: value.operation_id,
+                account_id: value.account_id,
+                provider_file_id: value.provider_file_id,
+                priority: value.priority,
+            },
+        )),
+        Command::Reply(value) => Ok(TelegramProviderCommand::Reply {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            reply_to_provider_message_id: value.reply_to_provider_message_id,
+            text: value.text,
+        }),
+        Command::Forward(value) => Ok(TelegramProviderCommand::Forward {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            from_provider_chat_id: value.from_provider_chat_id,
+            from_provider_message_id: value.from_provider_message_id,
+        }),
+        Command::Edit(value) => Ok(TelegramProviderCommand::Edit {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            text: value.text,
+        }),
+        Command::Delete(value) => Ok(TelegramProviderCommand::Delete {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            revoke: value.revoke,
+        }),
+        Command::RestoreVisibility(value) => Ok(TelegramProviderCommand::RestoreVisibility {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            reason: value.reason,
+        }),
+        Command::Reaction(value) => Ok(TelegramProviderCommand::Reaction {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            emoji: value.emoji,
+            active: value.active,
+        }),
+        Command::Pin(value) => Ok(TelegramProviderCommand::Pin {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            active: value.active,
+        }),
+        Command::MarkUnread(value) => Ok(TelegramProviderCommand::MarkUnread {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            unread: value.unread,
+            read_through_provider_message_id: value.read_through_provider_message_id,
+        }),
+        Command::Archive(value) => Ok(TelegramProviderCommand::Archive {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            archived: value.archived,
+        }),
+        Command::Mute(value) => Ok(TelegramProviderCommand::Mute {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            muted: value.muted,
+        }),
+        Command::Join(value) => Ok(TelegramProviderCommand::Join {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+        }),
+        Command::Leave(value) => Ok(TelegramProviderCommand::Leave {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+        }),
+        Command::AddChatToFolder(value) => Ok(TelegramProviderCommand::AddChatToFolder {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_folder_id: value.provider_folder_id,
+        }),
+        Command::RemoveChatFromFolder(value) => Ok(TelegramProviderCommand::RemoveChatFromFolder {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_folder_id: value.provider_folder_id,
+        }),
+        Command::SearchMessages(value) => Ok(TelegramProviderCommand::SearchMessages {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            query: value.query,
+            limit: value.limit,
+        }),
+        Command::ListParticipants(value) => Ok(TelegramProviderCommand::ListParticipants {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            filter: parse_participant_filter(&value.filter)?,
+            offset: value.offset,
+            limit: value.limit,
+        }),
+        Command::ListTopics(value) => Ok(TelegramProviderCommand::ListTopics {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            limit: value.limit,
+        }),
+        Command::CreateTopic(value) => Ok(TelegramProviderCommand::CreateTopic {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            title: value.title,
+        }),
+        Command::SetTopicClosed(value) => Ok(TelegramProviderCommand::SetTopicClosed {
+            operation_id: value.operation_id,
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_topic_id: value.provider_topic_id,
+            is_closed: value.is_closed,
+        }),
     }
 }
 
 pub fn encode_query(query: &TelegramProviderQuery) -> Vec<u8> {
     use wire::telegram_provider_query_v1::Query;
     let query = match query {
-        TelegramProviderQuery::LoadChats { account_id, limit } => Query::LoadChats(wire::AccountLimitQuery { account_id: account_id.clone(), limit: *limit }),
-        TelegramProviderQuery::Chat { account_id, provider_chat_id } => Query::Chat(wire::ChatIdQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone() }),
-        TelegramProviderQuery::ChatAvatar { account_id, provider_chat_id } => Query::ChatAvatar(wire::ChatIdQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone() }),
-        TelegramProviderQuery::LoadHistory { account_id, provider_chat_id, from_message_id, mode, limit } => Query::LoadHistory(wire::HistoryQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), from_message_id: *from_message_id, mode: match mode { TelegramHistorySyncMode::Latest => "latest", TelegramHistorySyncMode::Older => "older", TelegramHistorySyncMode::Full => "full" }.to_owned(), limit: *limit }),
-        TelegramProviderQuery::CachedChats { account_id, limit } => Query::CachedChats(wire::AccountLimitQuery { account_id: account_id.clone(), limit: *limit }),
-        TelegramProviderQuery::SearchChats { account_id, query, limit } => Query::SearchChats(wire::SearchChatsQuery { account_id: account_id.clone(), query: query.clone(), limit: *limit }),
-        TelegramProviderQuery::CachedMessages { account_id, provider_chat_id, limit } => Query::CachedMessages(wire::ChatLimitQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), limit: *limit }),
-        TelegramProviderQuery::MessageById { account_id, message_id } => Query::MessageById(wire::MessageIdQuery { account_id: account_id.clone(), message_id: message_id.clone() }),
-        TelegramProviderQuery::RecentMessages { account_id, provider_chat_id, limit } => Query::RecentMessages(wire::RecentMessagesQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), limit: *limit }),
-        TelegramProviderQuery::MessagesByIds { account_id, message_ids } => Query::MessagesByIds(wire::MessageIdsQuery { account_id: account_id.clone(), message_id: message_ids.clone() }),
-        TelegramProviderQuery::MessageVersions { account_id, message_id } => Query::MessageVersions(wire::MessageIdQuery { account_id: account_id.clone(), message_id: message_id.clone() }),
-        TelegramProviderQuery::MessageTombstones { account_id, message_id } => Query::MessageTombstones(wire::MessageIdQuery { account_id: account_id.clone(), message_id: message_id.clone() }),
-        TelegramProviderQuery::MessageMutations { account_id, message_id } => Query::MessageMutations(wire::MessageIdQuery { account_id: account_id.clone(), message_id: message_id.clone() }),
-        TelegramProviderQuery::MessageReferences { account_id, message_id } => Query::MessageReferences(wire::MessageIdQuery { account_id: account_id.clone(), message_id: message_id.clone() }),
-        TelegramProviderQuery::ReplyChain { account_id, provider_chat_id, provider_message_id, limit } => Query::ReplyChain(wire::MessageChainQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), limit: *limit }),
-        TelegramProviderQuery::ForwardChain { account_id, provider_chat_id, provider_message_id, limit } => Query::ForwardChain(wire::MessageChainQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), limit: *limit }),
-        TelegramProviderQuery::Attachment { account_id, attachment_id } => Query::Attachment(wire::AttachmentIdQuery { account_id: account_id.clone(), attachment_id: attachment_id.clone() }),
-        TelegramProviderQuery::AttachmentForMessage { account_id, provider_chat_id, provider_message_id } => Query::AttachmentForMessage(wire::MessageTargetQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone() }),
-        TelegramProviderQuery::File { account_id, provider_file_id } => Query::File(wire::FileIdQuery { account_id: account_id.clone(), provider_file_id: provider_file_id.clone() }),
-        TelegramProviderQuery::ChatState { account_id, provider_chat_id } => Query::ChatState(wire::ChatIdQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone() }),
-        TelegramProviderQuery::ChatPositions { account_id, provider_chat_id } => Query::ChatPositions(wire::ChatIdQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone() }),
-        TelegramProviderQuery::ChatOperationalState { account_id, provider_chat_id } => Query::ChatOperationalState(wire::ChatIdQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone() }),
-        TelegramProviderQuery::PinnedMessages { account_id, provider_chat_id, limit } => Query::PinnedMessages(wire::ChatLimitQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), limit: *limit }),
-        TelegramProviderQuery::SearchMessages { account_id, provider_chat_id, query, limit } => Query::SearchMessages(wire::SearchMessagesQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), query: query.clone(), limit: *limit }),
-        TelegramProviderQuery::ListParticipants { account_id, provider_chat_id, filter, offset, limit } => Query::ListParticipants(wire::ListParticipantsQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), filter: participant_filter_name(*filter).to_owned(), offset: *offset, limit: *limit }),
-        TelegramProviderQuery::BasicGroupParticipants { account_id, provider_chat_id, basic_group_id } => Query::BasicGroupParticipants(wire::BasicGroupParticipantsQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), basic_group_id: *basic_group_id }),
-        TelegramProviderQuery::ListTopics { account_id, provider_chat_id, limit } => Query::ListTopics(wire::ChatLimitQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), limit: *limit }),
-        TelegramProviderQuery::Topic { account_id, provider_chat_id, provider_topic_id } => Query::Topic(wire::TopicQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_topic_id: provider_topic_id.clone() }),
-        TelegramProviderQuery::TopicMessageIds { account_id, provider_chat_id, provider_topic_id, limit } => Query::TopicMessageIds(wire::TopicMessageIdsQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_topic_id: provider_topic_id.clone(), limit: *limit }),
-        TelegramProviderQuery::SearchTopics { account_id, provider_chat_id, query, limit } => Query::SearchTopics(wire::SearchTopicsQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), query: query.clone(), limit: *limit }),
-        TelegramProviderQuery::Reactions { account_id, provider_chat_id, provider_message_id } => Query::Reactions(wire::MessageTargetQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone() }),
-        TelegramProviderQuery::ReactionSummary { account_id, provider_chat_id, provider_message_id } => Query::ReactionSummary(wire::MessageTargetQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone() }),
-        TelegramProviderQuery::ChatFolder { account_id, provider_folder_id } => Query::ChatFolder(wire::FolderIdQuery { account_id: account_id.clone(), provider_folder_id: *provider_folder_id }),
-        TelegramProviderQuery::ChatFolders { account_id, provider_folder_ids } => Query::ChatFolders(wire::FolderIdsQuery { account_id: account_id.clone(), provider_folder_id: provider_folder_ids.clone() }),
-        TelegramProviderQuery::Operations { account_id, limit } => Query::Operations(wire::AccountLimitQuery { account_id: account_id.clone(), limit: *limit }),
-        TelegramProviderQuery::Commands { account_id, provider_chat_id, provider_message_id, command_kinds, limit } => Query::Commands(wire::CommandsQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), command_kind: command_kinds.clone(), limit: *limit }),
+        TelegramProviderQuery::LoadChats { account_id, limit } => {
+            Query::LoadChats(wire::AccountLimitQuery {
+                account_id: account_id.clone(),
+                limit: *limit,
+            })
+        }
+        TelegramProviderQuery::Chat {
+            account_id,
+            provider_chat_id,
+        } => Query::Chat(wire::ChatIdQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+        }),
+        TelegramProviderQuery::ChatAvatar {
+            account_id,
+            provider_chat_id,
+        } => Query::ChatAvatar(wire::ChatIdQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+        }),
+        TelegramProviderQuery::LoadHistory {
+            account_id,
+            provider_chat_id,
+            from_message_id,
+            mode,
+            limit,
+        } => Query::LoadHistory(wire::HistoryQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            from_message_id: *from_message_id,
+            mode: match mode {
+                TelegramHistorySyncMode::Latest => "latest",
+                TelegramHistorySyncMode::Older => "older",
+                TelegramHistorySyncMode::Full => "full",
+            }
+            .to_owned(),
+            limit: *limit,
+        }),
+        TelegramProviderQuery::CachedChats { account_id, limit } => {
+            Query::CachedChats(wire::AccountLimitQuery {
+                account_id: account_id.clone(),
+                limit: *limit,
+            })
+        }
+        TelegramProviderQuery::SearchChats {
+            account_id,
+            query,
+            limit,
+        } => Query::SearchChats(wire::SearchChatsQuery {
+            account_id: account_id.clone(),
+            query: query.clone(),
+            limit: *limit,
+        }),
+        TelegramProviderQuery::CachedMessages {
+            account_id,
+            provider_chat_id,
+            limit,
+        } => Query::CachedMessages(wire::ChatLimitQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            limit: *limit,
+        }),
+        TelegramProviderQuery::MessageById {
+            account_id,
+            message_id,
+        } => Query::MessageById(wire::MessageIdQuery {
+            account_id: account_id.clone(),
+            message_id: message_id.clone(),
+        }),
+        TelegramProviderQuery::RecentMessages {
+            account_id,
+            provider_chat_id,
+            limit,
+        } => Query::RecentMessages(wire::RecentMessagesQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            limit: *limit,
+        }),
+        TelegramProviderQuery::MessagesByIds {
+            account_id,
+            message_ids,
+        } => Query::MessagesByIds(wire::MessageIdsQuery {
+            account_id: account_id.clone(),
+            message_id: message_ids.clone(),
+        }),
+        TelegramProviderQuery::MessageVersions {
+            account_id,
+            message_id,
+        } => Query::MessageVersions(wire::MessageIdQuery {
+            account_id: account_id.clone(),
+            message_id: message_id.clone(),
+        }),
+        TelegramProviderQuery::MessageTombstones {
+            account_id,
+            message_id,
+        } => Query::MessageTombstones(wire::MessageIdQuery {
+            account_id: account_id.clone(),
+            message_id: message_id.clone(),
+        }),
+        TelegramProviderQuery::MessageMutations {
+            account_id,
+            message_id,
+        } => Query::MessageMutations(wire::MessageIdQuery {
+            account_id: account_id.clone(),
+            message_id: message_id.clone(),
+        }),
+        TelegramProviderQuery::MessageReferences {
+            account_id,
+            message_id,
+        } => Query::MessageReferences(wire::MessageIdQuery {
+            account_id: account_id.clone(),
+            message_id: message_id.clone(),
+        }),
+        TelegramProviderQuery::ReplyChain {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            limit,
+        } => Query::ReplyChain(wire::MessageChainQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            limit: *limit,
+        }),
+        TelegramProviderQuery::ForwardChain {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            limit,
+        } => Query::ForwardChain(wire::MessageChainQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            limit: *limit,
+        }),
+        TelegramProviderQuery::Attachment {
+            account_id,
+            attachment_id,
+        } => Query::Attachment(wire::AttachmentIdQuery {
+            account_id: account_id.clone(),
+            attachment_id: attachment_id.clone(),
+        }),
+        TelegramProviderQuery::AttachmentForMessage {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+        } => Query::AttachmentForMessage(wire::MessageTargetQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+        }),
+        TelegramProviderQuery::File {
+            account_id,
+            provider_file_id,
+        } => Query::File(wire::FileIdQuery {
+            account_id: account_id.clone(),
+            provider_file_id: provider_file_id.clone(),
+        }),
+        TelegramProviderQuery::ChatState {
+            account_id,
+            provider_chat_id,
+        } => Query::ChatState(wire::ChatIdQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+        }),
+        TelegramProviderQuery::ChatPositions {
+            account_id,
+            provider_chat_id,
+        } => Query::ChatPositions(wire::ChatIdQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+        }),
+        TelegramProviderQuery::ChatOperationalState {
+            account_id,
+            provider_chat_id,
+        } => Query::ChatOperationalState(wire::ChatIdQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+        }),
+        TelegramProviderQuery::PinnedMessages {
+            account_id,
+            provider_chat_id,
+            limit,
+        } => Query::PinnedMessages(wire::ChatLimitQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            limit: *limit,
+        }),
+        TelegramProviderQuery::SearchMessages {
+            account_id,
+            provider_chat_id,
+            query,
+            limit,
+        } => Query::SearchMessages(wire::SearchMessagesQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            query: query.clone(),
+            limit: *limit,
+        }),
+        TelegramProviderQuery::ListParticipants {
+            account_id,
+            provider_chat_id,
+            filter,
+            offset,
+            limit,
+        } => Query::ListParticipants(wire::ListParticipantsQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            filter: participant_filter_name(*filter).to_owned(),
+            offset: *offset,
+            limit: *limit,
+        }),
+        TelegramProviderQuery::BasicGroupParticipants {
+            account_id,
+            provider_chat_id,
+            basic_group_id,
+        } => Query::BasicGroupParticipants(wire::BasicGroupParticipantsQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            basic_group_id: *basic_group_id,
+        }),
+        TelegramProviderQuery::ListTopics {
+            account_id,
+            provider_chat_id,
+            limit,
+        } => Query::ListTopics(wire::ChatLimitQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            limit: *limit,
+        }),
+        TelegramProviderQuery::Topic {
+            account_id,
+            provider_chat_id,
+            provider_topic_id,
+        } => Query::Topic(wire::TopicQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_topic_id: provider_topic_id.clone(),
+        }),
+        TelegramProviderQuery::TopicMessageIds {
+            account_id,
+            provider_chat_id,
+            provider_topic_id,
+            limit,
+        } => Query::TopicMessageIds(wire::TopicMessageIdsQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_topic_id: provider_topic_id.clone(),
+            limit: *limit,
+        }),
+        TelegramProviderQuery::SearchTopics {
+            account_id,
+            provider_chat_id,
+            query,
+            limit,
+        } => Query::SearchTopics(wire::SearchTopicsQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            query: query.clone(),
+            limit: *limit,
+        }),
+        TelegramProviderQuery::Reactions {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+        } => Query::Reactions(wire::MessageTargetQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+        }),
+        TelegramProviderQuery::ReactionSummary {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+        } => Query::ReactionSummary(wire::MessageTargetQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+        }),
+        TelegramProviderQuery::ChatFolder {
+            account_id,
+            provider_folder_id,
+        } => Query::ChatFolder(wire::FolderIdQuery {
+            account_id: account_id.clone(),
+            provider_folder_id: *provider_folder_id,
+        }),
+        TelegramProviderQuery::ChatFolders {
+            account_id,
+            provider_folder_ids,
+        } => Query::ChatFolders(wire::FolderIdsQuery {
+            account_id: account_id.clone(),
+            provider_folder_id: provider_folder_ids.clone(),
+        }),
+        TelegramProviderQuery::Operations { account_id, limit } => {
+            Query::Operations(wire::AccountLimitQuery {
+                account_id: account_id.clone(),
+                limit: *limit,
+            })
+        }
+        TelegramProviderQuery::Commands {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            command_kinds,
+            limit,
+        } => Query::Commands(wire::CommandsQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            command_kind: command_kinds.clone(),
+            limit: *limit,
+        }),
     };
     wire::TelegramProviderQueryV1 { query: Some(query) }.encode_to_vec()
 }
@@ -229,43 +811,188 @@ pub fn decode_query(bytes: &[u8]) -> Result<TelegramProviderQuery, TelegramAutho
     use wire::telegram_provider_query_v1::Query;
     let message = wire::TelegramProviderQueryV1::decode(bytes)
         .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
-    match message.query.ok_or(TelegramAuthorizationWireError::MissingVariant)? {
-        Query::LoadChats(v) => Ok(TelegramProviderQuery::LoadChats { account_id: v.account_id, limit: v.limit }),
-        Query::Chat(v) => Ok(TelegramProviderQuery::Chat { account_id: v.account_id, provider_chat_id: v.provider_chat_id }),
-        Query::ChatAvatar(v) => Ok(TelegramProviderQuery::ChatAvatar { account_id: v.account_id, provider_chat_id: v.provider_chat_id }),
-        Query::LoadHistory(v) => Ok(TelegramProviderQuery::LoadHistory { account_id: v.account_id, provider_chat_id: v.provider_chat_id, from_message_id: v.from_message_id, mode: match v.mode.as_str() { "latest" => TelegramHistorySyncMode::Latest, "older" => TelegramHistorySyncMode::Older, "full" => TelegramHistorySyncMode::Full, _ => return Err(TelegramAuthorizationWireError::InvalidPayload) }, limit: v.limit }),
-        Query::CachedChats(v) => Ok(TelegramProviderQuery::CachedChats { account_id: v.account_id, limit: v.limit }),
-        Query::SearchChats(v) => Ok(TelegramProviderQuery::SearchChats { account_id: v.account_id, query: v.query, limit: v.limit }),
-        Query::CachedMessages(v) => Ok(TelegramProviderQuery::CachedMessages { account_id: v.account_id, provider_chat_id: v.provider_chat_id, limit: v.limit }),
-        Query::MessageById(v) => Ok(TelegramProviderQuery::MessageById { account_id: v.account_id, message_id: v.message_id }),
-        Query::RecentMessages(v) => Ok(TelegramProviderQuery::RecentMessages { account_id: v.account_id, provider_chat_id: v.provider_chat_id, limit: v.limit }),
-        Query::MessagesByIds(v) => Ok(TelegramProviderQuery::MessagesByIds { account_id: v.account_id, message_ids: v.message_id }),
-        Query::MessageVersions(v) => Ok(TelegramProviderQuery::MessageVersions { account_id: v.account_id, message_id: v.message_id }),
-        Query::MessageTombstones(v) => Ok(TelegramProviderQuery::MessageTombstones { account_id: v.account_id, message_id: v.message_id }),
-        Query::MessageMutations(v) => Ok(TelegramProviderQuery::MessageMutations { account_id: v.account_id, message_id: v.message_id }),
-        Query::MessageReferences(v) => Ok(TelegramProviderQuery::MessageReferences { account_id: v.account_id, message_id: v.message_id }),
-        Query::ReplyChain(v) => Ok(TelegramProviderQuery::ReplyChain { account_id: v.account_id, provider_chat_id: v.provider_chat_id, provider_message_id: v.provider_message_id, limit: v.limit }),
-        Query::ForwardChain(v) => Ok(TelegramProviderQuery::ForwardChain { account_id: v.account_id, provider_chat_id: v.provider_chat_id, provider_message_id: v.provider_message_id, limit: v.limit }),
-        Query::Attachment(v) => Ok(TelegramProviderQuery::Attachment { account_id: v.account_id, attachment_id: v.attachment_id }),
-        Query::AttachmentForMessage(v) => Ok(TelegramProviderQuery::AttachmentForMessage { account_id: v.account_id, provider_chat_id: v.provider_chat_id, provider_message_id: v.provider_message_id }),
-        Query::File(v) => Ok(TelegramProviderQuery::File { account_id: v.account_id, provider_file_id: v.provider_file_id }),
-        Query::ChatState(v) => Ok(TelegramProviderQuery::ChatState { account_id: v.account_id, provider_chat_id: v.provider_chat_id }),
-        Query::ChatPositions(v) => Ok(TelegramProviderQuery::ChatPositions { account_id: v.account_id, provider_chat_id: v.provider_chat_id }),
-        Query::ChatOperationalState(v) => Ok(TelegramProviderQuery::ChatOperationalState { account_id: v.account_id, provider_chat_id: v.provider_chat_id }),
-        Query::PinnedMessages(v) => Ok(TelegramProviderQuery::PinnedMessages { account_id: v.account_id, provider_chat_id: v.provider_chat_id, limit: v.limit }),
-        Query::SearchMessages(v) => Ok(TelegramProviderQuery::SearchMessages { account_id: v.account_id, provider_chat_id: v.provider_chat_id, query: v.query, limit: v.limit }),
-        Query::ListParticipants(v) => Ok(TelegramProviderQuery::ListParticipants { account_id: v.account_id, provider_chat_id: v.provider_chat_id, filter: parse_participant_filter(&v.filter)?, offset: v.offset, limit: v.limit }),
-        Query::BasicGroupParticipants(v) => Ok(TelegramProviderQuery::BasicGroupParticipants { account_id: v.account_id, provider_chat_id: v.provider_chat_id, basic_group_id: v.basic_group_id }),
-        Query::ListTopics(v) => Ok(TelegramProviderQuery::ListTopics { account_id: v.account_id, provider_chat_id: v.provider_chat_id, limit: v.limit }),
-        Query::Topic(v) => Ok(TelegramProviderQuery::Topic { account_id: v.account_id, provider_chat_id: v.provider_chat_id, provider_topic_id: v.provider_topic_id }),
-        Query::TopicMessageIds(v) => Ok(TelegramProviderQuery::TopicMessageIds { account_id: v.account_id, provider_chat_id: v.provider_chat_id, provider_topic_id: v.provider_topic_id, limit: v.limit }),
-        Query::SearchTopics(v) => Ok(TelegramProviderQuery::SearchTopics { account_id: v.account_id, provider_chat_id: v.provider_chat_id, query: v.query, limit: v.limit }),
-        Query::Reactions(v) => Ok(TelegramProviderQuery::Reactions { account_id: v.account_id, provider_chat_id: v.provider_chat_id, provider_message_id: v.provider_message_id }),
-        Query::ReactionSummary(v) => Ok(TelegramProviderQuery::ReactionSummary { account_id: v.account_id, provider_chat_id: v.provider_chat_id, provider_message_id: v.provider_message_id }),
-        Query::ChatFolder(v) => Ok(TelegramProviderQuery::ChatFolder { account_id: v.account_id, provider_folder_id: v.provider_folder_id }),
-        Query::ChatFolders(v) => Ok(TelegramProviderQuery::ChatFolders { account_id: v.account_id, provider_folder_ids: v.provider_folder_id }),
-        Query::Operations(v) => Ok(TelegramProviderQuery::Operations { account_id: v.account_id, limit: v.limit }),
-        Query::Commands(v) => Ok(TelegramProviderQuery::Commands { account_id: v.account_id, provider_chat_id: v.provider_chat_id, provider_message_id: v.provider_message_id, command_kinds: v.command_kind, limit: v.limit }),
+    match message
+        .query
+        .ok_or(TelegramAuthorizationWireError::MissingVariant)?
+    {
+        Query::LoadChats(v) => Ok(TelegramProviderQuery::LoadChats {
+            account_id: v.account_id,
+            limit: v.limit,
+        }),
+        Query::Chat(v) => Ok(TelegramProviderQuery::Chat {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+        }),
+        Query::ChatAvatar(v) => Ok(TelegramProviderQuery::ChatAvatar {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+        }),
+        Query::LoadHistory(v) => Ok(TelegramProviderQuery::LoadHistory {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            from_message_id: v.from_message_id,
+            mode: match v.mode.as_str() {
+                "latest" => TelegramHistorySyncMode::Latest,
+                "older" => TelegramHistorySyncMode::Older,
+                "full" => TelegramHistorySyncMode::Full,
+                _ => return Err(TelegramAuthorizationWireError::InvalidPayload),
+            },
+            limit: v.limit,
+        }),
+        Query::CachedChats(v) => Ok(TelegramProviderQuery::CachedChats {
+            account_id: v.account_id,
+            limit: v.limit,
+        }),
+        Query::SearchChats(v) => Ok(TelegramProviderQuery::SearchChats {
+            account_id: v.account_id,
+            query: v.query,
+            limit: v.limit,
+        }),
+        Query::CachedMessages(v) => Ok(TelegramProviderQuery::CachedMessages {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            limit: v.limit,
+        }),
+        Query::MessageById(v) => Ok(TelegramProviderQuery::MessageById {
+            account_id: v.account_id,
+            message_id: v.message_id,
+        }),
+        Query::RecentMessages(v) => Ok(TelegramProviderQuery::RecentMessages {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            limit: v.limit,
+        }),
+        Query::MessagesByIds(v) => Ok(TelegramProviderQuery::MessagesByIds {
+            account_id: v.account_id,
+            message_ids: v.message_id,
+        }),
+        Query::MessageVersions(v) => Ok(TelegramProviderQuery::MessageVersions {
+            account_id: v.account_id,
+            message_id: v.message_id,
+        }),
+        Query::MessageTombstones(v) => Ok(TelegramProviderQuery::MessageTombstones {
+            account_id: v.account_id,
+            message_id: v.message_id,
+        }),
+        Query::MessageMutations(v) => Ok(TelegramProviderQuery::MessageMutations {
+            account_id: v.account_id,
+            message_id: v.message_id,
+        }),
+        Query::MessageReferences(v) => Ok(TelegramProviderQuery::MessageReferences {
+            account_id: v.account_id,
+            message_id: v.message_id,
+        }),
+        Query::ReplyChain(v) => Ok(TelegramProviderQuery::ReplyChain {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            provider_message_id: v.provider_message_id,
+            limit: v.limit,
+        }),
+        Query::ForwardChain(v) => Ok(TelegramProviderQuery::ForwardChain {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            provider_message_id: v.provider_message_id,
+            limit: v.limit,
+        }),
+        Query::Attachment(v) => Ok(TelegramProviderQuery::Attachment {
+            account_id: v.account_id,
+            attachment_id: v.attachment_id,
+        }),
+        Query::AttachmentForMessage(v) => Ok(TelegramProviderQuery::AttachmentForMessage {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            provider_message_id: v.provider_message_id,
+        }),
+        Query::File(v) => Ok(TelegramProviderQuery::File {
+            account_id: v.account_id,
+            provider_file_id: v.provider_file_id,
+        }),
+        Query::ChatState(v) => Ok(TelegramProviderQuery::ChatState {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+        }),
+        Query::ChatPositions(v) => Ok(TelegramProviderQuery::ChatPositions {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+        }),
+        Query::ChatOperationalState(v) => Ok(TelegramProviderQuery::ChatOperationalState {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+        }),
+        Query::PinnedMessages(v) => Ok(TelegramProviderQuery::PinnedMessages {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            limit: v.limit,
+        }),
+        Query::SearchMessages(v) => Ok(TelegramProviderQuery::SearchMessages {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            query: v.query,
+            limit: v.limit,
+        }),
+        Query::ListParticipants(v) => Ok(TelegramProviderQuery::ListParticipants {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            filter: parse_participant_filter(&v.filter)?,
+            offset: v.offset,
+            limit: v.limit,
+        }),
+        Query::BasicGroupParticipants(v) => Ok(TelegramProviderQuery::BasicGroupParticipants {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            basic_group_id: v.basic_group_id,
+        }),
+        Query::ListTopics(v) => Ok(TelegramProviderQuery::ListTopics {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            limit: v.limit,
+        }),
+        Query::Topic(v) => Ok(TelegramProviderQuery::Topic {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            provider_topic_id: v.provider_topic_id,
+        }),
+        Query::TopicMessageIds(v) => Ok(TelegramProviderQuery::TopicMessageIds {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            provider_topic_id: v.provider_topic_id,
+            limit: v.limit,
+        }),
+        Query::SearchTopics(v) => Ok(TelegramProviderQuery::SearchTopics {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            query: v.query,
+            limit: v.limit,
+        }),
+        Query::Reactions(v) => Ok(TelegramProviderQuery::Reactions {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            provider_message_id: v.provider_message_id,
+        }),
+        Query::ReactionSummary(v) => Ok(TelegramProviderQuery::ReactionSummary {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            provider_message_id: v.provider_message_id,
+        }),
+        Query::ChatFolder(v) => Ok(TelegramProviderQuery::ChatFolder {
+            account_id: v.account_id,
+            provider_folder_id: v.provider_folder_id,
+        }),
+        Query::ChatFolders(v) => Ok(TelegramProviderQuery::ChatFolders {
+            account_id: v.account_id,
+            provider_folder_ids: v.provider_folder_id,
+        }),
+        Query::Operations(v) => Ok(TelegramProviderQuery::Operations {
+            account_id: v.account_id,
+            limit: v.limit,
+        }),
+        Query::Commands(v) => Ok(TelegramProviderQuery::Commands {
+            account_id: v.account_id,
+            provider_chat_id: v.provider_chat_id,
+            provider_message_id: v.provider_message_id,
+            command_kinds: v.command_kind,
+            limit: v.limit,
+        }),
     }
 }
 
@@ -297,23 +1024,32 @@ fn message_media_to_wire(value: &TelegramMessageMedia) -> wire::TelegramMessageM
     }
 }
 
-fn message_references_to_wire(value: &TelegramMessageReferences) -> wire::TelegramMessageReferencesProjection {
+fn message_references_to_wire(
+    value: &TelegramMessageReferences,
+) -> wire::TelegramMessageReferencesProjection {
     wire::TelegramMessageReferencesProjection {
-        reply_to: value.reply_to.as_ref().map(|reply| wire::TelegramReplyReferenceProjection {
-            provider_chat_id: reply.provider_chat_id.clone(),
-            provider_message_id: reply.provider_message_id.clone(),
-        }),
-        forward_origin: value.forward_origin.as_ref().map(|origin| wire::TelegramForwardOriginProjection {
-            provider_chat_id: origin.provider_chat_id.clone(),
-            provider_message_id: origin.provider_message_id.clone(),
-            provider_sender_id: origin.provider_sender_id.clone(),
-            sender_name: origin.sender_name.clone(),
-            observed_at_unix_seconds: origin.observed_at_unix_seconds,
+        reply_to: value
+            .reply_to
+            .as_ref()
+            .map(|reply| wire::TelegramReplyReferenceProjection {
+                provider_chat_id: reply.provider_chat_id.clone(),
+                provider_message_id: reply.provider_message_id.clone(),
+            }),
+        forward_origin: value.forward_origin.as_ref().map(|origin| {
+            wire::TelegramForwardOriginProjection {
+                provider_chat_id: origin.provider_chat_id.clone(),
+                provider_message_id: origin.provider_message_id.clone(),
+                provider_sender_id: origin.provider_sender_id.clone(),
+                sender_name: origin.sender_name.clone(),
+                observed_at_unix_seconds: origin.observed_at_unix_seconds,
+            }
         }),
     }
 }
 
-fn message_observation_to_wire(value: &TelegramMessageObservation) -> wire::TelegramMessageObservationProjection {
+fn message_observation_to_wire(
+    value: &TelegramMessageObservation,
+) -> wire::TelegramMessageObservationProjection {
     wire::TelegramMessageObservationProjection {
         account_id: value.account_id.clone(),
         provider_chat_id: value.provider_chat_id.clone(),
@@ -331,24 +1067,35 @@ fn message_observation_to_wire(value: &TelegramMessageObservation) -> wire::Tele
 fn parse_message_observation(
     value: wire::TelegramMessageObservationProjection,
 ) -> Result<TelegramMessageObservation, TelegramAuthorizationWireError> {
-    let references = value.references.ok_or(TelegramAuthorizationWireError::InvalidPayload)?;
-    let reply_to = references.reply_to.map(|reply| crate::TelegramReplyReference {
-        provider_chat_id: reply.provider_chat_id,
-        provider_message_id: reply.provider_message_id,
-    });
-    let forward_origin = references.forward_origin.map(|origin| crate::TelegramForwardOrigin {
-        provider_chat_id: origin.provider_chat_id,
-        provider_message_id: origin.provider_message_id,
-        provider_sender_id: origin.provider_sender_id,
-        sender_name: origin.sender_name,
-        observed_at_unix_seconds: origin.observed_at_unix_seconds,
-    });
-    let media = value.media.map(|media| Ok(TelegramMessageMedia {
-        kind: parse_media_kind(&media.kind)?,
-        provider_file_id: media.provider_file_id,
-        caption: media.caption,
-        filename: media.filename,
-    })).transpose()?;
+    let references = value
+        .references
+        .ok_or(TelegramAuthorizationWireError::InvalidPayload)?;
+    let reply_to = references
+        .reply_to
+        .map(|reply| crate::TelegramReplyReference {
+            provider_chat_id: reply.provider_chat_id,
+            provider_message_id: reply.provider_message_id,
+        });
+    let forward_origin = references
+        .forward_origin
+        .map(|origin| crate::TelegramForwardOrigin {
+            provider_chat_id: origin.provider_chat_id,
+            provider_message_id: origin.provider_message_id,
+            provider_sender_id: origin.provider_sender_id,
+            sender_name: origin.sender_name,
+            observed_at_unix_seconds: origin.observed_at_unix_seconds,
+        });
+    let media = value
+        .media
+        .map(|media| {
+            Ok(TelegramMessageMedia {
+                kind: parse_media_kind(&media.kind)?,
+                provider_file_id: media.provider_file_id,
+                caption: media.caption,
+                filename: media.filename,
+            })
+        })
+        .transpose()?;
     Ok(TelegramMessageObservation {
         account_id: value.account_id,
         provider_chat_id: value.provider_chat_id,
@@ -358,7 +1105,10 @@ fn parse_message_observation(
         sender_display_name: value.sender_display_name,
         text: value.text,
         media,
-        references: TelegramMessageReferences { reply_to, forward_origin },
+        references: TelegramMessageReferences {
+            reply_to,
+            forward_origin,
+        },
         observed_at_unix_seconds: value.observed_at_unix_seconds,
     })
 }
@@ -373,7 +1123,9 @@ fn chat_to_wire(value: &TelegramChat) -> wire::TelegramChatProjection {
     }
 }
 
-fn parse_chat(value: wire::TelegramChatProjection) -> Result<TelegramChat, TelegramAuthorizationWireError> {
+fn parse_chat(
+    value: wire::TelegramChatProjection,
+) -> Result<TelegramChat, TelegramAuthorizationWireError> {
     Ok(TelegramChat {
         account_id: value.account_id,
         provider_chat_id: value.provider_chat_id,
@@ -401,7 +1153,9 @@ fn parse_avatar(value: wire::TelegramChatAvatarProjection) -> TelegramChatAvatar
     }
 }
 
-fn chat_state_to_wire(value: &crate::TelegramChatStateProjection) -> wire::TelegramChatStateProjection {
+fn chat_state_to_wire(
+    value: &crate::TelegramChatStateProjection,
+) -> wire::TelegramChatStateProjection {
     wire::TelegramChatStateProjection {
         unread_count: value.unread_count,
         unread_mention_count: value.unread_mention_count,
@@ -421,48 +1175,73 @@ fn parse_chat_state(value: wire::TelegramChatStateProjection) -> TelegramChatSta
 
 fn chat_position_to_wire(value: &TelegramChatPosition) -> wire::TelegramChatPositionProjection {
     wire::TelegramChatPositionProjection {
-        account_id: value.account_id.clone(), provider_chat_id: value.provider_chat_id.clone(),
-        list_kind: value.list_kind.clone(), provider_folder_id: value.provider_folder_id,
-        order: value.order, is_pinned: value.is_pinned,
+        account_id: value.account_id.clone(),
+        provider_chat_id: value.provider_chat_id.clone(),
+        list_kind: value.list_kind.clone(),
+        provider_folder_id: value.provider_folder_id,
+        order: value.order,
+        is_pinned: value.is_pinned,
     }
 }
 
 fn parse_chat_position(value: wire::TelegramChatPositionProjection) -> TelegramChatPosition {
     TelegramChatPosition {
-        account_id: value.account_id, provider_chat_id: value.provider_chat_id,
-        list_kind: value.list_kind, provider_folder_id: value.provider_folder_id,
-        order: value.order, is_pinned: value.is_pinned,
+        account_id: value.account_id,
+        provider_chat_id: value.provider_chat_id,
+        list_kind: value.list_kind,
+        provider_folder_id: value.provider_folder_id,
+        order: value.order,
+        is_pinned: value.is_pinned,
     }
 }
 
-fn chat_operational_state_to_wire(value: &TelegramChatOperationalState) -> wire::TelegramChatOperationalStateProjection {
+fn chat_operational_state_to_wire(
+    value: &TelegramChatOperationalState,
+) -> wire::TelegramChatOperationalStateProjection {
     wire::TelegramChatOperationalStateProjection {
-        is_archived: value.is_archived, is_pinned: value.is_pinned, is_muted: value.is_muted,
-        mute_for_seconds: value.mute_for_seconds, is_marked_as_unread: value.is_marked_as_unread,
+        is_archived: value.is_archived,
+        is_pinned: value.is_pinned,
+        is_muted: value.is_muted,
+        mute_for_seconds: value.mute_for_seconds,
+        is_marked_as_unread: value.is_marked_as_unread,
     }
 }
 
-fn parse_chat_operational_state(value: wire::TelegramChatOperationalStateProjection) -> TelegramChatOperationalState {
+fn parse_chat_operational_state(
+    value: wire::TelegramChatOperationalStateProjection,
+) -> TelegramChatOperationalState {
     TelegramChatOperationalState {
-        is_archived: value.is_archived, is_pinned: value.is_pinned, is_muted: value.is_muted,
-        mute_for_seconds: value.mute_for_seconds, is_marked_as_unread: value.is_marked_as_unread,
+        is_archived: value.is_archived,
+        is_pinned: value.is_pinned,
+        is_muted: value.is_muted,
+        mute_for_seconds: value.mute_for_seconds,
+        is_marked_as_unread: value.is_marked_as_unread,
     }
 }
 
 fn chat_folder_to_wire(value: &TelegramChatFolder) -> wire::TelegramChatFolderProjection {
     wire::TelegramChatFolderProjection {
-        account_id: value.account_id.clone(), provider_folder_id: value.provider_folder_id,
-        title: value.title.clone(), icon_name: value.icon_name.clone(), color_id: value.color_id,
-        pinned_chat_id: value.pinned_chat_ids.clone(), included_chat_id: value.included_chat_ids.clone(),
+        account_id: value.account_id.clone(),
+        provider_folder_id: value.provider_folder_id,
+        title: value.title.clone(),
+        icon_name: value.icon_name.clone(),
+        color_id: value.color_id,
+        pinned_chat_id: value.pinned_chat_ids.clone(),
+        included_chat_id: value.included_chat_ids.clone(),
         excluded_chat_id: value.excluded_chat_ids.clone(),
     }
 }
 
 fn parse_chat_folder(value: wire::TelegramChatFolderProjection) -> TelegramChatFolder {
     TelegramChatFolder {
-        account_id: value.account_id, provider_folder_id: value.provider_folder_id, title: value.title,
-        icon_name: value.icon_name, color_id: value.color_id, pinned_chat_ids: value.pinned_chat_id,
-        included_chat_ids: value.included_chat_id, excluded_chat_ids: value.excluded_chat_id,
+        account_id: value.account_id,
+        provider_folder_id: value.provider_folder_id,
+        title: value.title,
+        icon_name: value.icon_name,
+        color_id: value.color_id,
+        pinned_chat_ids: value.pinned_chat_id,
+        included_chat_ids: value.included_chat_id,
+        excluded_chat_ids: value.excluded_chat_id,
     }
 }
 
@@ -475,7 +1254,9 @@ fn delivery_state_name(value: crate::TelegramDeliveryState) -> &'static str {
     }
 }
 
-fn parse_delivery_state(value: &str) -> Result<crate::TelegramDeliveryState, TelegramAuthorizationWireError> {
+fn parse_delivery_state(
+    value: &str,
+) -> Result<crate::TelegramDeliveryState, TelegramAuthorizationWireError> {
     match value {
         "received" => Ok(crate::TelegramDeliveryState::Received),
         "queued" => Ok(crate::TelegramDeliveryState::Queued),
@@ -485,12 +1266,18 @@ fn parse_delivery_state(value: &str) -> Result<crate::TelegramDeliveryState, Tel
     }
 }
 
-fn message_projection_to_wire(value: &TelegramMessageProjection) -> wire::TelegramMessageProjection {
+fn message_projection_to_wire(
+    value: &TelegramMessageProjection,
+) -> wire::TelegramMessageProjection {
     wire::TelegramMessageProjection {
-        message_id: value.message_id.clone(), account_id: value.account_id.clone(),
-        provider_chat_id: value.provider_chat_id.clone(), provider_message_id: value.provider_message_id.clone(),
-        provider_topic_id: value.provider_topic_id.clone(), sender_id: value.sender_id.clone(),
-        sender_display_name: value.sender_display_name.clone(), text: value.text.clone(),
+        message_id: value.message_id.clone(),
+        account_id: value.account_id.clone(),
+        provider_chat_id: value.provider_chat_id.clone(),
+        provider_message_id: value.provider_message_id.clone(),
+        provider_topic_id: value.provider_topic_id.clone(),
+        sender_id: value.sender_id.clone(),
+        sender_display_name: value.sender_display_name.clone(),
+        text: value.text.clone(),
         media: value.media.as_ref().map(message_media_to_wire),
         references: Some(message_references_to_wire(&value.references)),
         observed_at_unix_seconds: value.observed_at_unix_seconds,
@@ -498,20 +1285,51 @@ fn message_projection_to_wire(value: &TelegramMessageProjection) -> wire::Telegr
     }
 }
 
-fn parse_message_projection(value: wire::TelegramMessageProjection) -> Result<TelegramMessageProjection, TelegramAuthorizationWireError> {
-    let references = value.references.ok_or(TelegramAuthorizationWireError::InvalidPayload)?;
-    let media = value.media.map(|media| Ok(TelegramMessageMedia {
-        kind: parse_media_kind(&media.kind)?, provider_file_id: media.provider_file_id,
-        caption: media.caption, filename: media.filename,
-    })).transpose()?;
+fn parse_message_projection(
+    value: wire::TelegramMessageProjection,
+) -> Result<TelegramMessageProjection, TelegramAuthorizationWireError> {
+    let references = value
+        .references
+        .ok_or(TelegramAuthorizationWireError::InvalidPayload)?;
+    let media = value
+        .media
+        .map(|media| {
+            Ok(TelegramMessageMedia {
+                kind: parse_media_kind(&media.kind)?,
+                provider_file_id: media.provider_file_id,
+                caption: media.caption,
+                filename: media.filename,
+            })
+        })
+        .transpose()?;
     Ok(TelegramMessageProjection {
-        message_id: value.message_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id,
-        provider_message_id: value.provider_message_id, provider_topic_id: value.provider_topic_id,
-        sender_id: value.sender_id, sender_display_name: value.sender_display_name, text: value.text,
-        media, references: TelegramMessageReferences {
-            reply_to: references.reply_to.map(|reply| crate::TelegramReplyReference { provider_chat_id: reply.provider_chat_id, provider_message_id: reply.provider_message_id }),
-            forward_origin: references.forward_origin.map(|origin| crate::TelegramForwardOrigin { provider_chat_id: origin.provider_chat_id, provider_message_id: origin.provider_message_id, provider_sender_id: origin.provider_sender_id, sender_name: origin.sender_name, observed_at_unix_seconds: origin.observed_at_unix_seconds }),
-        }, observed_at_unix_seconds: value.observed_at_unix_seconds,
+        message_id: value.message_id,
+        account_id: value.account_id,
+        provider_chat_id: value.provider_chat_id,
+        provider_message_id: value.provider_message_id,
+        provider_topic_id: value.provider_topic_id,
+        sender_id: value.sender_id,
+        sender_display_name: value.sender_display_name,
+        text: value.text,
+        media,
+        references: TelegramMessageReferences {
+            reply_to: references
+                .reply_to
+                .map(|reply| crate::TelegramReplyReference {
+                    provider_chat_id: reply.provider_chat_id,
+                    provider_message_id: reply.provider_message_id,
+                }),
+            forward_origin: references
+                .forward_origin
+                .map(|origin| crate::TelegramForwardOrigin {
+                    provider_chat_id: origin.provider_chat_id,
+                    provider_message_id: origin.provider_message_id,
+                    provider_sender_id: origin.provider_sender_id,
+                    sender_name: origin.sender_name,
+                    observed_at_unix_seconds: origin.observed_at_unix_seconds,
+                }),
+        },
+        observed_at_unix_seconds: value.observed_at_unix_seconds,
         delivery_state: parse_delivery_state(&value.delivery_state)?,
     })
 }
@@ -524,7 +1342,9 @@ fn tombstone_reason_name(value: TelegramTombstoneReason) -> &'static str {
     }
 }
 
-fn parse_tombstone_reason(value: &str) -> Result<TelegramTombstoneReason, TelegramAuthorizationWireError> {
+fn parse_tombstone_reason(
+    value: &str,
+) -> Result<TelegramTombstoneReason, TelegramAuthorizationWireError> {
     match value {
         "provider_deleted" => Ok(TelegramTombstoneReason::ProviderDeleted),
         "owner_deleted" => Ok(TelegramTombstoneReason::OwnerDeleted),
@@ -540,7 +1360,9 @@ fn version_source_name(value: TelegramMessageVersionSource) -> &'static str {
     }
 }
 
-fn parse_version_source(value: &str) -> Result<TelegramMessageVersionSource, TelegramAuthorizationWireError> {
+fn parse_version_source(
+    value: &str,
+) -> Result<TelegramMessageVersionSource, TelegramAuthorizationWireError> {
     match value {
         "provider" => Ok(TelegramMessageVersionSource::Provider),
         "owner" => Ok(TelegramMessageVersionSource::Owner),
@@ -557,7 +1379,9 @@ fn attachment_state_name(value: TelegramAttachmentDownloadState) -> &'static str
     }
 }
 
-fn parse_attachment_state(value: &str) -> Result<TelegramAttachmentDownloadState, TelegramAuthorizationWireError> {
+fn parse_attachment_state(
+    value: &str,
+) -> Result<TelegramAttachmentDownloadState, TelegramAuthorizationWireError> {
     match value {
         "pending" => Ok(TelegramAttachmentDownloadState::Pending),
         "downloading" => Ok(TelegramAttachmentDownloadState::Downloading),
@@ -569,113 +1393,374 @@ fn parse_attachment_state(value: &str) -> Result<TelegramAttachmentDownloadState
 
 fn file_to_wire(value: &TelegramFileSnapshot) -> wire::TelegramFileSnapshotProjection {
     wire::TelegramFileSnapshotProjection {
-        account_id: value.account_id.clone(), provider_file_id: value.provider_file_id.clone(),
-        provider_unique_id: value.provider_unique_id.clone(), media_kind: value.media_kind.map(|kind| media_kind_name(kind).to_owned()),
-        size_bytes: value.size_bytes, expected_size_bytes: value.expected_size_bytes,
-        downloaded_size_bytes: value.downloaded_size_bytes, is_downloading: value.is_downloading, is_downloaded: value.is_downloaded,
+        account_id: value.account_id.clone(),
+        provider_file_id: value.provider_file_id.clone(),
+        provider_unique_id: value.provider_unique_id.clone(),
+        media_kind: value
+            .media_kind
+            .map(|kind| media_kind_name(kind).to_owned()),
+        size_bytes: value.size_bytes,
+        expected_size_bytes: value.expected_size_bytes,
+        downloaded_size_bytes: value.downloaded_size_bytes,
+        is_downloading: value.is_downloading,
+        is_downloaded: value.is_downloaded,
     }
 }
 
-fn parse_file(value: wire::TelegramFileSnapshotProjection) -> Result<TelegramFileSnapshot, TelegramAuthorizationWireError> {
+fn parse_file(
+    value: wire::TelegramFileSnapshotProjection,
+) -> Result<TelegramFileSnapshot, TelegramAuthorizationWireError> {
     Ok(TelegramFileSnapshot {
-        account_id: value.account_id, provider_file_id: value.provider_file_id, provider_unique_id: value.provider_unique_id,
-        media_kind: value.media_kind.as_deref().map(parse_media_kind).transpose()?, size_bytes: value.size_bytes,
-        expected_size_bytes: value.expected_size_bytes, downloaded_size_bytes: value.downloaded_size_bytes,
-        is_downloading: value.is_downloading, is_downloaded: value.is_downloaded,
+        account_id: value.account_id,
+        provider_file_id: value.provider_file_id,
+        provider_unique_id: value.provider_unique_id,
+        media_kind: value
+            .media_kind
+            .as_deref()
+            .map(parse_media_kind)
+            .transpose()?,
+        size_bytes: value.size_bytes,
+        expected_size_bytes: value.expected_size_bytes,
+        downloaded_size_bytes: value.downloaded_size_bytes,
+        is_downloading: value.is_downloading,
+        is_downloaded: value.is_downloaded,
     })
 }
 
 fn participant_to_wire(value: &TelegramParticipant) -> wire::TelegramParticipantProjection {
     wire::TelegramParticipantProjection {
-        account_id: value.account_id.clone(), provider_chat_id: value.provider_chat_id.clone(), provider_member_id: value.provider_member_id.clone(),
-        display_name: value.display_name.clone(), username: value.username.clone(), role: value.role.clone(), status: value.status.clone(),
-        is_admin: value.is_admin, is_owner: value.is_owner, permission: value.permissions.clone(),
+        account_id: value.account_id.clone(),
+        provider_chat_id: value.provider_chat_id.clone(),
+        provider_member_id: value.provider_member_id.clone(),
+        display_name: value.display_name.clone(),
+        username: value.username.clone(),
+        role: value.role.clone(),
+        status: value.status.clone(),
+        is_admin: value.is_admin,
+        is_owner: value.is_owner,
+        permission: value.permissions.clone(),
     }
 }
 
 fn parse_participant(value: wire::TelegramParticipantProjection) -> TelegramParticipant {
     TelegramParticipant {
-        account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_member_id: value.provider_member_id,
-        display_name: value.display_name, username: value.username, role: value.role, status: value.status,
-        is_admin: value.is_admin, is_owner: value.is_owner, permissions: value.permission,
+        account_id: value.account_id,
+        provider_chat_id: value.provider_chat_id,
+        provider_member_id: value.provider_member_id,
+        display_name: value.display_name,
+        username: value.username,
+        role: value.role,
+        status: value.status,
+        is_admin: value.is_admin,
+        is_owner: value.is_owner,
+        permissions: value.permission,
     }
 }
 
 fn topic_to_wire(value: &TelegramTopic) -> wire::TelegramTopicProjection {
     wire::TelegramTopicProjection {
-        account_id: value.account_id.clone(), provider_chat_id: value.provider_chat_id.clone(), provider_topic_id: value.provider_topic_id.clone(),
-        title: value.title.clone(), icon_emoji: value.icon_emoji.clone(), is_pinned: value.is_pinned, is_closed: value.is_closed,
-        unread_count: value.unread_count, last_message_at_unix_seconds: value.last_message_at_unix_seconds,
+        account_id: value.account_id.clone(),
+        provider_chat_id: value.provider_chat_id.clone(),
+        provider_topic_id: value.provider_topic_id.clone(),
+        title: value.title.clone(),
+        icon_emoji: value.icon_emoji.clone(),
+        is_pinned: value.is_pinned,
+        is_closed: value.is_closed,
+        unread_count: value.unread_count,
+        last_message_at_unix_seconds: value.last_message_at_unix_seconds,
     }
 }
 
 fn parse_topic(value: wire::TelegramTopicProjection) -> TelegramTopic {
     TelegramTopic {
-        account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_topic_id: value.provider_topic_id,
-        title: value.title, icon_emoji: value.icon_emoji, is_pinned: value.is_pinned, is_closed: value.is_closed,
-        unread_count: value.unread_count, last_message_at_unix_seconds: value.last_message_at_unix_seconds,
+        account_id: value.account_id,
+        provider_chat_id: value.provider_chat_id,
+        provider_topic_id: value.provider_topic_id,
+        title: value.title,
+        icon_emoji: value.icon_emoji,
+        is_pinned: value.is_pinned,
+        is_closed: value.is_closed,
+        unread_count: value.unread_count,
+        last_message_at_unix_seconds: value.last_message_at_unix_seconds,
     }
 }
 
 fn typing_to_wire(value: &TelegramTypingState) -> wire::TelegramTypingStateProjection {
     wire::TelegramTypingStateProjection {
-        account_id: value.account_id.clone(), provider_chat_id: value.provider_chat_id.clone(), provider_thread_id: value.provider_thread_id.clone(),
-        sender_id: value.sender_id.clone(), action: value.action.clone(), is_active: value.is_active,
+        account_id: value.account_id.clone(),
+        provider_chat_id: value.provider_chat_id.clone(),
+        provider_thread_id: value.provider_thread_id.clone(),
+        sender_id: value.sender_id.clone(),
+        action: value.action.clone(),
+        is_active: value.is_active,
     }
 }
 
 fn parse_typing(value: wire::TelegramTypingStateProjection) -> TelegramTypingState {
     TelegramTypingState {
-        account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_thread_id: value.provider_thread_id,
-        sender_id: value.sender_id, action: value.action, is_active: value.is_active,
+        account_id: value.account_id,
+        provider_chat_id: value.provider_chat_id,
+        provider_thread_id: value.provider_thread_id,
+        sender_id: value.sender_id,
+        action: value.action,
+        is_active: value.is_active,
     }
 }
 
 fn event_to_wire(value: &TelegramProviderEvent) -> wire::TelegramProviderEventProjection {
     use wire::telegram_provider_event_projection::Event;
     let event = match value {
-        TelegramProviderEvent::MessageCreated(value) => Event::MessageCreated(message_observation_to_wire(value)),
-        TelegramProviderEvent::MessageEdited { account_id, provider_chat_id, provider_message_id, text, observed_at_unix_seconds } => Event::MessageEdited(wire::MessageEditedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), text: text.clone(), observed_at_unix_seconds: *observed_at_unix_seconds }),
-        TelegramProviderEvent::MessageDeleted { account_id, provider_chat_id, provider_message_id, is_permanent } => Event::MessageDeleted(wire::MessageDeletedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), is_permanent: *is_permanent }),
-        TelegramProviderEvent::MessageSendFailed { account_id, provider_chat_id, old_provider_message_id, error_code } => Event::MessageSendFailed(wire::MessageSendFailedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), old_provider_message_id: old_provider_message_id.clone(), error_code: *error_code }),
-        TelegramProviderEvent::MessageSendSucceeded { account_id, provider_chat_id, old_provider_message_id, provider_message_id } => Event::MessageSendSucceeded(wire::MessageSendSucceededEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), old_provider_message_id: old_provider_message_id.clone(), provider_message_id: provider_message_id.clone() }),
-        TelegramProviderEvent::MessagePinned { account_id, provider_chat_id, provider_message_id, is_pinned } => Event::MessagePinned(wire::MessagePinnedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), is_pinned: *is_pinned }),
-        TelegramProviderEvent::ReactionChanged { account_id, provider_chat_id, provider_message_id, emoji, is_active } => Event::ReactionChanged(wire::ReactionChangedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), emoji: emoji.clone(), is_active: *is_active }),
-        TelegramProviderEvent::ReactionsObserved { account_id, provider_chat_id, provider_message_id, reactions } => Event::ReactionsObserved(wire::ReactionsObservedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), reaction: reactions.iter().map(|value| wire::TelegramReactionObservationProjection { sender_id: value.sender_id.clone(), emoji: value.emoji.clone(), is_outgoing: value.is_outgoing, is_active: value.is_active }).collect() }),
-        TelegramProviderEvent::ChatUnreadChanged { account_id, provider_chat_id, unread_count, unread_mention_count, last_read_inbox_message_id } => Event::ChatUnreadChanged(wire::ChatUnreadChangedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), unread_count: *unread_count, unread_mention_count: *unread_mention_count, last_read_inbox_message_id: last_read_inbox_message_id.clone() }),
-        TelegramProviderEvent::ChatMarkedUnreadChanged { account_id, provider_chat_id, is_marked_as_unread } => Event::ChatMarkedUnreadChanged(wire::ChatMarkedUnreadChangedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), is_marked_as_unread: *is_marked_as_unread }),
+        TelegramProviderEvent::MessageCreated(value) => {
+            Event::MessageCreated(message_observation_to_wire(value))
+        }
+        TelegramProviderEvent::MessageEdited {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            text,
+            observed_at_unix_seconds,
+        } => Event::MessageEdited(wire::MessageEditedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            text: text.clone(),
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
+        TelegramProviderEvent::MessageDeleted {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            is_permanent,
+        } => Event::MessageDeleted(wire::MessageDeletedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            is_permanent: *is_permanent,
+        }),
+        TelegramProviderEvent::MessageSendFailed {
+            account_id,
+            provider_chat_id,
+            old_provider_message_id,
+            error_code,
+        } => Event::MessageSendFailed(wire::MessageSendFailedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            old_provider_message_id: old_provider_message_id.clone(),
+            error_code: *error_code,
+        }),
+        TelegramProviderEvent::MessageSendSucceeded {
+            account_id,
+            provider_chat_id,
+            old_provider_message_id,
+            provider_message_id,
+        } => Event::MessageSendSucceeded(wire::MessageSendSucceededEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            old_provider_message_id: old_provider_message_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+        }),
+        TelegramProviderEvent::MessagePinned {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            is_pinned,
+        } => Event::MessagePinned(wire::MessagePinnedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            is_pinned: *is_pinned,
+        }),
+        TelegramProviderEvent::ReactionChanged {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            emoji,
+            is_active,
+        } => Event::ReactionChanged(wire::ReactionChangedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            emoji: emoji.clone(),
+            is_active: *is_active,
+        }),
+        TelegramProviderEvent::ReactionsObserved {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            reactions,
+        } => Event::ReactionsObserved(wire::ReactionsObservedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            reaction: reactions
+                .iter()
+                .map(|value| wire::TelegramReactionObservationProjection {
+                    sender_id: value.sender_id.clone(),
+                    emoji: value.emoji.clone(),
+                    is_outgoing: value.is_outgoing,
+                    is_active: value.is_active,
+                })
+                .collect(),
+        }),
+        TelegramProviderEvent::ChatUnreadChanged {
+            account_id,
+            provider_chat_id,
+            unread_count,
+            unread_mention_count,
+            last_read_inbox_message_id,
+        } => Event::ChatUnreadChanged(wire::ChatUnreadChangedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            unread_count: *unread_count,
+            unread_mention_count: *unread_mention_count,
+            last_read_inbox_message_id: last_read_inbox_message_id.clone(),
+        }),
+        TelegramProviderEvent::ChatMarkedUnreadChanged {
+            account_id,
+            provider_chat_id,
+            is_marked_as_unread,
+        } => Event::ChatMarkedUnreadChanged(wire::ChatMarkedUnreadChangedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            is_marked_as_unread: *is_marked_as_unread,
+        }),
         TelegramProviderEvent::TypingChanged(value) => Event::TypingChanged(typing_to_wire(value)),
         TelegramProviderEvent::TopicChanged(value) => Event::TopicChanged(topic_to_wire(value)),
-        TelegramProviderEvent::ChatPositionChanged(value) => Event::ChatPositionChanged(chat_position_to_wire(value)),
-        TelegramProviderEvent::ChatFoldersChanged { account_id, folders } => Event::ChatFoldersChanged(wire::ChatFoldersChangedEvent { account_id: account_id.clone(), folder: folders.iter().map(chat_folder_to_wire).collect() }),
-        TelegramProviderEvent::ChatNotificationChanged { account_id, provider_chat_id, use_default_mute_for, mute_for_seconds } => Event::ChatNotificationChanged(wire::ChatNotificationChangedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), use_default_mute_for: *use_default_mute_for, mute_for_seconds: *mute_for_seconds }),
-        TelegramProviderEvent::ChatAvatarChanged(value) => Event::ChatAvatarChanged(avatar_to_wire(value)),
-        TelegramProviderEvent::ParticipantChanged(value) => Event::ParticipantChanged(participant_to_wire(value)),
+        TelegramProviderEvent::ChatPositionChanged(value) => {
+            Event::ChatPositionChanged(chat_position_to_wire(value))
+        }
+        TelegramProviderEvent::ChatFoldersChanged {
+            account_id,
+            folders,
+        } => Event::ChatFoldersChanged(wire::ChatFoldersChangedEvent {
+            account_id: account_id.clone(),
+            folder: folders.iter().map(chat_folder_to_wire).collect(),
+        }),
+        TelegramProviderEvent::ChatNotificationChanged {
+            account_id,
+            provider_chat_id,
+            use_default_mute_for,
+            mute_for_seconds,
+        } => Event::ChatNotificationChanged(wire::ChatNotificationChangedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            use_default_mute_for: *use_default_mute_for,
+            mute_for_seconds: *mute_for_seconds,
+        }),
+        TelegramProviderEvent::ChatAvatarChanged(value) => {
+            Event::ChatAvatarChanged(avatar_to_wire(value))
+        }
+        TelegramProviderEvent::ParticipantChanged(value) => {
+            Event::ParticipantChanged(participant_to_wire(value))
+        }
         TelegramProviderEvent::FileChanged(value) => Event::FileChanged(file_to_wire(value)),
     };
     wire::TelegramProviderEventProjection { event: Some(event) }
 }
 
-fn parse_event(value: wire::TelegramProviderEventProjection) -> Result<TelegramProviderEvent, TelegramAuthorizationWireError> {
+fn parse_event(
+    value: wire::TelegramProviderEventProjection,
+) -> Result<TelegramProviderEvent, TelegramAuthorizationWireError> {
     use wire::telegram_provider_event_projection::Event;
-    match value.event.ok_or(TelegramAuthorizationWireError::MissingVariant)? {
-        Event::MessageCreated(value) => Ok(TelegramProviderEvent::MessageCreated(parse_message_observation(value)?)),
-        Event::MessageEdited(value) => Ok(TelegramProviderEvent::MessageEdited { account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, text: value.text, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::MessageDeleted(value) => Ok(TelegramProviderEvent::MessageDeleted { account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, is_permanent: value.is_permanent }),
-        Event::MessageSendFailed(value) => Ok(TelegramProviderEvent::MessageSendFailed { account_id: value.account_id, provider_chat_id: value.provider_chat_id, old_provider_message_id: value.old_provider_message_id, error_code: value.error_code }),
-        Event::MessageSendSucceeded(value) => Ok(TelegramProviderEvent::MessageSendSucceeded { account_id: value.account_id, provider_chat_id: value.provider_chat_id, old_provider_message_id: value.old_provider_message_id, provider_message_id: value.provider_message_id }),
-        Event::MessagePinned(value) => Ok(TelegramProviderEvent::MessagePinned { account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, is_pinned: value.is_pinned }),
-        Event::ReactionChanged(value) => Ok(TelegramProviderEvent::ReactionChanged { account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, emoji: value.emoji, is_active: value.is_active }),
-        Event::ReactionsObserved(value) => Ok(TelegramProviderEvent::ReactionsObserved { account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, reactions: value.reaction.into_iter().map(|value| TelegramReactionObservation { sender_id: value.sender_id, emoji: value.emoji, is_outgoing: value.is_outgoing, is_active: value.is_active }).collect() }),
-        Event::ChatUnreadChanged(value) => Ok(TelegramProviderEvent::ChatUnreadChanged { account_id: value.account_id, provider_chat_id: value.provider_chat_id, unread_count: value.unread_count, unread_mention_count: value.unread_mention_count, last_read_inbox_message_id: value.last_read_inbox_message_id }),
-        Event::ChatMarkedUnreadChanged(value) => Ok(TelegramProviderEvent::ChatMarkedUnreadChanged { account_id: value.account_id, provider_chat_id: value.provider_chat_id, is_marked_as_unread: value.is_marked_as_unread }),
-        Event::TypingChanged(value) => Ok(TelegramProviderEvent::TypingChanged(parse_typing(value))),
+    match value
+        .event
+        .ok_or(TelegramAuthorizationWireError::MissingVariant)?
+    {
+        Event::MessageCreated(value) => Ok(TelegramProviderEvent::MessageCreated(
+            parse_message_observation(value)?,
+        )),
+        Event::MessageEdited(value) => Ok(TelegramProviderEvent::MessageEdited {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            text: value.text,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::MessageDeleted(value) => Ok(TelegramProviderEvent::MessageDeleted {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            is_permanent: value.is_permanent,
+        }),
+        Event::MessageSendFailed(value) => Ok(TelegramProviderEvent::MessageSendFailed {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            old_provider_message_id: value.old_provider_message_id,
+            error_code: value.error_code,
+        }),
+        Event::MessageSendSucceeded(value) => Ok(TelegramProviderEvent::MessageSendSucceeded {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            old_provider_message_id: value.old_provider_message_id,
+            provider_message_id: value.provider_message_id,
+        }),
+        Event::MessagePinned(value) => Ok(TelegramProviderEvent::MessagePinned {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            is_pinned: value.is_pinned,
+        }),
+        Event::ReactionChanged(value) => Ok(TelegramProviderEvent::ReactionChanged {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            emoji: value.emoji,
+            is_active: value.is_active,
+        }),
+        Event::ReactionsObserved(value) => Ok(TelegramProviderEvent::ReactionsObserved {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            reactions: value
+                .reaction
+                .into_iter()
+                .map(|value| TelegramReactionObservation {
+                    sender_id: value.sender_id,
+                    emoji: value.emoji,
+                    is_outgoing: value.is_outgoing,
+                    is_active: value.is_active,
+                })
+                .collect(),
+        }),
+        Event::ChatUnreadChanged(value) => Ok(TelegramProviderEvent::ChatUnreadChanged {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            unread_count: value.unread_count,
+            unread_mention_count: value.unread_mention_count,
+            last_read_inbox_message_id: value.last_read_inbox_message_id,
+        }),
+        Event::ChatMarkedUnreadChanged(value) => {
+            Ok(TelegramProviderEvent::ChatMarkedUnreadChanged {
+                account_id: value.account_id,
+                provider_chat_id: value.provider_chat_id,
+                is_marked_as_unread: value.is_marked_as_unread,
+            })
+        }
+        Event::TypingChanged(value) => {
+            Ok(TelegramProviderEvent::TypingChanged(parse_typing(value)))
+        }
         Event::TopicChanged(value) => Ok(TelegramProviderEvent::TopicChanged(parse_topic(value))),
-        Event::ChatPositionChanged(value) => Ok(TelegramProviderEvent::ChatPositionChanged(parse_chat_position(value))),
-        Event::ChatFoldersChanged(value) => Ok(TelegramProviderEvent::ChatFoldersChanged { account_id: value.account_id, folders: value.folder.into_iter().map(parse_chat_folder).collect() }),
-        Event::ChatNotificationChanged(value) => Ok(TelegramProviderEvent::ChatNotificationChanged { account_id: value.account_id, provider_chat_id: value.provider_chat_id, use_default_mute_for: value.use_default_mute_for, mute_for_seconds: value.mute_for_seconds }),
-        Event::ChatAvatarChanged(value) => Ok(TelegramProviderEvent::ChatAvatarChanged(parse_avatar(value))),
-        Event::ParticipantChanged(value) => Ok(TelegramProviderEvent::ParticipantChanged(parse_participant(value))),
+        Event::ChatPositionChanged(value) => Ok(TelegramProviderEvent::ChatPositionChanged(
+            parse_chat_position(value),
+        )),
+        Event::ChatFoldersChanged(value) => Ok(TelegramProviderEvent::ChatFoldersChanged {
+            account_id: value.account_id,
+            folders: value.folder.into_iter().map(parse_chat_folder).collect(),
+        }),
+        Event::ChatNotificationChanged(value) => {
+            Ok(TelegramProviderEvent::ChatNotificationChanged {
+                account_id: value.account_id,
+                provider_chat_id: value.provider_chat_id,
+                use_default_mute_for: value.use_default_mute_for,
+                mute_for_seconds: value.mute_for_seconds,
+            })
+        }
+        Event::ChatAvatarChanged(value) => Ok(TelegramProviderEvent::ChatAvatarChanged(
+            parse_avatar(value),
+        )),
+        Event::ParticipantChanged(value) => Ok(TelegramProviderEvent::ParticipantChanged(
+            parse_participant(value),
+        )),
         Event::FileChanged(value) => Ok(TelegramProviderEvent::FileChanged(parse_file(value)?)),
     }
 }
@@ -689,117 +1774,244 @@ pub fn encode_query_response(response: &TelegramProviderQueryResponse) -> Option
         TelegramProviderQueryResponse::Chat(value) => Response::Chat(wire::ChatResponse {
             chat: value.as_ref().map(chat_to_wire),
         }),
-        TelegramProviderQueryResponse::ChatAvatar(value) => Response::ChatAvatar(wire::ChatAvatarResponse {
-            avatar: value.as_ref().map(avatar_to_wire),
-        }),
-        TelegramProviderQueryResponse::History(values) => Response::History(wire::MessageObservationListResponse {
-            item: values.iter().map(message_observation_to_wire).collect(),
-        }),
-        TelegramProviderQueryResponse::HistoryPage(value) => Response::HistoryPage(wire::HistoryPageResponse {
-            page: Some(wire::TelegramHistoryPageProjection {
-                item: value.items.iter().map(message_observation_to_wire).collect(),
-                next_from_message_id: value.next_from_message_id,
-                has_more: value.has_more,
-            }),
-        }),
-        TelegramProviderQueryResponse::ChatState(value) => Response::ChatState(wire::ChatStateResponse {
-            state: value.as_ref().map(chat_state_to_wire),
-        }),
-        TelegramProviderQueryResponse::ChatPositions(values) => Response::ChatPositions(wire::ChatPositionsResponse {
-            position: values.iter().map(chat_position_to_wire).collect(),
-        }),
-        TelegramProviderQueryResponse::ChatOperationalState(value) => Response::ChatOperationalState(wire::ChatOperationalStateResponse {
-            state: value.as_ref().map(chat_operational_state_to_wire),
-        }),
-        TelegramProviderQueryResponse::TopicMessageIds(values) => Response::TopicMessageIds(wire::TopicMessageIdsResponse {
-            provider_message_id: values.clone(),
-        }),
-        TelegramProviderQueryResponse::Reactions(values) => Response::Reactions(wire::ReactionListResponse {
-            reaction: values.iter().map(|value| wire::TelegramReactionObservationProjection {
-                sender_id: value.sender_id.clone(), emoji: value.emoji.clone(), is_outgoing: value.is_outgoing, is_active: value.is_active,
-            }).collect(),
-        }),
-        TelegramProviderQueryResponse::ReactionSummary(values) => Response::ReactionSummary(wire::ReactionSummaryResponse {
-            summary: values.iter().map(|value| wire::TelegramReactionSummaryProjection {
-                emoji: value.emoji.clone(), count: value.count, is_active: value.is_active,
-            }).collect(),
-        }),
-        TelegramProviderQueryResponse::ChatFolders(values) => Response::ChatFolders(wire::ChatFolderListResponse {
-            folder: values.iter().map(chat_folder_to_wire).collect(),
-        }),
-        TelegramProviderQueryResponse::CachedMessages(values) => Response::CachedMessages(wire::MessageProjectionListResponse {
-            item: values.iter().map(message_projection_to_wire).collect(),
-        }),
-        TelegramProviderQueryResponse::ReplyChain(values) => Response::ReplyChain(wire::MessageProjectionListResponse {
-            item: values.iter().map(message_projection_to_wire).collect(),
-        }),
-        TelegramProviderQueryResponse::ForwardChain(values) => Response::ForwardChain(wire::MessageProjectionListResponse {
-            item: values.iter().map(message_projection_to_wire).collect(),
-        }),
-        TelegramProviderQueryResponse::MessageVersions(values) => Response::MessageVersions(wire::MessageVersionListResponse {
-            item: values.iter().map(|value| wire::TelegramMessageVersionProjection {
-                version_id: value.version_id.clone(), message_id: value.message_id.clone(), account_id: value.account_id.clone(),
-                provider_chat_id: value.provider_chat_id.clone(), provider_message_id: value.provider_message_id.clone(),
-                version_number: value.version_number, body_text: value.body_text.clone(), observed_at_unix_seconds: value.observed_at_unix_seconds,
-                source: version_source_name(value.source).to_owned(),
-            }).collect(),
-        }),
-        TelegramProviderQueryResponse::MessageTombstones(values) => Response::MessageTombstones(wire::MessageTombstoneListResponse {
-            item: values.iter().map(|value| wire::TelegramMessageTombstoneProjection {
-                tombstone_id: value.tombstone_id.clone(), message_id: value.message_id.clone(), account_id: value.account_id.clone(),
-                provider_chat_id: value.provider_chat_id.clone(), provider_message_id: value.provider_message_id.clone(),
-                reason: tombstone_reason_name(value.reason).to_owned(), observed_at_unix_seconds: value.observed_at_unix_seconds,
-                is_provider_delete: value.is_provider_delete, is_locally_visible: value.is_locally_visible,
-            }).collect(),
-        }),
-        TelegramProviderQueryResponse::MessageMutations(values) => Response::MessageMutations(wire::MessageMutationListResponse {
-            item: values.iter().map(|value| wire::TelegramMessageMutationProjection {
-                mutation: Some(match value {
-                    TelegramMessageMutation::Edit { text, observed_at_unix_seconds } => wire::telegram_message_mutation_projection::Mutation::Edit(wire::EditMutation { text: text.clone(), observed_at_unix_seconds: *observed_at_unix_seconds }),
-                    TelegramMessageMutation::Delete { is_permanent } => wire::telegram_message_mutation_projection::Mutation::Delete(wire::DeleteMutation { is_permanent: *is_permanent }),
-                    TelegramMessageMutation::Pin { is_pinned } => wire::telegram_message_mutation_projection::Mutation::Pin(wire::PinMutation { is_pinned: *is_pinned }),
-                    TelegramMessageMutation::Reaction { emoji, is_active } => wire::telegram_message_mutation_projection::Mutation::Reaction(wire::ReactionMutation { emoji: emoji.clone(), is_active: *is_active }),
+        TelegramProviderQueryResponse::ChatAvatar(value) => {
+            Response::ChatAvatar(wire::ChatAvatarResponse {
+                avatar: value.as_ref().map(avatar_to_wire),
+            })
+        }
+        TelegramProviderQueryResponse::History(values) => {
+            Response::History(wire::MessageObservationListResponse {
+                item: values.iter().map(message_observation_to_wire).collect(),
+            })
+        }
+        TelegramProviderQueryResponse::HistoryPage(value) => {
+            Response::HistoryPage(wire::HistoryPageResponse {
+                page: Some(wire::TelegramHistoryPageProjection {
+                    item: value
+                        .items
+                        .iter()
+                        .map(message_observation_to_wire)
+                        .collect(),
+                    next_from_message_id: value.next_from_message_id,
+                    has_more: value.has_more,
                 }),
-            }).collect(),
-        }),
-        TelegramProviderQueryResponse::MessageReferences(value) => Response::MessageReferences(wire::MessageReferencesResponse {
-            references: value.as_ref().map(message_references_to_wire),
-        }),
-        TelegramProviderQueryResponse::Attachment(value) => Response::Attachment(wire::AttachmentResponse {
-            attachment: value.as_ref().map(|value| wire::TelegramAttachmentProjection {
-                attachment_id: value.attachment_id.clone(), account_id: value.account_id.clone(), provider_chat_id: value.provider_chat_id.clone(),
-                provider_message_id: value.provider_message_id.clone(), provider_file_id: value.provider_file_id.clone(),
-                state: attachment_state_name(value.state).to_owned(), size_bytes: value.size_bytes, filename: value.filename.clone(),
-                content_type: value.content_type.clone(), blob_ref: value.blob_ref.clone(),
-            }),
-        }),
+            })
+        }
+        TelegramProviderQueryResponse::ChatState(value) => {
+            Response::ChatState(wire::ChatStateResponse {
+                state: value.as_ref().map(chat_state_to_wire),
+            })
+        }
+        TelegramProviderQueryResponse::ChatPositions(values) => {
+            Response::ChatPositions(wire::ChatPositionsResponse {
+                position: values.iter().map(chat_position_to_wire).collect(),
+            })
+        }
+        TelegramProviderQueryResponse::ChatOperationalState(value) => {
+            Response::ChatOperationalState(wire::ChatOperationalStateResponse {
+                state: value.as_ref().map(chat_operational_state_to_wire),
+            })
+        }
+        TelegramProviderQueryResponse::TopicMessageIds(values) => {
+            Response::TopicMessageIds(wire::TopicMessageIdsResponse {
+                provider_message_id: values.clone(),
+            })
+        }
+        TelegramProviderQueryResponse::Reactions(values) => {
+            Response::Reactions(wire::ReactionListResponse {
+                reaction: values
+                    .iter()
+                    .map(|value| wire::TelegramReactionObservationProjection {
+                        sender_id: value.sender_id.clone(),
+                        emoji: value.emoji.clone(),
+                        is_outgoing: value.is_outgoing,
+                        is_active: value.is_active,
+                    })
+                    .collect(),
+            })
+        }
+        TelegramProviderQueryResponse::ReactionSummary(values) => {
+            Response::ReactionSummary(wire::ReactionSummaryResponse {
+                summary: values
+                    .iter()
+                    .map(|value| wire::TelegramReactionSummaryProjection {
+                        emoji: value.emoji.clone(),
+                        count: value.count,
+                        is_active: value.is_active,
+                    })
+                    .collect(),
+            })
+        }
+        TelegramProviderQueryResponse::ChatFolders(values) => {
+            Response::ChatFolders(wire::ChatFolderListResponse {
+                folder: values.iter().map(chat_folder_to_wire).collect(),
+            })
+        }
+        TelegramProviderQueryResponse::CachedMessages(values) => {
+            Response::CachedMessages(wire::MessageProjectionListResponse {
+                item: values.iter().map(message_projection_to_wire).collect(),
+            })
+        }
+        TelegramProviderQueryResponse::ReplyChain(values) => {
+            Response::ReplyChain(wire::MessageProjectionListResponse {
+                item: values.iter().map(message_projection_to_wire).collect(),
+            })
+        }
+        TelegramProviderQueryResponse::ForwardChain(values) => {
+            Response::ForwardChain(wire::MessageProjectionListResponse {
+                item: values.iter().map(message_projection_to_wire).collect(),
+            })
+        }
+        TelegramProviderQueryResponse::MessageVersions(values) => {
+            Response::MessageVersions(wire::MessageVersionListResponse {
+                item: values
+                    .iter()
+                    .map(|value| wire::TelegramMessageVersionProjection {
+                        version_id: value.version_id.clone(),
+                        message_id: value.message_id.clone(),
+                        account_id: value.account_id.clone(),
+                        provider_chat_id: value.provider_chat_id.clone(),
+                        provider_message_id: value.provider_message_id.clone(),
+                        version_number: value.version_number,
+                        body_text: value.body_text.clone(),
+                        observed_at_unix_seconds: value.observed_at_unix_seconds,
+                        source: version_source_name(value.source).to_owned(),
+                    })
+                    .collect(),
+            })
+        }
+        TelegramProviderQueryResponse::MessageTombstones(values) => {
+            Response::MessageTombstones(wire::MessageTombstoneListResponse {
+                item: values
+                    .iter()
+                    .map(|value| wire::TelegramMessageTombstoneProjection {
+                        tombstone_id: value.tombstone_id.clone(),
+                        message_id: value.message_id.clone(),
+                        account_id: value.account_id.clone(),
+                        provider_chat_id: value.provider_chat_id.clone(),
+                        provider_message_id: value.provider_message_id.clone(),
+                        reason: tombstone_reason_name(value.reason).to_owned(),
+                        observed_at_unix_seconds: value.observed_at_unix_seconds,
+                        is_provider_delete: value.is_provider_delete,
+                        is_locally_visible: value.is_locally_visible,
+                    })
+                    .collect(),
+            })
+        }
+        TelegramProviderQueryResponse::MessageMutations(values) => {
+            Response::MessageMutations(wire::MessageMutationListResponse {
+                item: values
+                    .iter()
+                    .map(|value| wire::TelegramMessageMutationProjection {
+                        mutation: Some(match value {
+                            TelegramMessageMutation::Edit {
+                                text,
+                                observed_at_unix_seconds,
+                            } => wire::telegram_message_mutation_projection::Mutation::Edit(
+                                wire::EditMutation {
+                                    text: text.clone(),
+                                    observed_at_unix_seconds: *observed_at_unix_seconds,
+                                },
+                            ),
+                            TelegramMessageMutation::Delete { is_permanent } => {
+                                wire::telegram_message_mutation_projection::Mutation::Delete(
+                                    wire::DeleteMutation {
+                                        is_permanent: *is_permanent,
+                                    },
+                                )
+                            }
+                            TelegramMessageMutation::Pin { is_pinned } => {
+                                wire::telegram_message_mutation_projection::Mutation::Pin(
+                                    wire::PinMutation {
+                                        is_pinned: *is_pinned,
+                                    },
+                                )
+                            }
+                            TelegramMessageMutation::Reaction { emoji, is_active } => {
+                                wire::telegram_message_mutation_projection::Mutation::Reaction(
+                                    wire::ReactionMutation {
+                                        emoji: emoji.clone(),
+                                        is_active: *is_active,
+                                    },
+                                )
+                            }
+                        }),
+                    })
+                    .collect(),
+            })
+        }
+        TelegramProviderQueryResponse::MessageReferences(value) => {
+            Response::MessageReferences(wire::MessageReferencesResponse {
+                references: value.as_ref().map(message_references_to_wire),
+            })
+        }
+        TelegramProviderQueryResponse::Attachment(value) => {
+            Response::Attachment(wire::AttachmentResponse {
+                attachment: value
+                    .as_ref()
+                    .map(|value| wire::TelegramAttachmentProjection {
+                        attachment_id: value.attachment_id.clone(),
+                        account_id: value.account_id.clone(),
+                        provider_chat_id: value.provider_chat_id.clone(),
+                        provider_message_id: value.provider_message_id.clone(),
+                        provider_file_id: value.provider_file_id.clone(),
+                        state: attachment_state_name(value.state).to_owned(),
+                        size_bytes: value.size_bytes,
+                        filename: value.filename.clone(),
+                        content_type: value.content_type.clone(),
+                        blob_ref: value.blob_ref.clone(),
+                    }),
+            })
+        }
         TelegramProviderQueryResponse::File(value) => Response::File(wire::FileResponse {
             file: value.as_ref().map(file_to_wire),
         }),
-        TelegramProviderQueryResponse::Participants(value) => Response::Participants(wire::ParticipantPageResponse {
-            account_id: value.account_id.clone(), provider_chat_id: value.provider_chat_id.clone(), filter: participant_filter_name(value.filter).to_owned(),
-            item: value.items.iter().map(participant_to_wire).collect(), next_offset: value.next_offset,
-        }),
-        TelegramProviderQueryResponse::Topics(values) => Response::Topics(wire::TopicListResponse {
-            topic: values.iter().map(topic_to_wire).collect(),
-        }),
+        TelegramProviderQueryResponse::Participants(value) => {
+            Response::Participants(wire::ParticipantPageResponse {
+                account_id: value.account_id.clone(),
+                provider_chat_id: value.provider_chat_id.clone(),
+                filter: participant_filter_name(value.filter).to_owned(),
+                item: value.items.iter().map(participant_to_wire).collect(),
+                next_offset: value.next_offset,
+            })
+        }
+        TelegramProviderQueryResponse::Topics(values) => {
+            Response::Topics(wire::TopicListResponse {
+                topic: values.iter().map(topic_to_wire).collect(),
+            })
+        }
         TelegramProviderQueryResponse::Topic(value) => Response::Topic(wire::TopicResponse {
             topic: value.as_ref().map(topic_to_wire),
         }),
-        TelegramProviderQueryResponse::Operations(values) => Response::Operations(wire::OperationListResponse {
-            operation: values.iter().map(operation_to_wire).collect(),
-        }),
-        TelegramProviderQueryResponse::Commands(values) => Response::Commands(wire::CommandRecordListResponse {
-            record: values.iter().map(|value| {
-                let command = wire::TelegramProviderCommandV1::decode(encode_command(&value.command)).ok()?;
-                Some(wire::TelegramCommandRecordProjection {
-                    operation: Some(operation_to_wire(&value.operation)), command: Some(command),
-                })
-            }).collect::<Option<Vec<_>>>()?,
-        }),
-        _ => return None,
+        TelegramProviderQueryResponse::Operations(values) => {
+            Response::Operations(wire::OperationListResponse {
+                operation: values.iter().map(operation_to_wire).collect(),
+            })
+        }
+        TelegramProviderQueryResponse::Commands(values) => {
+            Response::Commands(wire::CommandRecordListResponse {
+                record: values
+                    .iter()
+                    .map(|value| {
+                        let command = wire::TelegramProviderCommandV1::decode(
+                            encode_command(&value.command).as_slice(),
+                        )
+                        .ok()?;
+                        Some(wire::TelegramCommandRecordProjection {
+                            operation: Some(operation_to_wire(&value.operation)),
+                            command: Some(command),
+                        })
+                    })
+                    .collect::<Option<Vec<_>>>()?,
+            })
+        }
     };
-    Some(wire::TelegramProviderQueryResponseV1 { response: Some(response) }.encode_to_vec())
+    Some(
+        wire::TelegramProviderQueryResponseV1 {
+            response: Some(response),
+        }
+        .encode_to_vec(),
+    )
 }
 
 pub fn decode_query_response(
@@ -808,9 +2020,16 @@ pub fn decode_query_response(
     use wire::telegram_provider_query_response_v1::Response;
     let message = wire::TelegramProviderQueryResponseV1::decode(bytes)
         .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
-    match message.response.ok_or(TelegramAuthorizationWireError::MissingVariant)? {
+    match message
+        .response
+        .ok_or(TelegramAuthorizationWireError::MissingVariant)?
+    {
         Response::Chats(value) => Ok(TelegramProviderQueryResponse::Chats(
-            value.chat.into_iter().map(parse_chat).collect::<Result<Vec<_>, _>>()?,
+            value
+                .chat
+                .into_iter()
+                .map(parse_chat)
+                .collect::<Result<Vec<_>, _>>()?,
         )),
         Response::Chat(value) => Ok(TelegramProviderQueryResponse::Chat(
             value.chat.map(parse_chat).transpose()?,
@@ -819,95 +2038,219 @@ pub fn decode_query_response(
             value.avatar.map(parse_avatar),
         )),
         Response::History(value) => Ok(TelegramProviderQueryResponse::History(
-            value.item.into_iter().map(parse_message_observation).collect::<Result<Vec<_>, _>>()?,
+            value
+                .item
+                .into_iter()
+                .map(parse_message_observation)
+                .collect::<Result<Vec<_>, _>>()?,
         )),
         Response::HistoryPage(value) => {
-            let page = value.page.ok_or(TelegramAuthorizationWireError::InvalidPayload)?;
-            Ok(TelegramProviderQueryResponse::HistoryPage(TelegramHistoryPage {
-                items: page.item.into_iter().map(parse_message_observation).collect::<Result<Vec<_>, _>>()?,
-                next_from_message_id: page.next_from_message_id,
-                has_more: page.has_more,
-            }))
+            let page = value
+                .page
+                .ok_or(TelegramAuthorizationWireError::InvalidPayload)?;
+            Ok(TelegramProviderQueryResponse::HistoryPage(
+                TelegramHistoryPage {
+                    items: page
+                        .item
+                        .into_iter()
+                        .map(parse_message_observation)
+                        .collect::<Result<Vec<_>, _>>()?,
+                    next_from_message_id: page.next_from_message_id,
+                    has_more: page.has_more,
+                },
+            ))
         }
         Response::ChatState(value) => Ok(TelegramProviderQueryResponse::ChatState(
             value.state.map(parse_chat_state),
         )),
         Response::ChatPositions(value) => Ok(TelegramProviderQueryResponse::ChatPositions(
-            value.position.into_iter().map(parse_chat_position).collect(),
+            value
+                .position
+                .into_iter()
+                .map(parse_chat_position)
+                .collect(),
         )),
-        Response::ChatOperationalState(value) => Ok(TelegramProviderQueryResponse::ChatOperationalState(
-            value.state.map(parse_chat_operational_state),
+        Response::ChatOperationalState(value) => {
+            Ok(TelegramProviderQueryResponse::ChatOperationalState(
+                value.state.map(parse_chat_operational_state),
+            ))
+        }
+        Response::TopicMessageIds(value) => Ok(TelegramProviderQueryResponse::TopicMessageIds(
+            value.provider_message_id,
         )),
-        Response::TopicMessageIds(value) => Ok(TelegramProviderQueryResponse::TopicMessageIds(value.provider_message_id)),
         Response::Reactions(value) => Ok(TelegramProviderQueryResponse::Reactions(
-            value.reaction.into_iter().map(|value| TelegramReactionObservation {
-                sender_id: value.sender_id, emoji: value.emoji, is_outgoing: value.is_outgoing, is_active: value.is_active,
-            }).collect(),
+            value
+                .reaction
+                .into_iter()
+                .map(|value| TelegramReactionObservation {
+                    sender_id: value.sender_id,
+                    emoji: value.emoji,
+                    is_outgoing: value.is_outgoing,
+                    is_active: value.is_active,
+                })
+                .collect(),
         )),
         Response::ReactionSummary(value) => Ok(TelegramProviderQueryResponse::ReactionSummary(
-            value.summary.into_iter().map(|value| TelegramReactionSummary {
-                emoji: value.emoji, count: value.count, is_active: value.is_active,
-            }).collect(),
+            value
+                .summary
+                .into_iter()
+                .map(|value| TelegramReactionSummary {
+                    emoji: value.emoji,
+                    count: value.count,
+                    is_active: value.is_active,
+                })
+                .collect(),
         )),
         Response::ChatFolders(value) => Ok(TelegramProviderQueryResponse::ChatFolders(
             value.folder.into_iter().map(parse_chat_folder).collect(),
         )),
         Response::CachedMessages(value) => Ok(TelegramProviderQueryResponse::CachedMessages(
-            value.item.into_iter().map(parse_message_projection).collect::<Result<Vec<_>, _>>()?,
+            value
+                .item
+                .into_iter()
+                .map(parse_message_projection)
+                .collect::<Result<Vec<_>, _>>()?,
         )),
         Response::ReplyChain(value) => Ok(TelegramProviderQueryResponse::ReplyChain(
-            value.item.into_iter().map(parse_message_projection).collect::<Result<Vec<_>, _>>()?,
+            value
+                .item
+                .into_iter()
+                .map(parse_message_projection)
+                .collect::<Result<Vec<_>, _>>()?,
         )),
         Response::ForwardChain(value) => Ok(TelegramProviderQueryResponse::ForwardChain(
-            value.item.into_iter().map(parse_message_projection).collect::<Result<Vec<_>, _>>()?,
+            value
+                .item
+                .into_iter()
+                .map(parse_message_projection)
+                .collect::<Result<Vec<_>, _>>()?,
         )),
         Response::MessageVersions(value) => Ok(TelegramProviderQueryResponse::MessageVersions(
-            value.item.into_iter().map(|value| Ok(TelegramMessageVersion {
-                version_id: value.version_id, message_id: value.message_id, account_id: value.account_id,
-                provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id,
-                version_number: value.version_number, body_text: value.body_text, observed_at_unix_seconds: value.observed_at_unix_seconds,
-                source: parse_version_source(&value.source)?,
-            })).collect::<Result<Vec<_>, TelegramAuthorizationWireError>>()?,
+            value
+                .item
+                .into_iter()
+                .map(|value| {
+                    Ok(TelegramMessageVersion {
+                        version_id: value.version_id,
+                        message_id: value.message_id,
+                        account_id: value.account_id,
+                        provider_chat_id: value.provider_chat_id,
+                        provider_message_id: value.provider_message_id,
+                        version_number: value.version_number,
+                        body_text: value.body_text,
+                        observed_at_unix_seconds: value.observed_at_unix_seconds,
+                        source: parse_version_source(&value.source)?,
+                    })
+                })
+                .collect::<Result<Vec<_>, TelegramAuthorizationWireError>>()?,
         )),
         Response::MessageTombstones(value) => Ok(TelegramProviderQueryResponse::MessageTombstones(
-            value.item.into_iter().map(|value| Ok(TelegramMessageTombstone {
-                tombstone_id: value.tombstone_id, message_id: value.message_id, account_id: value.account_id,
-                provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id,
-                reason: parse_tombstone_reason(&value.reason)?, observed_at_unix_seconds: value.observed_at_unix_seconds,
-                is_provider_delete: value.is_provider_delete, is_locally_visible: value.is_locally_visible,
-            })).collect::<Result<Vec<_>, TelegramAuthorizationWireError>>()?,
+            value
+                .item
+                .into_iter()
+                .map(|value| {
+                    Ok(TelegramMessageTombstone {
+                        tombstone_id: value.tombstone_id,
+                        message_id: value.message_id,
+                        account_id: value.account_id,
+                        provider_chat_id: value.provider_chat_id,
+                        provider_message_id: value.provider_message_id,
+                        reason: parse_tombstone_reason(&value.reason)?,
+                        observed_at_unix_seconds: value.observed_at_unix_seconds,
+                        is_provider_delete: value.is_provider_delete,
+                        is_locally_visible: value.is_locally_visible,
+                    })
+                })
+                .collect::<Result<Vec<_>, TelegramAuthorizationWireError>>()?,
         )),
         Response::MessageMutations(value) => Ok(TelegramProviderQueryResponse::MessageMutations(
-            value.item.into_iter().map(|value| match value.mutation.ok_or(TelegramAuthorizationWireError::MissingVariant)? {
-                wire::telegram_message_mutation_projection::Mutation::Edit(value) => Ok(TelegramMessageMutation::Edit { text: value.text, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-                wire::telegram_message_mutation_projection::Mutation::Delete(value) => Ok(TelegramMessageMutation::Delete { is_permanent: value.is_permanent }),
-                wire::telegram_message_mutation_projection::Mutation::Pin(value) => Ok(TelegramMessageMutation::Pin { is_pinned: value.is_pinned }),
-                wire::telegram_message_mutation_projection::Mutation::Reaction(value) => Ok(TelegramMessageMutation::Reaction { emoji: value.emoji, is_active: value.is_active }),
-            }).collect::<Result<Vec<_>, TelegramAuthorizationWireError>>()?,
+            value
+                .item
+                .into_iter()
+                .map(|value| {
+                    match value
+                        .mutation
+                        .ok_or(TelegramAuthorizationWireError::MissingVariant)?
+                    {
+                        wire::telegram_message_mutation_projection::Mutation::Edit(value) => {
+                            Ok(TelegramMessageMutation::Edit {
+                                text: value.text,
+                                observed_at_unix_seconds: value.observed_at_unix_seconds,
+                            })
+                        }
+                        wire::telegram_message_mutation_projection::Mutation::Delete(value) => {
+                            Ok(TelegramMessageMutation::Delete {
+                                is_permanent: value.is_permanent,
+                            })
+                        }
+                        wire::telegram_message_mutation_projection::Mutation::Pin(value) => {
+                            Ok(TelegramMessageMutation::Pin {
+                                is_pinned: value.is_pinned,
+                            })
+                        }
+                        wire::telegram_message_mutation_projection::Mutation::Reaction(value) => {
+                            Ok(TelegramMessageMutation::Reaction {
+                                emoji: value.emoji,
+                                is_active: value.is_active,
+                            })
+                        }
+                    }
+                })
+                .collect::<Result<Vec<_>, TelegramAuthorizationWireError>>()?,
         )),
         Response::MessageReferences(value) => Ok(TelegramProviderQueryResponse::MessageReferences(
             value.references.map(|value| {
-                let reply_to = value.reply_to.map(|reply| crate::TelegramReplyReference { provider_chat_id: reply.provider_chat_id, provider_message_id: reply.provider_message_id });
-                let forward_origin = value.forward_origin.map(|origin| crate::TelegramForwardOrigin { provider_chat_id: origin.provider_chat_id, provider_message_id: origin.provider_message_id, provider_sender_id: origin.provider_sender_id, sender_name: origin.sender_name, observed_at_unix_seconds: origin.observed_at_unix_seconds });
-                crate::TelegramMessageReferences { reply_to, forward_origin }
+                let reply_to = value.reply_to.map(|reply| crate::TelegramReplyReference {
+                    provider_chat_id: reply.provider_chat_id,
+                    provider_message_id: reply.provider_message_id,
+                });
+                let forward_origin =
+                    value
+                        .forward_origin
+                        .map(|origin| crate::TelegramForwardOrigin {
+                            provider_chat_id: origin.provider_chat_id,
+                            provider_message_id: origin.provider_message_id,
+                            provider_sender_id: origin.provider_sender_id,
+                            sender_name: origin.sender_name,
+                            observed_at_unix_seconds: origin.observed_at_unix_seconds,
+                        });
+                crate::TelegramMessageReferences {
+                    reply_to,
+                    forward_origin,
+                }
             }),
         )),
         Response::Attachment(value) => Ok(TelegramProviderQueryResponse::Attachment(
-            value.attachment.map(|value| Ok(TelegramAttachmentProjection {
-                attachment_id: value.attachment_id, account_id: value.account_id, provider_chat_id: value.provider_chat_id,
-                provider_message_id: value.provider_message_id, provider_file_id: value.provider_file_id,
-                state: parse_attachment_state(&value.state)?, size_bytes: value.size_bytes, filename: value.filename,
-                content_type: value.content_type, blob_ref: value.blob_ref,
-            })).transpose()?,
+            value
+                .attachment
+                .map(|value| {
+                    Ok(TelegramAttachmentProjection {
+                        attachment_id: value.attachment_id,
+                        account_id: value.account_id,
+                        provider_chat_id: value.provider_chat_id,
+                        provider_message_id: value.provider_message_id,
+                        provider_file_id: value.provider_file_id,
+                        state: parse_attachment_state(&value.state)?,
+                        size_bytes: value.size_bytes,
+                        filename: value.filename,
+                        content_type: value.content_type,
+                        blob_ref: value.blob_ref,
+                    })
+                })
+                .transpose()?,
         )),
         Response::File(value) => Ok(TelegramProviderQueryResponse::File(
             value.file.map(parse_file).transpose()?,
         )),
-        Response::Participants(value) => Ok(TelegramProviderQueryResponse::Participants(TelegramParticipantPage {
-            account_id: value.account_id, provider_chat_id: value.provider_chat_id,
-            filter: parse_participant_filter(&value.filter)?,
-            items: value.item.into_iter().map(parse_participant).collect(), next_offset: value.next_offset,
-        })),
+        Response::Participants(value) => Ok(TelegramProviderQueryResponse::Participants(
+            TelegramParticipantPage {
+                account_id: value.account_id,
+                provider_chat_id: value.provider_chat_id,
+                filter: parse_participant_filter(&value.filter)?,
+                items: value.item.into_iter().map(parse_participant).collect(),
+                next_offset: value.next_offset,
+            },
+        )),
         Response::Topics(value) => Ok(TelegramProviderQueryResponse::Topics(
             value.topic.into_iter().map(parse_topic).collect(),
         )),
@@ -915,15 +2258,29 @@ pub fn decode_query_response(
             value.topic.map(parse_topic),
         )),
         Response::Operations(value) => Ok(TelegramProviderQueryResponse::Operations(
-            value.operation.into_iter().map(parse_operation).collect::<Result<Vec<_>, _>>()?,
+            value
+                .operation
+                .into_iter()
+                .map(parse_operation)
+                .collect::<Result<Vec<_>, _>>()?,
         )),
         Response::Commands(value) => Ok(TelegramProviderQueryResponse::Commands(
-            value.record.into_iter().map(|value| {
-                let operation = parse_operation(value.operation.ok_or(TelegramAuthorizationWireError::InvalidPayload)?)?;
-                let command = value.command.ok_or(TelegramAuthorizationWireError::InvalidPayload)?;
-                let command = decode_command(&command.encode_to_vec())?;
-                Ok(TelegramCommandRecord { operation, command })
-            }).collect::<Result<Vec<_>, TelegramAuthorizationWireError>>()?,
+            value
+                .record
+                .into_iter()
+                .map(|value| {
+                    let operation = parse_operation(
+                        value
+                            .operation
+                            .ok_or(TelegramAuthorizationWireError::InvalidPayload)?,
+                    )?;
+                    let command = value
+                        .command
+                        .ok_or(TelegramAuthorizationWireError::InvalidPayload)?;
+                    let command = decode_command(&command.encode_to_vec())?;
+                    Ok(TelegramCommandRecord { operation, command })
+                })
+                .collect::<Result<Vec<_>, TelegramAuthorizationWireError>>()?,
         )),
         Response::Realtime(_) => Err(TelegramAuthorizationWireError::InvalidPayload),
     }
@@ -938,8 +2295,12 @@ pub enum TelegramLifecycleRequest {
         next_attempt_at_unix_seconds: u64,
     },
     ListAccounts,
-    GetAccount { account_id: String },
-    RetireAccount { account_id: String },
+    GetAccount {
+        account_id: String,
+    },
+    RetireAccount {
+        account_id: String,
+    },
     RegisterMediaSession(TelegramMediaSessionRegistration),
     StartAccount {
         account_id: String,
@@ -948,7 +2309,9 @@ pub enum TelegramLifecycleRequest {
         expires_at_unix_seconds: u64,
         now_unix_seconds: u64,
     },
-    StopAccount { account_id: String },
+    StopAccount {
+        account_id: String,
+    },
     Replay {
         account_id: String,
         after_sequence: u64,
@@ -958,72 +2321,137 @@ pub enum TelegramLifecycleRequest {
 
 pub fn encode_realtime_response(frames: &[TelegramRealtimeFrame]) -> Vec<u8> {
     wire::TelegramProviderQueryResponseV1 {
-        response: Some(wire::telegram_provider_query_response_v1::Response::Realtime(wire::RealtimeResponse {
-            frame: frames.iter().map(|value| wire::TelegramRealtimeFrameProjection {
-                account_id: value.account_id.clone(), sequence: value.sequence, provider_cursor: value.provider_cursor.clone(), event: Some(event_to_wire(&value.event)),
-            }).collect(),
-        })),
-    }.encode_to_vec()
+        response: Some(
+            wire::telegram_provider_query_response_v1::Response::Realtime(wire::RealtimeResponse {
+                frame: frames
+                    .iter()
+                    .map(|value| wire::TelegramRealtimeFrameProjection {
+                        account_id: value.account_id.clone(),
+                        sequence: value.sequence,
+                        provider_cursor: value.provider_cursor.clone(),
+                        event: Some(event_to_wire(&value.event)),
+                    })
+                    .collect(),
+            }),
+        ),
+    }
+    .encode_to_vec()
 }
 
-pub fn decode_realtime_response(bytes: &[u8]) -> Result<Vec<TelegramRealtimeFrame>, TelegramAuthorizationWireError> {
+pub fn decode_realtime_response(
+    bytes: &[u8],
+) -> Result<Vec<TelegramRealtimeFrame>, TelegramAuthorizationWireError> {
     use wire::telegram_provider_query_response_v1::Response;
     let message = wire::TelegramProviderQueryResponseV1::decode(bytes)
         .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
-    let response = match message.response.ok_or(TelegramAuthorizationWireError::MissingVariant)? {
+    let response = match message
+        .response
+        .ok_or(TelegramAuthorizationWireError::MissingVariant)?
+    {
         Response::Realtime(value) => value,
         _ => return Err(TelegramAuthorizationWireError::InvalidPayload),
     };
-    response.frame.into_iter().map(|value| Ok(TelegramRealtimeFrame {
-        account_id: value.account_id, sequence: value.sequence, provider_cursor: value.provider_cursor,
-        event: parse_event(value.event.ok_or(TelegramAuthorizationWireError::InvalidPayload)?)?,
-    })).collect()
+    response
+        .frame
+        .into_iter()
+        .map(|value| {
+            Ok(TelegramRealtimeFrame {
+                account_id: value.account_id,
+                sequence: value.sequence,
+                provider_cursor: value.provider_cursor,
+                event: parse_event(
+                    value
+                        .event
+                        .ok_or(TelegramAuthorizationWireError::InvalidPayload)?,
+                )?,
+            })
+        })
+        .collect()
 }
 
 pub fn encode_lifecycle_request(request: &TelegramLifecycleRequest) -> Vec<u8> {
     use wire::telegram_lifecycle_request_v1::Request;
     let request = match request {
-        TelegramLifecycleRequest::Provision(setup) => Request::Provision(wire::ProvisionAccountRequest {
-            account_id: setup.account_id.clone(),
-            provider_kind: setup.provider_kind.as_str().to_owned(),
-            display_name: setup.display_name.clone(),
-            external_account_id: setup.external_account_id.clone(),
-            credential: setup.credentials.iter().map(|binding| wire::CredentialBinding {
-                purpose: binding.purpose.as_str().to_owned(),
-                secret_ref: binding.secret_ref.clone(),
-                revision: binding.revision,
-            }).collect(),
-            qr_authorized: setup.qr_authorized,
-        }),
-        TelegramLifecycleRequest::Retry { operation_id, now_unix_seconds, next_attempt_at_unix_seconds } => Request::Retry(wire::RetryCommandRequest {
+        TelegramLifecycleRequest::Provision(setup) => {
+            Request::Provision(wire::ProvisionAccountRequest {
+                account_id: setup.account_id.clone(),
+                provider_kind: setup.provider_kind.as_str().to_owned(),
+                display_name: setup.display_name.clone(),
+                external_account_id: setup.external_account_id.clone(),
+                credential: setup
+                    .credentials
+                    .iter()
+                    .map(|binding| wire::CredentialBinding {
+                        purpose: binding.purpose.as_str().to_owned(),
+                        secret_ref: binding.secret_ref.clone(),
+                        revision: binding.revision,
+                    })
+                    .collect(),
+                qr_authorized: setup.qr_authorized,
+            })
+        }
+        TelegramLifecycleRequest::Retry {
+            operation_id,
+            now_unix_seconds,
+            next_attempt_at_unix_seconds,
+        } => Request::Retry(wire::RetryCommandRequest {
             operation_id: operation_id.clone(),
             now_unix_seconds: *now_unix_seconds,
             next_attempt_at_unix_seconds: *next_attempt_at_unix_seconds,
         }),
-        TelegramLifecycleRequest::ListAccounts => Request::ListAccounts(wire::ListAccountsRequest {}),
-        TelegramLifecycleRequest::GetAccount { account_id } => Request::GetAccount(wire::AccountIdRequest { account_id: account_id.clone() }),
-        TelegramLifecycleRequest::RetireAccount { account_id } => Request::RetireAccount(wire::AccountIdRequest { account_id: account_id.clone() }),
-        TelegramLifecycleRequest::RegisterMediaSession(session) => Request::RegisterMediaSession(wire::RegisterMediaSessionRequest {
-            blob_ref: session.blob_ref.clone(),
-            grant_bytes: session.grant_bytes.clone(),
-            channel_binding: session.channel_binding.clone(),
-            declared_size: session.declared_size,
-        }),
-        TelegramLifecycleRequest::StartAccount { account_id, topology, holder, expires_at_unix_seconds, now_unix_seconds } => Request::StartAccount(wire::StartAccountRequest {
+        TelegramLifecycleRequest::ListAccounts => {
+            Request::ListAccounts(wire::ListAccountsRequest {})
+        }
+        TelegramLifecycleRequest::GetAccount { account_id } => {
+            Request::GetAccount(wire::AccountIdRequest {
+                account_id: account_id.clone(),
+            })
+        }
+        TelegramLifecycleRequest::RetireAccount { account_id } => {
+            Request::RetireAccount(wire::AccountIdRequest {
+                account_id: account_id.clone(),
+            })
+        }
+        TelegramLifecycleRequest::RegisterMediaSession(session) => {
+            Request::RegisterMediaSession(wire::RegisterMediaSessionRequest {
+                blob_ref: session.blob_ref.clone(),
+                grant_bytes: session.grant_bytes.clone(),
+                channel_binding: session.channel_binding.clone(),
+                declared_size: session.declared_size,
+            })
+        }
+        TelegramLifecycleRequest::StartAccount {
+            account_id,
+            topology,
+            holder,
+            expires_at_unix_seconds,
+            now_unix_seconds,
+        } => Request::StartAccount(wire::StartAccountRequest {
             account_id: account_id.clone(),
             topology: topology.clone(),
             holder: holder.clone(),
             expires_at_unix_seconds: *expires_at_unix_seconds,
             now_unix_seconds: *now_unix_seconds,
         }),
-        TelegramLifecycleRequest::StopAccount { account_id } => Request::StopAccount(wire::AccountIdRequest { account_id: account_id.clone() }),
-        TelegramLifecycleRequest::Replay { account_id, after_sequence, limit } => Request::Replay(wire::ReplayRequest {
+        TelegramLifecycleRequest::StopAccount { account_id } => {
+            Request::StopAccount(wire::AccountIdRequest {
+                account_id: account_id.clone(),
+            })
+        }
+        TelegramLifecycleRequest::Replay {
+            account_id,
+            after_sequence,
+            limit,
+        } => Request::Replay(wire::ReplayRequest {
             account_id: account_id.clone(),
             after_sequence: *after_sequence,
             limit: *limit,
         }),
     };
-    wire::TelegramLifecycleRequestV1 { request: Some(request) }.encode_to_vec()
+    wire::TelegramLifecycleRequestV1 {
+        request: Some(request),
+    }
+    .encode_to_vec()
 }
 
 pub fn decode_lifecycle_request(
@@ -1032,22 +2460,35 @@ pub fn decode_lifecycle_request(
     use wire::telegram_lifecycle_request_v1::Request;
     let message = wire::TelegramLifecycleRequestV1::decode(bytes)
         .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
-    match message.request.ok_or(TelegramAuthorizationWireError::MissingVariant)? {
+    match message
+        .request
+        .ok_or(TelegramAuthorizationWireError::MissingVariant)?
+    {
         Request::Provision(value) => {
             let provider_kind = match value.provider_kind.as_str() {
                 "telegram_user" => TelegramProviderKind::User,
                 "telegram_bot" => TelegramProviderKind::Bot,
                 _ => return Err(TelegramAuthorizationWireError::InvalidPayload),
             };
-            let credentials = value.credential.into_iter().map(|binding| {
-                let purpose = match binding.purpose.as_str() {
-                    "telegram_api_hash" => TelegramCredentialPurpose::ApiHash,
-                    "telegram_bot_token" => TelegramCredentialPurpose::BotToken,
-                    "telegram_session_encryption_key" => TelegramCredentialPurpose::SessionEncryptionKey,
-                    _ => return Err(TelegramAuthorizationWireError::InvalidPayload),
-                };
-                Ok(TelegramCredentialBinding { purpose, secret_ref: binding.secret_ref, revision: binding.revision })
-            }).collect::<Result<Vec<_>, _>>()?;
+            let credentials = value
+                .credential
+                .into_iter()
+                .map(|binding| {
+                    let purpose = match binding.purpose.as_str() {
+                        "telegram_api_hash" => TelegramCredentialPurpose::ApiHash,
+                        "telegram_bot_token" => TelegramCredentialPurpose::BotToken,
+                        "telegram_session_encryption_key" => {
+                            TelegramCredentialPurpose::SessionEncryptionKey
+                        }
+                        _ => return Err(TelegramAuthorizationWireError::InvalidPayload),
+                    };
+                    Ok(TelegramCredentialBinding {
+                        purpose,
+                        secret_ref: binding.secret_ref,
+                        revision: binding.revision,
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
             Ok(TelegramLifecycleRequest::Provision(TelegramAccountSetup {
                 account_id: value.account_id,
                 provider_kind,
@@ -1063,14 +2504,20 @@ pub fn decode_lifecycle_request(
             next_attempt_at_unix_seconds: value.next_attempt_at_unix_seconds,
         }),
         Request::ListAccounts(_) => Ok(TelegramLifecycleRequest::ListAccounts),
-        Request::GetAccount(value) => Ok(TelegramLifecycleRequest::GetAccount { account_id: value.account_id }),
-        Request::RetireAccount(value) => Ok(TelegramLifecycleRequest::RetireAccount { account_id: value.account_id }),
-        Request::RegisterMediaSession(value) => Ok(TelegramLifecycleRequest::RegisterMediaSession(TelegramMediaSessionRegistration {
-            blob_ref: value.blob_ref,
-            grant_bytes: value.grant_bytes,
-            channel_binding: value.channel_binding,
-            declared_size: value.declared_size,
-        })),
+        Request::GetAccount(value) => Ok(TelegramLifecycleRequest::GetAccount {
+            account_id: value.account_id,
+        }),
+        Request::RetireAccount(value) => Ok(TelegramLifecycleRequest::RetireAccount {
+            account_id: value.account_id,
+        }),
+        Request::RegisterMediaSession(value) => Ok(TelegramLifecycleRequest::RegisterMediaSession(
+            TelegramMediaSessionRegistration {
+                blob_ref: value.blob_ref,
+                grant_bytes: value.grant_bytes,
+                channel_binding: value.channel_binding,
+                declared_size: value.declared_size,
+            },
+        )),
         Request::StartAccount(value) => Ok(TelegramLifecycleRequest::StartAccount {
             account_id: value.account_id,
             topology: value.topology,
@@ -1078,7 +2525,9 @@ pub fn decode_lifecycle_request(
             expires_at_unix_seconds: value.expires_at_unix_seconds,
             now_unix_seconds: value.now_unix_seconds,
         }),
-        Request::StopAccount(value) => Ok(TelegramLifecycleRequest::StopAccount { account_id: value.account_id }),
+        Request::StopAccount(value) => Ok(TelegramLifecycleRequest::StopAccount {
+            account_id: value.account_id,
+        }),
         Request::Replay(value) => Ok(TelegramLifecycleRequest::Replay {
             account_id: value.account_id,
             after_sequence: value.after_sequence,
@@ -1098,14 +2547,16 @@ fn account_to_wire(account: &TelegramAccount) -> wire::TelegramAccountResponse {
             crate::TelegramAccountState::Ready => "ready",
             crate::TelegramAccountState::Degraded => "degraded",
             crate::TelegramAccountState::Retired => "retired",
-        }.to_owned(),
+        }
+        .to_owned(),
         runtime_state: match account.runtime_state {
             crate::TelegramRuntimeState::Stopped => "stopped",
             crate::TelegramRuntimeState::Starting => "starting",
             crate::TelegramRuntimeState::Running => "running",
             crate::TelegramRuntimeState::Degraded => "degraded",
             crate::TelegramRuntimeState::Blocked => "blocked",
-        }.to_owned(),
+        }
+        .to_owned(),
         runtime_epoch: account.runtime_epoch,
     }
 }
@@ -1124,7 +2575,8 @@ fn operation_to_wire(operation: &TelegramOperation) -> wire::TelegramOperationRe
             crate::TelegramOperationState::Failed => "failed",
             crate::TelegramOperationState::RetryScheduled => "retry_scheduled",
             crate::TelegramOperationState::DeadLetter => "dead_letter",
-        }.to_owned(),
+        }
+        .to_owned(),
         retry_count: operation.retry_count,
         max_retries: operation.max_retries,
         lease_epoch: operation.lease_epoch,
@@ -1133,7 +2585,8 @@ fn operation_to_wire(operation: &TelegramOperation) -> wire::TelegramOperationRe
             crate::TelegramReconciliationState::AwaitingProvider => "awaiting_provider",
             crate::TelegramReconciliationState::Observed => "observed",
             crate::TelegramReconciliationState::Mismatch => "mismatch",
-        }.to_owned(),
+        }
+        .to_owned(),
         last_error: operation.last_error.clone(),
         next_attempt_at_unix_seconds: operation.next_attempt_at_unix_seconds,
         locked_at_unix_seconds: operation.locked_at_unix_seconds,
@@ -1147,22 +2600,37 @@ pub fn encode_lifecycle_response(response: &TelegramClientResponse) -> Option<Ve
     use wire::telegram_lifecycle_response_v1::Response;
     let response = match response {
         TelegramClientResponse::Account(account) => Response::Account(account_to_wire(account)),
-        TelegramClientResponse::Accounts(accounts) => Response::Accounts(wire::TelegramAccountList {
-            account: accounts.iter().map(account_to_wire).collect(),
-        }),
-        TelegramClientResponse::Accepted { operation_id } => Response::Accepted(wire::AcceptedResponse {
-            operation_id: operation_id.clone(),
-        }),
-        TelegramClientResponse::Operation(operation) => Response::Operation(operation_to_wire(operation)),
-        TelegramClientResponse::MediaSessionRegistered { blob_ref } => Response::MediaSessionRegistered(
-            wire::MediaSessionRegisteredResponse { blob_ref: blob_ref.clone() },
-        ),
+        TelegramClientResponse::Accounts(accounts) => {
+            Response::Accounts(wire::TelegramAccountList {
+                account: accounts.iter().map(account_to_wire).collect(),
+            })
+        }
+        TelegramClientResponse::Accepted { operation_id } => {
+            Response::Accepted(wire::AcceptedResponse {
+                operation_id: operation_id.clone(),
+            })
+        }
+        TelegramClientResponse::Operation(operation) => {
+            Response::Operation(operation_to_wire(operation))
+        }
+        TelegramClientResponse::MediaSessionRegistered { blob_ref } => {
+            Response::MediaSessionRegistered(wire::MediaSessionRegisteredResponse {
+                blob_ref: blob_ref.clone(),
+            })
+        }
         _ => return None,
     };
-    Some(wire::TelegramLifecycleResponseV1 { response: Some(response) }.encode_to_vec())
+    Some(
+        wire::TelegramLifecycleResponseV1 {
+            response: Some(response),
+        }
+        .encode_to_vec(),
+    )
 }
 
-fn parse_account(value: wire::TelegramAccountResponse) -> Result<TelegramAccount, TelegramAuthorizationWireError> {
+fn parse_account(
+    value: wire::TelegramAccountResponse,
+) -> Result<TelegramAccount, TelegramAuthorizationWireError> {
     let provider_kind = match value.provider_kind.as_str() {
         "telegram_user" => TelegramProviderKind::User,
         "telegram_bot" => TelegramProviderKind::Bot,
@@ -1264,18 +2732,29 @@ pub fn decode_lifecycle_response(
     use wire::telegram_lifecycle_response_v1::Response;
     let message = wire::TelegramLifecycleResponseV1::decode(bytes)
         .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
-    match message.response.ok_or(TelegramAuthorizationWireError::MissingVariant)? {
+    match message
+        .response
+        .ok_or(TelegramAuthorizationWireError::MissingVariant)?
+    {
         Response::Account(value) => Ok(TelegramClientResponse::Account(parse_account(value)?)),
         Response::Accounts(value) => Ok(TelegramClientResponse::Accounts(
-            value.account.into_iter().map(parse_account).collect::<Result<Vec<_>, _>>()?,
+            value
+                .account
+                .into_iter()
+                .map(parse_account)
+                .collect::<Result<Vec<_>, _>>()?,
         )),
         Response::Accepted(value) => Ok(TelegramClientResponse::Accepted {
             operation_id: value.operation_id,
         }),
-        Response::Operation(value) => Ok(TelegramClientResponse::Operation(parse_operation(value)?)),
-        Response::MediaSessionRegistered(value) => Ok(TelegramClientResponse::MediaSessionRegistered {
-            blob_ref: value.blob_ref,
-        }),
+        Response::Operation(value) => {
+            Ok(TelegramClientResponse::Operation(parse_operation(value)?))
+        }
+        Response::MediaSessionRegistered(value) => {
+            Ok(TelegramClientResponse::MediaSessionRegistered {
+                blob_ref: value.blob_ref,
+            })
+        }
     }
 }
 
@@ -1299,14 +2778,14 @@ pub enum TelegramAuthorizationWireError {
 
 pub fn encode_request(request: &TelegramAuthorizationRequest) -> Vec<u8> {
     let request = match request {
-        TelegramAuthorizationRequest::Status => Request::AuthorizationStatus(
-            wire::AuthorizationStatusRequest {},
-        ),
-        TelegramAuthorizationRequest::SubmitPassword(password) => Request::SubmitPassword(
-            wire::SubmitAuthorizationPasswordRequest {
+        TelegramAuthorizationRequest::Status => {
+            Request::AuthorizationStatus(wire::AuthorizationStatusRequest {})
+        }
+        TelegramAuthorizationRequest::SubmitPassword(password) => {
+            Request::SubmitPassword(wire::SubmitAuthorizationPasswordRequest {
                 password: password.clone(),
-            },
-        ),
+            })
+        }
     };
     wire::TelegramAuthorizationRequestV1 {
         request: Some(request),
@@ -1319,24 +2798,29 @@ pub fn decode_request(
 ) -> Result<TelegramAuthorizationRequest, TelegramAuthorizationWireError> {
     let message = wire::TelegramAuthorizationRequestV1::decode(bytes)
         .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
-    match message.request.ok_or(TelegramAuthorizationWireError::MissingVariant)? {
+    match message
+        .request
+        .ok_or(TelegramAuthorizationWireError::MissingVariant)?
+    {
         Request::AuthorizationStatus(_) => Ok(TelegramAuthorizationRequest::Status),
-        Request::SubmitPassword(value) => Ok(TelegramAuthorizationRequest::SubmitPassword(value.password)),
+        Request::SubmitPassword(value) => {
+            Ok(TelegramAuthorizationRequest::SubmitPassword(value.password))
+        }
     }
 }
 
 pub fn encode_response(response: &TelegramAuthorizationResponse) -> Vec<u8> {
     let response = match response {
-        TelegramAuthorizationResponse::Status(status) => Response::AuthorizationStatus(
-            wire::AuthorizationStatusResponse {
+        TelegramAuthorizationResponse::Status(status) => {
+            Response::AuthorizationStatus(wire::AuthorizationStatusResponse {
                 state: status.state.clone(),
                 qr_link: status.qr_link.clone(),
                 password_hint: status.password_hint.clone(),
-            },
-        ),
-        TelegramAuthorizationResponse::PasswordAccepted => Response::PasswordAccepted(
-            wire::AuthorizationPasswordAcceptedResponse {},
-        ),
+            })
+        }
+        TelegramAuthorizationResponse::PasswordAccepted => {
+            Response::PasswordAccepted(wire::AuthorizationPasswordAcceptedResponse {})
+        }
     };
     wire::TelegramAuthorizationResponseV1 {
         response: Some(response),
@@ -1349,7 +2833,10 @@ pub fn decode_response(
 ) -> Result<TelegramAuthorizationResponse, TelegramAuthorizationWireError> {
     let message = wire::TelegramAuthorizationResponseV1::decode(bytes)
         .map_err(|_| TelegramAuthorizationWireError::InvalidPayload)?;
-    match message.response.ok_or(TelegramAuthorizationWireError::MissingVariant)? {
+    match message
+        .response
+        .ok_or(TelegramAuthorizationWireError::MissingVariant)?
+    {
         Response::AuthorizationStatus(value) => Ok(TelegramAuthorizationResponse::Status(
             TelegramAuthorizationStatus {
                 state: value.state,

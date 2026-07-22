@@ -3,12 +3,11 @@
 use std::io::{ErrorKind, Read, Write};
 use std::os::unix::net::UnixStream;
 
-use hermes_telegram_tdlib::TdlibTransport;
 use hermes_telegram_persistence::TelegramDurablePersistence;
+use hermes_telegram_tdlib::TdlibTransport;
 
 use crate::{
-    TelegramRuntime,
-    TelegramRuntimeComposition,
+    TelegramRuntime, TelegramRuntimeComposition,
     client_port::{TelegramClientPort, TelegramClientPortError},
 };
 
@@ -27,32 +26,36 @@ pub fn serve_authorization_connection(
         };
         let (request_id, payload) = crate::client_port::decode_module_request_payload(&request)
             .map_err(TelegramClientTransportError::Port)?;
-        let request = hermes_telegram_api::client_wire::decode_request(&payload)
-            .map_err(|_| TelegramClientTransportError::Port(TelegramClientPortError::Protocol(
+        let request = hermes_telegram_api::client_wire::decode_request(&payload).map_err(|_| {
+            TelegramClientTransportError::Port(TelegramClientPortError::Protocol(
                 "Telegram authorization payload is invalid".to_owned(),
-            )))?;
+            ))
+        })?;
         let response = match request {
             hermes_telegram_api::client_wire::TelegramAuthorizationRequest::Status => {
                 hermes_telegram_api::client_wire::TelegramAuthorizationResponse::Status(
-                    status.cloned().unwrap_or(hermes_telegram_api::TelegramAuthorizationStatus {
-                        state: "starting".to_owned(),
-                        qr_link: None,
-                        password_hint: None,
-                    }),
+                    status
+                        .cloned()
+                        .unwrap_or(hermes_telegram_api::TelegramAuthorizationStatus {
+                            state: "starting".to_owned(),
+                            qr_link: None,
+                            password_hint: None,
+                        }),
                 )
             }
-            hermes_telegram_api::client_wire::TelegramAuthorizationRequest::SubmitPassword(password) => {
-                composition
-                    .submit_password(&password)
-                    .map_err(|error| {
-                        TelegramClientTransportError::Port(TelegramClientPortError::Provider(error))
-                    })?;
+            hermes_telegram_api::client_wire::TelegramAuthorizationRequest::SubmitPassword(
+                password,
+            ) => {
+                composition.submit_password(&password).map_err(|error| {
+                    TelegramClientTransportError::Port(TelegramClientPortError::Provider(error))
+                })?;
                 hermes_telegram_api::client_wire::TelegramAuthorizationResponse::PasswordAccepted
             }
         };
         let response_payload = hermes_telegram_api::client_wire::encode_response(&response);
-        let encoded = crate::client_port::encode_module_response_payload(request_id, response_payload)
-            .map_err(TelegramClientTransportError::Port)?;
+        let encoded =
+            crate::client_port::encode_module_response_payload(request_id, response_payload)
+                .map_err(TelegramClientTransportError::Port)?;
         write_frame(&mut stream, &encoded)?;
     }
 }
@@ -70,7 +73,7 @@ pub fn serve_connection<T: TdlibTransport>(
     runtime: &mut TelegramRuntime<T>,
 ) -> Result<(), TelegramClientTransportError> {
     loop {
-        let request = match read_client_frame(&mut stream) {
+        let request = match read_frame(&mut stream) {
             Ok(request) => request,
             Err(TelegramClientTransportError::Io(error)) if error == "eof" => return Ok(()),
             Err(error) => return Err(error),
@@ -78,7 +81,7 @@ pub fn serve_connection<T: TdlibTransport>(
         let response = TelegramClientPort::new(runtime)
             .handle_module_request(&request)
             .map_err(TelegramClientTransportError::Port)?;
-        write_client_frame(&mut stream, &response)?;
+        write_frame(&mut stream, &response)?;
     }
 }
 
@@ -117,18 +120,13 @@ fn read_frame(stream: &mut UnixStream) -> Result<Vec<u8>, TelegramClientTranspor
         if error.kind() == ErrorKind::UnexpectedEof {
             TelegramClientTransportError::Io("eof".to_owned())
         } else {
-            TelegramClientTransportError::Io(
-                "Telegram client transport is unavailable".to_owned(),
-            )
+            TelegramClientTransportError::Io("Telegram client transport is unavailable".to_owned())
         }
     })?;
     Ok(bytes)
 }
 
-fn write_frame(
-    stream: &mut UnixStream,
-    bytes: &[u8],
-) -> Result<(), TelegramClientTransportError> {
+fn write_frame(stream: &mut UnixStream, bytes: &[u8]) -> Result<(), TelegramClientTransportError> {
     if bytes.is_empty() || bytes.len() > MAX_CLIENT_FRAME_BYTES {
         return Err(TelegramClientTransportError::Frame(
             "Telegram client frame length is invalid".to_owned(),

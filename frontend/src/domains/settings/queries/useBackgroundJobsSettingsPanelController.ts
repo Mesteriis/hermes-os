@@ -1,3 +1,5 @@
+import type { BackgroundJobFilter } from '../components/backgroundJobsPresentation'
+import type { SettingsSection } from '../stores/settings'
 import type { BackgroundJobsSettingsSurface } from './useBackgroundJobsSettingsSurface'
 
 export function useBackgroundJobsSettingsPanelController(
@@ -9,11 +11,11 @@ export function useBackgroundJobsSettingsPanelController(
     surface.handleRefresh()
   }
 
-  function handleSelectJobFilter(tabId: string): void {
+  function handleSelectJobFilter(tabId: BackgroundJobFilter): void {
     surface.handleSelectJobFilter(tabId)
   }
 
-  function handleOpenControl(controlSection: string): void {
+  function handleOpenControl(controlSection: SettingsSection): void {
     surface.handleOpenControl(controlSection)
   }
 

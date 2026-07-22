@@ -9,11 +9,11 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use hermes_blob_client_contract::{BlobReadError, BlobReadPort};
 use hermes_runtime_protocol::v1::{
     BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1,
     BlobDataWriteRequestV1, blob_data_request_v1::Operation,
 };
-use hermes_blob_client_contract::{BlobReadError, BlobReadPort};
 use prost::Message;
 
 pub const PACKAGE: &str = "hermes-blob-client";
@@ -113,12 +113,13 @@ impl BlobReadPort for BlobDataClient {
         start: u64,
         end_exclusive: u64,
     ) -> Result<Vec<u8>, BlobReadError> {
-        BlobDataClient::read_range(self, grant, channel_binding, start, end_exclusive)
-            .map_err(|error| match error {
+        BlobDataClient::read_range(self, grant, channel_binding, start, end_exclusive).map_err(
+            |error| match error {
                 BlobClientError::Rejected(_) => BlobReadError::Rejected,
                 BlobClientError::InvalidResponse => BlobReadError::InvalidResponse,
                 _ => BlobReadError::Unavailable,
-            })
+            },
+        )
     }
 }
 

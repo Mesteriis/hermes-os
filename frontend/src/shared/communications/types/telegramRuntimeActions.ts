@@ -1,3 +1,5 @@
+import type { MessengerConversationRuntimeAction } from './messengerRuntimeActions'
+
 export type { MessengerConversationRuntimeAction } from './messengerRuntimeActions'
 
 export type TelegramConversationRuntimeAction =

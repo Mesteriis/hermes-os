@@ -177,15 +177,22 @@ export function validateCurrentImplementationInventory(policy, cargoMetadata) {
     const targetKinds = list(pkg.targets).flatMap((target) => list(target?.kind));
     const primaryTargets = targetKinds.filter((kind) => kind !== 'custom-build');
     const customBuildTargets = targetKinds.filter((kind) => kind === 'custom-build');
-    const targetsMatch = primaryTargets.length === 1
+    const runtimeTargetsMatch = targetPolicy.primaryKind === 'bin'
+      && primaryTargets.includes('bin')
+      && primaryTargets.every((kind) => kind === 'bin' || kind === 'lib')
+      && primaryTargets.filter((kind) => kind === 'bin').length === 1
+      && primaryTargets.filter((kind) => kind === 'lib').length <= 1;
+    const targetsMatch = (runtimeTargetsMatch || (
+      primaryTargets.length === 1
       && primaryTargets[0] === targetPolicy.primaryKind
+    ))
       && customBuildTargets.length <= (targetPolicy.customBuildAllowed ? 1 : 0)
       && targetKinds.length === primaryTargets.length + customBuildTargets.length;
     if (!targetsMatch) {
       violations.push(violation(
         'implementation_target',
         `cargo:${name}`,
-        `${name} must expose one ${targetPolicy.primaryKind} target${targetPolicy.customBuildAllowed ? ' and at most one codegen build target' : ' without a build target'}`,
+        `${name} must expose its declared target surface${targetPolicy.customBuildAllowed ? ' and at most one codegen build target' : ' without a build target'}`,
       ));
     }
 

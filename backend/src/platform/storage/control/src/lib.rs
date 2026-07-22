@@ -1,6 +1,7 @@
 //! SQL-free Storage Control lifecycle state.
 
 mod lifecycle;
+mod vault_lease;
 
 pub use lifecycle::{
     StorageEndpointPreflightV1, StorageFenceOutcomeV1, StorageLifecycleErrorV1,

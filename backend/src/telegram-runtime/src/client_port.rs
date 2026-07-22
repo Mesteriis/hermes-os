@@ -1,17 +1,14 @@
 //! Typed client port for Telegram operational commands, queries and replay.
 
-use hermes_telegram_api::{
-    MAX_PAGE_SIZE, TelegramClientRequest, TelegramClientResponse,
-    provider_command_operation_id,
-};
-use hermes_telegram_persistence::{
-    TelegramDurablePersistence, TelegramDurablePersistenceError,
-};
-use hermes_telegram_tdlib::{TdlibError, TdlibTransport};
-use hermes_telegram_core::project_message;
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
+use hermes_telegram_api::{
+    MAX_PAGE_SIZE, TelegramClientRequest, TelegramClientResponse, provider_command_operation_id,
+};
+use hermes_telegram_core::project_message;
+use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
+use hermes_telegram_tdlib::{TdlibError, TdlibTransport};
 use prost::Message;
 
 use crate::TelegramRuntime;
@@ -95,9 +92,11 @@ fn lifecycle_wire_request(
             expires_at_unix_seconds: *expires_at_unix_seconds,
             now_unix_seconds: *now_unix_seconds,
         }),
-        TelegramClientRequest::StopAccount { account_id } => Some(TelegramLifecycleRequest::StopAccount {
-            account_id: account_id.clone(),
-        }),
+        TelegramClientRequest::StopAccount { account_id } => {
+            Some(TelegramLifecycleRequest::StopAccount {
+                account_id: account_id.clone(),
+            })
+        }
         TelegramClientRequest::Replay {
             account_id,
             after_sequence,
@@ -116,25 +115,49 @@ fn client_request_from_lifecycle(
 ) -> TelegramClientRequest {
     use hermes_telegram_api::client_wire::TelegramLifecycleRequest;
     match request {
-        TelegramLifecycleRequest::Provision(setup) => TelegramClientRequest::ProvisionAccount { setup },
-        TelegramLifecycleRequest::Retry { operation_id, now_unix_seconds, next_attempt_at_unix_seconds } => TelegramClientRequest::RetryCommand {
+        TelegramLifecycleRequest::Provision(setup) => {
+            TelegramClientRequest::ProvisionAccount { setup }
+        }
+        TelegramLifecycleRequest::Retry {
+            operation_id,
+            now_unix_seconds,
+            next_attempt_at_unix_seconds,
+        } => TelegramClientRequest::RetryCommand {
             operation_id,
             now_unix_seconds,
             next_attempt_at_unix_seconds,
         },
         TelegramLifecycleRequest::ListAccounts => TelegramClientRequest::ListAccounts,
-        TelegramLifecycleRequest::GetAccount { account_id } => TelegramClientRequest::GetAccount { account_id },
-        TelegramLifecycleRequest::RetireAccount { account_id } => TelegramClientRequest::RetireAccount { account_id },
-        TelegramLifecycleRequest::RegisterMediaSession(session) => TelegramClientRequest::RegisterMediaSession(session),
-        TelegramLifecycleRequest::StartAccount { account_id, topology, holder, expires_at_unix_seconds, now_unix_seconds } => TelegramClientRequest::StartAccount {
+        TelegramLifecycleRequest::GetAccount { account_id } => {
+            TelegramClientRequest::GetAccount { account_id }
+        }
+        TelegramLifecycleRequest::RetireAccount { account_id } => {
+            TelegramClientRequest::RetireAccount { account_id }
+        }
+        TelegramLifecycleRequest::RegisterMediaSession(session) => {
+            TelegramClientRequest::RegisterMediaSession(session)
+        }
+        TelegramLifecycleRequest::StartAccount {
+            account_id,
+            topology,
+            holder,
+            expires_at_unix_seconds,
+            now_unix_seconds,
+        } => TelegramClientRequest::StartAccount {
             account_id,
             topology,
             holder,
             expires_at_unix_seconds,
             now_unix_seconds,
         },
-        TelegramLifecycleRequest::StopAccount { account_id } => TelegramClientRequest::StopAccount { account_id },
-        TelegramLifecycleRequest::Replay { account_id, after_sequence, limit } => TelegramClientRequest::Replay {
+        TelegramLifecycleRequest::StopAccount { account_id } => {
+            TelegramClientRequest::StopAccount { account_id }
+        }
+        TelegramLifecycleRequest::Replay {
+            account_id,
+            after_sequence,
+            limit,
+        } => TelegramClientRequest::Replay {
             account_id,
             after_sequence,
             limit,
@@ -163,7 +186,9 @@ pub fn encode_module_request(
         )
     } else if let TelegramClientRequest::SubmitAuthorizationPassword { password } = request {
         hermes_telegram_api::client_wire::encode_request(
-            &hermes_telegram_api::client_wire::TelegramAuthorizationRequest::SubmitPassword(password.clone()),
+            &hermes_telegram_api::client_wire::TelegramAuthorizationRequest::SubmitPassword(
+                password.clone(),
+            ),
         )
     } else {
         return Err(TelegramClientPortError::Protocol(
@@ -195,8 +220,12 @@ pub fn decode_module_request(
         TelegramClientRequest::Query(query)
     } else if let Ok(auth) = hermes_telegram_api::client_wire::decode_request(&request_payload) {
         match auth {
-            hermes_telegram_api::client_wire::TelegramAuthorizationRequest::Status => TelegramClientRequest::AuthorizationStatus,
-            hermes_telegram_api::client_wire::TelegramAuthorizationRequest::SubmitPassword(password) => TelegramClientRequest::SubmitAuthorizationPassword { password },
+            hermes_telegram_api::client_wire::TelegramAuthorizationRequest::Status => {
+                TelegramClientRequest::AuthorizationStatus
+            }
+            hermes_telegram_api::client_wire::TelegramAuthorizationRequest::SubmitPassword(
+                password,
+            ) => TelegramClientRequest::SubmitAuthorizationPassword { password },
         }
     } else {
         return Err(TelegramClientPortError::Protocol(
@@ -263,7 +292,9 @@ pub fn encode_module_response(
     {
         payload
     } else if let TelegramClientResponse::Query(query_response) = response {
-        if let Some(payload) = hermes_telegram_api::client_wire::encode_query_response(query_response) {
+        if let Some(payload) =
+            hermes_telegram_api::client_wire::encode_query_response(query_response)
+        {
             payload
         } else {
             serde_json::to_vec(response)
@@ -273,7 +304,9 @@ pub fn encode_module_response(
         hermes_telegram_api::client_wire::encode_realtime_response(frames)
     } else if let TelegramClientResponse::AuthorizationStatus(status) = response {
         hermes_telegram_api::client_wire::encode_response(
-            &hermes_telegram_api::client_wire::TelegramAuthorizationResponse::Status(status.clone()),
+            &hermes_telegram_api::client_wire::TelegramAuthorizationResponse::Status(
+                status.clone(),
+            ),
         )
     } else if let TelegramClientResponse::AuthorizationPasswordAccepted = response {
         hermes_telegram_api::client_wire::encode_response(
@@ -315,14 +348,24 @@ pub fn decode_module_response(
         hermes_telegram_api::client_wire::decode_lifecycle_response(&envelope.response_payload)
     {
         response
-    } else if let Ok(response) = hermes_telegram_api::client_wire::decode_query_response(&envelope.response_payload) {
+    } else if let Ok(response) =
+        hermes_telegram_api::client_wire::decode_query_response(&envelope.response_payload)
+    {
         TelegramClientResponse::Query(response)
-    } else if let Ok(response) = hermes_telegram_api::client_wire::decode_realtime_response(&envelope.response_payload) {
+    } else if let Ok(response) =
+        hermes_telegram_api::client_wire::decode_realtime_response(&envelope.response_payload)
+    {
         TelegramClientResponse::Realtime(response)
-    } else if let Ok(response) = hermes_telegram_api::client_wire::decode_response(&envelope.response_payload) {
+    } else if let Ok(response) =
+        hermes_telegram_api::client_wire::decode_response(&envelope.response_payload)
+    {
         match response {
-            hermes_telegram_api::client_wire::TelegramAuthorizationResponse::Status(status) => TelegramClientResponse::AuthorizationStatus(status),
-            hermes_telegram_api::client_wire::TelegramAuthorizationResponse::PasswordAccepted => TelegramClientResponse::AuthorizationPasswordAccepted,
+            hermes_telegram_api::client_wire::TelegramAuthorizationResponse::Status(status) => {
+                TelegramClientResponse::AuthorizationStatus(status)
+            }
+            hermes_telegram_api::client_wire::TelegramAuthorizationResponse::PasswordAccepted => {
+                TelegramClientResponse::AuthorizationPasswordAccepted
+            }
         }
     } else {
         return Err(TelegramClientPortError::Protocol(
@@ -376,20 +419,17 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                     .account(&account_id)
                     .await
                     .map_err(TelegramClientPortError::Persistence)?
+                    .map(|(account, _credentials)| account)
                     .ok_or_else(|| {
-                        TelegramClientPortError::Protocol(
-                            "Telegram account is unknown".to_owned(),
-                        )
+                        TelegramClientPortError::Protocol("Telegram account is unknown".to_owned())
                     })?,
             ),
-            TelegramClientRequest::RetireAccount { account_id } => {
-                let account = self
-                    .runtime
-                    .retire_account_durable(durable, &account_id)
-                    .await
-                    .map(TelegramClientResponse::Account)
-                    .map_err(|error| TelegramClientPortError::Protocol(format!("{error:?}")))?
-            }
+            TelegramClientRequest::RetireAccount { account_id } => self
+                .runtime
+                .retire_account_durable(durable, &account_id)
+                .await
+                .map(TelegramClientResponse::Account)
+                .map_err(|error| TelegramClientPortError::Protocol(format!("{error:?}")))?,
             TelegramClientRequest::Command(command) => self
                 .runtime
                 .execute_provider_command_durable(durable, command)
@@ -418,9 +458,7 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                 self.runtime
                     .register_media_session(session)
                     .map_err(TelegramClientPortError::Provider)?;
-                TelegramClientResponse::MediaSessionRegistered {
-                    blob_ref,
-                }
+                TelegramClientResponse::MediaSessionRegistered { blob_ref }
             }
             TelegramClientRequest::StartAccount {
                 account_id,
@@ -451,9 +489,10 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                 account_id,
                 after_sequence,
                 limit,
-            } => self
-                .replay_durable(durable, &account_id, after_sequence, limit)
-                .await?,
+            } => {
+                self.replay_durable(durable, &account_id, after_sequence, limit)
+                    .await?
+            }
             TelegramClientRequest::Query(
                 hermes_telegram_api::TelegramProviderQuery::LoadHistory {
                     account_id,
@@ -495,7 +534,7 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                     durable
                         .operations_for_account(&account_id, i64::from(limit))
                         .await
-                    .map_err(TelegramClientPortError::Persistence)?,
+                        .map_err(TelegramClientPortError::Persistence)?,
                 ),
             ),
             TelegramClientRequest::Query(
@@ -522,7 +561,9 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                 ),
             ),
             TelegramClientRequest::Query(
-                hermes_telegram_api::TelegramProviderQuery::MessageReferences { message_id, .. },
+                hermes_telegram_api::TelegramProviderQuery::MessageReferences {
+                    message_id, ..
+                },
             ) => TelegramClientResponse::Query(
                 hermes_telegram_api::TelegramProviderQueryResponse::MessageReferences(
                     durable
@@ -589,9 +630,10 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                         .map_err(TelegramClientPortError::Persistence)?,
                 ),
             ),
-            TelegramClientRequest::Query(
-                hermes_telegram_api::TelegramProviderQuery::File { account_id, provider_file_id },
-            ) => TelegramClientResponse::Query(
+            TelegramClientRequest::Query(hermes_telegram_api::TelegramProviderQuery::File {
+                account_id,
+                provider_file_id,
+            }) => TelegramClientResponse::Query(
                 hermes_telegram_api::TelegramProviderQueryResponse::File(
                     durable
                         .file(&account_id, &provider_file_id)
@@ -657,7 +699,9 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                         .map_err(TelegramClientPortError::Persistence)?,
                 ),
             ),
-            request => self.handle(request)?,
+            request => self
+                .handle(request)
+                .map_err(TelegramClientPortError::Provider)?,
         };
         encode_module_response(request_id, &response)
     }
@@ -670,7 +714,8 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
             TelegramClientRequest::ProvisionAccount { setup } => self
                 .runtime
                 .provision_account(setup)
-                .map(TelegramClientResponse::Account),
+                .map(TelegramClientResponse::Account)
+                .map_err(|error| TdlibError::Protocol(format!("{error:?}"))),
             TelegramClientRequest::ListAccounts => {
                 Ok(TelegramClientResponse::Accounts(self.runtime.accounts()))
             }
@@ -682,7 +727,8 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
             TelegramClientRequest::RetireAccount { account_id } => self
                 .runtime
                 .retire_account(&account_id)
-                .map(TelegramClientResponse::Account),
+                .map(TelegramClientResponse::Account)
+                .map_err(|error| TdlibError::Protocol(format!("{error:?}"))),
             TelegramClientRequest::Command(command) => {
                 let operation_id = provider_command_operation_id(&command).to_owned();
                 self.runtime.execute_provider_command(command)?;
@@ -706,12 +752,8 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                 .map(TelegramClientResponse::Query),
             TelegramClientRequest::RegisterMediaSession(session) => {
                 let blob_ref = session.blob_ref.clone();
-                self.runtime
-                    .register_media_session(session)
-                    .map_err(|error| error)?;
-                Ok(TelegramClientResponse::MediaSessionRegistered {
-                    blob_ref,
-                })
+                self.runtime.register_media_session(session)?;
+                Ok(TelegramClientResponse::MediaSessionRegistered { blob_ref })
             }
             TelegramClientRequest::StartAccount {
                 account_id,
@@ -728,11 +770,13 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                     expires_at_unix_seconds,
                     now_unix_seconds,
                 )
-                .map(TelegramClientResponse::Account),
+                .map(TelegramClientResponse::Account)
+                .map_err(|error| TdlibError::Protocol(format!("{error:?}"))),
             TelegramClientRequest::StopAccount { account_id } => self
                 .runtime
                 .stop_account(&account_id)
-                .map(TelegramClientResponse::Account),
+                .map(TelegramClientResponse::Account)
+                .map_err(|error| TdlibError::Protocol(format!("{error:?}"))),
             TelegramClientRequest::Replay {
                 account_id,
                 after_sequence,
@@ -750,6 +794,12 @@ impl<'a, T: TdlibTransport> TelegramClientPort<'a, T> {
                     .take(limit as usize)
                     .collect();
                 Ok(TelegramClientResponse::Realtime(frames))
+            }
+            TelegramClientRequest::AuthorizationStatus
+            | TelegramClientRequest::SubmitAuthorizationPassword { .. } => {
+                Err(TdlibError::Protocol(
+                    "Telegram authorization requests require the authorization port".to_owned(),
+                ))
             }
         }
     }

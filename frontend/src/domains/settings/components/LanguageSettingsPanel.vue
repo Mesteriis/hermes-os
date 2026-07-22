@@ -35,8 +35,8 @@ const {
         :key="localeOption.value"
         type="button"
         class="settings-choice"
-        :class="{ active: currentLocale.value === localeOption.value }"
-        :disabled="isBusy.value"
+        :class="{ active: currentLocale === localeOption.value }"
+        :disabled="isBusy"
         @click="handleLocaleSelection(localeOption.value)"
       >
         <Icon icon="tabler:language" />

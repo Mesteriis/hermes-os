@@ -51,6 +51,7 @@ message ManagedRuntimeControlRequestV1 {
     ManagedRuntimeReadyRequestV1 ready = 2;
     ManagedRuntimeEventCredentialRequestV1 issue_event_credential = 3;
     ManagedRuntimeProviderCredentialRequestV1 issue_provider_credential = 4;
+    ManagedRuntimeVaultRouteRequestV1 route_vault_ciphertext = 5;
   }
 }
 message ManagedRuntimeControlResponseV1 {
@@ -58,6 +59,7 @@ message ManagedRuntimeControlResponseV1 {
     DescribeManagedRuntimeResponseV1 describe = 1;
     ManagedRuntimeEventCredentialDeliveryV1 event_credential_delivery = 2;
     ManagedRuntimeProviderCredentialDeliveryV1 provider_credential_delivery = 3;
+    ManagedRuntimeVaultRouteResponseV1 vault_route = 4;
   }
   string error_code = 15;
 }

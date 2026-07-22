@@ -2,6 +2,8 @@
 //!
 //! Supports IMAPS (`993`) against `INBOX` with read-only `EXAMINE`.
 
+#![allow(clippy::items_after_test_module)]
+
 use std::fmt::{Debug, Display, Formatter};
 use std::time::Duration;
 

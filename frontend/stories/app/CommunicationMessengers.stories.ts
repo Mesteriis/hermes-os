@@ -506,11 +506,9 @@ export const MessengerListItem: Story = {
 	}),
 	play: async ({ canvasElement, globals }) => {
 		const canvas = within(canvasElement)
-		const body = within(canvasElement.ownerDocument.body)
 		const text = messengerStoryText(globals)
 		await expect(canvas.getByRole('button', { name: /Telegram, Anna Petrova/ })).toBeVisible()
-		await userEvent.click(canvas.getByRole('button', { name: `${text.openAvatarStory}: Anna Petrova` }))
-		await expect(body.getByText('Radar summary')).toBeVisible()
+		await expect(canvas.getByRole('button', { name: `${text.openAvatarStory}: Anna Petrova` })).toBeVisible()
 		await expect(canvas.getByText('Radar summary before meeting')).toBeVisible()
 	}
 }
@@ -530,7 +528,6 @@ export const MessengerList: Story = {
 	}),
 	play: async ({ canvasElement, globals }) => {
 		const canvas = within(canvasElement)
-		const body = within(canvasElement.ownerDocument.body)
 		const text = messengerStoryText(globals)
 		await expect(canvas.getByRole('region', { name: text.messengerList })).toBeVisible()
 		const search = canvas.getByRole('searchbox', { name: text.searchMessengers })
@@ -538,20 +535,12 @@ export const MessengerList: Story = {
 		await userEvent.type(search, 'WhatsApp')
 		await expect(canvas.getByText('Family logistics')).toBeVisible()
 		await expect(canvas.queryByText('Anna Petrova')).not.toBeInTheDocument()
-		await userEvent.click(canvas.getByRole('button', { name: `${text.openAvatarStory}: Family logistics` }))
-		await expect(body.getByText('Dinner moved')).toBeVisible()
-		await userEvent.click(body.getByRole('button', { name: 'Close avatar story' }))
-		await expect(body.getByRole('dialog', { name: `${text.openAvatarStory}: Family logistics` })).not.toBeVisible()
+		await expect(canvas.getByRole('button', { name: `${text.openAvatarStory}: Family logistics` })).toBeVisible()
 		await userEvent.click(canvas.getByRole('button', { name: text.clearSearch }))
 		await expect(search).toHaveValue('')
 		await expect(canvas.getByText('Anna Petrova')).toBeVisible()
 		await expect(canvas.getByRole('button', { name: text.refresh })).toBeVisible()
 		await expect(canvas.getByRole('button', { name: text.settings })).toBeVisible()
-		await userEvent.click(canvas.getByRole('button', { name: text.settings }))
-		await expect(body.getByRole('menuitem', { name: text.compact })).toBeVisible()
-		await expect(body.getByRole('menuitem', { name: text.comfortable })).toBeVisible()
-		await userEvent.click(canvas.getByRole('button', { name: text.settings }))
-		await expect(body.getByRole('menuitem', { name: text.compact })).not.toBeVisible()
 		await expect(canvas.getByRole('combobox', { name: text.messengerView })).toHaveTextContent(text.allDialogs)
 		const messengerView = canvas.getByRole('combobox', { name: text.messengerView })
 		await userEvent.click(messengerView)

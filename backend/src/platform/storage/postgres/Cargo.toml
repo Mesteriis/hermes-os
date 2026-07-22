@@ -16,5 +16,5 @@ hermes-storage-protocol = { path = "../protocol" }
 getrandom = { version = "=0.4.3", default-features = false }
 libc = "=0.2.186"
 sha2 = { version = "=0.11.0", default-features = false }
-sqlx = { version = "=0.8.6", default-features = false, features = ["postgres", "runtime-tokio-rustls"] }
+sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring"] }
 zeroize = "=1.9.0"

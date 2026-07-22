@@ -1,22 +1,19 @@
 //! Telegram-owned durable command store. It never joins or mutates business tables.
 
-use hermes_telegram_api::{
-    TelegramAccount, TelegramCredentialBinding, TelegramOperation, TelegramOperationState,
-    TelegramChat, TelegramChatAvatar, TelegramChatFolder, TelegramChatPosition, TelegramChatOperationalState,
-    TelegramFileSnapshot,
-    TelegramMessageProjection, TelegramMessageTombstone, TelegramMessageVersion,
-    TelegramMessageMutation, TelegramChatStateProjection,
-    TelegramParticipantFilter, TelegramParticipantPage, TelegramReactionObservation, TelegramTopic,
-    TelegramReactionSummary,
-    TelegramProviderCommand,
-    TelegramAttachmentProjection,
-    TelegramCommandRecord, provider_command_chat_id, provider_command_message_id,
-    TelegramRealtimeFrame, TelegramReconciliationState, TelegramProviderEvent,
-    provider_command_kind,
-};
 use hermes_storage_protocol::StorageBindingV1;
+use hermes_telegram_api::{
+    TelegramAccount, TelegramAttachmentProjection, TelegramChat, TelegramChatAvatar,
+    TelegramChatFolder, TelegramChatOperationalState, TelegramChatPosition,
+    TelegramChatStateProjection, TelegramCommandRecord, TelegramCredentialBinding,
+    TelegramFileSnapshot, TelegramMessageMutation, TelegramMessageProjection,
+    TelegramMessageTombstone, TelegramMessageVersion, TelegramOperation, TelegramOperationState,
+    TelegramParticipantFilter, TelegramParticipantPage, TelegramProviderCommand,
+    TelegramProviderEvent, TelegramReactionObservation, TelegramReactionSummary,
+    TelegramRealtimeFrame, TelegramReconciliationState, TelegramTopic, provider_command_chat_id,
+    provider_command_kind, provider_command_message_id,
+};
 use serde_json::Value;
-use sqlx::{PgConnectOptions, PgPool, Row};
+use sqlx::{PgPool, Row, postgres::PgConnectOptions};
 use std::collections::HashSet;
 
 pub const TELEGRAM_SCHEMA_V1: &str = r#"
@@ -261,8 +258,8 @@ impl TelegramDurablePersistence {
         account: &TelegramAccount,
         credentials: &[TelegramCredentialBinding],
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let account_payload = serde_json::to_value(account)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let account_payload =
+            serde_json::to_value(account).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         let credentials_payload = serde_json::to_value(credentials)
             .map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
@@ -286,7 +283,10 @@ impl TelegramDurablePersistence {
     pub async fn account(
         &self,
         account_id: &str,
-    ) -> Result<Option<(TelegramAccount, Vec<TelegramCredentialBinding>)>, TelegramDurablePersistenceError> {
+    ) -> Result<
+        Option<(TelegramAccount, Vec<TelegramCredentialBinding>)>,
+        TelegramDurablePersistenceError,
+    > {
         let row = sqlx::query(
             "SELECT account_payload, credentials_payload FROM telegram_accounts WHERE account_id = $1",
         )
@@ -311,19 +311,17 @@ impl TelegramDurablePersistence {
     }
 
     pub async fn accounts(&self) -> Result<Vec<TelegramAccount>, TelegramDurablePersistenceError> {
-        let rows = sqlx::query(
-            "SELECT account_payload FROM telegram_accounts ORDER BY account_id ASC",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        let rows =
+            sqlx::query("SELECT account_payload FROM telegram_accounts ORDER BY account_id ASC")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|_| TelegramDurablePersistenceError::Database)?;
         rows.into_iter()
             .map(|row| {
                 let payload: Value = row
                     .try_get("account_payload")
                     .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-                serde_json::from_value(payload)
-                    .map_err(|_| TelegramDurablePersistenceError::Codec)
+                serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
             })
             .collect()
     }
@@ -332,8 +330,8 @@ impl TelegramDurablePersistence {
         &self,
         chat: &TelegramChat,
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(chat)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(chat).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_chat_projections
@@ -356,8 +354,8 @@ impl TelegramDurablePersistence {
         &self,
         avatar: &TelegramChatAvatar,
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(avatar)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(avatar).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_chat_avatar_projections
@@ -393,8 +391,7 @@ impl TelegramDurablePersistence {
             let payload: Value = row
                 .try_get("projection_payload")
                 .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-            serde_json::from_value(payload)
-                .map_err(|_| TelegramDurablePersistenceError::Codec)
+            serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
         })
         .transpose()
     }
@@ -404,8 +401,8 @@ impl TelegramDurablePersistence {
         folders: &[TelegramChatFolder],
     ) -> Result<(), TelegramDurablePersistenceError> {
         for folder in folders {
-            let payload = serde_json::to_value(folder)
-                .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+            let payload =
+                serde_json::to_value(folder).map_err(|_| TelegramDurablePersistenceError::Codec)?;
             sqlx::query(
                 r#"
                 INSERT INTO telegram_chat_folder_projections
@@ -429,8 +426,8 @@ impl TelegramDurablePersistence {
         &self,
         position: &TelegramChatPosition,
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(position)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(position).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_chat_position_projections
@@ -457,8 +454,8 @@ impl TelegramDurablePersistence {
         provider_chat_id: &str,
         state: &TelegramChatOperationalState,
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(state)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(state).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_chat_operational_states
@@ -498,8 +495,7 @@ impl TelegramDurablePersistence {
                 let payload: Value = row
                     .try_get("projection_payload")
                     .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-                serde_json::from_value(payload)
-                    .map_err(|_| TelegramDurablePersistenceError::Codec)
+                serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
             })
             .collect()
     }
@@ -527,8 +523,7 @@ impl TelegramDurablePersistence {
                 let payload: Value = row
                     .try_get("projection_payload")
                     .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-                serde_json::from_value(payload)
-                    .map_err(|_| TelegramDurablePersistenceError::Codec)
+                serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
             })
             .collect()
     }
@@ -554,8 +549,7 @@ impl TelegramDurablePersistence {
                 let payload: Value = row
                     .try_get("projection_payload")
                     .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-                serde_json::from_value(payload)
-                    .map_err(|_| TelegramDurablePersistenceError::Codec)
+                serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
             })
             .collect()
     }
@@ -581,8 +575,7 @@ impl TelegramDurablePersistence {
             let payload: Value = row
                 .try_get("projection_payload")
                 .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-            serde_json::from_value(payload)
-                .map_err(|_| TelegramDurablePersistenceError::Codec)
+            serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
         })
         .transpose()
     }
@@ -642,8 +635,7 @@ impl TelegramDurablePersistence {
                 let payload: Value = row
                     .try_get("projection_payload")
                     .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-                serde_json::from_value(payload)
-                    .map_err(|_| TelegramDurablePersistenceError::Codec)
+                serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
             })
             .collect()
     }
@@ -664,8 +656,7 @@ impl TelegramDurablePersistence {
                 let payload: Value = row
                     .try_get("projection_payload")
                     .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-                serde_json::from_value(payload)
-                    .map_err(|_| TelegramDurablePersistenceError::Codec)
+                serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
             })
             .collect()
     }
@@ -674,8 +665,8 @@ impl TelegramDurablePersistence {
         &self,
         message: &TelegramMessageProjection,
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(message)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(message).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_message_projections
@@ -725,8 +716,7 @@ impl TelegramDurablePersistence {
                 let payload: Value = row
                     .try_get("projection_payload")
                     .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-                serde_json::from_value(payload)
-                    .map_err(|_| TelegramDurablePersistenceError::Codec)
+                serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
             })
             .collect()
     }
@@ -768,7 +758,8 @@ impl TelegramDurablePersistence {
         operation: &TelegramOperation,
         command: &TelegramProviderCommand,
     ) -> Result<bool, TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(command).map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(command).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         let result = sqlx::query(
             r#"
             INSERT INTO telegram_runtime_operations (
@@ -788,7 +779,10 @@ impl TelegramDurablePersistence {
         .bind(state_name(operation.state))
         .bind(i64::from(operation.retry_count))
         .bind(i64::from(operation.max_retries))
-        .bind(i64::try_from(operation.lease_epoch).map_err(|_| TelegramDurablePersistenceError::InvalidRow)?)
+        .bind(
+            i64::try_from(operation.lease_epoch)
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )
         .bind(reconciliation_name(operation.reconciliation))
         .bind(&operation.last_error)
         .bind(optional_i64(operation.next_attempt_at_unix_seconds)?)
@@ -820,7 +814,10 @@ impl TelegramDurablePersistence {
         .bind(state_name(operation.state))
         .bind(i64::from(operation.retry_count))
         .bind(i64::from(operation.max_retries))
-        .bind(i64::try_from(operation.lease_epoch).map_err(|_| TelegramDurablePersistenceError::InvalidRow)?)
+        .bind(
+            i64::try_from(operation.lease_epoch)
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )
         .bind(reconciliation_name(operation.reconciliation))
         .bind(&operation.last_error)
         .bind(optional_i64(operation.next_attempt_at_unix_seconds)?)
@@ -856,13 +853,11 @@ impl TelegramDurablePersistence {
         &self,
         operation_id: &str,
     ) -> Result<Option<TelegramOperation>, TelegramDurablePersistenceError> {
-        let row = sqlx::query(
-            "SELECT * FROM telegram_runtime_operations WHERE operation_id = $1",
-        )
-        .bind(operation_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        let row = sqlx::query("SELECT * FROM telegram_runtime_operations WHERE operation_id = $1")
+            .bind(operation_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|_| TelegramDurablePersistenceError::Database)?;
         row.map(|row| row_to_operation(row).map(|(operation, _)| operation))
             .transpose()
     }
@@ -885,8 +880,10 @@ impl TelegramDurablePersistence {
         let mut records = Vec::new();
         for row in rows {
             let (operation, command) = row_to_operation(row)?;
-            if provider_chat_id.is_some_and(|value| provider_command_chat_id(&command) != Some(value))
-                || provider_message_id.is_some_and(|value| provider_command_message_id(&command) != Some(value))
+            if provider_chat_id
+                .is_some_and(|value| provider_command_chat_id(&command) != Some(value))
+                || provider_message_id
+                    .is_some_and(|value| provider_command_message_id(&command) != Some(value))
                 || (!command_kinds.is_empty()
                     && !command_kinds
                         .iter()
@@ -908,9 +905,15 @@ impl TelegramDurablePersistence {
         now_unix_seconds: u64,
         limit: i64,
         worker_id: &str,
-    ) -> Result<Vec<(TelegramOperation, TelegramProviderCommand)>, TelegramDurablePersistenceError> {
-        let now = i64::try_from(now_unix_seconds).map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-        let mut transaction = self.pool.begin().await.map_err(|_| TelegramDurablePersistenceError::Database)?;
+    ) -> Result<Vec<(TelegramOperation, TelegramProviderCommand)>, TelegramDurablePersistenceError>
+    {
+        let now = i64::try_from(now_unix_seconds)
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| TelegramDurablePersistenceError::Database)?;
         let rows = sqlx::query(
             r#"
             WITH due AS (
@@ -940,7 +943,10 @@ impl TelegramDurablePersistence {
         .fetch_all(&mut *transaction)
         .await
         .map_err(|_| TelegramDurablePersistenceError::Database)?;
-        transaction.commit().await.map_err(|_| TelegramDurablePersistenceError::Database)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| TelegramDurablePersistenceError::Database)?;
         rows.into_iter().map(row_to_operation).collect()
     }
 
@@ -976,8 +982,8 @@ impl TelegramDurablePersistence {
         sequence: u64,
         limit: i64,
     ) -> Result<Vec<TelegramRealtimeFrame>, TelegramDurablePersistenceError> {
-        let sequence = i64::try_from(sequence)
-            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+        let sequence =
+            i64::try_from(sequence).map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
         let rows = sqlx::query(
             r#"
             SELECT account_id, sequence, provider_cursor, event_payload
@@ -1021,8 +1027,8 @@ impl TelegramDurablePersistence {
         &self,
         file: &TelegramFileSnapshot,
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(file)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(file).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_file_projections
@@ -1045,8 +1051,8 @@ impl TelegramDurablePersistence {
         &self,
         attachment: &TelegramAttachmentProjection,
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(attachment)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(attachment).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_attachment_projections
@@ -1084,8 +1090,7 @@ impl TelegramDurablePersistence {
             let payload: Value = row
                 .try_get("projection_payload")
                 .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-            serde_json::from_value(payload)
-                .map_err(|_| TelegramDurablePersistenceError::Codec)
+            serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
         })
         .transpose()
     }
@@ -1109,8 +1114,7 @@ impl TelegramDurablePersistence {
             let payload: Value = row
                 .try_get("projection_payload")
                 .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-            serde_json::from_value(payload)
-                .map_err(|_| TelegramDurablePersistenceError::Codec)
+            serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
         })
         .transpose()
     }
@@ -1132,8 +1136,7 @@ impl TelegramDurablePersistence {
             let payload: Value = row
                 .try_get("projection_payload")
                 .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-            serde_json::from_value(payload)
-                .map_err(|_| TelegramDurablePersistenceError::Codec)
+            serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
         })
         .transpose()
     }
@@ -1187,8 +1190,8 @@ impl TelegramDurablePersistence {
         &self,
         page: &TelegramParticipantPage,
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(page)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(page).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_participant_projections
@@ -1261,8 +1264,7 @@ impl TelegramDurablePersistence {
             let payload: Value = row
                 .try_get("projection_payload")
                 .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-            serde_json::from_value(payload)
-                .map_err(|_| TelegramDurablePersistenceError::Codec)
+            serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
         })
         .transpose()
     }
@@ -1271,8 +1273,8 @@ impl TelegramDurablePersistence {
         &self,
         topic: &TelegramTopic,
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(topic)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(topic).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_topic_projections
@@ -1318,8 +1320,7 @@ impl TelegramDurablePersistence {
                 let payload: Value = row
                     .try_get("projection_payload")
                     .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-                serde_json::from_value(payload)
-                    .map_err(|_| TelegramDurablePersistenceError::Codec)
+                serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
             })
             .collect()
     }
@@ -1328,8 +1329,8 @@ impl TelegramDurablePersistence {
         &self,
         version: &TelegramMessageVersion,
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(version)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(version).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_message_versions
@@ -1357,8 +1358,8 @@ impl TelegramDurablePersistence {
         &self,
         tombstone: &TelegramMessageTombstone,
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(tombstone)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(tombstone).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_message_tombstones
@@ -1386,8 +1387,8 @@ impl TelegramDurablePersistence {
         message_id: &str,
         reactions: &[TelegramReactionObservation],
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(reactions)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(reactions).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_message_reactions (message_id, projection_payload)
@@ -1409,8 +1410,8 @@ impl TelegramDurablePersistence {
         message_id: &str,
         mutations: &[TelegramMessageMutation],
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(mutations)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(mutations).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_message_mutations (message_id, projection_payload)
@@ -1450,7 +1451,10 @@ impl TelegramDurablePersistence {
     pub async fn message_references(
         &self,
         message_id: &str,
-    ) -> Result<Option<hermes_telegram_api::TelegramMessageReferences>, TelegramDurablePersistenceError> {
+    ) -> Result<
+        Option<hermes_telegram_api::TelegramMessageReferences>,
+        TelegramDurablePersistenceError,
+    > {
         let row = sqlx::query(
             "SELECT projection_payload FROM telegram_message_projections WHERE message_id = $1",
         )
@@ -1476,8 +1480,11 @@ impl TelegramDurablePersistence {
         provider_chat_id: &str,
         provider_message_id: &str,
         limit: i64,
-    ) -> Result<Vec<hermes_telegram_api::TelegramMessageProjection>, TelegramDurablePersistenceError> {
-        let mut messages = self.list_messages(account_id, provider_chat_id, i64::MAX).await?;
+    ) -> Result<Vec<hermes_telegram_api::TelegramMessageProjection>, TelegramDurablePersistenceError>
+    {
+        let mut messages = self
+            .list_messages(account_id, provider_chat_id, i64::MAX)
+            .await?;
         messages.sort_by(|left, right| left.provider_message_id.cmp(&right.provider_message_id));
         let mut chain = Vec::new();
         let mut visited = HashSet::new();
@@ -1493,7 +1500,10 @@ impl TelegramDurablePersistence {
             };
             let message = messages[index].clone();
             next = message.references.reply_to.as_ref().map(|reference| {
-                (reference.provider_chat_id.clone(), reference.provider_message_id.clone())
+                (
+                    reference.provider_chat_id.clone(),
+                    reference.provider_message_id.clone(),
+                )
             });
             chain.push(message);
             if chain.len() >= usize::try_from(limit).unwrap_or(usize::MAX) {
@@ -1509,7 +1519,8 @@ impl TelegramDurablePersistence {
         provider_chat_id: &str,
         provider_message_id: &str,
         limit: i64,
-    ) -> Result<Vec<hermes_telegram_api::TelegramMessageProjection>, TelegramDurablePersistenceError> {
+    ) -> Result<Vec<hermes_telegram_api::TelegramMessageProjection>, TelegramDurablePersistenceError>
+    {
         let rows = sqlx::query(
             "SELECT projection_payload FROM telegram_message_projections WHERE account_id = $1",
         )
@@ -1539,12 +1550,16 @@ impl TelegramDurablePersistence {
             }) else {
                 break;
             };
-            next = message.references.forward_origin.as_ref().and_then(|origin| {
-                Some((
-                    origin.provider_chat_id.as_ref()?.clone(),
-                    origin.provider_message_id.as_ref()?.clone(),
-                ))
-            });
+            next = message
+                .references
+                .forward_origin
+                .as_ref()
+                .and_then(|origin| {
+                    Some((
+                        origin.provider_chat_id.as_ref()?.clone(),
+                        origin.provider_message_id.as_ref()?.clone(),
+                    ))
+                });
             chain.push(message.clone());
             if chain.len() >= usize::try_from(limit).unwrap_or(usize::MAX) {
                 break;
@@ -1559,8 +1574,8 @@ impl TelegramDurablePersistence {
         provider_chat_id: &str,
         state: &TelegramChatStateProjection,
     ) -> Result<(), TelegramDurablePersistenceError> {
-        let payload = serde_json::to_value(state)
-            .map_err(|_| TelegramDurablePersistenceError::Codec)?;
+        let payload =
+            serde_json::to_value(state).map_err(|_| TelegramDurablePersistenceError::Codec)?;
         sqlx::query(
             r#"
             INSERT INTO telegram_chat_states
@@ -1622,8 +1637,7 @@ impl TelegramDurablePersistence {
                 let payload: Value = row
                     .try_get("projection_payload")
                     .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-                serde_json::from_value(payload)
-                    .map_err(|_| TelegramDurablePersistenceError::Codec)
+                serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
             })
             .collect()
     }
@@ -1649,8 +1663,7 @@ impl TelegramDurablePersistence {
                 let payload: Value = row
                     .try_get("projection_payload")
                     .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-                serde_json::from_value(payload)
-                    .map_err(|_| TelegramDurablePersistenceError::Codec)
+                serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)
             })
             .collect()
     }
@@ -1700,28 +1713,74 @@ impl TelegramDurablePersistence {
     }
 }
 
-fn row_to_operation(row: sqlx::postgres::PgRow) -> Result<(TelegramOperation, TelegramProviderCommand), TelegramDurablePersistenceError> {
-    let payload: Value = row.try_get("command_payload").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
-    let command: TelegramProviderCommand = serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)?;
-    if row.try_get::<String, _>("command_kind").map_err(|_| TelegramDurablePersistenceError::InvalidRow)? != provider_command_kind(&command).as_str() {
+fn row_to_operation(
+    row: sqlx::postgres::PgRow,
+) -> Result<(TelegramOperation, TelegramProviderCommand), TelegramDurablePersistenceError> {
+    let payload: Value = row
+        .try_get("command_payload")
+        .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+    let command: TelegramProviderCommand =
+        serde_json::from_value(payload).map_err(|_| TelegramDurablePersistenceError::Codec)?;
+    if row
+        .try_get::<String, _>("command_kind")
+        .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?
+        != provider_command_kind(&command).as_str()
+    {
         return Err(TelegramDurablePersistenceError::InvalidRow);
     }
     let operation = TelegramOperation {
-        operation_id: row.try_get("operation_id").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
-        account_id: row.try_get("account_id").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        operation_id: row
+            .try_get("operation_id")
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        account_id: row
+            .try_get("account_id")
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
         command_kind: provider_command_kind(&command),
-        idempotency_key: row.try_get("idempotency_key").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
-        state: parse_state(&row.try_get::<String, _>("state").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?)?,
-        retry_count: bounded_u32(row.try_get::<i64, _>("retry_count").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?)?,
-        max_retries: bounded_u32(row.try_get::<i64, _>("max_retries").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?)?,
-        lease_epoch: bounded_u64(row.try_get::<i64, _>("lease_epoch").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?)?,
-        reconciliation: parse_reconciliation(&row.try_get::<String, _>("reconciliation").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?)?,
-        last_error: row.try_get("last_error").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
-        next_attempt_at_unix_seconds: optional_u64(row.try_get("next_attempt_at").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?)?,
-        locked_at_unix_seconds: optional_u64(row.try_get("locked_at").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?)?,
-        locked_by: row.try_get("locked_by").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
-        provider_observed_at_unix_seconds: optional_u64(row.try_get("provider_observed_at").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?)?,
-        reconciled_at_unix_seconds: optional_u64(row.try_get("reconciled_at").map_err(|_| TelegramDurablePersistenceError::InvalidRow)?)?,
+        idempotency_key: row
+            .try_get("idempotency_key")
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        state: parse_state(
+            &row.try_get::<String, _>("state")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )?,
+        retry_count: bounded_u32(
+            row.try_get::<i64, _>("retry_count")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )?,
+        max_retries: bounded_u32(
+            row.try_get::<i64, _>("max_retries")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )?,
+        lease_epoch: bounded_u64(
+            row.try_get::<i64, _>("lease_epoch")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )?,
+        reconciliation: parse_reconciliation(
+            &row.try_get::<String, _>("reconciliation")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )?,
+        last_error: row
+            .try_get("last_error")
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        next_attempt_at_unix_seconds: optional_u64(
+            row.try_get("next_attempt_at")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )?,
+        locked_at_unix_seconds: optional_u64(
+            row.try_get("locked_at")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )?,
+        locked_by: row
+            .try_get("locked_by")
+            .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        provider_observed_at_unix_seconds: optional_u64(
+            row.try_get("provider_observed_at")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )?,
+        reconciled_at_unix_seconds: optional_u64(
+            row.try_get("reconciled_at")
+                .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?,
+        )?,
     };
     Ok((operation, command))
 }
@@ -1760,7 +1819,9 @@ fn parse_state(value: &str) -> Result<TelegramOperationState, TelegramDurablePer
     }
 }
 
-fn parse_reconciliation(value: &str) -> Result<TelegramReconciliationState, TelegramDurablePersistenceError> {
+fn parse_reconciliation(
+    value: &str,
+) -> Result<TelegramReconciliationState, TelegramDurablePersistenceError> {
     match value {
         "not_observed" => Ok(TelegramReconciliationState::NotObserved),
         "awaiting_provider" => Ok(TelegramReconciliationState::AwaitingProvider),
@@ -1771,7 +1832,9 @@ fn parse_reconciliation(value: &str) -> Result<TelegramReconciliationState, Tele
 }
 
 fn optional_i64(value: Option<u64>) -> Result<Option<i64>, TelegramDurablePersistenceError> {
-    value.map(|value| i64::try_from(value).map_err(|_| TelegramDurablePersistenceError::InvalidRow)).transpose()
+    value
+        .map(|value| i64::try_from(value).map_err(|_| TelegramDurablePersistenceError::InvalidRow))
+        .transpose()
 }
 
 fn optional_u64(value: Option<i64>) -> Result<Option<u64>, TelegramDurablePersistenceError> {

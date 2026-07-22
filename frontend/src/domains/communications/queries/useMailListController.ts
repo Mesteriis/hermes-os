@@ -18,9 +18,12 @@ import {
   mailListSearchBuilderSetMatchMode,
   mailListSearchBuilderSetOperator,
   mailListSearchBuilderSetValue,
-  mailListSearchBuilderValueSuggestions,
   mailListSearchLocalizedToggleItems,
+  mailListSearchFieldGroups,
+  mailListSearchFieldItem,
+  mailListSearchMatchModeItems,
 } from '../components/mail/mailSearchBuilder'
+import { mailListSearchBuilderValueSuggestions } from '../components/mail/mailSearchSuggestions'
 import {
   committedSearchBuilderState,
   cloneSearchBuilderState,
@@ -28,21 +31,15 @@ import {
   findSavedFilter,
   savedFilterTreeOptions,
 } from '../components/mail/mailListSavedFilters'
-import {
-  mailListSearchFieldGroups,
-  mailListSearchFieldItem,
-  mailListSearchMatchModeItems,
-  type MailListItemDensity,
-  type MailListItemModel,
-} from '../components/mail/mailElements'
+import type { MailListItemDensity, MailListItemModel } from '../components/mail/mailElements'
 import {
   isMailListViewId,
   mailListItemIds,
-  mailListItemsForSearch,
   mailListItemsForView,
   mailListTreeSelectOptions,
   type MailListViewId,
 } from '../components/mail/mailListViews'
+import { mailListItemsForSearch } from '../components/mail/mailSearchBuilder'
 import type { MailListSavedFilter } from '../components/mail/mailListSavedFilters'
 
 export interface MailListControllerProps {
@@ -300,6 +297,7 @@ export function useMailListController(
     plainSearchButtonClass,
     mailViewOptions,
     localizedSearchMatchModeItems,
+    densityIsActive,
     densityMenuItemClass,
     selectDensity,
     updateSearchBuilderMatchMode,

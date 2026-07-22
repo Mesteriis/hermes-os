@@ -4,7 +4,6 @@ mod context;
 mod credentials;
 mod platform_credential;
 mod port;
-mod revoke;
 mod session;
 
 pub use context::{StorageVaultRouteContextErrorV1, StorageVaultRouteContextV1};

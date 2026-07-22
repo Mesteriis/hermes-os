@@ -11,3 +11,4 @@ owner = "storage"
 surface = "implementation"
 [dependencies]
 hermes-storage-protocol = { path = "../protocol" }
+hermes-storage-vault = { path = "../vault" }

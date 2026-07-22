@@ -47,8 +47,7 @@ struct Inner {
     workers: Mutex<HashMap<String, ActiveWorker>>,
     failures: Mutex<HashMap<String, String>>,
     event_credential_handler: Mutex<Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>>,
-    provider_credential_handler:
-        Mutex<Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>>,
+    provider_credential_handler: Mutex<Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>>,
     vault_route_handler: Mutex<Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>>,
 }
 

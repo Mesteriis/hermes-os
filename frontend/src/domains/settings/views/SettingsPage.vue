@@ -37,11 +37,11 @@ const {
   traceLogsSettings,
 } = useSettingsPageController()
 
-watch(() => actionMessage.value, (message) => {
+watch(() => actionMessage, (message) => {
   if (message) toast.success(t('Settings action completed'), message)
 })
 
-watch(() => errorMessage.value, (message) => {
+watch(() => errorMessage, (message) => {
   if (message) toast.error(t('Settings action failed'), message)
 })
 

@@ -275,7 +275,9 @@ fn route_class(path: &str) -> &'static str {
 }
 
 fn unsupported_integration_provider(path: &str) -> Option<&'static str> {
-    if path == TELEGRAM_INTEGRATIONS_PATH_ROOT || path.starts_with(TELEGRAM_INTEGRATIONS_PATH_PREFIX) {
+    if path == TELEGRAM_INTEGRATIONS_PATH_ROOT
+        || path.starts_with(TELEGRAM_INTEGRATIONS_PATH_PREFIX)
+    {
         Some("telegram")
     } else if path == WHATSAPP_INTEGRATIONS_PATH_ROOT
         || path.starts_with(WHATSAPP_INTEGRATIONS_PATH_PREFIX)
@@ -296,7 +298,7 @@ fn unsupported_integration_response(provider: &str) -> GatewayHttpResponse {
         .expect("Gateway response for unsupported provider integration is valid")
 }
 
-fn unsupported_integration_response_class(path: &str, provider: &str) -> &'static str {
+fn unsupported_integration_response_class<'a>(path: &str, provider: &'a str) -> &'a str {
     if path == TELEGRAM_INTEGRATIONS_PATH_ROOT || path == WHATSAPP_INTEGRATIONS_PATH_ROOT {
         "communications_integrations_legacy"
     } else {

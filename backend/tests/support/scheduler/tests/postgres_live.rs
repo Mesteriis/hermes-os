@@ -308,7 +308,7 @@ async fn install_schema(pool: &PgPool) {
         .expect("create Scheduler schema");
     for step in bundle.steps {
         let sql = std::str::from_utf8(&step.forward_sql_utf8).expect("Scheduler migration UTF-8");
-        sqlx::raw_sql(sql)
+        sqlx::raw_sql(sqlx::AssertSqlSafe(sql.to_owned()))
             .execute(pool)
             .await
             .expect("install Scheduler migration in disposable contour");

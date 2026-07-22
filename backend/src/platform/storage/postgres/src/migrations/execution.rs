@@ -2,7 +2,7 @@
 
 use hermes_storage_migrations::admit_storage_bundle;
 use hermes_storage_protocol::v1::StorageBundleV1;
-use sqlx::{query, query_scalar, raw_sql};
+use sqlx::{AssertSqlSafe, query, query_scalar, raw_sql};
 
 use crate::{
     PostgresAdapterErrorV1, PostgresAdminConnectorV1, StorageRoleSpecV1,
@@ -82,13 +82,13 @@ async fn execute_step_as_owner(
     step: &hermes_storage_protocol::v1::StorageMigrationStepV1,
 ) -> Result<(), PostgresAdapterErrorV1> {
     let set_role = format!("SET LOCAL ROLE {}", roles.ddl_owner());
-    query(&set_role)
+    query(AssertSqlSafe(set_role))
         .execute(&mut **transaction)
         .await
         .map_err(|_| PostgresAdapterErrorV1::MigrationOwnerRole)?;
     let sql = std::str::from_utf8(&step.forward_sql_utf8)
         .map_err(|_| PostgresAdapterErrorV1::MigrationStatement)?;
-    raw_sql(sql)
+    raw_sql(AssertSqlSafe(sql.to_owned()))
         .execute(&mut **transaction)
         .await
         .map_err(|_| PostgresAdapterErrorV1::MigrationStatement)?;

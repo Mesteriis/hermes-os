@@ -3,11 +3,12 @@
 use prost::Message;
 
 use crate::{
+    WhatsAppAccount, WhatsAppAccountState, WhatsAppConversationCommandKind, WhatsAppDialog,
+    WhatsAppMedia, WhatsAppMessage, WhatsAppParticipant, WhatsAppProviderCommand,
+    WhatsAppProviderEvent, WhatsAppProviderEventKind, WhatsAppProviderQuery,
+    WhatsAppProviderQueryResponse, WhatsAppProviderShape, WhatsAppRealtimeFrame,
+    WhatsAppRuntimeKind, WhatsAppRuntimeState, WhatsAppRuntimeStatus,
     capabilities::{WhatsAppActionClass, WhatsAppCapability, WhatsAppCapabilityState},
-    WhatsAppAccount, WhatsAppAccountState, WhatsAppConversationCommandKind, WhatsAppDialog, WhatsAppMessage, WhatsAppParticipant, WhatsAppProviderCommand, WhatsAppRuntimeStatus,
-    WhatsAppProviderShape, WhatsAppRuntimeKind, WhatsAppRuntimeState,
-    WhatsAppProviderEvent, WhatsAppProviderEventKind, WhatsAppProviderQuery, WhatsAppProviderQueryResponse,
-    WhatsAppRealtimeFrame, WhatsAppMedia,
     wire::{self, whats_app_provider_command_v1::Command, whats_app_provider_query_v1::Query},
 };
 
@@ -186,49 +187,56 @@ pub fn decode_query(bytes: &[u8]) -> Result<WhatsAppProviderQuery, ClientWireErr
 pub fn encode_query_response(response: &WhatsAppProviderQueryResponse) -> Option<Vec<u8>> {
     use wire::whats_app_query_response_v1::Response;
     let response = match response {
-        WhatsAppProviderQueryResponse::Account(value) => Response::Account(
-            wire::WhatsAppAccountList {
+        WhatsAppProviderQueryResponse::Account(value) => {
+            Response::Account(wire::WhatsAppAccountList {
                 account: value.iter().map(account_to_wire).collect(),
-            },
-        ),
+            })
+        }
         WhatsAppProviderQueryResponse::RuntimeStatus(value) => {
             Response::RuntimeStatus(runtime_status_to_wire(value))
         }
-        WhatsAppProviderQueryResponse::Messages(values) => Response::Messages(
-            wire::WhatsAppMessageList {
+        WhatsAppProviderQueryResponse::Messages(values) => {
+            Response::Messages(wire::WhatsAppMessageList {
                 message: values.iter().map(message_to_wire).collect(),
-            },
-        ),
-        WhatsAppProviderQueryResponse::Dialogs(values) => Response::Dialogs(
-            wire::WhatsAppDialogList {
+            })
+        }
+        WhatsAppProviderQueryResponse::Dialogs(values) => {
+            Response::Dialogs(wire::WhatsAppDialogList {
                 dialog: values.iter().map(dialog_to_wire).collect(),
-            },
-        ),
-        WhatsAppProviderQueryResponse::Participants(values) => Response::Participants(
-            wire::WhatsAppParticipantList {
+            })
+        }
+        WhatsAppProviderQueryResponse::Participants(values) => {
+            Response::Participants(wire::WhatsAppParticipantList {
                 participant: values.iter().map(participant_to_wire).collect(),
-            },
-        ),
-        WhatsAppProviderQueryResponse::Realtime(values) => Response::Realtime(
-            wire::WhatsAppRealtimeList {
+            })
+        }
+        WhatsAppProviderQueryResponse::Realtime(values) => {
+            Response::Realtime(wire::WhatsAppRealtimeList {
                 frame: values.iter().map(realtime_to_wire).collect(),
-            },
-        ),
-        WhatsAppProviderQueryResponse::Commands(values) => Response::Commands(
-            wire::WhatsAppCommandList {
-                command: values.iter().map(|value| command_message(value)).collect(),
-            },
-        ),
-        WhatsAppProviderQueryResponse::Events(values) => Response::Events(
-            wire::WhatsAppProviderEventList {
+            })
+        }
+        WhatsAppProviderQueryResponse::Commands(values) => {
+            Response::Commands(wire::WhatsAppCommandList {
+                command: values.iter().map(command_message).collect(),
+            })
+        }
+        WhatsAppProviderQueryResponse::Events(values) => {
+            Response::Events(wire::WhatsAppProviderEventList {
                 event: values.iter().map(event_to_wire).collect(),
-            },
-        ),
+            })
+        }
     };
-    Some(wire::WhatsAppQueryResponseV1 { response: Some(response) }.encode_to_vec())
+    Some(
+        wire::WhatsAppQueryResponseV1 {
+            response: Some(response),
+        }
+        .encode_to_vec(),
+    )
 }
 
-fn parse_account(value: wire::WhatsAppAccountResponseV1) -> Result<WhatsAppAccount, ClientWireError> {
+fn parse_account(
+    value: wire::WhatsAppAccountResponseV1,
+) -> Result<WhatsAppAccount, ClientWireError> {
     let account_state = match value.account_state.as_str() {
         "provisioning" => WhatsAppAccountState::Provisioning,
         "link_required" => WhatsAppAccountState::LinkRequired,
@@ -252,37 +260,62 @@ fn parse_account(value: wire::WhatsAppAccountResponseV1) -> Result<WhatsAppAccou
         return Err(ClientWireError::InvalidPayload);
     }
     Ok(WhatsAppAccount {
-        account_id: value.account_id, display_name: value.display_name, external_account_id: value.external_account_id,
-        provider_shape: WhatsAppProviderShape::WebCompanion, runtime_kind: WhatsAppRuntimeKind::HiddenWebView,
-        account_state, runtime_state, credentials: Vec::new(),
+        account_id: value.account_id,
+        display_name: value.display_name,
+        external_account_id: value.external_account_id,
+        provider_shape: WhatsAppProviderShape::WebCompanion,
+        runtime_kind: WhatsAppRuntimeKind::HiddenWebView,
+        account_state,
+        runtime_state,
+        credentials: Vec::new(),
     })
 }
 
 fn parse_message(value: wire::WhatsAppMessage) -> WhatsAppMessage {
     WhatsAppMessage {
-        account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id,
-        sender_id: value.sender_id, sender_display_name: value.sender_display_name, text: value.text,
-        reply_to_provider_message_id: value.reply_to_provider_message_id, occurred_at_unix_seconds: value.occurred_at_unix_seconds,
+        account_id: value.account_id,
+        provider_chat_id: value.provider_chat_id,
+        provider_message_id: value.provider_message_id,
+        sender_id: value.sender_id,
+        sender_display_name: value.sender_display_name,
+        text: value.text,
+        reply_to_provider_message_id: value.reply_to_provider_message_id,
+        occurred_at_unix_seconds: value.occurred_at_unix_seconds,
     }
 }
 
 fn parse_dialog(value: wire::WhatsAppDialog) -> WhatsAppDialog {
     WhatsAppDialog {
-        account_id: value.account_id, provider_chat_id: value.provider_chat_id, title: value.title, kind: value.kind,
-        is_archived: value.is_archived, is_pinned: value.is_pinned, is_muted: value.is_muted, is_unread: value.is_unread,
-        unread_count: value.unread_count, participant_count: value.participant_count, observed_at_unix_seconds: value.observed_at_unix_seconds,
+        account_id: value.account_id,
+        provider_chat_id: value.provider_chat_id,
+        title: value.title,
+        kind: value.kind,
+        is_archived: value.is_archived,
+        is_pinned: value.is_pinned,
+        is_muted: value.is_muted,
+        is_unread: value.is_unread,
+        unread_count: value.unread_count,
+        participant_count: value.participant_count,
+        observed_at_unix_seconds: value.observed_at_unix_seconds,
     }
 }
 
 fn parse_participant(value: wire::WhatsAppParticipant) -> WhatsAppParticipant {
     WhatsAppParticipant {
-        account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_identity_id: value.provider_identity_id,
-        display_name: value.display_name, role: value.role, status: value.status, is_self: value.is_self,
+        account_id: value.account_id,
+        provider_chat_id: value.provider_chat_id,
+        provider_identity_id: value.provider_identity_id,
+        display_name: value.display_name,
+        role: value.role,
+        status: value.status,
+        is_self: value.is_self,
         observed_at_unix_seconds: value.observed_at_unix_seconds,
     }
 }
 
-fn parse_capability(value: wire::WhatsAppCapability) -> Result<WhatsAppCapability, ClientWireError> {
+fn parse_capability(
+    value: wire::WhatsAppCapability,
+) -> Result<WhatsAppCapability, ClientWireError> {
     let status = match value.status.as_str() {
         "available" => WhatsAppCapabilityState::Available,
         "blocked" => WhatsAppCapabilityState::Blocked,
@@ -298,24 +331,55 @@ fn parse_capability(value: wire::WhatsAppCapability) -> Result<WhatsAppCapabilit
         "secret_access" => WhatsAppActionClass::SecretAccess,
         _ => return Err(ClientWireError::InvalidPayload),
     };
-    Ok(WhatsAppCapability { capability: value.capability, category: value.category, status, action_class, confirmation_required: value.confirmation_required, closure_gate: value.closure_gate, reason: value.reason })
+    Ok(WhatsAppCapability {
+        capability: value.capability,
+        category: value.category,
+        status,
+        action_class,
+        confirmation_required: value.confirmation_required,
+        closure_gate: value.closure_gate,
+        reason: value.reason,
+    })
 }
 
-fn parse_runtime_status(value: wire::WhatsAppRuntimeStatusV1) -> Result<WhatsAppRuntimeStatus, ClientWireError> {
+fn parse_runtime_status(
+    value: wire::WhatsAppRuntimeStatusV1,
+) -> Result<WhatsAppRuntimeStatus, ClientWireError> {
     Ok(WhatsAppRuntimeStatus {
         account_id: value.account_id,
-        account_state: value.account_state.as_deref().map(|value| match value {
-            "provisioning" => Ok(WhatsAppAccountState::Provisioning), "link_required" => Ok(WhatsAppAccountState::LinkRequired), "linked" => Ok(WhatsAppAccountState::Linked), "degraded" => Ok(WhatsAppAccountState::Degraded), "revoked" => Ok(WhatsAppAccountState::Revoked), "retired" => Ok(WhatsAppAccountState::Retired), _ => Err(ClientWireError::InvalidPayload),
-        }).transpose()?,
-        runtime_state: value.runtime_state.as_deref().map(parse_runtime_state).transpose()?,
-        capabilities: value.capability.into_iter().map(parse_capability).collect::<Result<Vec<_>, _>>()?,
+        account_state: value
+            .account_state
+            .as_deref()
+            .map(|value| match value {
+                "provisioning" => Ok(WhatsAppAccountState::Provisioning),
+                "link_required" => Ok(WhatsAppAccountState::LinkRequired),
+                "linked" => Ok(WhatsAppAccountState::Linked),
+                "degraded" => Ok(WhatsAppAccountState::Degraded),
+                "revoked" => Ok(WhatsAppAccountState::Revoked),
+                "retired" => Ok(WhatsAppAccountState::Retired),
+                _ => Err(ClientWireError::InvalidPayload),
+            })
+            .transpose()?,
+        runtime_state: value
+            .runtime_state
+            .as_deref()
+            .map(parse_runtime_state)
+            .transpose()?,
+        capabilities: value
+            .capability
+            .into_iter()
+            .map(parse_capability)
+            .collect::<Result<Vec<_>, _>>()?,
         host_command_queue_available: value.host_command_queue_available,
     })
 }
 
-pub fn decode_query_response(bytes: &[u8]) -> Result<WhatsAppProviderQueryResponse, ClientWireError> {
+pub fn decode_query_response(
+    bytes: &[u8],
+) -> Result<WhatsAppProviderQueryResponse, ClientWireError> {
     use wire::whats_app_query_response_v1::Response;
-    let message = wire::WhatsAppQueryResponseV1::decode(bytes).map_err(|_| ClientWireError::InvalidPayload)?;
+    let message = wire::WhatsAppQueryResponseV1::decode(bytes)
+        .map_err(|_| ClientWireError::InvalidPayload)?;
     match message.response.ok_or(ClientWireError::MissingVariant)? {
         Response::Account(value) => {
             let mut accounts = value.account.into_iter();
@@ -325,19 +389,43 @@ pub fn decode_query_response(bytes: &[u8]) -> Result<WhatsAppProviderQueryRespon
             }
             Ok(WhatsAppProviderQueryResponse::Account(account))
         }
-        Response::Messages(value) => Ok(WhatsAppProviderQueryResponse::Messages(value.message.into_iter().map(parse_message).collect())),
-        Response::Dialogs(value) => Ok(WhatsAppProviderQueryResponse::Dialogs(value.dialog.into_iter().map(parse_dialog).collect())),
-        Response::Participants(value) => Ok(WhatsAppProviderQueryResponse::Participants(value.participant.into_iter().map(parse_participant).collect())),
+        Response::Messages(value) => Ok(WhatsAppProviderQueryResponse::Messages(
+            value.message.into_iter().map(parse_message).collect(),
+        )),
+        Response::Dialogs(value) => Ok(WhatsAppProviderQueryResponse::Dialogs(
+            value.dialog.into_iter().map(parse_dialog).collect(),
+        )),
+        Response::Participants(value) => Ok(WhatsAppProviderQueryResponse::Participants(
+            value
+                .participant
+                .into_iter()
+                .map(parse_participant)
+                .collect(),
+        )),
         Response::Realtime(value) => Ok(WhatsAppProviderQueryResponse::Realtime(
-            value.frame.into_iter().map(parse_realtime).collect::<Result<Vec<_>, _>>()?,
+            value
+                .frame
+                .into_iter()
+                .map(parse_realtime)
+                .collect::<Result<Vec<_>, _>>()?,
         )),
         Response::Commands(value) => Ok(WhatsAppProviderQueryResponse::Commands(
-            value.command.into_iter().map(|value| decode_command(&value.encode_to_vec())).collect::<Result<Vec<_>, _>>()?,
+            value
+                .command
+                .into_iter()
+                .map(|value| decode_command(&value.encode_to_vec()))
+                .collect::<Result<Vec<_>, _>>()?,
         )),
         Response::Events(value) => Ok(WhatsAppProviderQueryResponse::Events(
-            value.event.into_iter().map(parse_event).collect::<Result<Vec<_>, _>>()?,
+            value
+                .event
+                .into_iter()
+                .map(parse_event)
+                .collect::<Result<Vec<_>, _>>()?,
         )),
-        Response::RuntimeStatus(value) => Ok(WhatsAppProviderQueryResponse::RuntimeStatus(parse_runtime_status(value)?)),
+        Response::RuntimeStatus(value) => Ok(WhatsAppProviderQueryResponse::RuntimeStatus(
+            parse_runtime_status(value)?,
+        )),
     }
 }
 
@@ -433,21 +521,165 @@ fn realtime_to_wire(value: &WhatsAppRealtimeFrame) -> wire::WhatsAppRealtimeFram
 fn event_to_wire(value: &WhatsAppProviderEvent) -> wire::WhatsAppProviderEventV1 {
     use wire::whats_app_provider_event_v1::Event;
     let event = match value {
-        WhatsAppProviderEvent::RuntimeStateChanged { account_id, state, observed_at_unix_seconds } => Event::RuntimeStateChanged(wire::RuntimeStateChangedEvent { account_id: account_id.clone(), state: format!("{state:?}").to_ascii_lowercase(), observed_at_unix_seconds: *observed_at_unix_seconds }),
-        WhatsAppProviderEvent::SessionStateChanged { account_id, linked, secret_ref, revision, observed_at_unix_seconds } => Event::SessionStateChanged(wire::SessionStateChangedEvent { account_id: account_id.clone(), linked: *linked, secret_ref: secret_ref.clone(), revision: *revision, observed_at_unix_seconds: *observed_at_unix_seconds }),
-        WhatsAppProviderEvent::CommandResultObserved { account_id, operation_id, provider_request_id, succeeded, observed_at_unix_seconds } => Event::CommandResultObserved(wire::CommandResultObservedEvent { account_id: account_id.clone(), operation_id: operation_id.clone(), provider_request_id: provider_request_id.clone(), succeeded: *succeeded, observed_at_unix_seconds: *observed_at_unix_seconds }),
-        WhatsAppProviderEvent::MessageObserved(value) => Event::MessageObserved(message_to_wire(value)),
-        WhatsAppProviderEvent::MessageEdited { account_id, provider_chat_id, provider_message_id, text, observed_at_unix_seconds } => Event::MessageEdited(wire::MessageEditedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), text: text.clone(), observed_at_unix_seconds: *observed_at_unix_seconds }),
-        WhatsAppProviderEvent::MessageDeleted { account_id, provider_chat_id, provider_message_id, observed_at_unix_seconds } => Event::MessageDeleted(wire::MessageDeletedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), observed_at_unix_seconds: *observed_at_unix_seconds }),
-        WhatsAppProviderEvent::ReceiptChanged { account_id, provider_chat_id, provider_message_id, delivery_state, observed_at_unix_seconds } => Event::ReceiptChanged(wire::ReceiptChangedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), delivery_state: delivery_state.clone(), observed_at_unix_seconds: *observed_at_unix_seconds }),
-        WhatsAppProviderEvent::ReactionChanged { account_id, provider_chat_id, provider_message_id, actor_id, emoji, is_active, observed_at_unix_seconds } => Event::ReactionChanged(wire::ReactionChangedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), actor_id: actor_id.clone(), emoji: emoji.clone(), is_active: *is_active, observed_at_unix_seconds: *observed_at_unix_seconds }),
-        WhatsAppProviderEvent::DialogObserved(value) => Event::DialogObserved(dialog_to_wire(value)),
-        WhatsAppProviderEvent::ParticipantObserved(value) => Event::ParticipantObserved(participant_to_wire(value)),
-        WhatsAppProviderEvent::PresenceChanged { account_id, provider_chat_id, provider_identity_id, state, observed_at_unix_seconds } => Event::PresenceChanged(wire::PresenceChangedEvent { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_identity_id: provider_identity_id.clone(), state: state.clone(), observed_at_unix_seconds: *observed_at_unix_seconds }),
-        WhatsAppProviderEvent::CallObserved { account_id, provider_call_id, provider_chat_id, direction, state, observed_at_unix_seconds } => Event::CallObserved(wire::CallObservedEvent { account_id: account_id.clone(), provider_call_id: provider_call_id.clone(), provider_chat_id: provider_chat_id.clone(), direction: direction.clone(), state: state.clone(), observed_at_unix_seconds: *observed_at_unix_seconds }),
-        WhatsAppProviderEvent::StatusObserved { account_id, provider_status_id, sender_id, text, observed_at_unix_seconds } => Event::StatusObserved(wire::StatusObservedEvent { account_id: account_id.clone(), provider_status_id: provider_status_id.clone(), sender_id: sender_id.clone(), text: text.clone(), observed_at_unix_seconds: *observed_at_unix_seconds }),
-        WhatsAppProviderEvent::StatusViewObserved { account_id, provider_status_id, viewer_id, observed_at_unix_seconds } => Event::StatusViewObserved(wire::StatusViewObservedEvent { account_id: account_id.clone(), provider_status_id: provider_status_id.clone(), viewer_id: viewer_id.clone(), observed_at_unix_seconds: *observed_at_unix_seconds }),
-        WhatsAppProviderEvent::StatusDeleted { account_id, provider_status_id, observed_at_unix_seconds } => Event::StatusDeleted(wire::StatusDeletedEvent { account_id: account_id.clone(), provider_status_id: provider_status_id.clone(), observed_at_unix_seconds: *observed_at_unix_seconds }),
+        WhatsAppProviderEvent::RuntimeStateChanged {
+            account_id,
+            state,
+            observed_at_unix_seconds,
+        } => Event::RuntimeStateChanged(wire::RuntimeStateChangedEvent {
+            account_id: account_id.clone(),
+            state: format!("{state:?}").to_ascii_lowercase(),
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
+        WhatsAppProviderEvent::SessionStateChanged {
+            account_id,
+            linked,
+            secret_ref,
+            revision,
+            observed_at_unix_seconds,
+        } => Event::SessionStateChanged(wire::SessionStateChangedEvent {
+            account_id: account_id.clone(),
+            linked: *linked,
+            secret_ref: secret_ref.clone(),
+            revision: *revision,
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
+        WhatsAppProviderEvent::CommandResultObserved {
+            account_id,
+            operation_id,
+            provider_request_id,
+            succeeded,
+            observed_at_unix_seconds,
+        } => Event::CommandResultObserved(wire::CommandResultObservedEvent {
+            account_id: account_id.clone(),
+            operation_id: operation_id.clone(),
+            provider_request_id: provider_request_id.clone(),
+            succeeded: *succeeded,
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
+        WhatsAppProviderEvent::MessageObserved(value) => {
+            Event::MessageObserved(message_to_wire(value))
+        }
+        WhatsAppProviderEvent::MessageEdited {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            text,
+            observed_at_unix_seconds,
+        } => Event::MessageEdited(wire::MessageEditedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            text: text.clone(),
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
+        WhatsAppProviderEvent::MessageDeleted {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            observed_at_unix_seconds,
+        } => Event::MessageDeleted(wire::MessageDeletedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
+        WhatsAppProviderEvent::ReceiptChanged {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            delivery_state,
+            observed_at_unix_seconds,
+        } => Event::ReceiptChanged(wire::ReceiptChangedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            delivery_state: delivery_state.clone(),
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
+        WhatsAppProviderEvent::ReactionChanged {
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            actor_id,
+            emoji,
+            is_active,
+            observed_at_unix_seconds,
+        } => Event::ReactionChanged(wire::ReactionChangedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            actor_id: actor_id.clone(),
+            emoji: emoji.clone(),
+            is_active: *is_active,
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
+        WhatsAppProviderEvent::DialogObserved(value) => {
+            Event::DialogObserved(dialog_to_wire(value))
+        }
+        WhatsAppProviderEvent::ParticipantObserved(value) => {
+            Event::ParticipantObserved(participant_to_wire(value))
+        }
+        WhatsAppProviderEvent::PresenceChanged {
+            account_id,
+            provider_chat_id,
+            provider_identity_id,
+            state,
+            observed_at_unix_seconds,
+        } => Event::PresenceChanged(wire::PresenceChangedEvent {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_identity_id: provider_identity_id.clone(),
+            state: state.clone(),
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
+        WhatsAppProviderEvent::CallObserved {
+            account_id,
+            provider_call_id,
+            provider_chat_id,
+            direction,
+            state,
+            observed_at_unix_seconds,
+        } => Event::CallObserved(wire::CallObservedEvent {
+            account_id: account_id.clone(),
+            provider_call_id: provider_call_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            direction: direction.clone(),
+            state: state.clone(),
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
+        WhatsAppProviderEvent::StatusObserved {
+            account_id,
+            provider_status_id,
+            sender_id,
+            text,
+            observed_at_unix_seconds,
+        } => Event::StatusObserved(wire::StatusObservedEvent {
+            account_id: account_id.clone(),
+            provider_status_id: provider_status_id.clone(),
+            sender_id: sender_id.clone(),
+            text: text.clone(),
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
+        WhatsAppProviderEvent::StatusViewObserved {
+            account_id,
+            provider_status_id,
+            viewer_id,
+            observed_at_unix_seconds,
+        } => Event::StatusViewObserved(wire::StatusViewObservedEvent {
+            account_id: account_id.clone(),
+            provider_status_id: provider_status_id.clone(),
+            viewer_id: viewer_id.clone(),
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
+        WhatsAppProviderEvent::StatusDeleted {
+            account_id,
+            provider_status_id,
+            observed_at_unix_seconds,
+        } => Event::StatusDeleted(wire::StatusDeletedEvent {
+            account_id: account_id.clone(),
+            provider_status_id: provider_status_id.clone(),
+            observed_at_unix_seconds: *observed_at_unix_seconds,
+        }),
         WhatsAppProviderEvent::MediaObserved(value) => Event::MediaObserved(media_to_wire(value)),
     };
     wire::WhatsAppProviderEventV1 { event: Some(event) }
@@ -520,31 +752,121 @@ fn parse_runtime_state(value: &str) -> Result<WhatsAppRuntimeState, ClientWireEr
     }
 }
 
-fn parse_event(value: wire::WhatsAppProviderEventV1) -> Result<WhatsAppProviderEvent, ClientWireError> {
+fn parse_event(
+    value: wire::WhatsAppProviderEventV1,
+) -> Result<WhatsAppProviderEvent, ClientWireError> {
     use wire::whats_app_provider_event_v1::Event;
     match value.event.ok_or(ClientWireError::MissingVariant)? {
-        Event::RuntimeStateChanged(value) => Ok(WhatsAppProviderEvent::RuntimeStateChanged { account_id: value.account_id, state: parse_runtime_state(&value.state)?, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::SessionStateChanged(value) => Ok(WhatsAppProviderEvent::SessionStateChanged { account_id: value.account_id, linked: value.linked, secret_ref: value.secret_ref, revision: value.revision, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::CommandResultObserved(value) => Ok(WhatsAppProviderEvent::CommandResultObserved { account_id: value.account_id, operation_id: value.operation_id, provider_request_id: value.provider_request_id, succeeded: value.succeeded, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::MessageObserved(value) => Ok(WhatsAppProviderEvent::MessageObserved(parse_message(value))),
-        Event::MessageEdited(value) => Ok(WhatsAppProviderEvent::MessageEdited { account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, text: value.text, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::MessageDeleted(value) => Ok(WhatsAppProviderEvent::MessageDeleted { account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::ReceiptChanged(value) => Ok(WhatsAppProviderEvent::ReceiptChanged { account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, delivery_state: value.delivery_state, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::ReactionChanged(value) => Ok(WhatsAppProviderEvent::ReactionChanged { account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, actor_id: value.actor_id, emoji: value.emoji, is_active: value.is_active, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::DialogObserved(value) => Ok(WhatsAppProviderEvent::DialogObserved(parse_dialog(value))),
-        Event::ParticipantObserved(value) => Ok(WhatsAppProviderEvent::ParticipantObserved(parse_participant(value))),
-        Event::PresenceChanged(value) => Ok(WhatsAppProviderEvent::PresenceChanged { account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_identity_id: value.provider_identity_id, state: value.state, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::CallObserved(value) => Ok(WhatsAppProviderEvent::CallObserved { account_id: value.account_id, provider_call_id: value.provider_call_id, provider_chat_id: value.provider_chat_id, direction: value.direction, state: value.state, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::StatusObserved(value) => Ok(WhatsAppProviderEvent::StatusObserved { account_id: value.account_id, provider_status_id: value.provider_status_id, sender_id: value.sender_id, text: value.text, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::StatusViewObserved(value) => Ok(WhatsAppProviderEvent::StatusViewObserved { account_id: value.account_id, provider_status_id: value.provider_status_id, viewer_id: value.viewer_id, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::StatusDeleted(value) => Ok(WhatsAppProviderEvent::StatusDeleted { account_id: value.account_id, provider_status_id: value.provider_status_id, observed_at_unix_seconds: value.observed_at_unix_seconds }),
-        Event::MediaObserved(value) => Ok(WhatsAppProviderEvent::MediaObserved(WhatsAppMedia { account_id: value.account_id, provider_chat_id: value.provider_chat_id, provider_message_id: value.provider_message_id, provider_media_id: value.provider_media_id, media_kind: value.media_kind, filename: value.filename, content_type: value.content_type, declared_size: value.declared_size, observed_at_unix_seconds: value.observed_at_unix_seconds })),
+        Event::RuntimeStateChanged(value) => Ok(WhatsAppProviderEvent::RuntimeStateChanged {
+            account_id: value.account_id,
+            state: parse_runtime_state(&value.state)?,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::SessionStateChanged(value) => Ok(WhatsAppProviderEvent::SessionStateChanged {
+            account_id: value.account_id,
+            linked: value.linked,
+            secret_ref: value.secret_ref,
+            revision: value.revision,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::CommandResultObserved(value) => Ok(WhatsAppProviderEvent::CommandResultObserved {
+            account_id: value.account_id,
+            operation_id: value.operation_id,
+            provider_request_id: value.provider_request_id,
+            succeeded: value.succeeded,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::MessageObserved(value) => {
+            Ok(WhatsAppProviderEvent::MessageObserved(parse_message(value)))
+        }
+        Event::MessageEdited(value) => Ok(WhatsAppProviderEvent::MessageEdited {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            text: value.text,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::MessageDeleted(value) => Ok(WhatsAppProviderEvent::MessageDeleted {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::ReceiptChanged(value) => Ok(WhatsAppProviderEvent::ReceiptChanged {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            delivery_state: value.delivery_state,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::ReactionChanged(value) => Ok(WhatsAppProviderEvent::ReactionChanged {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            actor_id: value.actor_id,
+            emoji: value.emoji,
+            is_active: value.is_active,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::DialogObserved(value) => {
+            Ok(WhatsAppProviderEvent::DialogObserved(parse_dialog(value)))
+        }
+        Event::ParticipantObserved(value) => Ok(WhatsAppProviderEvent::ParticipantObserved(
+            parse_participant(value),
+        )),
+        Event::PresenceChanged(value) => Ok(WhatsAppProviderEvent::PresenceChanged {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_identity_id: value.provider_identity_id,
+            state: value.state,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::CallObserved(value) => Ok(WhatsAppProviderEvent::CallObserved {
+            account_id: value.account_id,
+            provider_call_id: value.provider_call_id,
+            provider_chat_id: value.provider_chat_id,
+            direction: value.direction,
+            state: value.state,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::StatusObserved(value) => Ok(WhatsAppProviderEvent::StatusObserved {
+            account_id: value.account_id,
+            provider_status_id: value.provider_status_id,
+            sender_id: value.sender_id,
+            text: value.text,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::StatusViewObserved(value) => Ok(WhatsAppProviderEvent::StatusViewObserved {
+            account_id: value.account_id,
+            provider_status_id: value.provider_status_id,
+            viewer_id: value.viewer_id,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::StatusDeleted(value) => Ok(WhatsAppProviderEvent::StatusDeleted {
+            account_id: value.account_id,
+            provider_status_id: value.provider_status_id,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        }),
+        Event::MediaObserved(value) => Ok(WhatsAppProviderEvent::MediaObserved(WhatsAppMedia {
+            account_id: value.account_id,
+            provider_chat_id: value.provider_chat_id,
+            provider_message_id: value.provider_message_id,
+            provider_media_id: value.provider_media_id,
+            media_kind: value.media_kind,
+            filename: value.filename,
+            content_type: value.content_type,
+            declared_size: value.declared_size,
+            observed_at_unix_seconds: value.observed_at_unix_seconds,
+        })),
     }
 }
 
-fn parse_realtime(value: wire::WhatsAppRealtimeFrame) -> Result<WhatsAppRealtimeFrame, ClientWireError> {
+fn parse_realtime(
+    value: wire::WhatsAppRealtimeFrame,
+) -> Result<WhatsAppRealtimeFrame, ClientWireError> {
     Ok(WhatsAppRealtimeFrame {
-        account_id: value.account_id, sequence: value.sequence,
+        account_id: value.account_id,
+        sequence: value.sequence,
         event: parse_event(value.event.ok_or(ClientWireError::MissingVariant)?)?,
     })
 }
@@ -552,30 +874,196 @@ fn parse_realtime(value: wire::WhatsAppRealtimeFrame) -> Result<WhatsAppRealtime
 fn command_message(command: &WhatsAppProviderCommand) -> wire::WhatsAppProviderCommandV1 {
     use wire::whats_app_provider_command_v1::Command;
     let command = match command {
-        WhatsAppProviderCommand::SendText { operation_id, account_id, provider_chat_id, text } => Command::SendText(wire::SendTextCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), text: text.clone() }),
-        WhatsAppProviderCommand::Reply { operation_id, account_id, provider_chat_id, reply_to_provider_message_id, text } => Command::Reply(wire::ReplyCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), reply_to_provider_message_id: reply_to_provider_message_id.clone(), text: text.clone() }),
-        WhatsAppProviderCommand::Forward { operation_id, account_id, provider_chat_id, source_provider_chat_id, source_provider_message_id } => Command::Forward(wire::ForwardCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), source_provider_chat_id: source_provider_chat_id.clone(), source_provider_message_id: source_provider_message_id.clone() }),
-        WhatsAppProviderCommand::Edit { operation_id, account_id, provider_chat_id, provider_message_id, text } => Command::Edit(wire::EditCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), text: text.clone() }),
-        WhatsAppProviderCommand::Delete { operation_id, account_id, provider_chat_id, provider_message_id } => Command::Delete(wire::DeleteCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone() }),
-        WhatsAppProviderCommand::React { operation_id, account_id, provider_chat_id, provider_message_id, emoji } => Command::React(wire::ReactCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), emoji: emoji.clone() }),
-        WhatsAppProviderCommand::Unreact { operation_id, account_id, provider_chat_id, provider_message_id, emoji } => Command::Unreact(wire::UnreactCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), emoji: emoji.clone() }),
-        WhatsAppProviderCommand::SendMedia { operation_id, account_id, provider_chat_id, blob_ref, media_kind, caption, filename } => Command::SendMedia(wire::SendMediaCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), blob_ref: blob_ref.clone(), media_kind: media_kind.clone(), caption: caption.clone(), filename: filename.clone() }),
-        WhatsAppProviderCommand::SendVoiceNote { operation_id, account_id, provider_chat_id, attachment_id, blob_ref, content_type, declared_size, sha256, scan_status, filename } => Command::SendVoiceNote(wire::SendVoiceNoteCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), attachment_id: attachment_id.clone(), blob_ref: blob_ref.clone(), content_type: content_type.clone(), declared_size: *declared_size, sha256: sha256.clone(), scan_status: scan_status.clone(), filename: filename.clone() }),
-        WhatsAppProviderCommand::DownloadMedia { operation_id, account_id, provider_chat_id, provider_message_id, provider_media_id } => Command::DownloadMedia(wire::DownloadMediaCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), provider_message_id: provider_message_id.clone(), provider_media_id: provider_media_id.clone() }),
-        WhatsAppProviderCommand::PublishStatus { operation_id, account_id, text } => Command::PublishStatus(wire::PublishStatusCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), text: text.clone() }),
-        WhatsAppProviderCommand::JoinConversation { operation_id, account_id, provider_chat_id, invite_link } => Command::JoinConversation(wire::JoinConversationCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), invite_link: invite_link.clone() }),
-        WhatsAppProviderCommand::LeaveConversation { operation_id, account_id, provider_chat_id } => Command::LeaveConversation(wire::LeaveConversationCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone() }),
-        WhatsAppProviderCommand::Conversation { operation_id, account_id, provider_chat_id, action } => Command::Conversation(wire::ConversationCommand { operation_id: operation_id.clone(), account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), action: conversation_action_to_wire(*action) }),
+        WhatsAppProviderCommand::SendText {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            text,
+        } => Command::SendText(wire::SendTextCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            text: text.clone(),
+        }),
+        WhatsAppProviderCommand::Reply {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            reply_to_provider_message_id,
+            text,
+        } => Command::Reply(wire::ReplyCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            reply_to_provider_message_id: reply_to_provider_message_id.clone(),
+            text: text.clone(),
+        }),
+        WhatsAppProviderCommand::Forward {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            source_provider_chat_id,
+            source_provider_message_id,
+        } => Command::Forward(wire::ForwardCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            source_provider_chat_id: source_provider_chat_id.clone(),
+            source_provider_message_id: source_provider_message_id.clone(),
+        }),
+        WhatsAppProviderCommand::Edit {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            text,
+        } => Command::Edit(wire::EditCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            text: text.clone(),
+        }),
+        WhatsAppProviderCommand::Delete {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+        } => Command::Delete(wire::DeleteCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+        }),
+        WhatsAppProviderCommand::React {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            emoji,
+        } => Command::React(wire::ReactCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            emoji: emoji.clone(),
+        }),
+        WhatsAppProviderCommand::Unreact {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            emoji,
+        } => Command::Unreact(wire::UnreactCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            emoji: emoji.clone(),
+        }),
+        WhatsAppProviderCommand::SendMedia {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            blob_ref,
+            media_kind,
+            caption,
+            filename,
+        } => Command::SendMedia(wire::SendMediaCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            blob_ref: blob_ref.clone(),
+            media_kind: media_kind.clone(),
+            caption: caption.clone(),
+            filename: filename.clone(),
+        }),
+        WhatsAppProviderCommand::SendVoiceNote {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            attachment_id,
+            blob_ref,
+            content_type,
+            declared_size,
+            sha256,
+            scan_status,
+            filename,
+        } => Command::SendVoiceNote(wire::SendVoiceNoteCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            attachment_id: attachment_id.clone(),
+            blob_ref: blob_ref.clone(),
+            content_type: content_type.clone(),
+            declared_size: *declared_size,
+            sha256: sha256.clone(),
+            scan_status: scan_status.clone(),
+            filename: filename.clone(),
+        }),
+        WhatsAppProviderCommand::DownloadMedia {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            provider_message_id,
+            provider_media_id,
+        } => Command::DownloadMedia(wire::DownloadMediaCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            provider_message_id: provider_message_id.clone(),
+            provider_media_id: provider_media_id.clone(),
+        }),
+        WhatsAppProviderCommand::PublishStatus {
+            operation_id,
+            account_id,
+            text,
+        } => Command::PublishStatus(wire::PublishStatusCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            text: text.clone(),
+        }),
+        WhatsAppProviderCommand::JoinConversation {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            invite_link,
+        } => Command::JoinConversation(wire::JoinConversationCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            invite_link: invite_link.clone(),
+        }),
+        WhatsAppProviderCommand::LeaveConversation {
+            operation_id,
+            account_id,
+            provider_chat_id,
+        } => Command::LeaveConversation(wire::LeaveConversationCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+        }),
+        WhatsAppProviderCommand::Conversation {
+            operation_id,
+            account_id,
+            provider_chat_id,
+            action,
+        } => Command::Conversation(wire::ConversationCommand {
+            operation_id: operation_id.clone(),
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            action: conversation_action_to_wire(*action),
+        }),
     };
-    wire::WhatsAppProviderCommandV1 { command: Some(command) }
+    wire::WhatsAppProviderCommandV1 {
+        command: Some(command),
+    }
 }
 
 fn conversation_action_from_wire(
     value: i32,
 ) -> Result<WhatsAppConversationCommandKind, ClientWireError> {
-    match wire::DialogCommandAction::try_from(value)
-        .map_err(|_| ClientWireError::InvalidPayload)?
-    {
+    match wire::DialogCommandAction::try_from(value).map_err(|_| ClientWireError::InvalidPayload)? {
         wire::DialogCommandAction::MarkRead => Ok(WhatsAppConversationCommandKind::MarkRead),
         wire::DialogCommandAction::MarkUnread => Ok(WhatsAppConversationCommandKind::MarkUnread),
         wire::DialogCommandAction::Archive => Ok(WhatsAppConversationCommandKind::Archive),
@@ -604,16 +1092,86 @@ fn conversation_action_to_wire(value: WhatsAppConversationCommandKind) -> i32 {
 fn query_message(query: &WhatsAppProviderQuery) -> wire::WhatsAppProviderQueryV1 {
     use wire::whats_app_provider_query_v1::Query;
     let query = match query {
-        WhatsAppProviderQuery::Account { account_id } => Query::Account(wire::AccountQuery { account_id: account_id.clone() }),
-        WhatsAppProviderQuery::RuntimeStatus { account_id } => Query::RuntimeStatus(wire::RuntimeStatusQuery { account_id: account_id.clone() }),
-        WhatsAppProviderQuery::CachedMessages { account_id, provider_chat_id, limit } => Query::CachedMessages(wire::CachedMessagesQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), limit: *limit }),
-        WhatsAppProviderQuery::SearchMessages { account_id, provider_chat_id, query, limit } => Query::SearchMessages(wire::SearchMessagesQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), query: query.clone(), limit: *limit }),
-        WhatsAppProviderQuery::Dialogs { account_id, limit } => Query::Dialogs(wire::DialogsQuery { account_id: account_id.clone(), limit: *limit }),
-        WhatsAppProviderQuery::Participants { account_id, provider_chat_id, limit } => Query::Participants(wire::ParticipantsQuery { account_id: account_id.clone(), provider_chat_id: provider_chat_id.clone(), limit: *limit }),
-        WhatsAppProviderQuery::Replay { account_id, after_sequence, limit } => Query::Replay(wire::ReplayQuery { account_id: account_id.clone(), after_sequence: *after_sequence, limit: *limit }),
-        WhatsAppProviderQuery::PendingCommands { account_id, limit } => Query::PendingCommands(wire::PendingCommandsQuery { account_id: account_id.clone(), limit: *limit }),
-        WhatsAppProviderQuery::Events { account_id, kind, provider_chat_id, limit } => Query::Events(wire::EventsQuery { account_id: account_id.clone(), kind: event_kind_to_wire(*kind), provider_chat_id: provider_chat_id.clone(), limit: *limit }),
-        WhatsAppProviderQuery::ClaimPendingCommands { account_id, host_claim_id, lease_seconds, limit } => Query::ClaimPendingCommands(wire::ClaimPendingCommandsQuery { account_id: account_id.clone(), host_claim_id: host_claim_id.clone(), lease_seconds: *lease_seconds, limit: *limit }),
+        WhatsAppProviderQuery::Account { account_id } => Query::Account(wire::AccountQuery {
+            account_id: account_id.clone(),
+        }),
+        WhatsAppProviderQuery::RuntimeStatus { account_id } => {
+            Query::RuntimeStatus(wire::RuntimeStatusQuery {
+                account_id: account_id.clone(),
+            })
+        }
+        WhatsAppProviderQuery::CachedMessages {
+            account_id,
+            provider_chat_id,
+            limit,
+        } => Query::CachedMessages(wire::CachedMessagesQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            limit: *limit,
+        }),
+        WhatsAppProviderQuery::SearchMessages {
+            account_id,
+            provider_chat_id,
+            query,
+            limit,
+        } => Query::SearchMessages(wire::SearchMessagesQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            query: query.clone(),
+            limit: *limit,
+        }),
+        WhatsAppProviderQuery::Dialogs { account_id, limit } => {
+            Query::Dialogs(wire::DialogsQuery {
+                account_id: account_id.clone(),
+                limit: *limit,
+            })
+        }
+        WhatsAppProviderQuery::Participants {
+            account_id,
+            provider_chat_id,
+            limit,
+        } => Query::Participants(wire::ParticipantsQuery {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.clone(),
+            limit: *limit,
+        }),
+        WhatsAppProviderQuery::Replay {
+            account_id,
+            after_sequence,
+            limit,
+        } => Query::Replay(wire::ReplayQuery {
+            account_id: account_id.clone(),
+            after_sequence: *after_sequence,
+            limit: *limit,
+        }),
+        WhatsAppProviderQuery::PendingCommands { account_id, limit } => {
+            Query::PendingCommands(wire::PendingCommandsQuery {
+                account_id: account_id.clone(),
+                limit: *limit,
+            })
+        }
+        WhatsAppProviderQuery::Events {
+            account_id,
+            kind,
+            provider_chat_id,
+            limit,
+        } => Query::Events(wire::EventsQuery {
+            account_id: account_id.clone(),
+            kind: event_kind_to_wire(*kind),
+            provider_chat_id: provider_chat_id.clone(),
+            limit: *limit,
+        }),
+        WhatsAppProviderQuery::ClaimPendingCommands {
+            account_id,
+            host_claim_id,
+            lease_seconds,
+            limit,
+        } => Query::ClaimPendingCommands(wire::ClaimPendingCommandsQuery {
+            account_id: account_id.clone(),
+            host_claim_id: host_claim_id.clone(),
+            lease_seconds: *lease_seconds,
+            limit: *limit,
+        }),
     };
     wire::WhatsAppProviderQueryV1 { query: Some(query) }
 }

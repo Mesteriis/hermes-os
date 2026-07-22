@@ -2,15 +2,16 @@
 
 use std::os::unix::net::UnixStream;
 
-use hermes_runtime_protocol::v1::{VaultCiphertextResponseV1, VaultCiphertextRouteDirectionV1,
-    VaultCiphertextRouteV1};
+use hermes_runtime_protocol::v1::{
+    VaultCiphertextResponseV1, VaultCiphertextRouteDirectionV1, VaultCiphertextRouteV1,
+};
 use hermes_storage_protocol::StorageBindingV1;
 use hermes_storage_vault::{
     StorageCredentialLeaseErrorV1, StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1,
     StorageVaultRouteFailureV1, StorageVaultRoutePortV1,
 };
 use hermes_vault_protocol::{
-    LeaseAudienceV1, CredentialLeaseV1, SecretClassV1, VaultCiphertextFrameV1,
+    CredentialLeaseV1, LeaseAudienceV1, SecretClassV1, VaultCiphertextFrameV1,
     VaultResponseRecipientV1, VaultTransportBindingV1, VaultTransportCommandV1,
     VaultTransportDirectionV1, VaultTransportPublicKey, seal,
 };
@@ -53,7 +54,7 @@ pub fn resolve_credential_lease(
         lease_id: lease.lease_id().clone(),
         secret_class: SecretClassV1::PlatformCredential,
     };
-    let request_id = random_request_id().ok_or(TelegramCredentialRouteError::Rejected)?;
+    let request_id = random_request_id().map_err(|_| TelegramCredentialRouteError::Rejected)?;
     let recipient = VaultResponseRecipientV1::generate();
     let request_binding = transport_binding(
         &audience,
@@ -96,8 +97,8 @@ pub fn resolve_credential_lease(
     };
     let response = route_vault_ciphertext(channel, route.clone())
         .map_err(|_| TelegramCredentialRouteError::Unavailable)?;
-    let response_frame = validated_response(&route, response)
-        .ok_or(TelegramCredentialRouteError::Rejected)?;
+    let response_frame =
+        validated_response(&route, response).ok_or(TelegramCredentialRouteError::Rejected)?;
     recipient
         .open(&response_binding, &response_frame)
         .map_err(|_| TelegramCredentialRouteError::Rejected)
@@ -154,6 +155,7 @@ struct InheritedTelegramVaultRoute {
 }
 
 impl StorageVaultRoutePortV1 for InheritedTelegramVaultRoute {
+    #[allow(clippy::manual_async_fn)]
     fn route_vault_ciphertext(
         &mut self,
         route: VaultCiphertextRouteV1,
@@ -172,10 +174,8 @@ pub async fn resolve_storage_credential(
     binding: &StorageBindingV1,
     context: StorageVaultRouteContextV1,
 ) -> Result<Zeroizing<Vec<u8>>, StorageCredentialLeaseErrorV1> {
-    let mut leases = StorageVaultLeaseAdapterV1::new(
-        InheritedTelegramVaultRoute { channel },
-        context,
-    );
+    let mut leases =
+        StorageVaultLeaseAdapterV1::new(InheritedTelegramVaultRoute { channel }, context);
     let lease_id = leases.issue_runtime_credential(binding).await?;
     leases.resolve_runtime_credential(binding, lease_id).await
 }

@@ -256,11 +256,12 @@ export function validateDependencyEdges(policy, packages, descriptors) {
         && source.role !== 'test'
         && targetIsStorageOwner
         && dependency.name !== policy.storage.protocolPackage
+        && target.surface !== 'contract'
         && !isSharedStorageVaultRouteConsumer) {
         violations.push(violation(
           'storage_private_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
-          'production packages outside Storage may depend only on the public Storage protocol',
+          'production packages outside Storage may depend only on public Storage contracts',
         ));
         continue;
       }

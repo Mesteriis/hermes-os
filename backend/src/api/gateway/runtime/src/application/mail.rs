@@ -2002,7 +2002,9 @@ mod tests {
         });
         let request = with_body(
             Method::PUT,
-            &format!("http://localhost/api/v1/integrations/mail/accounts/{account_id}/sync-settings"),
+            &format!(
+                "http://localhost/api/v1/integrations/mail/accounts/{account_id}/sync-settings"
+            ),
             &payload,
         );
 
@@ -2026,7 +2028,9 @@ mod tests {
         });
         let request = with_body(
             Method::PUT,
-            &format!("http://localhost/api/v1/integrations/mail/accounts/{account_id}/sync-settings"),
+            &format!(
+                "http://localhost/api/v1/integrations/mail/accounts/{account_id}/sync-settings"
+            ),
             &payload,
         );
 

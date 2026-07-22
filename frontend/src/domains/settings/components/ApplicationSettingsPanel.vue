@@ -35,7 +35,7 @@ const {
       </div>
     </header>
 
-    <div v-if="isLoading.value" class="settings-empty-state">
+    <div v-if="isLoading" class="settings-empty-state">
       <Icon icon="tabler:loader-2" />
       <strong>{{ t('Loading settings') }}</strong>
     </div>
@@ -107,7 +107,7 @@ const {
           <button
             type="button"
             class="secondary-button"
-            :disabled="!setting.is_editable || !settingHasChanged(setting) || savingSettingKey.value === setting.setting_key"
+            :disabled="!setting.is_editable || !settingHasChanged(setting) || savingSettingKey === setting.setting_key"
             @click="handleSaveSetting(setting)"
           >
             <Icon icon="tabler:device-floppy" />

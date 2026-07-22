@@ -6,9 +6,8 @@ use serde_json::Value;
 
 use crate::{
     TdJsonClient, TdlibAuthorizationParameters, TdlibAuthorizationUpdate, TdlibError,
-    check_authentication_password, check_database_encryption_key_request,
-    close_session_request, parse_authorization_update, request_qr_code_authentication,
-    set_tdlib_parameters_request,
+    check_authentication_password, check_database_encryption_key_request, close_session_request,
+    parse_authorization_update, request_qr_code_authentication, set_tdlib_parameters_request,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -64,14 +63,20 @@ impl TdlibAuthorizationDriver {
                 self.initialize()?;
             }
             TdlibAuthorizationUpdate::WaitingEncryptionKey if !self.encryption_key_checked => {
-                self.client.send_json(&check_database_encryption_key_request(
-                    self.parameters.session_encryption_key.as_deref(),
-                ))?;
+                self.client
+                    .send_json(&check_database_encryption_key_request(
+                        self.parameters
+                            .session_encryption_key
+                            .as_deref()
+                            .map(|value| value.as_slice()),
+                    ))?;
                 self.encryption_key_checked = true;
             }
             TdlibAuthorizationUpdate::Other(state)
-                if matches!(state.as_str(), "authorizationStateWaitPhoneNumber" | "authorizationStateWaitCode")
-                    && !self.qr_requested =>
+                if matches!(
+                    state.as_str(),
+                    "authorizationStateWaitPhoneNumber" | "authorizationStateWaitCode"
+                ) && !self.qr_requested =>
             {
                 self.client.send_json(&request_qr_code_authentication())?;
                 self.qr_requested = true;

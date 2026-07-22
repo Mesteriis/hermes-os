@@ -40,8 +40,7 @@ pub struct ManagedChildRunInput<'a> {
     pub relay_requests: &'a Receiver<managed_runtime_control::ManagedRuntimeRelayRequest>,
     pub vault_route_handler: Option<&'a dyn ManagedRuntimeVaultRouteHandler>,
     pub event_credential_handler: Option<&'a dyn ManagedRuntimeEventCredentialHandler>,
-    pub provider_credential_handler:
-        Option<&'a dyn ManagedRuntimeProviderCredentialHandler>,
+    pub provider_credential_handler: Option<&'a dyn ManagedRuntimeProviderCredentialHandler>,
     pub ready_sender: &'a SyncSender<Result<(), String>>,
 }
 

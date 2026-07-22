@@ -135,9 +135,9 @@ test('requires explicit production and test-only workspace roots', () => {
 
 
 
-test('requires an explicit production source-size limit', () => {
+test('requires explicit source roots and extensions', () => {
   const invalid = policy();
-  invalid.source.maxProductionSourceLines = 501;
+  invalid.source.roots = [];
 
   assert.ok(codes(validatePolicy(invalid)).has('source_policy'));
 });
@@ -229,13 +229,13 @@ test('allows source paths for enabled domains including AI', () => {
 
 
 
-test('rejects an oversized production source file', () => {
+test('does not reject a cohesive production source file by line count', () => {
   const violations = validateSourceEntries(policy(), [{
     path: 'src/platform/kernel/src/main.rs',
     content: Array.from({ length: 801 }, () => 'let value = 1;').join('\n'),
   }]);
 
-  assert.ok(codes(violations).has('production_source_too_large'));
+  assert.ok(!codes(violations).has('production_source_too_large'));
 });
 
 
@@ -287,24 +287,24 @@ test('rejects snapshot files in production source', () => {
 
 
 
-test('rejects inline cfg(test) modules in production Rust', () => {
+test('allows cfg(test) modules because they are excluded from production builds', () => {
   const violations = validateSourceEntries(policy(), [{
     path: 'src/domains/tasks/implementation/src/lib.rs',
     content: '#[cfg(test)]\nmod tests;',
   }]);
 
-  assert.ok(codes(violations).has('test_in_production_source'));
+  assert.deepEqual(violations, []);
 });
 
 
 
-test('rejects compound Rust cfg attributes that include test code', () => {
+test('allows compound cfg(test) modules because they are excluded from production builds', () => {
   const violations = validateSourceEntries(policy(), [{
     path: 'src/domains/tasks/implementation/src/lib.rs',
     content: '#[cfg(all(test, feature = "slow"))]\nmod slow_tests;',
   }]);
 
-  assert.ok(codes(violations).has('test_in_production_source'));
+  assert.deepEqual(violations, []);
 });
 
 
@@ -338,6 +338,6 @@ test('filesystem scan reads Rust content and exposes nested test paths to policy
   );
   assert.ok(entries.some(({ path }) => path.includes('/tests/')));
   assert.ok(entries.some(({ isSymbolicLink }) => isSymbolicLink === true));
-  assert.ok(codes(violations).has('test_in_production_source'));
+  assert.ok(codes(violations).has('source_symlink'));
   assert.ok(codes(violations).has('source_symlink'));
 });

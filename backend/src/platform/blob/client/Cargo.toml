@@ -10,7 +10,7 @@ path = "src/lib.rs"
 [package.metadata.hermes]
 role = "platform"
 owner = "blob"
-surface = "implementation"
+surface = "contract"
 
 [dependencies]
 hermes-blob-client-contract = { path = "../client-contract" }

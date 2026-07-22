@@ -51,7 +51,7 @@ const STORAGE_FOUNDATION_PRODUCTION_PACKAGES = [
   ...TELEMETRY_FOUNDATION_PRODUCTION_PACKAGES,
   { name: 'hermes-storage-protocol', role: 'platform', owner: 'storage', surface: 'contract' },
   { name: 'hermes-storage-control', role: 'platform', owner: 'storage', surface: 'implementation' },
-  { name: 'hermes-storage-vault', role: 'platform', owner: 'storage', surface: 'implementation' },
+  { name: 'hermes-storage-vault', role: 'platform', owner: 'storage', surface: 'contract' },
   { name: 'hermes-storage-runtime', role: 'platform', owner: 'storage', surface: 'runtime' },
   { name: 'hermes-storage-postgres', role: 'platform', owner: 'storage', surface: 'persistence' },
   { name: 'hermes-storage-pgbouncer', role: 'platform', owner: 'storage', surface: 'implementation' },
@@ -132,10 +132,12 @@ const STORAGE_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
   'hermes-storage-protocol': [],
-  'hermes-storage-control': [{ name: 'hermes-storage-protocol', kind: 'normal' }],
+  'hermes-storage-control': [
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
   'hermes-storage-vault': [
     { name: 'hermes-runtime-protocol', kind: 'normal' },
-    { name: 'hermes-storage-control', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
     { name: 'hermes-vault-protocol', kind: 'normal' },
   ],
@@ -194,7 +196,7 @@ const BLOB_FOUNDATION_PRODUCTION_PACKAGES = [
 const BLOB_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES = [
   ...BLOB_FOUNDATION_PRODUCTION_PACKAGES,
   { name: 'hermes-blob-client-contract', role: 'platform', owner: 'blob', surface: 'contract' },
-  { name: 'hermes-blob-client', role: 'platform', owner: 'blob', surface: 'implementation' },
+  { name: 'hermes-blob-client', role: 'platform', owner: 'blob', surface: 'contract' },
   { name: 'hermes-blob-runtime', role: 'platform', owner: 'blob', surface: 'implementation' },
   { name: 'hermes-blob-service', role: 'platform', owner: 'blob', surface: 'runtime' },
 ];
@@ -375,6 +377,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-mail-imap': [
     { name: 'hermes-mail-core', kind: 'normal' },
+    { name: 'hermes-mail-api', kind: 'normal' },
   ],
   'hermes-mail-persistence': [
     { name: 'hermes-mail-core', kind: 'normal' },
@@ -385,9 +388,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-mail-imap', kind: 'normal' },
     { name: 'hermes-mail-persistence', kind: 'normal' },
   ],
-  'hermes-telegram-api': [
-    { name: 'serde', kind: 'normal' },
-  ],
+  'hermes-telegram-api': [],
   'hermes-telegram-core': [
     { name: 'hermes-telegram-api', kind: 'normal' },
     { name: 'hermes-communications-ingress', kind: 'normal' },
@@ -399,18 +400,19 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   'hermes-telegram-persistence': [
     { name: 'hermes-communications-ingress', kind: 'normal' },
     { name: 'hermes-telegram-api', kind: 'normal' },
-    { name: 'serde_json', kind: 'normal' },
-    { name: 'sqlx', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
   'hermes-telegram-runtime': [
     { name: 'hermes-blob-client-contract', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
     { name: 'hermes-telegram-api', kind: 'normal' },
     { name: 'hermes-telegram-core', kind: 'normal' },
     { name: 'hermes-telegram-persistence', kind: 'normal' },
     { name: 'hermes-telegram-tdlib', kind: 'normal' },
     { name: 'hermes-vault-protocol', kind: 'normal' },
-    { name: 'serde_json', kind: 'normal' },
+    { name: 'hermes-blob-client', kind: 'normal' },
   ],
   'hermes-whatsapp-api': [],
   'hermes-communications-ingress': [],
@@ -460,7 +462,7 @@ const RECOVERY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-kernel-control-store-sqlite': [
     {
-      name: 'rusqlite', kind: 'normal', source: 'crates_io', version: '=0.40.1', defaultFeatures: false, features: ['backup', 'bundled'],
+      name: 'rusqlite', kind: 'normal', source: 'crates_io', version: '=0.32.0', defaultFeatures: false, features: ['backup', 'bundled'],
     },
     {
       name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [],
@@ -521,7 +523,7 @@ const VAULT_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
     { name: 'hkdf', kind: 'normal', source: 'crates_io', version: '=0.13.0', defaultFeatures: true, features: [] },
     { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
-    { name: 'rusqlite', kind: 'normal', source: 'crates_io', version: '=0.40.1', defaultFeatures: false, features: ['backup', 'bundled-sqlcipher'] },
+    { name: 'rusqlite', kind: 'normal', source: 'crates_io', version: '=0.32.0', defaultFeatures: false, features: ['backup', 'bundled-sqlcipher'] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
@@ -575,7 +577,7 @@ const STORAGE_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
     { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
-    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.8.6', defaultFeatures: false, features: ['postgres', 'runtime-tokio-rustls'] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
   'hermes-storage-pgbouncer': [
@@ -664,7 +666,7 @@ const SCHEDULER_PERSISTENCE_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-scheduler-persistence': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
-    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.8.6', defaultFeatures: false, features: ['postgres', 'runtime-tokio-rustls'] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
   ],
 };
 
@@ -743,11 +745,19 @@ const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-mail-api': [],
   'hermes-mail-core': [],
-  'hermes-mail-imap': [],
+  'hermes-mail-imap': [
+    { name: 'async-imap', kind: 'normal', source: 'crates_io', version: '=0.11.2', defaultFeatures: true, features: [] },
+    { name: 'async-native-tls', kind: 'normal', source: 'crates_io', version: '=0.6.0', defaultFeatures: true, features: [] },
+    { name: 'async-std', kind: 'normal', source: 'crates_io', version: '=1.13.2', defaultFeatures: true, features: [] },
+    { name: 'futures-util', kind: 'normal', source: 'crates_io', version: '=0.3.32', defaultFeatures: true, features: [] },
+  ],
   'hermes-mail-persistence': [],
   'hermes-mail-runtime': [],
   'hermes-telegram-api': [
     { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive'] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
   ],
   'hermes-telegram-core': [],
   'hermes-telegram-tdlib': [
@@ -758,16 +768,22 @@ const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-telegram-persistence': [
     { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
-    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.8.6', defaultFeatures: false, features: ['json', 'postgres', 'runtime-tokio-rustls'] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['json', 'postgres', 'runtime-tokio', 'tls-rustls-ring'] },
   ],
   'hermes-telegram-runtime': [
     { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
     { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt', 'rt-multi-thread', 'time'] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
-  'hermes-whatsapp-api': [],
+  'hermes-whatsapp-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive'] },
+  ],
   'hermes-communications-ingress': [],
   'hermes-communications-api': [],
   'hermes-communications-domain': [],
@@ -1043,6 +1059,8 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-gateway-protocol',
       'hermes-storage-protocol',
       'hermes-scheduler-protocol',
+      'hermes-whatsapp-api',
+      'hermes-telegram-api',
     ].includes(packageName);
     return hasExactKeys(target, ['primaryKind', 'customBuildAllowed'])
       && target.primaryKind === (packageDescriptor?.surface === 'runtime' ? 'bin' : 'lib')

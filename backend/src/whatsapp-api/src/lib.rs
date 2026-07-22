@@ -2,9 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-pub mod host_bridge;
 pub mod capabilities;
 pub mod client_wire;
+pub mod host_bridge;
 
 pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/hermes.whatsapp.v1.rs"));
@@ -497,9 +497,13 @@ pub enum WhatsAppProviderEventKind {
 
 pub fn provider_event_kind(event: &WhatsAppProviderEvent) -> WhatsAppProviderEventKind {
     match event {
-        WhatsAppProviderEvent::RuntimeStateChanged { .. } => WhatsAppProviderEventKind::RuntimeState,
+        WhatsAppProviderEvent::RuntimeStateChanged { .. } => {
+            WhatsAppProviderEventKind::RuntimeState
+        }
         WhatsAppProviderEvent::SessionStateChanged { .. } => WhatsAppProviderEventKind::Session,
-        WhatsAppProviderEvent::CommandResultObserved { .. } => WhatsAppProviderEventKind::CommandResult,
+        WhatsAppProviderEvent::CommandResultObserved { .. } => {
+            WhatsAppProviderEventKind::CommandResult
+        }
         WhatsAppProviderEvent::MessageObserved(_) => WhatsAppProviderEventKind::Message,
         WhatsAppProviderEvent::MessageEdited { .. } => WhatsAppProviderEventKind::MessageEdited,
         WhatsAppProviderEvent::MessageDeleted { .. } => WhatsAppProviderEventKind::MessageDeleted,
@@ -519,15 +523,27 @@ pub fn provider_event_kind(event: &WhatsAppProviderEvent) -> WhatsAppProviderEve
 pub fn provider_event_chat_id(event: &WhatsAppProviderEvent) -> Option<&str> {
     match event {
         WhatsAppProviderEvent::MessageObserved(value) => Some(&value.provider_chat_id),
-        WhatsAppProviderEvent::MessageEdited { provider_chat_id, .. }
-        | WhatsAppProviderEvent::MessageDeleted { provider_chat_id, .. }
-        | WhatsAppProviderEvent::ReceiptChanged { provider_chat_id, .. }
-        | WhatsAppProviderEvent::ReactionChanged { provider_chat_id, .. }
-        | WhatsAppProviderEvent::PresenceChanged { provider_chat_id, .. }
-        | WhatsAppProviderEvent::CallObserved { provider_chat_id, .. }
-        | WhatsAppProviderEvent::MediaObserved(WhatsAppMedia { provider_chat_id, .. }) => {
-            Some(provider_chat_id)
+        WhatsAppProviderEvent::MessageEdited {
+            provider_chat_id, ..
         }
+        | WhatsAppProviderEvent::MessageDeleted {
+            provider_chat_id, ..
+        }
+        | WhatsAppProviderEvent::ReceiptChanged {
+            provider_chat_id, ..
+        }
+        | WhatsAppProviderEvent::ReactionChanged {
+            provider_chat_id, ..
+        }
+        | WhatsAppProviderEvent::PresenceChanged {
+            provider_chat_id, ..
+        }
+        | WhatsAppProviderEvent::CallObserved {
+            provider_chat_id, ..
+        }
+        | WhatsAppProviderEvent::MediaObserved(WhatsAppMedia {
+            provider_chat_id, ..
+        }) => Some(provider_chat_id),
         WhatsAppProviderEvent::DialogObserved(value) => Some(&value.provider_chat_id),
         WhatsAppProviderEvent::ParticipantObserved(value) => Some(&value.provider_chat_id),
         WhatsAppProviderEvent::RuntimeStateChanged { .. }
@@ -611,8 +627,13 @@ pub enum WhatsAppClientRequest {
         host_claim_id: String,
         reason: String,
     },
-    RetryCommand { operation_id: WhatsAppOperationId },
-    DeadLetterCommand { operation_id: WhatsAppOperationId, reason: String },
+    RetryCommand {
+        operation_id: WhatsAppOperationId,
+    },
+    DeadLetterCommand {
+        operation_id: WhatsAppOperationId,
+        reason: String,
+    },
     Command(WhatsAppProviderCommand),
     Query(WhatsAppProviderQuery),
 }
@@ -620,10 +641,19 @@ pub enum WhatsAppClientRequest {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum WhatsAppClientResponse {
     Account(WhatsAppAccount),
-    Accepted { operation_id: WhatsAppOperationId },
-    ObservationAccepted { provider_event_id: String },
-    HostCommandFailureRecorded { operation_id: WhatsAppOperationId },
-    CommandLifecycleUpdated { operation_id: WhatsAppOperationId, state: String },
+    Accepted {
+        operation_id: WhatsAppOperationId,
+    },
+    ObservationAccepted {
+        provider_event_id: String,
+    },
+    HostCommandFailureRecorded {
+        operation_id: WhatsAppOperationId,
+    },
+    CommandLifecycleUpdated {
+        operation_id: WhatsAppOperationId,
+        state: String,
+    },
     Query(WhatsAppProviderQueryResponse),
 }
 
@@ -631,35 +661,56 @@ pub fn validate_provider_query(query: &WhatsAppProviderQuery) -> Result<(), What
     let (account_id, limit) = match query {
         WhatsAppProviderQuery::Account { account_id }
         | WhatsAppProviderQuery::RuntimeStatus { account_id } => (account_id, 1),
-        WhatsAppProviderQuery::CachedMessages { account_id, limit, .. }
-        | WhatsAppProviderQuery::SearchMessages { account_id, limit, .. }
+        WhatsAppProviderQuery::CachedMessages {
+            account_id, limit, ..
+        }
+        | WhatsAppProviderQuery::SearchMessages {
+            account_id, limit, ..
+        }
         | WhatsAppProviderQuery::Dialogs { account_id, limit }
-        | WhatsAppProviderQuery::Participants { account_id, limit, .. }
-        | WhatsAppProviderQuery::Replay { account_id, limit, .. }
+        | WhatsAppProviderQuery::Participants {
+            account_id, limit, ..
+        }
+        | WhatsAppProviderQuery::Replay {
+            account_id, limit, ..
+        }
         | WhatsAppProviderQuery::PendingCommands { account_id, limit }
-        | WhatsAppProviderQuery::Events { account_id, limit, .. }
-        | WhatsAppProviderQuery::ClaimPendingCommands { account_id, limit, .. } => (account_id, *limit),
+        | WhatsAppProviderQuery::Events {
+            account_id, limit, ..
+        }
+        | WhatsAppProviderQuery::ClaimPendingCommands {
+            account_id, limit, ..
+        } => (account_id, *limit),
     };
     validate_id(account_id)?;
     if limit == 0 || limit > 500 {
         return Err(WhatsAppContractError::FieldTooLong);
     }
     match query {
-        WhatsAppProviderQuery::Account { .. }
-        | WhatsAppProviderQuery::RuntimeStatus { .. } => {}
-        WhatsAppProviderQuery::CachedMessages { provider_chat_id, .. } => {
+        WhatsAppProviderQuery::Account { .. } | WhatsAppProviderQuery::RuntimeStatus { .. } => {}
+        WhatsAppProviderQuery::CachedMessages {
+            provider_chat_id, ..
+        } => {
             if let Some(chat_id) = provider_chat_id {
                 validate_id(chat_id)?;
             }
         }
-        WhatsAppProviderQuery::SearchMessages { provider_chat_id, query, .. } => {
+        WhatsAppProviderQuery::SearchMessages {
+            provider_chat_id,
+            query,
+            ..
+        } => {
             if let Some(chat_id) = provider_chat_id {
                 validate_id(chat_id)?;
             }
             validate_text(query)?;
         }
-        WhatsAppProviderQuery::Participants { provider_chat_id, .. } => validate_id(provider_chat_id)?,
-        WhatsAppProviderQuery::Events { provider_chat_id, .. } => {
+        WhatsAppProviderQuery::Participants {
+            provider_chat_id, ..
+        } => validate_id(provider_chat_id)?,
+        WhatsAppProviderQuery::Events {
+            provider_chat_id, ..
+        } => {
             if let Some(chat_id) = provider_chat_id {
                 validate_id(chat_id)?;
             }
@@ -667,7 +718,11 @@ pub fn validate_provider_query(query: &WhatsAppProviderQuery) -> Result<(), What
         WhatsAppProviderQuery::Dialogs { .. }
         | WhatsAppProviderQuery::Replay { .. }
         | WhatsAppProviderQuery::PendingCommands { .. } => {}
-        WhatsAppProviderQuery::ClaimPendingCommands { host_claim_id, lease_seconds, .. } => {
+        WhatsAppProviderQuery::ClaimPendingCommands {
+            host_claim_id,
+            lease_seconds,
+            ..
+        } => {
             validate_id(host_claim_id)?;
             if *lease_seconds == 0 || *lease_seconds > 3600 {
                 return Err(WhatsAppContractError::FieldTooLong);
@@ -742,53 +797,120 @@ pub fn validate_provider_command(
     validate_id(provider_command_operation_id(command))?;
     validate_id(provider_command_account_id(command))?;
     match command {
-        WhatsAppProviderCommand::SendText { provider_chat_id, text, .. }
-        | WhatsAppProviderCommand::Reply { provider_chat_id, text, .. }
-        | WhatsAppProviderCommand::Edit { provider_chat_id, text, .. } => {
+        WhatsAppProviderCommand::SendText {
+            provider_chat_id,
+            text,
+            ..
+        }
+        | WhatsAppProviderCommand::Reply {
+            provider_chat_id,
+            text,
+            ..
+        }
+        | WhatsAppProviderCommand::Edit {
+            provider_chat_id,
+            text,
+            ..
+        } => {
             validate_id(provider_chat_id)?;
             validate_text(text)
         }
-        WhatsAppProviderCommand::Forward { provider_chat_id, source_provider_chat_id, source_provider_message_id, .. } => {
+        WhatsAppProviderCommand::Forward {
+            provider_chat_id,
+            source_provider_chat_id,
+            source_provider_message_id,
+            ..
+        } => {
             validate_id(provider_chat_id)?;
             validate_id(source_provider_chat_id)?;
             validate_id(source_provider_message_id)
         }
-        WhatsAppProviderCommand::Delete { provider_chat_id, provider_message_id, .. }
-        | WhatsAppProviderCommand::DownloadMedia { provider_chat_id, provider_message_id, .. } => {
+        WhatsAppProviderCommand::Delete {
+            provider_chat_id,
+            provider_message_id,
+            ..
+        }
+        | WhatsAppProviderCommand::DownloadMedia {
+            provider_chat_id,
+            provider_message_id,
+            ..
+        } => {
             validate_id(provider_chat_id)?;
             validate_id(provider_message_id)
         }
-        WhatsAppProviderCommand::React { provider_chat_id, provider_message_id, emoji, .. }
-        | WhatsAppProviderCommand::Unreact { provider_chat_id, provider_message_id, emoji, .. } => {
+        WhatsAppProviderCommand::React {
+            provider_chat_id,
+            provider_message_id,
+            emoji,
+            ..
+        }
+        | WhatsAppProviderCommand::Unreact {
+            provider_chat_id,
+            provider_message_id,
+            emoji,
+            ..
+        } => {
             validate_id(provider_chat_id)?;
             validate_id(provider_message_id)?;
             validate_text(emoji)
         }
-        WhatsAppProviderCommand::SendMedia { provider_chat_id, blob_ref, media_kind, caption, filename, .. } => {
+        WhatsAppProviderCommand::SendMedia {
+            provider_chat_id,
+            blob_ref,
+            media_kind,
+            caption,
+            filename,
+            ..
+        } => {
             validate_id(provider_chat_id)?;
             validate_id(blob_ref)?;
             validate_id(media_kind)?;
-            if let Some(caption) = caption { validate_text(caption)?; }
-            if let Some(filename) = filename { validate_id(filename)?; }
+            if let Some(caption) = caption {
+                validate_text(caption)?;
+            }
+            if let Some(filename) = filename {
+                validate_id(filename)?;
+            }
             Ok(())
         }
-        WhatsAppProviderCommand::SendVoiceNote { provider_chat_id, attachment_id, blob_ref, content_type, sha256, scan_status, filename, .. } => {
+        WhatsAppProviderCommand::SendVoiceNote {
+            provider_chat_id,
+            attachment_id,
+            blob_ref,
+            content_type,
+            sha256,
+            scan_status,
+            filename,
+            ..
+        } => {
             validate_id(provider_chat_id)?;
             validate_id(attachment_id)?;
             validate_id(blob_ref)?;
             validate_id(content_type)?;
             validate_id(sha256)?;
             validate_id(scan_status)?;
-            if let Some(filename) = filename { validate_id(filename)?; }
+            if let Some(filename) = filename {
+                validate_id(filename)?;
+            }
             Ok(())
         }
         WhatsAppProviderCommand::PublishStatus { text, .. } => validate_text(text),
-        WhatsAppProviderCommand::JoinConversation { provider_chat_id, invite_link, .. } => {
+        WhatsAppProviderCommand::JoinConversation {
+            provider_chat_id,
+            invite_link,
+            ..
+        } => {
             validate_id(provider_chat_id)?;
             validate_id(invite_link)
         }
-        WhatsAppProviderCommand::LeaveConversation { provider_chat_id, .. } => validate_id(provider_chat_id),
-        WhatsAppProviderCommand::Conversation { provider_chat_id, action, .. } => {
+        WhatsAppProviderCommand::LeaveConversation {
+            provider_chat_id, ..
+        } => validate_id(provider_chat_id),
+        WhatsAppProviderCommand::Conversation {
+            provider_chat_id,
+            action,
+            ..
+        } => {
             validate_id(provider_chat_id)?;
             let _ = action;
             Ok(())
@@ -798,43 +920,89 @@ pub fn validate_provider_command(
 
 pub fn validate_event(event: &WhatsAppProviderEvent) -> Result<(), WhatsAppContractError> {
     let timestamp = match event {
-        WhatsAppProviderEvent::RuntimeStateChanged { observed_at_unix_seconds, .. }
-        | WhatsAppProviderEvent::SessionStateChanged { observed_at_unix_seconds, .. }
-        | WhatsAppProviderEvent::CommandResultObserved { observed_at_unix_seconds, .. }
-        | WhatsAppProviderEvent::MessageEdited { observed_at_unix_seconds, .. }
-        | WhatsAppProviderEvent::MessageDeleted { observed_at_unix_seconds, .. }
-        | WhatsAppProviderEvent::ReceiptChanged { observed_at_unix_seconds, .. }
-        | WhatsAppProviderEvent::ReactionChanged { observed_at_unix_seconds, .. }
-        | WhatsAppProviderEvent::PresenceChanged { observed_at_unix_seconds, .. }
-        | WhatsAppProviderEvent::CallObserved { observed_at_unix_seconds, .. }
-        | WhatsAppProviderEvent::StatusObserved { observed_at_unix_seconds, .. }
-        | WhatsAppProviderEvent::StatusViewObserved { observed_at_unix_seconds, .. }
-        | WhatsAppProviderEvent::StatusDeleted { observed_at_unix_seconds, .. } => *observed_at_unix_seconds,
+        WhatsAppProviderEvent::RuntimeStateChanged {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::SessionStateChanged {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::CommandResultObserved {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::MessageEdited {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::MessageDeleted {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::ReceiptChanged {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::ReactionChanged {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::PresenceChanged {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::CallObserved {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::StatusObserved {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::StatusViewObserved {
+            observed_at_unix_seconds,
+            ..
+        }
+        | WhatsAppProviderEvent::StatusDeleted {
+            observed_at_unix_seconds,
+            ..
+        } => *observed_at_unix_seconds,
         WhatsAppProviderEvent::MessageObserved(value) => value.occurred_at_unix_seconds,
         WhatsAppProviderEvent::DialogObserved(value) => value.observed_at_unix_seconds,
         WhatsAppProviderEvent::ParticipantObserved(value) => value.observed_at_unix_seconds,
         WhatsAppProviderEvent::MediaObserved(value) => value.observed_at_unix_seconds,
     };
-    if timestamp <= 0 { return Err(WhatsAppContractError::InvalidTimestamp); }
+    if timestamp <= 0 {
+        return Err(WhatsAppContractError::InvalidTimestamp);
+    }
     if let WhatsAppProviderEvent::CommandResultObserved {
         account_id,
         operation_id,
         provider_request_id,
         ..
-    } = event {
+    } = event
+    {
         validate_id(account_id)?;
         validate_id(operation_id)?;
-        if provider_request_id.as_deref().is_some_and(|value| value.trim().is_empty()) {
+        if provider_request_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
             return Err(WhatsAppContractError::EmptyField);
         }
     }
-    if let WhatsAppProviderEvent::SessionStateChanged { linked, secret_ref, revision, .. } = event {
-        if *linked != secret_ref.is_some()
+    if let WhatsAppProviderEvent::SessionStateChanged {
+        linked,
+        secret_ref,
+        revision,
+        ..
+    } = event
+        && (*linked != secret_ref.is_some()
             || *linked != revision.is_some()
-            || revision.is_some_and(|value| value == 0)
-        {
-            return Err(WhatsAppContractError::InvalidTransition);
-        }
+            || revision.is_some_and(|value| value == 0))
+    {
+        return Err(WhatsAppContractError::InvalidTransition);
     }
     Ok(())
 }
@@ -851,7 +1019,10 @@ mod tests {
             provider_chat_id: "chat".to_owned(),
             text: "".to_owned(),
         };
-        assert_eq!(validate_provider_command(&command), Err(WhatsAppContractError::EmptyField));
+        assert_eq!(
+            validate_provider_command(&command),
+            Err(WhatsAppContractError::EmptyField)
+        );
     }
 
     #[test]
@@ -865,6 +1036,9 @@ mod tests {
             caption: None,
             filename: None,
         };
-        assert_eq!(validate_provider_command(&command), Err(WhatsAppContractError::EmptyField));
+        assert_eq!(
+            validate_provider_command(&command),
+            Err(WhatsAppContractError::EmptyField)
+        );
     }
 }

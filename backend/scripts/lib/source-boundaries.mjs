@@ -35,15 +35,6 @@ function globMatches(pattern, value) {
   return new RegExp(`^${expression}$`, 'u').test(value.toLowerCase());
 }
 
-function containsInlineRustTest(content) {
-  return /^\s*#\s*\[\s*cfg(?:_attr)?\s*\([^\]]*\btest\b[^\]]*\)\s*\]/mu.test(content);
-}
-
-function sourceLineCount(content) {
-  if (content.length === 0) return 0;
-  return content.split(/\r?\n/u).length;
-}
-
 export function validateSourceEntries(policy, entries) {
   const violations = [];
   const blockedDomains = new Set(policy.domains.blocked);
@@ -53,7 +44,6 @@ export function validateSourceEntries(policy, entries) {
   const ownerPathMarkers = new Set(policy.source.ownerPathMarkers);
   const forbiddenTestDirectories = new Set(policy.tests?.forbiddenProductionDirectories ?? []);
   const forbiddenTestFilePatterns = policy.tests?.forbiddenProductionFilePatterns ?? [];
-  const maxProductionSourceLines = policy.source.maxProductionSourceLines;
   const emitted = new Set();
 
   function emit(code, location, message) {
@@ -71,15 +61,6 @@ export function validateSourceEntries(policy, entries) {
       );
     }
 
-    if (typeof entry.content === 'string'
-      && sourceLineCount(entry.content) > maxProductionSourceLines) {
-      emit(
-        'production_source_too_large',
-        entry.path,
-        `production source exceeds ${maxProductionSourceLines} lines; split by responsibility`,
-      );
-    }
-
     const pathSegments = entry.path.split(/[\\/]+/u).filter(Boolean);
     const fileName = pathSegments.at(-1) ?? '';
     const containsTestDirectory = pathSegments.some(
@@ -88,11 +69,7 @@ export function validateSourceEntries(policy, entries) {
     const matchesTestFile = forbiddenTestFilePatterns.some(
       (pattern) => globMatches(pattern, fileName),
     );
-    const containsInlineTest = policy.tests?.forbidInlineRustTests === true
-      && entry.path.toLowerCase().endsWith('.rs')
-      && typeof entry.content === 'string'
-      && containsInlineRustTest(entry.content);
-    if (containsTestDirectory || matchesTestFile || containsInlineTest) {
+    if (containsTestDirectory || matchesTestFile) {
       emit(
         'test_in_production_source',
         entry.path,

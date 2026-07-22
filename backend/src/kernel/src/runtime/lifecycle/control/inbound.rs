@@ -222,9 +222,7 @@ fn valid_event_credential_request(value: &ManagedRuntimeEventCredentialRequestV1
         && value.recipient_public_key_x25519.len() == 32
 }
 
-fn valid_provider_credential_request(
-    value: &ManagedRuntimeProviderCredentialRequestV1,
-) -> bool {
+fn valid_provider_credential_request(value: &ManagedRuntimeProviderCredentialRequestV1) -> bool {
     value.request_id.len() == 16
         && value.request_id.iter().any(|byte| *byte != 0)
         && !value.purpose_id.trim().is_empty()

@@ -1,46 +1,45 @@
 //! Telegram runtime orchestration. Provider execution stays behind the TDLib port.
 
-pub mod managed_control;
-pub mod process;
+#![allow(clippy::collapsible_if)]
+
 pub mod bootstrap;
 pub mod client_port;
 pub mod client_transport;
+pub mod managed_control;
+pub mod process;
 pub mod vault_credentials;
 
+use hermes_blob_client::BlobDataClient;
+use hermes_blob_client_contract::BlobReadPort;
+use hermes_runtime_protocol::v1::BlobDataSessionGrantV1;
 use hermes_telegram_api::{
     TelegramAccount, TelegramAccountSetup, TelegramAccountState, TelegramContractError,
-    TelegramCredentialBinding, TelegramDownloadFile, TelegramFileSnapshot,
-    TelegramMessageObservation, TelegramOperation,
-    TelegramMessageTombstone, TelegramTombstoneReason,
-    TelegramParticipantFilter,
-    TelegramParticipantPage, TelegramProviderCommand, TelegramRealtimeFrame, TelegramRuntimeState,
-    TelegramDeliveryState, TelegramRuntimeLease, TelegramRuntimeLeaseState,
-    TelegramProviderQuery, TelegramProviderQueryResponse, TelegramSendMessage, TelegramTopic,
-    provider_command_account_id, provider_command_operation_id, validate_provider_command,
-    provider_query_account_id, validate_provider_query, validate_setup,
+    TelegramCredentialBinding, TelegramDeliveryState, TelegramDownloadFile, TelegramFileSnapshot,
+    TelegramMessageObservation, TelegramMessageTombstone, TelegramOperation,
+    TelegramParticipantFilter, TelegramParticipantPage, TelegramProviderCommand,
+    TelegramProviderKind, TelegramProviderQuery, TelegramProviderQueryResponse,
+    TelegramRealtimeFrame, TelegramRuntimeLease, TelegramRuntimeLeaseState, TelegramRuntimeState,
+    TelegramSendMessage, TelegramTombstoneReason, TelegramTopic, provider_command_account_id,
+    provider_command_operation_id, provider_query_account_id, validate_provider_command,
+    validate_provider_query, validate_setup,
 };
 use hermes_telegram_core::{
     CommunicationObservationDraft, TelegramLifecycle, accept_operation, credential_lease_purposes,
-    observation_draft, validate_credential_lease,
-    operation_awaiting_provider, operation_completed, operation_failed,
-    operation_retry_scheduled, operation_running,
-    event_chat_state, event_message_mutation, project_message, provider_event_draft,
-    qr_login_password_required, qr_login_password_submitted, qr_login_preparing, qr_login_qr_issued,
-    qr_login_ready,
+    event_chat_state, event_message_mutation, observation_draft, operation_awaiting_provider,
+    operation_completed, operation_failed, operation_retry_scheduled, operation_running,
+    project_message, provider_event_draft, qr_login_password_required, qr_login_password_submitted,
+    qr_login_preparing, qr_login_qr_issued, qr_login_ready, validate_credential_lease,
 };
 use hermes_telegram_persistence::{
     TelegramDurablePersistence, TelegramDurablePersistenceError, TelegramPersistence,
 };
-use hermes_blob_client_contract::BlobReadPort;
-use hermes_blob_client::BlobDataClient;
-use hermes_runtime_protocol::v1::BlobDataSessionGrantV1;
 use hermes_telegram_tdlib::{
-    TelegramMediaMaterializer, TdJsonLibrary, TdJsonTransport, TdlibAuthorizationDriver,
-    TdlibAuthorizationEvent, TdlibAuthorizationParameters, TdlibError, TdlibRequest,
-    TdlibResponse, TdlibTransport, get_chats_request, get_history_request,
-    get_history_request_with_options, parse_file_snapshot,
-    parse_provider_events, parse_topic_list,
+    TdJsonLibrary, TdJsonTransport, TdlibAuthorizationDriver, TdlibAuthorizationEvent,
+    TdlibAuthorizationParameters, TdlibError, TdlibRequest, TdlibResponse, TdlibTransport,
+    TelegramMediaMaterializer, get_chats_request, get_history_request,
+    get_history_request_with_options, parse_file_snapshot, parse_provider_events, parse_topic_list,
 };
+use prost::Message;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -247,32 +246,51 @@ fn provider_event_matches_command(
                 && topic.is_closed == *is_closed
         }
         (
-            hermes_telegram_api::TelegramProviderEvent::ChatFoldersChanged { account_id, folders },
+            hermes_telegram_api::TelegramProviderEvent::ChatFoldersChanged {
+                account_id,
+                folders,
+            },
             TelegramProviderCommand::AddChatToFolder {
                 account_id: command_account_id,
                 provider_chat_id,
                 provider_folder_id,
                 ..
             },
-        ) => account_id == command_account_id
-            && folders.iter().any(|folder| {
-                folder.provider_folder_id == *provider_folder_id
-                    && (folder.pinned_chat_ids.iter().any(|id| id == provider_chat_id)
-                        || folder.included_chat_ids.iter().any(|id| id == provider_chat_id))
-            }),
+        ) => {
+            account_id == command_account_id
+                && folders.iter().any(|folder| {
+                    folder.provider_folder_id == *provider_folder_id
+                        && (folder
+                            .pinned_chat_ids
+                            .iter()
+                            .any(|id| id == provider_chat_id)
+                            || folder
+                                .included_chat_ids
+                                .iter()
+                                .any(|id| id == provider_chat_id))
+                })
+        }
         (
-            hermes_telegram_api::TelegramProviderEvent::ChatFoldersChanged { account_id, folders },
+            hermes_telegram_api::TelegramProviderEvent::ChatFoldersChanged {
+                account_id,
+                folders,
+            },
             TelegramProviderCommand::RemoveChatFromFolder {
                 account_id: command_account_id,
                 provider_chat_id,
                 provider_folder_id,
                 ..
             },
-        ) => account_id == command_account_id
-            && folders.iter().any(|folder| {
-                folder.provider_folder_id == *provider_folder_id
-                    && folder.excluded_chat_ids.iter().any(|id| id == provider_chat_id)
-            }),
+        ) => {
+            account_id == command_account_id
+                && folders.iter().any(|folder| {
+                    folder.provider_folder_id == *provider_folder_id
+                        && folder
+                            .excluded_chat_ids
+                            .iter()
+                            .any(|id| id == provider_chat_id)
+                })
+        }
         (
             hermes_telegram_api::TelegramProviderEvent::ParticipantChanged(participant),
             TelegramProviderCommand::Join {
@@ -442,7 +460,10 @@ fn provider_event_targets_command(
                 && topic.provider_topic_id == *provider_topic_id
         }
         (
-            hermes_telegram_api::TelegramProviderEvent::ChatFoldersChanged { account_id, folders },
+            hermes_telegram_api::TelegramProviderEvent::ChatFoldersChanged {
+                account_id,
+                folders,
+            },
             TelegramProviderCommand::AddChatToFolder {
                 account_id: command_account_id,
                 provider_chat_id,
@@ -451,20 +472,34 @@ fn provider_event_targets_command(
             },
         )
         | (
-            hermes_telegram_api::TelegramProviderEvent::ChatFoldersChanged { account_id, folders },
+            hermes_telegram_api::TelegramProviderEvent::ChatFoldersChanged {
+                account_id,
+                folders,
+            },
             TelegramProviderCommand::RemoveChatFromFolder {
                 account_id: command_account_id,
                 provider_chat_id,
                 provider_folder_id,
                 ..
             },
-        ) => account_id == command_account_id
-            && folders.iter().any(|folder| {
-                folder.provider_folder_id == *provider_folder_id
-                    && (folder.pinned_chat_ids.iter().any(|id| id == provider_chat_id)
-                        || folder.included_chat_ids.iter().any(|id| id == provider_chat_id)
-                        || folder.excluded_chat_ids.iter().any(|id| id == provider_chat_id))
-            }),
+        ) => {
+            account_id == command_account_id
+                && folders.iter().any(|folder| {
+                    folder.provider_folder_id == *provider_folder_id
+                        && (folder
+                            .pinned_chat_ids
+                            .iter()
+                            .any(|id| id == provider_chat_id)
+                            || folder
+                                .included_chat_ids
+                                .iter()
+                                .any(|id| id == provider_chat_id)
+                            || folder
+                                .excluded_chat_ids
+                                .iter()
+                                .any(|id| id == provider_chat_id))
+                })
+        }
         _ => false,
     }
 }
@@ -490,7 +525,9 @@ mod tests {
 
     impl TdlibTransport for PollingTransport {
         fn request(&mut self, _request: TdlibRequest) -> Result<TdlibResponse, TdlibError> {
-            Err(TdlibError::Transport("request is not used by polling test".to_owned()))
+            Err(TdlibError::Transport(
+                "request is not used by polling test".to_owned(),
+            ))
         }
 
         fn poll_events(&mut self) -> Result<Vec<TelegramProviderEvent>, TdlibError> {
@@ -565,17 +602,28 @@ impl<R> TelegramBlobMaterializer<R> {
     pub fn new(reader: R, temp_dir: impl Into<PathBuf>) -> Result<Self, TdlibError> {
         let temp_dir = temp_dir.into();
         if !temp_dir.is_absolute() {
-            return Err(TdlibError::Protocol("Telegram media temp directory must be absolute".to_owned()));
+            return Err(TdlibError::Protocol(
+                "Telegram media temp directory must be absolute".to_owned(),
+            ));
         }
-        Ok(Self { reader, temp_dir, sessions: Vec::new() })
+        Ok(Self {
+            reader,
+            temp_dir,
+            sessions: Vec::new(),
+        })
     }
 
-    pub fn add_session(&mut self, session: TelegramBlobMaterializationSession) -> Result<(), TdlibError> {
+    pub fn add_session(
+        &mut self,
+        session: TelegramBlobMaterializationSession,
+    ) -> Result<(), TdlibError> {
         if session.blob_ref.trim().is_empty()
             || session.channel_binding.is_empty()
             || session.declared_size == 0
         {
-            return Err(TdlibError::Protocol("Telegram Blob materialization session is invalid".to_owned()));
+            return Err(TdlibError::Protocol(
+                "Telegram Blob materialization session is invalid".to_owned(),
+            ));
         }
         self.sessions.push(session);
         Ok(())
@@ -588,27 +636,47 @@ impl<R: BlobReadPort> TelegramMediaMaterializer for TelegramBlobMaterializer<R> 
             .sessions
             .iter()
             .position(|session| session.blob_ref == blob_ref)
-            .ok_or_else(|| TdlibError::Protocol("Telegram Blob session is unavailable".to_owned()))?;
+            .ok_or_else(|| {
+                TdlibError::Protocol("Telegram Blob session is unavailable".to_owned())
+            })?;
         let session = self.sessions.remove(index);
         let bytes = self
             .reader
-            .read_range(session.grant, session.channel_binding, 0, session.declared_size)
-            .map_err(|error| TdlibError::Protocol(format!("Telegram Blob read failed: {error:?}")))?;
+            .read_range(
+                session.grant,
+                session.channel_binding,
+                0,
+                session.declared_size,
+            )
+            .map_err(|error| {
+                TdlibError::Protocol(format!("Telegram Blob read failed: {error:?}"))
+            })?;
         if bytes.len() as u64 != session.declared_size {
-            return Err(TdlibError::Protocol("Telegram Blob size does not match grant".to_owned()));
+            return Err(TdlibError::Protocol(
+                "Telegram Blob size does not match grant".to_owned(),
+            ));
         }
         let file_id = NEXT_MEDIA_FILE_ID.fetch_add(1, Ordering::Relaxed);
-        let path = self.temp_dir.join(format!("hermes-telegram-media-{file_id}"));
+        let path = self
+            .temp_dir
+            .join(format!("hermes-telegram-media-{file_id}"));
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&path)
-            .map_err(|error| TdlibError::Protocol(format!("Telegram media staging failed: {error}")))?;
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
-            .map_err(|error| TdlibError::Protocol(format!("Telegram media staging permissions failed: {error}")))?;
+            .map_err(|error| {
+                TdlibError::Protocol(format!("Telegram media staging failed: {error}"))
+            })?;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).map_err(|error| {
+            TdlibError::Protocol(format!(
+                "Telegram media staging permissions failed: {error}"
+            ))
+        })?;
         if let Err(error) = file.write_all(&bytes).and_then(|_| file.sync_all()) {
             let _ = fs::remove_file(&path);
-            return Err(TdlibError::Protocol(format!("Telegram media staging write failed: {error}")));
+            return Err(TdlibError::Protocol(format!(
+                "Telegram media staging write failed: {error}"
+            )));
         }
         Ok(path.to_string_lossy().into_owned())
     }
@@ -661,7 +729,7 @@ impl TelegramRuntimeComposition {
         account_id: impl Into<String>,
         parameters: TdlibAuthorizationParameters,
     ) -> Result<Self, TdlibError> {
-        let account_id = account_id.into();
+        let account_id: String = account_id.into();
         Self::new_with_account_setup(
             library,
             TelegramAccountSetup {
@@ -681,10 +749,11 @@ impl TelegramRuntimeComposition {
         account_setup: TelegramAccountSetup,
         parameters: TdlibAuthorizationParameters,
     ) -> Result<Self, TdlibError> {
-        let account_id = account_setup.account_id.clone();
-        let account_id = account_id.into();
+        let account_id: String = account_setup.account_id.clone();
         if account_id.trim().is_empty() {
-            return Err(TdlibError::Protocol("Telegram account id is empty".to_owned()));
+            return Err(TdlibError::Protocol(
+                "Telegram account id is empty".to_owned(),
+            ));
         }
         if account_setup.provider_kind != TelegramProviderKind::User {
             return Err(TdlibError::Protocol(
@@ -708,7 +777,9 @@ impl TelegramRuntimeComposition {
         let event = self
             .authorization
             .as_mut()
-            .ok_or_else(|| TdlibError::Protocol("Telegram authorization is unavailable".to_owned()))?
+            .ok_or_else(|| {
+                TdlibError::Protocol("Telegram authorization is unavailable".to_owned())
+            })?
             .poll(timeout)?;
         if matches!(
             &event,
@@ -724,7 +795,9 @@ impl TelegramRuntimeComposition {
             runtime.set_admission(self.admission.clone());
             runtime
                 .provision_account(self.account_setup.clone())
-                .map_err(|_| TdlibError::Protocol("Telegram account provisioning failed".to_owned()))?;
+                .map_err(|_| {
+                    TdlibError::Protocol("Telegram account provisioning failed".to_owned())
+                })?;
             self.runtime = Some(runtime);
         }
         Ok(event)
@@ -733,7 +806,9 @@ impl TelegramRuntimeComposition {
     pub fn submit_password(&self, password: &str) -> Result<(), TdlibError> {
         self.authorization
             .as_ref()
-            .ok_or_else(|| TdlibError::Protocol("Telegram authorization is unavailable".to_owned()))?
+            .ok_or_else(|| {
+                TdlibError::Protocol("Telegram authorization is unavailable".to_owned())
+            })?
             .submit_password(password)
     }
 
@@ -877,7 +952,8 @@ where
             runtime_epoch: 0,
         };
         self.persistence.put_account(account.clone());
-        self.persistence.put_credentials(&account.account_id, setup.credentials);
+        self.persistence
+            .put_credentials(&account.account_id, setup.credentials);
         Ok(account)
     }
 
@@ -976,7 +1052,10 @@ where
         Ok(running)
     }
 
-    pub fn stop_account(&mut self, account_id: &str) -> Result<TelegramAccount, TelegramContractError> {
+    pub fn stop_account(
+        &mut self,
+        account_id: &str,
+    ) -> Result<TelegramAccount, TelegramContractError> {
         let account = self
             .persistence
             .account(account_id)
@@ -991,6 +1070,7 @@ where
         Ok(stopped)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn start_account_durable(
         &mut self,
         durable: &TelegramDurablePersistence,
@@ -1043,7 +1123,10 @@ where
         Ok(account)
     }
 
-    pub fn retire_account(&mut self, account_id: &str) -> Result<TelegramAccount, TelegramContractError> {
+    pub fn retire_account(
+        &mut self,
+        account_id: &str,
+    ) -> Result<TelegramAccount, TelegramContractError> {
         let account = self
             .persistence
             .account(account_id)
@@ -1060,7 +1143,7 @@ where
         account_id: &str,
     ) -> Result<TelegramAccount, TelegramDurableLifecycleError> {
         if self.persistence.account(account_id).is_none() {
-            let account = durable
+            let (account, _credentials) = durable
                 .account(account_id)
                 .await
                 .map_err(TelegramDurableLifecycleError::Persistence)?
@@ -1094,19 +1177,28 @@ where
         credential_lease_purposes(account_id, configuration_instance_id, bindings)
     }
 
-    pub fn execute(&mut self, account_id: &str, request: TdlibRequest) -> Result<TdlibResponse, TdlibError> {
+    pub fn execute(
+        &mut self,
+        account_id: &str,
+        request: TdlibRequest,
+    ) -> Result<TdlibResponse, TdlibError> {
         let account = self
             .persistence
             .account(account_id)
             .ok_or_else(|| TdlibError::Protocol("Telegram account is unknown".to_owned()))?;
         if account.runtime_state != TelegramRuntimeState::Running {
-            return Err(TdlibError::Protocol("Telegram account runtime is not running".to_owned()));
+            return Err(TdlibError::Protocol(
+                "Telegram account runtime is not running".to_owned(),
+            ));
         }
         let lease = self.persistence.runtime_lease(account_id).ok_or_else(|| {
             TdlibError::Protocol("Telegram runtime lease is unavailable".to_owned())
         })?;
-        if lease.state != TelegramRuntimeLeaseState::Active || lease.epoch != account.runtime_epoch {
-            return Err(TdlibError::Protocol("Telegram runtime lease is stale".to_owned()));
+        if lease.state != TelegramRuntimeLeaseState::Active || lease.epoch != account.runtime_epoch
+        {
+            return Err(TdlibError::Protocol(
+                "Telegram runtime lease is stale".to_owned(),
+            ));
         }
         self.transport.request(request)
     }
@@ -1123,11 +1215,17 @@ where
             .account(account_id)
             .ok_or_else(|| TdlibError::Protocol("Telegram account is unknown".to_owned()))?;
         if account.runtime_state != TelegramRuntimeState::Running {
-            return Err(TdlibError::Protocol("Telegram account runtime is not running".to_owned()));
+            return Err(TdlibError::Protocol(
+                "Telegram account runtime is not running".to_owned(),
+            ));
         }
-        let lease_epoch = self.persistence.runtime_lease(account_id).ok_or_else(|| {
-            TdlibError::Protocol("Telegram runtime lease is unavailable".to_owned())
-        })?.epoch;
+        let lease_epoch = self
+            .persistence
+            .runtime_lease(account_id)
+            .ok_or_else(|| {
+                TdlibError::Protocol("Telegram runtime lease is unavailable".to_owned())
+            })?
+            .epoch;
         let operation_id = provider_command_operation_id(&command).to_owned();
         if self.persistence.operation(&operation_id).is_some() {
             return Ok(TdlibResponse::Accepted { operation_id });
@@ -1135,14 +1233,20 @@ where
         let operation = accept_operation(&command, lease_epoch);
         self.persistence.put_operation_if_absent(operation.clone());
         self.persistence.put_command(command.clone());
-        self.persistence.update_operation(operation_running(&operation));
+        self.persistence
+            .update_operation(operation_running(&operation));
         if self.apply_local_command(&command) {
-            self.persistence.update_operation(operation_completed(&operation));
+            self.persistence
+                .update_operation(operation_completed(&operation));
             return Ok(TdlibResponse::Accepted { operation_id });
         }
-        match self.transport.request(TdlibRequest::ProviderCommand(command)) {
+        match self
+            .transport
+            .request(TdlibRequest::ProviderCommand(command))
+        {
             Ok(TdlibResponse::Accepted { .. }) => {
-                self.persistence.update_operation(operation_awaiting_provider(&operation));
+                self.persistence
+                    .update_operation(operation_awaiting_provider(&operation));
                 Ok(TdlibResponse::Accepted { operation_id })
             }
             Ok(TdlibResponse::History(messages)) => {
@@ -1151,15 +1255,18 @@ where
                         TdlibError::Protocol("Telegram search projection is invalid".to_owned())
                     })?;
                 }
-                self.persistence.update_operation(operation_completed(&operation));
+                self.persistence
+                    .update_operation(operation_completed(&operation));
                 Ok(TdlibResponse::History(messages))
             }
             Ok(response) => {
-                self.persistence.update_operation(operation_completed(&operation));
+                self.persistence
+                    .update_operation(operation_completed(&operation));
                 Ok(response)
             }
             Err(error) => {
-                self.persistence.update_operation(operation_failed(&operation, "provider request failed"));
+                self.persistence
+                    .update_operation(operation_failed(&operation, "provider request failed"));
                 Err(error)
             }
         }
@@ -1173,8 +1280,7 @@ where
     where
         T: TdlibTransport,
     {
-        validate_provider_command(&command)
-            .map_err(|_| TelegramDurableExecutionError::Provider)?;
+        validate_provider_command(&command).map_err(|_| TelegramDurableExecutionError::Provider)?;
         let account_id = provider_command_account_id(&command);
         let account = self
             .persistence
@@ -1313,11 +1419,7 @@ where
             }
         }
         let operation = self
-            .retry_operation(
-                operation_id,
-                now_unix_seconds,
-                next_attempt_at_unix_seconds,
-            )
+            .retry_operation(operation_id, now_unix_seconds, next_attempt_at_unix_seconds)
             .map_err(|_| TelegramDurableExecutionError::Provider)?;
         durable
             .save_operation(&operation)
@@ -1334,20 +1436,18 @@ where
             .map_err(|_| TdlibError::Protocol("Telegram provider query is invalid".to_owned()))?;
         let account_id = provider_query_account_id(&query).to_owned();
         match query {
-            TelegramProviderQuery::LoadChats { limit, .. } => {
-                self.load_chats(&account_id, limit).map(TelegramProviderQueryResponse::Chats)
-            }
+            TelegramProviderQuery::LoadChats { limit, .. } => self
+                .load_chats(&account_id, limit)
+                .map(TelegramProviderQueryResponse::Chats),
             TelegramProviderQuery::Chat {
-                provider_chat_id,
-                ..
+                provider_chat_id, ..
             } => Ok(TelegramProviderQueryResponse::Chat(
                 self.persistence
                     .chat(&account_id, &provider_chat_id)
                     .cloned(),
             )),
             TelegramProviderQuery::ChatAvatar {
-                provider_chat_id,
-                ..
+                provider_chat_id, ..
             } => Ok(TelegramProviderQueryResponse::ChatAvatar(
                 self.persistence
                     .chat_avatar(&account_id, &provider_chat_id)
@@ -1371,13 +1471,11 @@ where
             TelegramProviderQuery::CachedChats { limit, .. } => Ok(
                 TelegramProviderQueryResponse::Chats(self.cached_chats(&account_id, limit)),
             ),
-            TelegramProviderQuery::SearchChats { query, limit, .. } => Ok(
-                TelegramProviderQueryResponse::Chats(self.persistence.search_chats(
-                    &account_id,
-                    &query,
-                    limit,
-                )),
-            ),
+            TelegramProviderQuery::SearchChats { query, limit, .. } => {
+                Ok(TelegramProviderQueryResponse::Chats(
+                    self.persistence.search_chats(&account_id, &query, limit),
+                ))
+            }
             TelegramProviderQuery::CachedMessages {
                 provider_chat_id,
                 limit,
@@ -1385,15 +1483,15 @@ where
             } => Ok(TelegramProviderQueryResponse::CachedMessages(
                 self.cached_messages(&account_id, &provider_chat_id, limit),
             )),
-            TelegramProviderQuery::MessageById { message_id, .. } => Ok(
-                TelegramProviderQueryResponse::CachedMessages(
+            TelegramProviderQuery::MessageById { message_id, .. } => {
+                Ok(TelegramProviderQueryResponse::CachedMessages(
                     self.persistence
                         .message(&message_id)
                         .cloned()
                         .into_iter()
                         .collect(),
-                ),
-            ),
+                ))
+            }
             TelegramProviderQuery::RecentMessages {
                 provider_chat_id,
                 limit,
@@ -1402,40 +1500,40 @@ where
                 self.persistence
                     .recent_messages(&account_id, provider_chat_id.as_deref(), limit),
             )),
-            TelegramProviderQuery::MessagesByIds { message_ids, .. } => Ok(
-                TelegramProviderQueryResponse::CachedMessages(
+            TelegramProviderQuery::MessagesByIds { message_ids, .. } => {
+                Ok(TelegramProviderQueryResponse::CachedMessages(
                     self.persistence.messages_by_ids(&message_ids),
-                ),
-            ),
-            TelegramProviderQuery::MessageVersions { message_id, .. } => Ok(
-                TelegramProviderQueryResponse::MessageVersions(
+                ))
+            }
+            TelegramProviderQuery::MessageVersions { message_id, .. } => {
+                Ok(TelegramProviderQueryResponse::MessageVersions(
                     self.persistence
                         .message_versions(&message_id)
                         .map(|versions| versions.to_vec())
                         .unwrap_or_default(),
-                ),
-            ),
-            TelegramProviderQuery::MessageTombstones { message_id, .. } => Ok(
-                TelegramProviderQueryResponse::MessageTombstones(
+                ))
+            }
+            TelegramProviderQuery::MessageTombstones { message_id, .. } => {
+                Ok(TelegramProviderQueryResponse::MessageTombstones(
                     self.persistence
                         .message_tombstones(&message_id)
                         .map(|tombstones| tombstones.to_vec())
                         .unwrap_or_default(),
-                ),
-            ),
-            TelegramProviderQuery::MessageMutations { message_id, .. } => Ok(
-                TelegramProviderQueryResponse::MessageMutations(
+                ))
+            }
+            TelegramProviderQuery::MessageMutations { message_id, .. } => {
+                Ok(TelegramProviderQueryResponse::MessageMutations(
                     self.persistence
                         .message_mutations(&message_id)
                         .map(|mutations| mutations.to_vec())
                         .unwrap_or_default(),
-                ),
-            ),
-            TelegramProviderQuery::MessageReferences { message_id, .. } => Ok(
-                TelegramProviderQueryResponse::MessageReferences(
+                ))
+            }
+            TelegramProviderQuery::MessageReferences { message_id, .. } => {
+                Ok(TelegramProviderQueryResponse::MessageReferences(
                     self.persistence.message_references(&message_id),
-                ),
-            ),
+                ))
+            }
             TelegramProviderQuery::ReplyChain {
                 provider_chat_id,
                 provider_message_id,
@@ -1462,11 +1560,11 @@ where
                     limit,
                 ),
             )),
-            TelegramProviderQuery::Attachment { attachment_id, .. } => Ok(
-                TelegramProviderQueryResponse::Attachment(
+            TelegramProviderQuery::Attachment { attachment_id, .. } => {
+                Ok(TelegramProviderQueryResponse::Attachment(
                     self.persistence.attachment(&attachment_id).cloned(),
-                ),
-            ),
+                ))
+            }
             TelegramProviderQuery::AttachmentForMessage {
                 provider_chat_id,
                 provider_message_id,
@@ -1478,11 +1576,13 @@ where
                     &provider_message_id,
                 ),
             )),
-            TelegramProviderQuery::File { provider_file_id, .. } => Ok(
-                TelegramProviderQueryResponse::File(
-                    self.persistence.file(&account_id, &provider_file_id).cloned(),
-                ),
-            ),
+            TelegramProviderQuery::File {
+                provider_file_id, ..
+            } => Ok(TelegramProviderQueryResponse::File(
+                self.persistence
+                    .file(&account_id, &provider_file_id)
+                    .cloned(),
+            )),
             TelegramProviderQuery::ChatState {
                 provider_chat_id, ..
             } => Ok(TelegramProviderQueryResponse::ChatState(
@@ -1504,8 +1604,12 @@ where
                 limit,
                 ..
             } => Ok(TelegramProviderQueryResponse::CachedMessages(
-                self.persistence
-                    .search_messages(&account_id, provider_chat_id.as_deref(), &query, limit),
+                self.persistence.search_messages(
+                    &account_id,
+                    provider_chat_id.as_deref(),
+                    &query,
+                    limit,
+                ),
             )),
             TelegramProviderQuery::ListParticipants {
                 provider_chat_id,
@@ -1559,11 +1663,9 @@ where
                 provider_chat_id,
                 provider_message_id,
                 ..
-            } => Ok(TelegramProviderQueryResponse::Reactions(self.cached_reactions(
-                &account_id,
-                &provider_chat_id,
-                &provider_message_id,
-            ))),
+            } => Ok(TelegramProviderQueryResponse::Reactions(
+                self.cached_reactions(&account_id, &provider_chat_id, &provider_message_id),
+            )),
             TelegramProviderQuery::ReactionSummary {
                 provider_chat_id,
                 provider_message_id,
@@ -1576,7 +1678,8 @@ where
             TelegramProviderQuery::ChatPositions {
                 provider_chat_id, ..
             } => Ok(TelegramProviderQueryResponse::ChatPositions(
-                self.persistence.chat_positions(&account_id, &provider_chat_id),
+                self.persistence
+                    .chat_positions(&account_id, &provider_chat_id),
             )),
             TelegramProviderQuery::ChatOperationalState {
                 provider_chat_id, ..
@@ -1655,13 +1758,13 @@ where
                     }
                 }
                 Ok(TelegramProviderQueryResponse::ChatFolders(folders))
-            },
+            }
             TelegramProviderQuery::Operations { limit, .. } => {
                 let mut operations = self.persistence.operations_for_account(&account_id);
                 operations.sort_by(|left, right| left.operation_id.cmp(&right.operation_id));
                 operations.truncate(limit as usize);
                 Ok(TelegramProviderQueryResponse::Operations(operations))
-            },
+            }
             TelegramProviderQuery::Commands {
                 provider_chat_id,
                 provider_message_id,
@@ -1680,7 +1783,6 @@ where
         }
     }
 
-
     fn apply_local_command(&mut self, command: &TelegramProviderCommand) -> bool {
         let TelegramProviderCommand::RestoreVisibility {
             operation_id,
@@ -1692,20 +1794,20 @@ where
         else {
             return false;
         };
-        let message_id = format!(
-            "telegram:{account_id}:{provider_chat_id}:{provider_message_id}"
-        );
-        let _ = self.persistence.append_message_tombstone(TelegramMessageTombstone {
-            tombstone_id: format!("{message_id}:visibility-restored:{operation_id}"),
-            message_id,
-            account_id: account_id.clone(),
-            provider_chat_id: provider_chat_id.clone(),
-            provider_message_id: provider_message_id.clone(),
-            reason: TelegramTombstoneReason::Unknown,
-            observed_at_unix_seconds: 0,
-            is_provider_delete: false,
-            is_locally_visible: true,
-        });
+        let message_id = format!("telegram:{account_id}:{provider_chat_id}:{provider_message_id}");
+        let _ = self
+            .persistence
+            .append_message_tombstone(TelegramMessageTombstone {
+                tombstone_id: format!("{message_id}:visibility-restored:{operation_id}"),
+                message_id,
+                account_id: account_id.clone(),
+                provider_chat_id: provider_chat_id.clone(),
+                provider_message_id: provider_message_id.clone(),
+                reason: TelegramTombstoneReason::Unknown,
+                observed_at_unix_seconds: 0,
+                is_provider_delete: false,
+                is_locally_visible: true,
+            });
         true
     }
 
@@ -1725,11 +1827,17 @@ where
             .account(&account_id)
             .ok_or_else(|| TdlibError::Protocol("Telegram account is unknown".to_owned()))?;
         if account.runtime_state != TelegramRuntimeState::Running {
-            return Err(TdlibError::Protocol("Telegram account runtime is not running".to_owned()));
+            return Err(TdlibError::Protocol(
+                "Telegram account runtime is not running".to_owned(),
+            ));
         }
-        let lease_epoch = self.persistence.runtime_lease(&account_id).ok_or_else(|| {
-            TdlibError::Protocol("Telegram runtime lease is unavailable".to_owned())
-        })?.epoch;
+        let lease_epoch = self
+            .persistence
+            .runtime_lease(&account_id)
+            .ok_or_else(|| {
+                TdlibError::Protocol("Telegram runtime lease is unavailable".to_owned())
+            })?
+            .epoch;
         let materialized_path = materializer.materialize(&media.blob_ref)?;
         let operation_id = media.operation_id.clone();
         if self.persistence.operation(&operation_id).is_some() {
@@ -1740,7 +1848,8 @@ where
         let operation = accept_operation(&provider_command, lease_epoch);
         self.persistence.put_operation_if_absent(operation.clone());
         self.persistence.put_command(provider_command.clone());
-        self.persistence.update_operation(operation_running(&operation));
+        self.persistence
+            .update_operation(operation_running(&operation));
         let response = self.transport.request(TdlibRequest::SendMediaMaterialized {
             command: media,
             materialized_path: materialized_path.clone(),
@@ -1748,15 +1857,18 @@ where
         materializer.release(&materialized_path);
         match response {
             Ok(TdlibResponse::Accepted { .. }) => {
-                self.persistence.update_operation(operation_awaiting_provider(&operation));
+                self.persistence
+                    .update_operation(operation_awaiting_provider(&operation));
                 Ok(TdlibResponse::Accepted { operation_id })
             }
             Ok(response) => {
-                self.persistence.update_operation(operation_completed(&operation));
+                self.persistence
+                    .update_operation(operation_completed(&operation));
                 Ok(response)
             }
             Err(error) => {
-                self.persistence.update_operation(operation_failed(&operation, "provider request failed"));
+                self.persistence
+                    .update_operation(operation_failed(&operation, "provider request failed"));
                 Err(error)
             }
         }
@@ -1793,37 +1905,41 @@ where
                             let path = materializer
                                 .materialize(&media.blob_ref)
                                 .map_err(|_| TelegramDurableExecutionError::Provider)?;
-                            let response = self.transport.request(TdlibRequest::SendMediaMaterialized {
-                                command: media,
-                                materialized_path: path.clone(),
-                            });
+                            let response =
+                                self.transport.request(TdlibRequest::SendMediaMaterialized {
+                                    command: media,
+                                    materialized_path: path.clone(),
+                                });
                             materializer.release(&path);
                             response
                         }
-                        command => self.transport.request(TdlibRequest::ProviderCommand(command)),
+                        command => self
+                            .transport
+                            .request(TdlibRequest::ProviderCommand(command)),
                     };
                     match response {
-                    Ok(TdlibResponse::Accepted { .. }) => operation_awaiting_provider(&operation),
-                    Ok(TdlibResponse::History(messages)) => {
-                        for message in messages {
-                            self.ingest_message(message).map_err(|_| {
-                                TelegramDurableExecutionError::Provider
-                            })?;
+                        Ok(TdlibResponse::Accepted { .. }) => {
+                            operation_awaiting_provider(&operation)
                         }
-                        operation_completed(&operation)
-                    }
-                    Ok(_) => operation_completed(&operation),
-                    Err(_) => operation_retry_scheduled(
-                        &operation,
-                        now_unix_seconds.saturating_add(1),
-                        "Telegram provider execution failed",
-                    ),
+                        Ok(TdlibResponse::History(messages)) => {
+                            for message in messages {
+                                self.ingest_message(message)
+                                    .map_err(|_| TelegramDurableExecutionError::Provider)?;
+                            }
+                            operation_completed(&operation)
+                        }
+                        Ok(_) => operation_completed(&operation),
+                        Err(_) => operation_retry_scheduled(
+                            &operation,
+                            now_unix_seconds.saturating_add(1),
+                            "Telegram provider execution failed",
+                        ),
                     }
                 }
             };
-            next_operation.provider_observed_at_unix_seconds =
-                (next_operation.state == hermes_telegram_api::TelegramOperationState::Completed)
-                    .then_some(now_unix_seconds);
+            next_operation.provider_observed_at_unix_seconds = (next_operation.state
+                == hermes_telegram_api::TelegramOperationState::Completed)
+                .then_some(now_unix_seconds);
             durable
                 .save_operation(&next_operation)
                 .await
@@ -1840,17 +1956,17 @@ where
         request: TelegramDownloadFile,
     ) -> Result<TelegramFileSnapshot, TdlibError> {
         let account_id = request.account_id.clone();
-        let response = self.execute(
-            &account_id,
-            TdlibRequest::DownloadFile(request),
-        )?;
+        let response = self.execute(&account_id, TdlibRequest::DownloadFile(request))?;
         match response {
             TdlibResponse::File(file) => {
                 self.persistence.put_file(file.clone());
-                self.persistence.apply_file_to_attachments(&account_id, &file);
+                self.persistence
+                    .apply_file_to_attachments(&account_id, &file);
                 Ok(file)
             }
-            _ => Err(TdlibError::Protocol("TDLib did not return a file snapshot".to_owned())),
+            _ => Err(TdlibError::Protocol(
+                "TDLib did not return a file snapshot".to_owned(),
+            )),
         }
     }
 
@@ -1882,7 +1998,9 @@ where
                 }
                 Ok(chats)
             }
-            _ => Err(TdlibError::Protocol("TDLib did not return chats".to_owned())),
+            _ => Err(TdlibError::Protocol(
+                "TDLib did not return chats".to_owned(),
+            )),
         }
     }
 
@@ -1923,7 +2041,9 @@ where
                 }
                 Ok(messages)
             }
-            _ => Err(TdlibError::Protocol("TDLib did not return history".to_owned())),
+            _ => Err(TdlibError::Protocol(
+                "TDLib did not return history".to_owned(),
+            )),
         }
     }
 
@@ -1950,7 +2070,11 @@ where
             )?;
             let page = match response {
                 TdlibResponse::History(messages) => messages,
-                _ => return Err(TdlibError::Protocol("TDLib did not return history".to_owned())),
+                _ => {
+                    return Err(TdlibError::Protocol(
+                        "TDLib did not return history".to_owned(),
+                    ));
+                }
             };
             let page_len = page.len();
             let next_cursor = page
@@ -1995,8 +2119,8 @@ where
             .load_history(account_id, provider_chat_id, limit)
             .map_err(TelegramDurableProjectionError::Provider)?;
         for observation in &observations {
-            let projection = project_message(observation)
-                .map_err(TelegramDurableProjectionError::Contract)?;
+            let projection =
+                project_message(observation).map_err(TelegramDurableProjectionError::Contract)?;
             durable
                 .upsert_message(&projection)
                 .await
@@ -2044,11 +2168,8 @@ where
             .await
             .map_err(TelegramDurableProjectionError::Persistence)?
         {
-            self.persistence.put_chat_operational_state(
-                account_id,
-                provider_chat_id,
-                state,
-            );
+            self.persistence
+                .put_chat_operational_state(account_id, provider_chat_id, state);
         }
         let messages = durable
             .list_messages(account_id, provider_chat_id, message_limit)
@@ -2088,11 +2209,12 @@ where
         {
             self.persistence.put_chat_avatar(avatar);
         }
-        self.persistence
-            .put_chat_folders(durable
+        self.persistence.put_chat_folders(
+            durable
                 .list_chat_folders(account_id)
                 .await
-                .map_err(TelegramDurableProjectionError::Persistence)?);
+                .map_err(TelegramDurableProjectionError::Persistence)?,
+        );
         for position in durable
             .list_chat_positions_for_account(account_id)
             .await
@@ -2105,11 +2227,8 @@ where
             .await
             .map_err(TelegramDurableProjectionError::Persistence)?;
         for (provider_chat_id, state) in operational_states {
-            self.persistence.put_chat_operational_state(
-                account_id,
-                &provider_chat_id,
-                state,
-            );
+            self.persistence
+                .put_chat_operational_state(account_id, &provider_chat_id, state);
         }
         Ok(chats.len())
     }
@@ -2170,7 +2289,8 @@ where
             .await
             .map_err(TelegramDurableProjectionError::Persistence)?;
         if !reactions.is_empty() {
-            self.persistence.replace_reactions(message_id, reactions.clone());
+            self.persistence
+                .replace_reactions(message_id, reactions.clone());
         }
         Ok((versions.len(), tombstones.len(), reactions.len()))
     }
@@ -2215,7 +2335,9 @@ where
         provider_message_id: &str,
     ) -> Vec<hermes_telegram_api::TelegramReactionObservation> {
         self.persistence
-            .reactions(&format!("telegram:{account_id}:{provider_chat_id}:{provider_message_id}"))
+            .reactions(&format!(
+                "telegram:{account_id}:{provider_chat_id}:{provider_message_id}"
+            ))
             .map(|reactions| reactions.to_vec())
             .unwrap_or_default()
     }
@@ -2253,7 +2375,9 @@ where
                 self.persistence.put_participants(&page);
                 Ok(page)
             }
-            _ => Err(TdlibError::Protocol("TDLib did not return participants".to_owned())),
+            _ => Err(TdlibError::Protocol(
+                "TDLib did not return participants".to_owned(),
+            )),
         }
     }
 
@@ -2326,19 +2450,16 @@ where
         limit: u32,
     ) -> Result<TelegramParticipantPage, TdlibError> {
         if limit == 0 {
-            return Err(TdlibError::Protocol("participant limit must be positive".to_owned()));
+            return Err(TdlibError::Protocol(
+                "participant limit must be positive".to_owned(),
+            ));
         }
         let mut offset = 0;
         let mut items = Vec::new();
         while items.len() < limit as usize {
             let page_limit = (limit as usize - items.len()).min(100) as u32;
-            let page = self.list_participants(
-                account_id,
-                provider_chat_id,
-                filter,
-                offset,
-                page_limit,
-            )?;
+            let page =
+                self.list_participants(account_id, provider_chat_id, filter, offset, page_limit)?;
             let page_len = page.items.len();
             items.extend(page.items);
             if page_len == 0 || page.next_offset.is_none() || page_len < page_limit as usize {
@@ -2376,7 +2497,9 @@ where
                 }
                 Ok(topics)
             }
-            _ => Err(TdlibError::Protocol("TDLib did not return topics".to_owned())),
+            _ => Err(TdlibError::Protocol(
+                "TDLib did not return topics".to_owned(),
+            )),
         }
     }
 
@@ -2469,7 +2592,9 @@ where
             };
             self.persistence.append_realtime_frame(frame.clone());
             self.apply_provider_event(frame.event.clone())
-                .map_err(|_| TdlibError::Protocol("Telegram provider event is invalid".to_owned()))?;
+                .map_err(|_| {
+                    TdlibError::Protocol("Telegram provider event is invalid".to_owned())
+                })?;
             frames.push(frame);
         }
         Ok(frames)
@@ -2479,7 +2604,10 @@ where
         self.persistence.realtime_after(account_id, sequence)
     }
 
-    pub fn accept_send(&mut self, command: TelegramSendMessage) -> Result<TelegramOperation, TelegramContractError> {
+    pub fn accept_send(
+        &mut self,
+        command: TelegramSendMessage,
+    ) -> Result<TelegramOperation, TelegramContractError> {
         let account_id = command.account_id.clone();
         self.persistence
             .account(&account_id)
@@ -2629,28 +2757,25 @@ where
                 text,
                 observed_at_unix_seconds,
             } => {
-                let message_id = format!(
-                    "telegram:{account_id}:{provider_chat_id}:{provider_message_id}"
-                );
+                let message_id =
+                    format!("telegram:{account_id}:{provider_chat_id}:{provider_message_id}");
                 let version_number = self
                     .persistence
                     .next_message_version_number(&message_id)
                     .saturating_sub(1);
                 if version_number > 0 {
                     durable
-                        .upsert_message_version(
-                            &hermes_telegram_api::TelegramMessageVersion {
-                                version_id: format!("{message_id}:version:{version_number}"),
-                                message_id,
-                                account_id: account_id.clone(),
-                                provider_chat_id: provider_chat_id.clone(),
-                                provider_message_id: provider_message_id.clone(),
-                                version_number,
-                                body_text: text.clone(),
-                                observed_at_unix_seconds: *observed_at_unix_seconds,
-                                source: hermes_telegram_api::TelegramMessageVersionSource::Provider,
-                            },
-                        )
+                        .upsert_message_version(&hermes_telegram_api::TelegramMessageVersion {
+                            version_id: format!("{message_id}:version:{version_number}"),
+                            message_id,
+                            account_id: account_id.clone(),
+                            provider_chat_id: provider_chat_id.clone(),
+                            provider_message_id: provider_message_id.clone(),
+                            version_number,
+                            body_text: text.clone(),
+                            observed_at_unix_seconds: *observed_at_unix_seconds,
+                            source: hermes_telegram_api::TelegramMessageVersionSource::Provider,
+                        })
                         .await
                         .map_err(TelegramDurableProjectionError::Persistence)?;
                 }
@@ -2661,23 +2786,20 @@ where
                 provider_message_id,
                 is_permanent,
             } => {
-                let message_id = format!(
-                    "telegram:{account_id}:{provider_chat_id}:{provider_message_id}"
-                );
+                let message_id =
+                    format!("telegram:{account_id}:{provider_chat_id}:{provider_message_id}");
                 durable
-                    .upsert_tombstone(
-                        &hermes_telegram_api::TelegramMessageTombstone {
-                            tombstone_id: format!("{message_id}:tombstone:provider"),
-                            message_id,
-                            account_id: account_id.clone(),
-                            provider_chat_id: provider_chat_id.clone(),
-                            provider_message_id: provider_message_id.clone(),
-                            reason: hermes_telegram_api::TelegramTombstoneReason::ProviderDeleted,
-                            observed_at_unix_seconds: 0,
-                            is_provider_delete: *is_permanent,
-                            is_locally_visible: false,
-                        },
-                    )
+                    .upsert_tombstone(&hermes_telegram_api::TelegramMessageTombstone {
+                        tombstone_id: format!("{message_id}:tombstone:provider"),
+                        message_id,
+                        account_id: account_id.clone(),
+                        provider_chat_id: provider_chat_id.clone(),
+                        provider_message_id: provider_message_id.clone(),
+                        reason: hermes_telegram_api::TelegramTombstoneReason::ProviderDeleted,
+                        observed_at_unix_seconds: 0,
+                        is_provider_delete: *is_permanent,
+                        is_locally_visible: false,
+                    })
                     .await
                     .map_err(TelegramDurableProjectionError::Persistence)?;
             }
@@ -2700,15 +2822,14 @@ where
         if let Some((account_id, provider_chat_id, provider_message_id, _)) =
             event_message_mutation(&frame.event)
         {
-            let message_id = format!(
-                "telegram:{account_id}:{provider_chat_id}:{provider_message_id}"
-            );
+            let message_id =
+                format!("telegram:{account_id}:{provider_chat_id}:{provider_message_id}");
             let mutations = self
                 .persistence
                 .message_mutations(&message_id)
                 .unwrap_or_default();
             durable
-                .replace_message_mutations(&message_id, &mutations)
+                .replace_message_mutations(&message_id, mutations)
                 .await
                 .map_err(TelegramDurableProjectionError::Persistence)?;
         }
@@ -2783,11 +2904,8 @@ where
                     .unwrap_or_default();
                 state.is_muted = !*use_default_mute_for && *mute_for_seconds > 0;
                 state.mute_for_seconds = *mute_for_seconds;
-                self.persistence.put_chat_operational_state(
-                    account_id,
-                    provider_chat_id,
-                    state,
-                );
+                self.persistence
+                    .put_chat_operational_state(account_id, provider_chat_id, state);
             }
             hermes_telegram_api::TelegramProviderEvent::ChatAvatarChanged(avatar) => {
                 self.persistence.put_chat_avatar(avatar.clone());
@@ -2806,15 +2924,13 @@ where
                     .cloned()
                     .unwrap_or_default();
                 state.is_marked_as_unread = *is_marked_as_unread;
-                self.persistence.put_chat_operational_state(
-                    account_id,
-                    provider_chat_id,
-                    state,
-                );
+                self.persistence
+                    .put_chat_operational_state(account_id, provider_chat_id, state);
             }
             hermes_telegram_api::TelegramProviderEvent::FileChanged(file) => {
                 self.persistence.put_file(file.clone());
-                self.persistence.apply_file_to_attachments(&file.account_id, file);
+                self.persistence
+                    .apply_file_to_attachments(&file.account_id, file);
             }
             hermes_telegram_api::TelegramProviderEvent::MessageSendFailed {
                 account_id,
@@ -2871,9 +2987,8 @@ where
                 text,
                 observed_at_unix_seconds,
             } => {
-                let message_id = format!(
-                    "telegram:{account_id}:{provider_chat_id}:{provider_message_id}"
-                );
+                let message_id =
+                    format!("telegram:{account_id}:{provider_chat_id}:{provider_message_id}");
                 let version_number = self.persistence.next_message_version_number(&message_id);
                 self.persistence.append_message_version(
                     hermes_telegram_api::TelegramMessageVersion {
@@ -2895,9 +3010,8 @@ where
                 provider_message_id,
                 is_permanent,
             } => {
-                let message_id = format!(
-                    "telegram:{account_id}:{provider_chat_id}:{provider_message_id}"
-                );
+                let message_id =
+                    format!("telegram:{account_id}:{provider_chat_id}:{provider_message_id}");
                 self.persistence.append_message_tombstone(
                     hermes_telegram_api::TelegramMessageTombstone {
                         tombstone_id: format!("{message_id}:tombstone:provider"),
@@ -2942,7 +3056,9 @@ where
             .chat_operational_state(account_id, provider_chat_id)
             .cloned()
             .unwrap_or_default();
-        let positions = self.persistence.chat_positions(account_id, provider_chat_id);
+        let positions = self
+            .persistence
+            .chat_positions(account_id, provider_chat_id);
         self.persistence.put_chat_operational_state(
             account_id,
             provider_chat_id,
@@ -2956,7 +3072,10 @@ where
         );
     }
 
-    fn reconcile_provider_operations(&mut self, event: &hermes_telegram_api::TelegramProviderEvent) {
+    fn reconcile_provider_operations(
+        &mut self,
+        event: &hermes_telegram_api::TelegramProviderEvent,
+    ) {
         let account_id = hermes_telegram_api::provider_event_account_id(event).to_owned();
         let expected_self_member_id = self
             .persistence
@@ -2990,11 +3109,10 @@ where
                 hermes_telegram_api::TelegramOperationState::Running
                     | hermes_telegram_api::TelegramOperationState::AwaitingProvider
             ) {
-                self.persistence
-                    .reconcile_operation(
-                        &operation_id,
-                        provider_event_matches_command(event, command),
-                    );
+                self.persistence.reconcile_operation(
+                    &operation_id,
+                    provider_event_matches_command(event, command),
+                );
             }
         }
     }
@@ -3008,7 +3126,11 @@ where
         self.persistence
             .account(account_id)
             .ok_or(TelegramContractError::AccountUnknown)?;
-        let session = qr_login_preparing(setup_id.to_owned(), account_id.to_owned(), expires_at_unix_seconds);
+        let session = qr_login_preparing(
+            setup_id.to_owned(),
+            account_id.to_owned(),
+            expires_at_unix_seconds,
+        );
         self.persistence.put_qr_session(session.clone());
         Ok(session)
     }
