@@ -337,6 +337,7 @@ pub(super) fn assert_communications_admitted_body_projection(
             reference_id: [8; 16],
             declared_bytes: 32,
             sha256: [9; 32],
+            custody_transfer_source_proof: vec![7; 96],
         },
     )
     .expect("attach admitted opaque Blob receipt");
