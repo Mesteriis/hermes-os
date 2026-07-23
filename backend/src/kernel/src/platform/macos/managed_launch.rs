@@ -94,8 +94,7 @@ pub fn start(
     registration_id: &str,
 ) -> Result<u64, String> {
     let reservation = reserve(supervisor, store, registration_id)?;
-    let kernel_executable =
-        std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())?;
+    let kernel_executable = selected_kernel_executable()?;
     let staged = native_launch::stage_bound_installed_release(
         &kernel_executable,
         reservation.binding(),
@@ -105,6 +104,14 @@ pub fn start(
     let (registration_id, expectation, policy) = reservation.into_launch_parts();
     supervisor.start(registration_id, staged, expectation, policy)?;
     Ok(runtime_generation)
+}
+
+fn selected_kernel_executable() -> Result<std::path::PathBuf, String> {
+    #[cfg(test)]
+    if let Some(executable) = std::env::var_os("HERMES_TEST_KERNEL_EXECUTABLE") {
+        return Ok(std::path::PathBuf::from(executable));
+    }
+    std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())
 }
 
 pub fn start_with_storage_configuration(
@@ -273,8 +280,7 @@ fn start_staged_with_configuration_bytes(
     host_bridge_configuration: Option<ManagedIntegrationHostBridgeConfigurationV1>,
     cleanup: Option<Box<dyn FnOnce() + Send>>,
 ) -> Result<u64, String> {
-    let kernel_executable =
-        std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())?;
+    let kernel_executable = selected_kernel_executable()?;
     let prepared = native_launch::prepare_bound_managed_runtime(
         &kernel_executable,
         reservation.binding(),

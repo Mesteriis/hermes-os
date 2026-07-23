@@ -178,11 +178,11 @@ where
         ManagedRuntimeClientDeliveryRequestV1 { request: Some(request.clone()) }.encode_to_vec(),
     )?;
     let response = ManagedRuntimeClientDeliveryResponseV1::decode(response.as_slice())
-        .map_err(|_| "managed client response is invalid".to_owned())?
+        .map_err(|_| "managed client delivery response is invalid".to_owned())?
         .response
-        .ok_or_else(|| "managed client response is invalid".to_owned())?;
+        .ok_or_else(|| "managed client delivery response is missing".to_owned())?;
     validate_module_client_response_v1(&response)
-        .map_err(|_| "managed client response is invalid".to_owned())?;
+        .map_err(|_| "managed client response is rejected".to_owned())?;
     if response.request_id != request.request_id {
         return Err("managed client response does not match request".to_owned());
     }

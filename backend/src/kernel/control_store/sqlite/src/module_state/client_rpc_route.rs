@@ -48,7 +48,7 @@ pub(crate) fn insert_client_rpc_routes(
     Ok(())
 }
 
-fn read_approved_client_rpc_routes(connection: &Connection) -> Result<Vec<ModuleClientRpcRouteV1>, StoreError> {
+fn read_approved_client_rpc_routes(connection: &mut Connection) -> Result<Vec<ModuleClientRpcRouteV1>, StoreError> {
     let mut statement = connection.prepare(
         "SELECT route.registration_id, route.capability_id, route.contract_owner, route.contract_name,
                 route.contract_major, route.contract_revision, route.contract_schema_sha256, route.path

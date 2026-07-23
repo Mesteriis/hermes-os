@@ -71,6 +71,7 @@ pub fn communications_events_capability_v1() -> CapabilityDescriptorV1 {
         provides: vec![ProvidedSurfaceV1 {
             kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
             contract: Some(recorded.clone()),
+            client_rpc_route: None,
         }],
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::EventRoute(EventRouteRequestV1 {
@@ -97,6 +98,7 @@ pub fn communications_observe_capability_v1() -> CapabilityDescriptorV1 {
         provides: vec![ProvidedSurfaceV1 {
             kind: ProvidedSurfaceKindV1::DurableConsumer as i32,
             contract: Some(observed.clone()),
+            client_rpc_route: None,
         }],
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::EventRoute(EventRouteRequestV1 {

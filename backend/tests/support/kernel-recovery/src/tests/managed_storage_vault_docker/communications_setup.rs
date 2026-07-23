@@ -45,7 +45,12 @@ pub(super) fn issue_initial_communications_storage_binding(store: &SqliteControl
         COMMUNICATIONS_RUNTIME_INSTANCE_ID,
         1,
         COMMUNICATIONS_STORAGE_CAPABILITY_ID,
-        StorageBindingIssueV1::new(1, 1, 1, *bundle.digest())
+        StorageBindingIssueV1::new(
+            1,
+            1,
+            u64::from(COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1),
+            *bundle.digest(),
+        )
             .expect("initial Communications Storage issue"),
     )
     .expect("issue Communications Storage binding");
@@ -145,7 +150,7 @@ pub(super) fn start_communications_domain(
             registration_id: COMMUNICATIONS_REGISTRATION.to_owned(),
             runtime_instance_id: COMMUNICATIONS_RUNTIME_INSTANCE_ID.to_owned(),
             runtime_generation: 1,
-            grant_epoch: 1,
+            grant_epoch: binding.grant_epoch(),
             storage: Some(storage),
             event_hub_endpoint: events.nats_endpoint().to_owned(),
             event_credential_revision: events.credential_revision(),
@@ -220,19 +225,19 @@ fn route_communications_query(
 fn record_communications_registration(store: &SqliteControlStore, descriptor: &[u8]) -> u64 {
     let registration = ModuleRegistration::new(
         COMMUNICATIONS_REGISTRATION,
-        COMMUNICATIONS_OWNER_ID,
         COMMUNICATIONS_MODULE_ID,
+        COMMUNICATIONS_OWNER_ID,
         Sha256::digest(descriptor).into(),
         ModuleRegistrationState::Pending,
         1,
     );
     let capabilities = [
+        "communications.blob.v1".to_owned(),
         COMMUNICATIONS_EVENTS_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_OBSERVE_CAPABILITY_ID.to_owned(),
-        COMMUNICATIONS_STORAGE_CAPABILITY_ID.to_owned(),
-        "communications.blob.v1".to_owned(),
         "communications.query.v1".to_owned(),
         COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_STORAGE_CAPABILITY_ID.to_owned(),
     ];
     let storage = ModuleStorageRequestV1::new(
         COMMUNICATIONS_REGISTRATION,

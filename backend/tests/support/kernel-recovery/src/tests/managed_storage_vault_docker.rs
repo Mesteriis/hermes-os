@@ -147,6 +147,9 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
         &credential_directory(),
     );
     let release = installed_communications_release(&root);
+    unsafe {
+        std::env::set_var("HERMES_TEST_KERNEL_EXECUTABLE", release.kernel());
+    }
     let store = Arc::new(configured_communications_store(&root, release.kernel()));
     let _ = FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -185,6 +188,9 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
     assert_communications_search_query_delivery(&store, &supervisor);
 
     supervisor.shutdown().expect("stop managed processes");
+    unsafe {
+        std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
+    }
     std::fs::remove_dir_all(root).expect("remove fixture");
 }
 

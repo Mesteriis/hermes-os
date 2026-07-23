@@ -46,6 +46,19 @@ fn renders_a_generation_scoped_transaction_pool_without_credentials() {
 }
 
 #[test]
+fn derives_a_safe_alias_for_a_hyphenated_registration_id() {
+    let alias = PoolAliasV1::new("communications-runtime", 1).expect("valid alias");
+
+    assert_eq!(
+        alias.as_str(),
+        hermes_storage_protocol::storage_runtime_pool_alias("communications-runtime", 1),
+    );
+    assert!(alias.as_str().bytes().all(|byte| {
+        byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'
+    }));
+}
+
+#[test]
 fn rejects_config_that_cannot_be_safely_rendered() {
     let alias = PoolAliasV1::new("registration_notes", 1).expect("valid alias");
     let result = PgBouncerRuntimeConfigV1::new(

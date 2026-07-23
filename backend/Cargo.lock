@@ -1814,7 +1814,6 @@ dependencies = [
  "prost-build 0.14.4",
  "prost-types 0.14.4",
  "protoc-bin-vendored",
- "sha2 0.11.0",
 ]
 
 [[package]]
@@ -2259,6 +2258,7 @@ name = "hermes-storage-testkit"
 version = "0.1.0"
 dependencies = [
  "getrandom 0.4.3",
+ "hermes-communications-persistence",
  "hermes-runtime-protocol",
  "hermes-storage-control",
  "hermes-storage-migrations",

@@ -221,17 +221,41 @@ impl CommunicationsEventRuntimeV1 {
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?
             .request
             .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?;
-        validate_module_client_request_v1(&request).map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
+        if validate_module_client_request_v1(&request).is_err() {
+            if read_frame(&mut self.control_channel)? != frame {
+                return Err(CommunicationsEventRuntimeErrorV1::Admission);
+            }
+            write_frame(
+                &mut self.control_channel,
+                &ManagedRuntimeClientDeliveryResponseV1 {
+                    response: Some(ModuleClientResponseV1 {
+                        protocol_major: 1,
+                        request_id: request.request_id,
+                        response_payload: Vec::new(),
+                        error_code: "REJECTED".to_owned(),
+                    }),
+                }
+                .encode_to_vec(),
+            )?;
+            return Ok(true);
+        }
         if read_frame(&mut self.control_channel)? != frame { return Err(CommunicationsEventRuntimeErrorV1::Admission); }
         let payload = crate::query_client_port::handle_module_query_request_v1(
             &self.persistence,
             &mut self.search_access,
             &request.encode_to_vec(),
         )
-        .await
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-        let response = ModuleClientResponseV1::decode(payload.as_slice())
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        .await;
+        let response = match payload {
+            Ok(payload) => ModuleClientResponseV1::decode(payload.as_slice())
+                .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?,
+            Err(_) => ModuleClientResponseV1 {
+                protocol_major: 1,
+                request_id: request.request_id,
+                response_payload: Vec::new(),
+                error_code: "UNAVAILABLE".to_owned(),
+            },
+        };
         validate_module_client_response_v1(&response).map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
         if response.request_id != request.request_id {
             return Err(CommunicationsEventRuntimeErrorV1::Admission);

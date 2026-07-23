@@ -313,7 +313,7 @@ fn gateway_service(
                 return Err(ClientRpcRouteErrorV1::Internal);
             }
             Ok(response.response_payload)
-        });
+        })
     };
     let client_rpc_routes = client_rpc_routes.into_iter().map(|route| {
         ClientRpcRouter::new(Arc::clone(&session), ClientRpcRouteV1::new(

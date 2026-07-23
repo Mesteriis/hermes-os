@@ -32,8 +32,7 @@ pub fn validate_module_client_request_v1(
 pub fn validate_module_client_response_v1(
     response: &ModuleClientResponseV1,
 ) -> Result<(), ModuleClientValidationErrorV1> {
-    let successful_response = !response.response_payload.is_empty()
-        && response.response_payload.len() <= MAX_PAYLOAD_BYTES
+    let successful_response = response.response_payload.len() <= MAX_PAYLOAD_BYTES
         && response.error_code.is_empty();
     let failed_response = response.response_payload.is_empty() && valid_error_code(&response.error_code);
     if response.protocol_major != PROTOCOL_MAJOR
@@ -109,5 +108,16 @@ mod tests {
             validate_module_client_response_v1(&response),
             Err(ModuleClientValidationErrorV1::InvalidResponse)
         );
+    }
+
+    #[test]
+    fn accepts_an_empty_successful_protobuf_payload() {
+        let response = ModuleClientResponseV1 {
+            protocol_major: 1,
+            request_id: 1,
+            response_payload: Vec::new(),
+            error_code: String::new(),
+        };
+        assert_eq!(validate_module_client_response_v1(&response), Ok(()));
     }
 }

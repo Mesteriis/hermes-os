@@ -2,7 +2,7 @@
 
 use pg_query::{
     NodeEnum,
-    protobuf::{AlterTableType, Node},
+    protobuf::{AlterTableType, ConstrType, Node},
 };
 
 use super::{
@@ -35,7 +35,8 @@ pub fn admit_owner_local_additive_sql(
 fn admit_statement(node: &NodeEnum, owner: &str) -> Result<(), MigrationAdmissionErrorV1> {
     match node {
         NodeEnum::CreateStmt(statement) if create_table_is_additive(statement, owner) => Ok(()),
-        NodeEnum::AlterTableStmt(statement) if add_columns_is_additive(statement, owner) => Ok(()),
+        NodeEnum::IndexStmt(statement) if create_index_is_additive(statement, owner) => Ok(()),
+        NodeEnum::AlterTableStmt(statement) if alter_table_is_additive(statement, owner) => Ok(()),
         _ => Err(MigrationAdmissionErrorV1::Forbidden),
     }
 }
@@ -43,8 +44,10 @@ fn admit_statement(node: &NodeEnum, owner: &str) -> Result<(), MigrationAdmissio
 fn create_table_is_additive(statement: &pg_query::protobuf::CreateStmt, owner: &str) -> bool {
     is_owned_relation(statement.relation.as_ref(), owner)
         && !statement.table_elts.is_empty()
-        && statement.table_elts.iter().all(is_column_definition)
-        && statement.constraints.is_empty()
+        && statement.table_elts.iter().all(|element| {
+            is_column_definition(element) || is_owner_local_table_constraint(element, owner)
+        })
+        && statement.constraints.iter().all(|constraint| is_owner_local_table_constraint(constraint, owner))
         && statement.inh_relations.is_empty()
         && statement.partbound.is_none()
         && statement.partspec.is_none()
@@ -53,25 +56,56 @@ fn create_table_is_additive(statement: &pg_query::protobuf::CreateStmt, owner: &
         && statement.access_method.is_empty()
 }
 
-fn add_columns_is_additive(statement: &pg_query::protobuf::AlterTableStmt, owner: &str) -> bool {
+fn create_index_is_additive(statement: &pg_query::protobuf::IndexStmt, owner: &str) -> bool {
+    is_owned_relation(statement.relation.as_ref(), owner)
+}
+
+fn alter_table_is_additive(statement: &pg_query::protobuf::AlterTableStmt, owner: &str) -> bool {
     is_owned_relation(statement.relation.as_ref(), owner)
         && !statement.cmds.is_empty()
-        && statement.cmds.iter().all(is_add_column)
+        && statement.cmds.iter().all(is_additive_alter)
 }
 
 fn is_column_definition(node: &Node) -> bool {
     matches!(node.node.as_ref(), Some(NodeEnum::ColumnDef(_)))
 }
 
-fn is_add_column(node: &Node) -> bool {
+fn is_additive_alter(node: &Node) -> bool {
     let Some(NodeEnum::AlterTableCmd(command)) = node.node.as_ref() else {
         return false;
     };
-    matches!(
-        AlterTableType::try_from(command.subtype),
-        Ok(AlterTableType::AtAddColumn)
-    ) && command
-        .def
-        .as_ref()
-        .is_some_and(|definition| is_column_definition(definition))
+    match AlterTableType::try_from(command.subtype) {
+        Ok(AlterTableType::AtAddColumn) => command
+            .def
+            .as_ref()
+            .is_some_and(|definition| is_column_definition(definition)),
+        Ok(AlterTableType::AtAddConstraint) => command
+            .def
+            .as_ref()
+            .is_some_and(|definition| is_check_constraint(definition)),
+        _ => false,
+    }
+}
+
+fn is_check_constraint(node: &Node) -> bool {
+    matches!(node.node.as_ref(), Some(NodeEnum::Constraint(constraint))
+        if !constraint.conname.is_empty()
+            && matches!(ConstrType::try_from(constraint.contype), Ok(ConstrType::ConstrCheck))
+            && !constraint.deferrable
+            && !constraint.initdeferred
+            && !constraint.skip_validation
+            && constraint.pktable.is_none()
+            && constraint.fk_attrs.is_empty()
+            && constraint.pk_attrs.is_empty())
+}
+
+fn is_owner_local_table_constraint(node: &Node, owner: &str) -> bool {
+    let Some(NodeEnum::Constraint(constraint)) = node.node.as_ref() else {
+        return false;
+    };
+    match ConstrType::try_from(constraint.contype) {
+        Ok(ConstrType::ConstrPrimary | ConstrType::ConstrUnique | ConstrType::ConstrCheck) => true,
+        Ok(ConstrType::ConstrForeign) => is_owned_relation(constraint.pktable.as_ref(), owner),
+        _ => false,
+    }
 }

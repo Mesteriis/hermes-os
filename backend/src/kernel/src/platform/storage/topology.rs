@@ -107,8 +107,7 @@ pub(crate) fn to_runtime_binding(
     {
         return Err("Storage binding is stale for the current topology".to_owned());
     }
-    let pool_alias = format!(
-        "runtime_{}_{}",
+    let pool_alias = hermes_storage_protocol::storage_runtime_pool_alias(
         binding.registration_id(),
         binding.runtime_generation(),
     );

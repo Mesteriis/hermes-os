@@ -10,6 +10,7 @@ owner = "test"
 surface = "test_support"
 
 [dev-dependencies]
+hermes-communications-persistence = { path = "../../../src/communications-persistence" }
 hermes-storage-control = { path = "../../../src/platform/storage/control" }
 hermes-storage-migrations = { path = "../../../src/platform/storage/migrations" }
 hermes-storage-pgbouncer = { path = "../../../src/platform/storage/pgbouncer" }

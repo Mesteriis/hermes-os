@@ -30,6 +30,12 @@ fn accepts_a_bounded_ordered_bundle() {
 }
 
 #[test]
+fn admits_the_canonical_communications_bundle() {
+    let bundle = hermes_communications_persistence::communications_storage_bundle_v1();
+    assert_eq!(admit_storage_bundle(&bundle), Ok(()));
+}
+
+#[test]
 fn rejects_unversioned_or_reordered_steps() {
     let mut unversioned = valid_bundle();
     unversioned.major = 0;

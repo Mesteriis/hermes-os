@@ -28,6 +28,20 @@ fn admits_owner_local_add_column() {
 }
 
 #[test]
+fn admits_owner_local_simple_index_and_check_constraint() {
+    let index = admit_owner_local_additive_sql(
+        "notes",
+        "CREATE INDEX notes_entries_lookup ON hermes_data.notes_entries (entry_id) WHERE entry_id IS NOT NULL;",
+    );
+    let constraint = admit_owner_local_additive_sql(
+        "notes",
+        "ALTER TABLE hermes_data.notes_entries ADD CONSTRAINT notes_entries_shape CHECK (entry_id IS NOT NULL);",
+    );
+    assert_eq!(index, Ok(()));
+    assert_eq!(constraint, Ok(()));
+}
+
+#[test]
 fn admits_the_exact_scheduler_platform_schema() {
     let result = admit_owner_local_additive_sql(
         "scheduler",
@@ -52,6 +66,11 @@ fn rejects_wrong_schema_and_non_additive_alteration() {
         "notes",
         "ALTER TABLE hermes_data.notes_entries DROP COLUMN title;",
     );
+    let foreign_key = admit_owner_local_additive_sql(
+        "notes",
+        "ALTER TABLE hermes_data.notes_entries ADD CONSTRAINT notes_entries_foreign FOREIGN KEY (entry_id) REFERENCES hermes_data.other_entries (entry_id);",
+    );
     assert_eq!(wrong_schema, Err(MigrationAdmissionErrorV1::Forbidden));
     assert_eq!(drop_column, Err(MigrationAdmissionErrorV1::Forbidden));
+    assert_eq!(foreign_key, Err(MigrationAdmissionErrorV1::Forbidden));
 }

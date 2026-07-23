@@ -42,6 +42,7 @@ pub(super) fn error_code(error: &str) -> &'static str {
         "Storage binding is stale or unavailable" | "Storage binding is invalid" => {
             "binding_not_admissible"
         }
+        "Storage runtime configuration is invalid" => "binding_runtime_configuration_invalid",
         "Storage platform credential bootstrap is invalid"
         | "Storage platform credential bootstrap was rejected"
         | "Storage platform credential bootstrap is unavailable"
@@ -49,6 +50,12 @@ pub(super) fn error_code(error: &str) -> &'static str {
         "Storage role specification is invalid"
         | "Storage role reconciliation is unavailable"
         | "Storage role credential is unavailable" => "binding_role_provisioning_failed",
+        "Storage PostgreSQL runtime is unavailable"
+        | "Storage PostgreSQL admin authentication is unavailable"
+        | "Storage PostgreSQL bootstrap is unavailable"
+        | "Storage PostgreSQL readiness is unavailable"
+        | "Storage PostgreSQL identity is unavailable"
+        | "Storage PostgreSQL admin endpoint is invalid" => "binding_postgres_unavailable",
         "Storage migration bundle is unavailable" => "binding_migration_bundle_failed",
         "Storage migration application is unavailable" => "binding_migration_failed",
         "Storage migration owner role is unavailable" => "binding_migration_owner_role_failed",
@@ -62,9 +69,20 @@ pub(super) fn error_code(error: &str) -> &'static str {
         "Storage PgBouncer database configuration is unavailable" => {
             "binding_pool_configuration_failed"
         }
+        "Storage PgBouncer admin runtime is unavailable"
+        | "Storage PgBouncer admin authentication is unavailable"
+        | "Storage PgBouncer admin endpoint is invalid"
+        | "Storage PgBouncer admin credential is invalid"
+        | "Storage PgBouncer authentication configuration is unavailable" => {
+            "binding_pool_authentication_failed"
+        }
         "Storage PgBouncer configuration reload is unavailable" => "binding_pool_reload_failed",
         "Storage PgBouncer configuration is unavailable" => "binding_pool_verification_failed",
         "Storage PgBouncer catalog is unavailable" => "binding_pool_catalog_failed",
+        "Storage runtime SCRAM verifier is unavailable" => "binding_pool_runtime_credential_failed",
+        "Storage binding pool alias is invalid"
+        | "Storage binding budget is invalid"
+        | "Storage binding configuration is invalid" => "binding_pool_binding_invalid",
         _ => "binding_apply_failed",
     }
 }
