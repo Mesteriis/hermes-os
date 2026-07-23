@@ -220,6 +220,7 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
     );
 
     supervisor.shutdown().expect("stop managed processes");
+    assert_communications_storage_backup_restore(&root);
     unsafe {
         std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
     }

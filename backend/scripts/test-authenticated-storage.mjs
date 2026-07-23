@@ -89,6 +89,13 @@ async function start_contour(secrets) {
   await run('docker', [...compose, 'up', '--detach', '--wait'], {
     env: compose_environment(secrets),
   });
+  const { stdout } = await execFileAsync('docker', [...compose, 'ps', '--quiet', 'postgres'], {
+    encoding: 'utf8',
+    env: compose_environment(secrets),
+  });
+  const container = stdout.trim();
+  if (!/^[a-f0-9]{12,64}$/i.test(container)) throw new Error('authenticated PostgreSQL container is unavailable');
+  secrets.postgresContainer = container;
 }
 
 function allocate_runtime_files(secrets) {
@@ -137,6 +144,7 @@ async function run_conformance(secrets) {
       HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT: '35532',
       HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_DATABASES_FILE: secrets.databasesPath,
       HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_AUTH_FILE: secrets.authPath,
+      HERMES_STORAGE_AUTHENTICATED_POSTGRES_CONTAINER: secrets.postgresContainer,
     },
         });
       } finally {
@@ -219,6 +227,7 @@ function authenticated_environment(secrets) {
     HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT: '35532',
     HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_DATABASES_FILE: secrets.databasesPath,
       HERMES_STORAGE_AUTHENTICATED_PGBOUNCER_AUTH_FILE: secrets.authPath,
+      HERMES_STORAGE_AUTHENTICATED_POSTGRES_CONTAINER: secrets.postgresContainer,
   };
 }
 
