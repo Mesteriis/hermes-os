@@ -6,8 +6,7 @@ use hermes_events_protocol::{
     delivery::{OutboxRecordError, OutboxRecordV1},
     v1::{
         ActorKindV1, ActorRefV1, ContractRefV1, DurableEnvelopeV1, FenceKindV1,
-        ObservationMetadataV1, SourceFenceV1, SourceRefV1,
-        durable_envelope_v1::Semantics,
+        ObservationMetadataV1, SourceFenceV1, SourceRefV1, durable_envelope_v1::Semantics,
     },
     validation::envelope::validate_envelope_v1,
 };
@@ -16,10 +15,16 @@ use prost_types::Timestamp;
 use sha2::{Digest, Sha256};
 
 pub mod v1 {
-    include!(concat!(env!("OUT_DIR"), "/hermes.communications.ingress.v1.rs"));
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/hermes.communications.ingress.v1.rs"
+    ));
 }
 
-include!(concat!(env!("OUT_DIR"), "/communications_observation_schema.rs"));
+include!(concat!(
+    env!("OUT_DIR"),
+    "/communications_observation_schema.rs"
+));
 
 pub const PACKAGE: &str = "hermes-communications-ingress";
 pub const MAX_OBSERVATION_ID_LEN: usize = 256;
@@ -27,33 +32,71 @@ pub const MAX_EXTERNAL_RECORD_ID_LEN: usize = 512;
 pub const MAX_SOURCE_SCOPE_ID_LEN: usize = 512;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ProviderProvenanceV1 { MailImap, MailGmail, Telegram, WhatsAppWeb, MailSmtp, Zulip }
+pub enum ProviderProvenanceV1 {
+    MailImap,
+    MailGmail,
+    Telegram,
+    WhatsAppWeb,
+    MailSmtp,
+    Zulip,
+}
 
 impl ProviderProvenanceV1 {
     pub const fn as_str(self) -> &'static str {
-        match self { Self::MailImap => "mail-imap", Self::MailGmail => "mail-gmail", Self::Telegram => "telegram", Self::WhatsAppWeb => "whatsapp-web", Self::MailSmtp => "mail-smtp", Self::Zulip => "zulip" }
+        match self {
+            Self::MailImap => "mail-imap",
+            Self::MailGmail => "mail-gmail",
+            Self::Telegram => "telegram",
+            Self::WhatsAppWeb => "whatsapp-web",
+            Self::MailSmtp => "mail-smtp",
+            Self::Zulip => "zulip",
+        }
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationEvidenceKindV1 {
-    EmailMessage, ChatMessage, MessageEdited, MessageDeleted, ReactionChanged,
-    DeliveryStateChanged, ConversationStateChanged, ParticipantChanged, MediaChanged,
-    TopicChanged, TypingChanged,
+    EmailMessage,
+    ChatMessage,
+    MessageEdited,
+    MessageDeleted,
+    ReactionChanged,
+    DeliveryStateChanged,
+    ConversationStateChanged,
+    ParticipantChanged,
+    MediaChanged,
+    TopicChanged,
+    TypingChanged,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CommunicationDirectionV1 { Incoming, Outgoing, Unknown }
+pub enum CommunicationDirectionV1 {
+    Incoming,
+    Outgoing,
+    Unknown,
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BodyAvailabilityV1 { MetadataOnly, PendingBlob, Unavailable, AdmittedBlob }
+pub enum BodyAvailabilityV1 {
+    MetadataOnly,
+    PendingBlob,
+    Unavailable,
+    AdmittedBlob,
+}
 
 impl BodyAvailabilityV1 {
-    pub const fn has_pending_blob(self) -> bool { matches!(self, Self::PendingBlob) }
+    pub const fn has_pending_blob(self) -> bool {
+        matches!(self, Self::PendingBlob)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BodyAdmissionFailureV1 { SourceUnavailable, SizeLimitExceeded, IntegrityMismatch, PolicyRejected }
+pub enum BodyAdmissionFailureV1 {
+    SourceUnavailable,
+    SizeLimitExceeded,
+    IntegrityMismatch,
+    PolicyRejected,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BodyBlobReceiptV1 {
@@ -65,7 +108,11 @@ pub struct BodyBlobReceiptV1 {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AttachmentDispositionV1 { Attachment, Inline, Unknown }
+pub enum AttachmentDispositionV1 {
+    Attachment,
+    Inline,
+    Unknown,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttachmentDescriptorV1 {
@@ -108,14 +155,24 @@ pub struct CommunicationObservationDraft {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IngressDraftError {
-    EmptyObservationId, ObservationIdTooLong, EmptyExternalRecordId, ExternalRecordIdTooLong,
-    EmptyExternalAccountId, ExternalAccountIdTooLong, EmptyExternalConversationId,
+    EmptyObservationId,
+    ObservationIdTooLong,
+    EmptyExternalRecordId,
+    ExternalRecordIdTooLong,
+    EmptyExternalAccountId,
+    ExternalAccountIdTooLong,
+    EmptyExternalConversationId,
     ExternalConversationIdTooLong,
-    EmptyExternalParticipantId, ExternalParticipantIdTooLong,
-    EmptyExternalMediaId, ExternalMediaIdTooLong,
-    EmptyExternalReplyToRecordId, ExternalReplyToRecordIdTooLong,
-    EmptyExternalForwardOriginRecordId, ExternalForwardOriginRecordIdTooLong,
-    InvalidAttachmentDescriptor, InvalidBodyAdmission,
+    EmptyExternalParticipantId,
+    ExternalParticipantIdTooLong,
+    EmptyExternalMediaId,
+    ExternalMediaIdTooLong,
+    EmptyExternalReplyToRecordId,
+    ExternalReplyToRecordIdTooLong,
+    EmptyExternalForwardOriginRecordId,
+    ExternalForwardOriginRecordIdTooLong,
+    InvalidAttachmentDescriptor,
+    InvalidBodyAdmission,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -130,7 +187,11 @@ pub struct ObservationEnvelopeContextV1 {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ObservationEnvelopeBuildErrorV1 { InvalidContext, InvalidEnvelope, OutboxRejected }
+pub enum ObservationEnvelopeBuildErrorV1 {
+    InvalidContext,
+    InvalidEnvelope,
+    OutboxRejected,
+}
 
 pub fn new_communication_observation_draft(
     observation_id: impl Into<String>,
@@ -141,14 +202,35 @@ pub fn new_communication_observation_draft(
     observed_at_unix_seconds: Option<i64>,
 ) -> Result<CommunicationObservationDraft, IngressDraftError> {
     let observation_id = observation_id.into();
-    if observation_id.trim().is_empty() { return Err(IngressDraftError::EmptyObservationId); }
-    if observation_id.len() > MAX_OBSERVATION_ID_LEN { return Err(IngressDraftError::ObservationIdTooLong); }
-    if source.external_record_id.trim().is_empty() { return Err(IngressDraftError::EmptyExternalRecordId); }
-    if source.external_record_id.len() > MAX_EXTERNAL_RECORD_ID_LEN { return Err(IngressDraftError::ExternalRecordIdTooLong); }
-    Ok(CommunicationObservationDraft { observation_id, source, kind, direction, body, body_blob: None, body_admission_failure: None, attachment_descriptor: None, observed_at_unix_seconds })
+    if observation_id.trim().is_empty() {
+        return Err(IngressDraftError::EmptyObservationId);
+    }
+    if observation_id.len() > MAX_OBSERVATION_ID_LEN {
+        return Err(IngressDraftError::ObservationIdTooLong);
+    }
+    if source.external_record_id.trim().is_empty() {
+        return Err(IngressDraftError::EmptyExternalRecordId);
+    }
+    if source.external_record_id.len() > MAX_EXTERNAL_RECORD_ID_LEN {
+        return Err(IngressDraftError::ExternalRecordIdTooLong);
+    }
+    Ok(CommunicationObservationDraft {
+        observation_id,
+        source,
+        kind,
+        direction,
+        body,
+        body_blob: None,
+        body_admission_failure: None,
+        attachment_descriptor: None,
+        observed_at_unix_seconds,
+    })
 }
 
-pub fn with_admitted_body_blob(mut draft: CommunicationObservationDraft, receipt: BodyBlobReceiptV1) -> Result<CommunicationObservationDraft, IngressDraftError> {
+pub fn with_admitted_body_blob(
+    mut draft: CommunicationObservationDraft,
+    receipt: BodyBlobReceiptV1,
+) -> Result<CommunicationObservationDraft, IngressDraftError> {
     if draft.body != BodyAvailabilityV1::AdmittedBlob || !valid_body_blob_receipt(&receipt) {
         return Err(IngressDraftError::InvalidBodyAdmission);
     }
@@ -156,7 +238,10 @@ pub fn with_admitted_body_blob(mut draft: CommunicationObservationDraft, receipt
     Ok(draft)
 }
 
-pub fn with_body_admission_failure(mut draft: CommunicationObservationDraft, failure: BodyAdmissionFailureV1) -> Result<CommunicationObservationDraft, IngressDraftError> {
+pub fn with_body_admission_failure(
+    mut draft: CommunicationObservationDraft,
+    failure: BodyAdmissionFailureV1,
+) -> Result<CommunicationObservationDraft, IngressDraftError> {
     if draft.body != BodyAvailabilityV1::Unavailable {
         return Err(IngressDraftError::InvalidBodyAdmission);
     }
@@ -169,7 +254,12 @@ pub fn with_attachment_descriptor(
     descriptor: AttachmentDescriptorV1,
 ) -> Result<CommunicationObservationDraft, IngressDraftError> {
     if draft.kind != CommunicationEvidenceKindV1::MediaChanged
-        || draft.source.scope.as_ref().and_then(|scope| scope.external_media_id.as_ref()).is_none()
+        || draft
+            .source
+            .scope
+            .as_ref()
+            .and_then(|scope| scope.external_media_id.as_ref())
+            .is_none()
         || !valid_attachment_descriptor(&descriptor)
     {
         return Err(IngressDraftError::InvalidAttachmentDescriptor);
@@ -186,9 +276,19 @@ pub fn new_scoped_communication_observation_draft(
     direction: CommunicationDirectionV1,
     observed_at_unix_seconds: Option<i64>,
 ) -> Result<CommunicationObservationDraft, IngressDraftError> {
-    let scope = source.scope.as_ref().ok_or(IngressDraftError::EmptyExternalAccountId)?;
+    let scope = source
+        .scope
+        .as_ref()
+        .ok_or(IngressDraftError::EmptyExternalAccountId)?;
     validate_source_scope(scope)?;
-    new_communication_observation_draft(observation_id, source, kind, body, direction, observed_at_unix_seconds)
+    new_communication_observation_draft(
+        observation_id,
+        source,
+        kind,
+        body,
+        direction,
+        observed_at_unix_seconds,
+    )
 }
 
 /// Builds the immutable broker record. Callers must supply the live Kernel-issued runtime identity.
@@ -200,51 +300,115 @@ pub fn build_observation_outbox_record_v1(
     let message_id = observation_message_id(draft);
     let correlation_id = observation_correlation_id(draft);
     let cursor = source_cursor_sha256(draft);
-    let (account_cursor, conversation_cursor, participant_cursor, media_cursor, reply_to_source_cursor, forward_origin_source_cursor) = source_scope_cursors(draft);
-    let timestamp = Timestamp { seconds: context.recorded_at_unix_seconds, nanos: context.recorded_at_nanos };
+    let scope_cursors = source_scope_cursors(draft);
+    let timestamp = Timestamp {
+        seconds: context.recorded_at_unix_seconds,
+        nanos: context.recorded_at_nanos,
+    };
     let payload = v1::CommunicationObservationV1 {
-        provider: provider_value(draft.source.provider), kind: evidence_kind_value(draft.kind),
+        provider: provider_value(draft.source.provider),
+        kind: evidence_kind_value(draft.kind),
         direction: direction_value(draft.direction),
         body: body_availability_value(draft.body),
-        account_cursor_sha256: account_cursor.map_or_else(Vec::new, |value| value.to_vec()),
-        conversation_cursor_sha256: conversation_cursor.map_or_else(Vec::new, |value| value.to_vec()),
-        participant_cursor_sha256: participant_cursor.map_or_else(Vec::new, |value| value.to_vec()),
-        media_cursor_sha256: media_cursor.map_or_else(Vec::new, |value| value.to_vec()),
-        reply_to_source_cursor_sha256: reply_to_source_cursor.map_or_else(Vec::new, |value| value.to_vec()),
-        forward_origin_source_cursor_sha256: forward_origin_source_cursor.map_or_else(Vec::new, |value| value.to_vec()),
-        attachment_descriptor: draft.attachment_descriptor.as_ref().map(|descriptor| v1::AttachmentDescriptorV1 {
-            filename: descriptor.filename.clone().unwrap_or_default(),
-            media_type: descriptor.media_type.clone(),
-            declared_bytes: descriptor.declared_bytes,
-            sha256: descriptor.sha256.map_or_else(Vec::new, |value| value.to_vec()),
-            disposition: attachment_disposition_value(descriptor.disposition),
+        account_cursor_sha256: scope_cursors
+            .account
+            .map_or_else(Vec::new, |value| value.to_vec()),
+        conversation_cursor_sha256: scope_cursors
+            .conversation
+            .map_or_else(Vec::new, |value| value.to_vec()),
+        participant_cursor_sha256: scope_cursors
+            .participant
+            .map_or_else(Vec::new, |value| value.to_vec()),
+        media_cursor_sha256: scope_cursors
+            .media
+            .map_or_else(Vec::new, |value| value.to_vec()),
+        reply_to_source_cursor_sha256: scope_cursors
+            .reply_to_source
+            .map_or_else(Vec::new, |value| value.to_vec()),
+        forward_origin_source_cursor_sha256: scope_cursors
+            .forward_origin_source
+            .map_or_else(Vec::new, |value| value.to_vec()),
+        attachment_descriptor: draft.attachment_descriptor.as_ref().map(|descriptor| {
+            v1::AttachmentDescriptorV1 {
+                filename: descriptor.filename.clone().unwrap_or_default(),
+                media_type: descriptor.media_type.clone(),
+                declared_bytes: descriptor.declared_bytes,
+                sha256: descriptor
+                    .sha256
+                    .map_or_else(Vec::new, |value| value.to_vec()),
+                disposition: attachment_disposition_value(descriptor.disposition),
+            }
         }),
-        body_blob: draft.body_blob.as_ref().map(|receipt| v1::BodyBlobReceiptV1 {
-            blob_ref: receipt.blob_ref.clone(), reference_id: receipt.reference_id.to_vec(),
-            declared_bytes: receipt.declared_bytes, sha256: receipt.sha256.to_vec(),
-            custody_transfer_source_proof: receipt.custody_transfer_source_proof.clone(),
-        }),
-        body_admission_failure: draft.body_admission_failure.map(body_admission_failure_value).unwrap_or_default(),
-    }.encode_to_vec();
+        body_blob: draft
+            .body_blob
+            .as_ref()
+            .map(|receipt| v1::BodyBlobReceiptV1 {
+                blob_ref: receipt.blob_ref.clone(),
+                reference_id: receipt.reference_id.to_vec(),
+                declared_bytes: receipt.declared_bytes,
+                sha256: receipt.sha256.to_vec(),
+                custody_transfer_source_proof: receipt.custody_transfer_source_proof.clone(),
+            }),
+        body_admission_failure: draft
+            .body_admission_failure
+            .map(body_admission_failure_value)
+            .unwrap_or_default(),
+    }
+    .encode_to_vec();
     let envelope = DurableEnvelopeV1 {
-        envelope_major: 1, envelope_revision: 1, message_id: message_id.to_vec(),
-        contract: Some(ContractRefV1 { owner: "communications".to_owned(), name: "communication_observed".to_owned(), major: 1, revision: 1, schema_sha256: COMMUNICATION_OBSERVATION_SCHEMA_SHA256.to_vec() }),
-        source: Some(SourceRefV1 { module_id: context.module_id.clone(), runtime_instance_id: runtime_source_reference(&context.runtime_instance_id).to_vec(), runtime_generation: context.runtime_generation }),
-        recorded_at: Some(timestamp.clone()), partition_key: cursor.to_vec(), causation_message_id: Vec::new(), correlation_id: correlation_id.to_vec(),
-        actor: Some(ActorRefV1 { kind: ActorKindV1::Module as i32, actor_id: context.module_id.as_bytes().to_vec() }), trace: None,
-        source_fence: Some(SourceFenceV1 { kind: FenceKindV1::RuntimeLease as i32, scope_id: context.module_id.as_bytes().to_vec(), epoch: context.runtime_generation }),
-        semantics: Some(Semantics::Observation(ObservationMetadataV1 { observation_id: message_id.to_vec(), observed_at: Some(timestamp), occurred_at: draft.observed_at_unix_seconds.map(|seconds| Timestamp { seconds, nanos: 0 }), source_cursor_sha256: cursor.to_vec(), source_sequence: None })),
+        envelope_major: 1,
+        envelope_revision: 1,
+        message_id: message_id.to_vec(),
+        contract: Some(ContractRefV1 {
+            owner: "communications".to_owned(),
+            name: "communication_observed".to_owned(),
+            major: 1,
+            revision: 1,
+            schema_sha256: COMMUNICATION_OBSERVATION_SCHEMA_SHA256.to_vec(),
+        }),
+        source: Some(SourceRefV1 {
+            module_id: context.module_id.clone(),
+            runtime_instance_id: runtime_source_reference(&context.runtime_instance_id).to_vec(),
+            runtime_generation: context.runtime_generation,
+        }),
+        recorded_at: Some(timestamp),
+        partition_key: cursor.to_vec(),
+        causation_message_id: Vec::new(),
+        correlation_id: correlation_id.to_vec(),
+        actor: Some(ActorRefV1 {
+            kind: ActorKindV1::Module as i32,
+            actor_id: context.module_id.as_bytes().to_vec(),
+        }),
+        trace: None,
+        source_fence: Some(SourceFenceV1 {
+            kind: FenceKindV1::RuntimeLease as i32,
+            scope_id: context.module_id.as_bytes().to_vec(),
+            epoch: context.runtime_generation,
+        }),
+        semantics: Some(Semantics::Observation(ObservationMetadataV1 {
+            observation_id: message_id.to_vec(),
+            observed_at: Some(timestamp),
+            occurred_at: draft
+                .observed_at_unix_seconds
+                .map(|seconds| Timestamp { seconds, nanos: 0 }),
+            source_cursor_sha256: cursor.to_vec(),
+            source_sequence: None,
+        })),
         payload,
     };
-    validate_envelope_v1(&envelope).map_err(|_| ObservationEnvelopeBuildErrorV1::InvalidEnvelope)?;
+    validate_envelope_v1(&envelope)
+        .map_err(|_| ObservationEnvelopeBuildErrorV1::InvalidEnvelope)?;
     OutboxRecordV1::accept(envelope.encode_to_vec()).map_err(outbox_error)
 }
 
-fn validate_context(context: &ObservationEnvelopeContextV1) -> Result<(), ObservationEnvelopeBuildErrorV1> {
+fn validate_context(
+    context: &ObservationEnvelopeContextV1,
+) -> Result<(), ObservationEnvelopeBuildErrorV1> {
     if context.runtime_generation == 0
         || !valid_module_id(&context.module_id)
         || !valid_runtime_instance_id(&context.runtime_instance_id)
-        || !valid_timestamp(context.recorded_at_unix_seconds, context.recorded_at_nanos) {
+        || !valid_timestamp(context.recorded_at_unix_seconds, context.recorded_at_nanos)
+    {
         return Err(ObservationEnvelopeBuildErrorV1::InvalidContext);
     }
     Ok(())
@@ -255,7 +419,9 @@ fn runtime_source_reference(runtime_instance_id: &str) -> [u8; 16] {
     hasher.update(b"hermes.runtime.source-reference.v1\0");
     hasher.update(runtime_instance_id.as_bytes());
     let digest: [u8; 32] = hasher.finalize().into();
-    digest[..16].try_into().expect("fixed SHA-256 prefix length")
+    digest[..16]
+        .try_into()
+        .expect("fixed SHA-256 prefix length")
 }
 
 fn observation_message_id(draft: &CommunicationObservationDraft) -> [u8; 16] {
@@ -273,7 +439,9 @@ fn observation_identifier(domain: &[u8], draft: &CommunicationObservationDraft) 
     hasher.update(b"\0");
     hasher.update(draft.observation_id.as_bytes());
     let digest: [u8; 32] = hasher.finalize().into();
-    digest[..16].try_into().expect("fixed SHA-256 prefix length")
+    digest[..16]
+        .try_into()
+        .expect("fixed SHA-256 prefix length")
 }
 
 fn source_cursor_sha256(draft: &CommunicationObservationDraft) -> [u8; 32] {
@@ -289,10 +457,26 @@ fn source_cursor_sha256(draft: &CommunicationObservationDraft) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-fn source_scope_cursors(
-    draft: &CommunicationObservationDraft,
-) -> (Option<[u8; 32]>, Option<[u8; 32]>, Option<[u8; 32]>, Option<[u8; 32]>, Option<[u8; 32]>, Option<[u8; 32]>) {
-    let Some(scope) = draft.source.scope.as_ref() else { return (None, None, None, None, None, None) };
+struct SourceScopeCursorsV1 {
+    account: Option<[u8; 32]>,
+    conversation: Option<[u8; 32]>,
+    participant: Option<[u8; 32]>,
+    media: Option<[u8; 32]>,
+    reply_to_source: Option<[u8; 32]>,
+    forward_origin_source: Option<[u8; 32]>,
+}
+
+fn source_scope_cursors(draft: &CommunicationObservationDraft) -> SourceScopeCursorsV1 {
+    let Some(scope) = draft.source.scope.as_ref() else {
+        return SourceScopeCursorsV1 {
+            account: None,
+            conversation: None,
+            participant: None,
+            media: None,
+            reply_to_source: None,
+            forward_origin_source: None,
+        };
+    };
     let account = scope_identifier(
         b"hermes.communications.account-cursor.v1\0",
         draft.source.provider,
@@ -319,12 +503,34 @@ fn source_scope_cursors(
         hasher.update(value.as_bytes());
         hasher.finalize().into()
     });
-    let reply_to = scope.external_reply_to_record_id.as_ref().map(|value| source_cursor_for_scoped_record(draft.source.provider, &scope.external_account_id, value));
-    let forward_origin = scope.external_forward_origin_record_id.as_ref().map(|value| source_cursor_for_scoped_record(draft.source.provider, &scope.external_account_id, value));
-    (Some(account), conversation, participant, media, reply_to, forward_origin)
+    let reply_to = scope.external_reply_to_record_id.as_ref().map(|value| {
+        source_cursor_for_scoped_record(draft.source.provider, &scope.external_account_id, value)
+    });
+    let forward_origin = scope
+        .external_forward_origin_record_id
+        .as_ref()
+        .map(|value| {
+            source_cursor_for_scoped_record(
+                draft.source.provider,
+                &scope.external_account_id,
+                value,
+            )
+        });
+    SourceScopeCursorsV1 {
+        account: Some(account),
+        conversation,
+        participant,
+        media,
+        reply_to_source: reply_to,
+        forward_origin_source: forward_origin,
+    }
 }
 
-fn source_cursor_for_scoped_record(provider: ProviderProvenanceV1, account_id: &str, record_id: &str) -> [u8; 32] {
+fn source_cursor_for_scoped_record(
+    provider: ProviderProvenanceV1,
+    account_id: &str,
+    record_id: &str,
+) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(b"hermes.communications.source-cursor.v1\0");
     hasher.update(provider.as_str().as_bytes());
@@ -345,38 +551,74 @@ fn scope_identifier(domain: &[u8], provider: ProviderProvenanceV1, value: &str) 
 }
 
 fn validate_source_scope(scope: &SourceScopeEnvelope) -> Result<(), IngressDraftError> {
-    if scope.external_account_id.trim().is_empty() { return Err(IngressDraftError::EmptyExternalAccountId); }
-    if scope.external_account_id.len() > MAX_SOURCE_SCOPE_ID_LEN { return Err(IngressDraftError::ExternalAccountIdTooLong); }
+    if scope.external_account_id.trim().is_empty() {
+        return Err(IngressDraftError::EmptyExternalAccountId);
+    }
+    if scope.external_account_id.len() > MAX_SOURCE_SCOPE_ID_LEN {
+        return Err(IngressDraftError::ExternalAccountIdTooLong);
+    }
     if let Some(conversation_id) = &scope.external_conversation_id {
-        if conversation_id.trim().is_empty() { return Err(IngressDraftError::EmptyExternalConversationId); }
-        if conversation_id.len() > MAX_SOURCE_SCOPE_ID_LEN { return Err(IngressDraftError::ExternalConversationIdTooLong); }
+        if conversation_id.trim().is_empty() {
+            return Err(IngressDraftError::EmptyExternalConversationId);
+        }
+        if conversation_id.len() > MAX_SOURCE_SCOPE_ID_LEN {
+            return Err(IngressDraftError::ExternalConversationIdTooLong);
+        }
     }
     if let Some(participant_id) = &scope.external_participant_id {
-        if participant_id.trim().is_empty() { return Err(IngressDraftError::EmptyExternalParticipantId); }
-        if participant_id.len() > MAX_SOURCE_SCOPE_ID_LEN { return Err(IngressDraftError::ExternalParticipantIdTooLong); }
+        if participant_id.trim().is_empty() {
+            return Err(IngressDraftError::EmptyExternalParticipantId);
+        }
+        if participant_id.len() > MAX_SOURCE_SCOPE_ID_LEN {
+            return Err(IngressDraftError::ExternalParticipantIdTooLong);
+        }
     }
     if let Some(media_id) = &scope.external_media_id {
-        if media_id.trim().is_empty() { return Err(IngressDraftError::EmptyExternalMediaId); }
-        if media_id.len() > MAX_SOURCE_SCOPE_ID_LEN { return Err(IngressDraftError::ExternalMediaIdTooLong); }
+        if media_id.trim().is_empty() {
+            return Err(IngressDraftError::EmptyExternalMediaId);
+        }
+        if media_id.len() > MAX_SOURCE_SCOPE_ID_LEN {
+            return Err(IngressDraftError::ExternalMediaIdTooLong);
+        }
     }
     for (value, empty, too_long) in [
-        (&scope.external_reply_to_record_id, IngressDraftError::EmptyExternalReplyToRecordId, IngressDraftError::ExternalReplyToRecordIdTooLong),
-        (&scope.external_forward_origin_record_id, IngressDraftError::EmptyExternalForwardOriginRecordId, IngressDraftError::ExternalForwardOriginRecordIdTooLong),
+        (
+            &scope.external_reply_to_record_id,
+            IngressDraftError::EmptyExternalReplyToRecordId,
+            IngressDraftError::ExternalReplyToRecordIdTooLong,
+        ),
+        (
+            &scope.external_forward_origin_record_id,
+            IngressDraftError::EmptyExternalForwardOriginRecordId,
+            IngressDraftError::ExternalForwardOriginRecordIdTooLong,
+        ),
     ] {
         if let Some(value) = value {
-            if value.trim().is_empty() { return Err(empty); }
-            if value.len() > MAX_EXTERNAL_RECORD_ID_LEN { return Err(too_long); }
+            if value.trim().is_empty() {
+                return Err(empty);
+            }
+            if value.len() > MAX_EXTERNAL_RECORD_ID_LEN {
+                return Err(too_long);
+            }
         }
     }
     Ok(())
 }
 
 fn valid_module_id(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 64 && value.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-'))
+    !value.is_empty()
+        && value.len() <= 64
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
+        })
 }
 
 fn valid_runtime_instance_id(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 64 && value.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-'))
+    !value.is_empty()
+        && value.len() <= 64
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
+        })
 }
 
 fn valid_timestamp(seconds: i64, nanos: i32) -> bool {
@@ -384,7 +626,10 @@ fn valid_timestamp(seconds: i64, nanos: i32) -> bool {
 }
 
 fn valid_attachment_descriptor(value: &AttachmentDescriptorV1) -> bool {
-    value.filename.as_deref().is_none_or(|filename| !filename.is_empty() && filename.len() <= 512 && filename.is_ascii())
+    value
+        .filename
+        .as_deref()
+        .is_none_or(|filename| !filename.is_empty() && filename.len() <= 512 && filename.is_ascii())
         && !value.media_type.is_empty()
         && value.media_type.len() <= 256
         && value.media_type.is_ascii()
@@ -393,21 +638,72 @@ fn valid_attachment_descriptor(value: &AttachmentDescriptorV1) -> bool {
         && value.declared_bytes <= 64 * 1024 * 1024
 }
 fn valid_body_blob_receipt(value: &BodyBlobReceiptV1) -> bool {
-    !value.blob_ref.trim().is_empty() && value.blob_ref.len() <= 512 && value.blob_ref.is_ascii()
+    !value.blob_ref.trim().is_empty()
+        && value.blob_ref.len() <= 512
+        && value.blob_ref.is_ascii()
         && value.reference_id.iter().any(|byte| *byte != 0)
         && (1..=64 * 1024 * 1024).contains(&value.declared_bytes)
         && (1..=2_048).contains(&value.custody_transfer_source_proof.len())
 }
 
-fn outbox_error(_: OutboxRecordError) -> ObservationEnvelopeBuildErrorV1 { ObservationEnvelopeBuildErrorV1::OutboxRejected }
-const fn provider_value(value: ProviderProvenanceV1) -> i32 { match value { ProviderProvenanceV1::MailImap => 1, ProviderProvenanceV1::Telegram => 2, ProviderProvenanceV1::WhatsAppWeb => 3, ProviderProvenanceV1::MailSmtp => 4, ProviderProvenanceV1::Zulip => 5, ProviderProvenanceV1::MailGmail => 6 } }
-const fn direction_value(value: CommunicationDirectionV1) -> i32 { match value { CommunicationDirectionV1::Incoming => 1, CommunicationDirectionV1::Outgoing => 2, CommunicationDirectionV1::Unknown => 3 } }
-const fn evidence_kind_value(value: CommunicationEvidenceKindV1) -> i32 { match value {
-    CommunicationEvidenceKindV1::EmailMessage => 1, CommunicationEvidenceKindV1::ChatMessage => 2, CommunicationEvidenceKindV1::MessageEdited => 3, CommunicationEvidenceKindV1::MessageDeleted => 4, CommunicationEvidenceKindV1::ReactionChanged => 5, CommunicationEvidenceKindV1::DeliveryStateChanged => 6, CommunicationEvidenceKindV1::ConversationStateChanged => 7, CommunicationEvidenceKindV1::ParticipantChanged => 8, CommunicationEvidenceKindV1::MediaChanged => 9, CommunicationEvidenceKindV1::TopicChanged => 10, CommunicationEvidenceKindV1::TypingChanged => 11,
-} }
-const fn body_availability_value(value: BodyAvailabilityV1) -> i32 { match value { BodyAvailabilityV1::MetadataOnly => 1, BodyAvailabilityV1::PendingBlob => 2, BodyAvailabilityV1::Unavailable => 3, BodyAvailabilityV1::AdmittedBlob => 4 } }
-const fn body_admission_failure_value(value: BodyAdmissionFailureV1) -> i32 { match value { BodyAdmissionFailureV1::SourceUnavailable => 1, BodyAdmissionFailureV1::SizeLimitExceeded => 2, BodyAdmissionFailureV1::IntegrityMismatch => 3, BodyAdmissionFailureV1::PolicyRejected => 4 } }
-const fn attachment_disposition_value(value: AttachmentDispositionV1) -> i32 { match value { AttachmentDispositionV1::Attachment => 1, AttachmentDispositionV1::Inline => 2, AttachmentDispositionV1::Unknown => 3 } }
+fn outbox_error(_: OutboxRecordError) -> ObservationEnvelopeBuildErrorV1 {
+    ObservationEnvelopeBuildErrorV1::OutboxRejected
+}
+const fn provider_value(value: ProviderProvenanceV1) -> i32 {
+    match value {
+        ProviderProvenanceV1::MailImap => 1,
+        ProviderProvenanceV1::Telegram => 2,
+        ProviderProvenanceV1::WhatsAppWeb => 3,
+        ProviderProvenanceV1::MailSmtp => 4,
+        ProviderProvenanceV1::Zulip => 5,
+        ProviderProvenanceV1::MailGmail => 6,
+    }
+}
+const fn direction_value(value: CommunicationDirectionV1) -> i32 {
+    match value {
+        CommunicationDirectionV1::Incoming => 1,
+        CommunicationDirectionV1::Outgoing => 2,
+        CommunicationDirectionV1::Unknown => 3,
+    }
+}
+const fn evidence_kind_value(value: CommunicationEvidenceKindV1) -> i32 {
+    match value {
+        CommunicationEvidenceKindV1::EmailMessage => 1,
+        CommunicationEvidenceKindV1::ChatMessage => 2,
+        CommunicationEvidenceKindV1::MessageEdited => 3,
+        CommunicationEvidenceKindV1::MessageDeleted => 4,
+        CommunicationEvidenceKindV1::ReactionChanged => 5,
+        CommunicationEvidenceKindV1::DeliveryStateChanged => 6,
+        CommunicationEvidenceKindV1::ConversationStateChanged => 7,
+        CommunicationEvidenceKindV1::ParticipantChanged => 8,
+        CommunicationEvidenceKindV1::MediaChanged => 9,
+        CommunicationEvidenceKindV1::TopicChanged => 10,
+        CommunicationEvidenceKindV1::TypingChanged => 11,
+    }
+}
+const fn body_availability_value(value: BodyAvailabilityV1) -> i32 {
+    match value {
+        BodyAvailabilityV1::MetadataOnly => 1,
+        BodyAvailabilityV1::PendingBlob => 2,
+        BodyAvailabilityV1::Unavailable => 3,
+        BodyAvailabilityV1::AdmittedBlob => 4,
+    }
+}
+const fn body_admission_failure_value(value: BodyAdmissionFailureV1) -> i32 {
+    match value {
+        BodyAdmissionFailureV1::SourceUnavailable => 1,
+        BodyAdmissionFailureV1::SizeLimitExceeded => 2,
+        BodyAdmissionFailureV1::IntegrityMismatch => 3,
+        BodyAdmissionFailureV1::PolicyRejected => 4,
+    }
+}
+const fn attachment_disposition_value(value: AttachmentDispositionV1) -> i32 {
+    match value {
+        AttachmentDispositionV1::Attachment => 1,
+        AttachmentDispositionV1::Inline => 2,
+        AttachmentDispositionV1::Unknown => 3,
+    }
+}
 
 #[cfg(test)]
 mod body_admission_tests {
@@ -452,10 +748,14 @@ mod body_admission_tests {
         )
         .expect("record");
         let envelope = decode_envelope_v1(record.exact_bytes()).expect("envelope");
-        let payload = v1::CommunicationObservationV1::decode(envelope.payload.as_slice()).expect("payload");
+        let payload =
+            v1::CommunicationObservationV1::decode(envelope.payload.as_slice()).expect("payload");
 
         assert_eq!(payload.body, 4);
-        assert_eq!(payload.body_blob.expect("body blob").reference_id, vec![7; 16]);
+        assert_eq!(
+            payload.body_blob.expect("body blob").reference_id,
+            vec![7; 16]
+        );
         assert_eq!(payload.body_admission_failure, 0);
     }
 }
