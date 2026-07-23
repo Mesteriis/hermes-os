@@ -1,5 +1,7 @@
 //! Provider-neutral encrypted credential access over a Kernel-inherited FD.
 
+pub mod owner_derived_key;
+
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 
@@ -20,7 +22,7 @@ use hermes_vault_protocol::{
 use prost::Message;
 use zeroize::Zeroizing;
 
-const MAX_FRAME_BYTES: usize = 512 * 1024;
+pub(crate) const MAX_FRAME_BYTES: usize = 512 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ManagedProviderCredentialContextV1 {
@@ -262,7 +264,7 @@ fn issue_request(
         .map_err(|_| ManagedProviderCredentialErrorV1::InvalidContext)
 }
 
-fn binding(
+pub(crate) fn binding(
     audience: &LeaseAudienceV1,
     vault_runtime_generation: u64,
     request_id: [u8; 16],
@@ -274,7 +276,7 @@ fn binding(
         .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)
 }
 
-fn valid_response(route: &VaultCiphertextRouteV1, response: VaultCiphertextResponseV1) -> Result<VaultCiphertextFrameV1, ManagedProviderCredentialErrorV1> {
+pub(crate) fn valid_response(route: &VaultCiphertextRouteV1, response: VaultCiphertextResponseV1) -> Result<VaultCiphertextFrameV1, ManagedProviderCredentialErrorV1> {
     if response.major != 1 || response.vault_runtime_generation != route.vault_runtime_generation
         || response.caller_runtime_generation != route.caller_runtime_generation
         || response.request_id != route.request_id || response.operation_digest_sha256 != route.operation_digest_sha256
@@ -284,7 +286,7 @@ fn valid_response(route: &VaultCiphertextRouteV1, response: VaultCiphertextRespo
         .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)
 }
 
-fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), ManagedProviderCredentialErrorV1> {
+pub(crate) fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), ManagedProviderCredentialErrorV1> {
     if bytes.is_empty() || bytes.len() > MAX_FRAME_BYTES { return Err(ManagedProviderCredentialErrorV1::Rejected); }
     let mut value = u32::try_from(bytes.len()).map_err(|_| ManagedProviderCredentialErrorV1::Rejected)?;
     let mut prefix = Vec::with_capacity(5);
@@ -294,7 +296,7 @@ fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), ManagedProv
         .map_err(|_| ManagedProviderCredentialErrorV1::Unavailable)
 }
 
-fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, ManagedProviderCredentialErrorV1> {
+pub(crate) fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, ManagedProviderCredentialErrorV1> {
     let mut value = 0_u64;
     for index in 0..5 {
         let mut byte = [0_u8; 1];
@@ -311,7 +313,7 @@ fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, ManagedProviderCreden
     Err(ManagedProviderCredentialErrorV1::Rejected)
 }
 
-fn random_request_id() -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
+pub(crate) fn random_request_id() -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
     let mut request_id = [0_u8; 16];
     getrandom::fill(&mut request_id).map_err(|_| ManagedProviderCredentialErrorV1::Unavailable)?;
     Ok(request_id)
