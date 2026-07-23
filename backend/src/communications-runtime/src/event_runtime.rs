@@ -273,12 +273,6 @@ impl CommunicationsEventRuntimeV1 {
         consume_next_observation_v1(&self.persistence, &self.connection, &self.observation_permit, &canonical_event_context)
             .await
             .map(|_| ())?;
-        self.process_next_body_custody_transfer()
-            .await
-            .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
-        self.process_next_derived_index_job()
-            .await
-            .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
         Ok(())
     }
 

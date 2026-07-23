@@ -43,7 +43,6 @@ pub(super) fn configured_communications_store(root: &Path, kernel: &Path) -> Sql
     let descriptor = communications_module_descriptor_v1("managed-communications-live").encode_to_vec();
     let grant_epoch = record_communications_registration(&store, &descriptor);
     record_communications_runtime_fixture(&store, &schema, &descriptor, grant_epoch);
-    record_fixture_source_integration(&store);
     store
 }
 
@@ -267,7 +266,11 @@ pub(super) fn assert_communications_ingress_delivery(
                 canonical_events.next(),
             )
             .await
-            .expect("canonical Communications event timeout")
+            .unwrap_or_else(|_| panic!(
+                "canonical Communications event timeout: active={:?}, failure={:?}",
+                supervisor.is_active(COMMUNICATIONS_REGISTRATION),
+                supervisor.last_failure(COMMUNICATIONS_REGISTRATION),
+            ))
             .expect("canonical Communications event missing");
             let envelope = hermes_events_protocol::validation::envelope::decode_envelope_v1(
                 canonical.payload.as_ref(),
@@ -321,6 +324,7 @@ pub(super) fn assert_communications_transferred_body_projection(
     kernel_data: &Path,
 ) {
     const OPAQUE_BLOB_REFERENCE: &str = "blob://fixture-source/admitted-body-1";
+    let source_grant_epoch = record_fixture_source_integration(store);
     let plaintext = b"fixture source body for custody transfer";
     let plaintext_sha256: [u8; 32] = Sha256::digest(plaintext).into();
     let reference_id = [8; 16];
@@ -336,7 +340,7 @@ pub(super) fn assert_communications_transferred_body_projection(
             FIXTURE_SOURCE_RUNTIME_INSTANCE_ID,
             "integration.fixture-source",
             1,
-            1,
+            source_grant_epoch,
             [3; 32],
             None,
         ),
@@ -978,7 +982,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         .grant_epoch()
 }
 
-fn record_fixture_source_integration(store: &SqliteControlStore) {
+fn record_fixture_source_integration(store: &SqliteControlStore) -> u64 {
     let registration = ModuleRegistration::new(
         FIXTURE_SOURCE_REGISTRATION,
         "integration.fixture-source",
@@ -1003,13 +1007,10 @@ fn record_fixture_source_integration(store: &SqliteControlStore) {
             std::slice::from_ref(&blob),
         )
         .expect("record fixture source integration registration");
-    assert_eq!(
-        store
-            .approve_module_registration(FIXTURE_SOURCE_REGISTRATION, &capabilities)
-            .expect("approve fixture source integration capability")
-            .grant_epoch(),
-        1,
-    );
+    store
+        .approve_module_registration(FIXTURE_SOURCE_REGISTRATION, &capabilities)
+        .expect("approve fixture source integration capability")
+        .grant_epoch()
 }
 
 fn record_communications_runtime_fixture(

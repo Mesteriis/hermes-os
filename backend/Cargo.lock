@@ -1916,6 +1916,7 @@ dependencies = [
  "h2",
  "h3",
  "h3-quinn",
+ "hermes-blob-client",
  "hermes-communications-api",
  "hermes-communications-ingress",
  "hermes-communications-persistence",

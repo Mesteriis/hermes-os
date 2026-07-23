@@ -44,16 +44,36 @@ impl CommunicationsDurablePersistence {
         if worker_id.is_empty() || worker_id.len() > 256 || lease_expires_at_unix_seconds <= now_unix_seconds {
             return Err(CommunicationsBodyCustodyTransferErrorV1::InvalidRow);
         }
+        let mut transaction = self.pool.begin().await
+            .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
         let row = sqlx::query(
-            "WITH next AS (SELECT evidence_id FROM hermes_data.communications_body_custody_transfers WHERE state = 1 AND (lease_expires_at_unix_seconds IS NULL OR lease_expires_at_unix_seconds <= $2) ORDER BY evidence_id ASC LIMIT 1 FOR UPDATE SKIP LOCKED) UPDATE hermes_data.communications_body_custody_transfers AS transfer SET claimed_by = $1, lease_expires_at_unix_seconds = $3 FROM next WHERE transfer.evidence_id = next.evidence_id RETURNING transfer.evidence_id, transfer.envelope_sha256, transfer.source_reference_id, transfer.declared_bytes, transfer.plaintext_sha256, transfer.source_custody_proof",
+            "SELECT transfer.evidence_id, transfer.envelope_sha256, transfer.source_reference_id, transfer.declared_bytes, transfer.plaintext_sha256, transfer.source_custody_proof FROM hermes_data.communications_body_custody_transfer_lifecycle AS lifecycle JOIN hermes_data.communications_body_custody_transfers AS transfer ON transfer.evidence_id = lifecycle.evidence_id WHERE lifecycle.state = 1 AND (lifecycle.lease_expires_at_unix_seconds IS NULL OR lifecycle.lease_expires_at_unix_seconds <= $1) ORDER BY lifecycle.evidence_id ASC LIMIT 1 FOR UPDATE OF lifecycle SKIP LOCKED",
         )
-        .bind(worker_id)
         .bind(now_unix_seconds)
-        .bind(lease_expires_at_unix_seconds)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await
         .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
-        row.map(|row| claimed_from_row(row, worker_id)).transpose()
+        let Some(row) = row else {
+            transaction.commit().await
+                .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
+            return Ok(None);
+        };
+        let claimed = claimed_from_row(row, worker_id)?;
+        let lease = sqlx::query(
+            "UPDATE hermes_data.communications_body_custody_transfer_lifecycle SET claimed_by = $2, lease_expires_at_unix_seconds = $3 WHERE evidence_id = $1 AND state = 1",
+        )
+        .bind(claimed.evidence_id.bytes().as_slice())
+        .bind(worker_id)
+        .bind(lease_expires_at_unix_seconds)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
+        if lease.rows_affected() != 1 {
+            return Err(CommunicationsBodyCustodyTransferErrorV1::ClaimLost);
+        }
+        transaction.commit().await
+            .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
+        Ok(Some(claimed))
     }
 
     pub async fn complete_body_custody_transfer(
@@ -80,7 +100,7 @@ impl CommunicationsDurablePersistence {
         let observed_at_unix_seconds: i64 = evidence.try_get("observed_at_unix_seconds")
             .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::InvalidRow)?;
         let settled = sqlx::query(
-            "UPDATE hermes_data.communications_body_custody_transfers SET state = 2, completed_at_unix_seconds = $3, claimed_by = NULL, lease_expires_at_unix_seconds = NULL WHERE evidence_id = $1 AND state = 1 AND claimed_by = $2",
+            "UPDATE hermes_data.communications_body_custody_transfer_lifecycle SET state = 2, completed_at_unix_seconds = $3, claimed_by = NULL, lease_expires_at_unix_seconds = NULL WHERE evidence_id = $1 AND state = 1 AND claimed_by = $2",
         )
         .bind(claimed.evidence_id.bytes().as_slice())
         .bind(&claimed.worker_id)
@@ -146,7 +166,7 @@ impl CommunicationsDurablePersistence {
         let mut transaction = self.pool.begin().await
             .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
         let result = sqlx::query(
-            "UPDATE hermes_data.communications_body_custody_transfers SET state = 3, completed_at_unix_seconds = $3, claimed_by = NULL, lease_expires_at_unix_seconds = NULL WHERE evidence_id = $1 AND state = 1 AND claimed_by = $2",
+            "UPDATE hermes_data.communications_body_custody_transfer_lifecycle SET state = 3, completed_at_unix_seconds = $3, claimed_by = NULL, lease_expires_at_unix_seconds = NULL WHERE evidence_id = $1 AND state = 1 AND claimed_by = $2",
         )
         .bind(claimed.evidence_id.bytes().as_slice())
         .bind(&claimed.worker_id)

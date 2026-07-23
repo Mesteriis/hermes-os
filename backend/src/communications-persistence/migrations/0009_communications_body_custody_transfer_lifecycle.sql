@@ -1,14 +1,14 @@
-ALTER TABLE hermes_data.communications_body_custody_transfers
-  DROP CONSTRAINT communications_body_custody_transfers_state_check;
+CREATE TABLE hermes_data.communications_body_custody_transfer_lifecycle (
+  evidence_id BYTEA PRIMARY KEY REFERENCES hermes_data.communications_body_custody_transfers (
+    evidence_id
+  ) ON DELETE CASCADE CHECK (octet_length(evidence_id) = 16),
+  state SMALLINT NOT NULL CHECK (state IN (1, 2, 3)),
+  claimed_by TEXT,
+  lease_expires_at_unix_seconds BIGINT,
+  completed_at_unix_seconds BIGINT
+);
 
-ALTER TABLE hermes_data.communications_body_custody_transfers
-  ADD COLUMN claimed_by TEXT,
-  ADD COLUMN lease_expires_at_unix_seconds BIGINT,
-  ADD COLUMN completed_at_unix_seconds BIGINT,
-  ADD CONSTRAINT communications_body_custody_transfers_state_check
-    CHECK (state IN (1, 2, 3));
-
-CREATE INDEX communications_body_custody_transfers_pending_idx
-  ON hermes_data.communications_body_custody_transfers (
+CREATE INDEX communications_body_custody_transfer_lifecycle_pending_idx
+  ON hermes_data.communications_body_custody_transfer_lifecycle (
     state, lease_expires_at_unix_seconds, evidence_id
   );
