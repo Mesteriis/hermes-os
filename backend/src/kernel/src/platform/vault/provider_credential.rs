@@ -9,9 +9,9 @@ use hermes_runtime_protocol::v1::{
     VaultCiphertextRouteDirectionV1, VaultCiphertextRouteV1,
 };
 use hermes_vault_protocol::{
-    LeaseAudienceV1, SecretClassV1, VaultActionV1, VaultLeaseIssueRequestV1,
-    VaultPurposeRequestV1, VaultTransportBindingV1, VaultTransportCommandV1,
-    VaultTransportDirectionV1, VaultTransportPublicKey, seal,
+    LeaseAudienceV1, SecretClassV1, VaultActionV1, VaultLeaseIssueRequestV1, VaultPurposeRequestV1,
+    VaultTransportBindingV1, VaultTransportCommandV1, VaultTransportDirectionV1,
+    VaultTransportPublicKey, seal,
 };
 
 use crate::platform::vault::{managed_route::KernelManagedVaultRouteHandler, status};
@@ -35,7 +35,11 @@ impl ProviderCredentialHandlerV1 {
         relay: ManagedRuntimeRelayPort,
         vault_route: Arc<KernelManagedVaultRouteHandler>,
     ) -> Self {
-        Self { store, relay, vault_route }
+        Self {
+            store,
+            relay,
+            vault_route,
+        }
     }
 }
 
@@ -63,7 +67,7 @@ impl ManagedRuntimeProviderCredentialHandler for ProviderCredentialHandlerV1 {
             request.configuration_instance_id.clone(),
             vec![secret_class],
             vec![action],
-            u32::from(request.ttl_seconds),
+            request.ttl_seconds,
         )
         .map_err(|_| "managed runtime provider credential request is denied".to_owned())?;
         let issue = VaultLeaseIssueRequestV1::new(
@@ -76,40 +80,53 @@ impl ManagedRuntimeProviderCredentialHandler for ProviderCredentialHandlerV1 {
         )
         .map_err(|_| "managed runtime provider credential request is denied".to_owned())?;
         let command = VaultTransportCommandV1::IssueLease { request: issue };
-        let request_id: [u8; 16] = request.request_id.as_slice().try_into()
+        let request_id: [u8; 16] = request
+            .request_id
+            .as_slice()
+            .try_into()
             .map_err(|_| "managed runtime provider credential request is denied".to_owned())?;
-        let recipient_public_key: [u8; 32] = request.recipient_public_key_x25519.as_slice().try_into()
+        let recipient_public_key: [u8; 32] = request
+            .recipient_public_key_x25519
+            .as_slice()
+            .try_into()
             .map_err(|_| "managed runtime provider credential request is denied".to_owned())?;
         let binding = VaultTransportBindingV1::new(
-            vault.runtime_generation(), audience, request_id, command.operation_digest(),
-            VaultTransportDirectionV1::ToVault, recipient_public_key,
+            vault.runtime_generation(),
+            audience,
+            request_id,
+            command.operation_digest(),
+            VaultTransportDirectionV1::ToVault,
+            recipient_public_key,
         )
         .map_err(|_| "managed runtime provider credential request is denied".to_owned())?;
         let vault_key = VaultTransportPublicKey::from_bytes(*vault.hpke_public_key_x25519())
             .map_err(|_| "managed runtime provider credential is unavailable".to_owned())?;
         let frame = seal(&vault_key, &binding, &command.encode())
             .map_err(|_| "managed runtime provider credential is unavailable".to_owned())?;
-        let response = self.vault_route.route_vault_ciphertext(expectation, VaultCiphertextRouteV1 {
-            major: 1,
-            registration_id: expectation.registration_id().to_owned(),
-            runtime_instance_id: expectation.runtime_instance_id().to_owned(),
-            vault_runtime_generation: vault.runtime_generation(),
-            grant_epoch: expectation.grant_epoch(),
-            request_id: request_id.to_vec(),
-            operation_digest_sha256: command.operation_digest().to_vec(),
-            direction: VaultCiphertextRouteDirectionV1::ToVault as i32,
-            hpke_encapped_key: frame.encapped_key().to_vec(),
-            ciphertext: frame.ciphertext().to_vec(),
-            hpke_authentication_tag: frame.tag().to_vec(),
-            response_recipient_hpke_public_key_x25519: recipient_public_key.to_vec(),
-            kernel_instance_id: String::new(),
-            kernel_authorization_signature_raw: Vec::new(),
-            caller_runtime_generation: expectation.runtime_generation(),
-            storage_role_epoch: 0,
-            storage_credential_lease_revision: 0,
-            storage_runtime_principal: String::new(),
-            storage_owner_id: String::new(),
-        })?;
+        let response = self.vault_route.route_vault_ciphertext(
+            expectation,
+            VaultCiphertextRouteV1 {
+                major: 1,
+                registration_id: expectation.registration_id().to_owned(),
+                runtime_instance_id: expectation.runtime_instance_id().to_owned(),
+                vault_runtime_generation: vault.runtime_generation(),
+                grant_epoch: expectation.grant_epoch(),
+                request_id: request_id.to_vec(),
+                operation_digest_sha256: command.operation_digest().to_vec(),
+                direction: VaultCiphertextRouteDirectionV1::ToVault as i32,
+                hpke_encapped_key: frame.encapped_key().to_vec(),
+                ciphertext: frame.ciphertext().to_vec(),
+                hpke_authentication_tag: frame.tag().to_vec(),
+                response_recipient_hpke_public_key_x25519: recipient_public_key.to_vec(),
+                kernel_instance_id: String::new(),
+                kernel_authorization_signature_raw: Vec::new(),
+                caller_runtime_generation: expectation.runtime_generation(),
+                storage_role_epoch: 0,
+                storage_credential_lease_revision: 0,
+                storage_runtime_principal: String::new(),
+                storage_owner_id: String::new(),
+            },
+        )?;
         Ok(ManagedRuntimeProviderCredentialDeliveryV1 {
             encapped_key: response.hpke_encapped_key,
             ciphertext: response.ciphertext,
@@ -123,12 +140,16 @@ fn authorized_purpose(
     expectation: &ManagedRuntimeExpectation,
     request: &ManagedRuntimeProviderCredentialRequestV1,
 ) -> Result<ModuleVaultPurposeRequestV1, String> {
-    let snapshot = store.module_grant_snapshot(expectation.registration_id())
+    let snapshot = store
+        .module_grant_snapshot(expectation.registration_id())
         .map_err(|_| "managed runtime provider credential registration is unavailable".to_owned())?
-        .ok_or_else(|| "managed runtime provider credential registration is unavailable".to_owned())?;
+        .ok_or_else(|| {
+            "managed runtime provider credential registration is unavailable".to_owned()
+        })?;
     let registration = snapshot.registration();
-    let grants = snapshot.effective_grants()
-        .ok_or_else(|| "managed runtime provider credential registration is unavailable".to_owned())?;
+    let grants = snapshot.effective_grants().ok_or_else(|| {
+        "managed runtime provider credential registration is unavailable".to_owned()
+    })?;
     if registration.state() != ModuleRegistrationState::Approved
         || registration.grant_epoch() != expectation.grant_epoch()
     {
@@ -137,8 +158,13 @@ fn authorized_purpose(
     for capability_id in grants.capability_ids() {
         let purposes = store
             .module_vault_purpose_requests(registration.registration_id(), capability_id)
-            .map_err(|_| "managed runtime provider credential authorization is unavailable".to_owned())?;
-        if let Some(declared) = purposes.into_iter().find(|declared| purpose_matches(declared, request)) {
+            .map_err(|_| {
+                "managed runtime provider credential authorization is unavailable".to_owned()
+            })?;
+        if let Some(declared) = purposes
+            .into_iter()
+            .find(|declared| purpose_matches(declared, request))
+        {
             return Ok(declared);
         }
     }
@@ -149,10 +175,13 @@ fn current_owner(
     store: &SqliteControlStore,
     expectation: &ManagedRuntimeExpectation,
 ) -> Result<String, String> {
-    store.module_registration(expectation.registration_id())
+    store
+        .module_registration(expectation.registration_id())
         .map_err(|_| "managed runtime provider credential registration is unavailable".to_owned())?
-        .filter(|registration| registration.state() == ModuleRegistrationState::Approved
-            && registration.grant_epoch() == expectation.grant_epoch())
+        .filter(|registration| {
+            registration.state() == ModuleRegistrationState::Approved
+                && registration.grant_epoch() == expectation.grant_epoch()
+        })
         .map(|registration| registration.owner_id().to_owned())
         .ok_or_else(|| "managed runtime provider credential fence is stale".to_owned())
 }
@@ -177,9 +206,13 @@ mod tests {
 
     fn request() -> ManagedRuntimeProviderCredentialRequestV1 {
         ManagedRuntimeProviderCredentialRequestV1 {
-            request_id: vec![1; 16], purpose_id: "mail.imap.password".to_owned(),
-            credential_revision: 1, ttl_seconds: 60, secret_class: 1,
-            recipient_public_key_x25519: vec![2; 32], configuration_instance_id: "connection_1".to_owned(),
+            request_id: vec![1; 16],
+            purpose_id: "mail.imap.password".to_owned(),
+            credential_revision: 1,
+            ttl_seconds: 60,
+            secret_class: 1,
+            recipient_public_key_x25519: vec![2; 32],
+            configuration_instance_id: "connection_1".to_owned(),
             action: VaultActionV1::Resolve.code() as u32,
         }
     }
@@ -187,8 +220,13 @@ mod tests {
     #[test]
     fn accepts_only_the_exact_resolve_purpose() {
         let declared = ModuleVaultPurposeRequestV1::new(
-            "registration", "credentials", "mail.imap.password", 120, 1,
-            VaultActionV1::Resolve.code() as u8, 1,
+            "registration",
+            "credentials",
+            "mail.imap.password",
+            120,
+            1,
+            VaultActionV1::Resolve.code() as u8,
+            1,
         );
         assert!(purpose_matches(&declared, &request()));
         let mut wrong = request();

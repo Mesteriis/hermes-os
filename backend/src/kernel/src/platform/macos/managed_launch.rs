@@ -6,7 +6,10 @@ use std::time::Duration;
 use hermes_kernel_control_store::{ManagedLaunchRecord, PlatformStorageBindingStateV1};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
-    v1::{ManagedDomainRuntimeConfigurationV1, ManagedIntegrationHostBridgeConfigurationV1, ManagedIntegrationRuntimeConfigurationV1, ManagedStorageRuntimeConfigurationV1},
+    v1::{
+        ManagedDomainRuntimeConfigurationV1, ManagedIntegrationHostBridgeConfigurationV1,
+        ManagedIntegrationRuntimeConfigurationV1, ManagedStorageRuntimeConfigurationV1,
+    },
     validation::{
         integration_host_bridge::validate_managed_integration_host_bridge_configuration,
         managed_domain_runtime::validate_managed_domain_runtime_configuration,
@@ -17,8 +20,8 @@ use prost::Message;
 
 use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::infrastructure::filesystem::new_instance_id;
-use crate::platform::macos::native_launch;
 use crate::platform::macos::host_bridge_descriptor;
+use crate::platform::macos::native_launch;
 use crate::platform::{storage, vault::status as vault_status};
 use crate::runtime::lifecycle::control::ManagedRuntimeExpectation;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
@@ -149,13 +152,7 @@ fn start_staged_with_configuration(
     reservation: ManagedLaunchReservation,
     configuration: ManagedStorageRuntimeConfigurationV1,
 ) -> Result<u64, String> {
-    start_staged_with_configurations(
-        supervisor,
-        runtime_dir,
-        reservation,
-        configuration,
-        None,
-    )
+    start_staged_with_configurations(supervisor, runtime_dir, reservation, configuration, None)
 }
 
 /// Starts one already-reserved provider integration from a Kernel-staged,
@@ -241,7 +238,7 @@ pub(crate) fn start_staged_with_host_bridge_configuration(
         return Err("managed integration host bridge configuration is stale".to_owned());
     }
     let descriptor = host_bridge_descriptor::publish(runtime_dir, &host_bridge_configuration)?;
-    let result = start_staged_with_configuration_bytes(
+    start_staged_with_configuration_bytes(
         supervisor,
         runtime_dir,
         reservation,
@@ -249,8 +246,7 @@ pub(crate) fn start_staged_with_host_bridge_configuration(
         Some(settings_snapshot_bytes),
         Some(host_bridge_configuration),
         Some(Box::new(move || descriptor.remove())),
-    );
-    result
+    )
 }
 
 fn start_staged_with_configurations(
@@ -291,47 +287,56 @@ fn start_staged_with_configuration_bytes(
     let host_bridge_configuration_bytes = host_bridge_configuration
         .as_ref()
         .map(prost::Message::encode_to_vec);
-    let contracts = match (settings_snapshot_bytes, host_bridge_configuration_bytes.as_deref()) {
-        (Some(settings_snapshot_bytes), Some(host_bridge_configuration_bytes)) => StagedRuntimeContracts::stage_with_runtime_host_bridge_and_settings_snapshot(
-            &runtime_dir
-                .join("managed")
-                .join(format!("launch-{}", reservation.runtime_generation()))
-                .join("contracts"),
-            prepared.descriptor_bytes(),
-            prepared.settings_schema_bytes(),
-            Some(&settings_snapshot_bytes),
-            Some(&runtime_configuration_bytes),
-            Some(host_bridge_configuration_bytes),
-        )?,
-        (Some(settings_snapshot_bytes), None) => StagedRuntimeContracts::stage_with_runtime_configuration_and_settings_snapshot(
-            &runtime_dir
-                .join("managed")
-                .join(format!("launch-{}", reservation.runtime_generation()))
-                .join("contracts"),
-            prepared.descriptor_bytes(),
-            prepared.settings_schema_bytes(),
-            &settings_snapshot_bytes,
-            &runtime_configuration_bytes,
-        )?,
-        (None, Some(host_bridge_configuration_bytes)) => StagedRuntimeContracts::stage_with_runtime_and_host_bridge_configuration(
-        &runtime_dir
-            .join("managed")
-            .join(format!("launch-{}", reservation.runtime_generation()))
-            .join("contracts"),
-        prepared.descriptor_bytes(),
-        prepared.settings_schema_bytes(),
-        Some(&runtime_configuration_bytes),
-        Some(host_bridge_configuration_bytes),
-        )?,
+    let contracts = match (
+        settings_snapshot_bytes,
+        host_bridge_configuration_bytes.as_deref(),
+    ) {
+        (Some(settings_snapshot_bytes), Some(host_bridge_configuration_bytes)) => {
+            StagedRuntimeContracts::stage_with_runtime_host_bridge_and_settings_snapshot(
+                &runtime_dir
+                    .join("managed")
+                    .join(format!("launch-{}", reservation.runtime_generation()))
+                    .join("contracts"),
+                prepared.descriptor_bytes(),
+                prepared.settings_schema_bytes(),
+                Some(&settings_snapshot_bytes),
+                Some(&runtime_configuration_bytes),
+                Some(host_bridge_configuration_bytes),
+            )?
+        }
+        (Some(settings_snapshot_bytes), None) => {
+            StagedRuntimeContracts::stage_with_runtime_configuration_and_settings_snapshot(
+                &runtime_dir
+                    .join("managed")
+                    .join(format!("launch-{}", reservation.runtime_generation()))
+                    .join("contracts"),
+                prepared.descriptor_bytes(),
+                prepared.settings_schema_bytes(),
+                &settings_snapshot_bytes,
+                &runtime_configuration_bytes,
+            )?
+        }
+        (None, Some(host_bridge_configuration_bytes)) => {
+            StagedRuntimeContracts::stage_with_runtime_and_host_bridge_configuration(
+                &runtime_dir
+                    .join("managed")
+                    .join(format!("launch-{}", reservation.runtime_generation()))
+                    .join("contracts"),
+                prepared.descriptor_bytes(),
+                prepared.settings_schema_bytes(),
+                Some(&runtime_configuration_bytes),
+                Some(host_bridge_configuration_bytes),
+            )?
+        }
         (None, None) => StagedRuntimeContracts::stage_with_runtime_and_host_bridge_configuration(
-        &runtime_dir
-            .join("managed")
-            .join(format!("launch-{}", reservation.runtime_generation()))
-            .join("contracts"),
-        prepared.descriptor_bytes(),
-        prepared.settings_schema_bytes(),
-        Some(&runtime_configuration_bytes),
-        None,
+            &runtime_dir
+                .join("managed")
+                .join(format!("launch-{}", reservation.runtime_generation()))
+                .join("contracts"),
+            prepared.descriptor_bytes(),
+            prepared.settings_schema_bytes(),
+            Some(&runtime_configuration_bytes),
+            None,
         )?,
     };
     let mut arguments = vec![
@@ -363,13 +368,15 @@ fn start_staged_with_configuration_bytes(
     let (registration_id, expectation, policy) = reservation.into_launch_parts();
     if let Some(cleanup) = cleanup {
         supervisor.start_with_arguments_contracts_and_cleanup(
-            registration_id,
-            prepared.into_staged_executable(),
-            arguments,
-            expectation,
-            policy,
-            contracts,
-            cleanup,
+            crate::runtime::lifecycle::supervisor::ManagedRuntimeLaunchRequest {
+                registration_id,
+                staged_executable: prepared.into_staged_executable(),
+                arguments,
+                expectation,
+                policy,
+                contracts: Some(contracts),
+                cleanup: Some(cleanup),
+            },
         )?;
     } else {
         supervisor.start_with_arguments_and_contracts(

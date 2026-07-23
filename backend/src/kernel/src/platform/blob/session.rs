@@ -6,11 +6,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::{
-    BlobCustodySourceProofV1, BlobCustodyTransferGrantV1, BlobDataOperationV1, BlobDataSessionGrantV1, ManagedRuntimeBlobSessionDeliveryV1,
+    BlobCustodySourceProofV1, BlobCustodyTransferGrantV1, BlobDataOperationV1,
+    BlobDataSessionGrantV1, ManagedRuntimeBlobSessionDeliveryV1,
     ManagedRuntimeBlobSessionRequestV1,
 };
-use prost::Message;
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
+use prost::Message;
 use sha2::{Digest, Sha256};
 
 use crate::identity::device::signer::{DeviceSigner, FileDeviceSigner};
@@ -37,7 +38,11 @@ impl BlobSessionHandlerV1 {
         relay: ManagedRuntimeRelayPort,
         data_dir: PathBuf,
     ) -> Self {
-        Self { store, relay, data_dir }
+        Self {
+            store,
+            relay,
+            data_dir,
+        }
     }
 }
 
@@ -146,7 +151,9 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
             issue_custody_source_proof(&signer, &grant, &request.receipt_sha256, now)?
         };
         Ok(ManagedRuntimeBlobSessionDeliveryV1 {
-            data_socket_path: launch::data_socket_path(&self.data_dir).display().to_string(),
+            data_socket_path: launch::data_socket_path(&self.data_dir)
+                .display()
+                .to_string(),
             grant: Some(grant),
             custody_transfer_source_proof,
             custody_transfer_grant: None,
@@ -168,7 +175,7 @@ impl BlobSessionHandlerV1 {
             || request.custody_source_proof.is_empty()
             || request.custody_source_proof.len() > 2_048
             || request.declared_size == 0
-            || !matches!(request.backup_class, 1 | 2 | 3)
+            || !matches!(request.backup_class, 1..=3)
         {
             return Err("managed runtime Blob custody transfer is denied".to_owned());
         }
@@ -206,8 +213,13 @@ impl BlobSessionHandlerV1 {
         let mut session_id = [0_u8; 16];
         getrandom::fill(&mut session_id)
             .map_err(|_| "managed runtime Blob custody transfer is unavailable".to_owned())?;
-        let target_reference_id = transfer_target_reference(&request.custody_source_proof, &request.evidence_id, &request.evidence_envelope_sha256);
-        let expires_at_unix_ms = now.checked_add(u64::from(request.ttl_seconds) * 1_000)
+        let target_reference_id = transfer_target_reference(
+            &request.custody_source_proof,
+            &request.evidence_id,
+            &request.evidence_envelope_sha256,
+        );
+        let expires_at_unix_ms = now
+            .checked_add(u64::from(request.ttl_seconds) * 1_000)
             .ok_or_else(|| "managed runtime Blob custody transfer is unavailable".to_owned())?;
         let mut grant = BlobCustodyTransferGrantV1 {
             major: 1,
@@ -234,7 +246,9 @@ impl BlobSessionHandlerV1 {
         message.extend_from_slice(&grant.encode_to_vec());
         grant.kernel_authorization_signature_raw = signer.sign(&message).to_vec();
         Ok(ManagedRuntimeBlobSessionDeliveryV1 {
-            data_socket_path: launch::data_socket_path(&self.data_dir).display().to_string(),
+            data_socket_path: launch::data_socket_path(&self.data_dir)
+                .display()
+                .to_string(),
             grant: None,
             custody_transfer_source_proof: Vec::new(),
             custody_transfer_grant: Some(grant),
@@ -315,7 +329,11 @@ fn verify_custody_source_proof(
     Ok(proof)
 }
 
-fn transfer_target_reference(source_proof: &[u8], evidence_id: &[u8], envelope_hash: &[u8]) -> [u8; 16] {
+fn transfer_target_reference(
+    source_proof: &[u8],
+    evidence_id: &[u8],
+    envelope_hash: &[u8],
+) -> [u8; 16] {
     let mut digest = Sha256::new();
     digest.update(b"hermes.blob-custody-target-reference.v1\0");
     digest.update(source_proof);

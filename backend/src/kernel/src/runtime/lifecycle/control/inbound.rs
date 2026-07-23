@@ -5,11 +5,11 @@ use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
 
 use hermes_runtime_protocol::v1::{
+    ManagedRuntimeBlobSessionDeliveryV1, ManagedRuntimeBlobSessionRequestV1,
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeEventCredentialDeliveryV1, ManagedRuntimeEventCredentialRequestV1,
-    ManagedRuntimeProviderCredentialDeliveryV1, ManagedRuntimeProviderCredentialRequestV1,
     ManagedRuntimeOwnerDerivedKeyDeliveryV1, ManagedRuntimeOwnerDerivedKeyRequestV1,
-    ManagedRuntimeBlobSessionDeliveryV1, ManagedRuntimeBlobSessionRequestV1,
+    ManagedRuntimeProviderCredentialDeliveryV1, ManagedRuntimeProviderCredentialRequestV1,
     ManagedRuntimeReadyRequestV1, ManagedRuntimeVaultRouteRequestV1,
     ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1, VaultCiphertextRouteV1,
     managed_runtime_control_request_v1::Operation,
@@ -239,23 +239,6 @@ fn blob_session_error_code(error: &str) -> &'static str {
     }
 }
 
-#[cfg(test)]
-mod blob_session_error_code_tests {
-    use super::blob_session_error_code;
-
-    #[test]
-    fn exposes_only_the_retryable_blob_availability_code() {
-        assert_eq!(
-            blob_session_error_code("managed runtime Blob custody transfer is unavailable"),
-            "managed_blob_session_unavailable",
-        );
-        assert_eq!(
-            blob_session_error_code("managed runtime Blob custody transfer is denied"),
-            "managed_blob_session_denied",
-        );
-    }
-}
-
 fn peek_complete_frame(channel: &mut UnixStream) -> Result<Option<Vec<u8>>, String> {
     let mut header = [0_u8; 5];
     let header_length = match peek(channel, &mut header) {
@@ -356,8 +339,23 @@ fn valid_configuration_instance_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
         && value.bytes().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'_' | b'-' | b'.')
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-' | b'.')
         })
+}
+
+#[cfg(test)]
+mod blob_session_error_code_tests {
+    use super::blob_session_error_code;
+
+    #[test]
+    fn exposes_only_the_retryable_blob_availability_code() {
+        assert_eq!(
+            blob_session_error_code("managed runtime Blob custody transfer is unavailable"),
+            "managed_blob_session_unavailable",
+        );
+        assert_eq!(
+            blob_session_error_code("managed runtime Blob custody transfer is denied"),
+            "managed_blob_session_denied",
+        );
+    }
 }

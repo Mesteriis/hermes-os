@@ -8,9 +8,10 @@ use std::sync::{Arc, Mutex, Weak};
 use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::runtime::lifecycle::control::{
-    ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
-    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeBlobSessionHandler, ManagedRuntimeRelayRequest,
-    ManagedRuntimeOwnerDerivedKeyHandler, ManagedRuntimeVaultRouteHandler,
+    ManagedRuntimeBlobSessionHandler, ManagedRuntimeEventCredentialHandler,
+    ManagedRuntimeExpectation, ManagedRuntimeOwnerDerivedKeyHandler,
+    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeRelayRequest,
+    ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
 
@@ -53,6 +54,16 @@ struct Inner {
     owner_derived_key_handler: Mutex<Option<Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>>>,
     blob_session_handler: Mutex<Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>>,
     vault_route_handler: Mutex<Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>>,
+}
+
+pub(crate) struct ManagedRuntimeLaunchRequest {
+    pub registration_id: String,
+    pub staged_executable: StagedNativeArtifact,
+    pub arguments: Vec<String>,
+    pub expectation: ManagedRuntimeExpectation,
+    pub policy: ManagedChildExecutionPolicy,
+    pub contracts: Option<StagedRuntimeContracts>,
+    pub cleanup: Option<Box<dyn FnOnce() + Send>>,
 }
 
 impl ManagedRuntimeSupervisor {
@@ -174,15 +185,15 @@ impl ManagedRuntimeSupervisor {
         expectation: ManagedRuntimeExpectation,
         policy: ManagedChildExecutionPolicy,
     ) -> Result<(), String> {
-        self.start_with_optional_contracts(
+        self.start_with_optional_contracts(ManagedRuntimeLaunchRequest {
             registration_id,
             staged_executable,
             arguments,
             expectation,
             policy,
-            None,
-            None,
-        )
+            contracts: None,
+            cleanup: None,
+        })
     }
 
     pub fn start_with_arguments_and_contracts(
@@ -194,48 +205,37 @@ impl ManagedRuntimeSupervisor {
         policy: ManagedChildExecutionPolicy,
         contracts: StagedRuntimeContracts,
     ) -> Result<(), String> {
-        self.start_with_optional_contracts(
+        self.start_with_optional_contracts(ManagedRuntimeLaunchRequest {
             registration_id,
             staged_executable,
             arguments,
             expectation,
             policy,
-            Some(contracts),
-            None,
-        )
+            contracts: Some(contracts),
+            cleanup: None,
+        })
     }
 
     pub(crate) fn start_with_arguments_contracts_and_cleanup(
         &self,
-        registration_id: String,
-        staged_executable: StagedNativeArtifact,
-        arguments: Vec<String>,
-        expectation: ManagedRuntimeExpectation,
-        policy: ManagedChildExecutionPolicy,
-        contracts: StagedRuntimeContracts,
-        cleanup: Box<dyn FnOnce() + Send>,
+        request: ManagedRuntimeLaunchRequest,
     ) -> Result<(), String> {
-        self.start_with_optional_contracts(
+        self.start_with_optional_contracts(request)
+    }
+
+    fn start_with_optional_contracts(
+        &self,
+        request: ManagedRuntimeLaunchRequest,
+    ) -> Result<(), String> {
+        let ManagedRuntimeLaunchRequest {
             registration_id,
             staged_executable,
             arguments,
             expectation,
             policy,
-            Some(contracts),
-            Some(cleanup),
-        )
-    }
-
-    fn start_with_optional_contracts(
-        &self,
-        registration_id: String,
-        staged_executable: StagedNativeArtifact,
-        arguments: Vec<String>,
-        expectation: ManagedRuntimeExpectation,
-        policy: ManagedChildExecutionPolicy,
-        contracts: Option<StagedRuntimeContracts>,
-        cleanup: Option<Box<dyn FnOnce() + Send>>,
-    ) -> Result<(), String> {
+            contracts,
+            cleanup,
+        } = request;
         self.reap_finished();
         if self.inner.shutdown_requested.load(Ordering::Acquire) {
             remove_staged_launch(staged_executable, contracts, cleanup);
@@ -258,15 +258,20 @@ impl ManagedRuntimeSupervisor {
             remove_staged_launch(staged_executable, contracts, cleanup);
             return Err(error);
         }
-        let (vault_route_handler, event_credential_handler, provider_credential_handler, owner_derived_key_handler, blob_session_handler) =
-            match self.configured_request_handlers() {
-                Ok(handlers) => handlers,
-                Err(error) => {
-                    drop(workers);
-                    remove_staged_launch(staged_executable, contracts, cleanup);
-                    return Err(error);
-                }
-            };
+        let (
+            vault_route_handler,
+            event_credential_handler,
+            provider_credential_handler,
+            owner_derived_key_handler,
+            blob_session_handler,
+        ) = match self.configured_request_handlers() {
+            Ok(handlers) => handlers,
+            Err(error) => {
+                drop(workers);
+                remove_staged_launch(staged_executable, contracts, cleanup);
+                return Err(error);
+            }
+        };
         let worker = new_active_worker(ActiveWorkerInput {
             inner: Arc::clone(&self.inner),
             registration_id: registration_id.clone(),
