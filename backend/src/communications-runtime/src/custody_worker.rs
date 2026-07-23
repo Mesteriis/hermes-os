@@ -20,6 +20,12 @@ pub enum CommunicationsCustodyWorkerErrorV1 {
     RetryPending,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BlobCustodyTransferFailureV1 {
+    PolicyRejected,
+    RetryPending,
+}
+
 pub async fn process_next_body_custody_transfer_v1(
     control_channel: &mut UnixStream,
     persistence: &CommunicationsDurablePersistence,
@@ -73,14 +79,18 @@ pub async fn process_next_body_custody_transfer_v1(
 
     let target_reference_id = match transfer {
         Ok(reference_id) => reference_id,
-        Err(BlobClientError::Rejected(_)) => {
-            persistence
-                .fail_body_custody_transfer(&claimed, now_unix_seconds)
-                .await
-                .map_err(storage_error)?;
-            return Ok(true);
-        }
-        Err(error) => return Err(blob_transfer_error(error)),
+        Err(error) => match blob_transfer_failure(error) {
+            BlobCustodyTransferFailureV1::PolicyRejected => {
+                persistence
+                    .fail_body_custody_transfer(&claimed, now_unix_seconds)
+                    .await
+                    .map_err(storage_error)?;
+                return Ok(true);
+            }
+            BlobCustodyTransferFailureV1::RetryPending => {
+                return Err(CommunicationsCustodyWorkerErrorV1::RetryPending);
+            }
+        },
     };
     let blob_ref = format!(
         "blob-content:{}",
@@ -111,9 +121,9 @@ fn storage_error(
     CommunicationsCustodyWorkerErrorV1::StorageUnavailable
 }
 
-fn blob_transfer_error(error: BlobClientError) -> CommunicationsCustodyWorkerErrorV1 {
+fn blob_transfer_failure(error: BlobClientError) -> BlobCustodyTransferFailureV1 {
     match error {
-        BlobClientError::Rejected(_) => CommunicationsCustodyWorkerErrorV1::StorageUnavailable,
+        BlobClientError::Rejected(_) => BlobCustodyTransferFailureV1::PolicyRejected,
         BlobClientError::InvalidSocketPath
         | BlobClientError::InvalidTimeout
         | BlobClientError::Connect(_)
@@ -122,28 +132,28 @@ fn blob_transfer_error(error: BlobClientError) -> CommunicationsCustodyWorkerErr
         | BlobClientError::InvalidFrame
         | BlobClientError::InvalidResponse
         | BlobClientError::InvalidSessionRequest
-        | BlobClientError::Unavailable => CommunicationsCustodyWorkerErrorV1::RetryPending,
+        | BlobClientError::Unavailable => BlobCustodyTransferFailureV1::RetryPending,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CommunicationsCustodyWorkerErrorV1, blob_transfer_error};
+    use super::{BlobCustodyTransferFailureV1, blob_transfer_failure};
     use hermes_blob_client::BlobClientError;
 
     #[test]
     fn blob_unavailability_keeps_custody_transfer_pending() {
         assert_eq!(
-            blob_transfer_error(BlobClientError::Unavailable),
-            CommunicationsCustodyWorkerErrorV1::RetryPending,
+            blob_transfer_failure(BlobClientError::Unavailable),
+            BlobCustodyTransferFailureV1::RetryPending,
         );
     }
 
     #[test]
     fn rejected_custody_transfer_remains_terminal() {
         assert_eq!(
-            blob_transfer_error(BlobClientError::Rejected("denied".to_owned())),
-            CommunicationsCustodyWorkerErrorV1::StorageUnavailable,
+            blob_transfer_failure(BlobClientError::Rejected("denied".to_owned())),
+            BlobCustodyTransferFailureV1::PolicyRejected,
         );
     }
 }
