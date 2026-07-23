@@ -203,7 +203,7 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
     assert_communications_ingress_delivery(&store, &supervisor);
     assert_communications_relationship_projection(&store, &supervisor);
     assert_communications_attachment_anchor_projection(&store, &supervisor);
-    assert_communications_admitted_body_projection(&store, &supervisor);
+    assert_communications_pending_body_projection(&store, &supervisor);
     assert_communications_query_delivery(&store, &supervisor);
     assert_communications_search_query_delivery(&store, &supervisor);
     assert_communications_gateway_query_delivery(&store, &supervisor, &root);

@@ -305,7 +305,7 @@ pub(super) fn assert_communications_ingress_delivery(
     }
 }
 
-pub(super) fn assert_communications_admitted_body_projection(
+pub(super) fn assert_communications_pending_body_projection(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
 ) {
@@ -436,7 +436,7 @@ pub(super) fn assert_communications_admitted_body_projection(
         let Some(QueryResult::ListConversationMessages(messages)) = messages.result else {
             panic!("Communications messages query result");
         };
-        if messages.messages.iter().any(|message| message.body_state == 4) {
+        if messages.messages.iter().any(|message| message.body_state == 2) {
             let public_payload = CommunicationsQueryResponseV1 {
                 result: Some(QueryResult::ListConversationMessages(messages)),
                 error_code: String::new(),
@@ -450,7 +450,7 @@ pub(super) fn assert_communications_admitted_body_projection(
             );
             return;
         }
-        assert!(std::time::Instant::now() < deadline, "admitted body message was not projected");
+        assert!(std::time::Instant::now() < deadline, "pending body message was not projected");
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
 }
