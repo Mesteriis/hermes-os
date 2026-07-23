@@ -131,15 +131,16 @@ fn authorized_purpose(
     {
         return Err("managed runtime owner-derived key fence is stale".to_owned());
     }
-    for capability_id in grants.capability_ids() {
-        let purposes = store
-            .module_vault_purpose_requests(registration.registration_id(), capability_id)
-            .map_err(|_| "managed runtime owner-derived key authorization is unavailable".to_owned())?;
-        if purposes.into_iter().any(|declared| purpose_matches(&declared, request)) {
-            return Ok((registration.owner_id().to_owned(), capability_id.to_owned()));
-        }
+    if !grants.capability_ids().iter().any(|capability_id| capability_id == &request.capability_id) {
+        return Err("managed runtime owner-derived key request is denied".to_owned());
     }
-    Err("managed runtime owner-derived key request is denied".to_owned())
+    let purposes = store
+        .module_vault_purpose_requests(registration.registration_id(), &request.capability_id)
+        .map_err(|_| "managed runtime owner-derived key authorization is unavailable".to_owned())?;
+    purposes.into_iter()
+        .any(|declared| purpose_matches(&declared, request))
+        .then(|| (registration.owner_id().to_owned(), request.capability_id.clone()))
+        .ok_or_else(|| "managed runtime owner-derived key request is denied".to_owned())
 }
 
 fn purpose_matches(
@@ -168,6 +169,7 @@ mod tests {
             key_schema_revision: 1,
             ttl_seconds: 60,
             recipient_public_key_x25519: vec![2; 32],
+            capability_id: "search".to_owned(),
         }
     }
 

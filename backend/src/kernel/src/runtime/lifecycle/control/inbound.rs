@@ -321,6 +321,7 @@ fn valid_owner_derived_key_request(value: &ManagedRuntimeOwnerDerivedKeyRequestV
         && !value.purpose_id.trim().is_empty()
         && value.purpose_id.len() <= 128
         && value.purpose_id.is_ascii()
+        && valid_configuration_instance_id(&value.capability_id)
         && value.key_schema_revision != 0
         && (1..=600).contains(&value.ttl_seconds)
         && value.recipient_public_key_x25519.len() == 32

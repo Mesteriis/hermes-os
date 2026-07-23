@@ -66,13 +66,14 @@ message ManagedRuntimeProviderCredentialDeliveryV1 {
 }
 // Requests an exact descriptor-declared owner-derived key lease. The request
 // carries no configuration instance, action, secret class or key material:
-// Kernel derives all of those from the approved owner capability.
+// Kernel derives all of those from the exact approved owner capability.
 message ManagedRuntimeOwnerDerivedKeyRequestV1 {
   bytes request_id = 1;
   string purpose_id = 2;
   uint32 key_schema_revision = 3;
   uint32 ttl_seconds = 4;
   bytes recipient_public_key_x25519 = 5;
+  string capability_id = 6;
 }
 message ManagedRuntimeOwnerDerivedKeyDeliveryV1 {
   bytes encapped_key = 1;
