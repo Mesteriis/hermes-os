@@ -64,6 +64,7 @@ policy через ссылки из новых документов.
 - [ADR-0253: Communications legacy surface disposition](ADR-0253-communications-legacy-surface-disposition-and-clean-room-completion.md)
 - [ADR-0254: Communications derived search index](ADR-0254-communications-derived-search-index-and-private-content-boundary.md)
 - [ADR-0255: Managed owner-key leases](ADR-0255-managed-owner-key-leases-for-derived-projections.md)
+- [ADR-0256: Owner-declared client RPC route admission](ADR-0256-owner-declared-client-rpc-route-admission.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также

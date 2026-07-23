@@ -10,10 +10,11 @@ owner-key lease, а также one keyed-digest primitive реализованы
 observation атомарно ставит owner-local index job; fenced lease worker пишет
 digest projection либо typed failure без plaintext. Bounded owner-local
 reconciliation rebuilds missing/stale projection jobs from canonical evidence.
-Query execution в Gateway и managed conformance ещё не реализованы. Runtime исполняет
-typed owner query через transient Vault-derived key и возвращает только
-canonical IDs; пока Gateway path не доказан, внешний client route остаётся
-fail-closed as unavailable. Legacy full-text HTTP search не переносится.
+Runtime исполняет typed owner query через transient Vault-derived key и
+возвращает только canonical IDs. Generic Kernel capability router покрыт
+managed fixture, но внешний Core Gateway delivery и live managed conformance
+ещё не доказаны; до этого внешний client route остаётся fail-closed as
+unavailable. Legacy full-text HTTP search не переносится.
 Projection tombstone fence не допускает, чтобы stale Index job восстановил
 удалённое canonical message.
 
