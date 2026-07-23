@@ -7,8 +7,12 @@ accounts, conversations, messages, observed participants, attachment anchors,
 reply/forward references, transactional inbox/outbox, a generated metadata-query
 port, typed Blob-backed body admission receipts/failures, and a Kernel-inherited
 managed domain process root. The generic private owner-control launch contract
-and Core Gateway routing to the owner-owned public query contract are present,
-but live managed-launch evidence and public client conformance remain open.
+and Core Gateway routing to the owner-owned public query contract are present.
+`managed_communications_domain_starts_with_owner_local_storage_and_events`
+runs against the disposable authenticated Storage/NATS/Vault contour through
+`test-authenticated-storage.mjs`; it proves the generic managed-domain launch
+with owner-local Storage and Event Hub credentials. Public client conformance
+remains open.
 
 Depends on:
 

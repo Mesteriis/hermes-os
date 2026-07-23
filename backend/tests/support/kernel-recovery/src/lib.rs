@@ -56,6 +56,8 @@ mod platform {
     pub(crate) mod macos {
         #[path = "../../../../../../src/kernel/src/platform/macos/code_signature.rs"]
         pub(crate) mod code_signature;
+        #[path = "../../../../../../src/kernel/src/platform/macos/host_bridge_descriptor.rs"]
+        pub(crate) mod host_bridge_descriptor;
         #[path = "../../../../../../src/kernel/src/platform/macos/managed_launch.rs"]
         pub(crate) mod managed_launch;
         #[path = "../../../../../../src/kernel/src/platform/macos/native_launch.rs"]

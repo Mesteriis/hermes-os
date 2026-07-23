@@ -30,6 +30,7 @@ fn control_store_retains_owner_bound_scheduler_job_contracts_atomically() {
             &[],
             &[],
             std::slice::from_ref(&request),
+            &[],
         )
         .expect("persist pending registration and Scheduler request together");
 
@@ -84,6 +85,7 @@ fn control_store_rejects_foreign_or_duplicate_scheduler_job_contracts_atomically
                     &[],
                     &[],
                     &requests,
+                    &[],
                 )
                 .is_err()
         );
@@ -145,6 +147,7 @@ fn scheduler_schedule_admission_requires_the_current_exact_approved_job_contract
             &[],
             &[],
             std::slice::from_ref(&request),
+            &[],
         )
         .expect("persist Scheduler job request");
     store

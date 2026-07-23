@@ -252,7 +252,7 @@ async fn serve_async(
 }
 
 type BrowserGatewayRouter =
-    GatewayApplicationRouter<ControlStoreBrowserAuthority, BrowserRealtimeSource>;
+    GatewayApplicationRouter<ControlStoreBrowserAuthority, InMemoryBrowserRealtimeSource>;
 
 fn gateway_service(
     store: Arc<SqliteControlStore>,

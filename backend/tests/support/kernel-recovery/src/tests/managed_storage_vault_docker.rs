@@ -19,7 +19,7 @@ use hermes_kernel_control_store::{
     StorageDeploymentProfileV1,
 };
 use hermes_runtime_protocol::v1::{
-    ManagedRuntimeEventCredentialDeliveryV1, ManagedRuntimeEventCredentialRequestV1,
+    ManagedDomainRuntimeConfigurationV1, ManagedRuntimeEventCredentialDeliveryV1, ManagedRuntimeEventCredentialRequestV1,
     SchedulerRuntimeControlRequestV1, SchedulerRuntimeControlResponseV1,
     SchedulerScheduleUpsertOutcomeV1, SettingsSchemaRefV1, SettingsSchemaV1,
     UpsertSchedulerScheduleRequestV1,
@@ -61,6 +61,9 @@ use scheduler_setup::*;
 #[path = "managed_storage_vault_docker/scheduler_events.rs"]
 mod scheduler_events;
 use scheduler_events::*;
+#[path = "managed_storage_vault_docker/communications_setup.rs"]
+mod communications_setup;
+use communications_setup::*;
 
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault and Storage binaries"]
@@ -128,6 +131,59 @@ fn managed_scheduler_crash_uses_storage_control_successor_provisioning() {
     let successor = fixture.assert_successor(&binding, due_at);
     fixture.assert_revoked_binding_does_not_restart(successor);
     fixture.shutdown(worker);
+}
+
+#[test]
+#[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS and Communications binaries"]
+fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
+    assert_eq!(
+        std::env::var("HERMES_STORAGE_AUTHENTICATED_TEST").as_deref(),
+        Ok("1")
+    );
+    let root = unique_target_root("hermes-managed-communications-domain");
+    let data = private_directory(root.join("kernel"));
+    initialize_vault(
+        &private_directory(data.join("vault")),
+        &credential_directory(),
+    );
+    let release = installed_communications_release(&root);
+    let store = Arc::new(configured_communications_store(&root, release.kernel()));
+    let _ = FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
+    configure_route_handler(&supervisor, &store, &data);
+    supervisor
+        .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler))
+        .expect("configure Communications Event credential handler");
+    start_vault(&supervisor, &store, &data, release.kernel());
+    start_storage(
+        &supervisor,
+        &store,
+        release.kernel(),
+        &storage_runtime_directory(),
+    );
+    issue_initial_communications_storage_binding(&store);
+    crate::platform::storage::provisioning::apply_reserved_binding(
+        &supervisor,
+        &store,
+        &communications_storage_binding(&store),
+    )
+    .expect("provision Communications Storage binding");
+    configure_communications_jetstream(&store);
+
+    assert_eq!(
+        start_communications_domain(&supervisor, &store, &root.join("runtime")),
+        1,
+        "generic managed-domain launch admits Communications without a Kernel owner facade"
+    );
+    assert!(
+        supervisor
+            .is_active(COMMUNICATIONS_REGISTRATION)
+            .expect("read Communications process state")
+    );
+
+    supervisor.shutdown().expect("stop managed processes");
+    std::fs::remove_dir_all(root).expect("remove fixture");
 }
 
 struct SchedulerRecoveryFixture {

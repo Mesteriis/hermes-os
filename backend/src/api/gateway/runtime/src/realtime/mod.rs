@@ -8,7 +8,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use bytes::Bytes;
 use futures_util::{StreamExt, stream};
 use hermes_gateway_protocol::{
-    v1::{ClientRealtimeFrameV1, ClientReplayGapV1, client_realtime_frame_v1::Frame},
+    v1::{ClientRealtimeFrameV1, ClientRealtimeStreamStateKindV1, ClientReplayGapV1, client_realtime_frame_v1::Frame},
     validation::validate_client_realtime_frame,
 };
 use hermes_gateway_session::BrowserSession;
