@@ -5,11 +5,14 @@ use hermes_communications_api::query_wire::{
     communications_query_request_v1::Operation,
     communications_query_response_v1::Result as QueryResult,
 };
-use hermes_communications_persistence::communications_storage_bundle_v1;
+use hermes_communications_persistence::{
+    COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1, communications_storage_bundle_v1,
+};
 use hermes_communications_runtime::admission::{
     COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
     COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
     COMMUNICATIONS_STORAGE_CAPABILITY_ID, COMMUNICATIONS_QUERY_CAPABILITY_ID,
+    COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
     communications_module_descriptor_v1,
     communications_settings_schema_bytes_v1,
     communication_evidence_recorded_contract_reference_v1,
@@ -32,7 +35,7 @@ pub(super) fn configured_communications_store(root: &Path, kernel: &Path) -> Sql
 
 pub(super) fn issue_initial_communications_storage_binding(store: &SqliteControlStore) {
     let bundle = store
-        .platform_storage_bundle("communications", 1)
+        .platform_storage_bundle("communications", COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1)
         .expect("read Communications Storage bundle")
         .expect("Communications Storage bundle is present");
     let binding = issue_managed(
@@ -203,6 +206,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         COMMUNICATIONS_STORAGE_CAPABILITY_ID.to_owned(),
         "communications.blob.v1".to_owned(),
         "communications.query.v1".to_owned(),
+        COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID.to_owned(),
     ];
     let storage = ModuleStorageRequestV1::new(
         COMMUNICATIONS_REGISTRATION,
@@ -252,7 +256,9 @@ fn record_communications_runtime_fixture(
     let digest: [u8; 32] = Sha256::digest(&canonical_bundle).into();
     store
         .record_platform_storage_bundle(
-            &PlatformStorageBundleV1::new("communications", 1, digest, canonical_bundle)
+            &PlatformStorageBundleV1::new(
+                "communications", COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1, digest, canonical_bundle,
+            )
                 .expect("record Communications Storage bundle"),
         )
         .expect("persist Communications Storage bundle");

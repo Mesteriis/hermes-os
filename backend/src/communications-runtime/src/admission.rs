@@ -11,7 +11,8 @@ use hermes_runtime_protocol::v1::{
     ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1, EventRouteRequestV1,
     EventSubscriptionRequirementV1, ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1,
     ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1, SettingsSchemaRefV1,
-    SettingsSchemaV1, StorageNamespaceRequestV1, capability_request_v1::Request,
+    SettingsSchemaV1, StorageNamespaceRequestV1, VaultActionV1, VaultPurposeRequestV1,
+    VaultSecretClassV1, VaultTargetScopeV1, capability_request_v1::Request,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -20,6 +21,7 @@ pub const COMMUNICATIONS_BLOB_CAPABILITY_ID: &str = "communications.blob.v1";
 pub const COMMUNICATIONS_EVENTS_CAPABILITY_ID: &str = "communications.events.v1";
 pub const COMMUNICATIONS_OBSERVE_CAPABILITY_ID: &str = "communications.observe.v1";
 pub const COMMUNICATIONS_QUERY_CAPABILITY_ID: &str = "communications.query.v1";
+pub const COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID: &str = "communications.search.index.v1";
 pub const COMMUNICATIONS_STORAGE_CAPABILITY_ID: &str = "communications.storage.v1";
 pub const COMMUNICATIONS_MODULE_ID: &str = "hermes-communications-runtime";
 pub const COMMUNICATIONS_OWNER_ID: &str = "communications";
@@ -28,6 +30,9 @@ pub const COMMUNICATIONS_STORAGE_CONNECTION_BUDGET: u32 = 8;
 pub const COMMUNICATIONS_STORAGE_STATEMENT_TIMEOUT_MILLIS: u32 = 5_000;
 pub const COMMUNICATIONS_EVENT_MAX_DELIVER: u32 = 8;
 pub const COMMUNICATIONS_EVENT_ACK_WAIT_MILLIS: u32 = 30_000;
+pub const COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID: &str = "communications.search.index";
+pub const COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION: u32 = 1;
+pub const COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS: u32 = 60;
 
 #[must_use]
 pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
@@ -36,6 +41,7 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_events_capability_v1(),
         communications_observe_capability_v1(),
         communications_query_capability_v1(),
+        communications_search_index_capability_v1(),
         communications_storage_capability_v1(),
     ]
 }
@@ -116,6 +122,26 @@ pub fn communications_query_capability_v1() -> CapabilityDescriptorV1 {
         provides: vec![ProvidedSurfaceV1 {
             kind: ProvidedSurfaceKindV1::ClientRpc as i32,
             contract: Some(communications_query_contract_reference_v1()),
+        }],
+        ..Default::default()
+    }
+}
+
+#[must_use]
+pub fn communications_search_index_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::VaultPurpose(VaultPurposeRequestV1 {
+                purpose_id: COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID.to_owned(),
+                requested_lease_ttl_seconds: COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS,
+                allowed_secret_classes: vec![VaultSecretClassV1::OwnerDerivedKey as i32],
+                actions: vec![VaultActionV1::IssueOwnerDerivedKey as i32],
+                target_scope: VaultTargetScopeV1::OwnerDerivedProjectionKey as i32,
+                key_schema_revision: COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION,
+            })),
         }],
         ..Default::default()
     }
@@ -231,6 +257,7 @@ mod tests {
                 COMMUNICATIONS_EVENTS_CAPABILITY_ID,
                 COMMUNICATIONS_OBSERVE_CAPABILITY_ID,
                 COMMUNICATIONS_QUERY_CAPABILITY_ID,
+                COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
                 COMMUNICATIONS_STORAGE_CAPABILITY_ID,
             ]
         );

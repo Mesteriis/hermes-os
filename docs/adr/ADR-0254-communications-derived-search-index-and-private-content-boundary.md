@@ -4,9 +4,10 @@
 Дата: 2026-07-23
 Состояние реализации: typed public search contract, pure owner-local domain
 lifecycle/normalization и owner-local PostgreSQL digest projection реализованы.
-Private Blob read, Vault capability admission, durable replay/rebuild, Gateway
-route и managed conformance ещё не реализованы; legacy full-text HTTP search
-не переносится.
+`communications.search.index.v1` capability с exact owner-derived-key purpose
+declared. Private Blob read, Vault lease use, durable replay/rebuild, Gateway
+route и managed conformance ещё не реализованы; до них query fail-closed as
+unavailable. Legacy full-text HTTP search не переносится.
 
 Зависит от:
 

@@ -149,6 +149,11 @@ pub async fn handle_query_request_v1(
                 .collect(),
             },
         ),
+        // Search remains unavailable until the managed runtime has both the
+        // owner-derived key lease and bounded Blob reader. Returning an empty
+        // result here would incorrectly claim that canonical evidence has no
+        // matches.
+        Operation::SearchCommunications(_) => return Err(CommunicationsQueryPortErrorV1::Unavailable),
     };
     Ok(CommunicationsQueryResponseV1 {
         result: Some(result),
