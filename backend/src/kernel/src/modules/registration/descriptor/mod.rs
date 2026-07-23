@@ -1,15 +1,15 @@
 //! Translation of a validated module descriptor into Control Store request records.
 
 use hermes_kernel_control_store::{
-    ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
-    ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
-    ModuleEventSubscriptionRequirementV1, ModuleRegistration, ModuleSchedulerJobRequestV1,
-    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
+    ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1, ModuleEventDeliveryPolicyV1,
+    ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1,
+    ModuleEventRouteRequestV1, ModuleEventSubscriptionRequirementV1, ModuleRegistration,
+    ModuleSchedulerJobRequestV1, ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
 };
 use hermes_runtime_protocol::{
     v1::{
-        DurableEnvelopeKindV1, EventRouteDirectionV1, EventSubscriptionRequirementV1, ProvidedSurfaceKindV1,
-        VaultActionV1, VaultSecretClassV1, VaultTargetScopeV1,
+        DurableEnvelopeKindV1, EventRouteDirectionV1, EventSubscriptionRequirementV1,
+        ProvidedSurfaceKindV1, VaultActionV1, VaultSecretClassV1, VaultTargetScopeV1,
         capability_request_v1::Request as CapabilityRequest,
     },
     validation::descriptor::decode_descriptor_v1,
@@ -171,21 +171,46 @@ fn bind_vault_purpose_requests(
     requests: &[DescriptorVaultPurposeRequest],
     registration: &ModuleRegistration,
 ) -> Vec<ModuleVaultPurposeRequestV1> {
-    requests.iter().map(|request| ModuleVaultPurposeRequestV1::new_with_key_schema_revision(
-        registration.registration_id(), &request.capability_id, &request.purpose_id,
-        request.requested_lease_ttl_seconds, request.secret_class, request.action,
-        request.target_scope, request.key_schema_revision,
-    )).collect()
+    requests
+        .iter()
+        .map(|request| {
+            ModuleVaultPurposeRequestV1::new_with_key_schema_revision(
+                registration.registration_id(),
+                &request.capability_id,
+                &request.purpose_id,
+                request.requested_lease_ttl_seconds,
+                hermes_kernel_control_store::ModuleVaultPurposePolicyV1 {
+                    secret_class: request.secret_class,
+                    action: request.action,
+                    target_scope: request.target_scope,
+                    key_schema_revision: request.key_schema_revision,
+                },
+            )
+        })
+        .collect()
 }
 
 fn bind_client_rpc_routes(
-    requests: &[DescriptorClientRpcRoute], registration: &ModuleRegistration,
+    requests: &[DescriptorClientRpcRoute],
+    registration: &ModuleRegistration,
 ) -> Vec<ModuleClientRpcRouteV1> {
-    requests.iter().map(|request| ModuleClientRpcRouteV1::new(
-        registration.registration_id(), &request.capability_id, registration.owner_id(),
-        &request.contract_name, request.contract_major, request.contract_revision,
-        request.contract_schema_sha256, &request.path,
-    )).collect()
+    requests
+        .iter()
+        .map(|request| {
+            ModuleClientRpcRouteV1::new(
+                registration.registration_id(),
+                &request.capability_id,
+                registration.owner_id(),
+                &request.contract_name,
+                hermes_kernel_control_store::ModuleClientRpcContractVersionV1 {
+                    major: request.contract_major,
+                    revision: request.contract_revision,
+                },
+                request.contract_schema_sha256,
+                &request.path,
+            )
+        })
+        .collect()
 }
 
 struct DescriptorStorageRequest {
@@ -248,20 +273,34 @@ fn client_rpc_routes(
     let mut routes = Vec::new();
     for capability in &descriptor.capabilities {
         for surface in &capability.provides {
-            if ProvidedSurfaceKindV1::try_from(surface.kind).ok() != Some(ProvidedSurfaceKindV1::ClientRpc) {
+            if ProvidedSurfaceKindV1::try_from(surface.kind).ok()
+                != Some(ProvidedSurfaceKindV1::ClientRpc)
+            {
                 continue;
             }
-            let contract = surface.contract.as_ref().ok_or_else(|| "module Client RPC contract is invalid".to_owned())?;
-            let route = surface.client_rpc_route.as_ref().ok_or_else(|| "module Client RPC route is invalid".to_owned())?;
-            let schema_sha256 = contract.schema_sha256.as_slice().try_into()
+            let contract = surface
+                .contract
+                .as_ref()
+                .ok_or_else(|| "module Client RPC contract is invalid".to_owned())?;
+            let route = surface
+                .client_rpc_route
+                .as_ref()
+                .ok_or_else(|| "module Client RPC route is invalid".to_owned())?;
+            let schema_sha256 = contract
+                .schema_sha256
+                .as_slice()
+                .try_into()
                 .map_err(|_| "module Client RPC contract is invalid".to_owned())?;
             if contract.owner != descriptor.owner_id || !seen_paths.insert(route.path.clone()) {
                 return Err("module Client RPC route owner or path is invalid".to_owned());
             }
             routes.push(DescriptorClientRpcRoute {
-                capability_id: capability.capability_id.clone(), contract_name: contract.name.clone(),
-                contract_major: contract.major, contract_revision: contract.revision,
-                contract_schema_sha256: schema_sha256, path: route.path.clone(),
+                capability_id: capability.capability_id.clone(),
+                contract_name: contract.name.clone(),
+                contract_major: contract.major,
+                contract_revision: contract.revision,
+                contract_schema_sha256: schema_sha256,
+                path: route.path.clone(),
             });
         }
     }
@@ -472,19 +511,27 @@ fn vault_purpose_requests(
 ) -> Result<Vec<DescriptorVaultPurposeRequest>, String> {
     let mut result = Vec::new();
     for capability in &descriptor.capabilities {
-        for purpose in capability.requests.iter().filter_map(|request| match request.request.as_ref() {
-            Some(CapabilityRequest::VaultPurpose(purpose)) => Some(purpose),
-            _ => None,
-        }) {
-            let target_scope = VaultTargetScopeV1::try_from(purpose.target_scope).ok()
+        for purpose in
+            capability
+                .requests
+                .iter()
+                .filter_map(|request| match request.request.as_ref() {
+                    Some(CapabilityRequest::VaultPurpose(purpose)) => Some(purpose),
+                    _ => None,
+                })
+        {
+            let target_scope = VaultTargetScopeV1::try_from(purpose.target_scope)
+                .ok()
                 .ok_or_else(|| "module Vault purpose target scope is invalid".to_owned())?;
             let owner_derived = target_scope == VaultTargetScopeV1::OwnerDerivedProjectionKey;
             if target_scope != VaultTargetScopeV1::ConfigurationInstance && !owner_derived {
                 return Err("module Vault purpose target scope is invalid".to_owned());
             }
-            if (owner_derived && (purpose.key_schema_revision == 0
-                || purpose.allowed_secret_classes != [VaultSecretClassV1::OwnerDerivedKey as i32]
-                || purpose.actions != [VaultActionV1::IssueOwnerDerivedKey as i32]))
+            if (owner_derived
+                && (purpose.key_schema_revision == 0
+                    || purpose.allowed_secret_classes
+                        != [VaultSecretClassV1::OwnerDerivedKey as i32]
+                    || purpose.actions != [VaultActionV1::IssueOwnerDerivedKey as i32]))
                 || (!owner_derived && purpose.key_schema_revision != 0)
             {
                 return Err("module Vault purpose request is invalid".to_owned());
@@ -492,13 +539,17 @@ fn vault_purpose_requests(
             let ttl = u16::try_from(purpose.requested_lease_ttl_seconds)
                 .map_err(|_| "module Vault purpose request is invalid".to_owned())?;
             for secret_class in &purpose.allowed_secret_classes {
-                let secret_class = VaultSecretClassV1::try_from(*secret_class).ok()
+                let secret_class = VaultSecretClassV1::try_from(*secret_class)
+                    .ok()
                     .filter(|value| *value != VaultSecretClassV1::Unspecified)
-                    .ok_or_else(|| "module Vault purpose request is invalid".to_owned())? as u8;
+                    .ok_or_else(|| "module Vault purpose request is invalid".to_owned())?
+                    as u8;
                 for action in &purpose.actions {
-                    let action = VaultActionV1::try_from(*action).ok()
+                    let action = VaultActionV1::try_from(*action)
+                        .ok()
                         .filter(|value| *value != VaultActionV1::Unspecified)
-                        .ok_or_else(|| "module Vault purpose request is invalid".to_owned())? as u8;
+                        .ok_or_else(|| "module Vault purpose request is invalid".to_owned())?
+                        as u8;
                     result.push(DescriptorVaultPurposeRequest {
                         capability_id: capability.capability_id.clone(),
                         purpose_id: purpose.purpose_id.clone(),

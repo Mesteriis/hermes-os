@@ -10,7 +10,7 @@ mod storage_request;
 mod vault_purpose_request;
 
 pub use blob_request::ModuleBlobQuotaRequestV1;
-pub use client_rpc_route::ModuleClientRpcRouteV1;
+pub use client_rpc_route::{ModuleClientRpcContractVersionV1, ModuleClientRpcRouteV1};
 pub use event_request::{
     ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
     ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
@@ -25,4 +25,4 @@ pub use settings::{
     SettingsSchemaBindingInputV1,
 };
 pub use storage_request::ModuleStorageRequestV1;
-pub use vault_purpose_request::ModuleVaultPurposeRequestV1;
+pub use vault_purpose_request::{ModuleVaultPurposePolicyV1, ModuleVaultPurposeRequestV1};

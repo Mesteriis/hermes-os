@@ -18,13 +18,13 @@ pub use identity::{
     BrowserDeviceStateV1, InitialOwnerIdentity, ServerBootstrapPairing,
 };
 pub use modules::{
-    GrantSet, ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
-    ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
+    GrantSet, ModuleBlobQuotaRequestV1, ModuleClientRpcContractVersionV1, ModuleClientRpcRouteV1,
+    ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
+    ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
     ModuleEventSubscriptionRequirementV1, ModuleGrantSnapshot, ModuleRegistration,
     ModuleRegistrationState, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
-    ModuleVaultPurposeRequestV1,
-    SettingsApplyState, SettingsDesiredSnapshot, SettingsSchemaBinding,
-    SettingsSchemaBindingInputV1,
+    ModuleVaultPurposePolicyV1, ModuleVaultPurposeRequestV1, SettingsApplyState,
+    SettingsDesiredSnapshot, SettingsSchemaBinding, SettingsSchemaBindingInputV1,
 };
 pub use operation::{
     OperationAdmissionV1, OperationIdV1, OperationStatusV1, OperationTerminalOutcomeV1,
