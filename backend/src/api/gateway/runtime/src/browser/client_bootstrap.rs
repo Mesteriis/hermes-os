@@ -170,9 +170,7 @@ fn surface(surface: &ClientSurfaceAvailabilityProjectionV1) -> ClientSurfaceAvai
 fn surface_id(value: ProjectionSurfaceId) -> WireSurfaceId {
     match value {
         ProjectionSurfaceId::Dashboard => WireSurfaceId::Dashboard,
-        ProjectionSurfaceId::CommunicationsMail => WireSurfaceId::CommunicationsMail,
-        ProjectionSurfaceId::CommunicationsTelegram => WireSurfaceId::CommunicationsTelegram,
-        ProjectionSurfaceId::CommunicationsWhatsapp => WireSurfaceId::CommunicationsWhatsapp,
+        ProjectionSurfaceId::Communications => WireSurfaceId::Communications,
         ProjectionSurfaceId::Review => WireSurfaceId::Review,
         ProjectionSurfaceId::Personas => WireSurfaceId::Personas,
         ProjectionSurfaceId::Knowledge => WireSurfaceId::Knowledge,

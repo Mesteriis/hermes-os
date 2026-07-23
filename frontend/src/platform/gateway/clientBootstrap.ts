@@ -14,7 +14,7 @@ import {
 import {
 	CLIENT_SURFACE_CONTRACT_MAJOR,
 	clientSurfaceCatalog,
-	clientSurfaceByWireId,
+	clientSurfacesByWireId,
 	type ClientSurfaceAvailability,
 	type ClientSurfaceRouteId,
 	unavailableClientSurface,
@@ -50,8 +50,8 @@ export function validateClientBootstrap(response: ClientBootstrapResponseV1): Cl
 	const availability = new Map(recoveryClientBootstrap())
 	const seen = new Set<ClientSurfaceRouteId>()
 	for (const surface of response.surfaces) {
-		const metadata = clientSurfaceByWireId(surface.surfaceId)
-		if (!metadata || seen.has(metadata.routeId)) {
+		const metadata = clientSurfacesByWireId(surface.surfaceId)
+		if (metadata.length === 0 || metadata.some((route) => seen.has(route.routeId))) {
 			throw new Error('Invalid client surface catalog')
 		}
 		if (surface.supportedClientContractMajor !== CLIENT_SURFACE_CONTRACT_MAJOR) {
@@ -61,12 +61,14 @@ export function validateClientBootstrap(response: ClientBootstrapResponseV1): Cl
 			throw new Error('Invalid client surface availability state')
 		}
 
-		seen.add(metadata.routeId)
-		availability.set(metadata.routeId, {
-			state: surface.state,
-			reasonCode: surface.sanitizedReasonCode,
-			available: surface.state === ClientSurfaceAvailabilityStateV1.AVAILABLE,
-		})
+		for (const route of metadata) {
+			seen.add(route.routeId)
+			availability.set(route.routeId, {
+				state: surface.state,
+				reasonCode: surface.sanitizedReasonCode,
+				available: surface.state === ClientSurfaceAvailabilityStateV1.AVAILABLE,
+			})
+		}
 	}
 
 	if (seen.size !== clientSurfaceCatalog.length) {

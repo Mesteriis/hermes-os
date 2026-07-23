@@ -9,6 +9,7 @@ import {
 	ClientSystemComponentStatusV1Schema,
 	ClientSurfaceAvailabilityStateV1,
 	ClientSurfaceAvailabilityV1Schema,
+	ClientSurfaceIdV1,
 } from '../../gen/hermes/gateway/v1/client_bootstrap_pb'
 import { clientSurfaceCatalog } from '../client-runtime/clientSurfaces'
 import { validateClientBootstrap } from './clientBootstrap'
@@ -29,6 +30,21 @@ describe('validateClientBootstrap', () => {
 		response.surfaces.pop()
 
 		expect(() => validateClientBootstrap(response)).toThrow('Incomplete client surface catalog')
+	})
+
+	it('fans out the owner-neutral Communications surface to integration routes', () => {
+		const response = responseWithSurfaces()
+		const communications = response.surfaces.find(
+			(surface) => surface.surfaceId === ClientSurfaceIdV1.COMMUNICATIONS,
+		)
+		communications!.state = ClientSurfaceAvailabilityStateV1.AVAILABLE
+		communications!.sanitizedReasonCode = ''
+
+		const bootstrap = validateClientBootstrap(response)
+
+		for (const routeId of ['communications-mail', 'communications-telegram', 'communications-whatsapp'] as const) {
+			expect(bootstrap.get(routeId)).toMatchObject({ available: true, reasonCode: '' })
+		}
 	})
 
 	it('fails closed for an unknown wire enum value', () => {
@@ -74,7 +90,7 @@ function responseWithSurfaces() {
 				componentId,
 				state: ClientSystemComponentStateV1.HEALTHY,
 			})),
-		surfaces: clientSurfaceCatalog.map((surface) => create(ClientSurfaceAvailabilityV1Schema, {
+		surfaces: [...new Map(clientSurfaceCatalog.map((surface) => [surface.surfaceId, surface])).values()].map((surface) => create(ClientSurfaceAvailabilityV1Schema, {
 			surfaceId: surface.surfaceId,
 			state: surface.routeId === 'settings'
 				? ClientSurfaceAvailabilityStateV1.AVAILABLE

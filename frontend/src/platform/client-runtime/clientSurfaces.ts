@@ -49,9 +49,9 @@ export type ClientSurfaceAvailability = {
 
 export const clientSurfaceCatalog: readonly ClientSurfaceMetadata[] = [
 	{ routeId: 'dashboard', surfaceId: ClientSurfaceIdV1.DASHBOARD, label: 'Dashboard', icon: 'tabler:layout-dashboard', iconTone: 'dashboard', adapterKind: 'owner-contract' },
-	{ routeId: 'communications-mail', surfaceId: ClientSurfaceIdV1.COMMUNICATIONS_MAIL, label: 'Mail', icon: 'tabler:mail', iconTone: 'mail', adapterKind: 'owner-contract', parentRouteId: 'communications' },
-	{ routeId: 'communications-telegram', surfaceId: ClientSurfaceIdV1.COMMUNICATIONS_TELEGRAM, label: 'Telegram', icon: 'tabler:brand-telegram', iconTone: 'telegram', adapterKind: 'owner-contract', parentRouteId: 'communications' },
-	{ routeId: 'communications-whatsapp', surfaceId: ClientSurfaceIdV1.COMMUNICATIONS_WHATSAPP, label: 'WhatsApp', icon: 'tabler:brand-whatsapp', iconTone: 'whatsapp', adapterKind: 'owner-contract', parentRouteId: 'communications' },
+	{ routeId: 'communications-mail', surfaceId: ClientSurfaceIdV1.COMMUNICATIONS, label: 'Mail', icon: 'tabler:mail', iconTone: 'mail', adapterKind: 'owner-contract', parentRouteId: 'communications' },
+	{ routeId: 'communications-telegram', surfaceId: ClientSurfaceIdV1.COMMUNICATIONS, label: 'Telegram', icon: 'tabler:brand-telegram', iconTone: 'telegram', adapterKind: 'owner-contract', parentRouteId: 'communications' },
+	{ routeId: 'communications-whatsapp', surfaceId: ClientSurfaceIdV1.COMMUNICATIONS, label: 'WhatsApp', icon: 'tabler:brand-whatsapp', iconTone: 'whatsapp', adapterKind: 'owner-contract', parentRouteId: 'communications' },
 	{ routeId: 'review', surfaceId: ClientSurfaceIdV1.REVIEW, label: 'Review', icon: 'tabler:clipboard-check', iconTone: 'review', adapterKind: 'owner-contract' },
 	{ routeId: 'personas', surfaceId: ClientSurfaceIdV1.PERSONAS, label: 'Personas', icon: 'tabler:user-circle', iconTone: 'knowledge', adapterKind: 'owner-contract' },
 	{ routeId: 'knowledge', surfaceId: ClientSurfaceIdV1.KNOWLEDGE, label: 'Knowledge', icon: 'tabler:share', iconTone: 'knowledge', adapterKind: 'owner-contract' },
@@ -61,12 +61,8 @@ export const clientSurfaceCatalog: readonly ClientSurfaceMetadata[] = [
 	{ routeId: 'settings', surfaceId: ClientSurfaceIdV1.SETTINGS, label: 'Settings', icon: 'tabler:settings', iconTone: 'settings', adapterKind: 'system-control' },
 ]
 
-const surfaceMetadataByWireId = new Map(
-	clientSurfaceCatalog.map((surface) => [surface.surfaceId, surface]),
-)
-
-export function clientSurfaceByWireId(surfaceId: ClientSurfaceIdV1): ClientSurfaceMetadata | undefined {
-	return surfaceMetadataByWireId.get(surfaceId)
+export function clientSurfacesByWireId(surfaceId: ClientSurfaceIdV1): readonly ClientSurfaceMetadata[] {
+	return clientSurfaceCatalog.filter((surface) => surface.surfaceId === surfaceId)
 }
 
 export function hasCompiledClientSurfaceAdapter(surface: ClientSurfaceMetadata): boolean {

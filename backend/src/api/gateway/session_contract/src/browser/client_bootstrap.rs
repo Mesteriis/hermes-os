@@ -120,9 +120,7 @@ impl ClientSystemComponentStatusProjectionV1 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ClientSurfaceIdV1 {
     Dashboard,
-    CommunicationsMail,
-    CommunicationsTelegram,
-    CommunicationsWhatsapp,
+    Communications,
     Review,
     Personas,
     Knowledge,
@@ -140,9 +138,7 @@ impl ClientSurfaceIdV1 {
     pub const fn admission_capability_id(self) -> Option<&'static str> {
         match self {
             Self::Dashboard => Some("client.surface.dashboard.v1"),
-            Self::CommunicationsMail => Some("client.surface.communications.mail.v1"),
-            Self::CommunicationsTelegram => Some("client.surface.communications.telegram.v1"),
-            Self::CommunicationsWhatsapp => Some("client.surface.communications.whatsapp.v1"),
+            Self::Communications => Some("communications.query.v1"),
             Self::Review => Some("client.surface.review.v1"),
             Self::Personas => Some("client.surface.personas.v1"),
             Self::Knowledge => Some("client.surface.knowledge.v1"),
