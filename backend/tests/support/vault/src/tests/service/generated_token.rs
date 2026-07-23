@@ -44,6 +44,50 @@ fn generated_token_never_leaves_vault_until_a_distinct_resolve_lease() {
     assert!(token.iter().all(u8::is_ascii_hexdigit));
 }
 
+#[test]
+fn owner_derived_key_is_generated_inside_vault_and_resolves_as_32_raw_bytes() {
+    let temporary = private_temporary_directory();
+    let audience = storage_audience();
+    let mut service = VaultService::new(initialize_store(&temporary), 3).expect("Vault service");
+    let issue = issue_for(
+        &mut service,
+        &audience,
+        SecretClassV1::OwnerDerivedKey,
+        VaultActionV1::IssueOwnerDerivedKey,
+        100,
+    );
+    let record_id = service
+        .execute_command_once(
+            &VaultTransportCommandV1::GenerateOpaqueToken {
+                lease_id: issue,
+                secret_class: SecretClassV1::OwnerDerivedKey,
+            },
+            &audience,
+            101,
+        )
+        .expect("owner-derived key record identity");
+    assert_eq!(record_id.len(), 16);
+
+    let resolve = issue_for(
+        &mut service,
+        &audience,
+        SecretClassV1::OwnerDerivedKey,
+        VaultActionV1::Resolve,
+        102,
+    );
+    let key = service
+        .execute_command_once(
+            &VaultTransportCommandV1::ResolveLease {
+                lease_id: resolve,
+                secret_class: SecretClassV1::OwnerDerivedKey,
+            },
+            &audience,
+            103,
+        )
+        .expect("resolved owner-derived key");
+    assert_eq!(key.len(), 32);
+}
+
 fn private_temporary_directory() -> TempDir {
     let temporary = TempDir::new().expect("temporary Vault directory");
     std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
@@ -79,10 +123,26 @@ fn issue(
     action: VaultActionV1,
     now: u64,
 ) -> hermes_vault_protocol::LeaseIdV1 {
+    issue_for(
+        service,
+        audience,
+        SecretClassV1::PlatformCredential,
+        action,
+        now,
+    )
+}
+
+fn issue_for(
+    service: &mut VaultService,
+    audience: &LeaseAudienceV1,
+    secret_class: SecretClassV1,
+    action: VaultActionV1,
+    now: u64,
+) -> hermes_vault_protocol::LeaseIdV1 {
     let purpose = VaultPurposeRequestV1::new(
         "storage.control.pgbouncer.admin".to_owned(),
         "storage-main".to_owned(),
-        vec![SecretClassV1::PlatformCredential],
+        vec![secret_class],
         vec![action],
         60,
     )

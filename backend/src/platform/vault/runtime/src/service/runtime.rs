@@ -246,10 +246,14 @@ impl VaultService {
         secret_class: hermes_vault_protocol::SecretClassV1,
         now_unix_seconds: u64,
     ) -> Result<Zeroizing<Vec<u8>>, VaultServiceError> {
-        let lease =
-            self.consume_action(lease_id, audience, VaultActionV1::Create, now_unix_seconds)?;
+        let lease = self.consume_action(
+            lease_id,
+            audience,
+            generate_action(secret_class)?,
+            now_unix_seconds,
+        )?;
         let scope = scope_for_lease(&lease, secret_class, lease.request().secret_revision())?;
-        let token = generate_opaque_token()?;
+        let token = generate_secret_material(secret_class)?;
         let record_id = self
             .store
             .store_secret(&scope, token.as_slice())
@@ -330,8 +334,37 @@ fn scope_for_lease(
 fn supported_action(action: VaultActionV1) -> bool {
     matches!(
         action,
-        VaultActionV1::Resolve | VaultActionV1::Create | VaultActionV1::ReplaceCas
+        VaultActionV1::Resolve
+            | VaultActionV1::Create
+            | VaultActionV1::ReplaceCas
+            | VaultActionV1::IssueOwnerDerivedKey
     )
+}
+
+fn generate_action(
+    secret_class: hermes_vault_protocol::SecretClassV1,
+) -> Result<VaultActionV1, VaultServiceError> {
+    match secret_class {
+        hermes_vault_protocol::SecretClassV1::PlatformCredential => Ok(VaultActionV1::Create),
+        hermes_vault_protocol::SecretClassV1::OwnerDerivedKey => {
+            Ok(VaultActionV1::IssueOwnerDerivedKey)
+        }
+        _ => Err(VaultServiceError::LeaseScopeMismatch),
+    }
+}
+
+fn generate_secret_material(
+    secret_class: hermes_vault_protocol::SecretClassV1,
+) -> Result<Zeroizing<Vec<u8>>, VaultServiceError> {
+    match secret_class {
+        hermes_vault_protocol::SecretClassV1::PlatformCredential => generate_opaque_token(),
+        hermes_vault_protocol::SecretClassV1::OwnerDerivedKey => {
+            let mut key = Zeroizing::new(vec![0_u8; 32]);
+            fill(key.as_mut_slice()).map_err(|_| VaultServiceError::EntropyUnavailable)?;
+            Ok(key)
+        }
+        _ => Err(VaultServiceError::LeaseScopeMismatch),
+    }
 }
 
 fn generate_opaque_token() -> Result<Zeroizing<Vec<u8>>, VaultServiceError> {

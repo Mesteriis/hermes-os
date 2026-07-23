@@ -27,6 +27,7 @@ pub enum SecretClassV1 {
     SessionCredentialBlob,
     PlatformCredential,
     SessionStoreKey,
+    OwnerDerivedKey,
 }
 
 impl SecretClassV1 {
@@ -38,6 +39,7 @@ impl SecretClassV1 {
             Self::SessionCredentialBlob => 3,
             Self::PlatformCredential => 4,
             Self::SessionStoreKey => 5,
+            Self::OwnerDerivedKey => 6,
         }
     }
 
@@ -48,6 +50,7 @@ impl SecretClassV1 {
             3 => Some(Self::SessionCredentialBlob),
             4 => Some(Self::PlatformCredential),
             5 => Some(Self::SessionStoreKey),
+            6 => Some(Self::OwnerDerivedKey),
             _ => None,
         }
     }
@@ -61,6 +64,7 @@ pub enum VaultActionV1 {
     Retire,
     Delete,
     IssueSessionStoreKey,
+    IssueOwnerDerivedKey,
 }
 
 impl VaultActionV1 {
@@ -73,6 +77,7 @@ impl VaultActionV1 {
             Self::Retire => 4,
             Self::Delete => 5,
             Self::IssueSessionStoreKey => 6,
+            Self::IssueOwnerDerivedKey => 7,
         }
     }
 
@@ -84,6 +89,7 @@ impl VaultActionV1 {
             4 => Some(Self::Retire),
             5 => Some(Self::Delete),
             6 => Some(Self::IssueSessionStoreKey),
+            7 => Some(Self::IssueOwnerDerivedKey),
             _ => None,
         }
     }
