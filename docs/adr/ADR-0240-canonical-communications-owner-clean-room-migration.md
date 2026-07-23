@@ -37,6 +37,7 @@ Depends on:
 - ADR-0223: encrypted Vault and scoped credential leases;
 - ADR-0236: integration owners, protocol adapters, and configuration instances;
 - ADR-0239: Mail/IMAP read-only first-owner slice.
+- ADR-0257: event-backed Blob custody transfer for canonical evidence.
 
 ## Decision
 

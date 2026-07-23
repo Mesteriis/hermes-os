@@ -32,6 +32,7 @@ ConnectRPC evidence.
 - [ADR-0231: private Blob session](ADR-0231-private-blob-data-session-and-vault-route.md);
 - [ADR-0240: Communications owner](ADR-0240-canonical-communications-owner-clean-room-migration.md);
 - [ADR-0253: legacy surface disposition](ADR-0253-communications-legacy-surface-disposition-and-clean-room-completion.md).
+- [ADR-0257: event-backed Blob custody transfer](ADR-0257-event-backed-blob-custody-transfer-for-canonical-evidence.md).
 
 ## Context
 
