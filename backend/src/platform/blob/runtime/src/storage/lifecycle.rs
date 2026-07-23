@@ -108,16 +108,19 @@ impl BlobContentLifecycleStore {
     /// Plaintext remains inside Blob runtime and the source object is retained.
     pub fn custody_transfer(
         &self,
-        source_reference: &BlobRefV1,
-        source_access: &BlobAccessFenceV1,
-        source_lease: &BlobKeyLeaseV1,
-        target_reference: &BlobRefV1,
-        target_access: &BlobAccessFenceV1,
-        target_quota: &BlobQuotaGrantV1,
-        target_lease: &BlobKeyLeaseV1,
-        expected_plaintext_sha256: &[u8; 32],
-        now_unix_ms: u64,
+        request: BlobCustodyTransferRequestV1<'_>,
     ) -> Result<(), BlobLifecycleError> {
+        let BlobCustodyTransferRequestV1 {
+            source_reference,
+            source_access,
+            source_lease,
+            target_reference,
+            target_access,
+            target_quota,
+            target_lease,
+            expected_plaintext_sha256,
+            now_unix_ms,
+        } = request;
         let full_source = BlobRangeV1::new(
             0,
             source_reference.declared_size(),
@@ -258,6 +261,18 @@ impl BlobContentLifecycleStore {
         }
         Ok(())
     }
+}
+
+pub struct BlobCustodyTransferRequestV1<'a> {
+    pub source_reference: &'a BlobRefV1,
+    pub source_access: &'a BlobAccessFenceV1,
+    pub source_lease: &'a BlobKeyLeaseV1,
+    pub target_reference: &'a BlobRefV1,
+    pub target_access: &'a BlobAccessFenceV1,
+    pub target_quota: &'a BlobQuotaGrantV1,
+    pub target_lease: &'a BlobKeyLeaseV1,
+    pub expected_plaintext_sha256: &'a [u8; 32],
+    pub now_unix_ms: u64,
 }
 
 #[derive(Debug)]
