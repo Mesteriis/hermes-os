@@ -1,14 +1,14 @@
 //! Translation of a validated module descriptor into Control Store request records.
 
 use hermes_kernel_control_store::{
-    ModuleBlobQuotaRequestV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
+    ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
     ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
     ModuleEventSubscriptionRequirementV1, ModuleRegistration, ModuleSchedulerJobRequestV1,
     ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
 };
 use hermes_runtime_protocol::{
     v1::{
-        DurableEnvelopeKindV1, EventRouteDirectionV1, EventSubscriptionRequirementV1,
+        DurableEnvelopeKindV1, EventRouteDirectionV1, EventSubscriptionRequirementV1, ProvidedSurfaceKindV1,
         VaultActionV1, VaultSecretClassV1, VaultTargetScopeV1,
         capability_request_v1::Request as CapabilityRequest,
     },
@@ -26,6 +26,7 @@ pub(super) struct DescriptorRegistrationRequests {
     blobs: Vec<DescriptorBlobQuotaRequest>,
     scheduler: Vec<DescriptorSchedulerJobRequest>,
     vault_purposes: Vec<DescriptorVaultPurposeRequest>,
+    client_rpc_routes: Vec<DescriptorClientRpcRoute>,
 }
 
 pub(super) struct BoundRegistrationRequests {
@@ -34,6 +35,7 @@ pub(super) struct BoundRegistrationRequests {
     pub(super) blobs: Vec<ModuleBlobQuotaRequestV1>,
     pub(super) scheduler: Vec<ModuleSchedulerJobRequestV1>,
     pub(super) vault_purposes: Vec<ModuleVaultPurposeRequestV1>,
+    pub(super) client_rpc_routes: Vec<ModuleClientRpcRouteV1>,
 }
 
 impl DescriptorRegistrationRequests {
@@ -54,6 +56,7 @@ impl DescriptorRegistrationRequests {
             blobs: blob_quota_requests(&descriptor)?,
             scheduler: scheduler_job_requests(&descriptor)?,
             vault_purposes: vault_purpose_requests(&descriptor)?,
+            client_rpc_routes: client_rpc_routes(&descriptor)?,
         })
     }
 
@@ -80,6 +83,7 @@ impl DescriptorRegistrationRequests {
             blobs: bind_blob_quota_requests(&self.blobs, registration),
             scheduler: bind_scheduler_job_requests(&self.scheduler, registration),
             vault_purposes: bind_vault_purpose_requests(&self.vault_purposes, registration),
+            client_rpc_routes: bind_client_rpc_routes(&self.client_rpc_routes, registration),
         }
     }
 }
@@ -174,6 +178,16 @@ fn bind_vault_purpose_requests(
     )).collect()
 }
 
+fn bind_client_rpc_routes(
+    requests: &[DescriptorClientRpcRoute], registration: &ModuleRegistration,
+) -> Vec<ModuleClientRpcRouteV1> {
+    requests.iter().map(|request| ModuleClientRpcRouteV1::new(
+        registration.registration_id(), &request.capability_id, registration.owner_id(),
+        &request.contract_name, request.contract_major, request.contract_revision,
+        request.contract_schema_sha256, &request.path,
+    )).collect()
+}
+
 struct DescriptorStorageRequest {
     capability_id: String,
     owner_id: String,
@@ -216,6 +230,42 @@ struct DescriptorVaultPurposeRequest {
     action: u8,
     target_scope: u8,
     key_schema_revision: u32,
+}
+
+struct DescriptorClientRpcRoute {
+    capability_id: String,
+    contract_name: String,
+    contract_major: u32,
+    contract_revision: u32,
+    contract_schema_sha256: [u8; 32],
+    path: String,
+}
+
+fn client_rpc_routes(
+    descriptor: &hermes_runtime_protocol::v1::ModuleDescriptorV1,
+) -> Result<Vec<DescriptorClientRpcRoute>, String> {
+    let mut seen_paths = std::collections::BTreeSet::new();
+    let mut routes = Vec::new();
+    for capability in &descriptor.capabilities {
+        for surface in &capability.provides {
+            if ProvidedSurfaceKindV1::try_from(surface.kind).ok() != Some(ProvidedSurfaceKindV1::ClientRpc) {
+                continue;
+            }
+            let contract = surface.contract.as_ref().ok_or_else(|| "module Client RPC contract is invalid".to_owned())?;
+            let route = surface.client_rpc_route.as_ref().ok_or_else(|| "module Client RPC route is invalid".to_owned())?;
+            let schema_sha256 = contract.schema_sha256.as_slice().try_into()
+                .map_err(|_| "module Client RPC contract is invalid".to_owned())?;
+            if contract.owner != descriptor.owner_id || !seen_paths.insert(route.path.clone()) {
+                return Err("module Client RPC route owner or path is invalid".to_owned());
+            }
+            routes.push(DescriptorClientRpcRoute {
+                capability_id: capability.capability_id.clone(), contract_name: contract.name.clone(),
+                contract_major: contract.major, contract_revision: contract.revision,
+                contract_schema_sha256: schema_sha256, path: route.path.clone(),
+            });
+        }
+    }
+    Ok(routes)
 }
 
 fn event_route_requests(

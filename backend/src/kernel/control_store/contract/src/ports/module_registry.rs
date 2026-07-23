@@ -1,5 +1,5 @@
 use crate::{
-    GrantSet, ModuleBlobQuotaRequestV1, ModuleEventRouteRequestV1, ModuleGrantSnapshot,
+    GrantSet, ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1, ModuleEventRouteRequestV1, ModuleGrantSnapshot,
     ModuleRegistration, ModuleRegistrationState, ModuleSchedulerJobRequestV1,
     ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
 };
@@ -30,6 +30,17 @@ pub trait ModuleRegistryStore {
         scheduler_requests: &[ModuleSchedulerJobRequestV1],
         vault_purpose_requests: &[ModuleVaultPurposeRequestV1],
     ) -> Result<(), Self::Error>;
+    fn create_pending_registration_with_all_descriptor_requests(
+        &self,
+        registration: &ModuleRegistration,
+        requested_capability_ids: &[String],
+        storage_requests: &[ModuleStorageRequestV1],
+        event_requests: &[ModuleEventRouteRequestV1],
+        blob_requests: &[ModuleBlobQuotaRequestV1],
+        scheduler_requests: &[ModuleSchedulerJobRequestV1],
+        vault_purpose_requests: &[ModuleVaultPurposeRequestV1],
+        client_rpc_routes: &[ModuleClientRpcRouteV1],
+    ) -> Result<(), Self::Error>;
     fn module_registration(
         &self,
         registration_id: &str,
@@ -59,6 +70,7 @@ pub trait ModuleRegistryStore {
         registration_id: &str,
         capability_id: &str,
     ) -> Result<Vec<ModuleEventRouteRequestV1>, Self::Error>;
+    fn approved_module_client_rpc_routes(&self) -> Result<Vec<ModuleClientRpcRouteV1>, Self::Error>;
     fn module_blob_quota_request(
         &self,
         registration_id: &str,

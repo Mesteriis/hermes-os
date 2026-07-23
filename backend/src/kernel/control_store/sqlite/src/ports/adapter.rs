@@ -5,7 +5,7 @@ use hermes_kernel_control_store::{
     EventHubTopologyStore, EventsAuthorityStore, ExternalRuntimeAttestation,
     ExternalRuntimeIdentity, GrantSet, HealthRecoveryStore, InitialOwnerIdentity,
     ManagedLaunchRecord, ModuleBlobQuotaRequestV1, ModuleEventRouteRequestV1, ModuleGrantSnapshot,
-    ModuleRegistration, ModuleRegistrationState, ModuleRegistryStore, ModuleSchedulerJobRequestV1,
+    ModuleRegistration, ModuleRegistrationState, ModuleRegistryStore, ModuleSchedulerJobRequestV1, ModuleClientRpcRouteV1,
     ModuleStorageRequestV1, ModuleVaultPurposeRequestV1, OwnerIdentityStore, OwnerPinnedArtifactBinding,
     PlatformEventHubTopologyV1, PlatformEventsAuthorityConfigurationV1,
     PlatformManagedProcessBinding, PlatformManagedProcessLaunch, PlatformStorageTopology,
@@ -147,6 +147,22 @@ impl ModuleRegistryStore for SqliteControlStore {
             vault_purpose_requests,
         )
     }
+    fn create_pending_registration_with_all_descriptor_requests(
+        &self,
+        registration: &ModuleRegistration,
+        capabilities: &[String],
+        storage_requests: &[ModuleStorageRequestV1],
+        event_requests: &[ModuleEventRouteRequestV1],
+        blob_requests: &[ModuleBlobQuotaRequestV1],
+        scheduler_requests: &[ModuleSchedulerJobRequestV1],
+        vault_purpose_requests: &[ModuleVaultPurposeRequestV1],
+        client_rpc_routes: &[ModuleClientRpcRouteV1],
+    ) -> Result<(), Self::Error> {
+        SqliteControlStore::create_pending_registration_with_all_descriptor_requests(
+            self, registration, capabilities, storage_requests, event_requests, blob_requests,
+            scheduler_requests, vault_purpose_requests, client_rpc_routes,
+        )
+    }
     fn module_registration(&self, id: &str) -> Result<Option<ModuleRegistration>, Self::Error> {
         SqliteControlStore::module_registration(self, id)
     }
@@ -183,6 +199,9 @@ impl ModuleRegistryStore for SqliteControlStore {
         capability_id: &str,
     ) -> Result<Vec<ModuleEventRouteRequestV1>, Self::Error> {
         SqliteControlStore::module_event_route_requests(self, registration_id, capability_id)
+    }
+    fn approved_module_client_rpc_routes(&self) -> Result<Vec<ModuleClientRpcRouteV1>, Self::Error> {
+        SqliteControlStore::approved_module_client_rpc_routes(self)
     }
     fn module_blob_quota_request(
         &self,

@@ -18,7 +18,7 @@ use hyper::{Response, StatusCode};
 use crate::{
     BrowserAuthenticationRouter, BrowserBootstrapRouter, BrowserPairingRouter,
     BrowserRealtimeRouter, BrowserRealtimeSubscriptionSource, BrowserSessionStatusRouter,
-    CommunicationsQueryRouter, GatewayHttpResponse, GatewayTechnicalRouter,
+    ClientRpcRouter, GatewayHttpResponse, GatewayTechnicalRouter,
     ClientBootstrapRouter,
     SharedBrowserGatewaySessionService,
 };
@@ -28,7 +28,6 @@ const PAIRING_PREFIX: &str = "/browser/v1/pairing/";
 const REALTIME_PATH: &str = "/api/realtime/v1/events";
 const SESSION_STATUS_PATH: &str = "/hermes.gateway.v1.BrowserSessionService/GetStatus";
 const CLIENT_BOOTSTRAP_PATH: &str = "/hermes.gateway.v1.ClientBootstrapService/GetBootstrap";
-const COMMUNICATIONS_QUERY_PATH: &str = "/hermes.communications.query.v1.CommunicationsQueryService/Query";
 
 /// Composes technical health, browser authentication and client-safe realtime
 /// without adding an owner API or mounting a listener.
@@ -39,7 +38,7 @@ pub struct GatewayApplicationRouter<A, S> {
     browser_bootstrap: Option<BrowserBootstrapRouter>,
     browser_session_status: BrowserSessionStatusRouter<A>,
     client_bootstrap: ClientBootstrapRouter<A>,
-    communications_query: Option<CommunicationsQueryRouter<A>>,
+    client_rpc_routes: Vec<ClientRpcRouter<A>>,
     browser_realtime: BrowserRealtimeRouter<A, S>,
     lan_development_policy: Option<LanDevelopmentRequestPolicyV1>,
 }
@@ -59,7 +58,7 @@ impl<A, S> Clone for GatewayApplicationRouter<A, S> {
             browser_bootstrap: self.browser_bootstrap.clone(),
             browser_session_status: self.browser_session_status.clone(),
             client_bootstrap: self.client_bootstrap.clone(),
-            communications_query: self.communications_query.clone(),
+            client_rpc_routes: self.client_rpc_routes.clone(),
             browser_realtime: self.browser_realtime.clone(),
             lan_development_policy: self.lan_development_policy.clone(),
         }
@@ -80,7 +79,7 @@ where
             browser_bootstrap: None,
             browser_session_status: BrowserSessionStatusRouter::from_shared(service.clone()),
             client_bootstrap: ClientBootstrapRouter::from_shared(service.clone()),
-            communications_query: None,
+            client_rpc_routes: Vec::new(),
             browser_realtime: BrowserRealtimeRouter::new(service, source),
             lan_development_policy: None,
         }
@@ -99,9 +98,13 @@ where
     }
 
     #[must_use]
-    pub fn with_communications_query(mut self, router: CommunicationsQueryRouter<A>) -> Self {
-        self.communications_query = Some(router);
-        self
+    pub fn with_client_rpc_routes(mut self, routes: Vec<ClientRpcRouter<A>>) -> Result<Self, &'static str> {
+        let mut paths = std::collections::BTreeSet::new();
+        if !routes.iter().all(|route| paths.insert(route.path())) {
+            return Err("duplicate owner ClientRpc route");
+        }
+        self.client_rpc_routes = routes;
+        Ok(self)
     }
 
     pub fn with_lan_development_policy(mut self, exact_origin: &str) -> Result<Self, &'static str> {
@@ -122,7 +125,7 @@ where
         B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     {
         let path = request.uri().path();
-        let route = route_class(path);
+        let route = route_class(path, &self.client_rpc_routes);
         let method = request.method().clone();
         if let Some(policy) = &self.lan_development_policy
             && !policy.admits(&request)
@@ -174,13 +177,8 @@ where
         if path == CLIENT_BOOTSTRAP_PATH {
             return self.client_bootstrap.route(request).await;
         }
-        if path == COMMUNICATIONS_QUERY_PATH
-            && let Some(router) = &self.communications_query
-        {
+        if let Some(router) = self.client_rpc_routes.iter().find(|router| router.path() == path) {
             return router.route(request).await;
-        }
-        if path == COMMUNICATIONS_QUERY_PATH {
-            return not_found();
         }
         if path.starts_with(AUTHENTICATION_PREFIX) {
             if self.lan_development_policy.is_some() {
@@ -243,7 +241,10 @@ impl LanDevelopmentRequestPolicyV1 {
     }
 }
 
-fn route_class(path: &str) -> &'static str {
+fn route_class<A>(path: &str, client_rpc_routes: &[ClientRpcRouter<A>]) -> &'static str
+where
+    A: BrowserAuthenticationAuthority,
+{
     match path {
         "/" => "browser_bootstrap",
         "/healthz" => "health",
@@ -253,7 +254,7 @@ fn route_class(path: &str) -> &'static str {
         CLIENT_BOOTSTRAP_PATH => "client_bootstrap",
         path if path.starts_with(AUTHENTICATION_PREFIX) => "browser_authentication",
         path if path.starts_with(PAIRING_PREFIX) => "browser_pairing",
-        path if path == COMMUNICATIONS_QUERY_PATH => "communications_query",
+        path if client_rpc_routes.iter().any(|route| route.path() == path) => "client_rpc",
         _ => "unknown",
     }
 }

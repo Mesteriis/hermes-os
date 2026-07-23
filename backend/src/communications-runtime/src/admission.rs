@@ -122,6 +122,7 @@ pub fn communications_query_capability_v1() -> CapabilityDescriptorV1 {
         provides: vec![ProvidedSurfaceV1 {
             kind: ProvidedSurfaceKindV1::ClientRpc as i32,
             contract: Some(communications_query_contract_reference_v1()),
+            client_rpc_route: Some(hermes_runtime_protocol::v1::ClientRpcRouteV1 { path: "/hermes.communications.query.v1.CommunicationsQueryService/Query".to_owned() }),
         }],
         ..Default::default()
     }

@@ -1,5 +1,3 @@
-use sha2::{Digest, Sha256};
-
 fn main() {
     let protoc = protoc_bin_vendored::protoc_bin_path().expect("vendored protoc must be available");
     unsafe {
@@ -27,22 +25,4 @@ fn main() {
         )
         .expect("gateway protocol must compile");
 
-    let output = std::path::PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR is set"));
-    let descriptor = output.join("communications-query-v1.bin");
-    prost_build::Config::new()
-        .file_descriptor_set_path(&descriptor)
-        .compile_protos(
-            &["../../../communications-api/proto/hermes/communications/query/v1/query.proto"],
-            &["../../../communications-api/proto"],
-        )
-        .expect("communications query schema must compile");
-    let digest: [u8; 32] = Sha256::digest(
-        std::fs::read(&descriptor).expect("communications query descriptor must exist"),
-    )
-    .into();
-    std::fs::write(
-        output.join("communications_query_schema.rs"),
-        format!("pub const COMMUNICATIONS_QUERY_SCHEMA_SHA256: [u8; 32] = {digest:?};\n"),
-    )
-    .expect("communications query schema digest must be written");
 }

@@ -67,7 +67,7 @@ where
             1,
         );
         let bound = requests.bind(&registration);
-        match store.create_pending_registration_with_descriptor_requests(
+        match store.create_pending_registration_with_all_descriptor_requests(
             &registration,
             requests.capability_ids(),
             &bound.storage,
@@ -75,6 +75,7 @@ where
             &bound.blobs,
             &bound.scheduler,
             &bound.vault_purposes,
+            &bound.client_rpc_routes,
         ) {
             Ok(()) => return Ok(registration),
             Err(

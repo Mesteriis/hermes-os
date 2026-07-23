@@ -13,8 +13,8 @@ mod transport;
 pub use application::GatewayApplicationRouter;
 pub use browser::{
     BrowserAuthenticationRouter, BrowserBootstrapRouter, BrowserPairingRouter, BrowserSessionStatusRouter,
-    ClientBootstrapRouter, CommunicationsQueryRouteErrorV1, CommunicationsQueryRouteHandler,
-    CommunicationsQueryRouter, SharedBrowserGatewaySessionService, SharedBrowserPairingManager,
+    ClientBootstrapRouter, ClientRpcRouteErrorV1, ClientRpcRouteHandler, ClientRpcRouteV1,
+    ClientRpcRouter, SharedBrowserGatewaySessionService, SharedBrowserPairingManager,
 };
 pub use realtime::{
     BrowserRealtimePublisherV1, BrowserRealtimeRouter, BrowserRealtimeSubscriptionSource,

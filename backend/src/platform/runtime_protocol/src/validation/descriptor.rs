@@ -3,7 +3,7 @@ use prost::Message;
 use crate::v1::{
     CapabilityCriticalityV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
     EventSubscriptionRequirementV1, InitialOwnerEnrollmentChallengeV1, InitialOwnerEnrollmentV1,
-    ModuleDescriptorV1, ModuleKindV1, SettingApplyModeV1, SettingClientVisibilityV1,
+    ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1, SettingApplyModeV1, SettingClientVisibilityV1,
     SettingMutationAuthorityV1, SettingTargetScopeV1, SettingValueTypeV1, SettingsSchemaV1,
     SettingsSnapshotV1, VaultActionV1, VaultSecretClassV1, VaultTargetScopeV1,
     capability_request_v1, setting_value_v1,
@@ -137,6 +137,7 @@ pub fn validate_descriptor_v1(
             .filter(|criticality| *criticality != CapabilityCriticalityV1::Unspecified)
             .is_none()
             || capability.provides.len() > MAX_REFERENCES_PER_CAPABILITY
+            || capability.provides.iter().any(|surface| !valid_provided_surface(surface))
             || capability.dependencies.len() > MAX_REFERENCES_PER_CAPABILITY
             || capability
                 .requests
@@ -147,6 +148,30 @@ pub fn validate_descriptor_v1(
         }
     }
     Ok(())
+}
+
+fn valid_provided_surface(surface: &crate::v1::ProvidedSurfaceV1) -> bool {
+    let Some(kind) = ProvidedSurfaceKindV1::try_from(surface.kind).ok() else { return false; };
+    if kind == ProvidedSurfaceKindV1::Unspecified || !surface.contract.as_ref().is_some_and(valid_contract_reference) {
+        return false;
+    }
+    match kind {
+        ProvidedSurfaceKindV1::ClientRpc => surface.client_rpc_route.as_ref().is_some_and(|route| valid_client_rpc_path(&route.path)),
+        _ => surface.client_rpc_route.is_none(),
+    }
+}
+
+fn valid_client_rpc_path(path: &str) -> bool {
+    let mut segments = path.split('/');
+    matches!(segments.next(), Some(""))
+        && segments.next().is_some_and(valid_connect_component)
+        && segments.next().is_some_and(valid_connect_component)
+        && segments.next().is_none()
+        && path.len() <= 512
+}
+
+fn valid_connect_component(value: &str) -> bool {
+    !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_'))
 }
 
 fn valid_settings_schema_reference(descriptor: &ModuleDescriptorV1) -> bool {

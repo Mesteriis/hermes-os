@@ -40,7 +40,8 @@ message ProtocolRangeV1 { uint32 minimum_major = 1; uint32 maximum_major = 2; ui
 message RuntimeBudgetRequestV1 { uint32 max_processes = 1; uint32 max_connections = 2; uint64 max_memory_bytes = 3; uint32 max_cpu_millis = 4; }
 message SettingsSchemaRefV1 { uint32 major = 1; uint32 revision = 2; uint64 artifact_size_bytes = 3; bytes sha256 = 4; }
 message LifecycleSupportV1 { repeated LifecycleOperationV1 operations = 1; uint32 default_deadline_millis = 2; }
-message ProvidedSurfaceV1 { ProvidedSurfaceKindV1 kind = 1; ContractReferenceV1 contract = 2; }
+message ClientRpcRouteV1 { string path = 1; }
+message ProvidedSurfaceV1 { ProvidedSurfaceKindV1 kind = 1; ContractReferenceV1 contract = 2; ClientRpcRouteV1 client_rpc_route = 3; }
 message StorageNamespaceRequestV1 { string owner_id = 1; uint32 connection_budget = 2; uint32 timeout_millis = 3; }
 enum DurableEnvelopeKindV1 { DURABLE_ENVELOPE_KIND_V1_UNSPECIFIED = 0; DURABLE_ENVELOPE_KIND_V1_COMMAND = 1; DURABLE_ENVELOPE_KIND_V1_EVENT = 2; DURABLE_ENVELOPE_KIND_V1_OBSERVATION = 3; DURABLE_ENVELOPE_KIND_V1_RESULT = 4; DURABLE_ENVELOPE_KIND_V1_ACK = 5; }
 enum EventRouteDirectionV1 { EVENT_ROUTE_DIRECTION_V1_UNSPECIFIED = 0; EVENT_ROUTE_DIRECTION_V1_PUBLISH = 1; EVENT_ROUTE_DIRECTION_V1_CONSUME = 2; }

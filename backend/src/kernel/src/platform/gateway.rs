@@ -6,10 +6,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use hermes_gateway_protocol::COMMUNICATIONS_QUERY_SCHEMA_SHA256;
 use hermes_gateway_runtime::{
-    BrowserBootstrapRouter, BrowserPairingRouter, CommunicationsQueryRouteErrorV1,
-    CommunicationsQueryRouter, InMemoryBrowserRealtimeSource,
+    BrowserBootstrapRouter, BrowserPairingRouter, ClientRpcRouteErrorV1,
+    ClientRpcRouteHandler, ClientRpcRouteV1, ClientRpcRouter, InMemoryBrowserRealtimeSource,
     GatewayApplicationRouter, GatewayHttp3ListenerV1, GatewayLanDevelopmentListenerV1,
     GatewayLoopbackTlsListenerV1, GatewayTechnicalRouter,
     GatewayTlsListenerV1, PairedRemoteProfileV1, SharedBrowserPairingManager,
@@ -36,10 +35,6 @@ use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 const SHUTDOWN_POLL: Duration = Duration::from_millis(25);
 const BROWSER_BOOTSTRAP_ARTIFACT_ID: &str = "browser.bootstrap";
 const MACOS_KERNEL_TARGET: &str = "aarch64-apple-darwin";
-const COMMUNICATIONS_QUERY_CAPABILITY_ID: &str = "communications.query";
-const COMMUNICATIONS_OWNER_ID: &str = "communications";
-const COMMUNICATIONS_QUERY_CONTRACT_MAJOR: u32 = 1;
-const COMMUNICATIONS_QUERY_CONTRACT_REVISION: u32 = 1;
 const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
 
 #[path = "gateway/tls.rs"]
@@ -273,56 +268,62 @@ fn gateway_service(
     let realtime = InMemoryBrowserRealtimeSource::new(1_024)
         .map_err(|_| "browser Gateway realtime source is unavailable".to_owned())?;
     let request_id_sequence = Arc::new(AtomicU64::new(0));
-    let communications_query = {
+    let client_rpc_routes = store
+        .approved_module_client_rpc_routes()
+        .map_err(|_| "owner ClientRpc route records are unavailable".to_owned())?;
+    let client_rpc_handler: ClientRpcRouteHandler = {
         let store = Arc::clone(&store);
         let relay = supervisor.relay_port();
         let request_id_sequence = Arc::clone(&request_id_sequence);
-        let handler = Arc::new(move |owner_id: &str, query_payload: &[u8]| {
-            if owner_id != COMMUNICATIONS_OWNER_ID {
-                return Err(CommunicationsQueryRouteErrorV1::NotFound);
+        Arc::new(move |route: &ClientRpcRouteV1, owner_id: &str, request_payload: &[u8]| {
+            if owner_id != route.owner() {
+                return Err(ClientRpcRouteErrorV1::NotFound);
             }
-            let (registration_id, module_id, grant_epoch) = match find_communications_query_registration(
-                &store,
-                owner_id,
-            ) {
-                Ok(Some((registration_id, module_id, grant_epoch))) => {
-                    (registration_id, module_id, grant_epoch)
-                }
-                Ok(None) => return Err(CommunicationsQueryRouteErrorV1::NotFound),
-                Err(_) => return Err(CommunicationsQueryRouteErrorV1::Internal),
-            };
+            let snapshot = store.module_grant_snapshot(route.registration_id())
+                .map_err(|_| ClientRpcRouteErrorV1::Internal)?
+                .ok_or(ClientRpcRouteErrorV1::NotFound)?;
+            if snapshot.registration().owner_id() != route.owner() {
+                return Err(ClientRpcRouteErrorV1::NotFound);
+            }
+            let grants = snapshot.effective_grants().ok_or(ClientRpcRouteErrorV1::NotFound)?;
+            if grants.capability_ids().binary_search_by(|candidate| candidate.as_str().cmp(route.capability_id())).is_err() {
+                return Err(ClientRpcRouteErrorV1::NotFound);
+            }
             let launch = store
-                .effective_managed_launch_record(&registration_id)
-                .map_err(|_| CommunicationsQueryRouteErrorV1::Internal)?
-                .ok_or(CommunicationsQueryRouteErrorV1::Unavailable)?;
+                .effective_managed_launch_record(route.registration_id())
+                .map_err(|_| ClientRpcRouteErrorV1::Internal)?
+                .ok_or(ClientRpcRouteErrorV1::Unavailable)?;
             let request_id = request_id_sequence.fetch_add(1, Ordering::Relaxed).max(1);
-            let request = encode_communications_query_module_request(
-                &module_id,
-                request_id,
-                query_payload,
-            )
-            .map_err(|_| CommunicationsQueryRouteErrorV1::InvalidArgument)?;
+            let request = encode_owner_client_rpc_module_request(
+                snapshot.registration().module_id(), route, request_id, request_payload,
+            ).map_err(|_| ClientRpcRouteErrorV1::InvalidArgument)?;
             let route = ManagedCapabilityRouteRequest::new(
-                &registration_id,
+                snapshot.registration().registration_id(),
                 launch.runtime_instance_id(),
                 launch.runtime_generation(),
-                grant_epoch,
-                COMMUNICATIONS_QUERY_CAPABILITY_ID,
+                grants.grant_epoch(),
+                route.capability_id(),
                 &request,
             );
             let response_bytes = route_managed_client_request(&*store, &relay, &route)
-                .map_err(map_managed_route_error)?;
+                .map_err(map_managed_client_rpc_route_error)?;
             let response = ModuleClientResponseV1::decode(response_bytes.as_slice())
-                .map_err(|_| CommunicationsQueryRouteErrorV1::Internal)?;
+                .map_err(|_| ClientRpcRouteErrorV1::Internal)?;
             if !response.error_code.is_empty() {
-                return Err(CommunicationsQueryRouteErrorV1::Internal);
+                return Err(ClientRpcRouteErrorV1::Internal);
             }
             Ok(response.response_payload)
         });
-        CommunicationsQueryRouter::new(Arc::clone(&session), handler)
     };
+    let client_rpc_routes = client_rpc_routes.into_iter().map(|route| {
+        ClientRpcRouter::new(Arc::clone(&session), ClientRpcRouteV1::new(
+            route.registration_id(), route.capability_id(), route.owner(), route.contract_name(),
+            route.contract_major(), route.contract_revision(), *route.contract_schema_sha256(), route.path(),
+        ), Arc::clone(&client_rpc_handler))
+    }).collect();
     let mut service = GatewayApplicationRouter::new(true, Arc::clone(&session), realtime)
-        .with_communications_query(communications_query);
+        .with_client_rpc_routes(client_rpc_routes)
+        .map_err(str::to_owned)?;
     if let Some(pairing) = pairing {
         service = service.with_browser_pairing(pairing.router(configuration)?);
     }
@@ -463,74 +464,38 @@ pub(crate) fn required_browser_bootstrap_manifest(
         .ok_or_else(|| "signed browser bootstrap artifact is required".to_owned())
 }
 
-fn find_communications_query_registration(
-    store: &SqliteControlStore,
-    owner_id: &str,
-) -> Result<Option<(String, String, u64)>, String> {
-    let snapshots = store
-        .approved_module_grant_snapshots()
-        .map_err(|_| "module grant snapshots are unavailable".to_owned())?;
-    let mut selected: Option<(String, String, u64)> = None;
-    for snapshot in snapshots {
-        let grants = match snapshot.effective_grants() {
-            Some(grants) => grants,
-            None => continue,
-        };
-        if snapshot.registration().owner_id() != owner_id {
-            continue;
-        }
-        if grants
-            .capability_ids()
-            .binary_search_by(|candidate| candidate.as_str().cmp(COMMUNICATIONS_QUERY_CAPABILITY_ID))
-            .is_err()
-        {
-            continue;
-        }
-        match selected {
-            Some((_, _, current_epoch)) if current_epoch >= grants.grant_epoch() => {}
-            _ => {
-                selected = Some((
-                    snapshot.registration().registration_id().to_owned(),
-                    snapshot.registration().module_id().to_owned(),
-                    grants.grant_epoch(),
-                ));
-            }
-        }
-    }
-    Ok(selected)
-}
-
-fn encode_communications_query_module_request(
+fn encode_owner_client_rpc_module_request(
     module_id: &str,
+    route: &ClientRpcRouteV1,
     request_id: u64,
-    query_payload: &[u8],
+    request_payload: &[u8],
 ) -> Result<Vec<u8>, ()> {
-    if module_id.is_empty() || request_id == 0 || query_payload.is_empty() {
+    if module_id.is_empty() || request_id == 0 || request_payload.is_empty() {
         return Err(());
     }
     Ok(ModuleClientRequestV1 {
         protocol_major: MODULE_CLIENT_PROTOCOL_MAJOR,
         module_id: module_id.to_owned(),
-        owner_id: COMMUNICATIONS_OWNER_ID.to_owned(),
+        owner_id: route.owner().to_owned(),
         contract: Some(ContractReferenceV1 {
-            owner: COMMUNICATIONS_OWNER_ID.to_owned(),
-            name: COMMUNICATIONS_QUERY_CAPABILITY_ID.to_owned(),
-            major: COMMUNICATIONS_QUERY_CONTRACT_MAJOR,
-            revision: COMMUNICATIONS_QUERY_CONTRACT_REVISION,
-            schema_sha256: COMMUNICATIONS_QUERY_SCHEMA_SHA256.to_vec(),
+            owner: route.owner().to_owned(),
+            name: route.contract_name().to_owned(),
+            major: route.contract_major(),
+            revision: route.contract_revision(),
+            schema_sha256: route.contract_schema_sha256().to_vec(),
         }),
         request_id,
-        request_payload: query_payload.to_vec(),
+        request_payload: request_payload.to_vec(),
     }
     .encode_to_vec())
 }
 
-fn map_managed_route_error(error: String) -> CommunicationsQueryRouteErrorV1 {
+fn map_managed_client_rpc_route_error(error: String) -> ClientRpcRouteErrorV1 {
     match error.as_str() {
-        "managed runtime is unavailable" => CommunicationsQueryRouteErrorV1::Unavailable,
-        "managed runtime fence is stale" => CommunicationsQueryRouteErrorV1::Unavailable,
-        "module registration is not approved" => CommunicationsQueryRouteErrorV1::NotFound,
-        "capability is not granted to this registration" => CommunicationsQueryRouteErrorV1::NotFound,
-        _ => CommunicationsQueryRouteErrorV1::Internal,
+        "managed runtime is unavailable" => ClientRpcRouteErrorV1::Unavailable,
+        "managed runtime fence is stale" => ClientRpcRouteErrorV1::Unavailable,
+        "module registration is not approved" => ClientRpcRouteErrorV1::NotFound,
+        "capability is not granted to this registration" => ClientRpcRouteErrorV1::NotFound,
+        _ => ClientRpcRouteErrorV1::Internal,
     }
 }

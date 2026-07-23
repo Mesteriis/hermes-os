@@ -1,6 +1,7 @@
 //! Module registrations, runtime attestations, and trusted launch bindings.
 
 mod blob_request;
+mod client_rpc_route;
 mod event_hub_topology;
 mod event_request;
 mod events_authority;

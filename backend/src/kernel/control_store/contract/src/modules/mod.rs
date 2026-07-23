@@ -1,4 +1,5 @@
 mod blob_request;
+mod client_rpc_route;
 mod event_request;
 mod grant;
 mod grant_snapshot;
@@ -9,6 +10,7 @@ mod storage_request;
 mod vault_purpose_request;
 
 pub use blob_request::ModuleBlobQuotaRequestV1;
+pub use client_rpc_route::ModuleClientRpcRouteV1;
 pub use event_request::{
     ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1, ModuleEventRouteDirectionV1,
     ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,

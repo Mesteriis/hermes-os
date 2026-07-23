@@ -36,6 +36,7 @@ pub enum StoreError {
     InvalidModuleStorageRequest,
     InvalidModuleEventRouteRequest,
     InvalidModuleBlobQuotaRequest,
+    InvalidModuleClientRpcRoute,
     InvalidModuleSchedulerJobRequest,
     InvalidModuleVaultPurposeRequest,
     InvalidExternalRuntimeAttestation,

@@ -18,7 +18,7 @@ pub use identity::{
     BrowserDeviceStateV1, InitialOwnerIdentity, ServerBootstrapPairing,
 };
 pub use modules::{
-    GrantSet, ModuleBlobQuotaRequestV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
+    GrantSet, ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
     ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
     ModuleEventSubscriptionRequirementV1, ModuleGrantSnapshot, ModuleRegistration,
     ModuleRegistrationState, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
