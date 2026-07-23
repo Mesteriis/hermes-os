@@ -14,6 +14,7 @@ fn descriptor_validation_requires_a_bounded_typed_vault_purpose() {
         ],
         actions: vec![VaultActionV1::Resolve as i32],
         target_scope: VaultTargetScopeV1::ConfigurationInstance as i32,
+        key_schema_revision: 0,
     };
     let descriptor = descriptor_with_vault_purpose(vault_purpose.clone());
     assert!(decode_descriptor_v1(&descriptor.encode_to_vec()).is_ok());

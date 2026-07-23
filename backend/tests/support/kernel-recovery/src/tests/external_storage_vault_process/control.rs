@@ -307,6 +307,7 @@ fn vault_capability() -> CapabilityDescriptorV1 {
                 allowed_secret_classes: vec![VaultSecretClassV1::PlatformCredential as i32],
                 actions: vec![VaultActionV1::Resolve as i32, VaultActionV1::Create as i32],
                 target_scope: VaultTargetScopeV1::ConfigurationInstance as i32,
+                key_schema_revision: 0,
             })),
         }],
         ..Default::default()

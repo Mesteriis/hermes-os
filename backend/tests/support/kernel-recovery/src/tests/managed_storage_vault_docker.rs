@@ -182,6 +182,7 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
             .expect("read Communications process state")
     );
     assert_communications_query_delivery(&store, &supervisor);
+    assert_communications_search_query_delivery(&store, &supervisor);
 
     supervisor.shutdown().expect("stop managed processes");
     std::fs::remove_dir_all(root).expect("remove fixture");

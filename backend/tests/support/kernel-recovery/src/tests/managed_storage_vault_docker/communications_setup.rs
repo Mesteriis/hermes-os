@@ -2,6 +2,7 @@ use super::*;
 
 use hermes_communications_api::query_wire::{
     CommunicationsQueryRequestV1, CommunicationsQueryResponseV1, ListAccountsRequestV1,
+    SearchCommunicationsRequestV1,
     communications_query_request_v1::Operation,
     communications_query_response_v1::Result as QueryResult,
 };
@@ -35,7 +36,7 @@ pub(super) fn configured_communications_store(root: &Path, kernel: &Path) -> Sql
 
 pub(super) fn issue_initial_communications_storage_binding(store: &SqliteControlStore) {
     let bundle = store
-        .platform_storage_bundle("communications", COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1)
+        .platform_storage_bundle("communications", u64::from(COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1))
         .expect("read Communications Storage bundle")
         .expect("Communications Storage bundle is present");
     let binding = issue_managed(
@@ -162,7 +163,33 @@ pub(super) fn assert_communications_query_delivery(
         operation: Some(Operation::ListAccounts(ListAccountsRequestV1 { limit: 16 })),
     }
     .encode_to_vec();
-    let request = encode_module_query_request_v1(1, &payload)
+    let query = route_communications_query(store, supervisor, 1, &payload);
+    assert!(matches!(query.result, Some(QueryResult::ListAccounts(accounts)) if accounts.accounts.is_empty()));
+}
+
+pub(super) fn assert_communications_search_query_delivery(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+) {
+    let payload = CommunicationsQueryRequestV1 {
+        protocol_major: 1,
+        operation: Some(Operation::SearchCommunications(SearchCommunicationsRequestV1 {
+            query: "known-missing-token".to_owned(),
+            limit: 16,
+        })),
+    }
+    .encode_to_vec();
+    let query = route_communications_query(store, supervisor, 2, &payload);
+    assert!(matches!(query.result, Some(QueryResult::SearchCommunications(hits)) if hits.hits.is_empty()));
+}
+
+fn route_communications_query(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    request_id: u64,
+    payload: &[u8],
+) -> CommunicationsQueryResponseV1 {
+    let request = encode_module_query_request_v1(request_id, payload)
         .expect("encode Communications query module request");
     let launch = store
         .effective_managed_launch_record(COMMUNICATIONS_REGISTRATION)
@@ -184,11 +211,10 @@ pub(super) fn assert_communications_query_delivery(
     .expect("route exact Communications owner query");
     let response = ModuleClientResponseV1::decode(bytes.as_slice())
         .expect("decode Communications module response");
-    assert_eq!(response.request_id, 1);
+    assert_eq!(response.request_id, request_id);
     assert!(response.error_code.is_empty());
-    let query = CommunicationsQueryResponseV1::decode(response.response_payload.as_slice())
-        .expect("decode Communications query response");
-    assert!(matches!(query.result, Some(QueryResult::ListAccounts(accounts)) if accounts.accounts.is_empty()));
+    CommunicationsQueryResponseV1::decode(response.response_payload.as_slice())
+        .expect("decode Communications query response")
 }
 
 fn record_communications_registration(store: &SqliteControlStore, descriptor: &[u8]) -> u64 {
@@ -257,7 +283,7 @@ fn record_communications_runtime_fixture(
     store
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
-                "communications", COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1, digest, canonical_bundle,
+                "communications", u64::from(COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1), digest, canonical_bundle,
             )
                 .expect("record Communications Storage bundle"),
         )

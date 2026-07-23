@@ -174,6 +174,7 @@ fn valid_requests() -> Vec<Request> {
             allowed_secret_classes: vec![VaultSecretClassV1::ProviderCredential as i32],
             actions: vec![VaultActionV1::Resolve as i32],
             target_scope: VaultTargetScopeV1::ConfigurationInstance as i32,
+            key_schema_revision: 0,
         }),
         Request::BlobQuota(BlobQuotaRequestV1 { max_bytes: 1 }),
         Request::ClockTimer(ClockTimerRequestV1 {

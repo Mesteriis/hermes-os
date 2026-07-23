@@ -17,6 +17,11 @@ fail-closed as unavailable. Legacy full-text HTTP search не переносит
 Projection tombstone fence не допускает, чтобы stale Index job восстановил
 удалённое canonical message.
 
+Ignored managed-contour fixture routes a generated empty search request through
+the generic Kernel capability router and asserts a typed empty hit list. Its
+live pass remains pending while the disposable Docker contour cannot allocate
+its networks; the fixture itself is not treated as completed conformance.
+
 Зависит от:
 
 - [ADR-0220: durable envelope](ADR-0220-canonical-durable-envelope-and-contract-evolution.md);
