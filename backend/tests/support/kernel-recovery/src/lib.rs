@@ -79,6 +79,8 @@ mod platform {
         pub(crate) mod launch;
         #[path = "../../../../../../src/kernel/src/platform/vault/managed_route.rs"]
         pub(crate) mod managed_route;
+        #[path = "../../../../../../src/kernel/src/platform/vault/owner_derived_key.rs"]
+        pub(crate) mod owner_derived_key;
         #[path = "../../../../../../src/kernel/src/platform/vault/status.rs"]
         pub(crate) mod status;
     }

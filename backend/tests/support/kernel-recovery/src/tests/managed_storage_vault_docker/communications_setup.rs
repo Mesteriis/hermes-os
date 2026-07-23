@@ -27,6 +27,8 @@ const COMMUNICATIONS_RUNTIME_INSTANCE_ID: &str = "020202020202020202020202020202
 
 pub(super) fn configured_communications_store(root: &Path, kernel: &Path) -> SqliteControlStore {
     let store = configured_store(root, kernel);
+    crate::platform::blob::binding::bind_installed_release(&store, kernel)
+        .expect("bind signed Blob release");
     let schema = communications_settings_schema_bytes_v1();
     let descriptor = communications_module_descriptor_v1("managed-communications-live").encode_to_vec();
     let grant_epoch = record_communications_registration(&store, &descriptor);
@@ -1015,6 +1017,12 @@ pub(super) fn installed_communications_release(root: &Path) -> InstalledSignedBu
                 descriptor("vault").encode_to_vec(),
             ),
             SignedRuntimeArtifact::new(
+                "platform.blob",
+                blob_binary(),
+                blob_descriptor(),
+            )
+            .with_settings_schema(blob_settings_schema()),
+            SignedRuntimeArtifact::new(
                 "domain.communications",
                 communications_binary(),
                 communications_module_descriptor_v1("managed-communications-live").encode_to_vec(),
@@ -1027,6 +1035,40 @@ pub(super) fn installed_communications_release(root: &Path) -> InstalledSignedBu
 
 fn communications_binary() -> PathBuf {
     binary("HERMES_COMMUNICATIONS_RUNTIME_BIN")
+}
+
+fn blob_binary() -> PathBuf {
+    binary("HERMES_BLOB_SERVICE_BIN")
+}
+
+fn blob_settings_schema() -> Vec<u8> {
+    hermes_runtime_protocol::v1::SettingsSchemaV1 {
+        major: 1,
+        revision: 1,
+        ..Default::default()
+    }
+    .encode_to_vec()
+}
+
+fn blob_descriptor() -> Vec<u8> {
+    let schema = blob_settings_schema();
+    hermes_runtime_protocol::v1::ModuleDescriptorV1 {
+        descriptor_major: 1,
+        descriptor_revision: 1,
+        module_id: "blob".to_owned(),
+        owner_id: "blob".to_owned(),
+        module_kind: hermes_runtime_protocol::v1::ModuleKindV1::Platform as i32,
+        module_version: "1".to_owned(),
+        build_id: "managed-communications-blob".to_owned(),
+        settings_schema_ref: Some(hermes_runtime_protocol::v1::SettingsSchemaRefV1 {
+            major: 1,
+            revision: 1,
+            artifact_size_bytes: schema.len() as u64,
+            sha256: Sha256::digest(schema).to_vec(),
+        }),
+        ..Default::default()
+    }
+    .encode_to_vec()
 }
 
 fn communications_stream_details(

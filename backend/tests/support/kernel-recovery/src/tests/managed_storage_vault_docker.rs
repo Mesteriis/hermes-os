@@ -40,9 +40,11 @@ use super::common::*;
 use crate::identity::device::signer::FileDeviceSigner;
 use crate::platform::managed::signed_bundle::{InstalledSignedBundle, SignedRuntimeArtifact};
 use crate::platform::vault::managed_route::KernelManagedVaultRouteHandler;
+use crate::platform::vault::owner_derived_key::OwnerDerivedKeyHandlerV1;
 use crate::platform::vault::status as vault_status;
 use crate::platform::vault::{binding as vault_binding, launch as vault_launch};
 use crate::platform::{
+    blob::{binding as blob_binding, launch as blob_launch, session::BlobSessionHandlerV1},
     events::{catalog as event_catalog, topology as event_topology},
     macos::managed_launch,
     scheduler::{launch as scheduler_launch, lifecycle as scheduler_lifecycle},
@@ -141,7 +143,7 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
         Ok("1")
     );
     let root = unique_target_root("hermes-managed-communications-domain");
-    let data = private_directory(root.join("kernel"));
+    let data = private_directory(short_communications_kernel_data_directory());
     initialize_vault(
         &private_directory(data.join("vault")),
         &credential_directory(),
@@ -167,6 +169,12 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
         .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler))
         .expect("configure Communications Event credential handler");
     start_vault(&supervisor, &store, &data, release.kernel());
+    assert_eq!(
+        blob_launch::start_from_kernel(&supervisor, &store, release.kernel(), &data, &root.join("runtime"))
+            .expect("start signed Blob runtime"),
+        1,
+        "Blob starts as a separate managed platform process"
+    );
     start_storage(
         &supervisor,
         &store,
@@ -205,6 +213,15 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
         std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
     }
     std::fs::remove_dir_all(root).expect("remove fixture");
+    std::fs::remove_dir_all(data).expect("remove short kernel data fixture");
+}
+
+fn short_communications_kernel_data_directory() -> PathBuf {
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    PathBuf::from("/tmp").join(format!("hermes-comms-{}-{suffix}", std::process::id()))
 }
 
 fn assert_communications_gateway_query_delivery(
@@ -448,13 +465,30 @@ fn configure_route_handler(
     store: &Arc<SqliteControlStore>,
     data: &Path,
 ) {
+    let vault_route = Arc::new(KernelManagedVaultRouteHandler::new(
+        Arc::clone(store),
+        data,
+        Arc::new(supervisor.relay_port()),
+    ));
+    let vault_handler: Arc<dyn crate::runtime::lifecycle::control::ManagedRuntimeVaultRouteHandler> =
+        vault_route.clone();
     supervisor
-        .configure_vault_route_handler(Arc::new(KernelManagedVaultRouteHandler::new(
-            Arc::clone(store),
-            data,
-            Arc::new(supervisor.relay_port()),
-        )))
+        .configure_vault_route_handler(vault_handler)
         .expect("Vault route handler");
+    supervisor
+        .configure_owner_derived_key_handler(Arc::new(OwnerDerivedKeyHandlerV1::new(
+            Arc::clone(store),
+            supervisor.relay_port(),
+            vault_route,
+        )))
+        .expect("owner-derived key handler");
+    supervisor
+        .configure_blob_session_handler(Arc::new(BlobSessionHandlerV1::new(
+            Arc::clone(store),
+            supervisor.relay_port(),
+            data.to_path_buf(),
+        )))
+        .expect("Blob session handler");
 }
 
 fn upsert_recovery_schedule(

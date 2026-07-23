@@ -167,6 +167,8 @@ async function run_managed_process_conformance(secrets) {
     'hermes-scheduler-runtime',
     '-p',
     'hermes-communications-runtime',
+    '-p',
+    'hermes-blob-service',
   ]);
   for (const test of managedTest ? [managedTest] : [
     'managed_storage_binary_bootstraps_through_live_vault',
@@ -195,6 +197,7 @@ async function run_managed_process_conformance(secrets) {
       HERMES_SCHEDULER_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-scheduler-runtime`,
       HERMES_SCHEDULER_LIVE_NATS_ENDPOINT: 'nats://127.0.0.1:43225',
       HERMES_COMMUNICATIONS_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-communications-runtime`,
+      HERMES_BLOB_SERVICE_BIN: `${process.cwd()}/target/debug/hermes-blob-service`,
       HERMES_COMMUNICATIONS_LIVE_NATS_ENDPOINT: 'nats://127.0.0.1:43225',
     },
       });

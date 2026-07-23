@@ -9,7 +9,7 @@ port, typed Blob-backed body admission receipts/failures, and a Kernel-inherited
 managed domain process root. The generic private owner-control launch contract
 and Core Gateway routing to the owner-owned public query contract are present.
 `managed_communications_domain_starts_with_owner_local_storage_and_events`
-runs against the disposable authenticated Storage/NATS/Vault contour through
+runs against the disposable authenticated Storage/NATS/Vault/Blob contour through
 `test-authenticated-storage.mjs`; it proves the generic managed-domain launch
 with owner-local Storage and Event Hub credentials, a typed integration-shaped
 ingress observation and its resulting canonical owner projection through the
@@ -25,8 +25,9 @@ does not expose its Blob locator. A typed attachment descriptor reaches its
 canonical attachment anchor while the public anchor response does not expose
 the provider-local media locator. A typed participant, reply and forward scope
 reaches canonical relationship projections without exposing provider-local
-identifiers through the public query contract. Blob data-path service
-conformance remains a separate platform proof.
+identifiers through the public query contract. The Blob child starts as a
+separately signed managed platform process; an integration-owned physical body
+admission and its resulting search hit remain separate conformance evidence.
 
 Depends on:
 
