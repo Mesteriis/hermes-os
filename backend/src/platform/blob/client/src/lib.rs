@@ -102,10 +102,10 @@ pub fn request_managed_blob_custody_transfer(
         .map_err(|error| BlobClientError::Io(error.to_string()))?;
     let delivery = match response.result {
         Some(ControlResult::BlobSessionDelivery(delivery)) if response.error_code.is_empty() => delivery,
-        _ if response.error_code == "managed_blob_session_unavailable" => {
-            return Err(BlobClientError::Unavailable);
-        }
-        _ => return Err(BlobClientError::Rejected("managed_blob_custody_transfer_denied".to_owned())),
+        _ => return Err(managed_blob_session_error(
+            &response.error_code,
+            "managed_blob_custody_transfer_denied",
+        )),
     };
     let grant = delivery.custody_transfer_grant.ok_or(BlobClientError::InvalidResponse)?;
     if delivery.grant.is_some()
@@ -186,10 +186,10 @@ pub fn request_managed_blob_session(
         .map_err(|error| BlobClientError::Io(error.to_string()))?;
     let delivery = match response.result {
         Some(ControlResult::BlobSessionDelivery(delivery)) if response.error_code.is_empty() => delivery,
-        _ if response.error_code == "managed_blob_session_unavailable" => {
-            return Err(BlobClientError::Unavailable);
-        }
-        _ => return Err(BlobClientError::Rejected("managed_blob_session_denied".to_owned())),
+        _ => return Err(managed_blob_session_error(
+            &response.error_code,
+            "managed_blob_session_denied",
+        )),
     };
     let grant = delivery.grant.ok_or(BlobClientError::InvalidResponse)?;
     if !Path::new(&delivery.data_socket_path).is_absolute()
@@ -384,6 +384,14 @@ pub enum BlobClientError {
     Unavailable,
 }
 
+fn managed_blob_session_error(error_code: &str, denied_code: &str) -> BlobClientError {
+    if error_code == "managed_blob_session_unavailable" {
+        BlobClientError::Unavailable
+    } else {
+        BlobClientError::Rejected(denied_code.to_owned())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -403,6 +411,21 @@ mod tests {
                 .expect("valid path")
                 .with_timeout(Duration::ZERO),
             Err(BlobClientError::InvalidTimeout)
+        );
+    }
+
+    #[test]
+    fn managed_session_unavailability_remains_retryable() {
+        assert_eq!(
+            managed_blob_session_error(
+                "managed_blob_session_unavailable",
+                "managed_blob_custody_transfer_denied",
+            ),
+            BlobClientError::Unavailable,
+        );
+        assert_eq!(
+            managed_blob_session_error("managed_blob_session_denied", "managed_blob_session_denied"),
+            BlobClientError::Rejected("managed_blob_session_denied".to_owned()),
         );
     }
 }
