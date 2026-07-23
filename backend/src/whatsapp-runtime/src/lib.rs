@@ -4,20 +4,20 @@
 //! execution, or Communications persistence. It converts an admitted host
 //! observation into an exact provider-neutral Communications outbox record.
 
-mod communications_outbox;
 pub mod client_port;
 pub mod client_transport;
+mod communications_outbox;
 pub mod managed;
 
 use hermes_communications_ingress::{
-    CommunicationObservationDraft, ObservationEnvelopeBuildErrorV1,
-    ObservationEnvelopeContextV1, build_observation_outbox_record_v1,
+    CommunicationObservationDraft, ObservationEnvelopeBuildErrorV1, ObservationEnvelopeContextV1,
+    build_observation_outbox_record_v1,
 };
+use hermes_whatsapp_api::host_bridge::WhatsAppHostBridgeEnvelopeV1;
 use hermes_whatsapp_api::{
     WhatsAppProviderCommand, client_wire, provider_command_account_id,
     provider_command_operation_id, validate_provider_command,
 };
-use hermes_whatsapp_api::host_bridge::WhatsAppHostBridgeEnvelopeV1;
 use hermes_whatsapp_core::{
     WhatsAppCoreError, communication_observation_draft, project_host_observation,
 };
@@ -92,9 +92,10 @@ pub async fn accept_host_observation(
     envelope: &WhatsAppHostBridgeEnvelopeV1,
     recorded_at_unix_seconds: i64,
     recorded_at_nanos: i32,
-    ) -> Result<(), WhatsAppHostIngressError> {
+) -> Result<(), WhatsAppHostIngressError> {
     let projection = project_host_observation(envelope).map_err(WhatsAppHostIngressError::Core)?;
-    let draft = communication_observation_draft(&projection).map_err(WhatsAppHostIngressError::Core)?;
+    let draft =
+        communication_observation_draft(&projection).map_err(WhatsAppHostIngressError::Core)?;
     let record = build_observation_outbox_record_v1(
         &draft,
         &identity.observation_context(recorded_at_unix_seconds, recorded_at_nanos),
@@ -114,23 +115,27 @@ pub async fn accept_host_observation(
             ..
         } => durable
             .complete_provider_command_and_enqueue_observation(
-                operation_id,
-                &observation.account_id,
-                host_claim_id,
-                *succeeded,
-                &observation,
-                &record,
-                recorded_at_unix_seconds,
+                hermes_whatsapp_persistence::WhatsAppProviderCommandCompletionV1 {
+                    operation_id,
+                    account_id: &observation.account_id,
+                    host_claim_id,
+                    succeeded: *succeeded,
+                    observation: &observation,
+                    record: &record,
+                    completed_at_unix_seconds: recorded_at_unix_seconds,
+                },
             )
             .await
             .map_err(WhatsAppHostIngressError::Persistence)
-            .and_then(|completed| completed.then_some(()).ok_or(WhatsAppHostIngressError::Persistence(WhatsAppDurablePersistenceError::ObservationConflict))),
+            .and_then(|completed| {
+                completed
+                    .then_some(())
+                    .ok_or(WhatsAppHostIngressError::Persistence(
+                        WhatsAppDurablePersistenceError::ObservationConflict,
+                    ))
+            }),
         _ => durable
-            .record_host_observation_and_enqueue(
-                &observation,
-                &record,
-                recorded_at_unix_seconds,
-            )
+            .record_host_observation_and_enqueue(&observation, &record, recorded_at_unix_seconds)
             .await
             .map_err(WhatsAppHostIngressError::Persistence)
             .map(|_| ()),
@@ -163,7 +168,13 @@ pub async fn claim_provider_commands(
     limit: i64,
 ) -> Result<Vec<WhatsAppProviderCommand>, WhatsAppCommandQueueError> {
     let claimed = durable
-        .claim_provider_commands(account_id, host_claim_id, now_unix_seconds, lease_seconds, limit)
+        .claim_provider_commands(
+            account_id,
+            host_claim_id,
+            now_unix_seconds,
+            lease_seconds,
+            limit,
+        )
         .await
         .map_err(WhatsAppCommandQueueError::Persistence)?;
     decode_claimed_commands(claimed)
@@ -172,17 +183,22 @@ pub async fn claim_provider_commands(
 fn decode_claimed_commands(
     claimed: Vec<WhatsAppClaimedCommandV1>,
 ) -> Result<Vec<WhatsAppProviderCommand>, WhatsAppCommandQueueError> {
-    claimed.into_iter().map(|record| {
-        let command = client_wire::decode_command(&record.exact_command_bytes)
-            .map_err(|_| WhatsAppCommandQueueError::Wire)?;
-        (provider_command_operation_id(&command) == record.operation_id
-            && provider_command_account_id(&command) == record.account_id)
-            .then_some(command)
-            .ok_or(WhatsAppCommandQueueError::Wire)
-    }).collect()
+    claimed
+        .into_iter()
+        .map(|record| {
+            let command = client_wire::decode_command(&record.exact_command_bytes)
+                .map_err(|_| WhatsAppCommandQueueError::Wire)?;
+            (provider_command_operation_id(&command) == record.operation_id
+                && provider_command_account_id(&command) == record.account_id)
+                .then_some(command)
+                .ok_or(WhatsAppCommandQueueError::Wire)
+        })
+        .collect()
 }
 
-const fn evidence_kind_value(value: hermes_communications_ingress::CommunicationEvidenceKindV1) -> i16 {
+const fn evidence_kind_value(
+    value: hermes_communications_ingress::CommunicationEvidenceKindV1,
+) -> i16 {
     match value {
         hermes_communications_ingress::CommunicationEvidenceKindV1::EmailMessage => 1,
         hermes_communications_ingress::CommunicationEvidenceKindV1::ChatMessage => 2,
@@ -221,9 +237,18 @@ mod tests {
         })
         .expect("draft");
 
-        assert_eq!(draft.source.provider, hermes_communications_ingress::ProviderProvenanceV1::WhatsAppWeb);
-        assert_eq!(draft.kind, hermes_communications_ingress::CommunicationEvidenceKindV1::ChatMessage);
-        assert_eq!(draft.body, hermes_communications_ingress::BodyAvailabilityV1::MetadataOnly);
+        assert_eq!(
+            draft.source.provider,
+            hermes_communications_ingress::ProviderProvenanceV1::WhatsAppWeb
+        );
+        assert_eq!(
+            draft.kind,
+            hermes_communications_ingress::CommunicationEvidenceKindV1::ChatMessage
+        );
+        assert_eq!(
+            draft.body,
+            hermes_communications_ingress::BodyAvailabilityV1::MetadataOnly
+        );
     }
 
     #[test]
@@ -240,6 +265,11 @@ mod tests {
             },
         });
 
-        assert!(matches!(result, Err(WhatsAppHostIngressError::Core(WhatsAppCoreError::UnsupportedObservation))));
+        assert!(matches!(
+            result,
+            Err(WhatsAppHostIngressError::Core(
+                WhatsAppCoreError::UnsupportedObservation
+            ))
+        ));
     }
 }

@@ -2,36 +2,35 @@
 //! or provider credential material; the host owns that boundary.
 
 use std::io::{ErrorKind, Read, Write};
-use std::os::unix::{fs::PermissionsExt, net::{UnixListener, UnixStream}};
+use std::os::unix::{
+    fs::PermissionsExt,
+    net::{UnixListener, UnixStream},
+};
 use std::time::Duration;
 
 use hermes_events_jetstream::{
-    JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity,
-    RuntimePublishPermitV1, request_managed_runtime_event_access,
+    JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
+    request_managed_runtime_event_access,
 };
 use hermes_runtime_protocol::v1::{
-    DescribeManagedRuntimeRequestV1, ManagedRuntimeControlRequestV1,
-    ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
-    ManagedIntegrationHostBridgeConfigurationV1,
-    ManagedStorageRuntimeConfigurationV1,
-    managed_runtime_control_request_v1::Operation,
+    DescribeManagedRuntimeRequestV1, ManagedIntegrationHostBridgeConfigurationV1,
+    ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
+    ManagedStorageRuntimeConfigurationV1, managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
 use hermes_runtime_protocol::validation::integration_host_bridge::validate_managed_integration_host_bridge_configuration;
 use hermes_storage_protocol::{
-    StorageBindingAccessV1, StorageBindingFencesV1, StorageBindingIdentityV1,
-    StorageBindingV1, StorageEffectiveBudgetsV1,
+    StorageBindingAccessV1, StorageBindingFencesV1, StorageBindingIdentityV1, StorageBindingV1,
+    StorageEffectiveBudgetsV1,
 };
 use hermes_storage_vault::{
-    InheritedKernelVaultRouteV1, StorageVaultLeaseAdapterV1,
-    StorageVaultRouteContextV1,
+    InheritedKernelVaultRouteV1, StorageVaultLeaseAdapterV1, StorageVaultRouteContextV1,
 };
 use prost::Message;
 
 use crate::{
     WhatsAppCommandQueueError, WhatsAppRuntimeAdmission, WhatsAppRuntimeIdentity,
-    accept_host_observation, claim_provider_commands,
-    relay_communications_outbox_once,
+    accept_host_observation, claim_provider_commands, relay_communications_outbox_once,
 };
 use hermes_whatsapp_api::{
     WhatsAppProviderCommand,
@@ -97,8 +96,9 @@ pub async fn open_admitted_runtime(
         }
         .encode_to_vec(),
     )?;
-    let response = ManagedRuntimeControlResponseV1::decode(read_frame(&mut control_channel)?.as_slice())
-        .map_err(|_| WhatsAppBootstrapError::Control)?;
+    let response =
+        ManagedRuntimeControlResponseV1::decode(read_frame(&mut control_channel)?.as_slice())
+            .map_err(|_| WhatsAppBootstrapError::Control)?;
     let (registration_id, runtime_generation, grant_epoch) = match response.result {
         Some(ControlResult::Describe(value))
             if response.error_code.is_empty()
@@ -106,7 +106,11 @@ pub async fn open_admitted_runtime(
                 && value.runtime_generation != 0
                 && value.grant_epoch != 0 =>
         {
-            (value.registration_id, value.runtime_generation, value.grant_epoch)
+            (
+                value.registration_id,
+                value.runtime_generation,
+                value.grant_epoch,
+            )
         }
         _ => return Err(WhatsAppBootstrapError::Admission),
     };
@@ -161,7 +165,8 @@ pub async fn open_admitted_runtime(
         .resolve_runtime_credential(&binding, lease_id)
         .await
         .map_err(|_| WhatsAppBootstrapError::Credential)?;
-    let password = std::str::from_utf8(&password).map_err(|_| WhatsAppBootstrapError::Credential)?;
+    let password =
+        std::str::from_utf8(&password).map_err(|_| WhatsAppBootstrapError::Credential)?;
     let durable = WhatsAppDurablePersistence::connect_runtime(
         &binding,
         &storage_configuration.database_id,
@@ -171,7 +176,10 @@ pub async fn open_admitted_runtime(
     )
     .await
     .map_err(|_| WhatsAppBootstrapError::Persistence)?;
-    durable.initialize().await.map_err(|_| WhatsAppBootstrapError::Persistence)?;
+    durable
+        .initialize()
+        .await
+        .map_err(|_| WhatsAppBootstrapError::Persistence)?;
 
     let event_access = request_managed_runtime_event_access(
         &mut control_channel,
@@ -238,7 +246,9 @@ impl WhatsAppAdmittedRuntime {
         listener: &UnixListener,
         handle: &tokio::runtime::Handle,
     ) -> Result<(), WhatsAppBootstrapError> {
-        let (stream, _) = listener.accept().map_err(|_| WhatsAppBootstrapError::HostBridge)?;
+        let (stream, _) = listener
+            .accept()
+            .map_err(|_| WhatsAppBootstrapError::HostBridge)?;
         crate::client_transport::serve_connection(stream, self, handle)
             .map_err(|_| WhatsAppBootstrapError::HostBridge)
     }
@@ -314,7 +324,6 @@ impl WhatsAppAdmittedRuntime {
     }
 }
 
-
 fn host_bridge_route(
     configuration: &ManagedIntegrationHostBridgeConfigurationV1,
     admission: &WhatsAppRuntimeAdmission,
@@ -369,7 +378,8 @@ fn storage_binding(
     )
     .map_err(|_| WhatsAppBootstrapError::Storage)?;
     let budgets = StorageEffectiveBudgetsV1::new(
-        u16::try_from(configuration.max_connections).map_err(|_| WhatsAppBootstrapError::Storage)?,
+        u16::try_from(configuration.max_connections)
+            .map_err(|_| WhatsAppBootstrapError::Storage)?,
         configuration.statement_timeout_millis,
     )
     .map_err(|_| WhatsAppBootstrapError::Storage)?;
@@ -385,6 +395,52 @@ fn storage_binding(
     )
     .map_err(|_| WhatsAppBootstrapError::Storage)?;
     StorageBindingV1::new(identity, fences, access).map_err(|_| WhatsAppBootstrapError::Storage)
+}
+
+fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), WhatsAppBootstrapError> {
+    if bytes.is_empty() || bytes.len() > MAX_FRAME_BYTES {
+        return Err(WhatsAppBootstrapError::Control);
+    }
+    let mut length = u32::try_from(bytes.len()).map_err(|_| WhatsAppBootstrapError::Control)?;
+    let mut prefix = Vec::with_capacity(5);
+    while length >= 0x80 {
+        prefix.push((length as u8 & 0x7f) | 0x80);
+        length >>= 7;
+    }
+    prefix.push(length as u8);
+    channel
+        .write_all(&prefix)
+        .and_then(|_| channel.write_all(bytes))
+        .and_then(|_| channel.flush())
+        .map_err(|_| WhatsAppBootstrapError::Control)
+}
+
+fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, WhatsAppBootstrapError> {
+    let length =
+        usize::try_from(read_varint(channel)?).map_err(|_| WhatsAppBootstrapError::Control)?;
+    if length == 0 || length > MAX_FRAME_BYTES {
+        return Err(WhatsAppBootstrapError::Control);
+    }
+    let mut bytes = vec![0_u8; length];
+    channel
+        .read_exact(&mut bytes)
+        .map_err(|_| WhatsAppBootstrapError::Control)?;
+    Ok(bytes)
+}
+
+fn read_varint(channel: &mut UnixStream) -> Result<u64, WhatsAppBootstrapError> {
+    let mut value = 0_u64;
+    for index in 0..5 {
+        let mut byte = [0_u8; 1];
+        channel
+            .read_exact(&mut byte)
+            .map_err(|_| WhatsAppBootstrapError::Control)?;
+        value |= u64::from(byte[0] & 0x7f) << (index * 7);
+        if byte[0] & 0x80 == 0 {
+            return Ok(value);
+        }
+    }
+    Err(WhatsAppBootstrapError::Control)
 }
 
 #[cfg(test)]
@@ -435,47 +491,9 @@ mod tests {
             route_binding_sha256: vec![1; 32],
         };
 
-        assert!(matches!(host_bridge_route(&configuration, &admission()), Err(WhatsAppBootstrapError::Admission)));
+        assert!(matches!(
+            host_bridge_route(&configuration, &admission()),
+            Err(WhatsAppBootstrapError::Admission)
+        ));
     }
-}
-
-fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), WhatsAppBootstrapError> {
-    if bytes.is_empty() || bytes.len() > MAX_FRAME_BYTES {
-        return Err(WhatsAppBootstrapError::Control);
-    }
-    let mut length = u32::try_from(bytes.len()).map_err(|_| WhatsAppBootstrapError::Control)?;
-    let mut prefix = Vec::with_capacity(5);
-    while length >= 0x80 {
-        prefix.push((length as u8 & 0x7f) | 0x80);
-        length >>= 7;
-    }
-    prefix.push(length as u8);
-    channel
-        .write_all(&prefix)
-        .and_then(|_| channel.write_all(bytes))
-        .and_then(|_| channel.flush())
-        .map_err(|_| WhatsAppBootstrapError::Control)
-}
-
-fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, WhatsAppBootstrapError> {
-    let length = usize::try_from(read_varint(channel)?).map_err(|_| WhatsAppBootstrapError::Control)?;
-    if length == 0 || length > MAX_FRAME_BYTES {
-        return Err(WhatsAppBootstrapError::Control);
-    }
-    let mut bytes = vec![0_u8; length];
-    channel.read_exact(&mut bytes).map_err(|_| WhatsAppBootstrapError::Control)?;
-    Ok(bytes)
-}
-
-fn read_varint(channel: &mut UnixStream) -> Result<u64, WhatsAppBootstrapError> {
-    let mut value = 0_u64;
-    for index in 0..5 {
-        let mut byte = [0_u8; 1];
-        channel.read_exact(&mut byte).map_err(|_| WhatsAppBootstrapError::Control)?;
-        value |= u64::from(byte[0] & 0x7f) << (index * 7);
-        if byte[0] & 0x80 == 0 {
-            return Ok(value);
-        }
-    }
-    Err(WhatsAppBootstrapError::Control)
 }
