@@ -83,10 +83,11 @@ cross-owner read.
 
 The private work queue is owned by Communications persistence. It has an
 expiring worker lease, terminal completion/rejection states and no public query
-surface. Blob unavailability leaves the item pending for a later fenced retry;
-a policy rejection atomically exposes the canonical `Unavailable` state with
-the typed `PolicyRejected` failure, and still creates neither a Blob receipt
-nor an index job.
+surface. Blob transport or session unavailability is a pending retry outcome;
+it neither restarts the Communications runtime nor exposes a body. An explicit
+policy rejection atomically exposes the canonical `Unavailable` state with the
+typed `PolicyRejected` failure, and still creates neither a Blob receipt nor an
+index job.
 
 ## Non-goals
 

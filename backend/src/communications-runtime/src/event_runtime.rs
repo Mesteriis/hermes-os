@@ -33,7 +33,7 @@ use prost::Message;
 use crate::{
     canonical_outbox::CanonicalEventContextV1,
     consumer::{CommunicationsDeliveryErrorV1, consume_next_observation_v1},
-    custody_worker::process_next_body_custody_transfer_v1,
+    custody_worker::{CommunicationsCustodyWorkerErrorV1, process_next_body_custody_transfer_v1},
     domain_outbox::{CommunicationsDomainOutboxRelayErrorV1, relay_domain_outbox_once},
     search_access::CommunicationsSearchAccessV1,
     search_worker::process_next_derived_index_job_v1,
@@ -275,14 +275,20 @@ impl CommunicationsEventRuntimeV1 {
         let context = self
             .canonical_event_context()
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-        process_next_body_custody_transfer_v1(
+        match process_next_body_custody_transfer_v1(
             &mut self.control_channel,
             &self.persistence,
             &format!("{}:{}", self.runtime_instance_id, self.runtime_generation),
             context.recorded_at_unix_seconds,
         )
         .await
-        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)
+        {
+            Ok(processed) => Ok(processed),
+            Err(CommunicationsCustodyWorkerErrorV1::RetryPending) => Ok(false),
+            Err(CommunicationsCustodyWorkerErrorV1::StorageUnavailable) => {
+                Err(CommunicationsEventRuntimeErrorV1::Unavailable)
+            }
+        }
     }
 
     pub async fn process_next_derived_index_job(

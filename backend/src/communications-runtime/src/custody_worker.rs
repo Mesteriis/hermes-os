@@ -17,6 +17,7 @@ const CUSTODY_TRANSFER_LEASE_SECONDS: i64 = 60;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationsCustodyWorkerErrorV1 {
     StorageUnavailable,
+    RetryPending,
 }
 
 pub async fn process_next_body_custody_transfer_v1(
@@ -79,7 +80,7 @@ pub async fn process_next_body_custody_transfer_v1(
                 .map_err(storage_error)?;
             return Ok(true);
         }
-        Err(_) => return Err(CommunicationsCustodyWorkerErrorV1::StorageUnavailable),
+        Err(error) => return Err(blob_transfer_error(error)),
     };
     let blob_ref = format!(
         "blob-content:{}",
@@ -108,4 +109,41 @@ fn storage_error(
     _: CommunicationsBodyCustodyTransferErrorV1,
 ) -> CommunicationsCustodyWorkerErrorV1 {
     CommunicationsCustodyWorkerErrorV1::StorageUnavailable
+}
+
+fn blob_transfer_error(error: BlobClientError) -> CommunicationsCustodyWorkerErrorV1 {
+    match error {
+        BlobClientError::Rejected(_) => CommunicationsCustodyWorkerErrorV1::StorageUnavailable,
+        BlobClientError::InvalidSocketPath
+        | BlobClientError::InvalidTimeout
+        | BlobClientError::Connect(_)
+        | BlobClientError::Io(_)
+        | BlobClientError::FrameTooLarge
+        | BlobClientError::InvalidFrame
+        | BlobClientError::InvalidResponse
+        | BlobClientError::InvalidSessionRequest
+        | BlobClientError::Unavailable => CommunicationsCustodyWorkerErrorV1::RetryPending,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CommunicationsCustodyWorkerErrorV1, blob_transfer_error};
+    use hermes_blob_client::BlobClientError;
+
+    #[test]
+    fn blob_unavailability_keeps_custody_transfer_pending() {
+        assert_eq!(
+            blob_transfer_error(BlobClientError::Unavailable),
+            CommunicationsCustodyWorkerErrorV1::RetryPending,
+        );
+    }
+
+    #[test]
+    fn rejected_custody_transfer_remains_terminal() {
+        assert_eq!(
+            blob_transfer_error(BlobClientError::Rejected("denied".to_owned())),
+            CommunicationsCustodyWorkerErrorV1::StorageUnavailable,
+        );
+    }
 }
