@@ -28,7 +28,10 @@ reaches canonical relationship projections without exposing provider-local
 identifiers through the public query contract. The Blob child starts as a
 separately signed managed platform process; the same managed conformance now
 proves integration-owned physical body admission, custody transfer, owner-local
-derived indexing and a canonical-ID-only search hit.
+derived indexing and a canonical-ID-only search hit. The frontend generation
+pipeline now includes the same versioned owner query descriptor, and its
+platform-level Connect client is distinct from the legacy provider operational
+client.
 
 Depends on:
 
