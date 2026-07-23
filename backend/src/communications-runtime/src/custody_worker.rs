@@ -3,7 +3,8 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_blob_client::{
-    request_managed_blob_custody_transfer, BlobClientError, BlobDataClient,
+    BlobClientError, BlobDataClient, ManagedBlobCustodyTransferRequestV1,
+    request_managed_blob_custody_transfer,
 };
 use hermes_communications_api::CommunicationBodyBlobReferenceV1;
 use hermes_communications_persistence::{
@@ -53,13 +54,15 @@ pub async fn process_next_body_custody_transfer_v1(
     let transfer = (|| {
         let session = request_managed_blob_custody_transfer(
             control_channel,
-            COMMUNICATIONS_BLOB_CAPABILITY_ID,
-            &claimed.source_reference_id,
-            claimed.declared_bytes,
-            &claimed.plaintext_sha256,
-            &claimed.source_custody_proof,
-            &claimed.evidence_id.bytes(),
-            &claimed.envelope_sha256,
+            ManagedBlobCustodyTransferRequestV1 {
+                capability_id: COMMUNICATIONS_BLOB_CAPABILITY_ID,
+                source_reference_id: &claimed.source_reference_id,
+                declared_size: claimed.declared_bytes,
+                receipt_sha256: &claimed.plaintext_sha256,
+                custody_source_proof: &claimed.source_custody_proof,
+                evidence_id: &claimed.evidence_id.bytes(),
+                evidence_envelope_sha256: &claimed.envelope_sha256,
+            },
         )?;
         let target_reference_id = session
             .grant
@@ -67,10 +70,8 @@ pub async fn process_next_body_custody_transfer_v1(
             .as_slice()
             .try_into()
             .map_err(|_| BlobClientError::InvalidResponse)?;
-        BlobDataClient::new(&session.data_socket_path)?.custody_transfer(
-            session.grant,
-            session.channel_binding,
-        )?;
+        BlobDataClient::new(&session.data_socket_path)?
+            .custody_transfer(session.grant, session.channel_binding)?;
         Ok::<[u8; 16], BlobClientError>(target_reference_id)
     })();
     control_channel

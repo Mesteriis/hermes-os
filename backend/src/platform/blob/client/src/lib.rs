@@ -11,9 +11,9 @@ use std::time::Duration;
 
 use hermes_blob_client_contract::{BlobReadError, BlobReadPort};
 use hermes_runtime_protocol::v1::{
-    BlobCustodyTransferGrantV1, BlobDataCustodyTransferRequestV1, BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1,
-    BlobDataWriteRequestV1, BlobDataOperationV1,
-    ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
+    BlobCustodyTransferGrantV1, BlobDataCustodyTransferRequestV1, BlobDataOperationV1,
+    BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1,
+    BlobDataWriteRequestV1, ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
     ManagedRuntimeControlResponseV1, blob_data_request_v1::Operation,
     managed_runtime_control_request_v1::Operation as ControlOperation,
     managed_runtime_control_response_v1::Result as ControlResult,
@@ -40,25 +40,33 @@ pub struct ManagedBlobCustodyTransferV1 {
     pub channel_binding: Vec<u8>,
 }
 
+/// Typed evidence-bound request for an internal rewrap session.
+pub struct ManagedBlobCustodyTransferRequestV1<'a> {
+    pub capability_id: &'a str,
+    pub source_reference_id: &'a [u8; 16],
+    pub declared_size: u64,
+    pub receipt_sha256: &'a [u8; 32],
+    pub custody_source_proof: &'a [u8],
+    pub evidence_id: &'a [u8; 16],
+    pub evidence_envelope_sha256: &'a [u8; 32],
+}
+
 pub fn request_managed_blob_custody_transfer(
     channel: &mut UnixStream,
-    capability_id: &str,
-    source_reference_id: &[u8; 16],
-    declared_size: u64,
-    receipt_sha256: &[u8; 32],
-    custody_source_proof: &[u8],
-    evidence_id: &[u8; 16],
-    evidence_envelope_sha256: &[u8; 32],
+    request: ManagedBlobCustodyTransferRequestV1<'_>,
 ) -> Result<ManagedBlobCustodyTransferV1, BlobClientError> {
-    if capability_id.is_empty()
-        || capability_id.len() > 128
-        || source_reference_id.iter().all(|byte| *byte == 0)
-        || declared_size == 0
-        || receipt_sha256.iter().all(|byte| *byte == 0)
-        || custody_source_proof.is_empty()
-        || custody_source_proof.len() > 2_048
-        || evidence_id.iter().all(|byte| *byte == 0)
-        || evidence_envelope_sha256.iter().all(|byte| *byte == 0)
+    if request.capability_id.is_empty()
+        || request.capability_id.len() > 128
+        || request.source_reference_id.iter().all(|byte| *byte == 0)
+        || request.declared_size == 0
+        || request.receipt_sha256.iter().all(|byte| *byte == 0)
+        || request.custody_source_proof.is_empty()
+        || request.custody_source_proof.len() > 2_048
+        || request.evidence_id.iter().all(|byte| *byte == 0)
+        || request
+            .evidence_envelope_sha256
+            .iter()
+            .all(|byte| *byte == 0)
     {
         return Err(BlobClientError::InvalidSessionRequest);
     }
@@ -69,23 +77,25 @@ pub fn request_managed_blob_custody_transfer(
     if request_id.iter().all(|byte| *byte == 0) || channel_binding.iter().all(|byte| *byte == 0) {
         return Err(BlobClientError::Unavailable);
     }
-    let request = ManagedRuntimeControlRequestV1 {
-        operation: Some(ControlOperation::IssueBlobSession(ManagedRuntimeBlobSessionRequestV1 {
-            request_id: request_id.to_vec(),
-            capability_id: capability_id.to_owned(),
-            operation: BlobDataOperationV1::BlobDataOperationCustodyTransferV1 as u32,
-            channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
-            reference_id: source_reference_id.to_vec(),
-            declared_size,
-            backup_class: 1,
-            ttl_seconds: 30,
-            receipt_sha256: receipt_sha256.to_vec(),
-            custody_source_proof: custody_source_proof.to_vec(),
-            evidence_id: evidence_id.to_vec(),
-            evidence_envelope_sha256: evidence_envelope_sha256.to_vec(),
-        })),
+    let control_request = ManagedRuntimeControlRequestV1 {
+        operation: Some(ControlOperation::IssueBlobSession(
+            ManagedRuntimeBlobSessionRequestV1 {
+                request_id: request_id.to_vec(),
+                capability_id: request.capability_id.to_owned(),
+                operation: BlobDataOperationV1::BlobDataOperationCustodyTransferV1 as u32,
+                channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
+                reference_id: request.source_reference_id.to_vec(),
+                declared_size: request.declared_size,
+                backup_class: 1,
+                ttl_seconds: 30,
+                receipt_sha256: request.receipt_sha256.to_vec(),
+                custody_source_proof: request.custody_source_proof.to_vec(),
+                evidence_id: request.evidence_id.to_vec(),
+                evidence_envelope_sha256: request.evidence_envelope_sha256.to_vec(),
+            },
+        )),
     };
-    let bytes = request.encode_to_vec();
+    let bytes = control_request.encode_to_vec();
     if bytes.len() > CONTROL_FRAME_BYTES {
         return Err(BlobClientError::InvalidSessionRequest);
     }
@@ -101,18 +111,24 @@ pub fn request_managed_blob_custody_transfer(
         .and_then(|_| channel.set_write_timeout(None))
         .map_err(|error| BlobClientError::Io(error.to_string()))?;
     let delivery = match response.result {
-        Some(ControlResult::BlobSessionDelivery(delivery)) if response.error_code.is_empty() => delivery,
-        _ => return Err(managed_blob_session_error(
-            &response.error_code,
-            "managed_blob_custody_transfer_denied",
-        )),
+        Some(ControlResult::BlobSessionDelivery(delivery)) if response.error_code.is_empty() => {
+            delivery
+        }
+        _ => {
+            return Err(managed_blob_session_error(
+                &response.error_code,
+                "managed_blob_custody_transfer_denied",
+            ));
+        }
     };
-    let grant = delivery.custody_transfer_grant.ok_or(BlobClientError::InvalidResponse)?;
+    let grant = delivery
+        .custody_transfer_grant
+        .ok_or(BlobClientError::InvalidResponse)?;
     if delivery.grant.is_some()
         || !delivery.custody_transfer_source_proof.is_empty()
         || !Path::new(&delivery.data_socket_path).is_absolute()
-        || grant.evidence_id.as_slice() != evidence_id.as_slice()
-        || grant.evidence_envelope_sha256.as_slice() != evidence_envelope_sha256.as_slice()
+        || grant.evidence_id.as_slice() != request.evidence_id.as_slice()
+        || grant.evidence_envelope_sha256.as_slice() != request.evidence_envelope_sha256.as_slice()
         || grant.channel_binding_sha256 != Sha256::digest(&channel_binding).as_slice()
         || grant.target_reference_id.len() != 16
         || grant.target_reference_id.iter().all(|byte| *byte == 0)
@@ -141,8 +157,7 @@ pub fn request_managed_blob_session(
         || reference_id.iter().all(|byte| *byte == 0)
         || declared_size == 0
         || !(1..=3).contains(&backup_class)
-        || (receipt_sha256.is_some()
-            && operation != BlobDataOperationV1::BlobDataOperationWriteV1)
+        || (receipt_sha256.is_some() && operation != BlobDataOperationV1::BlobDataOperationWriteV1)
     {
         return Err(BlobClientError::InvalidSessionRequest);
     }
@@ -154,20 +169,22 @@ pub fn request_managed_blob_session(
         return Err(BlobClientError::Unavailable);
     }
     let request = ManagedRuntimeControlRequestV1 {
-        operation: Some(ControlOperation::IssueBlobSession(ManagedRuntimeBlobSessionRequestV1 {
-            request_id: request_id.to_vec(),
-            capability_id: capability_id.to_owned(),
-            operation: operation as u32,
-            channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
-            reference_id: reference_id.to_vec(),
-            declared_size,
-            backup_class,
-            ttl_seconds: 30,
-            receipt_sha256: receipt_sha256.map_or_else(Vec::new, |digest| digest.to_vec()),
-            custody_source_proof: Vec::new(),
-            evidence_id: Vec::new(),
-            evidence_envelope_sha256: Vec::new(),
-        })),
+        operation: Some(ControlOperation::IssueBlobSession(
+            ManagedRuntimeBlobSessionRequestV1 {
+                request_id: request_id.to_vec(),
+                capability_id: capability_id.to_owned(),
+                operation: operation as u32,
+                channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
+                reference_id: reference_id.to_vec(),
+                declared_size,
+                backup_class,
+                ttl_seconds: 30,
+                receipt_sha256: receipt_sha256.map_or_else(Vec::new, |digest| digest.to_vec()),
+                custody_source_proof: Vec::new(),
+                evidence_id: Vec::new(),
+                evidence_envelope_sha256: Vec::new(),
+            },
+        )),
     };
     let bytes = request.encode_to_vec();
     if bytes.len() > CONTROL_FRAME_BYTES {
@@ -185,11 +202,15 @@ pub fn request_managed_blob_session(
         .and_then(|_| channel.set_write_timeout(None))
         .map_err(|error| BlobClientError::Io(error.to_string()))?;
     let delivery = match response.result {
-        Some(ControlResult::BlobSessionDelivery(delivery)) if response.error_code.is_empty() => delivery,
-        _ => return Err(managed_blob_session_error(
-            &response.error_code,
-            "managed_blob_session_denied",
-        )),
+        Some(ControlResult::BlobSessionDelivery(delivery)) if response.error_code.is_empty() => {
+            delivery
+        }
+        _ => {
+            return Err(managed_blob_session_error(
+                &response.error_code,
+                "managed_blob_session_denied",
+            ));
+        }
     };
     let grant = delivery.grant.ok_or(BlobClientError::InvalidResponse)?;
     if !Path::new(&delivery.data_socket_path).is_absolute()
@@ -285,10 +306,12 @@ impl BlobDataClient {
         let response = self.request(BlobDataRequestV1 {
             grant: None,
             channel_binding: Vec::new(),
-            operation: Some(Operation::CustodyTransfer(BlobDataCustodyTransferRequestV1 {
-                grant: Some(grant),
-                channel_binding,
-            })),
+            operation: Some(Operation::CustodyTransfer(
+                BlobDataCustodyTransferRequestV1 {
+                    grant: Some(grant),
+                    channel_binding,
+                },
+            )),
         })?;
         if response.accepted {
             return Ok(());
@@ -424,7 +447,10 @@ mod tests {
             BlobClientError::Unavailable,
         );
         assert_eq!(
-            managed_blob_session_error("managed_blob_session_denied", "managed_blob_session_denied"),
+            managed_blob_session_error(
+                "managed_blob_session_denied",
+                "managed_blob_session_denied"
+            ),
             BlobClientError::Rejected("managed_blob_session_denied".to_owned()),
         );
     }

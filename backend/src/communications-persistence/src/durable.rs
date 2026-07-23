@@ -1,18 +1,16 @@
 //! PostgreSQL inbox and canonical summary storage owned only by Communications.
 
 use hermes_communications_api::{
-    CanonicalCommunicationEvidenceKindV1, CommunicationBodyStateV1, CommunicationDirectionV1,
-    CanonicalCommunicationProjectionV1, CanonicalMessageMutationV1,
-    CommunicationConversationIdV1, CommunicationConversationSummaryV1,
-    AttachmentDispositionV1, AttachmentSafetyStateV1, CommunicationAttachmentAnchorIdV1, CommunicationAttachmentAnchorStateV1,
-    CommunicationAttachmentAnchorSummaryV1,
+    AttachmentDispositionV1, AttachmentSafetyStateV1, CanonicalCommunicationEvidenceKindV1,
+    CanonicalCommunicationProjectionV1, CanonicalMessageMutationV1, CommunicationAccountIdV1,
+    CommunicationAccountSummaryV1, CommunicationAttachmentAnchorIdV1,
+    CommunicationAttachmentAnchorStateV1, CommunicationAttachmentAnchorSummaryV1,
+    CommunicationBodyStateV1, CommunicationConversationIdV1, CommunicationConversationSummaryV1,
+    CommunicationDirectionV1, CommunicationMessageIdV1, CommunicationMessageLifecycleStateV1,
     CommunicationMessageReferenceKindV1, CommunicationMessageReferenceSummaryV1,
-    CommunicationAccountIdV1, CommunicationAccountSummaryV1,
-    CommunicationMessageIdV1, CommunicationMessageLifecycleStateV1,
-    CommunicationMessageSummaryV1,
+    CommunicationMessageSummaryV1, CommunicationObservationIdV1,
     CommunicationObservedParticipantSummaryV1, CommunicationParticipantIdV1,
-    CommunicationObservationIdV1, CommunicationProviderProvenanceV1,
-    CommunicationSourceCursorV1, CommunicationSummary,
+    CommunicationProviderProvenanceV1, CommunicationSourceCursorV1, CommunicationSummary,
 };
 use hermes_events_protocol::delivery::OutboxRecordV1;
 use hermes_storage_protocol::StorageBindingV1;
@@ -23,15 +21,24 @@ use sqlx::{
 };
 
 use crate::{
-    CommunicationsConsumeOutcomeV1, CommunicationsDerivedIndexJobOperationV1,
-    CommunicationsDerivedIndexFailureRecordV1, CommunicationsDerivedIndexFailureV1,
+    CommunicationsConsumeOutcomeV1, CommunicationsDerivedIndexFailureRecordV1,
+    CommunicationsDerivedIndexFailureV1, CommunicationsDerivedIndexJobOperationV1,
     CommunicationsDerivedIndexJobV1, CommunicationsPersistenceError,
     PendingCommunicationsBodyCustodyTransferV1,
 };
 
-
 pub struct CommunicationsDurablePersistence {
     pub(crate) pool: PgPool,
+}
+
+/// One canonical owner mutation derived from an admitted ingress record.
+pub struct PersistedCommunicationsObservationV1<'a> {
+    pub projection: CanonicalCommunicationProjectionV1,
+    pub pending_custody_transfer: Option<&'a PendingCommunicationsBodyCustodyTransferV1>,
+    pub derived_index_job: Option<&'a CommunicationsDerivedIndexJobV1>,
+    pub derived_index_failure: Option<&'a CommunicationsDerivedIndexFailureRecordV1>,
+    pub canonical_outbox_record: &'a OutboxRecordV1,
+    pub created_at_unix_seconds: i64,
 }
 
 impl CommunicationsDurablePersistence {
@@ -103,14 +110,12 @@ impl CommunicationsDurablePersistence {
     pub async fn persist_consumed_observation(
         &self,
         record: &OutboxRecordV1,
-        projection: CanonicalCommunicationProjectionV1,
-        pending_custody_transfer: Option<&PendingCommunicationsBodyCustodyTransferV1>,
-        derived_index_job: Option<&CommunicationsDerivedIndexJobV1>,
-        derived_index_failure: Option<&CommunicationsDerivedIndexFailureRecordV1>,
-        canonical_outbox_record: &OutboxRecordV1,
-        created_at_unix_seconds: i64,
+        observation: PersistedCommunicationsObservationV1<'_>,
     ) -> Result<CommunicationsConsumeOutcomeV1, CommunicationsPersistenceError> {
-        let mut transaction = self.pool.begin().await
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         let inserted = sqlx::query(
             r#"
@@ -133,7 +138,8 @@ impl CommunicationsDurablePersistence {
             .fetch_one(&mut *transaction)
             .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
-            let hash: Vec<u8> = row.try_get("envelope_sha256")
+            let hash: Vec<u8> = row
+                .try_get("envelope_sha256")
                 .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
             return if hash.as_slice() == record.envelope_sha256() {
                 Ok(CommunicationsConsumeOutcomeV1::Duplicate)
@@ -141,7 +147,7 @@ impl CommunicationsDurablePersistence {
                 Err(CommunicationsPersistenceError::InboxHashConflict)
             };
         }
-        let summary = &projection.summary;
+        let summary = &observation.projection.summary;
         let inserted_summary = sqlx::query(
             r#"
             INSERT INTO hermes_data.communications_evidence_summaries
@@ -174,7 +180,7 @@ impl CommunicationsDurablePersistence {
         if inserted_summary.rows_affected() != 1 {
             return Err(CommunicationsPersistenceError::DuplicateOperation);
         }
-        if let Some(transfer) = pending_custody_transfer {
+        if let Some(transfer) = observation.pending_custody_transfer {
             if transfer.evidence_id != summary.evidence_id
                 || transfer.envelope_sha256.as_slice() != record.envelope_sha256()
                 || summary.body != CommunicationBodyStateV1::PendingBlob
@@ -212,7 +218,7 @@ impl CommunicationsDurablePersistence {
         } else if summary.body == CommunicationBodyStateV1::PendingBlob {
             return Err(CommunicationsPersistenceError::InvalidCustodyTransfer);
         }
-        if let Some(account) = &projection.account {
+        if let Some(account) = &observation.projection.account {
             sqlx::query(
                 "INSERT INTO hermes_data.communications_accounts (account_id, account_cursor_sha256, provider, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id) VALUES ($1, $2, $3, $4, $4, $5) ON CONFLICT (account_id) DO UPDATE SET last_observed_at_unix_seconds = GREATEST(communications_accounts.last_observed_at_unix_seconds, EXCLUDED.last_observed_at_unix_seconds), last_evidence_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds >= communications_accounts.last_observed_at_unix_seconds THEN EXCLUDED.last_evidence_id ELSE communications_accounts.last_evidence_id END",
             )
@@ -225,7 +231,7 @@ impl CommunicationsDurablePersistence {
             .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         }
-        if let Some(conversation) = &projection.conversation {
+        if let Some(conversation) = &observation.projection.conversation {
             sqlx::query(
                 "INSERT INTO hermes_data.communications_conversations (conversation_id, account_cursor_sha256, conversation_cursor_sha256, provider, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id) VALUES ($1, $2, $3, $4, $5, $5, $6) ON CONFLICT (conversation_id) DO UPDATE SET last_observed_at_unix_seconds = GREATEST(communications_conversations.last_observed_at_unix_seconds, EXCLUDED.last_observed_at_unix_seconds), last_evidence_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds >= communications_conversations.last_observed_at_unix_seconds THEN EXCLUDED.last_evidence_id ELSE communications_conversations.last_evidence_id END",
             )
@@ -239,7 +245,7 @@ impl CommunicationsDurablePersistence {
             .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         }
-        if let Some(message) = &projection.message {
+        if let Some(message) = &observation.projection.message {
             match message.mutation {
                 CanonicalMessageMutationV1::Create => {
                     sqlx::query(
@@ -281,7 +287,7 @@ impl CommunicationsDurablePersistence {
                 }
             }
         }
-        if let Some(participant) = &projection.participant {
+        if let Some(participant) = &observation.projection.participant {
             sqlx::query(
                 "INSERT INTO hermes_data.communications_observed_participants (participant_id, conversation_id, participant_cursor_sha256, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id) VALUES ($1, $2, $3, $4, $4, $5) ON CONFLICT (participant_id) DO UPDATE SET last_observed_at_unix_seconds = GREATEST(communications_observed_participants.last_observed_at_unix_seconds, EXCLUDED.last_observed_at_unix_seconds), last_evidence_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds >= communications_observed_participants.last_observed_at_unix_seconds THEN EXCLUDED.last_evidence_id ELSE communications_observed_participants.last_evidence_id END",
             )
@@ -294,7 +300,7 @@ impl CommunicationsDurablePersistence {
             .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         }
-        if let Some(anchor) = &projection.attachment_anchor {
+        if let Some(anchor) = &observation.projection.attachment_anchor {
             sqlx::query(
                 "INSERT INTO hermes_data.communications_attachment_anchors (attachment_anchor_id, message_id, media_cursor_sha256, anchor_state, attachment_filename, attachment_media_type, attachment_declared_bytes, attachment_sha256, attachment_disposition, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id) VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $9, $10) ON CONFLICT (attachment_anchor_id) DO UPDATE SET last_observed_at_unix_seconds = GREATEST(communications_attachment_anchors.last_observed_at_unix_seconds, EXCLUDED.last_observed_at_unix_seconds), last_evidence_id = CASE WHEN EXCLUDED.last_observed_at_unix_seconds >= communications_attachment_anchors.last_observed_at_unix_seconds THEN EXCLUDED.last_evidence_id ELSE communications_attachment_anchors.last_evidence_id END, attachment_filename = COALESCE(communications_attachment_anchors.attachment_filename, EXCLUDED.attachment_filename), attachment_media_type = COALESCE(communications_attachment_anchors.attachment_media_type, EXCLUDED.attachment_media_type), attachment_declared_bytes = COALESCE(communications_attachment_anchors.attachment_declared_bytes, EXCLUDED.attachment_declared_bytes), attachment_sha256 = COALESCE(communications_attachment_anchors.attachment_sha256, EXCLUDED.attachment_sha256), attachment_disposition = COALESCE(communications_attachment_anchors.attachment_disposition, EXCLUDED.attachment_disposition)",
             )
@@ -312,7 +318,7 @@ impl CommunicationsDurablePersistence {
             .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         }
-        for reference in &projection.message_references {
+        for reference in &observation.projection.message_references {
             let mut reference_id = Sha256::new();
             reference_id.update(reference.source_message_id.bytes());
             reference_id.update(reference_kind_value(reference.kind).to_be_bytes());
@@ -331,7 +337,7 @@ impl CommunicationsDurablePersistence {
             .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         }
-        if let Some(job) = derived_index_job {
+        if let Some(job) = observation.derived_index_job {
             job.validate()
                 .map_err(|_| CommunicationsPersistenceError::InvalidDerivedIndexJob)?;
             sqlx::query("INSERT INTO hermes_data.communications_derived_index_jobs (job_id, operation, evidence_id, message_id, conversation_id, blob_ref, blob_reference_id, blob_declared_bytes, blob_sha256, projection_revision, observed_at_unix_seconds, created_at_unix_seconds) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (job_id) DO NOTHING")
@@ -351,7 +357,7 @@ impl CommunicationsDurablePersistence {
                 .await
                 .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         }
-        if let Some(failure) = derived_index_failure {
+        if let Some(failure) = observation.derived_index_failure {
             if failure.failure != CommunicationsDerivedIndexFailureV1::DocumentLimit
                 || failure.projection_revision == 0
             {
@@ -368,14 +374,16 @@ impl CommunicationsDurablePersistence {
                 .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         }
         sqlx::query("INSERT INTO hermes_data.communications_domain_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
-            .bind(canonical_outbox_record.message_id().as_slice())
-            .bind(canonical_outbox_record.envelope_sha256().as_slice())
-            .bind(canonical_outbox_record.exact_bytes())
-            .bind(created_at_unix_seconds)
+            .bind(observation.canonical_outbox_record.message_id().as_slice())
+            .bind(observation.canonical_outbox_record.envelope_sha256().as_slice())
+            .bind(observation.canonical_outbox_record.exact_bytes())
+            .bind(observation.created_at_unix_seconds)
             .execute(&mut *transaction)
             .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
-        transaction.commit().await
+        transaction
+            .commit()
+            .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         Ok(CommunicationsConsumeOutcomeV1::Applied)
     }
@@ -389,11 +397,15 @@ impl CommunicationsDurablePersistence {
             .fetch_all(&self.pool)
             .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
-        rows.into_iter().map(|row| {
-            let bytes: Vec<u8> = row.try_get("exact_envelope_bytes")
-                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            OutboxRecordV1::accept(bytes).map_err(|_| CommunicationsPersistenceError::InvalidRow)
-        }).collect()
+        rows.into_iter()
+            .map(|row| {
+                let bytes: Vec<u8> = row
+                    .try_get("exact_envelope_bytes")
+                    .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+                OutboxRecordV1::accept(bytes)
+                    .map_err(|_| CommunicationsPersistenceError::InvalidRow)
+            })
+            .collect()
     }
 
     pub async fn mark_domain_outbox_published(
@@ -422,78 +434,144 @@ impl CommunicationsDurablePersistence {
         .await
         .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         row.map(|row| {
-            let observation_id: Vec<u8> = row.try_get("observation_id")
+            let observation_id: Vec<u8> = row
+                .try_get("observation_id")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let source_cursor: Vec<u8> = row.try_get("source_cursor_sha256")
+            let source_cursor: Vec<u8> = row
+                .try_get("source_cursor_sha256")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let account_cursor: Option<Vec<u8>> = row.try_get("account_cursor_sha256")
+            let account_cursor: Option<Vec<u8>> = row
+                .try_get("account_cursor_sha256")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let conversation_cursor: Option<Vec<u8>> = row.try_get("conversation_cursor_sha256")
+            let conversation_cursor: Option<Vec<u8>> = row
+                .try_get("conversation_cursor_sha256")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let participant_cursor: Option<Vec<u8>> = row.try_get("participant_cursor_sha256")
+            let participant_cursor: Option<Vec<u8>> = row
+                .try_get("participant_cursor_sha256")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let media_cursor: Option<Vec<u8>> = row.try_get("media_cursor_sha256")
+            let media_cursor: Option<Vec<u8>> = row
+                .try_get("media_cursor_sha256")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let reply_to_source_cursor: Option<Vec<u8>> = row.try_get("reply_to_source_cursor_sha256")
+            let reply_to_source_cursor: Option<Vec<u8>> = row
+                .try_get("reply_to_source_cursor_sha256")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let forward_origin_source_cursor: Option<Vec<u8>> = row.try_get("forward_origin_source_cursor_sha256")
+            let forward_origin_source_cursor: Option<Vec<u8>> = row
+                .try_get("forward_origin_source_cursor_sha256")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let provider: i16 = row.try_get("provider")
+            let provider: i16 = row
+                .try_get("provider")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let direction: i16 = row.try_get("direction")
+            let direction: i16 = row
+                .try_get("direction")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let kind: i16 = row.try_get("evidence_kind")
+            let kind: i16 = row
+                .try_get("evidence_kind")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let body: i16 = row.try_get("body_state")
+            let body: i16 = row
+                .try_get("body_state")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let body_blob_ref: Option<String> = row.try_get("body_blob_ref")
+            let body_blob_ref: Option<String> = row
+                .try_get("body_blob_ref")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let body_blob_reference_id: Option<Vec<u8>> = row.try_get("body_blob_reference_id")
+            let body_blob_reference_id: Option<Vec<u8>> = row
+                .try_get("body_blob_reference_id")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let body_blob_declared_bytes: Option<i64> = row.try_get("body_blob_declared_bytes")
+            let body_blob_declared_bytes: Option<i64> = row
+                .try_get("body_blob_declared_bytes")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let body_blob_sha256: Option<Vec<u8>> = row.try_get("body_blob_sha256")
+            let body_blob_sha256: Option<Vec<u8>> = row
+                .try_get("body_blob_sha256")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let body_admission_failure: Option<i16> = row.try_get("body_admission_failure")
+            let body_admission_failure: Option<i16> = row
+                .try_get("body_admission_failure")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let observed_at_unix_seconds: i64 = row.try_get("observed_at_unix_seconds")
+            let observed_at_unix_seconds: i64 = row
+                .try_get("observed_at_unix_seconds")
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let observation_id: [u8; 16] = observation_id.as_slice().try_into()
+            let observation_id: [u8; 16] = observation_id
+                .as_slice()
+                .try_into()
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let source_cursor: [u8; 32] = source_cursor.as_slice().try_into()
+            let source_cursor: [u8; 32] = source_cursor
+                .as_slice()
+                .try_into()
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let account_cursor = account_cursor
-                .map(|value| value.as_slice().try_into().map(CommunicationSourceCursorV1::new))
+                .map(|value| {
+                    value
+                        .as_slice()
+                        .try_into()
+                        .map(CommunicationSourceCursorV1::new)
+                })
                 .transpose()
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let conversation_cursor = conversation_cursor
-                .map(|value| value.as_slice().try_into().map(CommunicationSourceCursorV1::new))
+                .map(|value| {
+                    value
+                        .as_slice()
+                        .try_into()
+                        .map(CommunicationSourceCursorV1::new)
+                })
                 .transpose()
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let participant_cursor = participant_cursor
-                .map(|value| value.as_slice().try_into().map(CommunicationSourceCursorV1::new))
+                .map(|value| {
+                    value
+                        .as_slice()
+                        .try_into()
+                        .map(CommunicationSourceCursorV1::new)
+                })
                 .transpose()
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let media_cursor = media_cursor
-                .map(|value| value.as_slice().try_into().map(CommunicationSourceCursorV1::new))
+                .map(|value| {
+                    value
+                        .as_slice()
+                        .try_into()
+                        .map(CommunicationSourceCursorV1::new)
+                })
                 .transpose()
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let reply_to_source_cursor = reply_to_source_cursor
-                .map(|value| value.as_slice().try_into().map(CommunicationSourceCursorV1::new))
+                .map(|value| {
+                    value
+                        .as_slice()
+                        .try_into()
+                        .map(CommunicationSourceCursorV1::new)
+                })
                 .transpose()
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
             let forward_origin_source_cursor = forward_origin_source_cursor
-                .map(|value| value.as_slice().try_into().map(CommunicationSourceCursorV1::new))
+                .map(|value| {
+                    value
+                        .as_slice()
+                        .try_into()
+                        .map(CommunicationSourceCursorV1::new)
+                })
                 .transpose()
                 .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-            let body_blob = match (body_blob_ref, body_blob_reference_id, body_blob_declared_bytes, body_blob_sha256) {
+            let body_blob = match (
+                body_blob_ref,
+                body_blob_reference_id,
+                body_blob_declared_bytes,
+                body_blob_sha256,
+            ) {
                 (None, None, None, None) => None,
-                (Some(blob_ref), Some(reference_id), Some(declared_bytes), Some(sha256)) => Some(hermes_communications_api::CommunicationBodyBlobReferenceV1 {
-                    blob_ref,
-                    reference_id: reference_id.as_slice().try_into().map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
-                    declared_bytes: u64::try_from(declared_bytes).map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
-                    sha256: sha256.as_slice().try_into().map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
-                }),
+                (Some(blob_ref), Some(reference_id), Some(declared_bytes), Some(sha256)) => Some(
+                    hermes_communications_api::CommunicationBodyBlobReferenceV1 {
+                        blob_ref,
+                        reference_id: reference_id
+                            .as_slice()
+                            .try_into()
+                            .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+                        declared_bytes: u64::try_from(declared_bytes)
+                            .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+                        sha256: sha256
+                            .as_slice()
+                            .try_into()
+                            .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+                    },
+                ),
                 _ => return Err(CommunicationsPersistenceError::InvalidRow),
             };
             Ok(CommunicationSummary {
@@ -511,11 +589,14 @@ impl CommunicationsDurablePersistence {
                 kind: kind_from_value(kind)?,
                 body: body_from_value(body)?,
                 body_blob,
-                body_admission_failure: body_admission_failure.map(body_admission_failure_from_value).transpose()?,
+                body_admission_failure: body_admission_failure
+                    .map(body_admission_failure_from_value)
+                    .transpose()?,
                 attachment_descriptor: None,
                 observed_at_unix_seconds,
             })
-        }).transpose()
+        })
+        .transpose()
     }
 
     pub async fn conversation(
@@ -574,7 +655,8 @@ impl CommunicationsDurablePersistence {
         &self,
         conversation_id: CommunicationConversationIdV1,
         limit: u16,
-    ) -> Result<Vec<CommunicationObservedParticipantSummaryV1>, CommunicationsPersistenceError> {
+    ) -> Result<Vec<CommunicationObservedParticipantSummaryV1>, CommunicationsPersistenceError>
+    {
         let rows = sqlx::query("SELECT participant_id, conversation_id, participant_cursor_sha256, first_observed_at_unix_seconds, last_observed_at_unix_seconds, last_evidence_id FROM hermes_data.communications_observed_participants WHERE conversation_id = $1 ORDER BY last_observed_at_unix_seconds DESC, participant_id ASC LIMIT $2")
             .bind(conversation_id.bytes().as_slice())
             .bind(i64::from(limit.clamp(1, 100)))
@@ -616,12 +698,24 @@ impl CommunicationsDurablePersistence {
 fn reference_from_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<CommunicationMessageReferenceSummaryV1, CommunicationsPersistenceError> {
-    let source_message_id: Vec<u8> = row.try_get("source_message_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let reference_kind: i16 = row.try_get("reference_kind").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let target_source_cursor: Vec<u8> = row.try_get("target_source_cursor_sha256").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let target_message_id: Option<Vec<u8>> = row.try_get("target_message_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let observed_at_unix_seconds: i64 = row.try_get("observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let evidence_id: Vec<u8> = row.try_get("evidence_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let source_message_id: Vec<u8> = row
+        .try_get("source_message_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let reference_kind: i16 = row
+        .try_get("reference_kind")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let target_source_cursor: Vec<u8> = row
+        .try_get("target_source_cursor_sha256")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let target_message_id: Option<Vec<u8>> = row
+        .try_get("target_message_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let observed_at_unix_seconds: i64 = row
+        .try_get("observed_at_unix_seconds")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let evidence_id: Vec<u8> = row
+        .try_get("evidence_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
     Ok(CommunicationMessageReferenceSummaryV1 {
         source_message_id: CommunicationMessageIdV1::new(id16(&source_message_id)?),
         kind: reference_kind_from_value(reference_kind)?,
@@ -637,12 +731,24 @@ fn reference_from_row(
 fn account_from_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<CommunicationAccountSummaryV1, CommunicationsPersistenceError> {
-    let account_id: Vec<u8> = row.try_get("account_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let account_cursor: Vec<u8> = row.try_get("account_cursor_sha256").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let provider: i16 = row.try_get("provider").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let first_observed_at_unix_seconds: i64 = row.try_get("first_observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let last_observed_at_unix_seconds: i64 = row.try_get("last_observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let last_evidence_id: Vec<u8> = row.try_get("last_evidence_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let account_id: Vec<u8> = row
+        .try_get("account_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let account_cursor: Vec<u8> = row
+        .try_get("account_cursor_sha256")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let provider: i16 = row
+        .try_get("provider")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let first_observed_at_unix_seconds: i64 = row
+        .try_get("first_observed_at_unix_seconds")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let last_observed_at_unix_seconds: i64 = row
+        .try_get("last_observed_at_unix_seconds")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let last_evidence_id: Vec<u8> = row
+        .try_get("last_evidence_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
     Ok(CommunicationAccountSummaryV1 {
         account_id: CommunicationAccountIdV1::new(id16(&account_id)?),
         account_cursor: CommunicationSourceCursorV1::new(id32(&account_cursor)?),
@@ -656,18 +762,42 @@ fn account_from_row(
 fn anchor_from_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<CommunicationAttachmentAnchorSummaryV1, CommunicationsPersistenceError> {
-    let attachment_anchor_id: Vec<u8> = row.try_get("attachment_anchor_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let message_id: Vec<u8> = row.try_get("message_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let media_cursor: Vec<u8> = row.try_get("media_cursor_sha256").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let anchor_state: i16 = row.try_get("anchor_state").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let filename: Option<String> = row.try_get("attachment_filename").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let media_type: Option<String> = row.try_get("attachment_media_type").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let declared_bytes: Option<i64> = row.try_get("attachment_declared_bytes").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let sha256: Option<Vec<u8>> = row.try_get("attachment_sha256").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let disposition: Option<i16> = row.try_get("attachment_disposition").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let first_observed_at_unix_seconds: i64 = row.try_get("first_observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let last_observed_at_unix_seconds: i64 = row.try_get("last_observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let last_evidence_id: Vec<u8> = row.try_get("last_evidence_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let attachment_anchor_id: Vec<u8> = row
+        .try_get("attachment_anchor_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let message_id: Vec<u8> = row
+        .try_get("message_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let media_cursor: Vec<u8> = row
+        .try_get("media_cursor_sha256")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let anchor_state: i16 = row
+        .try_get("anchor_state")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let filename: Option<String> = row
+        .try_get("attachment_filename")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let media_type: Option<String> = row
+        .try_get("attachment_media_type")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let declared_bytes: Option<i64> = row
+        .try_get("attachment_declared_bytes")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let sha256: Option<Vec<u8>> = row
+        .try_get("attachment_sha256")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let disposition: Option<i16> = row
+        .try_get("attachment_disposition")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let first_observed_at_unix_seconds: i64 = row
+        .try_get("first_observed_at_unix_seconds")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let last_observed_at_unix_seconds: i64 = row
+        .try_get("last_observed_at_unix_seconds")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let last_evidence_id: Vec<u8> = row
+        .try_get("last_evidence_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
     let state = match anchor_state {
         1 => CommunicationAttachmentAnchorStateV1::DescriptorOnly,
         2 => CommunicationAttachmentAnchorStateV1::BlobPending,
@@ -682,7 +812,17 @@ fn anchor_from_row(
         (Some(media_type), Some(declared_bytes), sha256, Some(disposition)) => {
             let disposition = attachment_disposition_from_value(disposition)?;
             let sha256 = sha256.map(|value| id32(&value)).transpose()?;
-            Some(hermes_communications_api::AttachmentDescriptorV1::new(filename, media_type, u64::try_from(declared_bytes).map_err(|_| CommunicationsPersistenceError::InvalidRow)?, sha256, disposition).map_err(|_| CommunicationsPersistenceError::InvalidRow)?)
+            Some(
+                hermes_communications_api::AttachmentDescriptorV1::new(
+                    filename,
+                    media_type,
+                    u64::try_from(declared_bytes)
+                        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+                    sha256,
+                    disposition,
+                )
+                .map_err(|_| CommunicationsPersistenceError::InvalidRow)?,
+            )
         }
         _ => return Err(CommunicationsPersistenceError::InvalidRow),
     };
@@ -731,12 +871,24 @@ fn attachment_disposition_from_value(
 fn participant_from_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<CommunicationObservedParticipantSummaryV1, CommunicationsPersistenceError> {
-    let participant_id: Vec<u8> = row.try_get("participant_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let conversation_id: Vec<u8> = row.try_get("conversation_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let participant_cursor: Vec<u8> = row.try_get("participant_cursor_sha256").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let first_observed_at_unix_seconds: i64 = row.try_get("first_observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let last_observed_at_unix_seconds: i64 = row.try_get("last_observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let last_evidence_id: Vec<u8> = row.try_get("last_evidence_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let participant_id: Vec<u8> = row
+        .try_get("participant_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let conversation_id: Vec<u8> = row
+        .try_get("conversation_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let participant_cursor: Vec<u8> = row
+        .try_get("participant_cursor_sha256")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let first_observed_at_unix_seconds: i64 = row
+        .try_get("first_observed_at_unix_seconds")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let last_observed_at_unix_seconds: i64 = row
+        .try_get("last_observed_at_unix_seconds")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let last_evidence_id: Vec<u8> = row
+        .try_get("last_evidence_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
     Ok(CommunicationObservedParticipantSummaryV1 {
         participant_id: CommunicationParticipantIdV1::new(id16(&participant_id)?),
         conversation_id: CommunicationConversationIdV1::new(id16(&conversation_id)?),
@@ -750,13 +902,27 @@ fn participant_from_row(
 fn conversation_from_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<CommunicationConversationSummaryV1, CommunicationsPersistenceError> {
-    let conversation_id: Vec<u8> = row.try_get("conversation_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let account_cursor: Vec<u8> = row.try_get("account_cursor_sha256").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let conversation_cursor: Vec<u8> = row.try_get("conversation_cursor_sha256").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let provider: i16 = row.try_get("provider").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let first_observed_at_unix_seconds: i64 = row.try_get("first_observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let last_observed_at_unix_seconds: i64 = row.try_get("last_observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let last_evidence_id: Vec<u8> = row.try_get("last_evidence_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let conversation_id: Vec<u8> = row
+        .try_get("conversation_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let account_cursor: Vec<u8> = row
+        .try_get("account_cursor_sha256")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let conversation_cursor: Vec<u8> = row
+        .try_get("conversation_cursor_sha256")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let provider: i16 = row
+        .try_get("provider")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let first_observed_at_unix_seconds: i64 = row
+        .try_get("first_observed_at_unix_seconds")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let last_observed_at_unix_seconds: i64 = row
+        .try_get("last_observed_at_unix_seconds")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let last_evidence_id: Vec<u8> = row
+        .try_get("last_evidence_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
     Ok(CommunicationConversationSummaryV1 {
         conversation_id: CommunicationConversationIdV1::new(id16(&conversation_id)?),
         account_cursor: CommunicationSourceCursorV1::new(id32(&account_cursor)?),
@@ -771,15 +937,33 @@ fn conversation_from_row(
 fn message_from_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<CommunicationMessageSummaryV1, CommunicationsPersistenceError> {
-    let message_id: Vec<u8> = row.try_get("message_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let conversation_id: Vec<u8> = row.try_get("conversation_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let source_cursor: Vec<u8> = row.try_get("source_cursor_sha256").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let body: i16 = row.try_get("body_state").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let direction: i16 = row.try_get("direction").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let lifecycle_state: i16 = row.try_get("lifecycle_state").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let first_observed_at_unix_seconds: i64 = row.try_get("first_observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let last_observed_at_unix_seconds: i64 = row.try_get("last_observed_at_unix_seconds").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
-    let last_evidence_id: Vec<u8> = row.try_get("last_evidence_id").map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let message_id: Vec<u8> = row
+        .try_get("message_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let conversation_id: Vec<u8> = row
+        .try_get("conversation_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let source_cursor: Vec<u8> = row
+        .try_get("source_cursor_sha256")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let body: i16 = row
+        .try_get("body_state")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let direction: i16 = row
+        .try_get("direction")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let lifecycle_state: i16 = row
+        .try_get("lifecycle_state")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let first_observed_at_unix_seconds: i64 = row
+        .try_get("first_observed_at_unix_seconds")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let last_observed_at_unix_seconds: i64 = row
+        .try_get("last_observed_at_unix_seconds")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+    let last_evidence_id: Vec<u8> = row
+        .try_get("last_evidence_id")
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
     Ok(CommunicationMessageSummaryV1 {
         message_id: CommunicationMessageIdV1::new(id16(&message_id)?),
         conversation_id: CommunicationConversationIdV1::new(id16(&conversation_id)?),
@@ -794,15 +978,26 @@ fn message_from_row(
 }
 
 fn id16(value: &[u8]) -> Result<[u8; 16], CommunicationsPersistenceError> {
-    value.try_into().map_err(|_| CommunicationsPersistenceError::InvalidRow)
+    value
+        .try_into()
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)
 }
 
 fn id32(value: &[u8]) -> Result<[u8; 32], CommunicationsPersistenceError> {
-    value.try_into().map_err(|_| CommunicationsPersistenceError::InvalidRow)
+    value
+        .try_into()
+        .map_err(|_| CommunicationsPersistenceError::InvalidRow)
 }
 
 const fn provider_value(value: CommunicationProviderProvenanceV1) -> i16 {
-    match value { CommunicationProviderProvenanceV1::MailImap => 1, CommunicationProviderProvenanceV1::Telegram => 2, CommunicationProviderProvenanceV1::WhatsAppWeb => 3, CommunicationProviderProvenanceV1::MailSmtp => 4, CommunicationProviderProvenanceV1::Zulip => 5, CommunicationProviderProvenanceV1::MailGmail => 6 }
+    match value {
+        CommunicationProviderProvenanceV1::MailImap => 1,
+        CommunicationProviderProvenanceV1::Telegram => 2,
+        CommunicationProviderProvenanceV1::WhatsAppWeb => 3,
+        CommunicationProviderProvenanceV1::MailSmtp => 4,
+        CommunicationProviderProvenanceV1::Zulip => 5,
+        CommunicationProviderProvenanceV1::MailGmail => 6,
+    }
 }
 
 const fn direction_value(value: CommunicationDirectionV1) -> i16 {
@@ -815,24 +1010,43 @@ const fn direction_value(value: CommunicationDirectionV1) -> i16 {
 
 const fn kind_value(value: CanonicalCommunicationEvidenceKindV1) -> i16 {
     match value {
-        CanonicalCommunicationEvidenceKindV1::EmailMessage => 1, CanonicalCommunicationEvidenceKindV1::ChatMessage => 2,
-        CanonicalCommunicationEvidenceKindV1::MessageEdited => 3, CanonicalCommunicationEvidenceKindV1::MessageDeleted => 4,
-        CanonicalCommunicationEvidenceKindV1::ReactionChanged => 5, CanonicalCommunicationEvidenceKindV1::DeliveryStateChanged => 6,
-        CanonicalCommunicationEvidenceKindV1::ConversationStateChanged => 7, CanonicalCommunicationEvidenceKindV1::ParticipantChanged => 8,
-        CanonicalCommunicationEvidenceKindV1::MediaChanged => 9, CanonicalCommunicationEvidenceKindV1::TopicChanged => 10,
+        CanonicalCommunicationEvidenceKindV1::EmailMessage => 1,
+        CanonicalCommunicationEvidenceKindV1::ChatMessage => 2,
+        CanonicalCommunicationEvidenceKindV1::MessageEdited => 3,
+        CanonicalCommunicationEvidenceKindV1::MessageDeleted => 4,
+        CanonicalCommunicationEvidenceKindV1::ReactionChanged => 5,
+        CanonicalCommunicationEvidenceKindV1::DeliveryStateChanged => 6,
+        CanonicalCommunicationEvidenceKindV1::ConversationStateChanged => 7,
+        CanonicalCommunicationEvidenceKindV1::ParticipantChanged => 8,
+        CanonicalCommunicationEvidenceKindV1::MediaChanged => 9,
+        CanonicalCommunicationEvidenceKindV1::TopicChanged => 10,
         CanonicalCommunicationEvidenceKindV1::TypingChanged => 11,
     }
 }
 
 const fn body_value(value: CommunicationBodyStateV1) -> i16 {
-    match value { CommunicationBodyStateV1::MetadataOnly => 1, CommunicationBodyStateV1::PendingBlob => 2, CommunicationBodyStateV1::Unavailable => 3, CommunicationBodyStateV1::AdmittedBlob => 4 }
+    match value {
+        CommunicationBodyStateV1::MetadataOnly => 1,
+        CommunicationBodyStateV1::PendingBlob => 2,
+        CommunicationBodyStateV1::Unavailable => 3,
+        CommunicationBodyStateV1::AdmittedBlob => 4,
+    }
 }
 
-const fn body_admission_failure_value(value: hermes_communications_api::CommunicationBodyAdmissionFailureV1) -> i16 {
-    match value { hermes_communications_api::CommunicationBodyAdmissionFailureV1::SourceUnavailable => 1, hermes_communications_api::CommunicationBodyAdmissionFailureV1::SizeLimitExceeded => 2, hermes_communications_api::CommunicationBodyAdmissionFailureV1::IntegrityMismatch => 3, hermes_communications_api::CommunicationBodyAdmissionFailureV1::PolicyRejected => 4 }
+const fn body_admission_failure_value(
+    value: hermes_communications_api::CommunicationBodyAdmissionFailureV1,
+) -> i16 {
+    match value {
+        hermes_communications_api::CommunicationBodyAdmissionFailureV1::SourceUnavailable => 1,
+        hermes_communications_api::CommunicationBodyAdmissionFailureV1::SizeLimitExceeded => 2,
+        hermes_communications_api::CommunicationBodyAdmissionFailureV1::IntegrityMismatch => 3,
+        hermes_communications_api::CommunicationBodyAdmissionFailureV1::PolicyRejected => 4,
+    }
 }
 
-const fn provider_from_value(value: i16) -> Result<CommunicationProviderProvenanceV1, CommunicationsPersistenceError> {
+const fn provider_from_value(
+    value: i16,
+) -> Result<CommunicationProviderProvenanceV1, CommunicationsPersistenceError> {
     match value {
         1 => Ok(CommunicationProviderProvenanceV1::MailImap),
         2 => Ok(CommunicationProviderProvenanceV1::Telegram),
@@ -844,18 +1058,9 @@ const fn provider_from_value(value: i16) -> Result<CommunicationProviderProvenan
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{provider_from_value, provider_value};
-    use hermes_communications_api::CommunicationProviderProvenanceV1;
-
-    #[test]
-    fn zulip_provider_value_round_trips() {
-        assert_eq!(provider_from_value(provider_value(CommunicationProviderProvenanceV1::Zulip)), Ok(CommunicationProviderProvenanceV1::Zulip));
-    }
-}
-
-const fn direction_from_value(value: i16) -> Result<CommunicationDirectionV1, CommunicationsPersistenceError> {
+const fn direction_from_value(
+    value: i16,
+) -> Result<CommunicationDirectionV1, CommunicationsPersistenceError> {
     match value {
         1 => Ok(CommunicationDirectionV1::Incoming),
         2 => Ok(CommunicationDirectionV1::Outgoing),
@@ -864,7 +1069,9 @@ const fn direction_from_value(value: i16) -> Result<CommunicationDirectionV1, Co
     }
 }
 
-const fn kind_from_value(value: i16) -> Result<CanonicalCommunicationEvidenceKindV1, CommunicationsPersistenceError> {
+const fn kind_from_value(
+    value: i16,
+) -> Result<CanonicalCommunicationEvidenceKindV1, CommunicationsPersistenceError> {
     match value {
         1 => Ok(CanonicalCommunicationEvidenceKindV1::EmailMessage),
         2 => Ok(CanonicalCommunicationEvidenceKindV1::ChatMessage),
@@ -881,7 +1088,9 @@ const fn kind_from_value(value: i16) -> Result<CanonicalCommunicationEvidenceKin
     }
 }
 
-const fn body_from_value(value: i16) -> Result<CommunicationBodyStateV1, CommunicationsPersistenceError> {
+const fn body_from_value(
+    value: i16,
+) -> Result<CommunicationBodyStateV1, CommunicationsPersistenceError> {
     match value {
         1 => Ok(CommunicationBodyStateV1::MetadataOnly),
         2 => Ok(CommunicationBodyStateV1::PendingBlob),
@@ -891,11 +1100,24 @@ const fn body_from_value(value: i16) -> Result<CommunicationBodyStateV1, Communi
     }
 }
 
-const fn body_admission_failure_from_value(value: i16) -> Result<hermes_communications_api::CommunicationBodyAdmissionFailureV1, CommunicationsPersistenceError> {
-    match value { 1 => Ok(hermes_communications_api::CommunicationBodyAdmissionFailureV1::SourceUnavailable), 2 => Ok(hermes_communications_api::CommunicationBodyAdmissionFailureV1::SizeLimitExceeded), 3 => Ok(hermes_communications_api::CommunicationBodyAdmissionFailureV1::IntegrityMismatch), 4 => Ok(hermes_communications_api::CommunicationBodyAdmissionFailureV1::PolicyRejected), _ => Err(CommunicationsPersistenceError::InvalidRow) }
+const fn body_admission_failure_from_value(
+    value: i16,
+) -> Result<
+    hermes_communications_api::CommunicationBodyAdmissionFailureV1,
+    CommunicationsPersistenceError,
+> {
+    match value {
+        1 => Ok(hermes_communications_api::CommunicationBodyAdmissionFailureV1::SourceUnavailable),
+        2 => Ok(hermes_communications_api::CommunicationBodyAdmissionFailureV1::SizeLimitExceeded),
+        3 => Ok(hermes_communications_api::CommunicationBodyAdmissionFailureV1::IntegrityMismatch),
+        4 => Ok(hermes_communications_api::CommunicationBodyAdmissionFailureV1::PolicyRejected),
+        _ => Err(CommunicationsPersistenceError::InvalidRow),
+    }
 }
 
-const fn lifecycle_state_from_value(value: i16) -> Result<CommunicationMessageLifecycleStateV1, CommunicationsPersistenceError> {
+const fn lifecycle_state_from_value(
+    value: i16,
+) -> Result<CommunicationMessageLifecycleStateV1, CommunicationsPersistenceError> {
     match value {
         1 => Ok(CommunicationMessageLifecycleStateV1::Active),
         2 => Ok(CommunicationMessageLifecycleStateV1::Deleted),
@@ -903,17 +1125,35 @@ const fn lifecycle_state_from_value(value: i16) -> Result<CommunicationMessageLi
     }
 }
 
-const fn reference_kind_value(value: hermes_communications_api::CommunicationMessageReferenceKindV1) -> i16 {
+const fn reference_kind_value(
+    value: hermes_communications_api::CommunicationMessageReferenceKindV1,
+) -> i16 {
     match value {
         hermes_communications_api::CommunicationMessageReferenceKindV1::Reply => 1,
         hermes_communications_api::CommunicationMessageReferenceKindV1::Forward => 2,
     }
 }
 
-const fn reference_kind_from_value(value: i16) -> Result<CommunicationMessageReferenceKindV1, CommunicationsPersistenceError> {
+const fn reference_kind_from_value(
+    value: i16,
+) -> Result<CommunicationMessageReferenceKindV1, CommunicationsPersistenceError> {
     match value {
         1 => Ok(CommunicationMessageReferenceKindV1::Reply),
         2 => Ok(CommunicationMessageReferenceKindV1::Forward),
         _ => Err(CommunicationsPersistenceError::InvalidRow),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{provider_from_value, provider_value};
+    use hermes_communications_api::CommunicationProviderProvenanceV1;
+
+    #[test]
+    fn zulip_provider_value_round_trips() {
+        assert_eq!(
+            provider_from_value(provider_value(CommunicationProviderProvenanceV1::Zulip)),
+            Ok(CommunicationProviderProvenanceV1::Zulip)
+        );
     }
 }

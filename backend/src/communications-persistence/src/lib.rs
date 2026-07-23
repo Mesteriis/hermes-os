@@ -4,27 +4,27 @@ pub const PACKAGE: &str = "hermes-communications-persistence";
 
 use hermes_communications_api::CommunicationObservationIdV1;
 
-mod durable;
 mod custody_transfer;
+mod durable;
+mod schema;
 mod search;
 mod search_job;
-mod schema;
-pub use durable::CommunicationsDurablePersistence;
 pub use custody_transfer::{
     ClaimedCommunicationsBodyCustodyTransferV1, CommunicationsBodyCustodyTransferErrorV1,
 };
-pub use search::{
-    CommunicationsSearchProjectionWriteV1, CommunicationsSearchProjectionWriteErrorV1,
-};
-pub use search_job::{
-    ClaimedCommunicationsDerivedIndexJobV1, CommunicationsDerivedIndexFailureRecordV1,
-    CommunicationsDerivedIndexFailureV1,
-    CommunicationsDerivedIndexJobErrorV1, CommunicationsDerivedIndexJobOperationV1,
-    CommunicationsDerivedIndexJobV1, communications_derived_index_job_id_v1,
-};
+pub use durable::{CommunicationsDurablePersistence, PersistedCommunicationsObservationV1};
 pub use schema::{
     COMMUNICATIONS_SCHEMA_V1, COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1,
     communications_storage_bundle_v1,
+};
+pub use search::{
+    CommunicationsSearchProjectionWriteErrorV1, CommunicationsSearchProjectionWriteV1,
+};
+pub use search_job::{
+    ClaimedCommunicationsDerivedIndexJobV1, CommunicationsDerivedIndexFailureRecordV1,
+    CommunicationsDerivedIndexFailureV1, CommunicationsDerivedIndexJobErrorV1,
+    CommunicationsDerivedIndexJobOperationV1, CommunicationsDerivedIndexJobV1,
+    communications_derived_index_job_id_v1,
 };
 
 /// Private Communications-owned work item for an admitted producer body. It
