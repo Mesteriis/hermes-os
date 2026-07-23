@@ -2,7 +2,7 @@
 
 use hermes_communications_api::{
     CanonicalCommunicationProjectionV1, CanonicalMessageMutationV1,
-    CommunicationBodyBlobReferenceV1, CommunicationMessageIdV1,
+    CommunicationBodyBlobReferenceV1, CommunicationConversationIdV1, CommunicationMessageIdV1,
     CommunicationObservationIdV1,
 };
 
@@ -25,7 +25,9 @@ pub struct CommunicationsSearchDocumentV1 {
 pub struct CommunicationsSearchIndexJobV1 {
     pub evidence_id: CommunicationObservationIdV1,
     pub message_id: CommunicationMessageIdV1,
+    pub conversation_id: CommunicationConversationIdV1,
     pub blob: CommunicationBodyBlobReferenceV1,
+    pub observed_at_unix_seconds: i64,
     pub projection_revision: u32,
 }
 
@@ -62,7 +64,9 @@ pub fn decide_search_index_v1(
     CommunicationsSearchIndexDecisionV1::Index(CommunicationsSearchIndexJobV1 {
         evidence_id: projection.summary.evidence_id,
         message_id: message.message_id,
+        conversation_id: message.conversation_id,
         blob: blob.clone(),
+        observed_at_unix_seconds: projection.summary.observed_at_unix_seconds,
         projection_revision,
     })
 }
