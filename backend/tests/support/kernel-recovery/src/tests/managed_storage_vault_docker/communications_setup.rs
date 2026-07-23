@@ -332,32 +332,20 @@ pub(super) fn assert_communications_ingress_delivery(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
 ) {
-    let draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
+    let draft = hermes_mail_core::draft_ingress_observation_with_body(
         "managed-ingress-observation-1",
-        hermes_communications_ingress::SourceEnvelope {
-            provider: hermes_communications_ingress::ProviderProvenanceV1::MailImap,
-            external_record_id: "integration-private-record-1".to_owned(),
-            scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
-                external_account_id: "integration-private-account-1".to_owned(),
-                external_conversation_id: Some("integration-private-conversation-1".to_owned()),
-                external_participant_id: None,
-                external_media_id: None,
-                external_reply_to_record_id: None,
-                external_forward_origin_record_id: None,
-            }),
-        },
-        hermes_communications_ingress::CommunicationEvidenceKindV1::EmailMessage,
+        hermes_communications_ingress::ProviderProvenanceV1::MailImap,
+        "integration-private-account-1",
+        "integration-private-record-1",
         hermes_communications_ingress::BodyAvailabilityV1::MetadataOnly,
-        hermes_communications_ingress::CommunicationDirectionV1::Incoming,
-        Some(1_783_024_000),
     )
-    .expect("build typed integration ingress draft");
+    .expect("build typed Mail ingress draft");
     let record = hermes_communications_ingress::build_observation_outbox_record_v1(
         &draft,
         &hermes_communications_ingress::ObservationEnvelopeContextV1 {
-            runtime_instance_id: "integration-test-runtime-1".to_owned(),
+            runtime_instance_id: "mail-test-runtime-1".to_owned(),
             runtime_generation: 1,
-            module_id: "integration-test-runtime".to_owned(),
+            module_id: "hermes-mail-runtime".to_owned(),
             recorded_at_unix_seconds: 1_783_024_000,
             recorded_at_nanos: 0,
         },

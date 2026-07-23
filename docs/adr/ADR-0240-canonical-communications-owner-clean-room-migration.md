@@ -11,7 +11,7 @@ and Core Gateway routing to the owner-owned public query contract are present.
 `managed_communications_domain_starts_with_owner_local_storage_and_events`
 runs against the disposable authenticated Storage/NATS/Vault/Blob contour through
 `test-authenticated-storage.mjs`; it proves the generic managed-domain launch
-with owner-local Storage and Event Hub credentials, a typed integration-shaped
+with owner-local Storage and Event Hub credentials, a typed `hermes-mail-core`
 ingress observation and its resulting canonical owner projection through the
 managed owner query route, and the exact canonical outbox envelope on its
 catalog NATS subject. The same live contour redelivers the exact ingress bytes

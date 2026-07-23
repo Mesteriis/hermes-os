@@ -1929,6 +1929,7 @@ dependencies = [
  "hermes-gateway-session-contract",
  "hermes-kernel-control-store",
  "hermes-kernel-control-store-sqlite",
+ "hermes-mail-core",
  "hermes-runtime-protocol",
  "hermes-scheduler-persistence",
  "hermes-scheduler-protocol",
