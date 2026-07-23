@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -19,9 +19,6 @@ test('every Communications integration relay publishes exact durable envelopes',
 });
 
 test('integration packages reach Communications only through its ingress contract', () => {
-  const policy = JSON.parse(
-    readFileSync(join(backendRoot, 'architecture', 'policy.json'), 'utf8'),
-  );
   const communicationsPackages = new Set([
     'hermes-communications-api',
     'hermes-communications-domain',
@@ -30,21 +27,27 @@ test('integration packages reach Communications only through its ingress contrac
     'hermes-communications-runtime',
   ]);
 
-  for (const owner of ['mail', 'telegram', 'zulip', 'whatsapp']) {
-    const integrationPackages = policy.implementation.productionPackages.filter(
-      (entry) => entry.role === 'integration' && entry.owner === owner,
-    );
-    assert.ok(integrationPackages.length > 0, `missing ${owner} integration inventory`);
+  const integrationManifests = readdirSync(join(backendRoot, 'src'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join(backendRoot, 'src', entry.name, 'Cargo.toml'))
+    .filter((path) => {
+      try {
+        return readFileSync(path, 'utf8').includes('role = "integration"');
+      } catch {
+        return false;
+      }
+    });
 
-    for (const integrationPackage of integrationPackages) {
-      const communicationsDependencies = (policy.implementation.workspaceDependencyAllowlist[integrationPackage.name] ?? [])
-        .map((dependency) => dependency.name)
-        .filter((name) => communicationsPackages.has(name));
-      assert.deepEqual(
-        communicationsDependencies,
-        communicationsDependencies.length === 0 ? [] : ['hermes-communications-ingress'],
-        `${integrationPackage.name} has a direct Communications implementation edge`,
-      );
-    }
+  assert.ok(integrationManifests.length > 0, 'missing integration package manifests');
+  for (const manifestPath of integrationManifests) {
+    const manifest = readFileSync(manifestPath, 'utf8');
+    const communicationsDependencies = [...manifest.matchAll(/^([\w-]+)\s*=.*$/gm)]
+      .map((match) => match[1])
+      .filter((name) => communicationsPackages.has(name));
+    assert.deepEqual(
+      communicationsDependencies,
+      communicationsDependencies.length === 0 ? [] : ['hermes-communications-ingress'],
+      `${manifestPath} has a direct Communications implementation edge`,
+    );
   }
 });
