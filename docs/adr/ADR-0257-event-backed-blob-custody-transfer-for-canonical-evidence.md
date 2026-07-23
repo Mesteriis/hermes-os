@@ -115,8 +115,9 @@ nor an index job.
 
 ## Consequences
 
-The managed fixture now proves source receipt admission, target custody transfer
-and a canonical-ID-only derived search hit. It does not replace the remaining
+The managed fixture now proves source receipt admission, target custody transfer,
+a canonical-ID-only derived search hit, stale source/target launch fencing, and
+explicit revoked source/target fencing. It does not replace the remaining
 negative degraded-path evidence. The existing `communications.blob.v1`
 capability remains read/derived-index authority only after successful custody
 transfer; producer write authority remains integration-owned.

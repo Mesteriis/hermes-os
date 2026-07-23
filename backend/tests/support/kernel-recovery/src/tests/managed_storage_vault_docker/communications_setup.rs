@@ -250,7 +250,7 @@ pub(super) fn assert_communications_search_query_delivery(
     }
 }
 
-pub(super) fn assert_stale_communications_target_cannot_issue_blob_custody_grant(
+pub(super) fn assert_fenced_communications_target_cannot_issue_blob_custody_grant(
     store: &Arc<SqliteControlStore>,
     supervisor: &ManagedRuntimeSupervisor,
     kernel_data: &Path,
@@ -269,12 +269,26 @@ pub(super) fn assert_stale_communications_target_cannot_issue_blob_custody_grant
             launch.grant_epoch(),
         ))
         .expect("record Communications successor launch");
-    let result = BlobSessionHandlerV1::new(
+    let request = ManagedRuntimeBlobSessionRequestV1 {
+        request_id: vec![7; 16],
+        capability_id: COMMUNICATIONS_BLOB_CAPABILITY_ID.to_owned(),
+        operation: BlobDataOperationV1::BlobDataOperationCustodyTransferV1 as u32,
+        channel_binding_sha256: vec![8; 32],
+        reference_id: vec![9; 16],
+        declared_size: 1,
+        backup_class: 1,
+        ttl_seconds: 30,
+        receipt_sha256: vec![10; 32],
+        custody_source_proof: vec![11],
+        evidence_id: vec![12; 16],
+        evidence_envelope_sha256: vec![13; 32],
+    };
+    let handler = BlobSessionHandlerV1::new(
         Arc::clone(store),
         supervisor.relay_port(),
         kernel_data.to_path_buf(),
-    )
-    .issue_blob_session(
+    );
+    let result = handler.issue_blob_session(
         &ManagedRuntimeExpectation::new(
             COMMUNICATIONS_REGISTRATION,
             COMMUNICATIONS_RUNTIME_INSTANCE_ID,
@@ -284,24 +298,33 @@ pub(super) fn assert_stale_communications_target_cannot_issue_blob_custody_grant
             [2; 32],
             None,
         ),
-        ManagedRuntimeBlobSessionRequestV1 {
-            request_id: vec![7; 16],
-            capability_id: COMMUNICATIONS_BLOB_CAPABILITY_ID.to_owned(),
-            operation: BlobDataOperationV1::BlobDataOperationCustodyTransferV1 as u32,
-            channel_binding_sha256: vec![8; 32],
-            reference_id: vec![9; 16],
-            declared_size: 1,
-            backup_class: 1,
-            ttl_seconds: 30,
-            receipt_sha256: vec![10; 32],
-            custody_source_proof: vec![11],
-            evidence_id: vec![12; 16],
-            evidence_envelope_sha256: vec![13; 32],
-        },
+        request.clone(),
     );
     assert!(
         result.is_err(),
         "stale Communications target must not receive a Blob custody grant",
+    );
+    store
+        .transition_module_registration(
+            COMMUNICATIONS_REGISTRATION,
+            ModuleRegistrationState::Revoked,
+        )
+        .expect("revoke current Communications target");
+    let revoked = handler.issue_blob_session(
+        &ManagedRuntimeExpectation::new(
+            COMMUNICATIONS_REGISTRATION,
+            COMMUNICATIONS_RUNTIME_INSTANCE_ID_V2,
+            COMMUNICATIONS_MODULE_ID,
+            launch.runtime_generation() + 1,
+            launch.grant_epoch(),
+            [2; 32],
+            None,
+        ),
+        request,
+    );
+    assert!(
+        revoked.is_err(),
+        "revoked Communications target must not receive a Blob custody grant",
     );
 }
 
