@@ -223,12 +223,37 @@ pub(crate) fn respond_blob_session(
             result: Some(ControlResult::BlobSessionDelivery(delivery)),
             error_code: String::new(),
         },
-        Err(_) => ManagedRuntimeControlResponseV1 {
+        Err(error) => ManagedRuntimeControlResponseV1 {
             result: None,
-            error_code: "managed_blob_session_denied".to_owned(),
+            error_code: blob_session_error_code(&error).to_owned(),
         },
     };
     write_frame(channel, &response.encode_to_vec())
+}
+
+fn blob_session_error_code(error: &str) -> &'static str {
+    if error.ends_with(" is unavailable") {
+        "managed_blob_session_unavailable"
+    } else {
+        "managed_blob_session_denied"
+    }
+}
+
+#[cfg(test)]
+mod blob_session_error_code_tests {
+    use super::blob_session_error_code;
+
+    #[test]
+    fn exposes_only_the_retryable_blob_availability_code() {
+        assert_eq!(
+            blob_session_error_code("managed runtime Blob custody transfer is unavailable"),
+            "managed_blob_session_unavailable",
+        );
+        assert_eq!(
+            blob_session_error_code("managed runtime Blob custody transfer is denied"),
+            "managed_blob_session_denied",
+        );
+    }
 }
 
 fn peek_complete_frame(channel: &mut UnixStream) -> Result<Option<Vec<u8>>, String> {

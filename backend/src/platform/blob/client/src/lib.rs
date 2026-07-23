@@ -102,6 +102,9 @@ pub fn request_managed_blob_custody_transfer(
         .map_err(|error| BlobClientError::Io(error.to_string()))?;
     let delivery = match response.result {
         Some(ControlResult::BlobSessionDelivery(delivery)) if response.error_code.is_empty() => delivery,
+        _ if response.error_code == "managed_blob_session_unavailable" => {
+            return Err(BlobClientError::Unavailable);
+        }
         _ => return Err(BlobClientError::Rejected("managed_blob_custody_transfer_denied".to_owned())),
     };
     let grant = delivery.custody_transfer_grant.ok_or(BlobClientError::InvalidResponse)?;
@@ -183,6 +186,9 @@ pub fn request_managed_blob_session(
         .map_err(|error| BlobClientError::Io(error.to_string()))?;
     let delivery = match response.result {
         Some(ControlResult::BlobSessionDelivery(delivery)) if response.error_code.is_empty() => delivery,
+        _ if response.error_code == "managed_blob_session_unavailable" => {
+            return Err(BlobClientError::Unavailable);
+        }
         _ => return Err(BlobClientError::Rejected("managed_blob_session_denied".to_owned())),
     };
     let grant = delivery.grant.ok_or(BlobClientError::InvalidResponse)?;
