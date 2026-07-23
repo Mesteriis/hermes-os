@@ -21,7 +21,9 @@ owner Browser WebAuthn session reaches the descriptor-declared ConnectRPC
 Communications query route and the managed runtime response. Listener/TLS
 transport coverage remains Gateway platform evidence. A typed admitted opaque
 Blob receipt also reaches canonical body state while the public query response
-does not expose its Blob locator; Blob data-path service conformance remains a
+does not expose its Blob locator. A typed attachment descriptor reaches its
+canonical attachment anchor while the public anchor response does not expose
+the provider-local media locator. Blob data-path service conformance remains a
 separate platform proof.
 
 Depends on:
