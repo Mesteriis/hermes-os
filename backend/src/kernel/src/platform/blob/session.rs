@@ -55,6 +55,18 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
                     && entry.grant_epoch() == expectation.grant_epoch()
             })
             .ok_or_else(|| "managed runtime Blob session request is denied".to_owned())?;
+        let operation = i32::try_from(request.operation)
+            .ok()
+            .and_then(|value| BlobDataOperationV1::try_from(value).ok())
+            .filter(|value| {
+                matches!(
+                    value,
+                    BlobDataOperationV1::BlobDataOperationWriteV1
+                        | BlobDataOperationV1::BlobDataOperationReadRangeV1
+                        | BlobDataOperationV1::BlobDataOperationCustodyTransferV1
+                )
+            })
+            .ok_or_else(|| "managed runtime Blob session request is denied".to_owned())?;
         if (operation == BlobDataOperationV1::BlobDataOperationWriteV1
             && !request.receipt_sha256.is_empty()
             && (request.receipt_sha256.len() != 32
@@ -71,18 +83,6 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
         {
             return Err("managed runtime Blob session request is denied".to_owned());
         }
-        let operation = i32::try_from(request.operation)
-            .ok()
-            .and_then(|value| BlobDataOperationV1::try_from(value).ok())
-            .filter(|value| {
-                matches!(
-                    value,
-                    BlobDataOperationV1::BlobDataOperationWriteV1
-                        | BlobDataOperationV1::BlobDataOperationReadRangeV1
-                        | BlobDataOperationV1::BlobDataOperationCustodyTransferV1
-                )
-            })
-            .ok_or_else(|| "managed runtime Blob session request is denied".to_owned())?;
         if operation == BlobDataOperationV1::BlobDataOperationCustodyTransferV1 {
             return self.issue_custody_transfer(expectation, request, entry);
         }
