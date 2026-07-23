@@ -207,6 +207,11 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
     assert_communications_query_delivery(&store, &supervisor);
     assert_communications_search_query_delivery(&store, &supervisor);
     assert_communications_gateway_query_delivery(&store, &supervisor, &root);
+    assert_stale_communications_target_cannot_issue_blob_custody_grant(
+        &store,
+        &supervisor,
+        &data,
+    );
 
     supervisor.shutdown().expect("stop managed processes");
     unsafe {

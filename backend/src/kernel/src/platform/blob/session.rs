@@ -47,6 +47,15 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
         expectation: &ManagedRuntimeExpectation,
         request: ManagedRuntimeBlobSessionRequestV1,
     ) -> Result<ManagedRuntimeBlobSessionDeliveryV1, String> {
+        if !current_managed_launch_matches(
+            &self.store,
+            expectation.registration_id(),
+            expectation.runtime_instance_id(),
+            expectation.runtime_generation(),
+            expectation.grant_epoch(),
+        )? {
+            return Err("managed runtime Blob session request is denied".to_owned());
+        }
         let entry = catalog::resolve(&*self.store)?
             .into_iter()
             .find(|entry| {
@@ -184,15 +193,13 @@ impl BlobSessionHandlerV1 {
         {
             return Err("managed runtime Blob custody transfer is denied".to_owned());
         }
-        let source_launch = self
-            .store
-            .effective_managed_launch_record(&source.registration_id)
-            .map_err(|_| "managed runtime Blob custody transfer is denied".to_owned())?
-            .ok_or_else(|| "managed runtime Blob custody transfer is denied".to_owned())?;
-        if source_launch.runtime_instance_id() != source.runtime_instance_id
-            || source_launch.runtime_generation() != source.runtime_generation
-            || source_launch.grant_epoch() != source.grant_epoch
-        {
+        if !current_managed_launch_matches(
+            &self.store,
+            &source.registration_id,
+            &source.runtime_instance_id,
+            source.runtime_generation,
+            source.grant_epoch,
+        )? {
             return Err("managed runtime Blob custody transfer is denied".to_owned());
         }
         let blob = status::read_current(&self.store, &self.relay)?;
@@ -233,6 +240,23 @@ impl BlobSessionHandlerV1 {
             custody_transfer_grant: Some(grant),
         })
     }
+}
+
+fn current_managed_launch_matches(
+    store: &SqliteControlStore,
+    registration_id: &str,
+    runtime_instance_id: &str,
+    runtime_generation: u64,
+    grant_epoch: u64,
+) -> Result<bool, String> {
+    let launch = store
+        .effective_managed_launch_record(registration_id)
+        .map_err(|_| "managed runtime Blob session request is denied".to_owned())?;
+    Ok(launch.is_some_and(|launch| {
+        launch.runtime_instance_id() == runtime_instance_id
+            && launch.runtime_generation() == runtime_generation
+            && launch.grant_epoch() == grant_epoch
+    }))
 }
 
 pub(crate) fn valid_request(request: &ManagedRuntimeBlobSessionRequestV1) -> bool {

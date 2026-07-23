@@ -33,6 +33,7 @@ use crate::runtime::lifecycle::control::{
 
 pub(super) const COMMUNICATIONS_REGISTRATION: &str = "communications-runtime";
 const COMMUNICATIONS_RUNTIME_INSTANCE_ID: &str = "02020202020202020202020202020202";
+const COMMUNICATIONS_RUNTIME_INSTANCE_ID_V2: &str = "05050505050505050505050505050505";
 const FIXTURE_SOURCE_REGISTRATION: &str = "fixture-source-integration";
 const FIXTURE_SOURCE_CAPABILITY_ID: &str = "fixture-source.blob.v1";
 const FIXTURE_SOURCE_RUNTIME_INSTANCE_ID: &str = "03030303030303030303030303030303";
@@ -201,6 +202,61 @@ pub(super) fn assert_communications_search_query_delivery(
     .encode_to_vec();
     let query = route_communications_query(store, supervisor, 2, &payload);
     assert!(matches!(query.result, Some(QueryResult::SearchCommunications(hits)) if hits.hits.is_empty()));
+}
+
+pub(super) fn assert_stale_communications_target_cannot_issue_blob_custody_grant(
+    store: &Arc<SqliteControlStore>,
+    supervisor: &ManagedRuntimeSupervisor,
+    kernel_data: &Path,
+) {
+    let launch = store
+        .effective_managed_launch_record(COMMUNICATIONS_REGISTRATION)
+        .expect("read Communications launch")
+        .expect("Communications launch is active");
+    store
+        .record_managed_launch(&ManagedLaunchRecord::new(
+            COMMUNICATIONS_REGISTRATION,
+            COMMUNICATIONS_RUNTIME_INSTANCE_ID_V2,
+            1,
+            1,
+            launch.runtime_generation() + 1,
+            launch.grant_epoch(),
+        ))
+        .expect("record Communications successor launch");
+    let result = BlobSessionHandlerV1::new(
+        Arc::clone(store),
+        supervisor.relay_port(),
+        kernel_data.to_path_buf(),
+    )
+    .issue_blob_session(
+        &ManagedRuntimeExpectation::new(
+            COMMUNICATIONS_REGISTRATION,
+            COMMUNICATIONS_RUNTIME_INSTANCE_ID,
+            COMMUNICATIONS_MODULE_ID,
+            launch.runtime_generation(),
+            launch.grant_epoch(),
+            [2; 32],
+            None,
+        ),
+        ManagedRuntimeBlobSessionRequestV1 {
+            request_id: vec![7; 16],
+            capability_id: COMMUNICATIONS_BLOB_CAPABILITY_ID.to_owned(),
+            operation: BlobDataOperationV1::BlobDataOperationCustodyTransferV1 as u32,
+            channel_binding_sha256: vec![8; 32],
+            reference_id: vec![9; 16],
+            declared_size: 1,
+            backup_class: 1,
+            ttl_seconds: 30,
+            receipt_sha256: vec![10; 32],
+            custody_source_proof: vec![11],
+            evidence_id: vec![12; 16],
+            evidence_envelope_sha256: vec![13; 32],
+        },
+    );
+    assert!(
+        result.is_err(),
+        "stale Communications target must not receive a Blob custody grant",
+    );
 }
 
 pub(super) fn assert_communications_ingress_delivery(
