@@ -28,6 +28,8 @@ hermes-communications-runtime = { path = "../../../src/communications-runtime" }
 hermes-communications-ingress = { path = "../../../src/communications-ingress" }
 hermes-communications-api = { path = "../../../src/communications-api" }
 hermes-mail-core = { path = "../../../src/mail-core" }
+hermes-telegram-api = { path = "../../../src/telegram-api" }
+hermes-telegram-core = { path = "../../../src/telegram-core" }
 hermes-gateway-protocol = { path = "../../../src/api/gateway/contracts" }
 hermes-gateway-session = { path = "../../../src/api/gateway/session" }
 hermes-gateway-session-contract = { path = "../../../src/api/gateway/session_contract" }

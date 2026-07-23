@@ -1936,6 +1936,8 @@ dependencies = [
  "hermes-secure-file",
  "hermes-storage-control",
  "hermes-storage-protocol",
+ "hermes-telegram-api",
+ "hermes-telegram-core",
  "hermes-vault-key-provider",
  "hermes-vault-key-provider-file",
  "hermes-vault-protocol",

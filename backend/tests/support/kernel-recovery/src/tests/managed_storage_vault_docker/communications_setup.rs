@@ -1071,32 +1071,40 @@ pub(super) fn assert_communications_relationship_projection(
     const PRIVATE_PARTICIPANT_ID: &str = "integration-private-participant-1";
     const PRIVATE_REPLY_RECORD_ID: &str = "integration-private-reply-1";
     const PRIVATE_FORWARD_RECORD_ID: &str = "integration-private-forward-1";
-    let draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
-        "managed-relationship-observation-1",
-        hermes_communications_ingress::SourceEnvelope {
-            provider: hermes_communications_ingress::ProviderProvenanceV1::Zulip,
-            external_record_id: "integration-private-relationship-record-1".to_owned(),
-            scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
-                external_account_id: "integration-private-relationship-account-1".to_owned(),
-                external_conversation_id: Some("integration-private-relationship-conversation-1".to_owned()),
-                external_participant_id: Some(PRIVATE_PARTICIPANT_ID.to_owned()),
-                external_media_id: None,
-                external_reply_to_record_id: Some(PRIVATE_REPLY_RECORD_ID.to_owned()),
-                external_forward_origin_record_id: Some(PRIVATE_FORWARD_RECORD_ID.to_owned()),
-            }),
+    let draft = hermes_telegram_core::observation_draft(
+        hermes_telegram_api::TelegramMessageObservation {
+            account_id: "integration-private-relationship-account-1".to_owned(),
+            provider_chat_id: "integration-private-relationship-conversation-1".to_owned(),
+            provider_message_id: "managed-relationship-observation-1".to_owned(),
+            provider_topic_id: None,
+            sender_id: PRIVATE_PARTICIPANT_ID.to_owned(),
+            sender_display_name: None,
+            is_outgoing: false,
+            text: None,
+            media: None,
+            references: hermes_telegram_api::TelegramMessageReferences {
+                reply_to: Some(hermes_telegram_api::TelegramReplyReference {
+                    provider_chat_id: "integration-private-relationship-conversation-1".to_owned(),
+                    provider_message_id: PRIVATE_REPLY_RECORD_ID.to_owned(),
+                }),
+                forward_origin: Some(hermes_telegram_api::TelegramForwardOrigin {
+                    provider_chat_id: Some("integration-private-relationship-conversation-1".to_owned()),
+                    provider_message_id: Some(PRIVATE_FORWARD_RECORD_ID.to_owned()),
+                    provider_sender_id: None,
+                    sender_name: None,
+                    observed_at_unix_seconds: None,
+                }),
+            },
+            observed_at_unix_seconds: 1_783_024_003,
         },
-        hermes_communications_ingress::CommunicationEvidenceKindV1::EmailMessage,
-        hermes_communications_ingress::BodyAvailabilityV1::MetadataOnly,
-        hermes_communications_ingress::CommunicationDirectionV1::Incoming,
-        Some(1_783_024_003),
     )
-    .expect("build relationship ingress draft");
+    .expect("build typed Telegram relationship ingress draft");
     let record = hermes_communications_ingress::build_observation_outbox_record_v1(
         &draft,
         &hermes_communications_ingress::ObservationEnvelopeContextV1 {
-            runtime_instance_id: "integration-test-runtime-1".to_owned(),
+            runtime_instance_id: "telegram-test-runtime-1".to_owned(),
             runtime_generation: 1,
-            module_id: "integration-test-runtime".to_owned(),
+            module_id: "hermes-telegram-runtime".to_owned(),
             recorded_at_unix_seconds: 1_783_024_003,
             recorded_at_nanos: 0,
         },
@@ -1140,7 +1148,7 @@ pub(super) fn assert_communications_relationship_projection(
         let Some(QueryResult::ListAccounts(accounts)) = accounts.result else {
             panic!("Communications accounts query result");
         };
-        let Some(account) = accounts.accounts.iter().find(|account| account.provider == 5) else {
+        let Some(account) = accounts.accounts.iter().find(|account| account.provider == 2) else {
             assert!(std::time::Instant::now() < deadline, "relationship account was not projected");
             std::thread::sleep(std::time::Duration::from_millis(25));
             continue;
