@@ -157,7 +157,11 @@ async fn consume_or_tick(runtime: &mut CommunicationsEventRuntimeV1) -> Result<(
     tokio::select! {
         result = runtime.consume_next() => result
             .map_err(|_| "Communications runtime event delivery failed".to_owned()),
-        () = tokio::time::sleep(Duration::from_secs(1)) => Ok(()),
+        () = tokio::time::sleep(Duration::from_secs(1)) => runtime
+            .process_next_derived_index_job()
+            .await
+            .map(|_| ())
+            .map_err(|_| "Communications runtime derived index worker failed".to_owned()),
     }
 }
 

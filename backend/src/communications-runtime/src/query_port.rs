@@ -22,6 +22,10 @@ use crate::query::{
     list_conversation_participants, list_message_attachment_anchors,
     list_message_references,
 };
+use crate::{
+    search_access::CommunicationsSearchAccessV1,
+    search_query::{CommunicationsSearchQueryErrorV1, search_communications_v1},
+};
 
 const PROTOCOL_MAJOR: u32 = 1;
 
@@ -33,6 +37,7 @@ pub enum CommunicationsQueryPortErrorV1 {
 
 pub async fn handle_query_request_v1(
     persistence: &CommunicationsDurablePersistence,
+    search_access: &mut CommunicationsSearchAccessV1,
     bytes: &[u8],
 ) -> Result<Vec<u8>, CommunicationsQueryPortErrorV1> {
     let request = CommunicationsQueryRequestV1::decode(bytes)
@@ -149,11 +154,27 @@ pub async fn handle_query_request_v1(
                 .collect(),
             },
         ),
-        // Search remains unavailable until the managed runtime has both the
-        // owner-derived key lease and bounded Blob reader. Returning an empty
-        // result here would incorrectly claim that canonical evidence has no
-        // matches.
-        Operation::SearchCommunications(_) => return Err(CommunicationsQueryPortErrorV1::Unavailable),
+        Operation::SearchCommunications(request) => QueryResult::SearchCommunications(
+            hermes_communications_api::query_wire::SearchCommunicationsResponseV1 {
+                hits: search_communications_v1(
+                    persistence,
+                    search_access,
+                    &request.query,
+                    search_limit(request.limit)?,
+                )
+                .await
+                .map_err(map_search_error)?
+                .into_iter()
+                .map(|hit| hermes_communications_api::query_wire::CommunicationSearchHitV1 {
+                    evidence_id: hit.evidence_id.bytes().to_vec(),
+                    message_id: hit.message_id.bytes().to_vec(),
+                    conversation_id: hit.conversation_id.bytes().to_vec(),
+                    observed_at_unix_seconds: hit.observed_at_unix_seconds,
+                    matched_token_count: u32::from(hit.matched_token_count),
+                })
+                .collect(),
+            },
+        ),
     };
     Ok(CommunicationsQueryResponseV1 {
         result: Some(result),
@@ -167,6 +188,17 @@ fn limit(value: u32) -> Result<u16, CommunicationsQueryPortErrorV1> {
         .ok()
         .filter(|value| *value != 0)
         .ok_or(CommunicationsQueryPortErrorV1::Protocol)
+}
+
+fn search_limit(value: u32) -> Result<u16, CommunicationsQueryPortErrorV1> {
+    limit(value).and_then(|value| (value <= 100).then_some(value).ok_or(CommunicationsQueryPortErrorV1::Protocol))
+}
+
+const fn map_search_error(error: CommunicationsSearchQueryErrorV1) -> CommunicationsQueryPortErrorV1 {
+    match error {
+        CommunicationsSearchQueryErrorV1::InvalidQuery => CommunicationsQueryPortErrorV1::Protocol,
+        CommunicationsSearchQueryErrorV1::Unavailable => CommunicationsQueryPortErrorV1::Unavailable,
+    }
 }
 
 fn id16(value: &[u8]) -> Result<[u8; 16], CommunicationsQueryPortErrorV1> {

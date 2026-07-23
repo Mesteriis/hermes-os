@@ -8,6 +8,7 @@ use hermes_runtime_protocol::v1::{
 use prost::Message;
 
 use crate::query_port::{CommunicationsQueryPortErrorV1, handle_query_request_v1};
+use crate::search_access::CommunicationsSearchAccessV1;
 
 const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
 pub const COMMUNICATIONS_MODULE_ID: &str = "hermes-communications-runtime";
@@ -60,10 +61,11 @@ pub fn decode_module_query_request_v1(
 
 pub async fn handle_module_query_request_v1(
     persistence: &CommunicationsDurablePersistence,
+    search_access: &mut CommunicationsSearchAccessV1,
     bytes: &[u8],
 ) -> Result<Vec<u8>, CommunicationsQueryClientPortErrorV1> {
     let (request_id, query_payload) = decode_module_query_request_v1(bytes)?;
-    let response_payload = handle_query_request_v1(persistence, &query_payload)
+    let response_payload = handle_query_request_v1(persistence, search_access, &query_payload)
         .await
         .map_err(map_query_error)?;
     Ok(ModuleClientResponseV1 {

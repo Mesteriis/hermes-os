@@ -213,6 +213,7 @@ impl CommunicationsEventRuntimeV1 {
         if read_frame(&mut self.control_channel)? != frame { return Err(CommunicationsEventRuntimeErrorV1::Admission); }
         let payload = crate::query_client_port::handle_module_query_request_v1(
             &self.persistence,
+            &mut self.search_access,
             &request.encode_to_vec(),
         )
         .await
