@@ -57,6 +57,13 @@ test('Communications first owner inventory is exact and owner-local implementati
       'communications.storage.v1',
     ],
   });
+  assert.deepEqual(
+    policy.implementation.productionPackages
+      .filter((entry) => entry.role === 'integration')
+      .map((entry) => entry.name),
+    [],
+    'first_owner_v1 must not carry integration build units in its production inventory',
+  );
 
   for (const source of [...domainSources, ...persistenceSources, ...runtimeSources]) {
     for (const implementation of FORBIDDEN_INTEGRATION_IMPLEMENTATIONS) {
