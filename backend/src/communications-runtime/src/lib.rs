@@ -12,3 +12,4 @@ pub mod query_port;
 pub mod search_access;
 pub mod search_digest;
 pub mod search_projection;
+pub mod search_job;

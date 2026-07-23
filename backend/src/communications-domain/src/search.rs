@@ -34,7 +34,7 @@ pub struct CommunicationsSearchIndexJobV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CommunicationsSearchIndexDecisionV1 {
     Index(CommunicationsSearchIndexJobV1),
-    Remove { message_id: CommunicationMessageIdV1, projection_revision: u32 },
+    Remove { evidence_id: CommunicationObservationIdV1, message_id: CommunicationMessageIdV1, projection_revision: u32, observed_at_unix_seconds: i64 },
     Ignore,
 }
 
@@ -56,10 +56,10 @@ pub fn decide_search_index_v1(
         return CommunicationsSearchIndexDecisionV1::Ignore;
     };
     if message.mutation == CanonicalMessageMutationV1::Delete {
-        return CommunicationsSearchIndexDecisionV1::Remove { message_id: message.message_id, projection_revision };
+        return CommunicationsSearchIndexDecisionV1::Remove { evidence_id: projection.summary.evidence_id, message_id: message.message_id, projection_revision, observed_at_unix_seconds: projection.summary.observed_at_unix_seconds };
     }
     let Some(blob) = projection.summary.body_blob.as_ref() else {
-        return CommunicationsSearchIndexDecisionV1::Remove { message_id: message.message_id, projection_revision };
+        return CommunicationsSearchIndexDecisionV1::Remove { evidence_id: projection.summary.evidence_id, message_id: message.message_id, projection_revision, observed_at_unix_seconds: projection.summary.observed_at_unix_seconds };
     };
     CommunicationsSearchIndexDecisionV1::Index(CommunicationsSearchIndexJobV1 {
         evidence_id: projection.summary.evidence_id,
