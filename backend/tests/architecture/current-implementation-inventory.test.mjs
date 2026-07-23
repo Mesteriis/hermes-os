@@ -118,6 +118,39 @@ test('requires every production source file to belong to an authorized package r
   }
 });
 
+test('allows registered integration sources outside the active owner inventory only', () => {
+  const policy = canonicalPolicyForTests();
+  const integration = workspacePackage('hermes-mail-core', {
+    role: 'integration',
+    owner: 'mail',
+    surface: 'implementation',
+  });
+  const extraDomain = workspacePackage('hermes-extra-domain', {
+    role: 'domain',
+    owner: 'extra',
+    surface: 'implementation',
+  });
+
+  assert.deepEqual(
+    validateCurrentImplementationInventory(policy, metadata([...recoveryOnlyPackages(), integration])),
+    [],
+  );
+  assert.deepEqual(
+    validateCurrentImplementationSourceCoverage(policy, [
+      { path: 'src/mail-core/Cargo.toml', isDirectory: false },
+      { path: 'src/mail-core/src/lib.rs', isDirectory: false },
+    ], [{ name: 'hermes-mail-core', role: 'integration', root: 'src/mail-core' }]),
+    [],
+  );
+  assert.ok(codes(validateCurrentImplementationInventory(
+    policy,
+    metadata([...recoveryOnlyPackages(), extraDomain]),
+  )).has('implementation_inventory'));
+  assert.ok(codes(validateCurrentImplementationSourceCoverage(policy, [
+    { path: 'src/extra-domain/src/lib.rs', isDirectory: false },
+  ], [{ name: 'hermes-extra-domain', role: 'domain', root: 'src/extra-domain' }])).has('implementation_source_coverage'));
+});
+
 test('ignores a test-only workspace when enforcing the production slice', () => {
   const packages = [workspacePackage('hermes-test-support', {
     role: 'test',

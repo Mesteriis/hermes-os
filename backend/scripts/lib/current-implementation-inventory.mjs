@@ -86,7 +86,14 @@ export function validateCurrentImplementationInventory(policy, cargoMetadata) {
   const resolveById = new Map(
     list(cargoMetadata?.resolve?.nodes).map((node) => [node.id, node]),
   );
-  const actualByName = new Map(productionPackages.map((pkg) => [pkg.name, pkg]));
+  const inactiveIntegrationPackages = productionPackages.filter((pkg) => (
+    pkg?.metadata?.[metadataKey]?.role === 'integration'
+    && !expectedByName.has(pkg.name)
+  ));
+  const activePackages = productionPackages.filter(
+    (pkg) => !inactiveIntegrationPackages.includes(pkg),
+  );
+  const actualByName = new Map(activePackages.map((pkg) => [pkg.name, pkg]));
   const violations = [];
 
   const developmentPackages = packages.filter(
@@ -120,11 +127,11 @@ export function validateCurrentImplementationInventory(policy, cargoMetadata) {
   const unexpected = [...actualByName.keys()].filter((name) => !expectedByName.has(name));
   const missing = [...expectedByName.keys()].filter((name) => !actualByName.has(name));
   if (unexpected.length > 0 || missing.length > 0
-    || actualByName.size !== productionPackages.length) {
+    || actualByName.size !== activePackages.length) {
     violations.push(violation(
       'implementation_inventory',
       'cargo:workspace',
-      `production packages must exactly match ${policy.implementation.currentSlice}; missing=${missing.join(',') || '-'} unexpected=${unexpected.join(',') || '-'}`,
+      `active production packages must exactly match ${policy.implementation.currentSlice}; missing=${missing.join(',') || '-'} unexpected=${unexpected.join(',') || '-'}`,
     ));
   }
 
@@ -317,7 +324,7 @@ export function validateCurrentImplementationSourceCoverage(
   );
   const productionRoots = list(packageRoots).filter(({ name, role, root }) => (
     role !== policy?.owners?.test
-    && expectedNames.has(name)
+    && (expectedNames.has(name) || role === 'integration')
     && typeof root === 'string'
     && root !== ''
   ));
@@ -328,6 +335,6 @@ export function validateCurrentImplementationSourceCoverage(
     .map(({ path }) => violation(
       'implementation_source_coverage',
       path,
-      'every production source file must belong to an authorized current-slice Cargo package root',
+      'every production source file must belong to an authorized current-slice or registered integration Cargo package root',
     ));
 }
