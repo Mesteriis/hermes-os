@@ -92,6 +92,27 @@ enum GmailHistorySyncError {
     Runtime(MailBootstrapError),
 }
 
+struct ImapInboxSyncRequestV1<'a> {
+    connection_id: &'a str,
+    operation_id: &'a str,
+    host: &'a str,
+    port: u16,
+    username: &'a str,
+    window: u32,
+    windows: u32,
+}
+
+struct GmailHistorySyncRequestV1<'a> {
+    connection_id: &'a str,
+    token: &'a str,
+    client: &'a GmailApiClientV1,
+    start_history_id: &'a str,
+    page_token: Option<String>,
+    windows: u32,
+    observed_at_unix_seconds: i64,
+    observed_at_nanos: i32,
+}
+
 #[derive(Debug)]
 pub enum MailBootstrapError {
     Admission,
@@ -529,15 +550,15 @@ impl MailAdmittedRuntime {
         let account = self.account.clone();
         match account.inbound {
             MailInboundTransportV1::Imap(configuration) => {
-                self.sync_inbox(
-                    &account.connection_id,
+                self.sync_inbox(ImapInboxSyncRequestV1 {
+                    connection_id: &account.connection_id,
                     operation_id,
-                    &configuration.host,
-                    configuration.port,
-                    &configuration.username,
-                    account.sync_window,
-                    account.sync_windows,
-                )
+                    host: &configuration.host,
+                    port: configuration.port,
+                    username: &configuration.username,
+                    window: account.sync_window,
+                    windows: account.sync_windows,
+                })
                 .await
             }
             MailInboundTransportV1::Gmail(configuration) => {
@@ -555,14 +576,17 @@ impl MailAdmittedRuntime {
 
     async fn sync_inbox(
         &mut self,
-        connection_id: &str,
-        operation_id: &str,
-        host: &str,
-        port: u16,
-        username: &str,
-        window: u32,
-        windows: u32,
+        request: ImapInboxSyncRequestV1<'_>,
     ) -> Result<usize, MailBootstrapError> {
+        let ImapInboxSyncRequestV1 {
+            connection_id,
+            operation_id,
+            host,
+            port,
+            username,
+            window,
+            windows,
+        } = request;
         if connection_id.trim().is_empty()
             || operation_id.trim().is_empty()
             || username.trim().is_empty()
@@ -707,16 +731,16 @@ impl MailAdmittedRuntime {
             .map_err(|_| MailBootstrapError::Persistence)?
         {
             match self
-                .sync_gmail_history_pages(
+                .sync_gmail_history_pages(GmailHistorySyncRequestV1 {
                     connection_id,
                     token,
-                    &client,
-                    &start_history_id,
+                    client: &client,
+                    start_history_id: &start_history_id,
                     page_token,
-                    plan.windows,
+                    windows: plan.windows,
                     observed_at_unix_seconds,
                     observed_at_nanos,
-                )
+                })
                 .await
             {
                 Ok(observed_messages) => return Ok(observed_messages),
@@ -787,15 +811,18 @@ impl MailAdmittedRuntime {
 
     async fn sync_gmail_history_pages(
         &mut self,
-        connection_id: &str,
-        token: &str,
-        client: &GmailApiClientV1,
-        start_history_id: &str,
-        mut page_token: Option<String>,
-        windows: u32,
-        observed_at_unix_seconds: i64,
-        observed_at_nanos: i32,
+        request: GmailHistorySyncRequestV1<'_>,
     ) -> Result<usize, GmailHistorySyncError> {
+        let GmailHistorySyncRequestV1 {
+            connection_id,
+            token,
+            client,
+            start_history_id,
+            mut page_token,
+            windows,
+            observed_at_unix_seconds,
+            observed_at_nanos,
+        } = request;
         let mut observed_messages = 0_usize;
         for _ in 0..windows {
             let page = match client
