@@ -62,6 +62,7 @@ policy через ссылки из новых документов.
 - [ADR-0251: Opening client_gateway_v1 for owner contracts](ADR-0251-client-gateway-v1-opening-for-owner-contracts.md)
 - [ADR-0252: first_owner_v1 Communications admission](ADR-0252-first-owner-v1-communications-admission.md)
 - [ADR-0253: Communications legacy surface disposition](ADR-0253-communications-legacy-surface-disposition-and-clean-room-completion.md)
+- [ADR-0254: Communications derived search index](ADR-0254-communications-derived-search-index-and-private-content-boundary.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
