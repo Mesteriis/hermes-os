@@ -20,11 +20,20 @@ use hermes_communications_runtime::admission::{
     communication_evidence_recorded_contract_reference_v1,
 };
 use hermes_communications_runtime::query_client_port::encode_module_query_request_v1;
-use hermes_kernel_control_store::PlatformStorageBindingStateV1;
-use hermes_runtime_protocol::v1::ModuleClientResponseV1;
+use hermes_kernel_control_store::{ModuleBlobQuotaRequestV1, PlatformStorageBindingStateV1};
+use hermes_runtime_protocol::v1::{
+    BlobDataOperationV1, ManagedRuntimeBlobSessionRequestV1, ModuleClientResponseV1,
+};
+use hermes_blob_client::BlobDataClient;
+use crate::runtime::lifecycle::control::{
+    ManagedRuntimeBlobSessionHandler, ManagedRuntimeExpectation,
+};
 
 pub(super) const COMMUNICATIONS_REGISTRATION: &str = "communications-runtime";
 const COMMUNICATIONS_RUNTIME_INSTANCE_ID: &str = "02020202020202020202020202020202";
+const FIXTURE_SOURCE_REGISTRATION: &str = "fixture-source-integration";
+const FIXTURE_SOURCE_CAPABILITY_ID: &str = "fixture-source.blob.v1";
+const FIXTURE_SOURCE_RUNTIME_INSTANCE_ID: &str = "03030303030303030303030303030303";
 
 pub(super) fn configured_communications_store(root: &Path, kernel: &Path) -> SqliteControlStore {
     let store = configured_store(root, kernel);
@@ -34,6 +43,7 @@ pub(super) fn configured_communications_store(root: &Path, kernel: &Path) -> Sql
     let descriptor = communications_module_descriptor_v1("managed-communications-live").encode_to_vec();
     let grant_epoch = record_communications_registration(&store, &descriptor);
     record_communications_runtime_fixture(&store, &schema, &descriptor, grant_epoch);
+    record_fixture_source_integration(&store);
     store
 }
 
@@ -305,11 +315,56 @@ pub(super) fn assert_communications_ingress_delivery(
     }
 }
 
-pub(super) fn assert_communications_rejected_body_projection(
-    store: &SqliteControlStore,
+pub(super) fn assert_communications_transferred_body_projection(
+    store: &Arc<SqliteControlStore>,
     supervisor: &ManagedRuntimeSupervisor,
+    kernel_data: &Path,
 ) {
-    const OPAQUE_BLOB_REFERENCE: &str = "blob://owner-private/admitted-body-1";
+    const OPAQUE_BLOB_REFERENCE: &str = "blob://fixture-source/admitted-body-1";
+    let plaintext = b"fixture source body for custody transfer";
+    let plaintext_sha256: [u8; 32] = Sha256::digest(plaintext).into();
+    let reference_id = [8; 16];
+    let channel_binding = vec![6; 32];
+    let delivery = BlobSessionHandlerV1::new(
+        Arc::clone(store),
+        supervisor.relay_port(),
+        kernel_data.to_path_buf(),
+    )
+    .issue_blob_session(
+        &ManagedRuntimeExpectation::new(
+            FIXTURE_SOURCE_REGISTRATION,
+            FIXTURE_SOURCE_RUNTIME_INSTANCE_ID,
+            "integration.fixture-source",
+            1,
+            1,
+            [3; 32],
+            None,
+        ),
+        ManagedRuntimeBlobSessionRequestV1 {
+            request_id: vec![4; 16],
+            capability_id: FIXTURE_SOURCE_CAPABILITY_ID.to_owned(),
+            operation: BlobDataOperationV1::BlobDataOperationWriteV1 as u32,
+            channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
+            reference_id: reference_id.to_vec(),
+            declared_size: u64::try_from(plaintext.len()).expect("fixture body size"),
+            backup_class: 1,
+            ttl_seconds: 30,
+            receipt_sha256: plaintext_sha256.to_vec(),
+            custody_source_proof: Vec::new(),
+            evidence_id: Vec::new(),
+            evidence_envelope_sha256: Vec::new(),
+        },
+    )
+    .expect("issue source integration Blob write session");
+    let source_proof = delivery.custody_transfer_source_proof;
+    BlobDataClient::new(delivery.data_socket_path)
+        .expect("open source Blob data client")
+        .write(
+            delivery.grant.expect("source Blob write grant"),
+            channel_binding,
+            plaintext.to_vec(),
+        )
+        .expect("write source integration Blob content");
     let draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
         "managed-admitted-body-observation-1",
         hermes_communications_ingress::SourceEnvelope {
@@ -334,10 +389,10 @@ pub(super) fn assert_communications_rejected_body_projection(
         draft,
         hermes_communications_ingress::BodyBlobReceiptV1 {
             blob_ref: OPAQUE_BLOB_REFERENCE.to_owned(),
-            reference_id: [8; 16],
-            declared_bytes: 32,
-            sha256: [9; 32],
-            custody_transfer_source_proof: vec![7; 96],
+            reference_id,
+            declared_bytes: u64::try_from(plaintext.len()).expect("fixture body size"),
+            sha256: plaintext_sha256,
+            custody_transfer_source_proof: source_proof,
         },
     )
     .expect("attach admitted opaque Blob receipt");
@@ -436,7 +491,7 @@ pub(super) fn assert_communications_rejected_body_projection(
         let Some(QueryResult::ListConversationMessages(messages)) = messages.result else {
             panic!("Communications messages query result");
         };
-        if messages.messages.iter().any(|message| message.body_state == 3) {
+        if messages.messages.iter().any(|message| message.body_state == 4) {
             let public_payload = CommunicationsQueryResponseV1 {
                 result: Some(QueryResult::ListConversationMessages(messages)),
                 error_code: String::new(),
@@ -450,7 +505,7 @@ pub(super) fn assert_communications_rejected_body_projection(
             );
             return;
         }
-        assert!(std::time::Instant::now() < deadline, "rejected body message was not projected");
+        assert!(std::time::Instant::now() < deadline, "transferred body message was not projected");
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
 }
@@ -921,6 +976,40 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         .approve_module_registration(COMMUNICATIONS_REGISTRATION, &capabilities)
         .expect("approve Communications capabilities")
         .grant_epoch()
+}
+
+fn record_fixture_source_integration(store: &SqliteControlStore) {
+    let registration = ModuleRegistration::new(
+        FIXTURE_SOURCE_REGISTRATION,
+        "integration.fixture-source",
+        COMMUNICATIONS_OWNER_ID,
+        Sha256::digest(b"fixture-source-integration").into(),
+        ModuleRegistrationState::Pending,
+        1,
+    );
+    let capabilities = [FIXTURE_SOURCE_CAPABILITY_ID.to_owned()];
+    let blob = ModuleBlobQuotaRequestV1::new(
+        FIXTURE_SOURCE_REGISTRATION,
+        FIXTURE_SOURCE_CAPABILITY_ID,
+        COMMUNICATIONS_OWNER_ID,
+        COMMUNICATIONS_BLOB_QUOTA_BYTES,
+    );
+    store
+        .create_pending_registration_with_requests(
+            &registration,
+            &capabilities,
+            &[],
+            &[],
+            std::slice::from_ref(&blob),
+        )
+        .expect("record fixture source integration registration");
+    assert_eq!(
+        store
+            .approve_module_registration(FIXTURE_SOURCE_REGISTRATION, &capabilities)
+            .expect("approve fixture source integration capability")
+            .grant_epoch(),
+        1,
+    );
 }
 
 fn record_communications_runtime_fixture(
