@@ -12,8 +12,8 @@ use crate::v1::{
 pub const MAX_DESCRIPTOR_BYTES: usize = 256 * 1024;
 pub const MAX_CAPABILITIES: usize = 128;
 pub const MAX_REFERENCES_PER_CAPABILITY: usize = 128;
-pub const MAX_VAULT_ACTIONS: usize = 6;
-pub const MAX_VAULT_SECRET_CLASSES: usize = 5;
+pub const MAX_VAULT_ACTIONS: usize = 7;
+pub const MAX_VAULT_SECRET_CLASSES: usize = 6;
 pub const MAX_VAULT_LEASE_TTL_SECONDS: u32 = 3_600;
 pub const MAX_REQUEST_TIMEOUT_MILLIS: u32 = 60_000;
 pub const MAX_REQUEST_CONNECTION_BUDGET: u32 = 1_024;
@@ -252,9 +252,20 @@ fn valid_vault_purpose_request(purpose: &crate::v1::VaultPurposeRequestV1) -> bo
                 .ok()
                 .is_some_and(|value| value != VaultActionV1::Unspecified)
         })
-        && VaultTargetScopeV1::try_from(purpose.target_scope)
-            .ok()
-            .is_some_and(|scope| scope == VaultTargetScopeV1::ConfigurationInstance)
+        && valid_vault_target_scope(purpose)
+}
+
+fn valid_vault_target_scope(purpose: &crate::v1::VaultPurposeRequestV1) -> bool {
+    match VaultTargetScopeV1::try_from(purpose.target_scope).ok() {
+        Some(VaultTargetScopeV1::ConfigurationInstance) => purpose.key_schema_revision == 0,
+        Some(VaultTargetScopeV1::OwnerDerivedProjectionKey) => {
+            purpose.key_schema_revision != 0
+                && purpose.allowed_secret_classes
+                    == [VaultSecretClassV1::OwnerDerivedKey as i32]
+                && purpose.actions == [VaultActionV1::IssueOwnerDerivedKey as i32]
+        }
+        _ => false,
+    }
 }
 
 fn valid_ordered_enum_set(values: &[i32], maximum: usize, valid: impl Fn(i32) -> bool) -> bool {
@@ -451,4 +462,35 @@ fn value_matches_setting_type(value: &setting_value_v1::Value, value_type: i32) 
             Some(SettingValueTypeV1::ResourceReference)
         )
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::valid_vault_purpose_request;
+    use crate::v1::{VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1, VaultTargetScopeV1};
+
+    fn owner_derived_key_purpose() -> VaultPurposeRequestV1 {
+        VaultPurposeRequestV1 {
+            purpose_id: "communications.search.index".to_owned(),
+            requested_lease_ttl_seconds: 60,
+            allowed_secret_classes: vec![VaultSecretClassV1::OwnerDerivedKey as i32],
+            actions: vec![VaultActionV1::IssueOwnerDerivedKey as i32],
+            target_scope: VaultTargetScopeV1::OwnerDerivedProjectionKey as i32,
+            key_schema_revision: 1,
+        }
+    }
+
+    #[test]
+    fn accepts_only_exact_owner_derived_key_purpose_shape() {
+        assert!(valid_vault_purpose_request(&owner_derived_key_purpose()));
+        let mut missing_revision = owner_derived_key_purpose();
+        missing_revision.key_schema_revision = 0;
+        assert!(!valid_vault_purpose_request(&missing_revision));
+        let mut mixed_class = owner_derived_key_purpose();
+        mixed_class.allowed_secret_classes.push(VaultSecretClassV1::PlatformCredential as i32);
+        assert!(!valid_vault_purpose_request(&mixed_class));
+        let mut wrong_action = owner_derived_key_purpose();
+        wrong_action.actions = vec![VaultActionV1::Resolve as i32];
+        assert!(!valid_vault_purpose_request(&wrong_action));
+    }
 }

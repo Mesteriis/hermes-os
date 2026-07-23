@@ -64,6 +64,21 @@ message ManagedRuntimeProviderCredentialDeliveryV1 {
   bytes ciphertext = 2;
   bytes tag = 3;
 }
+// Requests an exact descriptor-declared owner-derived key lease. The request
+// carries no configuration instance, action, secret class or key material:
+// Kernel derives all of those from the approved owner capability.
+message ManagedRuntimeOwnerDerivedKeyRequestV1 {
+  bytes request_id = 1;
+  string purpose_id = 2;
+  uint32 key_schema_revision = 3;
+  uint32 ttl_seconds = 4;
+  bytes recipient_public_key_x25519 = 5;
+}
+message ManagedRuntimeOwnerDerivedKeyDeliveryV1 {
+  bytes encapped_key = 1;
+  bytes ciphertext = 2;
+  bytes tag = 3;
+}
 // Request for exactly one Blob data session. The runtime supplies a fresh
 // channel-binding digest; content never crosses this control channel.
 message ManagedRuntimeBlobSessionRequestV1 {
@@ -88,6 +103,7 @@ message ManagedRuntimeControlRequestV1 {
     ManagedRuntimeProviderCredentialRequestV1 issue_provider_credential = 4;
     ManagedRuntimeVaultRouteRequestV1 route_vault_ciphertext = 5;
     ManagedRuntimeBlobSessionRequestV1 issue_blob_session = 6;
+    ManagedRuntimeOwnerDerivedKeyRequestV1 issue_owner_derived_key = 7;
   }
 }
 message ManagedRuntimeControlResponseV1 {
@@ -97,6 +113,7 @@ message ManagedRuntimeControlResponseV1 {
     ManagedRuntimeProviderCredentialDeliveryV1 provider_credential_delivery = 3;
     ManagedRuntimeVaultRouteResponseV1 vault_route = 4;
     ManagedRuntimeBlobSessionDeliveryV1 blob_session_delivery = 5;
+    ManagedRuntimeOwnerDerivedKeyDeliveryV1 owner_derived_key_delivery = 6;
   }
   string error_code = 15;
 }

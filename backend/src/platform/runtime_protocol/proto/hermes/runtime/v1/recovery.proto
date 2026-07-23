@@ -46,10 +46,10 @@ enum DurableEnvelopeKindV1 { DURABLE_ENVELOPE_KIND_V1_UNSPECIFIED = 0; DURABLE_E
 enum EventRouteDirectionV1 { EVENT_ROUTE_DIRECTION_V1_UNSPECIFIED = 0; EVENT_ROUTE_DIRECTION_V1_PUBLISH = 1; EVENT_ROUTE_DIRECTION_V1_CONSUME = 2; }
 enum EventSubscriptionRequirementV1 { EVENT_SUBSCRIPTION_REQUIREMENT_V1_UNSPECIFIED = 0; EVENT_SUBSCRIPTION_REQUIREMENT_V1_REQUIRED = 1; EVENT_SUBSCRIPTION_REQUIREMENT_V1_OPTIONAL = 2; }
 message EventRouteRequestV1 { DurableEnvelopeKindV1 envelope_kind = 1; ContractReferenceV1 contract = 2; EventRouteDirectionV1 direction = 3; uint32 max_in_flight = 4; EventSubscriptionRequirementV1 subscription_requirement = 5; uint32 max_deliver = 6; uint32 ack_wait_millis = 7; }
-enum VaultSecretClassV1 { VAULT_SECRET_CLASS_V1_UNSPECIFIED = 0; VAULT_SECRET_CLASS_V1_PROVIDER_CREDENTIAL = 1; VAULT_SECRET_CLASS_V1_OAUTH_REFRESH_CREDENTIAL = 2; VAULT_SECRET_CLASS_V1_SESSION_CREDENTIAL_BLOB = 3; VAULT_SECRET_CLASS_V1_PLATFORM_CREDENTIAL = 4; VAULT_SECRET_CLASS_V1_SESSION_STORE_KEY = 5; }
-enum VaultActionV1 { VAULT_ACTION_V1_UNSPECIFIED = 0; VAULT_ACTION_V1_RESOLVE = 1; VAULT_ACTION_V1_CREATE = 2; VAULT_ACTION_V1_REPLACE_CAS = 3; VAULT_ACTION_V1_RETIRE = 4; VAULT_ACTION_V1_DELETE = 5; VAULT_ACTION_V1_ISSUE_SESSION_STORE_KEY = 6; }
-enum VaultTargetScopeV1 { VAULT_TARGET_SCOPE_V1_UNSPECIFIED = 0; VAULT_TARGET_SCOPE_V1_CONFIGURATION_INSTANCE = 1; }
-message VaultPurposeRequestV1 { string purpose_id = 1; uint32 requested_lease_ttl_seconds = 2; repeated VaultSecretClassV1 allowed_secret_classes = 3; repeated VaultActionV1 actions = 4; VaultTargetScopeV1 target_scope = 5; }
+enum VaultSecretClassV1 { VAULT_SECRET_CLASS_V1_UNSPECIFIED = 0; VAULT_SECRET_CLASS_V1_PROVIDER_CREDENTIAL = 1; VAULT_SECRET_CLASS_V1_OAUTH_REFRESH_CREDENTIAL = 2; VAULT_SECRET_CLASS_V1_SESSION_CREDENTIAL_BLOB = 3; VAULT_SECRET_CLASS_V1_PLATFORM_CREDENTIAL = 4; VAULT_SECRET_CLASS_V1_SESSION_STORE_KEY = 5; VAULT_SECRET_CLASS_V1_OWNER_DERIVED_KEY = 6; }
+enum VaultActionV1 { VAULT_ACTION_V1_UNSPECIFIED = 0; VAULT_ACTION_V1_RESOLVE = 1; VAULT_ACTION_V1_CREATE = 2; VAULT_ACTION_V1_REPLACE_CAS = 3; VAULT_ACTION_V1_RETIRE = 4; VAULT_ACTION_V1_DELETE = 5; VAULT_ACTION_V1_ISSUE_SESSION_STORE_KEY = 6; VAULT_ACTION_V1_ISSUE_OWNER_DERIVED_KEY = 7; }
+enum VaultTargetScopeV1 { VAULT_TARGET_SCOPE_V1_UNSPECIFIED = 0; VAULT_TARGET_SCOPE_V1_CONFIGURATION_INSTANCE = 1; VAULT_TARGET_SCOPE_V1_OWNER_DERIVED_PROJECTION_KEY = 2; }
+message VaultPurposeRequestV1 { string purpose_id = 1; uint32 requested_lease_ttl_seconds = 2; repeated VaultSecretClassV1 allowed_secret_classes = 3; repeated VaultActionV1 actions = 4; VaultTargetScopeV1 target_scope = 5; uint32 key_schema_revision = 6; }
 message BlobQuotaRequestV1 { uint64 max_bytes = 1; }
 message ClockTimerRequestV1 { bool requires_wall_clock = 1; }
 message SchedulerJobRequestV1 { ContractReferenceV1 job_kind = 1; }
