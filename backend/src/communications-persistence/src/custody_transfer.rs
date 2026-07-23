@@ -143,16 +143,43 @@ impl CommunicationsDurablePersistence {
         claimed: &ClaimedCommunicationsBodyCustodyTransferV1,
         completed_at_unix_seconds: i64,
     ) -> Result<bool, CommunicationsBodyCustodyTransferErrorV1> {
+        let mut transaction = self.pool.begin().await
+            .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
         let result = sqlx::query(
             "UPDATE hermes_data.communications_body_custody_transfers SET state = 3, completed_at_unix_seconds = $3, claimed_by = NULL, lease_expires_at_unix_seconds = NULL WHERE evidence_id = $1 AND state = 1 AND claimed_by = $2",
         )
         .bind(claimed.evidence_id.bytes().as_slice())
         .bind(&claimed.worker_id)
         .bind(completed_at_unix_seconds)
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await
         .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
-        Ok(result.rows_affected() == 1)
+        if result.rows_affected() != 1 {
+            return Ok(false);
+        }
+        let summary = sqlx::query(
+            "UPDATE hermes_data.communications_evidence_summaries SET body_state = 3, body_admission_failure = 4 WHERE observation_id = $1 AND body_state = 2",
+        )
+        .bind(claimed.evidence_id.bytes().as_slice())
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
+        if summary.rows_affected() != 1 {
+            return Err(CommunicationsBodyCustodyTransferErrorV1::ClaimLost);
+        }
+        let message = sqlx::query(
+            "UPDATE hermes_data.communications_messages SET body_state = 3, canonical_body_state = 3 WHERE last_evidence_id = $1 AND canonical_body_state = 2",
+        )
+        .bind(claimed.evidence_id.bytes().as_slice())
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
+        if message.rows_affected() != 1 {
+            return Err(CommunicationsBodyCustodyTransferErrorV1::ClaimLost);
+        }
+        transaction.commit().await
+            .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
+        Ok(true)
     }
 }
 
