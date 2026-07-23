@@ -10,7 +10,7 @@ use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
     ManagedRuntimeProviderCredentialHandler, ManagedRuntimeBlobSessionHandler, ManagedRuntimeRelayRequest,
-    ManagedRuntimeVaultRouteHandler,
+    ManagedRuntimeOwnerDerivedKeyHandler, ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
 use crate::runtime::managed::supervisor as managed_child_supervisor;
@@ -37,6 +37,7 @@ pub(super) struct ActiveWorkerInput {
     pub(super) event_credential_handler: Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>,
     pub(super) provider_credential_handler:
         Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>,
+    pub(super) owner_derived_key_handler: Option<Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>>,
     pub(super) blob_session_handler: Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>,
 }
 
@@ -53,6 +54,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
         vault_route_handler,
         event_credential_handler,
         provider_credential_handler,
+        owner_derived_key_handler,
         blob_session_handler,
     } = input;
     let shutdown_requested = Arc::clone(&inner.shutdown_requested);
@@ -76,6 +78,7 @@ pub(super) fn new_active_worker(input: ActiveWorkerInput) -> ActiveWorker {
                     vault_route_handler: vault_route_handler.as_deref(),
                     event_credential_handler: event_credential_handler.as_deref(),
                     provider_credential_handler: provider_credential_handler.as_deref(),
+                    owner_derived_key_handler: owner_derived_key_handler.as_deref(),
                     blob_session_handler: blob_session_handler.as_deref(),
                     ready_sender: &ready_sender,
                 },

@@ -10,7 +10,7 @@ use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
     ManagedRuntimeProviderCredentialHandler, ManagedRuntimeBlobSessionHandler, ManagedRuntimeRelayRequest,
-    ManagedRuntimeVaultRouteHandler,
+    ManagedRuntimeOwnerDerivedKeyHandler, ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
 
@@ -26,6 +26,7 @@ type ConfiguredRequestHandlers = (
     Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>,
     Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>,
     Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>,
+    Option<Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>>,
     Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>,
 );
 
@@ -49,6 +50,7 @@ struct Inner {
     failures: Mutex<HashMap<String, String>>,
     event_credential_handler: Mutex<Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>>,
     provider_credential_handler: Mutex<Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>>,
+    owner_derived_key_handler: Mutex<Option<Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>>>,
     blob_session_handler: Mutex<Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>>,
     vault_route_handler: Mutex<Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>>,
 }
@@ -63,6 +65,7 @@ impl ManagedRuntimeSupervisor {
                 failures: Mutex::new(HashMap::new()),
                 event_credential_handler: Mutex::new(None),
                 provider_credential_handler: Mutex::new(None),
+                owner_derived_key_handler: Mutex::new(None),
                 blob_session_handler: Mutex::new(None),
                 vault_route_handler: Mutex::new(None),
             }),
@@ -115,6 +118,17 @@ impl ManagedRuntimeSupervisor {
             &self.inner.provider_credential_handler,
             handler,
             "managed runtime provider credential handler",
+        )
+    }
+
+    pub fn configure_owner_derived_key_handler(
+        &self,
+        handler: Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>,
+    ) -> Result<(), String> {
+        self.configure_before_launch(
+            &self.inner.owner_derived_key_handler,
+            handler,
+            "managed runtime owner-derived key handler",
         )
     }
 
@@ -244,7 +258,7 @@ impl ManagedRuntimeSupervisor {
             remove_staged_launch(staged_executable, contracts, cleanup);
             return Err(error);
         }
-        let (vault_route_handler, event_credential_handler, provider_credential_handler, blob_session_handler) =
+        let (vault_route_handler, event_credential_handler, provider_credential_handler, owner_derived_key_handler, blob_session_handler) =
             match self.configured_request_handlers() {
                 Ok(handlers) => handlers,
                 Err(error) => {
@@ -265,6 +279,7 @@ impl ManagedRuntimeSupervisor {
             vault_route_handler,
             event_credential_handler,
             provider_credential_handler,
+            owner_derived_key_handler,
             blob_session_handler,
         });
         workers.insert(registration_id, worker);
@@ -276,6 +291,7 @@ impl ManagedRuntimeSupervisor {
             self.vault_route_handler()?,
             self.event_credential_handler()?,
             self.provider_credential_handler()?,
+            self.owner_derived_key_handler()?,
             self.blob_session_handler()?,
         ))
     }
@@ -305,6 +321,16 @@ impl ManagedRuntimeSupervisor {
     ) -> Result<Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>, String> {
         self.inner
             .provider_credential_handler
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
+            .map(|handler| handler.clone())
+    }
+
+    fn owner_derived_key_handler(
+        &self,
+    ) -> Result<Option<Arc<dyn ManagedRuntimeOwnerDerivedKeyHandler>>, String> {
+        self.inner
+            .owner_derived_key_handler
             .lock()
             .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
             .map(|handler| handler.clone())

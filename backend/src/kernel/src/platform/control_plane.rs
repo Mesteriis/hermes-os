@@ -17,6 +17,7 @@ use crate::platform::gateway::{self, BrowserGatewayConfigurationV1, BrowserPairi
 use crate::platform::scheduler::lifecycle as scheduler_lifecycle;
 use crate::platform::vault::managed_route::KernelManagedVaultRouteHandler;
 use crate::platform::vault::provider_credential::ProviderCredentialHandlerV1;
+use crate::platform::vault::owner_derived_key::OwnerDerivedKeyHandlerV1;
 use crate::platform::blob::session::BlobSessionHandlerV1;
 use crate::recovery;
 use crate::runtime::external::ipc as external_session_ipc;
@@ -83,6 +84,13 @@ fn configure_runtime(
     managed_runtime_supervisor.configure_vault_route_handler(vault_route_handler.clone())?;
     managed_runtime_supervisor.configure_provider_credential_handler(Arc::new(
         ProviderCredentialHandlerV1::new(
+            Arc::clone(store),
+            managed_runtime_supervisor.relay_port(),
+            Arc::clone(&vault_route_handler),
+        ),
+    ))?;
+    managed_runtime_supervisor.configure_owner_derived_key_handler(Arc::new(
+        OwnerDerivedKeyHandlerV1::new(
             Arc::clone(store),
             managed_runtime_supervisor.relay_port(),
             vault_route_handler,

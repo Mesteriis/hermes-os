@@ -17,6 +17,7 @@ use hermes_runtime_protocol::v1::{
     ManagedRuntimeEventCredentialRequestV1, ManagedRuntimeProviderCredentialDeliveryV1,
     ManagedRuntimeProviderCredentialRequestV1, ManagedRuntimeBlobSessionDeliveryV1,
     ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeVaultRouteRequestV1,
+    ManagedRuntimeOwnerDerivedKeyDeliveryV1, ManagedRuntimeOwnerDerivedKeyRequestV1,
     VaultCiphertextResponseV1, VaultCiphertextRouteV1,
 };
 use hermes_runtime_protocol::validation::descriptor::{
@@ -54,6 +55,14 @@ pub trait ManagedRuntimeProviderCredentialHandler: Send + Sync {
         expectation: &ManagedRuntimeExpectation,
         request: ManagedRuntimeProviderCredentialRequestV1,
     ) -> Result<ManagedRuntimeProviderCredentialDeliveryV1, String>;
+}
+
+pub trait ManagedRuntimeOwnerDerivedKeyHandler: Send + Sync {
+    fn issue_owner_derived_key(
+        &self,
+        expectation: &ManagedRuntimeExpectation,
+        request: ManagedRuntimeOwnerDerivedKeyRequestV1,
+    ) -> Result<ManagedRuntimeOwnerDerivedKeyDeliveryV1, String>;
 }
 
 pub trait ManagedRuntimeBlobSessionHandler: Send + Sync {

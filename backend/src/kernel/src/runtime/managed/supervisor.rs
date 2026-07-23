@@ -4,7 +4,8 @@ use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::runtime::lifecycle::control::{
     self as managed_runtime_control, ManagedRuntimeEventCredentialHandler,
     ManagedRuntimeExpectation, ManagedRuntimeProviderCredentialHandler,
-    ManagedRuntimeBlobSessionHandler, ManagedRuntimeVaultRouteHandler,
+    ManagedRuntimeBlobSessionHandler, ManagedRuntimeOwnerDerivedKeyHandler,
+    ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::{
     self as bounded_managed_child_execution, ManagedChildExecutionPolicy,
@@ -41,6 +42,7 @@ pub struct ManagedChildRunInput<'a> {
     pub vault_route_handler: Option<&'a dyn ManagedRuntimeVaultRouteHandler>,
     pub event_credential_handler: Option<&'a dyn ManagedRuntimeEventCredentialHandler>,
     pub provider_credential_handler: Option<&'a dyn ManagedRuntimeProviderCredentialHandler>,
+    pub owner_derived_key_handler: Option<&'a dyn ManagedRuntimeOwnerDerivedKeyHandler>,
     pub blob_session_handler: Option<&'a dyn ManagedRuntimeBlobSessionHandler>,
     pub ready_sender: &'a SyncSender<Result<(), String>>,
 }
@@ -128,6 +130,7 @@ fn wait_until_shutdown_with_relay(
             input.vault_route_handler,
             input.event_credential_handler,
             input.provider_credential_handler,
+            input.owner_derived_key_handler,
             input.blob_session_handler,
         ) {
             Ok(true) => continue,
@@ -151,6 +154,7 @@ fn process_typed_requests(
     vault_route_handler: Option<&dyn ManagedRuntimeVaultRouteHandler>,
     event_credential_handler: Option<&dyn ManagedRuntimeEventCredentialHandler>,
     provider_credential_handler: Option<&dyn ManagedRuntimeProviderCredentialHandler>,
+    owner_derived_key_handler: Option<&dyn ManagedRuntimeOwnerDerivedKeyHandler>,
     blob_session_handler: Option<&dyn ManagedRuntimeBlobSessionHandler>,
 ) -> Result<bool, String> {
     if let Some(route) = managed_runtime_control::inbound::try_receive_vault_route(channel)? {
@@ -169,6 +173,10 @@ fn process_typed_requests(
         managed_runtime_control::inbound::try_receive_provider_credential(channel)?
     {
         dispatch_provider_credential(channel, expectation, provider_credential_handler, request)?;
+        return Ok(true);
+    }
+    if let Some(request) = managed_runtime_control::inbound::try_receive_owner_derived_key(channel)? {
+        dispatch_owner_derived_key(channel, expectation, owner_derived_key_handler, request)?;
         return Ok(true);
     }
     if let Some(request) = managed_runtime_control::inbound::try_receive_blob_session(channel)? {
@@ -200,6 +208,18 @@ fn dispatch_provider_credential(
         .ok_or_else(|| "managed runtime provider credential route is not available".to_owned())?
         .issue_provider_credential(expectation, request);
     managed_runtime_control::inbound::respond_provider_credential(channel, result)
+}
+
+fn dispatch_owner_derived_key(
+    channel: &mut std::os::unix::net::UnixStream,
+    expectation: &ManagedRuntimeExpectation,
+    handler: Option<&dyn ManagedRuntimeOwnerDerivedKeyHandler>,
+    request: hermes_runtime_protocol::v1::ManagedRuntimeOwnerDerivedKeyRequestV1,
+) -> Result<(), String> {
+    let result = handler
+        .ok_or_else(|| "managed runtime owner-derived key route is not available".to_owned())?
+        .issue_owner_derived_key(expectation, request);
+    managed_runtime_control::inbound::respond_owner_derived_key(channel, result)
 }
 
 fn dispatch_event_credential(

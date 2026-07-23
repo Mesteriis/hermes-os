@@ -8,6 +8,7 @@ use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeEventCredentialDeliveryV1, ManagedRuntimeEventCredentialRequestV1,
     ManagedRuntimeProviderCredentialDeliveryV1, ManagedRuntimeProviderCredentialRequestV1,
+    ManagedRuntimeOwnerDerivedKeyDeliveryV1, ManagedRuntimeOwnerDerivedKeyRequestV1,
     ManagedRuntimeBlobSessionDeliveryV1, ManagedRuntimeBlobSessionRequestV1,
     ManagedRuntimeReadyRequestV1, ManagedRuntimeVaultRouteRequestV1,
     ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1, VaultCiphertextRouteV1,
@@ -23,6 +24,7 @@ const READY_FIELD_TAG: u8 = 0x12;
 const EVENT_CREDENTIAL_FIELD_TAG: u8 = 0x1a;
 const PROVIDER_CREDENTIAL_FIELD_TAG: u8 = 0x22;
 const BLOB_SESSION_FIELD_TAG: u8 = 0x32;
+const OWNER_DERIVED_KEY_FIELD_TAG: u8 = 0x3a;
 
 pub(crate) fn try_receive_vault_route(
     channel: &mut UnixStream,
@@ -153,6 +155,44 @@ pub(crate) fn respond_provider_credential(
     write_frame(channel, &response.encode_to_vec())
 }
 
+pub(crate) fn try_receive_owner_derived_key(
+    channel: &mut UnixStream,
+) -> Result<Option<ManagedRuntimeOwnerDerivedKeyRequestV1>, String> {
+    let Some(frame) = peek_complete_frame(channel)? else {
+        return Ok(None);
+    };
+    if frame.first() != Some(&OWNER_DERIVED_KEY_FIELD_TAG) {
+        return Ok(None);
+    }
+    let request = ManagedRuntimeControlRequestV1::decode(frame.as_slice())
+        .map_err(|_| "managed runtime owner-derived key request is invalid".to_owned())?;
+    let Some(Operation::IssueOwnerDerivedKey(value)) = request.operation else {
+        return Err("managed runtime owner-derived key request is invalid".to_owned());
+    };
+    valid_owner_derived_key_request(&value)
+        .then_some(())
+        .ok_or_else(|| "managed runtime owner-derived key request is invalid".to_owned())?;
+    read_frame(channel)?;
+    Ok(Some(value))
+}
+
+pub(crate) fn respond_owner_derived_key(
+    channel: &mut UnixStream,
+    result: Result<ManagedRuntimeOwnerDerivedKeyDeliveryV1, String>,
+) -> Result<(), String> {
+    let response = match result {
+        Ok(delivery) => ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::OwnerDerivedKeyDelivery(delivery)),
+            error_code: String::new(),
+        },
+        Err(_) => ManagedRuntimeControlResponseV1 {
+            result: None,
+            error_code: "managed_owner_derived_key_denied".to_owned(),
+        },
+    };
+    write_frame(channel, &response.encode_to_vec())
+}
+
 pub(crate) fn try_receive_blob_session(
     channel: &mut UnixStream,
 ) -> Result<Option<ManagedRuntimeBlobSessionRequestV1>, String> {
@@ -273,6 +313,17 @@ fn valid_provider_credential_request(value: &ManagedRuntimeProviderCredentialReq
         && (1..=6).contains(&value.action)
         && value.recipient_public_key_x25519.len() == 32
         && valid_configuration_instance_id(&value.configuration_instance_id)
+}
+
+fn valid_owner_derived_key_request(value: &ManagedRuntimeOwnerDerivedKeyRequestV1) -> bool {
+    value.request_id.len() == 16
+        && value.request_id.iter().any(|byte| *byte != 0)
+        && !value.purpose_id.trim().is_empty()
+        && value.purpose_id.len() <= 128
+        && value.purpose_id.is_ascii()
+        && value.key_schema_revision != 0
+        && (1..=600).contains(&value.ttl_seconds)
+        && value.recipient_public_key_x25519.len() == 32
 }
 
 fn valid_configuration_instance_id(value: &str) -> bool {
