@@ -17,8 +17,10 @@ const CANONICAL_MESSAGE_BODY_STATE_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0006_communications_canonical_message_body_state.sql");
 const SEARCH_PROJECTION_TOMBSTONES_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0007_communications_search_projection_tombstones.sql");
+const BODY_CUSTODY_TRANSFERS_SCHEMA: &[u8] =
+    include_bytes!("../../migrations/0008_communications_body_custody_transfers.sql");
 
-pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 7;
+pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 8;
 
 /// Immutable Communications schema admitted and applied only by Storage Control.
 #[must_use]
@@ -70,6 +72,12 @@ pub fn communications_storage_bundle_v1() -> StorageBundleV1 {
                 migration_id: "communications_search_projection_tombstones".to_owned(),
                 forward_sql_utf8: SEARCH_PROJECTION_TOMBSTONES_SCHEMA.to_vec(),
                 sha256: Sha256::digest(SEARCH_PROJECTION_TOMBSTONES_SCHEMA).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: 8,
+                migration_id: "communications_body_custody_transfers".to_owned(),
+                forward_sql_utf8: BODY_CUSTODY_TRANSFERS_SCHEMA.to_vec(),
+                sha256: Sha256::digest(BODY_CUSTODY_TRANSFERS_SCHEMA).to_vec(),
             },
         ],
     }

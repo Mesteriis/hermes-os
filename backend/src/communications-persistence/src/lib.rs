@@ -2,6 +2,8 @@
 
 pub const PACKAGE: &str = "hermes-communications-persistence";
 
+use hermes_communications_api::CommunicationObservationIdV1;
+
 mod durable;
 mod search;
 mod search_job;
@@ -21,6 +23,19 @@ pub use schema::{
     communications_storage_bundle_v1,
 };
 
+/// Private Communications-owned work item for an admitted producer body. It
+/// never becomes a canonical Blob reference or public query field.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingCommunicationsBodyCustodyTransferV1 {
+    pub evidence_id: CommunicationObservationIdV1,
+    pub envelope_sha256: [u8; 32],
+    pub source_blob_ref: String,
+    pub source_reference_id: [u8; 16],
+    pub declared_bytes: u64,
+    pub plaintext_sha256: [u8; 32],
+    pub source_custody_proof: Vec<u8>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationsConsumeOutcomeV1 {
     Applied,
@@ -32,6 +47,7 @@ pub enum CommunicationsPersistenceError {
     DuplicateOperation,
     InboxHashConflict,
     InvalidDerivedIndexJob,
+    InvalidCustodyTransfer,
     MissingCanonicalMessage,
     StorageUnavailable,
     InvalidRow,

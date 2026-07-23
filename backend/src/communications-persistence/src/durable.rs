@@ -26,6 +26,7 @@ use crate::{
     CommunicationsConsumeOutcomeV1, CommunicationsDerivedIndexJobOperationV1,
     CommunicationsDerivedIndexFailureRecordV1, CommunicationsDerivedIndexFailureV1,
     CommunicationsDerivedIndexJobV1, CommunicationsPersistenceError,
+    PendingCommunicationsBodyCustodyTransferV1,
 };
 
 
@@ -91,7 +92,7 @@ impl CommunicationsDurablePersistence {
 
     pub async fn verify_storage_ready(&self) -> Result<(), CommunicationsPersistenceError> {
         sqlx::query(
-            "SELECT 1 FROM hermes_data.communications_event_inbox, hermes_data.communications_evidence_summaries, hermes_data.communications_domain_outbox, hermes_data.communications_conversations, hermes_data.communications_accounts, hermes_data.communications_messages, hermes_data.communications_observed_participants, hermes_data.communications_attachment_anchors, hermes_data.communications_message_references, hermes_data.communications_derived_index_projections, hermes_data.communications_derived_index_token_digests, hermes_data.communications_derived_index_tombstones, hermes_data.communications_derived_index_jobs, hermes_data.communications_derived_index_failures LIMIT 0",
+            "SELECT 1 FROM hermes_data.communications_event_inbox, hermes_data.communications_evidence_summaries, hermes_data.communications_domain_outbox, hermes_data.communications_conversations, hermes_data.communications_accounts, hermes_data.communications_messages, hermes_data.communications_observed_participants, hermes_data.communications_attachment_anchors, hermes_data.communications_message_references, hermes_data.communications_derived_index_projections, hermes_data.communications_derived_index_token_digests, hermes_data.communications_derived_index_tombstones, hermes_data.communications_derived_index_jobs, hermes_data.communications_derived_index_failures, hermes_data.communications_body_custody_transfers LIMIT 0",
         )
             .execute(&self.pool)
             .await
@@ -103,6 +104,7 @@ impl CommunicationsDurablePersistence {
         &self,
         record: &OutboxRecordV1,
         projection: CanonicalCommunicationProjectionV1,
+        pending_custody_transfer: Option<&PendingCommunicationsBodyCustodyTransferV1>,
         derived_index_job: Option<&CommunicationsDerivedIndexJobV1>,
         derived_index_failure: Option<&CommunicationsDerivedIndexFailureRecordV1>,
         canonical_outbox_record: &OutboxRecordV1,
@@ -171,6 +173,37 @@ impl CommunicationsDurablePersistence {
         .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         if inserted_summary.rows_affected() != 1 {
             return Err(CommunicationsPersistenceError::DuplicateOperation);
+        }
+        if let Some(transfer) = pending_custody_transfer {
+            if transfer.evidence_id != summary.evidence_id
+                || transfer.envelope_sha256.as_slice() != record.envelope_sha256()
+                || summary.body != CommunicationBodyStateV1::PendingBlob
+                || summary.body_blob.is_some()
+                || transfer.source_blob_ref.is_empty()
+                || transfer.source_blob_ref.len() > 512
+                || !transfer.source_blob_ref.is_ascii()
+                || transfer.source_reference_id.iter().all(|byte| *byte == 0)
+                || !(1..=64 * 1024 * 1024).contains(&transfer.declared_bytes)
+                || transfer.plaintext_sha256.iter().all(|byte| *byte == 0)
+                || !(1..=2_048).contains(&transfer.source_custody_proof.len())
+            {
+                return Err(CommunicationsPersistenceError::InvalidCustodyTransfer);
+            }
+            sqlx::query(
+                "INSERT INTO hermes_data.communications_body_custody_transfers (evidence_id, envelope_sha256, source_blob_ref, source_reference_id, declared_bytes, plaintext_sha256, source_custody_proof, state) VALUES ($1, $2, $3, $4, $5, $6, $7, 1) ON CONFLICT (evidence_id) DO NOTHING",
+            )
+            .bind(transfer.evidence_id.bytes().as_slice())
+            .bind(transfer.envelope_sha256.as_slice())
+            .bind(&transfer.source_blob_ref)
+            .bind(transfer.source_reference_id.as_slice())
+            .bind(i64::try_from(transfer.declared_bytes).map_err(|_| CommunicationsPersistenceError::InvalidCustodyTransfer)?)
+            .bind(transfer.plaintext_sha256.as_slice())
+            .bind(&transfer.source_custody_proof)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        } else if summary.body == CommunicationBodyStateV1::PendingBlob {
+            return Err(CommunicationsPersistenceError::InvalidCustodyTransfer);
         }
         if let Some(account) = &projection.account {
             sqlx::query(
