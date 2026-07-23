@@ -1681,7 +1681,12 @@ mod tests {
             account_id: "account".to_owned(),
             provider_chat_id: "100".to_owned(),
             media_kind: TelegramMediaKind::Document,
-            blob_ref: "blob:report".to_owned(),
+            blob: hermes_telegram_api::TelegramBlobIntentV1 {
+                blob_ref: "blob:report".to_owned(),
+                reference_id: vec![7; 32],
+                declared_size: 42,
+                backup_class: 1,
+            },
             caption: Some("report".to_owned()),
             filename: Some("report.pdf".to_owned()),
         });

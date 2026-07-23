@@ -3,13 +3,22 @@
 use hermes_kernel_control_store::{ModuleRegistryStore, RuntimeTrustStore};
 use hermes_kernel_control_store_sqlite::StoreError;
 use hermes_runtime_protocol::{
-    v1::{ManagedRuntimeClientDeliveryRequestV1, ManagedRuntimeClientDeliveryResponseV1, ModuleClientRequestV1},
-    validation::module_client::{validate_module_client_request_v1, validate_module_client_response_v1},
+    v1::{
+        ManagedRuntimeClientDeliveryRequestV1, ManagedRuntimeClientDeliveryResponseV1,
+        ModuleClientRequestV1,
+    },
+    validation::module_client::{
+        validate_module_client_request_v1, validate_module_client_response_v1,
+    },
 };
 use prost::Message;
 
 use crate::modules::capability::policy::permits_external_route;
-use crate::runtime::lifecycle::supervisor::ManagedRuntimeRelay;
+
+/// Delivers a capability request to the exact fenced managed runtime.
+pub trait ManagedRuntimeRelay: Send + Sync {
+    fn relay(&self, registration_id: &str, payload: Vec<u8>) -> Result<Vec<u8>, String>;
+}
 
 pub struct ExternalCapabilityRouteRequest<'a> {
     registration_id: &'a str,
@@ -175,7 +184,10 @@ where
     }
     let response = relay.relay(
         route.registration_id,
-        ManagedRuntimeClientDeliveryRequestV1 { request: Some(request.clone()) }.encode_to_vec(),
+        ManagedRuntimeClientDeliveryRequestV1 {
+            request: Some(request.clone()),
+        }
+        .encode_to_vec(),
     )?;
     let response = ManagedRuntimeClientDeliveryResponseV1::decode(response.as_slice())
         .map_err(|_| "managed client delivery response is invalid".to_owned())?

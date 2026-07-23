@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex, Weak};
 
 use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::distribution::staged_contracts::StagedRuntimeContracts;
+pub use crate::modules::capability::router::ManagedRuntimeRelay;
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeBlobSessionHandler, ManagedRuntimeEventCredentialHandler,
     ManagedRuntimeExpectation, ManagedRuntimeOwnerDerivedKeyHandler,
@@ -39,10 +40,6 @@ pub struct ManagedRuntimeSupervisor {
 #[derive(Clone)]
 pub struct ManagedRuntimeRelayPort {
     inner: Weak<Inner>,
-}
-
-pub trait ManagedRuntimeRelay: Send + Sync {
-    fn relay(&self, registration_id: &str, payload: Vec<u8>) -> Result<Vec<u8>, String>;
 }
 
 struct Inner {
