@@ -1,38 +1,26 @@
-//! Persistence placeholder for ADR-0239 communications domain.
+//! Owner-local idempotency seam for canonical Communications evidence.
 
 pub const PACKAGE: &str = "hermes-communications-persistence";
 
-use std::collections::HashSet;
+mod durable;
+mod schema;
+pub use durable::CommunicationsDurablePersistence;
+pub use schema::{
+    COMMUNICATIONS_SCHEMA_V1, COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1,
+    communications_storage_bundle_v1,
+};
 
-use hermes_communications_domain::CommunicationSummary;
-
-#[derive(Default)]
-pub struct CommunicationsPersistence {
-    ids: HashSet<String>,
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CommunicationsConsumeOutcomeV1 {
+    Applied,
+    Duplicate,
 }
 
-impl CommunicationsPersistence {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn has(&self, operation_id: &str) -> bool {
-        self.ids.contains(operation_id)
-    }
-
-    pub fn persist(
-        &mut self,
-        summary: &CommunicationSummary,
-    ) -> Result<(), CommunicationsPersistenceError> {
-        if self.ids.contains(&summary.operation_id) {
-            return Err(CommunicationsPersistenceError::DuplicateOperation);
-        }
-        self.ids.insert(summary.operation_id.clone());
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationsPersistenceError {
     DuplicateOperation,
+    InboxHashConflict,
+    MissingCanonicalMessage,
+    StorageUnavailable,
+    InvalidRow,
 }

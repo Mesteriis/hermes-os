@@ -115,6 +115,8 @@ fn respond_with_credential(mut relay: UnixStream, credential: RuntimeNatsJwtCred
                     encapped_key: delivery.encapped_key().to_vec(),
                     ciphertext: delivery.ciphertext().to_vec(),
                     tag: delivery.tag().to_vec(),
+                    consumer_bindings: Vec::new(),
+                    publish_subjects: Vec::new(),
                 },
             )),
             error_code: String::new(),

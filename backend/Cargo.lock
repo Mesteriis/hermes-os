@@ -1560,9 +1560,11 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 name = "hermes-blob-client"
 version = "0.1.0"
 dependencies = [
+ "getrandom 0.3.4",
  "hermes-blob-client-contract",
  "hermes-runtime-protocol",
  "prost 0.14.4",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -1639,24 +1641,43 @@ dependencies = [
 [[package]]
 name = "hermes-communications-api"
 version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
 
 [[package]]
 name = "hermes-communications-domain"
 version = "0.1.0"
 dependencies = [
  "hermes-communications-api",
- "hermes-communications-ingress",
+ "sha2 0.11.0",
 ]
 
 [[package]]
 name = "hermes-communications-ingress"
 version = "0.1.0"
+dependencies = [
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "prost-types 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
 
 [[package]]
 name = "hermes-communications-persistence"
 version = "0.1.0"
 dependencies = [
- "hermes-communications-domain",
+ "hermes-communications-api",
+ "hermes-events-protocol",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
 ]
 
 [[package]]
@@ -1667,6 +1688,16 @@ dependencies = [
  "hermes-communications-domain",
  "hermes-communications-ingress",
  "hermes-communications-persistence",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "prost-types 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
 ]
 
 [[package]]
@@ -1730,6 +1761,7 @@ dependencies = [
  "hermes-vault-protocol",
  "hpke",
  "nats-jwt",
+ "prost 0.14.4",
  "serde",
  "serde_json",
  "tokio",
@@ -1779,6 +1811,7 @@ dependencies = [
  "prost-build 0.14.4",
  "prost-types 0.14.4",
  "protoc-bin-vendored",
+ "sha2 0.11.0",
 ]
 
 [[package]]
@@ -1838,6 +1871,7 @@ dependencies = [
  "hermes-runtime-protocol",
  "hermes-secure-file",
  "hermes-storage-protocol",
+ "hermes-vault-protocol",
  "libc",
  "p256",
  "prost 0.14.4",
@@ -1922,6 +1956,11 @@ dependencies = [
 [[package]]
 name = "hermes-mail-api"
 version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+]
 
 [[package]]
 name = "hermes-mail-communications-slice-testkit"
@@ -1931,18 +1970,32 @@ dependencies = [
  "hermes-communications-domain",
  "hermes-communications-ingress",
  "hermes-communications-persistence",
+ "hermes-events-protocol",
  "hermes-mail-api",
  "hermes-mail-core",
  "hermes-mail-imap",
- "hermes-mail-persistence",
+ "prost 0.14.4",
 ]
 
 [[package]]
 name = "hermes-mail-core"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "hermes-communications-ingress",
  "hermes-mail-api",
+]
+
+[[package]]
+name = "hermes-mail-gmail"
+version = "0.1.0"
+dependencies = [
+ "async-native-tls",
+ "async-std",
+ "base64 0.22.1",
+ "futures-util",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1961,17 +2014,56 @@ dependencies = [
 name = "hermes-mail-persistence"
 version = "0.1.0"
 dependencies = [
- "hermes-mail-core",
+ "hermes-events-protocol",
+ "hermes-storage-protocol",
+ "sqlx",
 ]
 
 [[package]]
 name = "hermes-mail-runtime"
 version = "0.1.0"
 dependencies = [
+ "getrandom 0.4.3",
+ "hermes-blob-client",
+ "hermes-communications-ingress",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
  "hermes-mail-api",
  "hermes-mail-core",
+ "hermes-mail-gmail",
  "hermes-mail-imap",
  "hermes-mail-persistence",
+ "hermes-mail-smtp",
+ "hermes-managed-vault-client",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "hermes-vault-protocol",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
+name = "hermes-mail-smtp"
+version = "0.1.0"
+dependencies = [
+ "async-native-tls",
+ "async-std",
+ "hermes-mail-api",
+]
+
+[[package]]
+name = "hermes-managed-vault-client"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "hermes-runtime-protocol",
+ "hermes-vault-protocol",
+ "prost 0.14.4",
+ "zeroize",
 ]
 
 [[package]]
@@ -2184,6 +2276,7 @@ dependencies = [
  "hermes-runtime-protocol",
  "hermes-storage-protocol",
  "hermes-vault-protocol",
+ "prost 0.14.4",
  "zeroize",
 ]
 
@@ -2204,6 +2297,8 @@ dependencies = [
  "hermes-communications-ingress",
  "hermes-telegram-api",
  "hermes-vault-protocol",
+ "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -2211,6 +2306,7 @@ name = "hermes-telegram-persistence"
 version = "0.1.0"
 dependencies = [
  "hermes-communications-ingress",
+ "hermes-events-protocol",
  "hermes-storage-protocol",
  "hermes-telegram-api",
  "serde_json",
@@ -2224,6 +2320,10 @@ dependencies = [
  "getrandom 0.4.3",
  "hermes-blob-client",
  "hermes-blob-client-contract",
+ "hermes-communications-ingress",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-managed-vault-client",
  "hermes-runtime-protocol",
  "hermes-storage-protocol",
  "hermes-storage-vault",
@@ -2235,6 +2335,7 @@ dependencies = [
  "libc",
  "prost 0.14.4",
  "serde_json",
+ "sha2 0.10.9",
  "tokio",
  "zeroize",
 ]
@@ -2358,6 +2459,105 @@ dependencies = [
  "prost-build 0.14.4",
  "protoc-bin-vendored",
  "serde",
+]
+
+[[package]]
+name = "hermes-whatsapp-core"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-ingress",
+ "hermes-whatsapp-api",
+]
+
+[[package]]
+name = "hermes-whatsapp-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-events-protocol",
+ "hermes-storage-protocol",
+ "sqlx",
+]
+
+[[package]]
+name = "hermes-whatsapp-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-ingress",
+ "hermes-events-jetstream",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "hermes-vault-protocol",
+ "hermes-whatsapp-api",
+ "hermes-whatsapp-core",
+ "hermes-whatsapp-persistence",
+ "libc",
+ "prost 0.14.4",
+ "tokio",
+]
+
+[[package]]
+name = "hermes-zulip-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+]
+
+[[package]]
+name = "hermes-zulip-core"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-ingress",
+ "hermes-vault-protocol",
+ "hermes-zulip-api",
+]
+
+[[package]]
+name = "hermes-zulip-http"
+version = "0.1.0"
+dependencies = [
+ "async-native-tls",
+ "async-std",
+ "hermes-zulip-api",
+ "serde_json",
+ "zeroize",
+]
+
+[[package]]
+name = "hermes-zulip-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-events-protocol",
+ "hermes-storage-protocol",
+ "hermes-zulip-api",
+ "sqlx",
+]
+
+[[package]]
+name = "hermes-zulip-runtime"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "hermes-blob-client",
+ "hermes-blob-client-contract",
+ "hermes-communications-ingress",
+ "hermes-events-jetstream",
+ "hermes-managed-vault-client",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "hermes-vault-protocol",
+ "hermes-zulip-api",
+ "hermes-zulip-core",
+ "hermes-zulip-http",
+ "hermes-zulip-persistence",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
 ]
 
 [[package]]
@@ -3864,7 +4064,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5115,6 +5315,15 @@ name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
+dependencies = [
+ "windows-targets",
+]
+
+[[package]]
+name = "windows-sys"
+version = "0.59.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets",
 ]

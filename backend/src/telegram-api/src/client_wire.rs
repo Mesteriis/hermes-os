@@ -9,7 +9,7 @@ use crate::{
     TelegramChatStateProjection, TelegramClientResponse, TelegramCommandRecord,
     TelegramCredentialBinding, TelegramCredentialPurpose, TelegramDownloadFile,
     TelegramFileSnapshot, TelegramHistoryPage, TelegramHistorySyncMode, TelegramMediaKind,
-    TelegramMediaSessionRegistration, TelegramMessageMedia, TelegramMessageMutation,
+    TelegramBlobIntentV1, TelegramMessageMedia, TelegramMessageMutation,
     TelegramMessageObservation, TelegramMessageProjection, TelegramMessageReferences,
     TelegramMessageTombstone, TelegramMessageVersion, TelegramMessageVersionSource,
     TelegramOperation, TelegramParticipant, TelegramParticipantFilter, TelegramParticipantPage,
@@ -77,7 +77,7 @@ pub fn encode_command(command: &TelegramProviderCommand) -> Vec<u8> {
             account_id: value.account_id.clone(),
             provider_chat_id: value.provider_chat_id.clone(),
             media_kind: media_kind_name(value.media_kind).to_owned(),
-            blob_ref: value.blob_ref.clone(),
+            blob: Some(blob_message(&value.blob)),
             caption: value.caption.clone(),
             filename: value.filename.clone(),
         }),
@@ -348,7 +348,7 @@ pub fn decode_command(
             account_id: value.account_id,
             provider_chat_id: value.provider_chat_id,
             media_kind: parse_media_kind(&value.media_kind)?,
-            blob_ref: value.blob_ref,
+            blob: decode_blob(value.blob)?,
             caption: value.caption,
             filename: value.filename,
         })),
@@ -486,6 +486,31 @@ pub fn decode_command(
             is_closed: value.is_closed,
         }),
     }
+}
+
+fn blob_message(value: &TelegramBlobIntentV1) -> wire::TelegramBlobIntentV1 {
+    wire::TelegramBlobIntentV1 {
+        blob_ref: value.blob_ref.clone(),
+        reference_id: value.reference_id.clone(),
+        declared_size: value.declared_size,
+        backup_class: value.backup_class,
+    }
+}
+
+fn decode_blob(value: Option<wire::TelegramBlobIntentV1>) -> Result<TelegramBlobIntentV1, TelegramAuthorizationWireError> {
+    let value = value.ok_or(TelegramAuthorizationWireError::MissingVariant)?;
+    (value.reference_id.len() == 16
+        && value.reference_id.iter().any(|byte| *byte != 0)
+        && value.declared_size > 0
+        && (1..=3).contains(&value.backup_class)
+        && !value.blob_ref.is_empty())
+        .then_some(TelegramBlobIntentV1 {
+            blob_ref: value.blob_ref,
+            reference_id: value.reference_id,
+            declared_size: value.declared_size,
+            backup_class: value.backup_class,
+        })
+        .ok_or(TelegramAuthorizationWireError::InvalidPayload)
 }
 
 pub fn encode_query(query: &TelegramProviderQuery) -> Vec<u8> {
@@ -1021,6 +1046,7 @@ fn message_media_to_wire(value: &TelegramMessageMedia) -> wire::TelegramMessageM
         provider_file_id: value.provider_file_id.clone(),
         caption: value.caption.clone(),
         filename: value.filename.clone(),
+        content_type: value.content_type.clone(),
     }
 }
 
@@ -1057,6 +1083,7 @@ fn message_observation_to_wire(
         provider_topic_id: value.provider_topic_id.clone(),
         sender_id: value.sender_id.clone(),
         sender_display_name: value.sender_display_name.clone(),
+        is_outgoing: value.is_outgoing,
         text: value.text.clone(),
         media: value.media.as_ref().map(message_media_to_wire),
         references: Some(message_references_to_wire(&value.references)),
@@ -1093,6 +1120,7 @@ fn parse_message_observation(
                 provider_file_id: media.provider_file_id,
                 caption: media.caption,
                 filename: media.filename,
+                content_type: media.content_type,
             })
         })
         .transpose()?;
@@ -1103,6 +1131,7 @@ fn parse_message_observation(
         provider_topic_id: value.provider_topic_id,
         sender_id: value.sender_id,
         sender_display_name: value.sender_display_name,
+        is_outgoing: value.is_outgoing,
         text: value.text,
         media,
         references: TelegramMessageReferences {
@@ -1299,6 +1328,7 @@ fn parse_message_projection(
                 provider_file_id: media.provider_file_id,
                 caption: media.caption,
                 filename: media.filename,
+                content_type: media.content_type,
             })
         })
         .transpose()?;
@@ -2301,7 +2331,6 @@ pub enum TelegramLifecycleRequest {
     RetireAccount {
         account_id: String,
     },
-    RegisterMediaSession(TelegramMediaSessionRegistration),
     StartAccount {
         account_id: String,
         topology: String,
@@ -2412,14 +2441,6 @@ pub fn encode_lifecycle_request(request: &TelegramLifecycleRequest) -> Vec<u8> {
                 account_id: account_id.clone(),
             })
         }
-        TelegramLifecycleRequest::RegisterMediaSession(session) => {
-            Request::RegisterMediaSession(wire::RegisterMediaSessionRequest {
-                blob_ref: session.blob_ref.clone(),
-                grant_bytes: session.grant_bytes.clone(),
-                channel_binding: session.channel_binding.clone(),
-                declared_size: session.declared_size,
-            })
-        }
         TelegramLifecycleRequest::StartAccount {
             account_id,
             topology,
@@ -2510,14 +2531,6 @@ pub fn decode_lifecycle_request(
         Request::RetireAccount(value) => Ok(TelegramLifecycleRequest::RetireAccount {
             account_id: value.account_id,
         }),
-        Request::RegisterMediaSession(value) => Ok(TelegramLifecycleRequest::RegisterMediaSession(
-            TelegramMediaSessionRegistration {
-                blob_ref: value.blob_ref,
-                grant_bytes: value.grant_bytes,
-                channel_binding: value.channel_binding,
-                declared_size: value.declared_size,
-            },
-        )),
         Request::StartAccount(value) => Ok(TelegramLifecycleRequest::StartAccount {
             account_id: value.account_id,
             topology: value.topology,
@@ -2612,11 +2625,6 @@ pub fn encode_lifecycle_response(response: &TelegramClientResponse) -> Option<Ve
         }
         TelegramClientResponse::Operation(operation) => {
             Response::Operation(operation_to_wire(operation))
-        }
-        TelegramClientResponse::MediaSessionRegistered { blob_ref } => {
-            Response::MediaSessionRegistered(wire::MediaSessionRegisteredResponse {
-                blob_ref: blob_ref.clone(),
-            })
         }
         _ => return None,
     };
@@ -2749,11 +2757,6 @@ pub fn decode_lifecycle_response(
         }),
         Response::Operation(value) => {
             Ok(TelegramClientResponse::Operation(parse_operation(value)?))
-        }
-        Response::MediaSessionRegistered(value) => {
-            Ok(TelegramClientResponse::MediaSessionRegistered {
-                blob_ref: value.blob_ref,
-            })
         }
     }
 }

@@ -10,7 +10,9 @@ use getrandom::fill;
 pub struct StagedRuntimeContracts {
     descriptor_path: PathBuf,
     settings_schema_path: Option<PathBuf>,
+    settings_snapshot_path: Option<PathBuf>,
     runtime_configuration_path: Option<PathBuf>,
+    host_bridge_configuration_path: Option<PathBuf>,
 }
 
 impl StagedRuntimeContracts {
@@ -32,6 +34,57 @@ impl StagedRuntimeContracts {
         descriptor_bytes: &[u8],
         settings_schema_bytes: Option<&[u8]>,
         runtime_configuration_bytes: Option<&[u8]>,
+    ) -> Result<Self, String> {
+        Self::stage_with_runtime_and_host_bridge_configuration(
+            directory,
+            descriptor_bytes,
+            settings_schema_bytes,
+            runtime_configuration_bytes,
+            None,
+        )
+    }
+
+    pub fn stage_with_runtime_and_host_bridge_configuration(
+        directory: &Path,
+        descriptor_bytes: &[u8],
+        settings_schema_bytes: Option<&[u8]>,
+        runtime_configuration_bytes: Option<&[u8]>,
+        host_bridge_configuration_bytes: Option<&[u8]>,
+    ) -> Result<Self, String> {
+        Self::stage_with_runtime_host_bridge_and_settings_snapshot(
+            directory,
+            descriptor_bytes,
+            settings_schema_bytes,
+            None,
+            runtime_configuration_bytes,
+            host_bridge_configuration_bytes,
+        )
+    }
+
+    pub fn stage_with_runtime_configuration_and_settings_snapshot(
+        directory: &Path,
+        descriptor_bytes: &[u8],
+        settings_schema_bytes: Option<&[u8]>,
+        settings_snapshot_bytes: &[u8],
+        runtime_configuration_bytes: &[u8],
+    ) -> Result<Self, String> {
+        Self::stage_with_runtime_host_bridge_and_settings_snapshot(
+            directory,
+            descriptor_bytes,
+            settings_schema_bytes,
+            Some(settings_snapshot_bytes),
+            Some(runtime_configuration_bytes),
+            None,
+        )
+    }
+
+    pub fn stage_with_runtime_host_bridge_and_settings_snapshot(
+        directory: &Path,
+        descriptor_bytes: &[u8],
+        settings_schema_bytes: Option<&[u8]>,
+        settings_snapshot_bytes: Option<&[u8]>,
+        runtime_configuration_bytes: Option<&[u8]>,
+        host_bridge_configuration_bytes: Option<&[u8]>,
     ) -> Result<Self, String> {
         validate_directory(directory)?;
         if descriptor_bytes.is_empty() {
@@ -55,26 +108,77 @@ impl StagedRuntimeContracts {
             }
             None => None,
         };
-        let runtime_configuration_path = match runtime_configuration_bytes {
+        let settings_snapshot_path = match settings_snapshot_bytes {
             Some(bytes) if !bytes.is_empty() => {
-                let path = directory.join(format!("configuration-{suffix}.bin"));
+                let path = directory.join(format!("settings-snapshot-{suffix}.bin"));
                 if let Err(error) = write_private_file(&path, bytes) {
-                    let _ =
-                        remove_optional_files(&descriptor_path, settings_schema_path.as_deref());
+                    let _ = remove_optional_files(&descriptor_path, settings_schema_path.as_deref());
                     return Err(error);
                 }
                 Some(path)
             }
             Some(_) => {
                 let _ = remove_optional_files(&descriptor_path, settings_schema_path.as_deref());
+                return Err("managed runtime settings snapshot bytes are invalid".to_owned());
+            }
+            None => None,
+        };
+        let runtime_configuration_path = match runtime_configuration_bytes {
+            Some(bytes) if !bytes.is_empty() => {
+                let path = directory.join(format!("configuration-{suffix}.bin"));
+                if let Err(error) = write_private_file(&path, bytes) {
+                    let _ = remove_staged_files(
+                        &descriptor_path,
+                        settings_schema_path.as_deref(),
+                        settings_snapshot_path.as_deref(),
+                        None,
+                    );
+                    return Err(error);
+                }
+                Some(path)
+            }
+            Some(_) => {
+                let _ = remove_staged_files(
+                    &descriptor_path,
+                    settings_schema_path.as_deref(),
+                    settings_snapshot_path.as_deref(),
+                    None,
+                );
                 return Err("managed runtime configuration bytes are invalid".to_owned());
+            }
+            None => None,
+        };
+        let host_bridge_configuration_path = match host_bridge_configuration_bytes {
+            Some(bytes) if !bytes.is_empty() => {
+                let path = directory.join(format!("host-bridge-{suffix}.bin"));
+                if let Err(error) = write_private_file(&path, bytes) {
+                    let _ = remove_staged_files(
+                        &descriptor_path,
+                        settings_schema_path.as_deref(),
+                        settings_snapshot_path.as_deref(),
+                        runtime_configuration_path.as_deref(),
+                    );
+                    return Err(error);
+                }
+                Some(path)
+            }
+            Some(_) => {
+                let _ = remove_staged_files(
+                    &descriptor_path,
+                    settings_schema_path.as_deref(),
+                    settings_snapshot_path.as_deref(),
+                    runtime_configuration_path.as_deref(),
+                );
+                return Err("managed host bridge configuration bytes are invalid".to_owned());
             }
             None => None,
         };
         Ok(Self {
             descriptor_path,
             settings_schema_path,
+            settings_snapshot_path,
             runtime_configuration_path,
+            host_bridge_configuration_path,
         })
     }
 
@@ -89,8 +193,18 @@ impl StagedRuntimeContracts {
     }
 
     #[must_use]
+    pub fn settings_snapshot_path(&self) -> Option<&Path> {
+        self.settings_snapshot_path.as_deref()
+    }
+
+    #[must_use]
     pub fn runtime_configuration_path(&self) -> Option<&Path> {
         self.runtime_configuration_path.as_deref()
+    }
+
+    #[must_use]
+    pub fn host_bridge_configuration_path(&self) -> Option<&Path> {
+        self.host_bridge_configuration_path.as_deref()
     }
 
     pub fn remove(self) -> Result<(), String> {
@@ -98,7 +212,13 @@ impl StagedRuntimeContracts {
         if let Some(path) = self.settings_schema_path {
             remove_private_file(&path)?;
         }
+        if let Some(path) = self.settings_snapshot_path {
+            remove_private_file(&path)?;
+        }
         if let Some(path) = self.runtime_configuration_path {
+            remove_private_file(&path)?;
+        }
+        if let Some(path) = self.host_bridge_configuration_path {
             remove_private_file(&path)?;
         }
         Ok(())
@@ -111,6 +231,22 @@ fn remove_optional_files(
 ) -> Result<(), String> {
     remove_private_file(descriptor_path)?;
     if let Some(path) = settings_schema_path {
+        remove_private_file(path)?;
+    }
+    Ok(())
+}
+
+fn remove_staged_files(
+    descriptor_path: &Path,
+    settings_schema_path: Option<&Path>,
+    settings_snapshot_path: Option<&Path>,
+    runtime_configuration_path: Option<&Path>,
+) -> Result<(), String> {
+    remove_optional_files(descriptor_path, settings_schema_path)?;
+    if let Some(path) = settings_snapshot_path {
+        remove_private_file(path)?;
+    }
+    if let Some(path) = runtime_configuration_path {
         remove_private_file(path)?;
     }
     Ok(())

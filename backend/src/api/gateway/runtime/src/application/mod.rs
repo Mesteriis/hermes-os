@@ -18,25 +18,17 @@ use hyper::{Response, StatusCode};
 use crate::{
     BrowserAuthenticationRouter, BrowserBootstrapRouter, BrowserPairingRouter,
     BrowserRealtimeRouter, BrowserRealtimeSubscriptionSource, BrowserSessionStatusRouter,
-    ClientBootstrapRouter, GatewayHttpResponse, GatewayTechnicalRouter,
+    CommunicationsQueryRouter, GatewayHttpResponse, GatewayTechnicalRouter,
+    ClientBootstrapRouter,
     SharedBrowserGatewaySessionService,
 };
-
-mod mail;
 
 const AUTHENTICATION_PREFIX: &str = "/browser/v1/authentication/";
 const PAIRING_PREFIX: &str = "/browser/v1/pairing/";
 const REALTIME_PATH: &str = "/api/realtime/v1/events";
 const SESSION_STATUS_PATH: &str = "/hermes.gateway.v1.BrowserSessionService/GetStatus";
 const CLIENT_BOOTSTRAP_PATH: &str = "/hermes.gateway.v1.ClientBootstrapService/GetBootstrap";
-const MAIL_COMMUNICATIONS_LIST_PATH: &str = "/api/v1/communications/email/accounts";
-const MAIL_INTEGRATIONS_PATH_PREFIX: &str = "/api/v1/integrations/mail/";
-const TELEGRAM_INTEGRATIONS_PATH_PREFIX: &str = "/api/v1/integrations/telegram/";
-const WHATSAPP_INTEGRATIONS_PATH_PREFIX: &str = "/api/v1/integrations/whatsapp/";
-const TELEGRAM_INTEGRATIONS_PATH_ROOT: &str = "/api/v1/integrations/telegram";
-const WHATSAPP_INTEGRATIONS_PATH_ROOT: &str = "/api/v1/integrations/whatsapp";
-const MAIL_GMAIL_OAUTH_CALLBACK_PATH: &str =
-    "/api/v1/integrations/mail/accounts/gmail/oauth/callback";
+const COMMUNICATIONS_QUERY_PATH: &str = "/hermes.communications.query.v1.CommunicationsQueryService/Query";
 
 /// Composes technical health, browser authentication and client-safe realtime
 /// without adding an owner API or mounting a listener.
@@ -47,8 +39,8 @@ pub struct GatewayApplicationRouter<A, S> {
     browser_bootstrap: Option<BrowserBootstrapRouter>,
     browser_session_status: BrowserSessionStatusRouter<A>,
     client_bootstrap: ClientBootstrapRouter<A>,
+    communications_query: Option<CommunicationsQueryRouter<A>>,
     browser_realtime: BrowserRealtimeRouter<A, S>,
-    mail: mail::MailGatewayIntegrationRouter,
     lan_development_policy: Option<LanDevelopmentRequestPolicyV1>,
 }
 
@@ -67,8 +59,8 @@ impl<A, S> Clone for GatewayApplicationRouter<A, S> {
             browser_bootstrap: self.browser_bootstrap.clone(),
             browser_session_status: self.browser_session_status.clone(),
             client_bootstrap: self.client_bootstrap.clone(),
+            communications_query: self.communications_query.clone(),
             browser_realtime: self.browser_realtime.clone(),
-            mail: self.mail.clone(),
             lan_development_policy: self.lan_development_policy.clone(),
         }
     }
@@ -88,8 +80,8 @@ where
             browser_bootstrap: None,
             browser_session_status: BrowserSessionStatusRouter::from_shared(service.clone()),
             client_bootstrap: ClientBootstrapRouter::from_shared(service.clone()),
+            communications_query: None,
             browser_realtime: BrowserRealtimeRouter::new(service, source),
-            mail: mail::MailGatewayIntegrationRouter::new(),
             lan_development_policy: None,
         }
     }
@@ -103,6 +95,12 @@ where
     #[must_use]
     pub fn with_browser_bootstrap(mut self, router: BrowserBootstrapRouter) -> Self {
         self.browser_bootstrap = Some(router);
+        self
+    }
+
+    #[must_use]
+    pub fn with_communications_query(mut self, router: CommunicationsQueryRouter<A>) -> Self {
+        self.communications_query = Some(router);
         self
     }
 
@@ -155,10 +153,7 @@ where
         B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     {
         let path = request.uri().path();
-        if let Some(provider) = unsupported_integration_provider(path) {
-            return unsupported_integration_response(provider);
-        }
-        if request.uri().query().is_some() && path != MAIL_GMAIL_OAUTH_CALLBACK_PATH {
+        if request.uri().query().is_some() {
             return self.technical.route(request.method(), "");
         }
         if path == "/" || path.starts_with("/assets/") {
@@ -170,12 +165,6 @@ where
         if is_technical_path(path) {
             return self.technical.route(request.method(), path);
         }
-        if path.starts_with(MAIL_INTEGRATIONS_PATH_PREFIX) {
-            return self.mail.route(request).await;
-        }
-        if path == MAIL_COMMUNICATIONS_LIST_PATH {
-            return self.mail.route(request).await;
-        }
         if path == REALTIME_PATH {
             return self.browser_realtime.route(request);
         }
@@ -184,6 +173,14 @@ where
         }
         if path == CLIENT_BOOTSTRAP_PATH {
             return self.client_bootstrap.route(request).await;
+        }
+        if path == COMMUNICATIONS_QUERY_PATH
+            && let Some(router) = &self.communications_query
+        {
+            return router.route(request).await;
+        }
+        if path == COMMUNICATIONS_QUERY_PATH {
+            return not_found();
         }
         if path.starts_with(AUTHENTICATION_PREFIX) {
             if self.lan_development_policy.is_some() {
@@ -256,54 +253,17 @@ fn route_class(path: &str) -> &'static str {
         CLIENT_BOOTSTRAP_PATH => "client_bootstrap",
         path if path.starts_with(AUTHENTICATION_PREFIX) => "browser_authentication",
         path if path.starts_with(PAIRING_PREFIX) => "browser_pairing",
-        path if path.starts_with(MAIL_INTEGRATIONS_PATH_PREFIX) => "mail",
-        path if path == MAIL_COMMUNICATIONS_LIST_PATH => "mail",
-        path if path == TELEGRAM_INTEGRATIONS_PATH_ROOT => {
-            unsupported_integration_response_class(path, "telegram")
-        }
-        path if path == WHATSAPP_INTEGRATIONS_PATH_ROOT => {
-            unsupported_integration_response_class(path, "whatsapp")
-        }
-        path if path.starts_with(TELEGRAM_INTEGRATIONS_PATH_PREFIX) => {
-            unsupported_integration_response_class(path, "telegram")
-        }
-        path if path.starts_with(WHATSAPP_INTEGRATIONS_PATH_PREFIX) => {
-            unsupported_integration_response_class(path, "whatsapp")
-        }
+        path if path == COMMUNICATIONS_QUERY_PATH => "communications_query",
         _ => "unknown",
     }
 }
 
-fn unsupported_integration_provider(path: &str) -> Option<&'static str> {
-    if path == TELEGRAM_INTEGRATIONS_PATH_ROOT
-        || path.starts_with(TELEGRAM_INTEGRATIONS_PATH_PREFIX)
-    {
-        Some("telegram")
-    } else if path == WHATSAPP_INTEGRATIONS_PATH_ROOT
-        || path.starts_with(WHATSAPP_INTEGRATIONS_PATH_PREFIX)
-    {
-        Some("whatsapp")
-    } else {
-        None
-    }
-}
-
-fn unsupported_integration_response(provider: &str) -> GatewayHttpResponse {
+fn not_found() -> GatewayHttpResponse {
     Response::builder()
-        .status(StatusCode::NOT_IMPLEMENTED)
+        .status(StatusCode::NOT_FOUND)
         .header("cache-control", "no-store")
-        .body(crate::full_gateway_body(Bytes::from(format!(
-            "integration {provider} is not migrated in clean-room backend yet; endpoint remains reserved for external provider runtime\n"
-        ))))
-        .expect("Gateway response for unsupported provider integration is valid")
-}
-
-fn unsupported_integration_response_class<'a>(path: &str, provider: &'a str) -> &'a str {
-    if path == TELEGRAM_INTEGRATIONS_PATH_ROOT || path == WHATSAPP_INTEGRATIONS_PATH_ROOT {
-        "communications_integrations_legacy"
-    } else {
-        provider
-    }
+        .body(crate::full_gateway_body(Bytes::from_static(b"unimplemented\n")))
+        .expect("Gateway not found response is valid")
 }
 
 fn forbidden() -> GatewayHttpResponse {

@@ -22,6 +22,7 @@ pub use modules::{
     ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
     ModuleEventSubscriptionRequirementV1, ModuleGrantSnapshot, ModuleRegistration,
     ModuleRegistrationState, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
+    ModuleVaultPurposeRequestV1,
     SettingsApplyState, SettingsDesiredSnapshot, SettingsSchemaBinding,
     SettingsSchemaBindingInputV1,
 };

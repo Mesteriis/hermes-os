@@ -6,7 +6,7 @@ use hermes_kernel_control_store::{
     ExternalRuntimeIdentity, GrantSet, HealthRecoveryStore, InitialOwnerIdentity,
     ManagedLaunchRecord, ModuleBlobQuotaRequestV1, ModuleEventRouteRequestV1, ModuleGrantSnapshot,
     ModuleRegistration, ModuleRegistrationState, ModuleRegistryStore, ModuleSchedulerJobRequestV1,
-    ModuleStorageRequestV1, OwnerIdentityStore, OwnerPinnedArtifactBinding,
+    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1, OwnerIdentityStore, OwnerPinnedArtifactBinding,
     PlatformEventHubTopologyV1, PlatformEventsAuthorityConfigurationV1,
     PlatformManagedProcessBinding, PlatformManagedProcessLaunch, PlatformStorageTopology,
     RuntimeTrustStore, ServerBootstrapPairing, SettingsApplyState, SettingsDesiredSnapshot,
@@ -134,6 +134,7 @@ impl ModuleRegistryStore for SqliteControlStore {
         event_requests: &[ModuleEventRouteRequestV1],
         blob_requests: &[ModuleBlobQuotaRequestV1],
         scheduler_requests: &[ModuleSchedulerJobRequestV1],
+        vault_purpose_requests: &[ModuleVaultPurposeRequestV1],
     ) -> Result<(), Self::Error> {
         SqliteControlStore::create_pending_registration_with_descriptor_requests(
             self,
@@ -143,6 +144,7 @@ impl ModuleRegistryStore for SqliteControlStore {
             event_requests,
             blob_requests,
             scheduler_requests,
+            vault_purpose_requests,
         )
     }
     fn module_registration(&self, id: &str) -> Result<Option<ModuleRegistration>, Self::Error> {
@@ -195,6 +197,13 @@ impl ModuleRegistryStore for SqliteControlStore {
         capability_id: &str,
     ) -> Result<Vec<ModuleSchedulerJobRequestV1>, Self::Error> {
         SqliteControlStore::module_scheduler_job_requests(self, registration_id, capability_id)
+    }
+    fn module_vault_purpose_requests(
+        &self,
+        registration_id: &str,
+        capability_id: &str,
+    ) -> Result<Vec<ModuleVaultPurposeRequestV1>, Self::Error> {
+        SqliteControlStore::module_vault_purpose_requests(self, registration_id, capability_id)
     }
 }
 

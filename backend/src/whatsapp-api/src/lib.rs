@@ -53,14 +53,12 @@ impl WhatsAppProviderShape {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum WhatsAppRuntimeKind {
     HiddenWebView,
-    Fixture,
 }
 
 impl WhatsAppRuntimeKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::HiddenWebView => "webview_companion",
-            Self::Fixture => "fixture",
         }
     }
 }

@@ -8,7 +8,6 @@ use std::time::Duration;
 use hermes_runtime_protocol::v1::{
     DescribeManagedRuntimeRequestV1, ManagedRuntimeControlRequestV1,
     ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
-    ManagedRuntimeVaultRouteRequestV1, ManagedRuntimeVaultRouteResponseV1,
     managed_runtime_control_request_v1::Operation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
@@ -134,22 +133,6 @@ impl TelegramManagedRuntimeIdentity {
     pub const fn grant_epoch(&self) -> u64 {
         self.grant_epoch
     }
-}
-
-pub fn route_vault_ciphertext(
-    channel: &mut UnixStream,
-    route: hermes_runtime_protocol::v1::VaultCiphertextRouteV1,
-) -> Result<hermes_runtime_protocol::v1::VaultCiphertextResponseV1, String> {
-    write_frame(
-        channel,
-        &ManagedRuntimeVaultRouteRequestV1 { route: Some(route) }.encode_to_vec(),
-    )?;
-    let response = ManagedRuntimeVaultRouteResponseV1::decode(read_frame(channel)?.as_slice())
-        .map_err(|_| "Telegram managed-runtime Vault response is invalid".to_owned())?;
-    response
-        .response
-        .filter(|_| response.error_code.is_empty())
-        .ok_or_else(|| "Telegram managed-runtime Vault route was denied".to_owned())
 }
 
 fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, String> {

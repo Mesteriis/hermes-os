@@ -3,7 +3,7 @@
 use hermes_kernel_control_store::{
     ExternalRuntimeAttestation, GrantSet, ModuleBlobQuotaRequestV1, ModuleEventRouteRequestV1,
     ModuleGrantSnapshot, ModuleRegistration, ModuleRegistrationState, ModuleSchedulerJobRequestV1,
-    ModuleStorageRequestV1,
+    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -17,6 +17,7 @@ use super::{
     event_request::{insert_event_route_requests, validate_event_route_requests},
     scheduler_request::{insert_scheduler_job_requests, validate_scheduler_job_requests},
     storage_request::{insert_storage_requests, validate_storage_requests},
+    vault_purpose_request::{insert_vault_purpose_requests, validate_vault_purpose_requests},
 };
 
 impl SqliteControlStore {
@@ -49,6 +50,7 @@ impl SqliteControlStore {
             event_requests,
             blob_requests,
             &[],
+            &[],
         )
     }
 
@@ -60,6 +62,7 @@ impl SqliteControlStore {
         event_requests: &[ModuleEventRouteRequestV1],
         blob_requests: &[ModuleBlobQuotaRequestV1],
         scheduler_requests: &[ModuleSchedulerJobRequestV1],
+        vault_purpose_requests: &[ModuleVaultPurposeRequestV1],
     ) -> Result<(), StoreError> {
         validate_pending_registration(registration, requested_capability_ids)?;
         validate_storage_requests(registration, requested_capability_ids, storage_requests)?;
@@ -70,12 +73,14 @@ impl SqliteControlStore {
             requested_capability_ids,
             scheduler_requests,
         )?;
+        validate_vault_purpose_requests(registration, requested_capability_ids, vault_purpose_requests)?;
         let registration = registration.clone();
         let capabilities = requested_capability_ids.to_vec();
         let storage_requests = storage_requests.to_vec();
         let event_requests = event_requests.to_vec();
         let blob_requests = blob_requests.to_vec();
         let scheduler_requests = scheduler_requests.to_vec();
+        let vault_purpose_requests = vault_purpose_requests.to_vec();
         self.with_connection(move |connection| {
             let transaction = connection.transaction()?;
             insert_pending_registration(&transaction, &registration, &capabilities)?;
@@ -83,6 +88,7 @@ impl SqliteControlStore {
             insert_event_route_requests(&transaction, &event_requests)?;
             insert_blob_quota_requests(&transaction, &blob_requests)?;
             insert_scheduler_job_requests(&transaction, &scheduler_requests)?;
+            insert_vault_purpose_requests(&transaction, &vault_purpose_requests)?;
             transaction.commit()?;
             Ok(())
         })

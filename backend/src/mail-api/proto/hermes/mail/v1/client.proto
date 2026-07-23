@@ -1,0 +1,15 @@
+syntax = "proto3";
+package hermes.mail.v1;
+
+message MailClientRequestV1 { oneof request { SyncInboxRequestV1 sync_inbox = 1; SendMailRequestV1 send_mail = 2; } }
+message SyncInboxRequestV1 { string operation_id = 1; }
+message SendMailRequestV1 { string operation_id = 1; string provider_conversation_id = 2; repeated string recipient = 3; string subject = 4; string text_body = 5; }
+message MailClientResponseV1 { oneof response { SyncInboxCompletedV1 sync_inbox_completed = 1; MailAcceptedV1 mail_accepted = 2; } }
+message SyncInboxCompletedV1 { string operation_id = 1; uint32 observed_messages = 2; }
+message MailAcceptedV1 { string operation_id = 1; uint32 response_code = 2; }
+
+// Provider-specific public operational contract. Core Gateway authenticates
+// and routes this exact contract but does not translate its payload.
+service MailOperationalService {
+  rpc Execute(MailClientRequestV1) returns (MailClientResponseV1);
+}

@@ -175,6 +175,7 @@ const VAULT_POLICY_KEYS = [
   'role',
   'owner',
   'protocolPackage',
+  'managedClientPackage',
   'keyProviderPackage',
   'runtimePackage',
   'storePackage',
@@ -688,6 +689,7 @@ export function validatePolicy(policy) {
     || vault?.owner !== 'vault'
     || !list(policy?.owners?.platform).includes(vault?.owner)
     || vault?.protocolPackage !== 'hermes-vault-protocol'
+    || vault?.managedClientPackage !== 'hermes-managed-vault-client'
     || vault?.keyProviderPackage !== 'hermes-vault-key-provider'
     || vault?.runtimePackage !== 'hermes-vault-runtime'
     || vault?.storePackage !== 'hermes-vault-store-sqlcipher'
@@ -807,14 +809,16 @@ export function validatePolicy(policy) {
       'compile-isolation package, role, runtime and persistence rules must be explicit',
     ));
   }
-  const hostOnlyIntegrationOwners = list(policy?.integrations?.hostOnlyOwners);
-  if (!hostOnlyIntegrationOwners.length
-    || duplicates(hostOnlyIntegrationOwners).length > 0
-    || hostOnlyIntegrationOwners.some((owner) => typeof owner !== 'string' || owner.length === 0)) {
+  const hostOnlyProviderExecutionOwners = list(
+    policy?.integrations?.hostOnlyProviderExecutionOwners,
+  );
+  if (!hostOnlyProviderExecutionOwners.length
+    || duplicates(hostOnlyProviderExecutionOwners).length > 0
+    || hostOnlyProviderExecutionOwners.some((owner) => typeof owner !== 'string' || owner.length === 0)) {
     violations.push(violation(
       'integration_policy',
-      'integrations.hostOnlyOwners',
-      'host-only integration owners must be explicit and unique',
+      'integrations.hostOnlyProviderExecutionOwners',
+      'host-only provider execution owners must be explicit and unique',
     ));
   }
   const storage = policy?.storage;

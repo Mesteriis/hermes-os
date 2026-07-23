@@ -8,6 +8,10 @@ license = "MIT"
 name = "hermes-mail-runtime"
 path = "src/main.rs"
 
+[lib]
+name = "hermes_mail_runtime"
+path = "src/lib.rs"
+
 [package.metadata.hermes]
 role = "integration"
 owner = "mail"
@@ -17,4 +21,21 @@ surface = "runtime"
 hermes-mail-api = { path = "../mail-api" }
 hermes-mail-core = { path = "../mail-core" }
 hermes-mail-imap = { path = "../mail-imap" }
+hermes-mail-gmail = { path = "../mail-gmail" }
+hermes-mail-smtp = { path = "../mail-smtp" }
 hermes-mail-persistence = { path = "../mail-persistence" }
+hermes-communications-ingress = { path = "../communications-ingress" }
+hermes-blob-client = { path = "../platform/blob/client" }
+hermes-events-protocol = { path = "../platform/events" }
+hermes-events-jetstream = { path = "../platform/events/jetstream" }
+hermes-managed-vault-client = { path = "../platform/vault/managed_client" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+hermes-storage-vault = { path = "../platform/storage/vault" }
+hermes-vault-protocol = { path = "../platform/vault/protocol" }
+libc = "=0.2.186"
+getrandom = { version = "=0.4.3", default-features = false }
+prost = "=0.14.4"
+sha2 = { version = "=0.11.0", default-features = false }
+tokio = { version = "=1.52.4", default-features = false, features = ["rt-multi-thread", "time"] }
+zeroize = "=1.9.0"

@@ -75,10 +75,23 @@ where
                     "managed runtime Events credential authority is unavailable".to_owned()
                 }
             })?;
+        let consumer_bindings = topology::managed_runtime_consumer_bindings(
+            &topology,
+            registration.registration_id(),
+            registration.grant_epoch(),
+        )
+        .map_err(|_| "managed runtime Events consumer binding is unavailable".to_owned())?;
+        let publish_subjects = topology::managed_runtime_publish_subjects(
+            &topology,
+            registration.registration_id(),
+            registration.grant_epoch(),
+        );
         Ok(ManagedRuntimeEventCredentialDeliveryV1 {
             encapped_key: delivery.encapped_key,
             ciphertext: delivery.ciphertext,
             tag: delivery.tag,
+            consumer_bindings,
+            publish_subjects,
         })
     }
 }

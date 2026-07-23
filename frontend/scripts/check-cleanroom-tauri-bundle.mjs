@@ -31,10 +31,10 @@ if (mainCapability.permissions.some((permission) => permission.startsWith('allow
 if (/CommunicationsWorkspaceView|PersonasWorkspaceView|@\/integrations\//.test(appRoot)) {
   failures.push('Tauri recovery shell must not mount disabled product routes or provider host bridges');
 }
-if (!source.includes('#[cfg(feature = "provider-companions")]\nmod whatsapp_companion;')) {
+if (!source.includes('#[cfg(feature = "whatsapp-host-webview")]\nmod whatsapp_companion;')) {
   failures.push('Tauri provider companion module must be excluded from the default recovery build');
 }
-if (!/#\[cfg\(feature = "provider-companions"\)\]\s+let builder = builder\.invoke_handler/.test(source)) {
+if (!/#\[cfg\(feature = "whatsapp-host-webview"\)\]\s+let builder = builder\.invoke_handler/.test(source)) {
   failures.push('Tauri provider host commands must be excluded from the default recovery invoke handler');
 }
 

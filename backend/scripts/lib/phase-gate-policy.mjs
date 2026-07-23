@@ -37,6 +37,8 @@ const NOT_AUTHORIZED = ALL_GATES.filter((gate) => ![
   'clock_v1',
   'scheduler_v1',
   'browser_client_v1',
+  'client_gateway_v1',
+  'whole_instance_backup_v1',
 ].includes(gate));
 
 const REQUIRES = {

@@ -1,0 +1,18 @@
+[package]
+name = "hermes-zulip-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "integration"
+owner = "zulip"
+surface = "implementation"
+
+[dependencies]
+hermes-communications-ingress = { path = "../communications-ingress" }
+hermes-zulip-api = { path = "../zulip-api" }
+hermes-vault-protocol = { path = "../platform/vault/protocol" }

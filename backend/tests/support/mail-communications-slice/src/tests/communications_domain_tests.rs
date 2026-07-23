@@ -1,56 +1,48 @@
-use hermes_communications_api::CommunicationsClientError;
-use hermes_communications_domain::{
-    CommunicationsDomainError, canonicalize_communication, convert_client_query_error,
-    promote_draft_to_summary,
+use hermes_communications_api::{
+    CanonicalCommunicationEvidenceKindV1, CommunicationBodyStateV1,
+    CommunicationDirectionV1, CommunicationObservationIdV1, CommunicationProviderProvenanceV1,
+    CommunicationSourceCursorV1, CommunicationsClientError, RecordCommunicationEvidenceV1,
 };
-use hermes_communications_ingress::CommunicationObservationDraft;
+use hermes_communications_domain::{
+    CommunicationsDomainError, accept_command, canonicalize_communication, convert_client_query_error,
+};
 
-#[test]
-fn promotes_valid_draft() {
-    let draft = CommunicationObservationDraft {
-        operation_id: "op-1".to_owned(),
-        source_id: "source-1".to_owned(),
-        source_kind: "mail-imap".to_owned(),
-        text_preview: None,
-        has_body: true,
-        is_final_window: true,
-    };
-    let summary = promote_draft_to_summary(draft).unwrap();
-    assert_eq!(summary.communication_id, "comm-op-1");
-    assert_eq!(summary.operation_id, "op-1");
+fn command(observed_at_unix_seconds: i64) -> RecordCommunicationEvidenceV1 {
+    RecordCommunicationEvidenceV1 {
+        observation_id: CommunicationObservationIdV1::new([1; 16]),
+        source_cursor: CommunicationSourceCursorV1::new([2; 32]),
+        account_cursor: Some(CommunicationSourceCursorV1::new([3; 32])),
+        conversation_cursor: Some(CommunicationSourceCursorV1::new([4; 32])),
+        participant_cursor: None,
+        media_cursor: None,
+        reply_to_source_cursor: None,
+        forward_origin_source_cursor: None,
+        provider: CommunicationProviderProvenanceV1::MailImap,
+        direction: CommunicationDirectionV1::Incoming,
+        kind: CanonicalCommunicationEvidenceKindV1::EmailMessage,
+        body: CommunicationBodyStateV1::PendingBlob,
+        body_blob: None,
+        body_admission_failure: None,
+        attachment_descriptor: None,
+        observed_at_unix_seconds,
+    }
 }
 
 #[test]
-fn rejects_invalid_draft_and_maps_errors() {
-    let draft = CommunicationObservationDraft {
-        operation_id: "".to_owned(),
-        source_id: "source-1".to_owned(),
-        source_kind: "mail-imap".to_owned(),
-        text_preview: None,
-        has_body: false,
-        is_final_window: true,
-    };
-    assert!(matches!(
-        promote_draft_to_summary(draft),
-        Err(CommunicationsDomainError::InvalidDraft)
-    ));
-    assert!(matches!(
-        convert_client_query_error(CommunicationsDomainError::InvalidDraft),
-        CommunicationsClientError::DraftValidationFailed
-    ));
+fn accepts_a_typed_owner_command() {
+    let summary = accept_command(command(1)).expect("command accepted");
+    assert_eq!(summary.evidence_id, CommunicationObservationIdV1::new([1; 16]));
+}
+
+#[test]
+fn rejects_invalid_commands_and_maps_errors() {
+    assert!(matches!(accept_command(command(i64::MAX)), Err(CommunicationsDomainError::InvalidObservedTime)));
+    assert_eq!(convert_client_query_error(CommunicationsDomainError::InvalidObservedTime), CommunicationsClientError::DraftValidationFailed);
 }
 
 #[test]
 fn canonicalization_wraps_summary() {
-    let summary = hermes_communications_api::CommunicationSummary {
-        communication_id: "comm-op-1".to_owned(),
-        operation_id: "op-1".to_owned(),
-        source_id: "source-1".to_owned(),
-        source_kind: "mail-imap".to_owned(),
-        has_body: true,
-        has_preview: false,
-        is_final_window: true,
-    };
-    let canonical = canonicalize_communication(&summary);
-    assert_eq!(canonical.id, summary.communication_id);
+    let summary = accept_command(command(2)).expect("command accepted");
+    let canonical = canonicalize_communication(&summary).expect("canonical projection");
+    assert_eq!(canonical.summary.evidence_id, summary.evidence_id);
 }

@@ -223,6 +223,7 @@ pub struct TelegramMessageObservation {
     pub provider_topic_id: Option<String>,
     pub sender_id: String,
     pub sender_display_name: Option<String>,
+    pub is_outgoing: bool,
     pub text: Option<String>,
     pub media: Option<TelegramMessageMedia>,
     pub references: TelegramMessageReferences,
@@ -258,6 +259,7 @@ pub struct TelegramMessageMedia {
     pub provider_file_id: Option<String>,
     pub caption: Option<String>,
     pub filename: Option<String>,
+    pub content_type: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -314,17 +316,17 @@ pub struct TelegramSendMedia {
     pub account_id: TelegramAccountId,
     pub provider_chat_id: String,
     pub media_kind: TelegramMediaKind,
-    pub blob_ref: String,
+    pub blob: TelegramBlobIntentV1,
     pub caption: Option<String>,
     pub filename: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct TelegramMediaSessionRegistration {
+pub struct TelegramBlobIntentV1 {
     pub blob_ref: String,
-    pub grant_bytes: Vec<u8>,
-    pub channel_binding: Vec<u8>,
+    pub reference_id: Vec<u8>,
     pub declared_size: u64,
+    pub backup_class: u32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -971,7 +973,6 @@ pub enum TelegramClientRequest {
     RetireAccount {
         account_id: TelegramAccountId,
     },
-    RegisterMediaSession(TelegramMediaSessionRegistration),
     AuthorizationStatus,
     SubmitAuthorizationPassword {
         password: String,
@@ -999,7 +1000,6 @@ pub enum TelegramClientResponse {
     Operation(TelegramOperation),
     Accounts(Vec<TelegramAccount>),
     Query(TelegramProviderQueryResponse),
-    MediaSessionRegistered { blob_ref: String },
     AuthorizationStatus(TelegramAuthorizationStatus),
     AuthorizationPasswordAccepted,
     Account(TelegramAccount),
@@ -1436,7 +1436,14 @@ pub fn validate_provider_command(
     match command {
         TelegramProviderCommand::SendText(command) => validate_text(&command.text),
         TelegramProviderCommand::SendMedia(command) => {
-            validate_id(&command.blob_ref)?;
+            validate_id(&command.blob.blob_ref)?;
+            if command.blob.reference_id.len() != 16
+                || command.blob.reference_id.iter().all(|byte| *byte == 0)
+                || command.blob.declared_size == 0
+                || !(1..=3).contains(&command.blob.backup_class)
+            {
+                return Err(TelegramContractError::InvalidTransition);
+            }
             if let Some(caption) = &command.caption {
                 validate_text(caption)?;
             }

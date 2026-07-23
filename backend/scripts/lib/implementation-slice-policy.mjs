@@ -28,6 +28,7 @@ const RECOVERY_PRODUCTION_PACKAGES = [
 const VAULT_FOUNDATION_PRODUCTION_PACKAGES = [
   ...RECOVERY_PRODUCTION_PACKAGES,
   { name: 'hermes-vault-protocol', role: 'platform', owner: 'vault', surface: 'contract' },
+  { name: 'hermes-managed-vault-client', role: 'platform', owner: 'vault', surface: 'contract' },
   { name: 'hermes-vault-key-provider', role: 'platform', owner: 'vault', surface: 'contract' },
   { name: 'hermes-vault-key-provider-file', role: 'platform', owner: 'vault', surface: 'implementation' },
   { name: 'hermes-secure-file', role: 'platform', owner: 'secure_file', surface: 'contract' },
@@ -89,6 +90,10 @@ const RECOVERY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
 const VAULT_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...RECOVERY_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-vault-protocol': [],
+  'hermes-managed-vault-client': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+  ],
   'hermes-vault-key-provider': [],
   'hermes-vault-key-provider-file': [
     { name: 'hermes-vault-key-provider', kind: 'normal' },
@@ -173,6 +178,7 @@ const NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-runtime-protocol', kind: 'normal' },
     { name: 'hermes-scheduler-protocol', kind: 'normal' },
     { name: 'hermes-vault-protocol', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
   ],
   'hermes-events-authority': [
     { name: 'hermes-events-jetstream', kind: 'normal' },
@@ -246,6 +252,8 @@ const MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES = [
   { name: 'hermes-mail-api', role: 'integration', owner: 'mail', surface: 'contract' },
   { name: 'hermes-mail-core', role: 'integration', owner: 'mail', surface: 'implementation' },
   { name: 'hermes-mail-imap', role: 'integration', owner: 'mail', surface: 'implementation' },
+  { name: 'hermes-mail-gmail', role: 'integration', owner: 'mail', surface: 'implementation' },
+  { name: 'hermes-mail-smtp', role: 'integration', owner: 'mail', surface: 'implementation' },
   { name: 'hermes-mail-persistence', role: 'integration', owner: 'mail', surface: 'persistence' },
   { name: 'hermes-mail-runtime', role: 'integration', owner: 'mail', surface: 'runtime' },
   { name: 'hermes-telegram-api', role: 'integration', owner: 'telegram', surface: 'contract' },
@@ -254,6 +262,23 @@ const MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES = [
   { name: 'hermes-telegram-persistence', role: 'integration', owner: 'telegram', surface: 'persistence' },
   { name: 'hermes-telegram-runtime', role: 'integration', owner: 'telegram', surface: 'runtime' },
   { name: 'hermes-whatsapp-api', role: 'integration', owner: 'whatsapp', surface: 'contract' },
+  { name: 'hermes-whatsapp-core', role: 'integration', owner: 'whatsapp', surface: 'implementation' },
+  { name: 'hermes-whatsapp-persistence', role: 'integration', owner: 'whatsapp', surface: 'persistence' },
+  { name: 'hermes-whatsapp-runtime', role: 'integration', owner: 'whatsapp', surface: 'runtime' },
+  { name: 'hermes-zulip-api', role: 'integration', owner: 'zulip', surface: 'contract' },
+  { name: 'hermes-zulip-core', role: 'integration', owner: 'zulip', surface: 'implementation' },
+  { name: 'hermes-zulip-http', role: 'integration', owner: 'zulip', surface: 'implementation' },
+  { name: 'hermes-zulip-persistence', role: 'integration', owner: 'zulip', surface: 'persistence' },
+  { name: 'hermes-zulip-runtime', role: 'integration', owner: 'zulip', surface: 'runtime' },
+  { name: 'hermes-communications-ingress', role: 'domain', owner: 'communications', surface: 'contract' },
+  { name: 'hermes-communications-api', role: 'domain', owner: 'communications', surface: 'contract' },
+  { name: 'hermes-communications-domain', role: 'domain', owner: 'communications', surface: 'implementation' },
+  { name: 'hermes-communications-persistence', role: 'domain', owner: 'communications', surface: 'persistence' },
+  { name: 'hermes-communications-runtime', role: 'domain', owner: 'communications', surface: 'runtime' },
+];
+
+const FIRST_OWNER_PRODUCTION_PACKAGES = [
+  ...GATEWAY_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES,
   { name: 'hermes-communications-ingress', role: 'domain', owner: 'communications', surface: 'contract' },
   { name: 'hermes-communications-api', role: 'domain', owner: 'communications', surface: 'contract' },
   { name: 'hermes-communications-domain', role: 'domain', owner: 'communications', surface: 'implementation' },
@@ -360,6 +385,7 @@ const GATEWAY_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     ...SCHEDULER_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST['hermes-kernel'],
     { name: 'hermes-gateway-runtime', kind: 'normal' },
     { name: 'hermes-gateway-session', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
   ],
   'hermes-gateway-runtime': [
     { name: 'hermes-gateway-protocol', kind: 'normal' },
@@ -379,14 +405,30 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-mail-core', kind: 'normal' },
     { name: 'hermes-mail-api', kind: 'normal' },
   ],
+  'hermes-mail-gmail': [],
+  'hermes-mail-smtp': [
+    { name: 'hermes-mail-api', kind: 'normal' },
+  ],
   'hermes-mail-persistence': [
-    { name: 'hermes-mail-core', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
   'hermes-mail-runtime': [
     { name: 'hermes-mail-api', kind: 'normal' },
     { name: 'hermes-mail-core', kind: 'normal' },
     { name: 'hermes-mail-imap', kind: 'normal' },
+    { name: 'hermes-mail-gmail', kind: 'normal' },
+    { name: 'hermes-mail-smtp', kind: 'normal' },
     { name: 'hermes-mail-persistence', kind: 'normal' },
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-managed-vault-client', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
   ],
   'hermes-telegram-api': [],
   'hermes-telegram-core': [
@@ -399,11 +441,16 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-telegram-persistence': [
     { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-telegram-api', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
   'hermes-telegram-runtime': [
     { name: 'hermes-blob-client-contract', kind: 'normal' },
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-managed-vault-client', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
     { name: 'hermes-storage-vault', kind: 'normal' },
@@ -415,22 +462,84 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-blob-client', kind: 'normal' },
   ],
   'hermes-whatsapp-api': [],
-  'hermes-communications-ingress': [],
+  'hermes-whatsapp-core': [
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-whatsapp-api', kind: 'normal' },
+  ],
+  'hermes-whatsapp-persistence': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+  'hermes-whatsapp-runtime': [
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+    { name: 'hermes-whatsapp-api', kind: 'normal' },
+    { name: 'hermes-whatsapp-core', kind: 'normal' },
+    { name: 'hermes-whatsapp-persistence', kind: 'normal' },
+  ],
+  'hermes-zulip-api': [],
+  'hermes-zulip-core': [
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-zulip-api', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+  ],
+  'hermes-zulip-http': [{ name: 'hermes-zulip-api', kind: 'normal' }],
+  'hermes-zulip-persistence': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-zulip-api', kind: 'normal' },
+  ],
+  'hermes-zulip-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-blob-client-contract', kind: 'normal' },
+    { name: 'hermes-communications-ingress', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-managed-vault-client', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-zulip-api', kind: 'normal' },
+    { name: 'hermes-zulip-core', kind: 'normal' },
+    { name: 'hermes-zulip-http', kind: 'normal' },
+    { name: 'hermes-zulip-persistence', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+    { name: 'hermes-vault-protocol', kind: 'normal' },
+  ],
+  'hermes-communications-ingress': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
   'hermes-communications-api': [],
   'hermes-communications-domain': [
-    { name: 'hermes-communications-ingress', kind: 'normal' },
     { name: 'hermes-communications-api', kind: 'normal' },
   ],
   'hermes-communications-persistence': [
-    { name: 'hermes-communications-domain', kind: 'normal' },
+    { name: 'hermes-communications-api', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
   'hermes-communications-runtime': [
     { name: 'hermes-communications-ingress', kind: 'normal' },
     { name: 'hermes-communications-api', kind: 'normal' },
     { name: 'hermes-communications-domain', kind: 'normal' },
     { name: 'hermes-communications-persistence', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
   ],
 };
+
+const FIRST_OWNER_WORKSPACE_DEPENDENCY_ALLOWLIST = Object.fromEntries(
+  FIRST_OWNER_PRODUCTION_PACKAGES.map(({ name }) => [
+    name,
+    MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST[name],
+  ]),
+);
 
 const PROTOCOL_THIRD_PARTY_DEPENDENCIES = [
   {
@@ -512,6 +621,11 @@ const VAULT_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
+  'hermes-managed-vault-client': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
   'hermes-vault-key-provider': [],
   'hermes-vault-key-provider-file': [
     { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
@@ -564,6 +678,7 @@ const STORAGE_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-storage-control': [],
   'hermes-storage-vault': [
     { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
   'hermes-storage-runtime': [
@@ -600,6 +715,7 @@ const NATS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
     { name: 'hpke', kind: 'normal', source: 'crates_io', version: '=0.14.0', defaultFeatures: false, features: ['alloc', 'chacha', 'getrandom', 'x25519'] },
     { name: 'nats-jwt', kind: 'normal', source: 'crates_io', version: '=0.3.0', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive'] },
     { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
@@ -710,6 +826,10 @@ const SCHEDULER_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
 
 const GATEWAY_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...SCHEDULER_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-gateway-protocol': [
+    ...PROTOCOL_THIRD_PARTY_DEPENDENCIES,
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
   'hermes-kernel': [
     ...SCHEDULER_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST['hermes-kernel'],
     { name: 'chacha20poly1305', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: ['alloc', 'zeroize'] },
@@ -741,25 +861,57 @@ const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...GATEWAY_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-blob-client-contract': [],
   'hermes-blob-client': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.3.4', defaultFeatures: true, features: [] },
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.10.9', defaultFeatures: true, features: [] },
   ],
-  'hermes-mail-api': [],
-  'hermes-mail-core': [],
+  'hermes-mail-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-mail-core': [
+    { name: 'base64', kind: 'normal', source: 'crates_io', version: '=0.22.1', defaultFeatures: true, features: [] },
+  ],
   'hermes-mail-imap': [
     { name: 'async-imap', kind: 'normal', source: 'crates_io', version: '=0.11.2', defaultFeatures: true, features: [] },
     { name: 'async-native-tls', kind: 'normal', source: 'crates_io', version: '=0.6.0', defaultFeatures: true, features: [] },
     { name: 'async-std', kind: 'normal', source: 'crates_io', version: '=1.13.2', defaultFeatures: true, features: [] },
     { name: 'futures-util', kind: 'normal', source: 'crates_io', version: '=0.3.32', defaultFeatures: true, features: [] },
   ],
-  'hermes-mail-persistence': [],
-  'hermes-mail-runtime': [],
+  'hermes-mail-gmail': [
+    { name: 'async-native-tls', kind: 'normal', source: 'crates_io', version: '=0.6.0', defaultFeatures: true, features: [] },
+    { name: 'async-std', kind: 'normal', source: 'crates_io', version: '=1.13.2', defaultFeatures: true, features: [] },
+    { name: 'base64', kind: 'normal', source: 'crates_io', version: '=0.22.1', defaultFeatures: true, features: [] },
+    { name: 'futures-util', kind: 'normal', source: 'crates_io', version: '=0.3.32', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: true, features: ['derive'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+  ],
+  'hermes-mail-smtp': [
+    { name: 'async-native-tls', kind: 'normal', source: 'crates_io', version: '=0.6.0', defaultFeatures: true, features: [] },
+    { name: 'async-std', kind: 'normal', source: 'crates_io', version: '=1.13.2', defaultFeatures: true, features: [] },
+  ],
+  'hermes-mail-persistence': [
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+  'hermes-mail-runtime': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
   'hermes-telegram-api': [
     { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive'] },
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
   ],
-  'hermes-telegram-core': [],
+  'hermes-telegram-core': [
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.10.9', defaultFeatures: true, features: [] },
+  ],
   'hermes-telegram-tdlib': [
     { name: 'base64', kind: 'normal', source: 'crates_io', version: '=0.22.1', defaultFeatures: true, features: [] },
     { name: 'libloading', kind: 'normal', source: 'crates_io', version: '=0.8.9', defaultFeatures: true, features: [] },
@@ -775,6 +927,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.10.9', defaultFeatures: false, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt', 'rt-multi-thread', 'time'] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
@@ -782,14 +935,74 @@ const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
-    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive'] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['alloc', 'derive'] },
   ],
-  'hermes-communications-ingress': [],
-  'hermes-communications-api': [],
-  'hermes-communications-domain': [],
-  'hermes-communications-persistence': [],
-  'hermes-communications-runtime': [],
+  'hermes-whatsapp-core': [],
+  'hermes-whatsapp-persistence': [
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+  'hermes-whatsapp-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread'] },
+  ],
+  'hermes-zulip-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-zulip-core': [],
+  'hermes-zulip-http': [
+    { name: 'async-native-tls', kind: 'normal', source: 'crates_io', version: '=0.6.0', defaultFeatures: true, features: [] },
+    { name: 'async-std', kind: 'normal', source: 'crates_io', version: '=1.13.2', defaultFeatures: true, features: [] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-zulip-persistence': [{ name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] }],
+  'hermes-zulip-runtime': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: false, features: [] },
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-communications-ingress': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communications-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communications-domain': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communications-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+  'hermes-communications-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt', 'rt-multi-thread', 'time'] },
+  ],
 };
+
+const FIRST_OWNER_THIRD_PARTY_DEPENDENCY_ALLOWLIST = Object.fromEntries(
+  FIRST_OWNER_PRODUCTION_PACKAGES.map(({ name }) => [
+    name,
+    MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST[name],
+  ]),
+);
 
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
@@ -929,6 +1142,28 @@ const MANAGED_LAUNCH_TRUST_PROFILE = {
   managedLaunchEnabled: true,
 };
 
+const FIRST_OWNER_PROFILE = {
+  ...MANAGED_LAUNCH_TRUST_PROFILE,
+  publicGatewayEnabled: true,
+  natsDataPlaneEnabled: true,
+  businessDataPlaneEnabled: true,
+  wholeInstanceBackupEnabled: true,
+};
+
+const FIRST_OWNER_INVENTORY = {
+  domains: ['communications'],
+  integrations: [],
+  workflows: [],
+  engines: [],
+  businessCapabilities: [
+    'communications.blob.v1',
+    'communications.events.v1',
+    'communications.observe.v1',
+    'communications.query.v1',
+    'communications.storage.v1',
+  ],
+};
+
 const CLOCK_KEYS = ['wallTime', 'elapsedTime', 'testTime', 'moduleCapabilityEnabled'];
 
 const EXIT_GATES = [
@@ -1011,6 +1246,21 @@ function isEmptyOwnerInventory(inventory) {
       .every((ownerClass) => Array.isArray(inventory[ownerClass]) && inventory[ownerClass].length === 0);
 }
 
+function isExactOwnerInventory(inventory, expected) {
+  const ownerClasses = [
+    'domains',
+    'integrations',
+    'workflows',
+    'engines',
+    'businessCapabilities',
+  ];
+  return hasExactKeys(inventory, ownerClasses)
+    && hasExactKeys(expected, ownerClasses)
+    && ownerClasses.every((ownerClass) => (
+      isExactOrderedStringList(inventory[ownerClass], expected[ownerClass])
+    ));
+}
+
 function isExactWorkspaceDependencyAllowlist(allowlist, expectedPackages, expectedAllowlist) {
   if (!Array.isArray(expectedPackages) || !expectedAllowlist) return false;
   const packageNames = expectedPackages.map(({ name }) => name);
@@ -1061,6 +1311,10 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-scheduler-protocol',
       'hermes-whatsapp-api',
       'hermes-telegram-api',
+      'hermes-zulip-api',
+      'hermes-mail-api',
+      'hermes-communications-ingress',
+      'hermes-communications-api',
     ].includes(packageName);
     return hasExactKeys(target, ['primaryKind', 'customBuildAllowed'])
       && target.primaryKind === (packageDescriptor?.surface === 'runtime' ? 'bin' : 'lib')
@@ -1168,9 +1422,19 @@ function expectedSlice(currentSlice) {
   if (currentSlice === 'gateway_runtime_foundation_v1') {
     return { profile: MANAGED_LAUNCH_TRUST_PROFILE, packages: GATEWAY_RUNTIME_FOUNDATION_PRODUCTION_PACKAGES, workspaceDependencies: GATEWAY_RUNTIME_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST, thirdPartyDependencies: GATEWAY_RUNTIME_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST, forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES };
   }
-  if (currentSlice === 'gateway_runtime_plus_mail_communications_v1') {
+  if (currentSlice === 'gateway_runtime_plus_mail_telegram_whatsapp_communications_v1') {
     return {
       profile: MANAGED_LAUNCH_TRUST_PROFILE,
+      packages: MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES,
+      workspaceDependencies: MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'first_owner_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: FIRST_OWNER_INVENTORY,
       packages: MAIL_COMMUNICATIONS_FOUNDATION_PRODUCTION_PACKAGES,
       workspaceDependencies: MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
@@ -1228,13 +1492,13 @@ function isExactKernelProfile(profile, constitutionalComponents, expected) {
     && isExactOrderedStringList(profile.offlineOperations, expected.offlineOperations)
     && isExactOrderedStringList(profile.externalServices, expected.externalServices)
     && isExactOrderedStringList(profile.managedChildren, expected.managedChildren)
-    && profile.publicGatewayEnabled === false
+    && profile.publicGatewayEnabled === (expected.publicGatewayEnabled ?? false)
     && profile.networkListenerEnabled === expected.networkListenerEnabled
     && profile.moduleRegistrationEnabled === expected.moduleRegistrationEnabled
     && profile.managedLaunchEnabled === expected.managedLaunchEnabled
-    && profile.natsDataPlaneEnabled === false
-    && profile.businessDataPlaneEnabled === false
-    && profile.wholeInstanceBackupEnabled === false
+    && profile.natsDataPlaneEnabled === (expected.natsDataPlaneEnabled ?? false)
+    && profile.businessDataPlaneEnabled === (expected.businessDataPlaneEnabled ?? false)
+    && profile.wholeInstanceBackupEnabled === (expected.wholeInstanceBackupEnabled ?? false)
     && isExactClock(profile.clock);
 }
 
@@ -1267,7 +1531,9 @@ export function validateImplementationSlicePolicy(policy) {
     cargo_features: implementation?.cargoFeaturesEnabled === false,
     target_policy: isExactTargetPolicy(implementation?.targetPolicy, slice?.packages),
     development_profile: isExactDevelopmentProfile(implementation?.developmentProfile),
-    owner_inventory: isEmptyOwnerInventory(implementation?.ownerInventory),
+    owner_inventory: slice?.ownerInventory
+      ? isExactOwnerInventory(implementation?.ownerInventory, slice.ownerInventory)
+      : isEmptyOwnerInventory(implementation?.ownerInventory),
     kernel_profile: isExactKernelProfile(
       implementation?.kernelProfile,
       list(policy?.kernel?.constitutionalComponents),

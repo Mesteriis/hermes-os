@@ -28,6 +28,7 @@ hermes-kernel-control-store-sqlite = { path = "control_store/sqlite" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 hermes-secure-file = { path = "../platform/secure_file" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
+hermes-vault-protocol = { path = "../platform/vault/protocol" }
 p256 = { version = "=0.14.0", default-features = false, features = ["ecdsa"] }
 prost = "=0.14.4"
 quinn = "=0.11.7"

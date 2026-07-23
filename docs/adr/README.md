@@ -57,6 +57,10 @@ policy через ссылки из новых документов.
 - [ADR-0236: Integration owners, protocol adapters и configuration instances](ADR-0236-integration-owners-protocol-adapters-and-configuration-instances.md)
 - [ADR-0237: Временный private-LAN development без owner authority](ADR-0237-temporary-private-lan-development-without-owner-authority.md)
 - [ADR-0238: Secure-file FD boundary](ADR-0238-secure-file-fd-boundary.md)
+- [ADR-0249: Communications profile for storage_control_v1](ADR-0249-communications-storage-control-v1-admission-profile.md)
+- [ADR-0250: Communications profile for nats_data_plane_v1](ADR-0250-communications-nats-data-plane-v1-admission-profile.md)
+- [ADR-0251: Opening client_gateway_v1 for owner contracts](ADR-0251-client-gateway-v1-opening-for-owner-contracts.md)
+- [ADR-0252: first_owner_v1 Communications admission](ADR-0252-first-owner-v1-communications-admission.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
@@ -123,21 +127,20 @@ business/runtime state и Scheduler records настройками не явля
 ADR-0223 выделяет Vault в отдельный verified managed process. Kernel вычисляет
 grants и маршрутизирует только HPKE ciphertext, а Vault хранит bounded credential
 material в SQLCipher с record-level AEAD и выдаёт process-bound leases. Bulk
-provider session state остаётся у integration owner. Решение принято, но
-exact `vault_v1` production packages, storage format и conformance tests
-реализованы. Whole-instance backup остаётся отдельным gate.
+provider session state остаётся у integration owner. Exact `vault_v1`
+production packages, storage format и conformance tests реализованы;
+whole-instance backup открыт ADR-0233.
 ADR-0224 выделяет Storage Control в отдельный managed control-plane process.
 Kernel supervises PostgreSQL, PgBouncer и Storage Control; modules выполняют
 business SQL напрямую через PgBouncer, а Storage Control владеет bootstrap,
 roles/grants/budgets, migration admission и readiness. Runtime credentials
 выдаёт Vault, а PgBouncer не считается единственной security boundary. Target
 принят, но production packages и process-level isolation tests отсутствуют.
-ADR-0225 разрешает строго ограниченный production graph. Kernel может достичь
-только `recovery_only`, активирует лишь
-`supervisor` и локальный `core_gateway`, не запускает внешние сервисы и не
-содержит business owners. Managed launch реализован; NATS, Blob, Scheduler,
-public client gateway, whole-instance backup и первый owner закрыты отдельными
-фазовыми воротами.
+ADR-0225 зафиксировал исходный recovery-only production graph. Последующие
+атомарные gates открыли managed platform runtimes, NATS, Blob, Scheduler,
+public client Gateway, whole-instance backup и первый owner Communications.
+Текущий Kernel по-прежнему честно сообщает `module_control_plane`; отдельный
+production state `ready` не заявляется.
 ADR-0226 запрещает AI прямой доступ к таблицам и query APIs других owners.
 Cross-owner AI context собирает отдельный use-case workflow через явные public
 contracts в distinct generated request с common `AiContextReceiptV1` и
@@ -152,20 +155,18 @@ discontinuity policy and deterministic fake clock. It does not open Scheduler,
 module timers or timezone/DST calendar evaluation.
 ADR-0230 фиксирует Blob Platform boundary: opaque references, owner-local
 metadata, Vault-scoped encryption authority, bounded range/path handling and
-fenced retention/GC. `blob_v1` остаётся закрытым до runtime conformance.
+fenced retention/GC. `blob_v1` открыт после runtime conformance.
 ADR-0231 фиксирует следующий mandatory Blob vertical slice: private direct
 socket authenticated by a short-lived generation-bound session grant and
 ciphertext-only inherited Vault routing. Kernel never receives Blob plaintext.
 ADR-0232 включает browser как отдельный first-party client: он получает
 owner-approved, revocable, device-bound WebAuthn ES256 identity и только
 short-lived same-origin HttpOnly Gateway session. Его owner-neutral
-`browser_client_v1` gate открыт отдельно; explicit paired-remote HTTP/2+H3
-transport не открывает public owner API или полный `client_gateway_v1` runtime
-evidence.
-ADR-0233 фиксирует меньший текущий scope: отдельные Control Store/Vault/Blob
-recovery artifacts и PostgreSQL custom data dump. JetStream, Scheduler,
-provider state и composed whole-instance restore не входят в эту процедуру;
-whole-instance recovery gate остаётся закрытым.
+`browser_client_v1` gate открыт отдельно; ADR-0251 затем открывает
+`client_gateway_v1` для owner contracts без Gateway-owned business facade.
+ADR-0233 открывает `whole_instance_backup_v1`: signed/encrypted media включает
+Control Store, Vault, PostgreSQL, Blob, Scheduler и Event Hub topology через
+component-owned offline ports, с empty-target restore и generation fencing.
 ADR-0234 допускает synchronised WebAuthn passkeys только как одну часть
 двухключевой browser identity: session требует ещё и подписи отдельного
 non-extractable browser-local WebCrypto key. Новый Mac с синхронизированным
@@ -181,6 +182,6 @@ listener без owner APIs: он не сохраняется и не даёт ow
 ADR-0238 вводит один FD-bound secure-file contract для bounded no-symlink
 readers private material и release inputs; rollout readers остаётся явным
 admission prerequisite.
-ADR-0239 предлагает exact first-owner Mail/IMAP read-only vertical slice и
-Communications evidence boundary, но сохраняет все prerequisite gates закрытыми
-до атомарной package/evidence admission.
+ADR-0239 остаётся историей раннего Mail/IMAP slice. ADR-0252 заменяет временный
+owner exception exact admission домена Communications; provider integrations
+остаются отдельными units и не входят в owner inventory домена.

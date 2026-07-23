@@ -24,6 +24,11 @@ const MAX_ATTEMPTS: u8 = 3;
 const MAX_RUNTIME: Duration = Duration::from_secs(300);
 const MAXIMUM_BLOB_BYTES: u64 = 64 * 1024 * 1024;
 
+#[must_use]
+pub(crate) fn data_socket_path(data_dir: &Path) -> std::path::PathBuf {
+    data_dir.join("blob").join("data.sock")
+}
+
 pub fn start(
     supervisor: &ManagedRuntimeSupervisor,
     store: &SqliteControlStore,
@@ -143,7 +148,7 @@ fn prepare_launch(
     // Unix socket paths have a small kernel-defined byte limit. The
     // OS-standard runtime cache path can exceed it on macOS, while the
     // owner-private Kernel data directory is an already-short service boundary.
-    let data_socket_path = service_data_dir.join("data.sock");
+    let data_socket_path = data_socket_path(data_dir);
     let prepared = native_launch::prepare_bound_platform_process(
         kernel,
         binding,

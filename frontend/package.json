@@ -6,6 +6,7 @@
 	"packageManager": "pnpm@11.5.1",
 	"scripts": {
 		"dev": "vite",
+		"tauri:whatsapp": "tauri dev --features whatsapp-host-webview",
 		"proto:generate": "node scripts/generate-proto.mjs",
 		"browser:bootstrap:check": "node scripts/check-browser-bootstrap-bundle.mjs",
 		"build": "pnpm typecheck && vite build && node scripts/check-local-client-assets.mjs dist",

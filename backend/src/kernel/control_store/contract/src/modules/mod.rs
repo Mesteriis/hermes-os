@@ -6,6 +6,7 @@ mod registration;
 mod scheduler_request;
 mod settings;
 mod storage_request;
+mod vault_purpose_request;
 
 pub use blob_request::ModuleBlobQuotaRequestV1;
 pub use event_request::{
@@ -22,3 +23,4 @@ pub use settings::{
     SettingsSchemaBindingInputV1,
 };
 pub use storage_request::ModuleStorageRequestV1;
+pub use vault_purpose_request::ModuleVaultPurposeRequestV1;

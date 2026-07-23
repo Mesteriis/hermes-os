@@ -1,9 +1,5 @@
 mod api_tests;
 mod communications_domain_tests;
 mod communications_ingress_tests;
-mod communications_persistence_tests;
-mod communications_runtime_tests;
 mod core_tests;
 mod imap_tests;
-mod mail_persistence_tests;
-mod mail_runtime_tests;

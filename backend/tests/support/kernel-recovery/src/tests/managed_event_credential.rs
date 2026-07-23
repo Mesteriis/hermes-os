@@ -34,6 +34,8 @@ fn managed_runtime_request_exposes_only_public_fences_and_receives_opaque_delive
             encapped_key: vec![1; 32],
             ciphertext: vec![2; 32],
             tag: vec![3; 16],
+            consumer_bindings: Vec::new(),
+            publish_subjects: Vec::new(),
         }),
     )
     .expect("opaque response");
@@ -94,6 +96,8 @@ impl ManagedRuntimeEventCredentialHandler for RecordingCredentialHandler {
             encapped_key: vec![1; 32],
             ciphertext: vec![2; 32],
             tag: vec![3; 16],
+            consumer_bindings: Vec::new(),
+            publish_subjects: Vec::new(),
         })
     }
 }

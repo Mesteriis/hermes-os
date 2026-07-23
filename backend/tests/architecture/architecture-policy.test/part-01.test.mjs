@@ -439,6 +439,7 @@ test('requires an exact Vault process, lease and secret-carrier policy', () => {
     (vault) => { vault.role = 'core'; },
     (vault) => { vault.owner = 'kernel'; },
     (vault) => { vault.protocolPackage = 'hermes-vault-contracts'; },
+    (vault) => { vault.managedClientPackage = 'hermes-vault-client'; },
     (vault) => { vault.keyProviderPackage = 'hermes-platform-key-provider'; },
     (vault) => { vault.runtimePackage = 'hermes-kernel'; },
     (vault) => { vault.storePackage = 'hermes-vault-store'; },

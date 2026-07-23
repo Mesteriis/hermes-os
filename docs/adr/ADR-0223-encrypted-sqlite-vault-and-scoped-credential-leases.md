@@ -211,6 +211,10 @@ backend/src/platform/vault/protocol/
     hermes-vault-protocol
     platform:vault:contract
 
+backend/src/platform/vault/managed_client/
+    hermes-managed-vault-client
+    platform:vault:contract
+
 backend/src/platform/vault/key_provider/
     hermes-vault-key-provider
     platform:vault:contract
@@ -232,6 +236,15 @@ backend/src/platform/vault/key_provider_file/
 `hermes-vault-key-provider` является внутренним adapter port владельца Vault.
 Kernel, modules и Gateway не зависят от него. Новый Vault package или platform
 adapter требует изменения этого ADR и executable policy.
+
+`hermes-managed-vault-client` является единственным публичным contract для
+managed module runtime, которому требуется provider credential. Он принимает
+только Kernel-inherited authenticated local FD и строит HPKE ciphertext frames
+для scoped lease request; он не открывает Vault store, не получает root/wrapping
+keys, не импортирует Vault runtime или key-provider и не создаёт alternate Vault
+transport. Его dependency разрешена только runtime packages с действующим
+owner-approved grant; Kernel и Gateway не зависят от него. Остальные Vault
+packages остаются закрытой owner implementation boundary.
 
 ### Threat boundary
 

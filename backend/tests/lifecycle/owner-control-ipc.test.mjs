@@ -14,8 +14,6 @@ import {
   ownerBindExternal,
   ownerComplete,
   ownerStatus,
-  ownerMailRuntimeCommand,
-  ownerCommunicationsRuntimeCommand,
   ownerTelemetryDiagnostics,
   ownerTransition,
   ownerUpdateSettings,
@@ -194,12 +192,6 @@ async function proveOwnerSessionEnforcement(socketPath, registrationId) {
     socketPath, ownerBeginBrowserPairing('missing'),
   )), 'operation_denied');
   assert.equal(errorCode(await request(
-    socketPath, ownerMailRuntimeCommand('missing', 'status'),
-  )), 'operation_denied');
-  assert.equal(errorCode(await request(
-    socketPath, ownerCommunicationsRuntimeCommand('missing', 'status'),
-  )), 'operation_denied');
-  assert.equal(errorCode(await request(
     socketPath, configurePlatformEventHubTopology('missing'),
   )), 'operation_denied');
 }
@@ -215,7 +207,6 @@ async function exerciseOwnerMutations(context, dataDir, descriptor, schema) {
     dataDir,
     pairSession,
   );
-  await assertRuntimeOwnerCommandStatus(socketPaths.owner, ownerSessionId);
   await admitSchema(context, pairSession, descriptor, schema);
   await assertTopologyAndSchedulerGuards(socketPaths.owner, registrationId, ownerSessionId);
   return ownerSessionId;
@@ -247,57 +238,6 @@ async function assertModuleBindRestrictions(ownerSocket, registrationId, ownerSe
   assert.equal(errorCode(await request(
     ownerSocket,
     ownerBindExternal(registrationId, Buffer.alloc(65, 4), 'missing'),
-  )), 'operation_denied');
-}
-
-async function assertRuntimeOwnerCommandStatus(ownerSocket, ownerSessionId) {
-  const mailStatus = decode(
-    decode(await request(
-      ownerSocket,
-      ownerMailRuntimeCommand(ownerSessionId, 'status'),
-    )).get(37),
-  );
-  assert.ok(mailStatus, 'owner mail runtime status command failed');
-  assert.equal(mailStatus.get(2) ?? 0, 0);
-  assert.equal(stringValue(mailStatus, 1), 'status');
-  assert.ok(stringValue(mailStatus, 3).includes('mail_runtime_status'));
-  const commStatus = decode(
-    decode(await request(
-      ownerSocket,
-      ownerCommunicationsRuntimeCommand(ownerSessionId, 'status'),
-    )).get(38),
-  );
-  assert.ok(commStatus, 'owner communications runtime status command failed');
-  assert.equal(stringValue(commStatus, 1), 'status');
-  assert.equal(commStatus.get(2) ?? 0, 0);
-  assert.ok(stringValue(commStatus, 3).includes('communications_runtime status ok'));
-  assert.equal(errorCode(await request(
-    ownerSocket,
-    ownerMailRuntimeCommand(ownerSessionId, 'sync'),
-  )), 'operation_denied');
-  assert.equal(errorCode(await request(
-    ownerSocket,
-    ownerMailRuntimeCommand(ownerSessionId, 'magic-sync'),
-  )), 'operation_denied');
-  assert.equal(errorCode(await request(
-    ownerSocket,
-    ownerMailRuntimeCommand(ownerSessionId, 'sync', ['conn-1']),
-  )), 'operation_denied');
-  assert.equal(errorCode(await request(
-    ownerSocket,
-    ownerMailRuntimeCommand(ownerSessionId, 'ingest'),
-  )), 'operation_denied');
-  assert.equal(errorCode(await request(
-    ownerSocket,
-    ownerCommunicationsRuntimeCommand(ownerSessionId, 'ingest'),
-  )), 'operation_denied');
-  assert.equal(errorCode(await request(
-    ownerSocket,
-    ownerCommunicationsRuntimeCommand(ownerSessionId, 'ingest', ['op-1']),
-  )), 'operation_denied');
-  assert.equal(errorCode(await request(
-    ownerSocket,
-    ownerCommunicationsRuntimeCommand(ownerSessionId, 'magic-ingest'),
   )), 'operation_denied');
 }
 

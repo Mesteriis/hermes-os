@@ -1,0 +1,20 @@
+[package]
+name = "hermes-zulip-http"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "integration"
+owner = "zulip"
+surface = "implementation"
+
+[dependencies]
+async-native-tls = "=0.6.0"
+async-std = "=1.13.2"
+hermes-zulip-api = { path = "../zulip-api" }
+serde_json = "=1.0.150"
+zeroize = "=1.9.0"

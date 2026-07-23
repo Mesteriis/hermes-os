@@ -13,5 +13,6 @@ owner = "mail"
 surface = "implementation"
 
 [dependencies]
+base64 = "=0.22.1"
 hermes-communications-ingress = { path = "../communications-ingress" }
 hermes-mail-api = { path = "../mail-api" }

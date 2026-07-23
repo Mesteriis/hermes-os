@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "whatsapp-companion-relay",
-  "description": "Allows owner-visible WhatsApp Web companion windows to invoke only the sanitized relay preflight command.",
+  "description": "Allows the remote WhatsApp Web companion window to relay only sanitized runtime lifecycle metadata through its active native host route.",
   "local": false,
   "remote": {
     "urls": [
@@ -12,9 +12,6 @@
     "whatsapp-companion-*"
   ],
   "permissions": [
-    "allow-whatsapp-web-companion-relay-observation",
-    "allow-whatsapp-web-companion-poll-commands",
-    "allow-whatsapp-web-companion-report-command-failure",
-    "allow-whatsapp-web-companion-report-command-result"
+    "allow-whatsapp-web-companion-relay-runtime-state"
   ]
 }

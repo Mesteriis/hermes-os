@@ -19,11 +19,15 @@ fn supports_only_read_windows() {
             subject: "s".to_owned(),
             snippet: "p".to_owned(),
             has_plain_text: true,
+            plain_text_body: None,
+            attachments: Vec::new(),
         } != ImapMessage {
             uid: 2,
             subject: "s".to_owned(),
             snippet: "p".to_owned(),
             has_plain_text: true,
+            plain_text_body: None,
+            attachments: Vec::new(),
         }
     );
 }

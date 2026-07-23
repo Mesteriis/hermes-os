@@ -1,0 +1,32 @@
+[package]
+name = "hermes-whatsapp-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+name = "hermes_whatsapp_runtime"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermes-whatsapp-runtime"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "integration"
+owner = "whatsapp"
+surface = "runtime"
+
+[dependencies]
+hermes-communications-ingress = { path = "../communications-ingress" }
+hermes-events-jetstream = { path = "../platform/events/jetstream" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+hermes-storage-vault = { path = "../platform/storage/vault" }
+hermes-vault-protocol = { path = "../platform/vault/protocol" }
+hermes-whatsapp-api = { path = "../whatsapp-api" }
+hermes-whatsapp-core = { path = "../whatsapp-core" }
+hermes-whatsapp-persistence = { path = "../whatsapp-persistence" }
+libc = "=0.2.186"
+prost = "=0.14.4"
+tokio = { version = "=1.52.4", default-features = false, features = ["rt-multi-thread"] }

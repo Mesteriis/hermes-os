@@ -830,6 +830,10 @@ pub fn parse_message_observation(
         provider_topic_id: payload.get("message_thread_id").and_then(value_id_optional),
         sender_id: sender.to_string(),
         sender_display_name: None,
+        is_outgoing: payload
+            .get("is_outgoing")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| TdlibError::Protocol("TDLib message direction is missing".to_owned()))?,
         text,
         media,
         references,
@@ -1381,9 +1385,15 @@ fn message_text(content: Option<&Value>) -> Option<String> {
 fn parse_message_media(content: Option<&Value>) -> Option<TelegramMessageMedia> {
     let content = content?;
     let content_type = content.get("@type").and_then(Value::as_str)?;
-    let (kind, file) = match content_type {
+    let (kind, metadata, file) = match content_type {
         "messagePhoto" => (
             TelegramMediaKind::Photo,
+            content
+                .get("photo")?
+                .get("sizes")?
+                .as_array()?
+                .last()?
+                .get("photo"),
             content
                 .get("photo")?
                 .get("sizes")?
@@ -1393,29 +1403,28 @@ fn parse_message_media(content: Option<&Value>) -> Option<TelegramMessageMedia> 
         ),
         "messageVideo" => (
             TelegramMediaKind::Video,
+            content.get("video"),
             content.get("video").and_then(|value| value.get("video")),
         ),
         "messageAudio" => (
             TelegramMediaKind::Audio,
+            content.get("audio"),
             content.get("audio").and_then(|value| value.get("audio")),
         ),
         "messageDocument" => (
             TelegramMediaKind::Document,
-            content
-                .get("document")
-                .and_then(|value| value.get("document")),
+            content.get("document"),
+            content.get("document").and_then(|value| value.get("document")),
         ),
         "messageAnimation" => (
             TelegramMediaKind::Animation,
-            content
-                .get("animation")
-                .and_then(|value| value.get("animation")),
+            content.get("animation"),
+            content.get("animation").and_then(|value| value.get("animation")),
         ),
         "messageVoiceNote" => (
             TelegramMediaKind::VoiceNote,
-            content
-                .get("voice_note")
-                .and_then(|value| value.get("voice")),
+            content.get("voice_note"),
+            content.get("voice_note").and_then(|value| value.get("voice")),
         ),
         _ => return None,
     };
@@ -1429,12 +1438,25 @@ fn parse_message_media(content: Option<&Value>) -> Option<TelegramMessageMedia> 
             .and_then(|value| value.get("text"))
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
-        filename: content
-            .get("document")
+        filename: metadata
             .and_then(|value| value.get("file_name"))
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
+        content_type: metadata
+            .and_then(|value| value.get("mime_type"))
+            .and_then(Value::as_str)
+            .filter(|value| valid_content_type(value))
+            .map(ToOwned::to_owned),
     })
+}
+
+fn valid_content_type(value: &&str) -> bool {
+    !value.is_empty()
+        && value.len() <= 256
+        && value.is_ascii()
+        && value.contains('/')
+        && !value.contains(char::is_whitespace)
+        && !value.contains(';')
 }
 
 fn value_id_optional(value: &Value) -> Option<String> {
@@ -1740,6 +1762,7 @@ mod tests {
                 "chat_id": 100,
                 "id": 200,
                 "date": 10,
+                "is_outgoing": false,
                 "sender_id": {"user_id": 7},
                 "content": {
                     "@type": "messageDocument",
@@ -1893,6 +1916,22 @@ pub struct TdJsonLibrary {
 }
 
 impl TdJsonLibrary {
+    /// Loads only the exact signed TDLib artifact selected by the integration.
+    /// No host-library discovery is permitted for a managed runtime.
+    pub fn load_exact(path: &Path) -> Result<Self, TdlibError> {
+        if !path.is_absolute() {
+            return Err(TdlibError::Protocol("TDLib artifact path is not absolute".to_owned()));
+        }
+        let metadata = std::fs::symlink_metadata(path)
+            .map_err(|_| TdlibError::Protocol("TDLib artifact is unavailable".to_owned()))?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(TdlibError::Protocol("TDLib artifact is invalid".to_owned()));
+        }
+        let library = unsafe { Library::new(path) }
+            .map_err(|_| TdlibError::Protocol("TDLib artifact is unavailable".to_owned()))?;
+        Self::from_library(library, path)
+    }
+
     pub fn load(configured_path: Option<&Path>) -> Result<Self, TdlibError> {
         let candidates = library_candidates(configured_path);
         let mut errors = Vec::new();
@@ -2407,6 +2446,7 @@ mod message_reference_tests {
                 "id": 200,
                 "sender_id": {"user_id": 42},
                 "date": 10,
+                "is_outgoing": false,
                 "reply_to": {
                     "@type": "messageReplyToMessage",
                     "chat_id": 100,
@@ -2510,6 +2550,7 @@ mod folder_command_tests {
                     "id": 200,
                     "sender_id": {"user_id": 42},
                     "date": 10,
+                    "is_outgoing": false,
                     "content": {"@type": "messageText", "text": {"text": "release"}}
                 }]
             }),

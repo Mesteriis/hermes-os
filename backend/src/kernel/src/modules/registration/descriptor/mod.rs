@@ -4,11 +4,12 @@ use hermes_kernel_control_store::{
     ModuleBlobQuotaRequestV1, ModuleEventDeliveryPolicyV1, ModuleEventEnvelopeKindV1,
     ModuleEventRouteDirectionV1, ModuleEventRouteRequestInputV1, ModuleEventRouteRequestV1,
     ModuleEventSubscriptionRequirementV1, ModuleRegistration, ModuleSchedulerJobRequestV1,
-    ModuleStorageRequestV1,
+    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
 };
 use hermes_runtime_protocol::{
     v1::{
         DurableEnvelopeKindV1, EventRouteDirectionV1, EventSubscriptionRequirementV1,
+        VaultActionV1, VaultSecretClassV1, VaultTargetScopeV1,
         capability_request_v1::Request as CapabilityRequest,
     },
     validation::descriptor::decode_descriptor_v1,
@@ -24,6 +25,7 @@ pub(super) struct DescriptorRegistrationRequests {
     events: Vec<DescriptorEventRouteRequest>,
     blobs: Vec<DescriptorBlobQuotaRequest>,
     scheduler: Vec<DescriptorSchedulerJobRequest>,
+    vault_purposes: Vec<DescriptorVaultPurposeRequest>,
 }
 
 pub(super) struct BoundRegistrationRequests {
@@ -31,6 +33,7 @@ pub(super) struct BoundRegistrationRequests {
     pub(super) events: Vec<ModuleEventRouteRequestV1>,
     pub(super) blobs: Vec<ModuleBlobQuotaRequestV1>,
     pub(super) scheduler: Vec<ModuleSchedulerJobRequestV1>,
+    pub(super) vault_purposes: Vec<ModuleVaultPurposeRequestV1>,
 }
 
 impl DescriptorRegistrationRequests {
@@ -50,6 +53,7 @@ impl DescriptorRegistrationRequests {
             events: event_route_requests(&descriptor)?,
             blobs: blob_quota_requests(&descriptor)?,
             scheduler: scheduler_job_requests(&descriptor)?,
+            vault_purposes: vault_purpose_requests(&descriptor)?,
         })
     }
 
@@ -75,6 +79,7 @@ impl DescriptorRegistrationRequests {
             events: bind_event_route_requests(&self.events, registration),
             blobs: bind_blob_quota_requests(&self.blobs, registration),
             scheduler: bind_scheduler_job_requests(&self.scheduler, registration),
+            vault_purposes: bind_vault_purpose_requests(&self.vault_purposes, registration),
         }
     }
 }
@@ -158,6 +163,17 @@ fn bind_scheduler_job_requests(
         .collect()
 }
 
+fn bind_vault_purpose_requests(
+    requests: &[DescriptorVaultPurposeRequest],
+    registration: &ModuleRegistration,
+) -> Vec<ModuleVaultPurposeRequestV1> {
+    requests.iter().map(|request| ModuleVaultPurposeRequestV1::new(
+        registration.registration_id(), &request.capability_id, &request.purpose_id,
+        request.requested_lease_ttl_seconds, request.secret_class, request.action,
+        request.target_scope,
+    )).collect()
+}
+
 struct DescriptorStorageRequest {
     capability_id: String,
     owner_id: String,
@@ -190,6 +206,15 @@ struct DescriptorSchedulerJobRequest {
     major: u32,
     revision: u32,
     schema_sha256: [u8; 32],
+}
+
+struct DescriptorVaultPurposeRequest {
+    capability_id: String,
+    purpose_id: String,
+    requested_lease_ttl_seconds: u16,
+    secret_class: u8,
+    action: u8,
+    target_scope: u8,
 }
 
 fn event_route_requests(
@@ -389,4 +414,43 @@ fn scheduler_job_requests(
         }
     }
     Ok(requests)
+}
+
+fn vault_purpose_requests(
+    descriptor: &hermes_runtime_protocol::v1::ModuleDescriptorV1,
+) -> Result<Vec<DescriptorVaultPurposeRequest>, String> {
+    let mut result = Vec::new();
+    for capability in &descriptor.capabilities {
+        for purpose in capability.requests.iter().filter_map(|request| match request.request.as_ref() {
+            Some(CapabilityRequest::VaultPurpose(purpose)) => Some(purpose),
+            _ => None,
+        }) {
+            if VaultTargetScopeV1::try_from(purpose.target_scope).ok()
+                != Some(VaultTargetScopeV1::ConfigurationInstance)
+            {
+                return Err("module Vault purpose target scope is invalid".to_owned());
+            }
+            let ttl = u16::try_from(purpose.requested_lease_ttl_seconds)
+                .map_err(|_| "module Vault purpose request is invalid".to_owned())?;
+            for secret_class in &purpose.allowed_secret_classes {
+                let secret_class = VaultSecretClassV1::try_from(*secret_class).ok()
+                    .filter(|value| *value != VaultSecretClassV1::Unspecified)
+                    .ok_or_else(|| "module Vault purpose request is invalid".to_owned())? as u8;
+                for action in &purpose.actions {
+                    let action = VaultActionV1::try_from(*action).ok()
+                        .filter(|value| *value != VaultActionV1::Unspecified)
+                        .ok_or_else(|| "module Vault purpose request is invalid".to_owned())? as u8;
+                    result.push(DescriptorVaultPurposeRequest {
+                        capability_id: capability.capability_id.clone(),
+                        purpose_id: purpose.purpose_id.clone(),
+                        requested_lease_ttl_seconds: ttl,
+                        secret_class,
+                        action,
+                        target_scope: VaultTargetScopeV1::ConfigurationInstance as u8,
+                    });
+                }
+            }
+        }
+    }
+    Ok(result)
 }

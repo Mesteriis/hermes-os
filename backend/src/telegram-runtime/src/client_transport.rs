@@ -8,7 +8,7 @@ use hermes_telegram_tdlib::TdlibTransport;
 
 use crate::{
     TelegramRuntime, TelegramRuntimeComposition,
-    client_port::{TelegramClientPort, TelegramClientPortError},
+    client_port::TelegramClientPortError,
 };
 
 const MAX_CLIENT_FRAME_BYTES: usize = 512 * 1024;
@@ -68,23 +68,6 @@ pub enum TelegramClientTransportError {
     RuntimeUnavailable,
 }
 
-pub fn serve_connection<T: TdlibTransport>(
-    mut stream: UnixStream,
-    runtime: &mut TelegramRuntime<T>,
-) -> Result<(), TelegramClientTransportError> {
-    loop {
-        let request = match read_frame(&mut stream) {
-            Ok(request) => request,
-            Err(TelegramClientTransportError::Io(error)) if error == "eof" => return Ok(()),
-            Err(error) => return Err(error),
-        };
-        let response = TelegramClientPort::new(runtime)
-            .handle_module_request(&request)
-            .map_err(TelegramClientTransportError::Port)?;
-        write_frame(&mut stream, &response)?;
-    }
-}
-
 pub fn serve_connection_durable<T: TdlibTransport>(
     mut stream: UnixStream,
     runtime: &mut TelegramRuntime<T>,
@@ -106,6 +89,17 @@ pub fn serve_connection_durable<T: TdlibTransport>(
         .map_err(TelegramClientTransportError::Port)?;
         write_frame(&mut stream, &response)?;
     }
+}
+
+pub async fn handle_durable_request<T: TdlibTransport>(
+    runtime: &mut TelegramRuntime<T>,
+    durable: &TelegramDurablePersistence,
+    request: &[u8],
+) -> Result<Vec<u8>, TelegramClientTransportError> {
+    crate::client_port::TelegramClientPort::new(runtime)
+        .handle_module_request_durable(request, durable)
+        .await
+        .map_err(TelegramClientTransportError::Port)
 }
 
 fn read_frame(stream: &mut UnixStream) -> Result<Vec<u8>, TelegramClientTransportError> {

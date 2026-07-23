@@ -12,12 +12,13 @@ mod transport;
 
 pub use application::GatewayApplicationRouter;
 pub use browser::{
-    BrowserAuthenticationRouter, BrowserBootstrapRouter, BrowserPairingRouter,
-    BrowserSessionStatusRouter, ClientBootstrapRouter, SharedBrowserGatewaySessionService,
-    SharedBrowserPairingManager,
+    BrowserAuthenticationRouter, BrowserBootstrapRouter, BrowserPairingRouter, BrowserSessionStatusRouter,
+    ClientBootstrapRouter, CommunicationsQueryRouteErrorV1, CommunicationsQueryRouteHandler,
+    CommunicationsQueryRouter, SharedBrowserGatewaySessionService, SharedBrowserPairingManager,
 };
 pub use realtime::{
-    BrowserRealtimeRouter, BrowserRealtimeSubscriptionSource, ClientRealtimeSubscriptionV1,
+    BrowserRealtimePublisherV1, BrowserRealtimeRouter, BrowserRealtimeSubscriptionSource,
+    ClientRealtimeSubscriptionV1, InMemoryBrowserRealtimeSource,
 };
 pub use routes::GatewayTechnicalRouter;
 pub use transport::{

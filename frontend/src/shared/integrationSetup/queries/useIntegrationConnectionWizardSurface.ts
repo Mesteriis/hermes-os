@@ -4,7 +4,7 @@ import {
   useSetupImapEmailAccountMutation,
   useStartGmailOAuthSetupMutation,
 } from '../../../integrations/mail/queries/accountSetupQueries'
-import { useStartHiddenWhatsappWebviewMutation } from '../../../integrations/whatsapp/queries/useWhatsappRuntimeQuery'
+import { useOpenWhatsappWebCompanionForPairingMutation } from '../../../integrations/whatsapp/queries/useWhatsappRuntimeQuery'
 import { useI18n } from '../../../platform/i18n'
 import {
   fetchTelegramQrLoginStatus,
@@ -72,7 +72,7 @@ export function useIntegrationConnectionWizardSurface(options: {
     mutationFn: ({ setupId, password }: { setupId: string; password: string }) =>
       submitTelegramQrLoginPassword(setupId, { password }),
   })
-  const hiddenWebviewMutation = useStartHiddenWhatsappWebviewMutation()
+  const hiddenWebviewMutation = useOpenWhatsappWebCompanionForPairingMutation()
 
   const activeFlowId = ref<ConnectionFlowPattern>('browser_callback')
   const gmailAccountLabel = ref('Personal Google')
@@ -437,10 +437,10 @@ export function useIntegrationConnectionWizardSurface(options: {
     try {
       const manifest = await hiddenWebviewMutation.mutateAsync({ account_id: selectedAccountId.value })
       wizard.setSuccess({
-        title: t('Скрытый WhatsApp WebView запущен'),
+        title: t('WhatsApp WebView открыт для pairing'),
         message: manifest.reused_existing_window
-          ? t('Скрытый runtime уже работал.')
-          : t('Скрытый runtime запущен.'),
+          ? t('WhatsApp WebView уже был открыт.')
+          : t('Отсканируйте QR-код, затем WebView можно скрыть.'),
       })
     } catch (error) {
       wizard.setError(

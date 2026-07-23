@@ -5,16 +5,26 @@
 pub mod bootstrap;
 pub mod client_port;
 pub mod client_transport;
+pub mod communications_outbox;
 pub mod managed_control;
 pub mod process;
+mod projection_cache;
+pub mod settings;
 pub mod vault_credentials;
 
 use hermes_blob_client::BlobDataClient;
 use hermes_blob_client_contract::BlobReadPort;
+use hermes_communications_ingress::{
+    BodyAdmissionFailureV1, BodyAvailabilityV1, BodyBlobReceiptV1,
+    CommunicationObservationDraft, ObservationEnvelopeContextV1,
+    build_observation_outbox_record_v1, with_admitted_body_blob, with_body_admission_failure,
+};
+use hermes_events_protocol::delivery::OutboxRecordV1;
 use hermes_runtime_protocol::v1::BlobDataSessionGrantV1;
 use hermes_telegram_api::{
     TelegramAccount, TelegramAccountSetup, TelegramAccountState, TelegramContractError,
-    TelegramCredentialBinding, TelegramDeliveryState, TelegramDownloadFile, TelegramFileSnapshot,
+    TelegramCredentialPurpose,
+    TelegramDeliveryState, TelegramDownloadFile, TelegramFileSnapshot,
     TelegramMessageObservation, TelegramMessageTombstone, TelegramOperation,
     TelegramParticipantFilter, TelegramParticipantPage, TelegramProviderCommand,
     TelegramProviderKind, TelegramProviderQuery, TelegramProviderQueryResponse,
@@ -24,28 +34,27 @@ use hermes_telegram_api::{
     validate_provider_query, validate_setup,
 };
 use hermes_telegram_core::{
-    CommunicationObservationDraft, TelegramLifecycle, accept_operation, credential_lease_purposes,
+    TelegramLifecycle, accept_operation, credential_lease_purposes,
     event_chat_state, event_message_mutation, observation_draft, operation_awaiting_provider,
     operation_completed, operation_failed, operation_retry_scheduled, operation_running,
     project_message, provider_event_draft, qr_login_password_required, qr_login_password_submitted,
-    qr_login_preparing, qr_login_qr_issued, qr_login_ready, validate_credential_lease,
+    qr_login_preparing, qr_login_qr_issued, qr_login_ready,
 };
-use hermes_telegram_persistence::{
-    TelegramDurablePersistence, TelegramDurablePersistenceError, TelegramPersistence,
-};
+use hermes_telegram_persistence::{TelegramDurablePersistence, TelegramDurablePersistenceError};
 use hermes_telegram_tdlib::{
     TdJsonLibrary, TdJsonTransport, TdlibAuthorizationDriver, TdlibAuthorizationEvent,
     TdlibAuthorizationParameters, TdlibError, TdlibRequest, TdlibResponse, TdlibTransport,
     TelegramMediaMaterializer, get_chats_request, get_history_request,
     get_history_request_with_options, parse_file_snapshot, parse_provider_events, parse_topic_list,
 };
-use prost::Message;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use projection_cache::TelegramRuntimeProjectionCache;
 
 pub const PACKAGE: &str = "hermes-telegram-runtime";
 
@@ -516,7 +525,7 @@ mod tests {
     use super::*;
     use hermes_telegram_api::{
         TelegramAccountSetup, TelegramCredentialPurpose, TelegramProviderEvent,
-        TelegramProviderKind,
+        TelegramMessageObservation, TelegramMessageReferences, TelegramProviderKind,
     };
 
     struct PollingTransport {
@@ -583,12 +592,51 @@ mod tests {
             runtime_generation: 1,
             grant_epoch: 1,
             vault_runtime_generation: 1,
-            credential_leases: Vec::new(),
+            api_hash_revision: 0,
+            session_encryption_key_revision: 0,
         };
         assert_eq!(
             runtime.start_account("account", "process", "holder", 100, 10, &admission),
             Err(TelegramContractError::CredentialLeaseRejected)
         );
+    }
+
+    #[test]
+    fn provider_text_uses_injected_body_admission_and_records_typed_failure() {
+        let observation = TelegramMessageObservation {
+            account_id: "account".to_owned(),
+            provider_chat_id: "chat".to_owned(),
+            provider_message_id: "message".to_owned(),
+            provider_topic_id: None,
+            sender_id: "sender".to_owned(),
+            sender_display_name: None,
+            is_outgoing: false,
+            text: Some("hello".to_owned()),
+            media: None,
+            references: TelegramMessageReferences::default(),
+            observed_at_unix_seconds: 1,
+        };
+        let event = TelegramProviderEvent::MessageCreated(observation.clone());
+        let draft = hermes_telegram_core::observation_draft(observation).expect("draft");
+        let receipt = BodyBlobReceiptV1 {
+            blob_ref: "blob-content:test".to_owned(),
+            reference_id: [7; 16],
+            declared_bytes: 5,
+            sha256: [8; 32],
+        };
+        let admitted = admit_provider_event_body(draft.clone(), &event, &mut |_| Ok(receipt.clone()))
+            .expect("admitted body");
+        assert_eq!(admitted.body, BodyAvailabilityV1::AdmittedBlob);
+        assert_eq!(admitted.body_blob, Some(receipt));
+
+        let failed = admit_provider_event_body(
+            draft,
+            &event,
+            &mut |_| Err(BodyAdmissionFailureV1::PolicyRejected),
+        )
+        .expect("typed admission failure");
+        assert_eq!(failed.body, BodyAvailabilityV1::Unavailable);
+        assert_eq!(failed.body_admission_failure, Some(BodyAdmissionFailureV1::PolicyRejected));
     }
 }
 
@@ -691,7 +739,7 @@ impl<R: BlobReadPort> TelegramMediaMaterializer for TelegramBlobMaterializer<R> 
 
 pub struct TelegramRuntime<T> {
     transport: T,
-    persistence: TelegramPersistence,
+    persistence: TelegramRuntimeProjectionCache,
     lifecycle: TelegramLifecycle,
     media_materializer: Option<TelegramBlobMaterializer<BlobDataClient>>,
     admission: Option<TelegramRuntimeAdmission>,
@@ -706,12 +754,6 @@ pub struct TelegramRuntimeComposition {
 }
 
 #[derive(Clone)]
-pub struct TelegramCredentialLeaseBinding {
-    pub binding: TelegramCredentialBinding,
-    pub lease: hermes_telegram_core::TelegramCredentialLeaseV1,
-}
-
-#[derive(Clone)]
 pub struct TelegramRuntimeAdmission {
     pub logical_owner_id: String,
     pub configuration_instance_id: String,
@@ -720,7 +762,8 @@ pub struct TelegramRuntimeAdmission {
     pub runtime_generation: u64,
     pub grant_epoch: u64,
     pub vault_runtime_generation: u64,
-    pub credential_leases: Vec<TelegramCredentialLeaseBinding>,
+    pub api_hash_revision: u64,
+    pub session_encryption_key_revision: u64,
 }
 
 impl TelegramRuntimeComposition {
@@ -849,7 +892,7 @@ where
     pub fn new(transport: T) -> Self {
         Self {
             transport,
-            persistence: TelegramPersistence::new(),
+            persistence: TelegramRuntimeProjectionCache::new(),
             lifecycle: TelegramLifecycle,
             media_materializer: None,
             admission: None,
@@ -909,31 +952,24 @@ where
         .await
     }
 
-    pub fn configure_blob_materializer(
+    pub fn authorize_media_session(
         &mut self,
-        socket_path: impl Into<PathBuf>,
-        temp_dir: impl Into<PathBuf>,
+        session: hermes_blob_client::ManagedBlobSessionV1,
+        intent: &hermes_telegram_api::TelegramBlobIntentV1,
     ) -> Result<(), TdlibError> {
-        let reader = BlobDataClient::new(socket_path.into())
-            .map_err(|_| TdlibError::Protocol("Telegram Blob client is unavailable".to_owned()))?;
-        self.media_materializer = Some(TelegramBlobMaterializer::new(reader, temp_dir)?);
-        Ok(())
-    }
-
-    pub fn register_media_session(
-        &mut self,
-        session: hermes_telegram_api::TelegramMediaSessionRegistration,
-    ) -> Result<(), TdlibError> {
-        let grant = BlobDataSessionGrantV1::decode(session.grant_bytes.as_slice())
-            .map_err(|_| TdlibError::Protocol("Telegram Blob grant is invalid".to_owned()))?;
+        if self.media_materializer.is_none() {
+            let reader = BlobDataClient::new(session.data_socket_path)
+                .map_err(|_| TdlibError::Protocol("Telegram Blob client is unavailable".to_owned()))?;
+            self.media_materializer = Some(TelegramBlobMaterializer::new(reader, std::env::temp_dir())?);
+        }
         let materializer = self.media_materializer.as_mut().ok_or_else(|| {
             TdlibError::Protocol("Telegram Blob materializer is unavailable".to_owned())
         })?;
         materializer.add_session(TelegramBlobMaterializationSession {
-            blob_ref: session.blob_ref,
-            grant,
+            blob_ref: intent.blob_ref.clone(),
+            grant: session.grant,
             channel_binding: session.channel_binding,
-            declared_size: session.declared_size,
+            declared_size: intent.declared_size,
         })
     }
 
@@ -1014,29 +1050,22 @@ where
             .persistence
             .credentials(account_id)
             .ok_or(TelegramContractError::AccountUnknown)?;
-        if bindings.len() != admission.credential_leases.len() {
-            return Err(TelegramContractError::CredentialLeaseRejected);
-        }
+        let mut api_hash = false;
+        let mut session_key = false;
         for binding in bindings {
-            let provided = admission
-                .credential_leases
-                .iter()
-                .find(|item| item.binding == *binding)
-                .ok_or(TelegramContractError::CredentialLeaseRejected)?;
-            validate_credential_lease(
-                account_id,
-                &admission.logical_owner_id,
-                &admission.configuration_instance_id,
-                &admission.module_registration_id,
-                &admission.runtime_instance_id,
-                admission.runtime_generation,
-                admission.grant_epoch,
-                admission.vault_runtime_generation,
-                &provided.binding,
-                &provided.lease,
-                now_unix_seconds,
-            )?;
+            match binding.purpose {
+                TelegramCredentialPurpose::ApiHash
+                    if binding.revision == admission.api_hash_revision && !api_hash => {
+                    api_hash = true;
+                }
+                TelegramCredentialPurpose::SessionEncryptionKey
+                    if binding.revision == admission.session_encryption_key_revision && !session_key => {
+                    session_key = true;
+                }
+                _ => return Err(TelegramContractError::CredentialLeaseRejected),
+            }
         }
+        if !api_hash || !session_key { return Err(TelegramContractError::CredentialLeaseRejected); }
         let lease = TelegramRuntimeLease {
             account_id: account_id.to_owned(),
             topology: topology.to_owned(),
@@ -1203,75 +1232,6 @@ where
         self.transport.request(request)
     }
 
-    pub fn execute_provider_command(
-        &mut self,
-        command: TelegramProviderCommand,
-    ) -> Result<TdlibResponse, TdlibError> {
-        validate_provider_command(&command)
-            .map_err(|_| TdlibError::Protocol("Telegram provider command is invalid".to_owned()))?;
-        let account_id = provider_command_account_id(&command);
-        let account = self
-            .persistence
-            .account(account_id)
-            .ok_or_else(|| TdlibError::Protocol("Telegram account is unknown".to_owned()))?;
-        if account.runtime_state != TelegramRuntimeState::Running {
-            return Err(TdlibError::Protocol(
-                "Telegram account runtime is not running".to_owned(),
-            ));
-        }
-        let lease_epoch = self
-            .persistence
-            .runtime_lease(account_id)
-            .ok_or_else(|| {
-                TdlibError::Protocol("Telegram runtime lease is unavailable".to_owned())
-            })?
-            .epoch;
-        let operation_id = provider_command_operation_id(&command).to_owned();
-        if self.persistence.operation(&operation_id).is_some() {
-            return Ok(TdlibResponse::Accepted { operation_id });
-        }
-        let operation = accept_operation(&command, lease_epoch);
-        self.persistence.put_operation_if_absent(operation.clone());
-        self.persistence.put_command(command.clone());
-        self.persistence
-            .update_operation(operation_running(&operation));
-        if self.apply_local_command(&command) {
-            self.persistence
-                .update_operation(operation_completed(&operation));
-            return Ok(TdlibResponse::Accepted { operation_id });
-        }
-        match self
-            .transport
-            .request(TdlibRequest::ProviderCommand(command))
-        {
-            Ok(TdlibResponse::Accepted { .. }) => {
-                self.persistence
-                    .update_operation(operation_awaiting_provider(&operation));
-                Ok(TdlibResponse::Accepted { operation_id })
-            }
-            Ok(TdlibResponse::History(messages)) => {
-                for message in &messages {
-                    self.ingest_message(message.clone()).map_err(|_| {
-                        TdlibError::Protocol("Telegram search projection is invalid".to_owned())
-                    })?;
-                }
-                self.persistence
-                    .update_operation(operation_completed(&operation));
-                Ok(TdlibResponse::History(messages))
-            }
-            Ok(response) => {
-                self.persistence
-                    .update_operation(operation_completed(&operation));
-                Ok(response)
-            }
-            Err(error) => {
-                self.persistence
-                    .update_operation(operation_failed(&operation, "provider request failed"));
-                Err(error)
-            }
-        }
-    }
-
     pub async fn execute_provider_command_durable(
         &mut self,
         durable: &TelegramDurablePersistence,
@@ -1322,7 +1282,7 @@ where
             let response: Result<TdlibResponse, ()> = match &command {
                 TelegramProviderCommand::SendMedia(media) => {
                     match self.media_materializer.as_mut() {
-                        Some(materializer) => match materializer.materialize(&media.blob_ref) {
+                        Some(materializer) => match materializer.materialize(&media.blob.blob_ref) {
                             Ok(path) => {
                                 let response = self
                                     .transport
@@ -1811,77 +1771,16 @@ where
         true
     }
 
-    pub fn execute_provider_command_with_materializer<M: TelegramMediaMaterializer>(
-        &mut self,
-        command: TelegramProviderCommand,
-        materializer: &mut M,
-    ) -> Result<TdlibResponse, TdlibError> {
-        let TelegramProviderCommand::SendMedia(media) = command else {
-            return self.execute_provider_command(command);
-        };
-        validate_provider_command(&TelegramProviderCommand::SendMedia(media.clone()))
-            .map_err(|_| TdlibError::Protocol("Telegram provider command is invalid".to_owned()))?;
-        let account_id = media.account_id.clone();
-        let account = self
-            .persistence
-            .account(&account_id)
-            .ok_or_else(|| TdlibError::Protocol("Telegram account is unknown".to_owned()))?;
-        if account.runtime_state != TelegramRuntimeState::Running {
-            return Err(TdlibError::Protocol(
-                "Telegram account runtime is not running".to_owned(),
-            ));
-        }
-        let lease_epoch = self
-            .persistence
-            .runtime_lease(&account_id)
-            .ok_or_else(|| {
-                TdlibError::Protocol("Telegram runtime lease is unavailable".to_owned())
-            })?
-            .epoch;
-        let materialized_path = materializer.materialize(&media.blob_ref)?;
-        let operation_id = media.operation_id.clone();
-        if self.persistence.operation(&operation_id).is_some() {
-            materializer.release(&materialized_path);
-            return Ok(TdlibResponse::Accepted { operation_id });
-        }
-        let provider_command = TelegramProviderCommand::SendMedia(media.clone());
-        let operation = accept_operation(&provider_command, lease_epoch);
-        self.persistence.put_operation_if_absent(operation.clone());
-        self.persistence.put_command(provider_command.clone());
-        self.persistence
-            .update_operation(operation_running(&operation));
-        let response = self.transport.request(TdlibRequest::SendMediaMaterialized {
-            command: media,
-            materialized_path: materialized_path.clone(),
-        });
-        materializer.release(&materialized_path);
-        match response {
-            Ok(TdlibResponse::Accepted { .. }) => {
-                self.persistence
-                    .update_operation(operation_awaiting_provider(&operation));
-                Ok(TdlibResponse::Accepted { operation_id })
-            }
-            Ok(response) => {
-                self.persistence
-                    .update_operation(operation_completed(&operation));
-                Ok(response)
-            }
-            Err(error) => {
-                self.persistence
-                    .update_operation(operation_failed(&operation, "provider request failed"));
-                Err(error)
-            }
-        }
-    }
-
-    pub async fn execute_due_durable_operations<M: TelegramMediaMaterializer>(
+    pub async fn execute_due_durable_operations(
         &mut self,
         durable: &TelegramDurablePersistence,
         account_id: &str,
         now_unix_seconds: u64,
         limit: i64,
         worker_id: &str,
-        materializer: &mut M,
+        mut issue_media_session: impl FnMut(
+            &hermes_telegram_api::TelegramBlobIntentV1,
+        ) -> Result<hermes_blob_client::ManagedBlobSessionV1, TdlibError>,
     ) -> Result<Vec<TelegramOperation>, TelegramDurableExecutionError> {
         let claimed = durable
             .claim_due_operations(account_id, now_unix_seconds, limit, worker_id)
@@ -1902,16 +1801,37 @@ where
                 } else {
                     let response = match command.clone() {
                         TelegramProviderCommand::SendMedia(media) => {
-                            let path = materializer
-                                .materialize(&media.blob_ref)
-                                .map_err(|_| TelegramDurableExecutionError::Provider)?;
-                            let response =
-                                self.transport.request(TdlibRequest::SendMediaMaterialized {
-                                    command: media,
-                                    materialized_path: path.clone(),
+                            let materialized_path = issue_media_session(&media.blob)
+                                .and_then(|session| {
+                                    self.authorize_media_session(session, &media.blob)
+                                })
+                                .and_then(|()| {
+                                    self.media_materializer
+                                        .as_mut()
+                                        .ok_or_else(|| {
+                                            TdlibError::Protocol(
+                                                "Telegram Blob materializer is unavailable".to_owned(),
+                                            )
+                                        })?
+                                        .materialize(&media.blob.blob_ref)
                                 });
-                            materializer.release(&path);
-                            response
+                            match materialized_path {
+                                Ok(path) => {
+                                    let response = self.transport.request(
+                                        TdlibRequest::SendMediaMaterialized {
+                                            command: media,
+                                            materialized_path: path.clone(),
+                                        },
+                                    );
+                                    if let Some(materializer) = self.media_materializer.as_mut() {
+                                        materializer.release(&path);
+                                    }
+                                    response
+                                }
+                                Err(_) => Err(TdlibError::Protocol(
+                                    "Telegram Blob session is unavailable".to_owned(),
+                                )),
+                            }
                         }
                         command => self
                             .transport
@@ -2656,13 +2576,12 @@ where
                     state: hermes_telegram_api::TelegramAttachmentDownloadState::Pending,
                     size_bytes: None,
                     filename: media.filename.clone(),
-                    content_type: None,
+                    content_type: media.content_type.clone(),
                     blob_ref: None,
                 })?;
             }
         }
         let draft = observation_draft(observation)?;
-        self.persistence.enqueue_observation(draft.clone());
         Ok(draft)
     }
 
@@ -2670,11 +2589,15 @@ where
         self.persistence.put_chat(chat);
     }
 
-    pub async fn persist_provider_frame_durable(
+    pub async fn persist_provider_frame_durable<F>(
         &mut self,
         durable: &TelegramDurablePersistence,
         frame: &TelegramRealtimeFrame,
-    ) -> Result<(), TelegramDurableProjectionError> {
+        body_admitter: &mut F,
+    ) -> Result<(), TelegramDurableProjectionError>
+    where
+        F: FnMut(&[u8]) -> Result<BodyBlobReceiptV1, BodyAdmissionFailureV1>,
+    {
         match &frame.event {
             hermes_telegram_api::TelegramProviderEvent::ChatFoldersChanged { folders, .. } => {
                 durable
@@ -2724,7 +2647,7 @@ where
                             state: hermes_telegram_api::TelegramAttachmentDownloadState::Pending,
                             size_bytes: None,
                             filename: media.filename.clone(),
-                            content_type: None,
+                            content_type: media.content_type.clone(),
                             blob_ref: None,
                         };
                         durable
@@ -2739,10 +2662,23 @@ where
                     .upsert_file(file)
                     .await
                     .map_err(TelegramDurableProjectionError::Persistence)?;
-                durable
+                let attachments = durable
                     .apply_file_to_attachments(&file.account_id, file)
                     .await
                     .map_err(TelegramDurableProjectionError::Persistence)?;
+                for attachment in attachments {
+                    if let Some(draft) = hermes_telegram_core::attachment_observation_draft(&attachment)
+                        .map_err(TelegramDurableProjectionError::Contract)?
+                    {
+                        let (record, recorded_at_unix_seconds) = self
+                            .communication_observation_record(&draft)
+                            .map_err(TelegramDurableProjectionError::Contract)?;
+                        durable
+                            .enqueue_communications_outbox(&record, recorded_at_unix_seconds)
+                            .await
+                            .map_err(TelegramDurableProjectionError::Persistence)?;
+                    }
+                }
             }
             hermes_telegram_api::TelegramProviderEvent::TopicChanged(topic) => {
                 durable
@@ -2854,6 +2790,18 @@ where
         for operation in self.operations_for_account(&frame.account_id) {
             durable
                 .save_operation(&operation)
+                .await
+                .map_err(TelegramDurableProjectionError::Persistence)?;
+        }
+        if let Some(draft) = provider_event_draft(&frame.event)
+            .map_err(TelegramDurableProjectionError::Contract)?
+        {
+            let draft = admit_provider_event_body(draft, &frame.event, body_admitter)?;
+            let (record, recorded_at_unix_seconds) = self
+                .communication_observation_record(&draft)
+                .map_err(TelegramDurableProjectionError::Contract)?;
+            durable
+                .enqueue_communications_outbox(&record, recorded_at_unix_seconds)
                 .await
                 .map_err(TelegramDurableProjectionError::Persistence)?;
         }
@@ -3044,10 +2992,32 @@ where
         }
         self.reconcile_provider_operations(&event);
         let draft = provider_event_draft(&event)?;
-        if let Some(draft) = &draft {
-            self.persistence.enqueue_observation(draft.clone());
-        }
         Ok(draft)
+    }
+
+    fn communication_observation_record(
+        &self,
+        draft: &CommunicationObservationDraft,
+    ) -> Result<(OutboxRecordV1, i64), TelegramContractError> {
+        let admission = self.admission.as_ref().ok_or(TelegramContractError::RuntimeBlocked)?;
+        let recorded_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| TelegramContractError::RuntimeBlocked)?;
+        let recorded_at_unix_seconds = i64::try_from(recorded_at.as_secs())
+            .map_err(|_| TelegramContractError::RuntimeBlocked)?;
+        let record = build_observation_outbox_record_v1(
+            draft,
+            &ObservationEnvelopeContextV1 {
+                runtime_instance_id: admission.runtime_instance_id.clone(),
+                runtime_generation: admission.runtime_generation,
+                module_id: "telegram-runtime".to_owned(),
+                recorded_at_unix_seconds,
+                recorded_at_nanos: i32::try_from(recorded_at.subsec_nanos())
+                    .map_err(|_| TelegramContractError::RuntimeBlocked)?,
+            },
+        )
+        .map_err(|_| TelegramContractError::RuntimeBlocked)?;
+        Ok((record, recorded_at_unix_seconds))
     }
 
     fn refresh_chat_operational_state(&mut self, account_id: &str, provider_chat_id: &str) {
@@ -3186,5 +3156,35 @@ where
         let updated = qr_login_ready(session)?;
         self.persistence.put_qr_session(updated.clone());
         Ok(updated)
+    }
+}
+
+fn admit_provider_event_body<F>(
+    draft: CommunicationObservationDraft,
+    event: &hermes_telegram_api::TelegramProviderEvent,
+    body_admitter: &mut F,
+) -> Result<CommunicationObservationDraft, TelegramDurableProjectionError>
+where
+    F: FnMut(&[u8]) -> Result<BodyBlobReceiptV1, BodyAdmissionFailureV1>,
+{
+    let text = match event {
+        hermes_telegram_api::TelegramProviderEvent::MessageCreated(observation) => observation.text.as_deref(),
+        hermes_telegram_api::TelegramProviderEvent::MessageEdited { text, .. } => text.as_deref(),
+        _ => None,
+    };
+    let Some(text) = text else { return Ok(draft); };
+    hermes_telegram_api::validate_text(text).map_err(TelegramDurableProjectionError::Contract)?;
+    if draft.body != BodyAvailabilityV1::Unavailable {
+        return Err(TelegramDurableProjectionError::Contract(TelegramContractError::InvalidTransition));
+    }
+    match body_admitter(text.as_bytes()) {
+        Ok(receipt) => {
+            let mut admitted = draft;
+            admitted.body = BodyAvailabilityV1::AdmittedBlob;
+            with_admitted_body_blob(admitted, receipt)
+                .map_err(|_| TelegramDurableProjectionError::Contract(TelegramContractError::InvalidTransition))
+        }
+        Err(failure) => with_body_admission_failure(draft, failure)
+            .map_err(|_| TelegramDurableProjectionError::Contract(TelegramContractError::InvalidTransition)),
     }
 }

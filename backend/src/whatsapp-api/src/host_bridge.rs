@@ -8,7 +8,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 
 pub const HOST_BRIDGE_PROTOCOL_MAJOR: u32 = 1;
-pub const HOST_BRIDGE_PROTOCOL_REVISION: u32 = 2;
+pub const HOST_BRIDGE_PROTOCOL_REVISION: u32 = 4;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct WhatsAppHostBridgeEnvelopeV1 {
@@ -18,6 +18,13 @@ pub struct WhatsAppHostBridgeEnvelopeV1 {
     pub provider_event_id: String,
     pub observed_at_unix_seconds: i64,
     pub observation: WhatsAppHostObservationV1,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct WhatsAppHostBridgeHandshakeV1 {
+    pub protocol_major: u32,
+    pub protocol_revision: u32,
+    pub route_binding_sha256: [u8; 32],
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -70,6 +77,9 @@ pub enum WhatsAppHostObservationV1 {
         provider_message_id: String,
         provider_media_id: String,
         media_kind: String,
+        filename: Option<String>,
+        content_type: Option<String>,
+        declared_size: Option<u64>,
     },
     CallMetadata {
         provider_call_id: String,
@@ -97,6 +107,7 @@ pub enum WhatsAppHostObservationV1 {
         operation_id: String,
         provider_request_id: Option<String>,
         succeeded: bool,
+        host_claim_id: String,
     },
 }
 
@@ -106,6 +117,83 @@ pub enum WhatsAppHostBridgeError {
     EmptyField,
     InvalidTimestamp,
     ForbiddenContent,
+}
+
+pub fn encode_host_bridge_handshake(
+    handshake: &WhatsAppHostBridgeHandshakeV1,
+) -> Result<Vec<u8>, WhatsAppHostBridgeError> {
+    validate_host_bridge_handshake(handshake)?;
+    Ok(wire::WhatsAppHostBridgeHandshakeV1 {
+        protocol_major: handshake.protocol_major,
+        protocol_revision: handshake.protocol_revision,
+        route_binding_sha256: handshake.route_binding_sha256.to_vec(),
+    }
+    .encode_to_vec())
+}
+
+pub fn decode_host_bridge_handshake(
+    bytes: &[u8],
+) -> Result<WhatsAppHostBridgeHandshakeV1, WhatsAppHostBridgeError> {
+    let payload = wire::WhatsAppHostBridgeHandshakeV1::decode(bytes)
+        .map_err(|_| WhatsAppHostBridgeError::InvalidProtocol)?;
+    let handshake = WhatsAppHostBridgeHandshakeV1 {
+        protocol_major: payload.protocol_major,
+        protocol_revision: payload.protocol_revision,
+        route_binding_sha256: payload
+            .route_binding_sha256
+            .try_into()
+            .map_err(|_| WhatsAppHostBridgeError::InvalidProtocol)?,
+    };
+    validate_host_bridge_handshake(&handshake)?;
+    Ok(handshake)
+}
+
+pub fn encode_host_bridge_handshake_accepted() -> Vec<u8> {
+    wire::WhatsAppHostBridgeHandshakeAcceptedV1 {
+        protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+        protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+    }
+    .encode_to_vec()
+}
+
+pub fn decode_host_bridge_handshake_accepted(
+    bytes: &[u8],
+) -> Result<(), WhatsAppHostBridgeError> {
+    let accepted = wire::WhatsAppHostBridgeHandshakeAcceptedV1::decode(bytes)
+        .map_err(|_| WhatsAppHostBridgeError::InvalidProtocol)?;
+    (accepted.protocol_major == HOST_BRIDGE_PROTOCOL_MAJOR
+        && accepted.protocol_revision == HOST_BRIDGE_PROTOCOL_REVISION)
+        .then_some(())
+        .ok_or(WhatsAppHostBridgeError::InvalidProtocol)
+}
+
+pub fn validate_host_bridge_handshake(
+    handshake: &WhatsAppHostBridgeHandshakeV1,
+) -> Result<(), WhatsAppHostBridgeError> {
+    if handshake.protocol_major != HOST_BRIDGE_PROTOCOL_MAJOR
+        || handshake.protocol_revision != HOST_BRIDGE_PROTOCOL_REVISION
+    {
+        return Err(WhatsAppHostBridgeError::InvalidProtocol);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn handshake_round_trips_only_the_exact_protocol_and_route_binding() {
+        let handshake = WhatsAppHostBridgeHandshakeV1 {
+            protocol_major: HOST_BRIDGE_PROTOCOL_MAJOR,
+            protocol_revision: HOST_BRIDGE_PROTOCOL_REVISION,
+            route_binding_sha256: [7; 32],
+        };
+
+        let encoded = encode_host_bridge_handshake(&handshake).expect("encoded handshake");
+
+        assert_eq!(decode_host_bridge_handshake(&encoded), Ok(handshake));
+    }
 }
 
 pub fn validate_host_bridge_envelope(
@@ -253,11 +341,17 @@ fn observation_to_wire(
             provider_message_id,
             provider_media_id,
             media_kind,
+            filename,
+            content_type,
+            declared_size,
         } => Observation::MediaMetadata(wire::MediaMetadata {
             provider_chat_id: provider_chat_id.clone(),
             provider_message_id: provider_message_id.clone(),
             provider_media_id: provider_media_id.clone(),
             media_kind: media_kind.clone(),
+            filename: filename.clone(),
+            content_type: content_type.clone(),
+            declared_size: *declared_size,
         }),
         WhatsAppHostObservationV1::CallMetadata {
             provider_call_id,
@@ -303,10 +397,12 @@ fn observation_to_wire(
             operation_id,
             provider_request_id,
             succeeded,
+            host_claim_id,
         } => Observation::CommandResult(wire::CommandResultMetadata {
             operation_id: operation_id.clone(),
             provider_request_id: provider_request_id.clone(),
             succeeded: *succeeded,
+            host_claim_id: host_claim_id.clone(),
         }),
     }
 }
@@ -364,6 +460,9 @@ fn observation_from_wire(
             provider_message_id: value.provider_message_id,
             provider_media_id: value.provider_media_id,
             media_kind: value.media_kind,
+            filename: value.filename,
+            content_type: value.content_type,
+            declared_size: value.declared_size,
         },
         Observation::CallMetadata(value) => WhatsAppHostObservationV1::CallMetadata {
             provider_call_id: value.provider_call_id,
@@ -393,6 +492,7 @@ fn observation_from_wire(
             operation_id: value.operation_id,
             provider_request_id: value.provider_request_id,
             succeeded: value.succeeded,
+            host_claim_id: value.host_claim_id,
         },
     })
 }
@@ -466,6 +566,7 @@ fn validate_observation(
             provider_message_id,
             provider_media_id,
             media_kind,
+            ..
         } => vec![
             provider_chat_id.as_str(),
             provider_message_id.as_str(),
@@ -496,8 +597,8 @@ fn validate_observation(
         }
         WhatsAppHostObservationV1::SessionLinked { secret_ref, .. } => vec![secret_ref.as_str()],
         WhatsAppHostObservationV1::SessionRevoked => Vec::new(),
-        WhatsAppHostObservationV1::CommandResult { operation_id, .. } => {
-            vec![operation_id.as_str()]
+        WhatsAppHostObservationV1::CommandResult { operation_id, host_claim_id, .. } => {
+            vec![operation_id.as_str(), host_claim_id.as_str()]
         }
     };
     if fields.iter().any(|value| value.trim().is_empty()) {
@@ -505,6 +606,12 @@ fn validate_observation(
     }
     if let WhatsAppHostObservationV1::SessionLinked { revision, .. } = observation
         && *revision == 0
+    {
+        return Err(WhatsAppHostBridgeError::ForbiddenContent);
+    }
+    if let WhatsAppHostObservationV1::MediaMetadata { filename, content_type, .. } = observation
+        && (filename.as_deref().is_some_and(str::is_empty)
+            || content_type.as_deref().is_some_and(str::is_empty))
     {
         return Err(WhatsAppHostBridgeError::ForbiddenContent);
     }

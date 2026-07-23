@@ -116,12 +116,23 @@ export function vaultProtocol(dependencies = [], metadataOverrides = {}) {
 
 export function vaultPackages({
   protocolDependencies = [],
+  managedClientDependencies = [],
   keyProviderDependencies = [],
   runtimeDependencies = [],
   overrides = {},
 } = {}) {
   return [
     vaultProtocol(protocolDependencies, overrides.protocol),
+    workspacePackage(
+      'hermes-managed-vault-client',
+      {
+        role: 'platform',
+        owner: 'vault',
+        surface: 'contract',
+        ...overrides.managedClient,
+      },
+      managedClientDependencies,
+    ),
     workspacePackage(
       'hermes-vault-key-provider',
       {

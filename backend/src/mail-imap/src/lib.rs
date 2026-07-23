@@ -15,6 +15,7 @@ use async_std::task;
 use futures_util::TryStreamExt;
 use futures_util::io::{AsyncRead, AsyncWrite};
 use hermes_mail_api::{MAX_PLAIN_TEXT_BYTES, MAX_WINDOW, MAX_WINDOWS, WINDOW_DEADLINE_SECONDS};
+use hermes_mail_core::rfc822::{AttachmentDispositionV1, attachment_metadata};
 
 pub const PACKAGE: &str = "hermes-mail-imap";
 
@@ -47,6 +48,23 @@ pub struct ImapMessage {
     pub subject: String,
     pub snippet: String,
     pub has_plain_text: bool,
+    pub plain_text_body: Option<Vec<u8>>,
+    pub attachments: Vec<ImapAttachment>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ImapAttachmentDisposition {
+    Attachment,
+    Inline,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImapAttachment {
+    pub part_id: u16,
+    pub filename: Option<String>,
+    pub media_type: String,
+    pub declared_bytes: u64,
+    pub disposition: ImapAttachmentDisposition,
 }
 
 #[derive(Clone, Debug)]
@@ -299,11 +317,14 @@ where
                 .body()
                 .ok_or_else(|| ImapError::new("protocol", "missing BODY.PEEK[] payload"))?;
             let (subject, snippet, has_plain_text) = decode_message_preview(body);
+            let attachments = decode_message_attachments(body);
             messages.push(ImapMessage {
                 uid,
                 subject,
                 snippet,
                 has_plain_text,
+                plain_text_body: hermes_mail_core::rfc822::direct_plain_text_body(body),
+                attachments,
             });
         }
     }
@@ -463,6 +484,43 @@ mod tests {
         assert!(supports_read_only_windows(MAX_WINDOWS));
         assert!(!supports_read_only_windows(MAX_WINDOWS + 1));
     }
+
+    #[test]
+    fn extracts_only_explicit_bounded_attachment_metadata_from_nested_mime() {
+        let message = concat!(
+            "Content-Type: multipart/mixed; boundary=outer\r\n\r\n",
+            "--outer\r\nContent-Type: text/plain\r\n\r\nhello\r\n",
+            "--outer\r\nContent-Type: multipart/related; boundary=inner\r\n\r\n",
+            "--inner\r\nContent-Type: application/pdf; name=report.pdf\r\n",
+            "Content-Disposition: attachment; filename=report.pdf\r\n",
+            "Content-Transfer-Encoding: base64\r\n\r\naGVsbG8=\r\n",
+            "--inner--\r\n--outer--\r\n",
+        );
+
+        assert_eq!(
+            decode_message_attachments(message.as_bytes()),
+            vec![ImapAttachment {
+                part_id: 1,
+                filename: Some("report.pdf".to_owned()),
+                media_type: "application/pdf".to_owned(),
+                declared_bytes: 5,
+                disposition: ImapAttachmentDisposition::Attachment,
+            }],
+        );
+    }
+
+    #[test]
+    fn rejects_attachment_with_undecidable_transfer_encoding() {
+        let message = concat!(
+            "Content-Type: multipart/mixed; boundary=outer\r\n\r\n",
+            "--outer\r\nContent-Type: application/octet-stream\r\n",
+            "Content-Disposition: attachment\r\n",
+            "Content-Transfer-Encoding: quoted-printable\r\n\r\nhello=20world\r\n",
+            "--outer--\r\n",
+        );
+
+        assert!(decode_message_attachments(message.as_bytes()).is_empty());
+    }
 }
 
 fn decode_message_preview(body: &[u8]) -> (String, String, bool) {
@@ -518,6 +576,22 @@ fn split_subject_and_body(raw_message: &str) -> (String, String) {
         subject
     };
     (subject, body)
+}
+
+fn decode_message_attachments(raw_message: &[u8]) -> Vec<ImapAttachment> {
+    attachment_metadata(raw_message)
+        .into_iter()
+        .map(|attachment| ImapAttachment {
+            part_id: attachment.part_id,
+            filename: attachment.filename,
+            media_type: attachment.media_type,
+            declared_bytes: attachment.declared_bytes,
+            disposition: match attachment.disposition {
+                AttachmentDispositionV1::Attachment => ImapAttachmentDisposition::Attachment,
+                AttachmentDispositionV1::Inline => ImapAttachmentDisposition::Inline,
+            },
+        })
+        .collect()
 }
 
 fn uids_window(count: usize) -> u32 {

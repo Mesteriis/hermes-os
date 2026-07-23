@@ -1,5 +1,6 @@
 //! Telegram-owned durable command store. It never joins or mutates business tables.
 
+use hermes_events_protocol::delivery::OutboxRecordV1;
 use hermes_storage_protocol::StorageBindingV1;
 use hermes_telegram_api::{
     TelegramAccount, TelegramAttachmentProjection, TelegramChat, TelegramChatAvatar,
@@ -197,6 +198,19 @@ CREATE TABLE IF NOT EXISTS telegram_chat_states (
     projection_payload JSONB NOT NULL,
     PRIMARY KEY (account_id, provider_chat_id)
 );
+CREATE TABLE IF NOT EXISTS telegram_communications_outbox (
+    message_id BYTEA PRIMARY KEY,
+    envelope_sha256 BYTEA NOT NULL,
+    exact_envelope_bytes BYTEA NOT NULL,
+    created_at_unix_seconds BIGINT NOT NULL,
+    published_at_unix_seconds BIGINT,
+    CHECK (octet_length(message_id) = 16),
+    CHECK (octet_length(envelope_sha256) = 32),
+    CHECK (octet_length(exact_envelope_bytes) > 0)
+);
+CREATE INDEX IF NOT EXISTS telegram_communications_outbox_pending_idx
+    ON telegram_communications_outbox (created_at_unix_seconds, message_id)
+    WHERE published_at_unix_seconds IS NULL;
 "#;
 
 pub struct TelegramDurablePersistence {
@@ -251,6 +265,77 @@ impl TelegramDurablePersistence {
             .await
             .map(|_| ())
             .map_err(|_| TelegramDurablePersistenceError::Database)
+    }
+
+    pub async fn enqueue_communications_outbox(
+        &self,
+        record: &OutboxRecordV1,
+        created_at_unix_seconds: i64,
+    ) -> Result<(), TelegramDurablePersistenceError> {
+        sqlx::query(
+            r#"
+            INSERT INTO telegram_communications_outbox
+                (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (message_id) DO NOTHING
+            "#,
+        )
+        .bind(record.message_id().as_slice())
+        .bind(record.envelope_sha256().as_slice())
+        .bind(record.exact_bytes())
+        .bind(created_at_unix_seconds)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(|_| TelegramDurablePersistenceError::Database)
+    }
+
+    pub async fn pending_communications_outbox(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<OutboxRecordV1>, TelegramDurablePersistenceError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT exact_envelope_bytes
+            FROM telegram_communications_outbox
+            WHERE published_at_unix_seconds IS NULL
+            ORDER BY created_at_unix_seconds ASC, message_id ASC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit.clamp(1, 256))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|_| TelegramDurablePersistenceError::Database)?;
+        rows.into_iter()
+            .map(|row| {
+                let bytes: Vec<u8> = row
+                    .try_get("exact_envelope_bytes")
+                    .map_err(|_| TelegramDurablePersistenceError::InvalidRow)?;
+                OutboxRecordV1::accept(bytes)
+                    .map_err(|_| TelegramDurablePersistenceError::InvalidRow)
+            })
+            .collect()
+    }
+
+    pub async fn mark_communications_outbox_published(
+        &self,
+        message_id: &[u8; 16],
+        published_at_unix_seconds: i64,
+    ) -> Result<bool, TelegramDurablePersistenceError> {
+        sqlx::query(
+            r#"
+            UPDATE telegram_communications_outbox
+            SET published_at_unix_seconds = $2
+            WHERE message_id = $1 AND published_at_unix_seconds IS NULL
+            "#,
+        )
+        .bind(message_id.as_slice())
+        .bind(published_at_unix_seconds)
+        .execute(&self.pool)
+        .await
+        .map(|result| result.rows_affected() == 1)
+        .map_err(|_| TelegramDurablePersistenceError::Database)
     }
 
     pub async fn upsert_account(
@@ -1145,7 +1230,7 @@ impl TelegramDurablePersistence {
         &self,
         account_id: &str,
         file: &TelegramFileSnapshot,
-    ) -> Result<(), TelegramDurablePersistenceError> {
+    ) -> Result<Vec<TelegramAttachmentProjection>, TelegramDurablePersistenceError> {
         let rows = sqlx::query(
             "SELECT attachment_id, projection_payload FROM telegram_attachment_projections WHERE account_id = $1 AND provider_file_id = $2",
         )
@@ -1161,6 +1246,7 @@ impl TelegramDurablePersistence {
         } else {
             hermes_telegram_api::TelegramAttachmentDownloadState::Pending
         };
+        let mut updated = Vec::new();
         for row in rows {
             let attachment_id: String = row
                 .try_get("attachment_id")
@@ -1182,8 +1268,9 @@ impl TelegramDurablePersistence {
             .execute(&self.pool)
             .await
             .map_err(|_| TelegramDurablePersistenceError::Database)?;
+            updated.push(attachment);
         }
-        Ok(())
+        Ok(updated)
     }
 
     pub async fn upsert_participants(

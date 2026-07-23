@@ -3,6 +3,8 @@ syntax = "proto3";
 package hermes.runtime.v1;
 
 import "hermes/runtime/v1/vault_runtime.proto";
+import "hermes/runtime/v1/module_client.proto";
+import "hermes/runtime/v1/blob_runtime.proto";
 
 // One-shot inherited private control channel for a Kernel-managed runtime.
 message DescribeManagedRuntimeRequestV1 {
@@ -27,10 +29,24 @@ message ManagedRuntimeEventCredentialRequestV1 {
   uint32 ttl_seconds = 3;
   bytes recipient_public_key_x25519 = 4;
 }
+// Kernel-derived pull-consumer binding for one already approved subscription.
+// A managed runtime receives it only with a credential delivery bound to its
+// current registration, runtime generation and grant epoch.
+message ManagedRuntimeEventConsumerBindingV1 {
+  string stream_name = 1;
+  string durable_name = 2;
+  string filter_subject = 3;
+  uint32 ack_wait_millis = 4;
+  uint32 max_deliver = 5;
+  uint32 max_ack_pending = 6;
+}
 message ManagedRuntimeEventCredentialDeliveryV1 {
   bytes encapped_key = 1;
   bytes ciphertext = 2;
   bytes tag = 3;
+  repeated ManagedRuntimeEventConsumerBindingV1 consumer_bindings = 4;
+  // Exact publish subjects derived by Kernel from the approved topology.
+  repeated string publish_subjects = 5;
 }
 message ManagedRuntimeProviderCredentialRequestV1 {
   bytes request_id = 1;
@@ -39,11 +55,30 @@ message ManagedRuntimeProviderCredentialRequestV1 {
   uint32 ttl_seconds = 4;
   uint32 secret_class = 5;
   bytes recipient_public_key_x25519 = 6;
+  string configuration_instance_id = 7;
+  // Exactly one descriptor-declared Vault action; never an implicit write grant.
+  uint32 action = 8;
 }
 message ManagedRuntimeProviderCredentialDeliveryV1 {
   bytes encapped_key = 1;
   bytes ciphertext = 2;
   bytes tag = 3;
+}
+// Request for exactly one Blob data session. The runtime supplies a fresh
+// channel-binding digest; content never crosses this control channel.
+message ManagedRuntimeBlobSessionRequestV1 {
+  bytes request_id = 1;
+  string capability_id = 2;
+  uint32 operation = 3;
+  bytes channel_binding_sha256 = 4;
+  bytes reference_id = 5;
+  uint64 declared_size = 6;
+  uint32 backup_class = 7;
+  uint32 ttl_seconds = 8;
+}
+message ManagedRuntimeBlobSessionDeliveryV1 {
+  string data_socket_path = 1;
+  BlobDataSessionGrantV1 grant = 2;
 }
 message ManagedRuntimeControlRequestV1 {
   oneof operation {
@@ -52,6 +87,7 @@ message ManagedRuntimeControlRequestV1 {
     ManagedRuntimeEventCredentialRequestV1 issue_event_credential = 3;
     ManagedRuntimeProviderCredentialRequestV1 issue_provider_credential = 4;
     ManagedRuntimeVaultRouteRequestV1 route_vault_ciphertext = 5;
+    ManagedRuntimeBlobSessionRequestV1 issue_blob_session = 6;
   }
 }
 message ManagedRuntimeControlResponseV1 {
@@ -60,8 +96,19 @@ message ManagedRuntimeControlResponseV1 {
     ManagedRuntimeEventCredentialDeliveryV1 event_credential_delivery = 2;
     ManagedRuntimeProviderCredentialDeliveryV1 provider_credential_delivery = 3;
     ManagedRuntimeVaultRouteResponseV1 vault_route = 4;
+    ManagedRuntimeBlobSessionDeliveryV1 blob_session_delivery = 5;
   }
   string error_code = 15;
+}
+
+// Kernel-to-managed-runtime capability delivery. The Kernel validates the
+// target runtime fence and envelope structure, but never decodes the
+// owner-owned request payload.
+message ManagedRuntimeClientDeliveryRequestV1 {
+  ModuleClientRequestV1 request = 1;
+}
+message ManagedRuntimeClientDeliveryResponseV1 {
+  ModuleClientResponseV1 response = 1;
 }
 
 // Request initiated by an already verified managed platform process over its

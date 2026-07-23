@@ -2,9 +2,8 @@
 
 Статус: Принято  
 Дата: 2026-07-19  
-Состояние реализации: Реализовано на уровне evidence/contour; `whole_instance_backup_v1`
-остается fail-closed в `phaseGates.notAuthorized` до снятия gate в следующем
-срезе. Kernel уже содержит fail-closed capture/restore coordinators, P-256 signed
+Состояние реализации: Реализовано; `whole_instance_backup_v1` открыт.
+Kernel содержит fail-closed capture/restore coordinators, P-256 signed
 media inventory с fd-based no-symlink verification и production process-port, который
 вызывает только `StagedNativeArtifact` component executables для Vault, Storage,
 Blob и Scheduler. Он также сохраняет и восстанавливает Event Hub topology через

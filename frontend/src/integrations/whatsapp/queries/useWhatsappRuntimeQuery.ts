@@ -22,7 +22,10 @@ import {
   startWhatsappRuntime,
   stopWhatsappRuntime,
 } from '../api/whatsapp'
-import { startHiddenWhatsappWebview } from '../api/whatsappCompanion'
+import {
+  openWhatsappWebCompanionForPairing,
+  startHiddenWhatsappWebview,
+} from '../api/whatsappCompanion'
 import type {
   WhatsAppCallSyncItem,
   WhatsAppChatSyncItem,
@@ -405,6 +408,15 @@ export function useStartHiddenWhatsappWebviewMutation() {
 
   return useMutation<WhatsAppWebCompanionManifest, Error, { account_id: string }>({
     mutationFn: ({ account_id }) => startHiddenWhatsappWebview(account_id),
+    onSuccess: () => invalidateWhatsappRuntime(queryClient),
+  })
+}
+
+export function useOpenWhatsappWebCompanionForPairingMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation<WhatsAppWebCompanionManifest, Error, { account_id: string }>({
+    mutationFn: ({ account_id }) => openWhatsappWebCompanionForPairing(account_id),
     onSuccess: () => invalidateWhatsappRuntime(queryClient),
   })
 }

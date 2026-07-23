@@ -9,7 +9,7 @@ use crate::distribution::staged_artifact::StagedNativeArtifact;
 use crate::distribution::staged_contracts::StagedRuntimeContracts;
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeEventCredentialHandler, ManagedRuntimeExpectation,
-    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeRelayRequest,
+    ManagedRuntimeProviderCredentialHandler, ManagedRuntimeBlobSessionHandler, ManagedRuntimeRelayRequest,
     ManagedRuntimeVaultRouteHandler,
 };
 use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
@@ -26,6 +26,7 @@ type ConfiguredRequestHandlers = (
     Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>,
     Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>,
     Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>,
+    Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>,
 );
 
 #[derive(Clone)]
@@ -48,6 +49,7 @@ struct Inner {
     failures: Mutex<HashMap<String, String>>,
     event_credential_handler: Mutex<Option<Arc<dyn ManagedRuntimeEventCredentialHandler>>>,
     provider_credential_handler: Mutex<Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>>,
+    blob_session_handler: Mutex<Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>>,
     vault_route_handler: Mutex<Option<Arc<dyn ManagedRuntimeVaultRouteHandler>>>,
 }
 
@@ -61,6 +63,7 @@ impl ManagedRuntimeSupervisor {
                 failures: Mutex::new(HashMap::new()),
                 event_credential_handler: Mutex::new(None),
                 provider_credential_handler: Mutex::new(None),
+                blob_session_handler: Mutex::new(None),
                 vault_route_handler: Mutex::new(None),
             }),
         }
@@ -115,6 +118,17 @@ impl ManagedRuntimeSupervisor {
         )
     }
 
+    pub fn configure_blob_session_handler(
+        &self,
+        handler: Arc<dyn ManagedRuntimeBlobSessionHandler>,
+    ) -> Result<(), String> {
+        self.configure_before_launch(
+            &self.inner.blob_session_handler,
+            handler,
+            "managed runtime Blob session handler",
+        )
+    }
+
     #[must_use]
     pub fn relay_port(&self) -> ManagedRuntimeRelayPort {
         ManagedRuntimeRelayPort {
@@ -153,6 +167,7 @@ impl ManagedRuntimeSupervisor {
             expectation,
             policy,
             None,
+            None,
         )
     }
 
@@ -172,6 +187,28 @@ impl ManagedRuntimeSupervisor {
             expectation,
             policy,
             Some(contracts),
+            None,
+        )
+    }
+
+    pub(crate) fn start_with_arguments_contracts_and_cleanup(
+        &self,
+        registration_id: String,
+        staged_executable: StagedNativeArtifact,
+        arguments: Vec<String>,
+        expectation: ManagedRuntimeExpectation,
+        policy: ManagedChildExecutionPolicy,
+        contracts: StagedRuntimeContracts,
+        cleanup: Box<dyn FnOnce() + Send>,
+    ) -> Result<(), String> {
+        self.start_with_optional_contracts(
+            registration_id,
+            staged_executable,
+            arguments,
+            expectation,
+            policy,
+            Some(contracts),
+            Some(cleanup),
         )
     }
 
@@ -183,35 +220,36 @@ impl ManagedRuntimeSupervisor {
         expectation: ManagedRuntimeExpectation,
         policy: ManagedChildExecutionPolicy,
         contracts: Option<StagedRuntimeContracts>,
+        cleanup: Option<Box<dyn FnOnce() + Send>>,
     ) -> Result<(), String> {
         self.reap_finished();
         if self.inner.shutdown_requested.load(Ordering::Acquire) {
-            remove_staged_launch(staged_executable, contracts);
+            remove_staged_launch(staged_executable, contracts, cleanup);
             return Err("managed runtime supervisor is shutting down".to_owned());
         }
         let mut workers = match self.inner.workers.lock() {
             Ok(workers) => workers,
             Err(_) => {
-                remove_staged_launch(staged_executable, contracts);
+                remove_staged_launch(staged_executable, contracts, cleanup);
                 return Err("managed runtime supervisor state is unavailable".to_owned());
             }
         };
         if workers.contains_key(&registration_id) {
             drop(workers);
-            remove_staged_launch(staged_executable, contracts);
+            remove_staged_launch(staged_executable, contracts, cleanup);
             return Err("managed runtime is already active for this registration".to_owned());
         }
         if let Err(error) = self.clear_failure(&registration_id) {
             drop(workers);
-            remove_staged_launch(staged_executable, contracts);
+            remove_staged_launch(staged_executable, contracts, cleanup);
             return Err(error);
         }
-        let (vault_route_handler, event_credential_handler, provider_credential_handler) =
+        let (vault_route_handler, event_credential_handler, provider_credential_handler, blob_session_handler) =
             match self.configured_request_handlers() {
                 Ok(handlers) => handlers,
                 Err(error) => {
                     drop(workers);
-                    remove_staged_launch(staged_executable, contracts);
+                    remove_staged_launch(staged_executable, contracts, cleanup);
                     return Err(error);
                 }
             };
@@ -223,9 +261,11 @@ impl ManagedRuntimeSupervisor {
             expectation,
             policy,
             contracts,
+            cleanup,
             vault_route_handler,
             event_credential_handler,
             provider_credential_handler,
+            blob_session_handler,
         });
         workers.insert(registration_id, worker);
         Ok(())
@@ -236,6 +276,7 @@ impl ManagedRuntimeSupervisor {
             self.vault_route_handler()?,
             self.event_credential_handler()?,
             self.provider_credential_handler()?,
+            self.blob_session_handler()?,
         ))
     }
 
@@ -264,6 +305,16 @@ impl ManagedRuntimeSupervisor {
     ) -> Result<Option<Arc<dyn ManagedRuntimeProviderCredentialHandler>>, String> {
         self.inner
             .provider_credential_handler
+            .lock()
+            .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
+            .map(|handler| handler.clone())
+    }
+
+    fn blob_session_handler(
+        &self,
+    ) -> Result<Option<Arc<dyn ManagedRuntimeBlobSessionHandler>>, String> {
+        self.inner
+            .blob_session_handler
             .lock()
             .map_err(|_| "managed runtime supervisor state is unavailable".to_owned())
             .map(|handler| handler.clone())

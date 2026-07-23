@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Статус: clean-room target, реализация не начата
+Статус: clean-room target, первый owner admission реализован
 Дата: 2026-07-16
 
 ## Architectural Thesis
@@ -144,13 +144,13 @@ Storage Control владеет bootstrap, roles/grants/budgets, migration admiss
 readiness, но не находится на business data path. Runtime database credentials
 принадлежат Vault.
 
-ADR-0225 разделяет полный target и текущую реализацию. Six-package recovery
-baseline теперь дополнен private module control plane, managed-launch trust,
-five-package `vault_v1`, two-package `clock_v1` и Scheduler protocol foundation.
-Control Store работает через один bounded
-SQLite actor и внешний crash-safe recovery fence. NATS, Blob,
-Scheduler, public client gateway, whole-instance backup и первый
-owner остаются закрытыми phase gates; Kernel не может достичь `ready`.
+ADR-0225 разделяет полный target и текущую реализацию. Recovery baseline теперь
+дополнен private module control plane, managed-launch trust, Vault, Clock,
+Storage, NATS, Blob, Scheduler, browser/client Gateway и whole-instance backup.
+ADR-0252 атомарно допускает первый business owner Communications с пятью
+owner capabilities; provider integrations остаются отдельными build/runtime
+units. Kernel не выдумывает состояние `ready` и пока сообщает
+`module_control_plane`.
 
 ADR-0226 не даёт AI стать superdomain. Cross-owner AI use case принадлежит
 explicit workflow: он читает public owner contracts, формирует bounded
@@ -342,11 +342,11 @@ Projects, Obligations, Decisions, Knowledge и Review остаются
 зарегистрированными, но заблокированными.
 
 Этот allowlist не является фактическим package inventory. В текущем
-`kernel_recovery_only_v1` owner inventory для domains, integrations, workflows
-и engines пуст. Разрешены только `hermes-events-protocol`,
-`hermes-runtime-protocol`, `hermes-gateway-protocol`, Control Store port/SQLite
-adapter и `hermes-kernel`. Первый owner требует отдельного `first_owner_v1`
-gate.
+В `first_owner_v1` owner inventory содержит только домен `communications` и
+capabilities `communications.blob.v1`, `communications.events.v1`,
+`communications.observe.v1`, `communications.query.v1`,
+`communications.storage.v1`. Integrations, workflows и engines не входят в
+owner inventory; provider runtimes остаются отдельными units.
 
 Все product projections, включая Graph, Timeline, Search и Context,
 заблокированы. Допустимы только canonical state владельца, обычные database
@@ -453,9 +453,9 @@ secret material — только через Vault. NATS и client realtime envel
 bounded metadata и opaque references.
 
 Полный package, binding, migration и failure contract описан в
-[Storage Control Plane](storage-control-plane.md). Решение принято, но
-реализован только foundation package/Protobuf/AST-admission контур; managed
-binaries и PostgreSQL/PgBouncer integration suite ещё не реализованы.
+[Storage Control Plane](storage-control-plane.md). Managed binaries,
+PostgreSQL/PgBouncer control plane и Communications owner Storage bundle
+реализованы; runtime DDL домена запрещён.
 
 ## Vault и credential leases
 
@@ -486,16 +486,15 @@ business state, outbox/inbox/jobs, large/high-churn provider session databases
 hierarchy и recovery policy описаны в
 [Vault and credential leases](vault-and-credential-leases.md).
 
-Решение принято, но production Vault runtime, SQLCipher store, file-key
-adapter и conformance tests ещё не реализованы.
+Production Vault runtime, SQLCipher store, file-key adapter и conformance
+tests реализованы.
 
 ## Durable и Derived State
 
-В текущем `kernel_recovery_only_v1` durable business owner state отсутствует:
-domains, integrations, workflows и engines имеют пустой production inventory.
-После открытия `first_owner_v1` development allowlist ограничивает первые
-domain owners семью именами ADR-0208; остальные domains и все derived
-projections остаются заблокированы.
+В текущем `first_owner_v1` durable business state принадлежит только
+Communications. Integrations, workflows и engines не входят в owner inventory.
+Development allowlist не является production admission; остальные domains и
+все derived projections остаются заблокированы до отдельных gates.
 
 Следующие категории derived rebuildable state архитектурно распознаны, но
 полностью заблокированы ADR-0208:

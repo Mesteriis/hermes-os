@@ -1,0 +1,18 @@
+[package]
+name = "hermes-whatsapp-persistence"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "integration"
+owner = "whatsapp"
+surface = "persistence"
+
+[dependencies]
+hermes-events-protocol = { path = "../platform/events" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring"] }

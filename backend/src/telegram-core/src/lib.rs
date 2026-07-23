@@ -1,18 +1,22 @@
 //! Telegram integration policy and provider-neutral orchestration.
 
-use hermes_communications_ingress::SourceEnvelope;
+use hermes_communications_ingress::{
+    AttachmentDescriptorV1, AttachmentDispositionV1, BodyAvailabilityV1,
+    CommunicationDirectionV1, CommunicationEvidenceKindV1, ProviderProvenanceV1, SourceEnvelope, SourceScopeEnvelope,
+    new_communication_observation_draft, new_scoped_communication_observation_draft,
+    with_attachment_descriptor,
+};
 use hermes_telegram_api::{
     TelegramAccount, TelegramAccountState, TelegramChatStateProjection, TelegramContractError,
     TelegramCredentialBinding, TelegramDeliveryState, TelegramMessageMutation,
-    TelegramMessageObservation, TelegramMessageProjection, TelegramOperation,
+    TelegramAttachmentProjection, TelegramMessageObservation, TelegramMessageProjection, TelegramOperation,
     TelegramOperationState, TelegramProviderCommand, TelegramProviderEvent, TelegramQrLoginSession,
     TelegramQrLoginState, TelegramReconciliationState, TelegramRuntimeLease,
     TelegramRuntimeLeaseState, TelegramRuntimeState, provider_command_account_id,
     provider_command_kind, provider_command_operation_id, validate_text,
 };
-use hermes_vault_protocol::{
-    CredentialLeaseV1, DEFAULT_LEASE_TTL_SECONDS, SecretClassV1, VaultActionV1,
-};
+use hermes_vault_protocol::{DEFAULT_LEASE_TTL_SECONDS, SecretClassV1, VaultActionV1};
+use sha2::{Digest, Sha256};
 
 pub use hermes_vault_protocol::VaultPurposeRequestV1;
 pub use hermes_vault_protocol::{CredentialLeaseV1 as TelegramCredentialLeaseV1, LeaseAudienceV1};
@@ -26,11 +30,19 @@ pub fn credential_lease_purpose(
     configuration_instance_id: &str,
     binding: &TelegramCredentialBinding,
 ) -> Result<VaultPurposeRequestV1, TelegramContractError> {
+    credential_lease_purpose_for_purpose(account_id, configuration_instance_id, binding.purpose)
+}
+
+pub fn credential_lease_purpose_for_purpose(
+    account_id: &str,
+    configuration_instance_id: &str,
+    purpose: hermes_telegram_api::TelegramCredentialPurpose,
+) -> Result<VaultPurposeRequestV1, TelegramContractError> {
     let purpose_id = format!(
         "{TELEGRAM_CREDENTIAL_PURPOSE_PREFIX}.{account_id}.{}",
-        binding.purpose.as_str()
+        purpose.as_str()
     );
-    let secret_class = if binding.purpose.is_session_store_key() {
+    let secret_class = if purpose.is_session_store_key() {
         SecretClassV1::SessionStoreKey
     } else {
         SecretClassV1::ProviderCredential
@@ -56,40 +68,6 @@ pub fn credential_lease_purposes(
         .collect()
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn validate_credential_lease(
-    account_id: &str,
-    logical_owner_id: &str,
-    configuration_instance_id: &str,
-    module_registration_id: &str,
-    runtime_instance_id: &str,
-    runtime_generation: u64,
-    grant_epoch: u64,
-    vault_runtime_generation: u64,
-    binding: &TelegramCredentialBinding,
-    lease: &CredentialLeaseV1,
-    now_unix_seconds: u64,
-) -> Result<(), TelegramContractError> {
-    let expected_purpose = credential_lease_purpose(account_id, configuration_instance_id, binding)
-        .map_err(|_| TelegramContractError::CredentialLeaseRejected)?;
-    let request = lease.request();
-    let audience = request.audience();
-    let purpose = request.purpose();
-    if request.logical_owner_id() != logical_owner_id
-        || request.secret_revision() != binding.revision
-        || request.vault_runtime_generation() != vault_runtime_generation
-        || purpose != &expected_purpose
-        || audience.module_registration_id() != module_registration_id
-        || audience.runtime_instance_id() != runtime_instance_id
-        || audience.runtime_generation() != runtime_generation
-        || audience.grant_epoch() != grant_epoch
-        || lease.issued_at_unix_seconds() > now_unix_seconds
-        || lease.expires_at_unix_seconds() <= now_unix_seconds
-    {
-        return Err(TelegramContractError::CredentialLeaseRejected);
-    }
-    Ok(())
-}
 
 pub fn qr_login_preparing(
     setup_id: impl Into<String>,
@@ -316,14 +294,76 @@ pub fn observation_draft(
     if let Some(text) = &text_preview {
         validate_text(text)?;
     }
-    Ok(CommunicationObservationDraft {
-        operation_id: source_id.clone(),
-        source_id,
-        source_kind: "telegram".to_owned(),
-        text_preview,
-        has_body: true,
-        is_final_window: true,
+    new_scoped_communication_observation_draft(
+        source_id.clone(),
+        SourceEnvelope {
+            provider: ProviderProvenanceV1::Telegram,
+            external_record_id: source_id.clone(),
+            scope: Some(SourceScopeEnvelope {
+                external_account_id: observation.account_id.to_string(),
+                external_conversation_id: Some(observation.provider_chat_id.clone()),
+                external_participant_id: Some(observation.sender_id.clone()),
+                external_media_id: observation.media.as_ref().and_then(|media| media.provider_file_id.clone()),
+                external_reply_to_record_id: observation.references.reply_to.as_ref().map(|reference| telegram_record_id(&observation.account_id, &reference.provider_chat_id, &reference.provider_message_id)),
+                external_forward_origin_record_id: observation.references.forward_origin.as_ref().and_then(|origin| match (&origin.provider_chat_id, &origin.provider_message_id) { (Some(chat_id), Some(message_id)) => Some(telegram_record_id(&observation.account_id, chat_id, message_id)), _ => None }),
+            }),
+        },
+        CommunicationEvidenceKindV1::ChatMessage,
+        if text_preview.is_some() {
+            BodyAvailabilityV1::Unavailable
+        } else {
+            BodyAvailabilityV1::MetadataOnly
+        },
+        if observation.is_outgoing {
+            CommunicationDirectionV1::Outgoing
+        } else {
+            CommunicationDirectionV1::Incoming
+        },
+        Some(observation.observed_at_unix_seconds),
+    )
+    .map_err(|_| TelegramContractError::InvalidTransition)
+}
+
+pub fn attachment_observation_draft(
+    attachment: &TelegramAttachmentProjection,
+) -> Result<Option<CommunicationObservationDraft>, TelegramContractError> {
+    let (Some(media_type), Some(declared_bytes)) = (&attachment.content_type, attachment.size_bytes) else {
+        return Ok(None);
+    };
+    let source_id = format!(
+        "telegram:{}:{}:{}:{}",
+        attachment.account_id, attachment.provider_chat_id, attachment.provider_message_id,
+        attachment.provider_file_id,
+    );
+    let draft = new_scoped_communication_observation_draft(
+        &source_id,
+        SourceEnvelope {
+            provider: ProviderProvenanceV1::Telegram,
+            external_record_id: source_id.clone(),
+            scope: Some(SourceScopeEnvelope {
+                external_account_id: attachment.account_id.clone(),
+                external_conversation_id: Some(attachment.provider_chat_id.clone()),
+                external_participant_id: None,
+                external_media_id: Some(attachment.provider_file_id.clone()),
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
+            }),
+        },
+        CommunicationEvidenceKindV1::MediaChanged,
+        BodyAvailabilityV1::MetadataOnly,
+        CommunicationDirectionV1::Unknown,
+        None,
+    )
+    .map_err(|_| TelegramContractError::InvalidTransition)?;
+    with_attachment_descriptor(draft, AttachmentDescriptorV1 {
+        filename: attachment.filename.clone(),
+        media_type: media_type.clone(),
+        declared_bytes,
+        sha256: None,
+        disposition: AttachmentDispositionV1::Unknown,
     })
+    .map(Some)
+    .map_err(|_| TelegramContractError::InvalidTransition)
 }
 
 pub fn project_message(
@@ -458,181 +498,227 @@ pub fn event_chat_state(
 pub fn provider_event_draft(
     event: &TelegramProviderEvent,
 ) -> Result<Option<CommunicationObservationDraft>, TelegramContractError> {
+    let event_identity = provider_event_identity(event)?;
     match event {
         TelegramProviderEvent::MessageCreated(observation) => {
             observation_draft(observation.clone()).map(Some)
         }
-        TelegramProviderEvent::MessageEdited {
-            account_id,
-            provider_chat_id,
-            provider_message_id,
-            text,
-            ..
-        } => event_draft(
-            &format!("telegram:event:edited:{account_id}:{provider_chat_id}:{provider_message_id}"),
+        TelegramProviderEvent::MessageEdited { text, .. } => event_draft(
+            &event_identity,
             text.clone(),
+            CommunicationEvidenceKindV1::MessageEdited,
         ),
-        TelegramProviderEvent::MessageDeleted {
-            account_id,
-            provider_chat_id,
-            provider_message_id,
-            ..
-        }
-        | TelegramProviderEvent::MessagePinned {
-            account_id,
-            provider_chat_id,
-            provider_message_id,
-            ..
-        }
-        | TelegramProviderEvent::ReactionChanged {
-            account_id,
-            provider_chat_id,
-            provider_message_id,
-            ..
-        } => event_draft(
-            &format!(
-                "telegram:event:{}:{account_id}:{provider_chat_id}:{provider_message_id}",
-                event_kind(event)
-            ),
+        TelegramProviderEvent::MessageDeleted { .. } => event_draft(
+            &event_identity,
             None,
+            CommunicationEvidenceKindV1::MessageDeleted,
         ),
-        TelegramProviderEvent::ReactionsObserved {
-            account_id,
-            provider_chat_id,
-            provider_message_id,
-            ..
-        } => event_draft(
-            &format!(
-                "telegram:event:reactions:{account_id}:{provider_chat_id}:{provider_message_id}"
-            ),
+        TelegramProviderEvent::MessagePinned { .. } => event_draft(
+            &event_identity,
             None,
+            CommunicationEvidenceKindV1::ConversationStateChanged,
         ),
-        TelegramProviderEvent::MessageSendFailed {
-            account_id,
-            provider_chat_id,
-            old_provider_message_id,
-            ..
-        }
-        | TelegramProviderEvent::MessageSendSucceeded {
-            account_id,
-            provider_chat_id,
-            old_provider_message_id,
-            ..
-        } => event_draft(
-            &format!(
-                "telegram:event:send-state:{account_id}:{provider_chat_id}:{old_provider_message_id}"
-            ),
+        TelegramProviderEvent::ReactionChanged { .. } => event_draft(
+            &event_identity,
             None,
+            CommunicationEvidenceKindV1::ReactionChanged,
         ),
-        TelegramProviderEvent::ChatUnreadChanged {
-            account_id,
-            provider_chat_id,
-            ..
-        }
-        | TelegramProviderEvent::ChatMarkedUnreadChanged {
-            account_id,
-            provider_chat_id,
-            ..
-        } => event_draft(
-            &format!("telegram:event:chat-state:{account_id}:{provider_chat_id}"),
+        TelegramProviderEvent::ReactionsObserved { .. } => event_draft(
+            &event_identity,
             None,
+            CommunicationEvidenceKindV1::ReactionChanged,
         ),
-        TelegramProviderEvent::TypingChanged(state) => event_draft(
-            &format!(
-                "telegram:event:typing:{}:{}:{}",
-                state.account_id, state.provider_chat_id, state.sender_id
-            ),
+        TelegramProviderEvent::MessageSendFailed { .. }
+        | TelegramProviderEvent::MessageSendSucceeded { .. } => event_draft(
+            &event_identity,
             None,
+            CommunicationEvidenceKindV1::DeliveryStateChanged,
+        ),
+        TelegramProviderEvent::ChatUnreadChanged { .. }
+        | TelegramProviderEvent::ChatMarkedUnreadChanged { .. } => event_draft(
+            &event_identity,
+            None,
+            CommunicationEvidenceKindV1::ConversationStateChanged,
+        ),
+        TelegramProviderEvent::TypingChanged(_) => event_draft(
+            &event_identity,
+            None,
+            CommunicationEvidenceKindV1::TypingChanged,
         ),
         TelegramProviderEvent::TopicChanged(topic) => event_draft(
-            &format!(
-                "telegram:event:topic:{}:{}:{}",
-                topic.account_id, topic.provider_chat_id, topic.provider_topic_id
-            ),
+            &event_identity,
             Some(topic.title.clone()),
+            CommunicationEvidenceKindV1::TopicChanged,
         ),
-        TelegramProviderEvent::ChatPositionChanged(position) => event_draft(
-            &format!(
-                "telegram:event:chat-position:{}:{}",
-                position.account_id, position.provider_chat_id
-            ),
+        TelegramProviderEvent::ChatPositionChanged(_) => event_draft(
+            &event_identity,
             None,
+            CommunicationEvidenceKindV1::ConversationStateChanged,
         ),
-        TelegramProviderEvent::ChatFoldersChanged { account_id, .. } => {
-            event_draft(&format!("telegram:event:chat-folders:{account_id}"), None)
-        }
-        TelegramProviderEvent::ChatNotificationChanged {
-            account_id,
-            provider_chat_id,
-            ..
-        } => event_draft(
-            &format!("telegram:event:chat-notifications:{account_id}:{provider_chat_id}"),
+        TelegramProviderEvent::ChatFoldersChanged { .. } => event_draft(
+            &event_identity,
             None,
+            CommunicationEvidenceKindV1::ConversationStateChanged,
         ),
-        TelegramProviderEvent::ChatAvatarChanged(avatar) => event_draft(
-            &format!(
-                "telegram:event:chat-avatar:{}:{}",
-                avatar.account_id, avatar.provider_chat_id
-            ),
+        TelegramProviderEvent::ChatNotificationChanged { .. } => event_draft(
+            &event_identity,
             None,
+            CommunicationEvidenceKindV1::ConversationStateChanged,
         ),
-        TelegramProviderEvent::ParticipantChanged(participant) => event_draft(
-            &format!(
-                "telegram:event:participant:{}:{}:{}",
-                participant.account_id,
-                participant.provider_chat_id,
-                participant.provider_member_id
-            ),
+        TelegramProviderEvent::ChatAvatarChanged(_) => event_draft(
+            &event_identity,
             None,
+            CommunicationEvidenceKindV1::ConversationStateChanged,
         ),
-        TelegramProviderEvent::FileChanged(file) => event_draft(
-            &format!(
-                "telegram:event:file:{}:{}",
-                file.account_id, file.provider_file_id
-            ),
+        TelegramProviderEvent::ParticipantChanged(_) => event_draft(
+            &event_identity,
             None,
+            CommunicationEvidenceKindV1::ParticipantChanged,
         ),
+        TelegramProviderEvent::FileChanged(_) => Ok(None),
+    }
+}
+
+fn provider_event_identity(event: &TelegramProviderEvent) -> Result<String, TelegramContractError> {
+    let canonical_event = serde_json::to_vec(event)
+        .map_err(|_| TelegramContractError::InvalidTransition)?;
+    let mut hasher = Sha256::new();
+    hasher.update(b"hermes.telegram.provider-event.v1\0");
+    hasher.update(canonical_event);
+    Ok(format!("telegram:event:{}", hex_digest(&hasher.finalize())))
+}
+
+fn hex_digest(value: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(value.len() * 2);
+    for byte in value {
+        encoded.push(HEX[usize::from(byte >> 4)] as char);
+        encoded.push(HEX[usize::from(byte & 0x0f)] as char);
+    }
+    encoded
+}
+
+#[cfg(test)]
+mod provider_event_identity_tests {
+    use super::*;
+
+    #[test]
+    fn provider_event_identity_deduplicates_replay_and_preserves_distinct_edits() {
+        let replayed_event = TelegramProviderEvent::MessageEdited {
+            account_id: "account".to_owned(),
+            provider_chat_id: "chat".to_owned(),
+            provider_message_id: "message".to_owned(),
+            text: Some("first body".to_owned()),
+            observed_at_unix_seconds: 1_782_504_000,
+        };
+        let later_edit = TelegramProviderEvent::MessageEdited {
+            account_id: "account".to_owned(),
+            provider_chat_id: "chat".to_owned(),
+            provider_message_id: "message".to_owned(),
+            text: Some("second body".to_owned()),
+            observed_at_unix_seconds: 1_782_504_000,
+        };
+
+        assert_eq!(
+            provider_event_identity(&replayed_event).expect("valid replay identity"),
+            provider_event_identity(&replayed_event).expect("valid replay identity"),
+        );
+        assert_ne!(
+            provider_event_identity(&replayed_event).expect("valid replay identity"),
+            provider_event_identity(&later_edit).expect("valid later edit identity"),
+        );
     }
 }
 
 fn event_draft(
     source_id: &str,
     text: Option<String>,
+    kind: CommunicationEvidenceKindV1,
 ) -> Result<Option<CommunicationObservationDraft>, TelegramContractError> {
     if let Some(value) = &text {
         validate_text(value)?;
     }
-    let has_body = text.is_some();
-    Ok(Some(CommunicationObservationDraft {
-        operation_id: source_id.to_owned(),
-        source_id: source_id.to_owned(),
-        source_kind: "telegram".to_owned(),
-        text_preview: text,
-        has_body,
-        is_final_window: true,
-    }))
+    let body = if text.is_some() {
+        BodyAvailabilityV1::Unavailable
+    } else {
+        BodyAvailabilityV1::MetadataOnly
+    };
+    new_communication_observation_draft(
+        source_id,
+        SourceEnvelope {
+            provider: ProviderProvenanceV1::Telegram,
+            external_record_id: source_id.to_owned(),
+            scope: None,
+        },
+        kind,
+        body,
+        CommunicationDirectionV1::Unknown,
+        None,
+    )
+    .map(Some)
+    .map_err(|_| TelegramContractError::InvalidTransition)
 }
 
-fn event_kind(event: &TelegramProviderEvent) -> &'static str {
-    match event {
-        TelegramProviderEvent::MessageEdited { .. } => "edited",
-        TelegramProviderEvent::MessageDeleted { .. } => "deleted",
-        TelegramProviderEvent::MessagePinned { .. } => "pinned",
-        TelegramProviderEvent::ReactionChanged { .. } => "reaction",
-        TelegramProviderEvent::MessageSendFailed { .. } => "send-failed",
-        TelegramProviderEvent::MessageSendSucceeded { .. } => "send-succeeded",
-        _ => "other",
+#[cfg(test)]
+mod attachment_observation_tests {
+    use super::*;
+
+    fn attachment() -> TelegramAttachmentProjection {
+        TelegramAttachmentProjection {
+            attachment_id: "telegram:account:chat:message:file".to_owned(),
+            account_id: "account".to_owned(),
+            provider_chat_id: "chat".to_owned(),
+            provider_message_id: "message".to_owned(),
+            provider_file_id: "file".to_owned(),
+            state: hermes_telegram_api::TelegramAttachmentDownloadState::Pending,
+            size_bytes: Some(5),
+            filename: Some("report.pdf".to_owned()),
+            content_type: Some("application/pdf".to_owned()),
+            blob_ref: None,
+        }
+    }
+
+    #[test]
+    fn attachment_metadata_becomes_scoped_media_observation() {
+        let draft = attachment_observation_draft(&attachment())
+            .expect("valid attachment")
+            .expect("complete metadata must publish");
+
+        assert_eq!(draft.kind, CommunicationEvidenceKindV1::MediaChanged);
+        assert_eq!(draft.source.scope.as_ref().and_then(|scope| scope.external_media_id.as_deref()), Some("file"));
+        assert_eq!(draft.attachment_descriptor.as_ref().map(|value| value.media_type.as_str()), Some("application/pdf"));
+    }
+
+    #[test]
+    fn incomplete_attachment_metadata_is_not_published() {
+        let mut value = attachment();
+        value.content_type = None;
+        assert!(attachment_observation_draft(&value)
+            .expect("incomplete attachment is not an error")
+            .is_none());
     }
 }
 
 pub fn source_envelope(observation: &TelegramMessageObservation) -> SourceEnvelope {
     SourceEnvelope {
-        source_kind: "telegram".to_owned(),
-        source_id: format!(
+        provider: ProviderProvenanceV1::Telegram,
+        external_record_id: format!(
             "telegram:{}:{}:{}",
             observation.account_id, observation.provider_chat_id, observation.provider_message_id
         ),
+        scope: Some(SourceScopeEnvelope {
+            external_account_id: observation.account_id.to_string(),
+            external_conversation_id: Some(observation.provider_chat_id.clone()),
+            external_participant_id: Some(observation.sender_id.clone()),
+            external_media_id: observation.media.as_ref().and_then(|media| media.provider_file_id.clone()),
+            external_reply_to_record_id: observation.references.reply_to.as_ref().map(|reference| telegram_record_id(&observation.account_id, &reference.provider_chat_id, &reference.provider_message_id)),
+            external_forward_origin_record_id: observation.references.forward_origin.as_ref().and_then(|origin| match (&origin.provider_chat_id, &origin.provider_message_id) { (Some(chat_id), Some(message_id)) => Some(telegram_record_id(&observation.account_id, chat_id, message_id)), _ => None }),
+        }),
     }
+}
+
+fn telegram_record_id(account_id: &str, chat_id: &str, message_id: &str) -> String {
+    format!("telegram:{account_id}:{chat_id}:{message_id}")
 }
 
 #[cfg(test)]
@@ -641,10 +727,7 @@ mod tests {
     use hermes_telegram_api::{
         TelegramAccountSetup, TelegramCredentialPurpose, TelegramProviderKind,
     };
-    use hermes_vault_protocol::{
-        CredentialLeaseV1, LeaseAudienceV1, LeaseIdV1, SecretClassV1, VaultActionV1,
-        VaultLeaseIssueRequestV1,
-    };
+    use hermes_vault_protocol::{SecretClassV1, VaultActionV1};
 
     fn account_setup() -> TelegramAccountSetup {
         TelegramAccountSetup {
@@ -674,66 +757,6 @@ mod tests {
     }
 
     #[test]
-    fn credential_lease_requires_exact_scope_and_current_fences() {
-        let binding = &account_setup().credentials[0];
-        let purpose = credential_lease_purpose("telegram-account", "cfg-1", binding)
-            .expect("valid Telegram Vault purpose");
-        let audience =
-            LeaseAudienceV1::new("registration-1".to_owned(), "runtime-1".to_owned(), 4, 9)
-                .expect("valid lease audience");
-        let request = VaultLeaseIssueRequestV1::new(
-            "vault-1".to_owned(),
-            7,
-            binding.revision,
-            "owner-1".to_owned(),
-            purpose,
-            audience,
-        )
-        .expect("valid lease request");
-        let lease = CredentialLeaseV1::new(
-            LeaseIdV1::new("a".repeat(32)).expect("valid lease id"),
-            request,
-            100,
-            60,
-            true,
-        )
-        .expect("valid credential lease");
-
-        assert_eq!(
-            validate_credential_lease(
-                "telegram-account",
-                "owner-1",
-                "cfg-1",
-                "registration-1",
-                "runtime-1",
-                4,
-                9,
-                7,
-                binding,
-                &lease,
-                120,
-            ),
-            Ok(())
-        );
-        assert_eq!(
-            validate_credential_lease(
-                "telegram-account",
-                "owner-1",
-                "cfg-1",
-                "registration-1",
-                "runtime-1",
-                5,
-                9,
-                7,
-                binding,
-                &lease,
-                120,
-            ),
-            Err(TelegramContractError::CredentialLeaseRejected)
-        );
-    }
-
-    #[test]
     fn qr_password_attempts_stop_after_five() {
         let mut session = qr_login_preparing("setup-1", "telegram-account", 100);
         session = qr_login_qr_issued(&session, "tg://login?token=x").expect("QR issued");
@@ -757,6 +780,7 @@ mod tests {
             provider_topic_id: None,
             sender_id: "42".to_owned(),
             sender_display_name: Some("Owner".to_owned()),
+            is_outgoing: true,
             text: Some("hello".to_owned()),
             media: None,
             references: hermes_telegram_api::TelegramMessageReferences::default(),
@@ -765,8 +789,9 @@ mod tests {
         let projection = project_message(&observation).expect("projection");
         let draft = observation_draft(observation).expect("neutral evidence draft");
         assert_eq!(projection.message_id, "telegram:telegram-account:100:200");
-        assert_eq!(draft.source_kind, "telegram");
-        assert_eq!(draft.source_id, "telegram:telegram-account:100:200");
+        assert_eq!(draft.source.provider, ProviderProvenanceV1::Telegram);
+        assert_eq!(draft.direction, CommunicationDirectionV1::Outgoing);
+        assert_eq!(draft.source.external_record_id, "telegram:telegram-account:100:200");
     }
 
     #[test]

@@ -34,10 +34,9 @@ message TelegramLifecycleRequestV1 {
     ListAccountsRequest list_accounts = 3;
     AccountIdRequest get_account = 4;
     AccountIdRequest retire_account = 5;
-    RegisterMediaSessionRequest register_media_session = 6;
-    StartAccountRequest start_account = 7;
-    AccountIdRequest stop_account = 8;
-    ReplayRequest replay = 9;
+    StartAccountRequest start_account = 6;
+    AccountIdRequest stop_account = 7;
+    ReplayRequest replay = 8;
   }
 }
 
@@ -61,12 +60,6 @@ message RetryCommandRequest {
 }
 message ListAccountsRequest {}
 message AccountIdRequest { string account_id = 1; }
-message RegisterMediaSessionRequest {
-  string blob_ref = 1;
-  bytes grant_bytes = 2;
-  bytes channel_binding = 3;
-  uint64 declared_size = 4;
-}
 message StartAccountRequest {
   string account_id = 1;
   string topology = 2;
@@ -86,7 +79,6 @@ message TelegramLifecycleResponseV1 {
     TelegramAccountList accounts = 2;
     AcceptedResponse accepted = 3;
     TelegramOperationResponse operation = 4;
-    MediaSessionRegisteredResponse media_session_registered = 5;
   }
 }
 message TelegramAccountResponse {
@@ -117,7 +109,6 @@ message TelegramOperationResponse {
   optional uint64 provider_observed_at_unix_seconds = 14;
   optional uint64 reconciled_at_unix_seconds = 15;
 }
-message MediaSessionRegisteredResponse { string blob_ref = 1; }
 
 message TelegramProviderCommandV1 {
   oneof command {
@@ -146,7 +137,8 @@ message TelegramProviderCommandV1 {
   }
 }
 message SendTextCommand { string operation_id = 1; string account_id = 2; string provider_chat_id = 3; string text = 4; }
-message SendMediaCommand { string operation_id = 1; string account_id = 2; string provider_chat_id = 3; string media_kind = 4; string blob_ref = 5; optional string caption = 6; optional string filename = 7; }
+message TelegramBlobIntentV1 { string blob_ref = 1; bytes reference_id = 2; uint64 declared_size = 3; uint32 backup_class = 4; }
+message SendMediaCommand { string operation_id = 1; string account_id = 2; string provider_chat_id = 3; string media_kind = 4; TelegramBlobIntentV1 blob = 5; optional string caption = 6; optional string filename = 7; }
 message DownloadFileCommand { string operation_id = 1; string account_id = 2; string provider_file_id = 3; int32 priority = 4; }
 message ReplyCommand { string operation_id = 1; string account_id = 2; string provider_chat_id = 3; string reply_to_provider_message_id = 4; string text = 5; }
 message ForwardCommand { string operation_id = 1; string account_id = 2; string provider_chat_id = 3; string from_provider_chat_id = 4; string from_provider_message_id = 5; }
@@ -265,11 +257,11 @@ message ChatListResponse { repeated TelegramChatProjection chat = 1; }
 message ChatResponse { optional TelegramChatProjection chat = 1; }
 message TelegramChatAvatarProjection { string account_id = 1; string provider_chat_id = 2; optional string provider_file_id = 3; optional string provider_unique_id = 4; }
 message ChatAvatarResponse { optional TelegramChatAvatarProjection avatar = 1; }
-message TelegramMessageMediaProjection { string kind = 1; optional string provider_file_id = 2; optional string caption = 3; optional string filename = 4; }
+message TelegramMessageMediaProjection { string kind = 1; optional string provider_file_id = 2; optional string caption = 3; optional string filename = 4; optional string content_type = 5; }
 message TelegramReplyReferenceProjection { string provider_chat_id = 1; string provider_message_id = 2; }
 message TelegramForwardOriginProjection { optional string provider_chat_id = 1; optional string provider_message_id = 2; optional string provider_sender_id = 3; optional string sender_name = 4; optional int64 observed_at_unix_seconds = 5; }
 message TelegramMessageReferencesProjection { optional TelegramReplyReferenceProjection reply_to = 1; optional TelegramForwardOriginProjection forward_origin = 2; }
-message TelegramMessageObservationProjection { string account_id = 1; string provider_chat_id = 2; string provider_message_id = 3; optional string provider_topic_id = 4; string sender_id = 5; optional string sender_display_name = 6; optional string text = 7; optional TelegramMessageMediaProjection media = 8; TelegramMessageReferencesProjection references = 9; int64 observed_at_unix_seconds = 10; }
+message TelegramMessageObservationProjection { string account_id = 1; string provider_chat_id = 2; string provider_message_id = 3; optional string provider_topic_id = 4; string sender_id = 5; optional string sender_display_name = 6; optional string text = 7; optional TelegramMessageMediaProjection media = 8; TelegramMessageReferencesProjection references = 9; int64 observed_at_unix_seconds = 10; bool is_outgoing = 11; }
 message MessageObservationListResponse { repeated TelegramMessageObservationProjection item = 1; }
 message TelegramHistoryPageProjection { repeated TelegramMessageObservationProjection item = 1; optional int64 next_from_message_id = 2; bool has_more = 3; }
 message HistoryPageResponse { TelegramHistoryPageProjection page = 1; }
@@ -347,3 +339,16 @@ message ReactionSummaryResponse { repeated TelegramReactionSummaryProjection sum
 message TelegramReactionSummaryProjection { string emoji = 1; uint32 count = 2; bool is_active = 3; }
 message ChatFolderListResponse { repeated TelegramChatFolderProjection folder = 1; }
 message TelegramChatFolderProjection { string account_id = 1; int64 provider_folder_id = 2; string title = 3; optional string icon_name = 4; optional int64 color_id = 5; repeated string pinned_chat_id = 6; repeated string included_chat_id = 7; repeated string excluded_chat_id = 8; }
+
+// Telegram retains separate operational services because authorization,
+// lifecycle, commands and projection queries have different semantics.
+service TelegramAuthorizationService {
+  rpc Authorize(TelegramAuthorizationRequestV1) returns (TelegramAuthorizationResponseV1);
+}
+service TelegramLifecycleService {
+  rpc Execute(TelegramLifecycleRequestV1) returns (TelegramLifecycleResponseV1);
+}
+service TelegramOperationalService {
+  rpc ExecuteCommand(TelegramProviderCommandV1) returns (TelegramOperationResponse);
+  rpc ExecuteQuery(TelegramProviderQueryV1) returns (TelegramProviderQueryResponseV1);
+}

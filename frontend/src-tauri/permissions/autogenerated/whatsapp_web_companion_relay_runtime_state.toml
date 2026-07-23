@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-whatsapp-web-companion-relay-runtime-state"
+description = "Enables the whatsapp_web_companion_relay_runtime_state command without any pre-configured scope."
+commands.allow = ["whatsapp_web_companion_relay_runtime_state"]
+
+[[permission]]
+identifier = "deny-whatsapp-web-companion-relay-runtime-state"
+description = "Denies the whatsapp_web_companion_relay_runtime_state command without any pre-configured scope."
+commands.deny = ["whatsapp_web_companion_relay_runtime_state"]

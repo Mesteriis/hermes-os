@@ -20,16 +20,16 @@ is a migration adapter only and cannot be treated as the v1 contract.
 
 ## Implementation state
 
-The typed API contract, validation, runtime-side metadata adapter, durable
-runtime ingress, admitted Unix client transport, Tauri emission, generated
-provider client payloads and provider-local capability/read contract are
-implemented. Runtime startup remains fail-closed until the Kernel-managed
-identity and scoped Vault/storage credential handoff is wired. Tauri host
-polling and acknowledgement now use the generated client response envelope;
-JSON response fallback and fake provider-command acceptance are forbidden.
-The host bridge also exposes a typed command-result relay carrying only
-operation/provider request identity, success state, and observation time;
-runtime reconciliation remains the sole owner of command lifecycle state.
-Live WebView smoke evidence and actual provider command execution remain
-migration work; no public availability is claimed until those gates are
-present.
+The typed API contract, exact route-binding handshake and runtime-side durable
+metadata ingress exist. Kernel publishes an owner-private route descriptor
+only for the lifetime of its admitted runtime; Tauri consumes it natively and
+returns only fenced attachment state. The host executor emits only native-derived
+`host_route_attached` and `webview_loaded` lifecycle observations through the
+exact admitted route. The remote WebView has no relay payload and cannot select
+an account, event ID, timestamp, state, command, or observation content.
+
+The host executor intentionally has no provider-DOM relay, polling or
+acknowledgement command yet. JSON fallback and fake provider-command acceptance
+are forbidden. Live WebView smoke evidence, a metadata-only provider DOM
+extractor, and actual provider command execution remain migration work; no
+public availability is claimed until those gates are present.

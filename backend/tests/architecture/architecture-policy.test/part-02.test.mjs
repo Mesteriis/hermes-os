@@ -68,9 +68,9 @@ test('requires explicit compile-isolation policy', () => {
 
 
 
-test('requires an explicit host-only integration registry', () => {
+test('requires an explicit host-only provider execution registry', () => {
   const invalid = policy();
-  invalid.integrations.hostOnlyOwners = [];
+  invalid.integrations.hostOnlyProviderExecutionOwners = [];
 
   assert.ok(codes(validatePolicy(invalid)).has('integration_policy'));
 });

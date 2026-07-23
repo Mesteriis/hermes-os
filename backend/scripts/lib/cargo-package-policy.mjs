@@ -7,6 +7,12 @@ import {
 } from './validation-diagnostics.mjs';
 
 const HERMES_METADATA_KEYS = new Set(['role', 'owner', 'surface', 'components']);
+const HOST_EXECUTION_DEPENDENCIES = new Set([
+  'tauri',
+  'wry',
+  'webkit2gtk',
+  'webview2-com',
+]);
 
 function claimsCanonicalEventsOwner(policy, descriptor) {
   return descriptor?.role === policy.events.role
@@ -33,6 +39,7 @@ function isExactRuntimeProtocolDescriptor(policy, descriptor) {
 function vaultPackageSpecifications(policy) {
   return [
     { name: policy.vault.protocolPackage, surface: 'contract', components: [] },
+    { name: policy.vault.managedClientPackage, surface: 'contract', components: [] },
     { name: policy.vault.keyProviderPackage, surface: 'contract', components: [] },
     {
       name: policy.vault.runtimePackage,
@@ -189,12 +196,12 @@ function validateDescriptor(policy, pkg, descriptor, violations) {
     violations.push(violation('invalid_owner', location, 'integration owner cannot use a business domain identity'));
   }
   if (role === 'integration'
-    && policy.integrations.hostOnlyOwners.includes(owner)
-    && surface !== 'contract') {
+    && list(policy.integrations.hostOnlyProviderExecutionOwners).includes(owner)
+    && list(pkg.dependencies).some(({ name }) => HOST_EXECUTION_DEPENDENCIES.has(name))) {
     violations.push(violation(
-      'host_only_integration',
+      'host_execution_dependency',
       location,
-      `${owner} implementation remains in the host client and cannot create a backend ${surface} package`,
+      `${owner} provider execution is host-only and cannot depend on a browser or WebView runtime from backend`,
     ));
   }
   if (role === 'platform' && !policy.owners.platform.includes(owner)) {

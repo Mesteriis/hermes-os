@@ -12,12 +12,95 @@ use std::time::Duration;
 use hermes_blob_client_contract::{BlobReadError, BlobReadPort};
 use hermes_runtime_protocol::v1::{
     BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1,
-    BlobDataWriteRequestV1, blob_data_request_v1::Operation,
+    BlobDataWriteRequestV1, BlobDataOperationV1,
+    ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
+    ManagedRuntimeControlResponseV1, blob_data_request_v1::Operation,
+    managed_runtime_control_request_v1::Operation as ControlOperation,
+    managed_runtime_control_response_v1::Result as ControlResult,
 };
 use prost::Message;
+use sha2::{Digest, Sha256};
 
 pub const PACKAGE: &str = "hermes-blob-client";
 const MAX_FRAME_BYTES: usize = 64 * 1024 * 1024 + 32 * 1024;
+const CONTROL_FRAME_BYTES: usize = 512 * 1024;
+
+pub struct ManagedBlobSessionV1 {
+    pub data_socket_path: PathBuf,
+    pub grant: BlobDataSessionGrantV1,
+    pub channel_binding: Vec<u8>,
+}
+
+pub fn request_managed_blob_session(
+    channel: &mut UnixStream,
+    capability_id: &str,
+    operation: BlobDataOperationV1,
+    reference_id: &[u8],
+    declared_size: u64,
+    backup_class: u32,
+) -> Result<ManagedBlobSessionV1, BlobClientError> {
+    if capability_id.is_empty()
+        || capability_id.len() > 128
+        || reference_id.len() != 16
+        || reference_id.iter().all(|byte| *byte == 0)
+        || declared_size == 0
+        || !(1..=3).contains(&backup_class)
+    {
+        return Err(BlobClientError::InvalidSessionRequest);
+    }
+    let mut request_id = [0_u8; 16];
+    let mut channel_binding = vec![0_u8; 32];
+    getrandom::fill(&mut request_id).map_err(|_| BlobClientError::Unavailable)?;
+    getrandom::fill(&mut channel_binding).map_err(|_| BlobClientError::Unavailable)?;
+    if request_id.iter().all(|byte| *byte == 0) || channel_binding.iter().all(|byte| *byte == 0) {
+        return Err(BlobClientError::Unavailable);
+    }
+    let request = ManagedRuntimeControlRequestV1 {
+        operation: Some(ControlOperation::IssueBlobSession(ManagedRuntimeBlobSessionRequestV1 {
+            request_id: request_id.to_vec(),
+            capability_id: capability_id.to_owned(),
+            operation: operation as u32,
+            channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
+            reference_id: reference_id.to_vec(),
+            declared_size,
+            backup_class,
+            ttl_seconds: 30,
+        })),
+    };
+    let bytes = request.encode_to_vec();
+    if bytes.len() > CONTROL_FRAME_BYTES {
+        return Err(BlobClientError::InvalidSessionRequest);
+    }
+    channel
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .and_then(|_| channel.set_write_timeout(Some(Duration::from_secs(5))))
+        .map_err(|error| BlobClientError::Io(error.to_string()))?;
+    write_frame(channel, &bytes)?;
+    let response = ManagedRuntimeControlResponseV1::decode(read_frame(channel)?.as_slice())
+        .map_err(|_| BlobClientError::InvalidResponse)?;
+    channel
+        .set_read_timeout(None)
+        .and_then(|_| channel.set_write_timeout(None))
+        .map_err(|error| BlobClientError::Io(error.to_string()))?;
+    let delivery = match response.result {
+        Some(ControlResult::BlobSessionDelivery(delivery)) if response.error_code.is_empty() => delivery,
+        _ => return Err(BlobClientError::Rejected("managed_blob_session_denied".to_owned())),
+    };
+    let grant = delivery.grant.ok_or(BlobClientError::InvalidResponse)?;
+    if !Path::new(&delivery.data_socket_path).is_absolute()
+        || grant.reference_id != reference_id
+        || grant.declared_size != declared_size
+        || grant.operation != operation as i32
+        || grant.channel_binding_sha256 != Sha256::digest(&channel_binding).as_slice()
+    {
+        return Err(BlobClientError::InvalidResponse);
+    }
+    Ok(ManagedBlobSessionV1 {
+        data_socket_path: PathBuf::from(delivery.data_socket_path),
+        grant,
+        channel_binding,
+    })
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BlobDataClient {
@@ -171,6 +254,8 @@ pub enum BlobClientError {
     InvalidFrame,
     InvalidResponse,
     Rejected(String),
+    InvalidSessionRequest,
+    Unavailable,
 }
 
 #[cfg(test)]

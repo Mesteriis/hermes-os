@@ -5,11 +5,9 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 
-#[cfg(feature = "provider-companions")]
+#[cfg(feature = "whatsapp-host-webview")]
 mod whatsapp_companion;
-#[cfg(feature = "provider-companions")]
-mod whatsapp_runtime_client;
-#[cfg(feature = "provider-companions")]
+#[cfg(feature = "telemost-host-companion")]
 mod yandex_telemost_companion;
 
 #[derive(Default)]
@@ -39,14 +37,17 @@ impl Drop for KernelSidecar {
 
 pub fn run() {
     let builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
-    #[cfg(feature = "provider-companions")]
+    #[cfg(feature = "whatsapp-host-webview")]
     let builder = builder.invoke_handler(tauri::generate_handler![
         whatsapp_companion::start_hidden_whatsapp_webview,
         whatsapp_companion::whatsapp_web_companion_manifest,
-        whatsapp_companion::whatsapp_web_companion_relay_observation,
-        whatsapp_companion::whatsapp_web_companion_poll_commands,
-        whatsapp_companion::whatsapp_web_companion_report_command_failure,
-        whatsapp_companion::whatsapp_web_companion_report_command_result,
+        whatsapp_companion::open_whatsapp_web_companion,
+        whatsapp_companion::hide_whatsapp_web_companion,
+        whatsapp_companion::connect_whatsapp_runtime_bridge,
+        whatsapp_companion::whatsapp_web_companion_relay_runtime_state,
+    ]);
+    #[cfg(feature = "telemost-host-companion")]
+    let builder = builder.invoke_handler(tauri::generate_handler![
         yandex_telemost_companion::open_yandex_telemost_companion,
         yandex_telemost_companion::yandex_telemost_companion_manifest,
         yandex_telemost_companion::yandex_telemost_prepare_audio_device,
@@ -65,7 +66,9 @@ pub fn run() {
                 )?;
             }
             app.manage(KernelSidecar::default());
-            #[cfg(feature = "provider-companions")]
+            #[cfg(feature = "whatsapp-host-webview")]
+            app.manage(whatsapp_companion::WhatsAppHostRoutes::default());
+            #[cfg(feature = "telemost-host-companion")]
             app.manage(yandex_telemost_companion::TelemostLocalRecorder::default());
             if !cfg!(debug_assertions) {
                 start_kernel_sidecar(app.handle().clone(), 0)?;
@@ -88,6 +91,8 @@ fn start_kernel_sidecar<R: Runtime>(
         .shell()
         .sidecar("hermes-kernel")?
         .env_clear()
+        .arg("--data-dir")
+        .arg(app.path().app_local_data_dir()?)
         .arg("serve");
 
     let (mut events, child) = command.spawn()?;

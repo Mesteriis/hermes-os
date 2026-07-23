@@ -1,7 +1,7 @@
 use crate::{
     GrantSet, ModuleBlobQuotaRequestV1, ModuleEventRouteRequestV1, ModuleGrantSnapshot,
     ModuleRegistration, ModuleRegistrationState, ModuleSchedulerJobRequestV1,
-    ModuleStorageRequestV1,
+    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
 };
 
 pub trait ModuleRegistryStore {
@@ -28,6 +28,7 @@ pub trait ModuleRegistryStore {
         event_requests: &[ModuleEventRouteRequestV1],
         blob_requests: &[ModuleBlobQuotaRequestV1],
         scheduler_requests: &[ModuleSchedulerJobRequestV1],
+        vault_purpose_requests: &[ModuleVaultPurposeRequestV1],
     ) -> Result<(), Self::Error>;
     fn module_registration(
         &self,
@@ -68,4 +69,9 @@ pub trait ModuleRegistryStore {
         registration_id: &str,
         capability_id: &str,
     ) -> Result<Vec<ModuleSchedulerJobRequestV1>, Self::Error>;
+    fn module_vault_purpose_requests(
+        &self,
+        registration_id: &str,
+        capability_id: &str,
+    ) -> Result<Vec<ModuleVaultPurposeRequestV1>, Self::Error>;
 }

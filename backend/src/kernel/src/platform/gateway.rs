@@ -2,35 +2,45 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use hermes_gateway_protocol::v1::{
-    ClientRealtimeFrameV1, ClientRealtimeStreamStateKindV1, ClientRealtimeStreamStateV1,
-    client_realtime_frame_v1::Frame,
-};
+use hermes_gateway_protocol::COMMUNICATIONS_QUERY_SCHEMA_SHA256;
 use hermes_gateway_runtime::{
-    BrowserBootstrapRouter, BrowserPairingRouter, BrowserRealtimeSubscriptionSource,
-    ClientRealtimeSubscriptionV1, GatewayApplicationRouter, GatewayHttp3ListenerV1,
-    GatewayLanDevelopmentListenerV1, GatewayLoopbackTlsListenerV1, GatewayTechnicalRouter,
+    BrowserBootstrapRouter, BrowserPairingRouter, CommunicationsQueryRouteErrorV1,
+    CommunicationsQueryRouter, InMemoryBrowserRealtimeSource,
+    GatewayApplicationRouter, GatewayHttp3ListenerV1, GatewayLanDevelopmentListenerV1,
+    GatewayLoopbackTlsListenerV1, GatewayTechnicalRouter,
     GatewayTlsListenerV1, PairedRemoteProfileV1, SharedBrowserPairingManager,
 };
 use hermes_gateway_session::{
-    BrowserGatewaySessionService, BrowserPairingChallengeV1, BrowserPairingManager, BrowserSession,
+    BrowserGatewaySessionService, BrowserPairingChallengeV1, BrowserPairingManager,
     BrowserWebauthnVerifier, OwnerPairingApprovalV1,
 };
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
-use hermes_runtime_protocol::v1::{DistributionArtifactKindV1, DistributionManifestArtifactV1};
-use tokio::sync::{broadcast, watch};
+use hermes_runtime_protocol::v1::{
+    ContractReferenceV1, DistributionArtifactKindV1, DistributionManifestArtifactV1,
+    ModuleClientRequestV1, ModuleClientResponseV1,
+};
+use prost::Message;
+use tokio::sync::watch;
 
 use crate::identity::browser_gateway::ControlStoreBrowserAuthority;
+use crate::modules::capability::router::{
+    route_managed_client_request, ManagedCapabilityRouteRequest,
+};
 use crate::platform::macos::native_launch;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
 
 const SHUTDOWN_POLL: Duration = Duration::from_millis(25);
 const BROWSER_BOOTSTRAP_ARTIFACT_ID: &str = "browser.bootstrap";
 const MACOS_KERNEL_TARGET: &str = "aarch64-apple-darwin";
+const COMMUNICATIONS_QUERY_CAPABILITY_ID: &str = "communications.query";
+const COMMUNICATIONS_OWNER_ID: &str = "communications";
+const COMMUNICATIONS_QUERY_CONTRACT_MAJOR: u32 = 1;
+const COMMUNICATIONS_QUERY_CONTRACT_REVISION: u32 = 1;
+const MODULE_CLIENT_PROTOCOL_MAJOR: u32 = 1;
 
 #[path = "gateway/tls.rs"]
 mod tls;
@@ -205,42 +215,6 @@ fn require_private_lan_address(address: SocketAddr) -> Result<(), String> {
         .ok_or_else(|| "developer mode listener must bind a private LAN address".to_owned())
 }
 
-/// The Browser Gateway owns only the transport lifecycle. In developer mode it
-/// exposes a verified idle stream; business events remain owner-provided.
-#[derive(Clone)]
-struct BrowserRealtimeSource {
-    live: Option<broadcast::Sender<ClientRealtimeFrameV1>>,
-}
-
-impl BrowserRealtimeSource {
-    fn unavailable() -> Self {
-        Self { live: None }
-    }
-}
-
-impl BrowserRealtimeSubscriptionSource for BrowserRealtimeSource {
-    fn subscribe(
-        &self,
-        _session: &BrowserSession,
-        _after_cursor: Option<&str>,
-    ) -> Result<ClientRealtimeSubscriptionV1, String> {
-        let live = self
-            .live
-            .as_ref()
-            .ok_or_else(|| "client realtime owner is not admitted".to_owned())?;
-        ClientRealtimeSubscriptionV1::new(
-            vec![ClientRealtimeFrameV1 {
-                frame: Some(Frame::StreamState(ClientRealtimeStreamStateV1 {
-                    state: ClientRealtimeStreamStateKindV1::ClientRealtimeStreamStateKindOpen
-                        as i32,
-                    cursor: String::new(),
-                })),
-            }],
-            live.subscribe(),
-        )
-    }
-}
-
 pub(crate) fn serve(
     store: Arc<SqliteControlStore>,
     supervisor: ManagedRuntimeSupervisor,
@@ -286,18 +260,69 @@ fn gateway_service(
     configuration: &BrowserGatewayConfigurationV1,
     pairing: Option<Arc<BrowserPairingAdmissionV1>>,
 ) -> Result<BrowserGatewayRouter, String> {
-    let authority = ControlStoreBrowserAuthority::new(Arc::clone(&store), supervisor);
+    let authority = ControlStoreBrowserAuthority::new(Arc::clone(&store), supervisor.clone());
     let verifier =
         BrowserWebauthnVerifier::new(&configuration.rp_id, &configuration.exact_https_origin)
             .map_err(|_| "browser Gateway origin or RP ID is invalid".to_owned())?;
-    let session = BrowserGatewaySessionService::new(
+    let session = Arc::new(BrowserGatewaySessionService::new(
         authority,
         verifier,
         configuration.exact_https_origin.clone(),
     )
-    .map_err(|_| "browser Gateway session service is unavailable".to_owned())?;
-    let realtime = BrowserRealtimeSource::unavailable();
-    let mut service = GatewayApplicationRouter::new(true, Arc::new(session), realtime);
+    .map_err(|_| "browser Gateway session service is unavailable".to_owned())?);
+    let realtime = InMemoryBrowserRealtimeSource::new(1_024)
+        .map_err(|_| "browser Gateway realtime source is unavailable".to_owned())?;
+    let request_id_sequence = Arc::new(AtomicU64::new(0));
+    let communications_query = {
+        let store = Arc::clone(&store);
+        let relay = supervisor.relay_port();
+        let request_id_sequence = Arc::clone(&request_id_sequence);
+        let handler = Arc::new(move |owner_id: &str, query_payload: &[u8]| {
+            if owner_id != COMMUNICATIONS_OWNER_ID {
+                return Err(CommunicationsQueryRouteErrorV1::NotFound);
+            }
+            let (registration_id, module_id, grant_epoch) = match find_communications_query_registration(
+                &store,
+                owner_id,
+            ) {
+                Ok(Some((registration_id, module_id, grant_epoch))) => {
+                    (registration_id, module_id, grant_epoch)
+                }
+                Ok(None) => return Err(CommunicationsQueryRouteErrorV1::NotFound),
+                Err(_) => return Err(CommunicationsQueryRouteErrorV1::Internal),
+            };
+            let launch = store
+                .effective_managed_launch_record(&registration_id)
+                .map_err(|_| CommunicationsQueryRouteErrorV1::Internal)?
+                .ok_or(CommunicationsQueryRouteErrorV1::Unavailable)?;
+            let request_id = request_id_sequence.fetch_add(1, Ordering::Relaxed).max(1);
+            let request = encode_communications_query_module_request(
+                &module_id,
+                request_id,
+                query_payload,
+            )
+            .map_err(|_| CommunicationsQueryRouteErrorV1::InvalidArgument)?;
+            let route = ManagedCapabilityRouteRequest::new(
+                &registration_id,
+                launch.runtime_instance_id(),
+                launch.runtime_generation(),
+                grant_epoch,
+                COMMUNICATIONS_QUERY_CAPABILITY_ID,
+                &request,
+            );
+            let response_bytes = route_managed_client_request(&*store, &relay, &route)
+                .map_err(map_managed_route_error)?;
+            let response = ModuleClientResponseV1::decode(response_bytes.as_slice())
+                .map_err(|_| CommunicationsQueryRouteErrorV1::Internal)?;
+            if !response.error_code.is_empty() {
+                return Err(CommunicationsQueryRouteErrorV1::Internal);
+            }
+            Ok(response.response_payload)
+        });
+        CommunicationsQueryRouter::new(Arc::clone(&session), handler)
+    };
+    let mut service = GatewayApplicationRouter::new(true, Arc::clone(&session), realtime)
+        .with_communications_query(communications_query);
     if let Some(pairing) = pairing {
         service = service.with_browser_pairing(pairing.router(configuration)?);
     }
@@ -436,4 +461,76 @@ pub(crate) fn required_browser_bootstrap_manifest(
         .iter()
         .find(|artifact| artifact.artifact_id == BROWSER_BOOTSTRAP_ARTIFACT_ID)
         .ok_or_else(|| "signed browser bootstrap artifact is required".to_owned())
+}
+
+fn find_communications_query_registration(
+    store: &SqliteControlStore,
+    owner_id: &str,
+) -> Result<Option<(String, String, u64)>, String> {
+    let snapshots = store
+        .approved_module_grant_snapshots()
+        .map_err(|_| "module grant snapshots are unavailable".to_owned())?;
+    let mut selected: Option<(String, String, u64)> = None;
+    for snapshot in snapshots {
+        let grants = match snapshot.effective_grants() {
+            Some(grants) => grants,
+            None => continue,
+        };
+        if snapshot.registration().owner_id() != owner_id {
+            continue;
+        }
+        if grants
+            .capability_ids()
+            .binary_search_by(|candidate| candidate.as_str().cmp(COMMUNICATIONS_QUERY_CAPABILITY_ID))
+            .is_err()
+        {
+            continue;
+        }
+        match selected {
+            Some((_, _, current_epoch)) if current_epoch >= grants.grant_epoch() => {}
+            _ => {
+                selected = Some((
+                    snapshot.registration().registration_id().to_owned(),
+                    snapshot.registration().module_id().to_owned(),
+                    grants.grant_epoch(),
+                ));
+            }
+        }
+    }
+    Ok(selected)
+}
+
+fn encode_communications_query_module_request(
+    module_id: &str,
+    request_id: u64,
+    query_payload: &[u8],
+) -> Result<Vec<u8>, ()> {
+    if module_id.is_empty() || request_id == 0 || query_payload.is_empty() {
+        return Err(());
+    }
+    Ok(ModuleClientRequestV1 {
+        protocol_major: MODULE_CLIENT_PROTOCOL_MAJOR,
+        module_id: module_id.to_owned(),
+        owner_id: COMMUNICATIONS_OWNER_ID.to_owned(),
+        contract: Some(ContractReferenceV1 {
+            owner: COMMUNICATIONS_OWNER_ID.to_owned(),
+            name: COMMUNICATIONS_QUERY_CAPABILITY_ID.to_owned(),
+            major: COMMUNICATIONS_QUERY_CONTRACT_MAJOR,
+            revision: COMMUNICATIONS_QUERY_CONTRACT_REVISION,
+            schema_sha256: COMMUNICATIONS_QUERY_SCHEMA_SHA256.to_vec(),
+        }),
+        request_id,
+        request_payload: query_payload.to_vec(),
+    }
+    .encode_to_vec())
+}
+
+fn map_managed_route_error(error: String) -> CommunicationsQueryRouteErrorV1 {
+    match error.as_str() {
+        "managed runtime is unavailable" => CommunicationsQueryRouteErrorV1::Unavailable,
+        "managed runtime fence is stale" => CommunicationsQueryRouteErrorV1::Unavailable,
+        "module registration is not approved" => CommunicationsQueryRouteErrorV1::NotFound,
+        "capability is not granted to this registration" => CommunicationsQueryRouteErrorV1::NotFound,
+        _ => CommunicationsQueryRouteErrorV1::Internal,
+    }
 }

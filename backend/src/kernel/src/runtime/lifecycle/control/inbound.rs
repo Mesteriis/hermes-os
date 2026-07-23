@@ -8,6 +8,7 @@ use hermes_runtime_protocol::v1::{
     ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
     ManagedRuntimeEventCredentialDeliveryV1, ManagedRuntimeEventCredentialRequestV1,
     ManagedRuntimeProviderCredentialDeliveryV1, ManagedRuntimeProviderCredentialRequestV1,
+    ManagedRuntimeBlobSessionDeliveryV1, ManagedRuntimeBlobSessionRequestV1,
     ManagedRuntimeReadyRequestV1, ManagedRuntimeVaultRouteRequestV1,
     ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1, VaultCiphertextRouteV1,
     managed_runtime_control_request_v1::Operation,
@@ -21,6 +22,7 @@ const VAULT_ROUTE_FIELD_TAG: u8 = 0x0a;
 const READY_FIELD_TAG: u8 = 0x12;
 const EVENT_CREDENTIAL_FIELD_TAG: u8 = 0x1a;
 const PROVIDER_CREDENTIAL_FIELD_TAG: u8 = 0x22;
+const BLOB_SESSION_FIELD_TAG: u8 = 0x32;
 
 pub(crate) fn try_receive_vault_route(
     channel: &mut UnixStream,
@@ -151,6 +153,44 @@ pub(crate) fn respond_provider_credential(
     write_frame(channel, &response.encode_to_vec())
 }
 
+pub(crate) fn try_receive_blob_session(
+    channel: &mut UnixStream,
+) -> Result<Option<ManagedRuntimeBlobSessionRequestV1>, String> {
+    let Some(frame) = peek_complete_frame(channel)? else {
+        return Ok(None);
+    };
+    if frame.first() != Some(&BLOB_SESSION_FIELD_TAG) {
+        return Ok(None);
+    }
+    let request = ManagedRuntimeControlRequestV1::decode(frame.as_slice())
+        .map_err(|_| "managed runtime Blob session request is invalid".to_owned())?;
+    let Some(Operation::IssueBlobSession(value)) = request.operation else {
+        return Err("managed runtime Blob session request is invalid".to_owned());
+    };
+    crate::platform::blob::session::valid_request(&value)
+        .then_some(())
+        .ok_or_else(|| "managed runtime Blob session request is invalid".to_owned())?;
+    read_frame(channel)?;
+    Ok(Some(value))
+}
+
+pub(crate) fn respond_blob_session(
+    channel: &mut UnixStream,
+    result: Result<ManagedRuntimeBlobSessionDeliveryV1, String>,
+) -> Result<(), String> {
+    let response = match result {
+        Ok(delivery) => ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::BlobSessionDelivery(delivery)),
+            error_code: String::new(),
+        },
+        Err(_) => ManagedRuntimeControlResponseV1 {
+            result: None,
+            error_code: "managed_blob_session_denied".to_owned(),
+        },
+    };
+    write_frame(channel, &response.encode_to_vec())
+}
+
 fn peek_complete_frame(channel: &mut UnixStream) -> Result<Option<Vec<u8>>, String> {
     let mut header = [0_u8; 5];
     let header_length = match peek(channel, &mut header) {
@@ -230,5 +270,17 @@ fn valid_provider_credential_request(value: &ManagedRuntimeProviderCredentialReq
         && value.credential_revision > 0
         && (1..=600).contains(&value.ttl_seconds)
         && (1..=5).contains(&value.secret_class)
+        && (1..=6).contains(&value.action)
         && value.recipient_public_key_x25519.len() == 32
+        && valid_configuration_instance_id(&value.configuration_instance_id)
+}
+
+fn valid_configuration_instance_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase()
+                || byte.is_ascii_digit()
+                || matches!(byte, b'_' | b'-' | b'.')
+        })
 }

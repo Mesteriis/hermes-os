@@ -15,3 +15,4 @@ mod storage_binding;
 mod storage_bundle;
 mod storage_request;
 mod storage_topology;
+mod vault_purpose_request;

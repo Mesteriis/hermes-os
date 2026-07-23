@@ -8,6 +8,10 @@ license = "MIT"
 name = "hermes-communications-runtime"
 path = "src/main.rs"
 
+[lib]
+name = "hermes_communications_runtime"
+path = "src/lib.rs"
+
 [package.metadata.hermes]
 role = "domain"
 owner = "communications"
@@ -18,3 +22,13 @@ hermes-communications-api = { path = "../communications-api" }
 hermes-communications-domain = { path = "../communications-domain" }
 hermes-communications-ingress = { path = "../communications-ingress" }
 hermes-communications-persistence = { path = "../communications-persistence" }
+hermes-events-jetstream = { path = "../platform/events/jetstream" }
+hermes-events-protocol = { path = "../platform/events" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+hermes-storage-vault = { path = "../platform/storage/vault" }
+libc = "=0.2.186"
+prost = "=0.14.4"
+prost-types = "=0.14.4"
+sha2 = { version = "=0.11.0", default-features = false }
+tokio = { version = "=1.52.4", default-features = false, features = ["rt", "rt-multi-thread", "time"] }

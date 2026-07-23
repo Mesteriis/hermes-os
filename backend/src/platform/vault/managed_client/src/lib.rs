@@ -1,0 +1,318 @@
+//! Provider-neutral encrypted credential access over a Kernel-inherited FD.
+
+use std::io::{Read, Write};
+use std::os::unix::net::UnixStream;
+
+use hermes_runtime_protocol::v1::{
+    ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
+    ManagedRuntimeProviderCredentialRequestV1, ManagedRuntimeVaultRouteRequestV1,
+    ManagedRuntimeVaultRouteResponseV1, VaultCiphertextResponseV1,
+    VaultCiphertextRouteDirectionV1, VaultCiphertextRouteV1,
+    managed_runtime_control_request_v1::Operation,
+    managed_runtime_control_response_v1::Result as ControlResult,
+};
+use hermes_vault_protocol::{
+    LeaseAudienceV1, LeaseIdV1, SecretClassV1, VaultActionV1, VaultCiphertextFrameV1,
+    VaultLeaseIssueRequestV1, VaultPurposeRequestV1, VaultResponseRecipientV1,
+    VaultTransportBindingV1, VaultTransportCommandV1, VaultTransportDirectionV1,
+    VaultTransportPublicKey, seal,
+};
+use prost::Message;
+use zeroize::Zeroizing;
+
+const MAX_FRAME_BYTES: usize = 512 * 1024;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ManagedProviderCredentialContextV1 {
+    pub vault_instance_id: String,
+    pub vault_runtime_generation: u64,
+    pub vault_public_key_x25519: [u8; 32],
+    pub logical_owner_id: String,
+    pub registration_id: String,
+    pub runtime_instance_id: String,
+    pub runtime_generation: u64,
+    pub grant_epoch: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ManagedProviderCredentialErrorV1 {
+    InvalidContext,
+    Rejected,
+    Unavailable,
+}
+
+pub struct ManagedProviderCredentialClientV1 {
+    channel: UnixStream,
+}
+
+impl ManagedProviderCredentialClientV1 {
+    #[must_use]
+    pub fn new(channel: UnixStream) -> Self { Self { channel } }
+
+    pub fn resolve(
+        &mut self,
+        context: &ManagedProviderCredentialContextV1,
+        configuration_instance_id: &str,
+        purpose_id: &str,
+        credential_revision: u64,
+        ttl_seconds: u32,
+        secret_class: SecretClassV1,
+    ) -> Result<Zeroizing<Vec<u8>>, ManagedProviderCredentialErrorV1> {
+        let audience = audience(context)?;
+        if credential_revision == 0 || ttl_seconds == 0 || ttl_seconds > 600 {
+            return Err(ManagedProviderCredentialErrorV1::InvalidContext);
+        }
+        let lease_id = self.issue_action_lease(
+            context, audience.clone(), configuration_instance_id, purpose_id, credential_revision,
+            ttl_seconds, secret_class, VaultActionV1::Resolve,
+        )?;
+        self.resolve_lease(context, audience, lease_id, secret_class)
+    }
+
+    pub fn store_once(
+        &mut self,
+        context: &ManagedProviderCredentialContextV1,
+        configuration_instance_id: &str,
+        purpose_id: &str,
+        credential_revision: u64,
+        ttl_seconds: u32,
+        secret_class: SecretClassV1,
+        payload: &[u8],
+    ) -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
+        let audience = audience(context)?;
+        if payload.is_empty() || payload.len() > MAX_FRAME_BYTES {
+            return Err(ManagedProviderCredentialErrorV1::InvalidContext);
+        }
+        let lease_id = self.issue_action_lease(
+            context, audience.clone(), configuration_instance_id, purpose_id, credential_revision,
+            ttl_seconds, secret_class, VaultActionV1::Create,
+        )?;
+        let response = self.execute_command(
+            context,
+            audience,
+            VaultTransportCommandV1::StoreLease { lease_id, secret_class, payload: payload.to_vec() },
+        )?;
+        response.as_slice().try_into().map_err(|_| ManagedProviderCredentialErrorV1::Rejected)
+    }
+
+    pub fn replace_once(
+        &mut self,
+        context: &ManagedProviderCredentialContextV1,
+        configuration_instance_id: &str,
+        purpose_id: &str,
+        credential_revision: u64,
+        ttl_seconds: u32,
+        secret_class: SecretClassV1,
+        prior_record_id: [u8; 16],
+        payload: &[u8],
+    ) -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
+        let audience = audience(context)?;
+        if payload.is_empty() || payload.len() > MAX_FRAME_BYTES {
+            return Err(ManagedProviderCredentialErrorV1::InvalidContext);
+        }
+        let lease_id = self.issue_action_lease(
+            context, audience.clone(), configuration_instance_id, purpose_id, credential_revision,
+            ttl_seconds, secret_class, VaultActionV1::ReplaceCas,
+        )?;
+        let response = self.execute_command(
+            context,
+            audience,
+            VaultTransportCommandV1::ReplaceLease { lease_id, secret_class, prior_record_id, payload: payload.to_vec() },
+        )?;
+        response.as_slice().try_into().map_err(|_| ManagedProviderCredentialErrorV1::Rejected)
+    }
+
+    fn issue_action_lease(
+        &mut self,
+        context: &ManagedProviderCredentialContextV1,
+        audience: LeaseAudienceV1,
+        configuration_instance_id: &str,
+        purpose_id: &str,
+        credential_revision: u64,
+        ttl_seconds: u32,
+        secret_class: SecretClassV1,
+        action: VaultActionV1,
+    ) -> Result<LeaseIdV1, ManagedProviderCredentialErrorV1> {
+        if credential_revision == 0 || ttl_seconds == 0 || ttl_seconds > 600 {
+            return Err(ManagedProviderCredentialErrorV1::InvalidContext);
+        }
+        let recipient = VaultResponseRecipientV1::generate();
+        let request_id = random_request_id()?;
+        let delivery = self.issue_lease(
+            request_id, configuration_instance_id, purpose_id, credential_revision, ttl_seconds,
+            secret_class, action, recipient.public_key().as_bytes(),
+        )?;
+        let issue = issue_request(
+            context, audience.clone(), configuration_instance_id, purpose_id, credential_revision,
+            ttl_seconds, secret_class, action,
+        )?;
+        let command = VaultTransportCommandV1::IssueLease { request: issue };
+        let binding = binding(
+            &audience, context.vault_runtime_generation, request_id, &command, &recipient,
+            VaultTransportDirectionV1::FromVault,
+        )?;
+        let frame = VaultCiphertextFrameV1::from_parts(delivery.encapped_key, delivery.ciphertext, delivery.tag)
+            .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)?;
+        let lease_id = recipient.open(&binding, &frame)
+            .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)?;
+        String::from_utf8(lease_id.to_vec())
+            .ok().and_then(|value| LeaseIdV1::new(value).ok())
+            .ok_or(ManagedProviderCredentialErrorV1::Rejected)
+    }
+
+    fn issue_lease(
+        &mut self,
+        request_id: [u8; 16],
+        configuration_instance_id: &str,
+        purpose_id: &str,
+        credential_revision: u64,
+        ttl_seconds: u32,
+        secret_class: SecretClassV1,
+        action: VaultActionV1,
+        recipient_public_key_x25519: &[u8; 32],
+    ) -> Result<hermes_runtime_protocol::v1::ManagedRuntimeProviderCredentialDeliveryV1, ManagedProviderCredentialErrorV1> {
+        write_frame(&mut self.channel, &ManagedRuntimeControlRequestV1 {
+            operation: Some(Operation::IssueProviderCredential(ManagedRuntimeProviderCredentialRequestV1 {
+                request_id: request_id.to_vec(), purpose_id: purpose_id.to_owned(), credential_revision,
+                ttl_seconds, secret_class: secret_class.code() as u32,
+                recipient_public_key_x25519: recipient_public_key_x25519.to_vec(),
+                configuration_instance_id: configuration_instance_id.to_owned(),
+                action: action.code() as u32,
+            })),
+        }.encode_to_vec())?;
+        let response = ManagedRuntimeControlResponseV1::decode(read_frame(&mut self.channel)?.as_slice())
+            .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)?;
+        match response.result {
+            Some(ControlResult::ProviderCredentialDelivery(delivery)) if response.error_code.is_empty() => Ok(delivery),
+            _ => Err(ManagedProviderCredentialErrorV1::Rejected),
+        }
+    }
+
+    fn resolve_lease(
+        &mut self,
+        context: &ManagedProviderCredentialContextV1,
+        audience: LeaseAudienceV1,
+        lease_id: LeaseIdV1,
+        secret_class: SecretClassV1,
+    ) -> Result<Zeroizing<Vec<u8>>, ManagedProviderCredentialErrorV1> {
+        self.execute_command(context, audience, VaultTransportCommandV1::ResolveLease { lease_id, secret_class })
+    }
+
+    fn execute_command(
+        &mut self,
+        context: &ManagedProviderCredentialContextV1,
+        audience: LeaseAudienceV1,
+        command: VaultTransportCommandV1,
+    ) -> Result<Zeroizing<Vec<u8>>, ManagedProviderCredentialErrorV1> {
+        let request_id = random_request_id()?;
+        let recipient = VaultResponseRecipientV1::generate();
+        let request_binding = binding(&audience, context.vault_runtime_generation, request_id, &command, &recipient, VaultTransportDirectionV1::ToVault)?;
+        let response_binding = binding(&audience, context.vault_runtime_generation, request_id, &command, &recipient, VaultTransportDirectionV1::FromVault)?;
+        let key = VaultTransportPublicKey::from_bytes(context.vault_public_key_x25519)
+            .map_err(|_| ManagedProviderCredentialErrorV1::InvalidContext)?;
+        let frame = seal(&key, &request_binding, &command.encode())
+            .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)?;
+        let route = VaultCiphertextRouteV1 {
+            major: 1, registration_id: audience.module_registration_id().to_owned(),
+            runtime_instance_id: audience.runtime_instance_id().to_owned(),
+            vault_runtime_generation: context.vault_runtime_generation, grant_epoch: audience.grant_epoch(),
+            request_id: request_id.to_vec(), operation_digest_sha256: command.operation_digest().to_vec(),
+            direction: VaultCiphertextRouteDirectionV1::ToVault as i32,
+            hpke_encapped_key: frame.encapped_key().to_vec(), ciphertext: frame.ciphertext().to_vec(),
+            hpke_authentication_tag: frame.tag().to_vec(),
+            response_recipient_hpke_public_key_x25519: recipient.public_key().as_bytes().to_vec(),
+            kernel_instance_id: String::new(), kernel_authorization_signature_raw: Vec::new(),
+            caller_runtime_generation: audience.runtime_generation(), storage_role_epoch: 0,
+            storage_credential_lease_revision: 0, storage_runtime_principal: String::new(), storage_owner_id: String::new(),
+        };
+        let response = self.route(route.clone())?;
+        let frame = valid_response(&route, response)?;
+        recipient.open(&response_binding, &frame).map_err(|_| ManagedProviderCredentialErrorV1::Rejected)
+    }
+
+    fn route(&mut self, route: VaultCiphertextRouteV1) -> Result<VaultCiphertextResponseV1, ManagedProviderCredentialErrorV1> {
+        write_frame(&mut self.channel, &ManagedRuntimeVaultRouteRequestV1 { route: Some(route) }.encode_to_vec())?;
+        let response = ManagedRuntimeVaultRouteResponseV1::decode(read_frame(&mut self.channel)?.as_slice())
+            .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)?;
+        response.response.filter(|_| response.error_code.is_empty()).ok_or(ManagedProviderCredentialErrorV1::Rejected)
+    }
+}
+
+fn audience(context: &ManagedProviderCredentialContextV1) -> Result<LeaseAudienceV1, ManagedProviderCredentialErrorV1> {
+    if context.vault_runtime_generation == 0 || context.runtime_generation == 0 || context.grant_epoch == 0 {
+        return Err(ManagedProviderCredentialErrorV1::InvalidContext);
+    }
+    LeaseAudienceV1::new(context.registration_id.clone(), context.runtime_instance_id.clone(), context.runtime_generation, context.grant_epoch)
+        .map_err(|_| ManagedProviderCredentialErrorV1::InvalidContext)
+}
+
+fn issue_request(
+    context: &ManagedProviderCredentialContextV1,
+    audience: LeaseAudienceV1,
+    configuration_instance_id: &str,
+    purpose_id: &str,
+    credential_revision: u64,
+    ttl_seconds: u32,
+    secret_class: SecretClassV1,
+    action: VaultActionV1,
+) -> Result<VaultLeaseIssueRequestV1, ManagedProviderCredentialErrorV1> {
+    let purpose = VaultPurposeRequestV1::new(purpose_id.to_owned(), configuration_instance_id.to_owned(), vec![secret_class], vec![action], ttl_seconds)
+        .map_err(|_| ManagedProviderCredentialErrorV1::InvalidContext)?;
+    VaultLeaseIssueRequestV1::new(context.vault_instance_id.clone(), context.vault_runtime_generation, credential_revision, context.logical_owner_id.clone(), purpose, audience)
+        .map_err(|_| ManagedProviderCredentialErrorV1::InvalidContext)
+}
+
+fn binding(
+    audience: &LeaseAudienceV1,
+    vault_runtime_generation: u64,
+    request_id: [u8; 16],
+    command: &VaultTransportCommandV1,
+    recipient: &VaultResponseRecipientV1,
+    direction: VaultTransportDirectionV1,
+) -> Result<VaultTransportBindingV1, ManagedProviderCredentialErrorV1> {
+    VaultTransportBindingV1::new(vault_runtime_generation, audience.clone(), request_id, command.operation_digest(), direction, *recipient.public_key().as_bytes())
+        .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)
+}
+
+fn valid_response(route: &VaultCiphertextRouteV1, response: VaultCiphertextResponseV1) -> Result<VaultCiphertextFrameV1, ManagedProviderCredentialErrorV1> {
+    if response.major != 1 || response.vault_runtime_generation != route.vault_runtime_generation
+        || response.caller_runtime_generation != route.caller_runtime_generation
+        || response.request_id != route.request_id || response.operation_digest_sha256 != route.operation_digest_sha256
+        || response.direction != VaultCiphertextRouteDirectionV1::FromVault as i32
+    { return Err(ManagedProviderCredentialErrorV1::Rejected); }
+    VaultCiphertextFrameV1::from_parts(response.hpke_encapped_key, response.ciphertext, response.hpke_authentication_tag)
+        .map_err(|_| ManagedProviderCredentialErrorV1::Rejected)
+}
+
+fn write_frame(channel: &mut UnixStream, bytes: &[u8]) -> Result<(), ManagedProviderCredentialErrorV1> {
+    if bytes.is_empty() || bytes.len() > MAX_FRAME_BYTES { return Err(ManagedProviderCredentialErrorV1::Rejected); }
+    let mut value = u32::try_from(bytes.len()).map_err(|_| ManagedProviderCredentialErrorV1::Rejected)?;
+    let mut prefix = Vec::with_capacity(5);
+    while value >= 0x80 { prefix.push((value as u8 & 0x7f) | 0x80); value >>= 7; }
+    prefix.push(value as u8);
+    channel.write_all(&prefix).and_then(|_| channel.write_all(bytes)).and_then(|_| channel.flush())
+        .map_err(|_| ManagedProviderCredentialErrorV1::Unavailable)
+}
+
+fn read_frame(channel: &mut UnixStream) -> Result<Vec<u8>, ManagedProviderCredentialErrorV1> {
+    let mut value = 0_u64;
+    for index in 0..5 {
+        let mut byte = [0_u8; 1];
+        channel.read_exact(&mut byte).map_err(|_| ManagedProviderCredentialErrorV1::Unavailable)?;
+        value |= u64::from(byte[0] & 0x7f) << (index * 7);
+        if byte[0] & 0x80 == 0 {
+            let length = usize::try_from(value).map_err(|_| ManagedProviderCredentialErrorV1::Rejected)?;
+            if length == 0 || length > MAX_FRAME_BYTES { return Err(ManagedProviderCredentialErrorV1::Rejected); }
+            let mut frame = vec![0_u8; length];
+            channel.read_exact(&mut frame).map_err(|_| ManagedProviderCredentialErrorV1::Unavailable)?;
+            return Ok(frame);
+        }
+    }
+    Err(ManagedProviderCredentialErrorV1::Rejected)
+}
+
+fn random_request_id() -> Result<[u8; 16], ManagedProviderCredentialErrorV1> {
+    let mut request_id = [0_u8; 16];
+    getrandom::fill(&mut request_id).map_err(|_| ManagedProviderCredentialErrorV1::Unavailable)?;
+    Ok(request_id)
+}

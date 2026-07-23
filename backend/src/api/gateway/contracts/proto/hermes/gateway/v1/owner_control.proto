@@ -138,6 +138,38 @@ message StartReservedSchedulerRuntimeResponseV1 {
   string launch_state = 3;
 }
 
+// Provider integrations launch only from an existing generic reservation and
+// owner-approved platform resource bindings. Provider account data, secrets
+// and settings remain integration-owned and are not accepted here. A requested
+// host bridge is an owner-approved local transport route allocated by Kernel,
+// never a provider credential or browser session carrier.
+message StartReservedIntegrationRuntimeRequestV1 {
+  string registration_id = 1;
+  string storage_capability_id = 2;
+  string configuration_instance_id = 3;
+  string owner_session_id = 4;
+  bool request_host_bridge = 5;
+}
+message StartReservedIntegrationRuntimeResponseV1 {
+  string registration_id = 1;
+  uint64 runtime_generation = 2;
+  string launch_state = 3;
+  optional string host_bridge_socket_path = 4;
+}
+
+// Business domains use the same fenced managed-launch lifecycle, but never
+// receive provider configuration, host bridge routes or integration settings.
+message StartReservedDomainRuntimeRequestV1 {
+  string registration_id = 1;
+  string storage_capability_id = 2;
+  string owner_session_id = 3;
+}
+message StartReservedDomainRuntimeResponseV1 {
+  string registration_id = 1;
+  uint64 runtime_generation = 2;
+  string launch_state = 3;
+}
+
 // Crash recovery composes a new durable Scheduler identity, its matching
 // Storage binding and one exact managed-child launch. It never reuses the
 // predecessor's runtime identity, credential lease or Storage binding.
@@ -461,32 +493,6 @@ message BeginBrowserPairingResponseV1 {
   uint64 expires_at_unix_millis = 2;
 }
 
-message ExecuteMailRuntimeOwnerCommandRequestV1 {
-  string owner_session_id = 1;
-  string command = 2;
-  repeated string arg = 3;
-}
-
-message ExecuteMailRuntimeOwnerCommandResponseV1 {
-  string command = 1;
-  uint32 exit_code = 2;
-  string stdout = 3;
-  string stderr = 4;
-}
-
-message ExecuteCommunicationsRuntimeOwnerCommandRequestV1 {
-  string owner_session_id = 1;
-  string command = 2;
-  repeated string arg = 3;
-}
-
-message ExecuteCommunicationsRuntimeOwnerCommandResponseV1 {
-  string command = 1;
-  uint32 exit_code = 2;
-  string stdout = 3;
-  string stderr = 4;
-}
-
 message OwnerControlRequestV1 {
   oneof operation {
     GetModuleRegistrationStatusRequestV1 get_module_registration_status = 1;
@@ -524,8 +530,8 @@ message OwnerControlRequestV1 {
     UpsertSchedulerScheduleRequestV1 upsert_scheduler_schedule = 33;
     RestartSchedulerRuntimeRequestV1 restart_scheduler_runtime = 34;
     BeginBrowserPairingRequestV1 begin_browser_pairing = 35;
-    ExecuteMailRuntimeOwnerCommandRequestV1 execute_mail_runtime_owner_command = 37;
-    ExecuteCommunicationsRuntimeOwnerCommandRequestV1 execute_communications_runtime_owner_command = 38;
+    StartReservedIntegrationRuntimeRequestV1 start_reserved_integration_runtime = 36;
+    StartReservedDomainRuntimeRequestV1 start_reserved_domain_runtime = 37;
   }
 }
 
@@ -566,8 +572,8 @@ message OwnerControlResponseV1 {
     UpsertSchedulerScheduleResponseV1 upsert_scheduler_schedule = 34;
     RestartSchedulerRuntimeResponseV1 restart_scheduler_runtime = 35;
     BeginBrowserPairingResponseV1 begin_browser_pairing = 36;
-    ExecuteMailRuntimeOwnerCommandResponseV1 execute_mail_runtime_owner_command = 37;
-    ExecuteCommunicationsRuntimeOwnerCommandResponseV1 execute_communications_runtime_owner_command = 38;
+    StartReservedIntegrationRuntimeResponseV1 start_reserved_integration_runtime = 37;
+    StartReservedDomainRuntimeResponseV1 start_reserved_domain_runtime = 38;
   }
 
   // Sanitized stable code; details and private data remain local to Kernel.

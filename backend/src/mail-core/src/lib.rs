@@ -2,12 +2,19 @@
 
 use std::collections::HashMap;
 
-use hermes_communications_ingress::CommunicationObservationDraft;
+use hermes_communications_ingress::{
+    AttachmentDescriptorV1, AttachmentDispositionV1, BodyAvailabilityV1,
+    CommunicationDirectionV1, CommunicationEvidenceKindV1, CommunicationObservationDraft,
+    ProviderProvenanceV1, SourceEnvelope, SourceScopeEnvelope,
+    new_scoped_communication_observation_draft, with_attachment_descriptor,
+};
 use hermes_mail_api::{
     DEFAULT_WINDOW, MAX_PLAIN_TEXT_BYTES, MAX_WINDOWS, MailContractError::WindowLimitExceeded,
-    SYNC_DEADLINE_SECONDS, WINDOW_DEADLINE_SECONDS, valid_host, valid_message_bytes, valid_port,
-    valid_window,
+    SYNC_DEADLINE_SECONDS, WINDOW_DEADLINE_SECONDS, valid_host, valid_mailbox,
+    valid_message_bytes, valid_port, valid_window, OutgoingMailV1,
 };
+
+pub mod rfc822;
 
 pub use hermes_mail_api::{
     MailConnection, MailConnectionId, MailConnectionState, MailContractError, MailOperation,
@@ -133,25 +140,176 @@ pub fn validate_sync_request(
     Ok(())
 }
 
+pub fn compose_rfc822(from_address: &str, message: &OutgoingMailV1) -> Result<String, MailContractError> {
+    if message.operation_id.trim().is_empty()
+        || message.connection_id.trim().is_empty()
+        || message.provider_conversation_id.trim().is_empty()
+        || !valid_mailbox(from_address)
+        || message.recipients.is_empty()
+        || message.recipients.iter().any(|recipient| !valid_mailbox(recipient))
+        || invalid_header(&message.subject)
+        || message.subject.len() > 998
+        || !valid_message_bytes(message.text_body.len())
+    {
+        return Err(MailContractError::InvalidPayload);
+    }
+    let recipients = message.recipients.join(", ");
+    Ok(format!(
+        "From: {}\r\nTo: {recipients}\r\nSubject: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{}",
+        from_address,
+        message.subject,
+        normalize_crlf(&message.text_body),
+    ))
+}
+
+pub fn draft_delivery_observation(
+    provider: ProviderProvenanceV1,
+    message: &OutgoingMailV1,
+) -> Result<CommunicationObservationDraft, MailContractError> {
+    if message.operation_id.trim().is_empty()
+        || message.connection_id.trim().is_empty()
+        || message.provider_conversation_id.trim().is_empty()
+    {
+        return Err(MailContractError::InvalidPayload);
+    }
+    new_scoped_communication_observation_draft(
+        format!("{}:{}:{}", provider.as_str(), message.connection_id, message.operation_id),
+        SourceEnvelope {
+            provider,
+            external_record_id: format!("{}:{}:{}", provider.as_str(), message.connection_id, message.operation_id),
+            scope: Some(SourceScopeEnvelope {
+                external_account_id: message.connection_id.clone(),
+                external_conversation_id: Some(message.provider_conversation_id.clone()),
+                external_participant_id: None,
+                external_media_id: None,
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
+            }),
+        },
+        CommunicationEvidenceKindV1::EmailMessage,
+        BodyAvailabilityV1::Unavailable,
+        CommunicationDirectionV1::Outgoing,
+        None,
+    )
+    .map_err(|_| MailContractError::InvalidPayload)
+}
+
+fn invalid_header(value: &str) -> bool {
+    value.is_empty() || value.contains(['\r', '\n', '\0'])
+}
+
+fn normalize_crlf(value: &str) -> String {
+    value.replace("\r\n", "\n").replace('\r', "\n").replace('\n', "\r\n")
+}
+
 pub fn draft_ingress_observation(
     operation_id: &str,
-    source_kind: impl Into<String>,
+    provider: ProviderProvenanceV1,
+    account_id: impl Into<String>,
     source_id: impl Into<String>,
     body_bytes: usize,
-    preview: Option<String>,
 ) -> Result<CommunicationObservationDraft, MailContractError> {
     if body_bytes > MAX_PLAIN_TEXT_BYTES {
         return Err(MailContractError::InvalidPayload);
     }
-    let text_preview = preview.filter(|value| !value.trim().is_empty());
-    Ok(CommunicationObservationDraft {
-        operation_id: operation_id.to_string(),
-        source_id: source_id.into(),
-        source_kind: source_kind.into(),
-        text_preview,
-        has_body: body_bytes > 0,
-        is_final_window: true,
+    let source_id = source_id.into();
+    new_scoped_communication_observation_draft(
+        operation_id,
+        SourceEnvelope {
+            provider,
+            external_record_id: source_id.clone(),
+            scope: Some(SourceScopeEnvelope {
+                external_account_id: account_id.into(),
+                external_conversation_id: Some(source_id),
+                external_participant_id: None,
+                external_media_id: None,
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
+            }),
+        },
+        CommunicationEvidenceKindV1::EmailMessage,
+        if body_bytes > 0 {
+            BodyAvailabilityV1::Unavailable
+        } else {
+            BodyAvailabilityV1::MetadataOnly
+        },
+        CommunicationDirectionV1::Incoming,
+        None,
+    )
+    .map_err(|_| MailContractError::InvalidPayload)
+}
+
+pub fn draft_ingress_observation_with_body(
+    operation_id: &str,
+    provider: ProviderProvenanceV1,
+    account_id: impl Into<String>,
+    source_id: impl Into<String>,
+    body: BodyAvailabilityV1,
+) -> Result<CommunicationObservationDraft, MailContractError> {
+    let source_id = source_id.into();
+    new_scoped_communication_observation_draft(
+        operation_id,
+        SourceEnvelope {
+            provider,
+            external_record_id: source_id.clone(),
+            scope: Some(SourceScopeEnvelope {
+                external_account_id: account_id.into(),
+                external_conversation_id: Some(source_id),
+                external_participant_id: None,
+                external_media_id: None,
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
+            }),
+        },
+        CommunicationEvidenceKindV1::EmailMessage,
+        body,
+        CommunicationDirectionV1::Incoming,
+        None,
+    )
+    .map_err(|_| MailContractError::InvalidPayload)
+}
+
+pub fn draft_attachment_ingress_observation(
+    operation_id: &str,
+    provider: ProviderProvenanceV1,
+    account_id: impl Into<String>,
+    message_source_id: impl Into<String>,
+    media_id: impl Into<String>,
+    filename: Option<String>,
+    media_type: String,
+    declared_bytes: u64,
+    disposition: AttachmentDispositionV1,
+) -> Result<CommunicationObservationDraft, MailContractError> {
+    let message_source_id = message_source_id.into();
+    let media_id = media_id.into();
+    let draft = new_scoped_communication_observation_draft(
+        operation_id,
+        SourceEnvelope {
+            provider,
+            external_record_id: format!("{message_source_id}:{media_id}"),
+            scope: Some(SourceScopeEnvelope {
+                external_account_id: account_id.into(),
+                external_conversation_id: Some(message_source_id),
+                external_participant_id: None,
+                external_media_id: Some(media_id),
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
+            }),
+        },
+        CommunicationEvidenceKindV1::MediaChanged,
+        BodyAvailabilityV1::MetadataOnly,
+        CommunicationDirectionV1::Incoming,
+        None,
+    )
+    .map_err(|_| MailContractError::InvalidPayload)?;
+    with_attachment_descriptor(draft, AttachmentDescriptorV1 {
+        filename,
+        media_type,
+        declared_bytes,
+        sha256: None,
+        disposition,
     })
+    .map_err(|_| MailContractError::InvalidPayload)
 }
 
 pub fn bounded_window(window: u32, windows: u32) -> Result<SyncPlan, MailContractError> {
@@ -160,4 +318,47 @@ pub fn bounded_window(window: u32, windows: u32) -> Result<SyncPlan, MailContrac
 
 pub mod constants {
     pub use hermes_mail_api::MAX_WINDOWS;
+}
+
+#[cfg(test)]
+mod rfc822_composition_tests {
+    use super::*;
+    use hermes_mail_api::OutgoingMailV1;
+
+    fn message() -> OutgoingMailV1 {
+        OutgoingMailV1 {
+            operation_id: "operation".to_owned(),
+            connection_id: "connection".to_owned(),
+            provider_conversation_id: "thread-1".to_owned(),
+            recipients: vec!["recipient@example.test".to_owned()],
+            subject: "Report".to_owned(),
+            text_body: "line one\nline two".to_owned(),
+        }
+    }
+
+    #[test]
+    fn composes_bounded_plain_text_rfc822_message() {
+        let rendered = compose_rfc822("owner@example.test", &message()).expect("valid message");
+        assert!(rendered.starts_with("From: owner@example.test\r\nTo: recipient@example.test\r\nSubject: Report\r\n"));
+        assert!(rendered.ends_with("\r\n\r\nline one\r\nline two"));
+    }
+
+    #[test]
+    fn rejects_header_injection_in_subject_and_recipients() {
+        let mut subject_injection = message();
+        subject_injection.subject = "Report\r\nBcc: attacker@example.test".to_owned();
+        assert_eq!(compose_rfc822("owner@example.test", &subject_injection), Err(MailContractError::InvalidPayload));
+
+        let mut recipient_injection = message();
+        recipient_injection.recipients = vec!["recipient@example.test\r\nBcc: attacker@example.test".to_owned()];
+        assert_eq!(compose_rfc822("owner@example.test", &recipient_injection), Err(MailContractError::InvalidPayload));
+    }
+
+    #[test]
+    fn delivery_observation_is_outgoing_and_provider_scoped() {
+        let draft = draft_delivery_observation(ProviderProvenanceV1::MailSmtp, &message()).expect("valid delivery observation");
+        assert_eq!(draft.source.provider, ProviderProvenanceV1::MailSmtp);
+        assert_eq!(draft.direction, CommunicationDirectionV1::Outgoing);
+        assert_eq!(draft.source.scope.as_ref().and_then(|scope| scope.external_conversation_id.as_deref()), Some("thread-1"));
+    }
 }

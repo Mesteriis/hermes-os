@@ -74,6 +74,7 @@ where
             &bound.events,
             &bound.blobs,
             &bound.scheduler,
+            &bound.vault_purposes,
         ) {
             Ok(()) => return Ok(registration),
             Err(

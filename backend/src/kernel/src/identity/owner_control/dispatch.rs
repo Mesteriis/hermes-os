@@ -1,10 +1,11 @@
 //! Request dispatch for owner-private control IPC.
 
-mod communications;
 mod platform;
 mod scheduler;
 
 use std::path::Path;
+
+use sha2::{Digest, Sha256};
 
 use hermes_gateway_protocol::v1::{
     ApproveModuleRegistrationRequestV1, ApproveModuleRegistrationResponseV1,
@@ -15,12 +16,25 @@ use hermes_gateway_protocol::v1::{
     CompleteOwnerControlSessionResponseV1, GetModuleRegistrationStatusRequestV1,
     GetModuleRegistrationStatusResponseV1, OwnerControlRequestV1, OwnerControlResponseV1,
     ReserveBundledManagedRuntimeRequestV1, ReserveBundledManagedRuntimeResponseV1,
+    StartReservedDomainRuntimeRequestV1, StartReservedDomainRuntimeResponseV1,
+    StartReservedIntegrationRuntimeRequestV1, StartReservedIntegrationRuntimeResponseV1,
     StartBundledManagedRuntimeRequestV1, StartBundledManagedRuntimeResponseV1,
     TransitionModuleRegistrationRequestV1, TransitionModuleRegistrationResponseV1,
     UpdateOperatorSettingsRequestV1, UpdateOperatorSettingsResponseV1,
 };
-use hermes_kernel_control_store::ModuleRegistrationState;
+use hermes_kernel_control_store::{
+    ModuleRegistrationState, PlatformStorageBindingStateV1, SettingsApplyState,
+};
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
+use hermes_runtime_protocol::{
+    v1::{ManagedDomainRuntimeConfigurationV1, ManagedIntegrationHostBridgeConfigurationV1, ManagedIntegrationRuntimeConfigurationV1},
+    validation::{
+        descriptor::decode_settings_snapshot_v1,
+        integration_host_bridge::validate_managed_integration_host_bridge_configuration,
+        managed_domain_runtime::validate_managed_domain_runtime_configuration,
+        managed_integration_runtime::validate_managed_integration_runtime_configuration,
+    },
+};
 
 use crate::identity::owner_control::sessions::OwnerControlSessions;
 use crate::modules::registration::registry as module_registry;
@@ -96,12 +110,6 @@ fn route_operation(
         Operation::BeginBrowserPairing(request) => {
             begin_browser_pairing(store, sessions, browser_pairing, request)
         }
-        Operation::ExecuteMailRuntimeOwnerCommand(request) => {
-            communications::execute_mail_runtime_owner_command(store, sessions, request)
-        }
-        Operation::ExecuteCommunicationsRuntimeOwnerCommand(request) => {
-            communications::execute_communications_runtime_owner_command(store, sessions, request)
-        }
         Operation::UpdateOperatorSettings(request) => update_settings(store, sessions, request),
         Operation::BindExternalRuntimeIdentity(request) => {
             bind_external_identity(store, sessions, request)
@@ -114,6 +122,12 @@ fn route_operation(
         }
         Operation::ReserveBundledManagedRuntime(request) => {
             reserve_managed_runtime(store, supervisor, sessions, request)
+        }
+        Operation::StartReservedIntegrationRuntime(request) => {
+            start_reserved_integration_runtime(store, runtime_dir, supervisor, sessions, request)
+        }
+        Operation::StartReservedDomainRuntime(request) => {
+            start_reserved_domain_runtime(store, runtime_dir, supervisor, sessions, request)
         }
         Operation::StartReservedSchedulerRuntime(request) => {
             scheduler::start_reserved(store, runtime_dir, supervisor, sessions, request)
@@ -171,6 +185,254 @@ fn reserve_managed_runtime(
             grant_epoch: reservation.grant_epoch(),
         })
     })
+}
+
+fn start_reserved_integration_runtime(
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    supervisor: &ManagedRuntimeSupervisor,
+    sessions: &mut OwnerControlSessions,
+    request: StartReservedIntegrationRuntimeRequestV1,
+) -> Result<OwnerResult, String> {
+    (|| {
+        sessions.authorize(store, &request.owner_session_id)?;
+        let reservation = macos_managed_runtime_launch::load(supervisor, store, &request.registration_id)?;
+        let registration = store
+            .module_registration(&request.registration_id)
+            .map_err(|_| "managed integration registration is unavailable".to_owned())?
+            .ok_or_else(|| "managed integration registration is unavailable".to_owned())?;
+        let binding = store
+            .platform_storage_binding(&request.registration_id, &request.storage_capability_id)
+            .map_err(|_| "managed integration Storage binding is unavailable".to_owned())?
+            .filter(|value| value.state() == PlatformStorageBindingStateV1::Active)
+            .ok_or_else(|| "managed integration Storage binding is unavailable".to_owned())?;
+        let storage_topology = crate::platform::storage::topology::current(store)?;
+        let vault = crate::platform::vault::status::read_current(store, &supervisor.relay_port())?;
+        let storage = crate::platform::storage::topology::to_managed_runtime_configuration(
+            &storage_topology,
+            &binding,
+            store.snapshot().instance_id(),
+            vault.runtime_generation(),
+            vault.hpke_public_key_x25519(),
+        )?;
+        let event_topology = store
+            .platform_event_hub_topology()
+            .map_err(|_| "Event Hub topology is unavailable".to_owned())?
+            .ok_or_else(|| "Event Hub topology is unavailable".to_owned())?;
+        let settings_snapshot_bytes = admitted_settings_snapshot(store, &request.registration_id)?;
+        let configuration = ManagedIntegrationRuntimeConfigurationV1 {
+            major: 1,
+            logical_owner_id: registration.owner_id().to_owned(),
+            registration_id: request.registration_id.clone(),
+            runtime_instance_id: reservation.runtime_instance_id().to_owned(),
+            runtime_generation: reservation.runtime_generation(),
+            grant_epoch: reservation.grant_epoch(),
+            storage: Some(storage),
+            event_hub_endpoint: event_topology.nats_endpoint().to_owned(),
+            event_credential_revision: event_topology.credential_revision(),
+            configuration_instance_id: request.configuration_instance_id.clone(),
+        };
+        validate_managed_integration_runtime_configuration(&configuration)
+            .map_err(|_| "managed integration runtime configuration is invalid".to_owned())?;
+        let host_bridge_configuration = host_bridge_configuration(
+            request.request_host_bridge,
+            runtime_dir,
+            store.snapshot().instance_id(),
+            registration.owner_id(),
+            &reservation,
+        )?;
+        let host_bridge_socket_path = host_bridge_configuration
+            .as_ref()
+            .map(|configuration| configuration.socket_path.clone());
+        let runtime_generation = match host_bridge_configuration {
+            Some(host_bridge_configuration) => {
+                macos_managed_runtime_launch::start_staged_with_host_bridge_configuration(
+                    supervisor,
+                    runtime_dir,
+                    reservation,
+                    configuration,
+                    settings_snapshot_bytes,
+                    host_bridge_configuration,
+                )?
+            }
+            None => macos_managed_runtime_launch::start_reserved_integration(
+                supervisor,
+                runtime_dir,
+                reservation,
+                configuration,
+                settings_snapshot_bytes,
+            )?,
+        };
+        Ok((runtime_generation, host_bridge_socket_path))
+    })()
+    .map(|(runtime_generation, host_bridge_socket_path)| OwnerResult::StartReservedIntegrationRuntime(
+        StartReservedIntegrationRuntimeResponseV1 {
+            registration_id: request.registration_id,
+            runtime_generation,
+            launch_state: "accepted".to_owned(),
+            host_bridge_socket_path,
+        },
+    ))
+}
+
+fn start_reserved_domain_runtime(
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    supervisor: &ManagedRuntimeSupervisor,
+    sessions: &mut OwnerControlSessions,
+    request: StartReservedDomainRuntimeRequestV1,
+) -> Result<OwnerResult, String> {
+    (|| {
+        sessions.authorize(store, &request.owner_session_id)?;
+        let reservation = macos_managed_runtime_launch::load(supervisor, store, &request.registration_id)?;
+        let registration = store
+            .module_registration(&request.registration_id)
+            .map_err(|_| "managed domain registration is unavailable".to_owned())?
+            .ok_or_else(|| "managed domain registration is unavailable".to_owned())?;
+        let binding = store
+            .platform_storage_binding(&request.registration_id, &request.storage_capability_id)
+            .map_err(|_| "managed domain Storage binding is unavailable".to_owned())?
+            .filter(|value| value.state() == PlatformStorageBindingStateV1::Active)
+            .ok_or_else(|| "managed domain Storage binding is unavailable".to_owned())?;
+        let storage_topology = crate::platform::storage::topology::current(store)?;
+        let vault = crate::platform::vault::status::read_current(store, &supervisor.relay_port())?;
+        let storage = crate::platform::storage::topology::to_managed_runtime_configuration(
+            &storage_topology,
+            &binding,
+            store.snapshot().instance_id(),
+            vault.runtime_generation(),
+            vault.hpke_public_key_x25519(),
+        )?;
+        let event_topology = store
+            .platform_event_hub_topology()
+            .map_err(|_| "Event Hub topology is unavailable".to_owned())?
+            .ok_or_else(|| "Event Hub topology is unavailable".to_owned())?;
+        let configuration = ManagedDomainRuntimeConfigurationV1 {
+            major: 1,
+            logical_owner_id: registration.owner_id().to_owned(),
+            registration_id: request.registration_id.clone(),
+            runtime_instance_id: reservation.runtime_instance_id().to_owned(),
+            runtime_generation: reservation.runtime_generation(),
+            grant_epoch: reservation.grant_epoch(),
+            storage: Some(storage),
+            event_hub_endpoint: event_topology.nats_endpoint().to_owned(),
+            event_credential_revision: event_topology.credential_revision(),
+        };
+        validate_managed_domain_runtime_configuration(&configuration)
+            .map_err(|_| "managed domain runtime configuration is invalid".to_owned())?;
+        macos_managed_runtime_launch::start_reserved_domain(
+            supervisor,
+            runtime_dir,
+            reservation,
+            configuration,
+        )
+    })()
+    .map(|runtime_generation| OwnerResult::StartReservedDomainRuntime(
+        StartReservedDomainRuntimeResponseV1 {
+            registration_id: request.registration_id,
+            runtime_generation,
+            launch_state: "accepted".to_owned(),
+        },
+    ))
+}
+
+fn host_bridge_configuration(
+    requested: bool,
+    runtime_dir: &Path,
+    kernel_instance_id: &str,
+    owner_id: &str,
+    reservation: &macos_managed_runtime_launch::ManagedLaunchReservation,
+) -> Result<Option<ManagedIntegrationHostBridgeConfigurationV1>, String> {
+    if !requested {
+        return Ok(None);
+    }
+    let parent = runtime_dir.join("host-bridges");
+    crate::infrastructure::filesystem::ensure_owner_private_directory(&parent)
+        .map_err(|_| "host bridge socket parent is invalid".to_owned())?;
+    let mut route_name = Sha256::new();
+    for field in [
+        kernel_instance_id,
+        owner_id,
+        reservation.registration_id(),
+        reservation.runtime_instance_id(),
+    ] {
+        route_name.update(field.as_bytes());
+        route_name.update([0]);
+    }
+    route_name.update(reservation.runtime_generation().to_be_bytes());
+    route_name.update(reservation.grant_epoch().to_be_bytes());
+    let digest = route_name.finalize();
+    let route_name = format!(
+        "host-{}.sock",
+        digest[..16]
+            .iter()
+            .map(|value| format!("{value:02x}"))
+            .collect::<String>(),
+    );
+    let path = parent.join(route_name);
+    let socket_path = path
+        .to_str()
+        .filter(|value| !value.is_empty() && value.len() <= 96)
+        .ok_or_else(|| "host bridge socket path is invalid".to_owned())?;
+    if std::fs::symlink_metadata(&path).is_ok() {
+        return Err("host bridge socket path must be absent".to_owned());
+    }
+    let mut binding = Sha256::new();
+    for field in [
+        kernel_instance_id,
+        owner_id,
+        reservation.registration_id(),
+        reservation.runtime_instance_id(),
+        socket_path,
+    ] {
+        binding.update(field.as_bytes());
+        binding.update([0]);
+    }
+    binding.update(reservation.runtime_generation().to_be_bytes());
+    binding.update(reservation.grant_epoch().to_be_bytes());
+    let configuration = ManagedIntegrationHostBridgeConfigurationV1 {
+        major: 1,
+        kernel_instance_id: kernel_instance_id.to_owned(),
+        owner_id: owner_id.to_owned(),
+        registration_id: reservation.registration_id().to_owned(),
+        runtime_instance_id: reservation.runtime_instance_id().to_owned(),
+        runtime_generation: reservation.runtime_generation(),
+        grant_epoch: reservation.grant_epoch(),
+        socket_path: socket_path.to_owned(),
+        route_binding_sha256: binding.finalize().to_vec(),
+    };
+    validate_managed_integration_host_bridge_configuration(&configuration)
+        .map_err(|_| "host bridge socket path is invalid".to_owned())?;
+    Ok(Some(configuration))
+}
+
+fn admitted_settings_snapshot(
+    store: &SqliteControlStore,
+    registration_id: &str,
+) -> Result<Vec<u8>, String> {
+    let binding = store
+        .settings_schema_binding(registration_id)
+        .map_err(|_| "managed integration settings are unavailable".to_owned())?
+        .ok_or_else(|| "managed integration settings are unavailable".to_owned())?;
+    if binding.desired_revision() == 0
+        || binding.desired_revision() != binding.effective_revision()
+        || binding.apply_state() != SettingsApplyState::Current
+    {
+        return Err("managed integration settings are not current".to_owned());
+    }
+    let (revision, bytes) = store
+        .desired_settings_snapshot(registration_id)
+        .map_err(|_| "managed integration settings are unavailable".to_owned())?
+        .ok_or_else(|| "managed integration settings are unavailable".to_owned())?;
+    let snapshot = decode_settings_snapshot_v1(&bytes)
+        .map_err(|_| "managed integration settings are unavailable".to_owned())?;
+    if revision != binding.desired_revision()
+        || snapshot.target_id != registration_id
+        || snapshot.revision != binding.desired_revision()
+    {
+        return Err("managed integration settings are stale".to_owned());
+    }
+    Ok(bytes)
 }
 
 fn status(

@@ -101,15 +101,6 @@ export type WhatsAppWebCompanionCommandChannel = {
   completion_rule: string
 }
 
-export type WhatsAppWebCompanionCommandResultRequest = {
-  account_id: string
-  operation_id: string
-  provider_event_id: string
-  provider_request_id?: string | null
-  succeeded: boolean
-  observed_at: string
-}
-
 export type WhatsAppWebCompanionExtractorContract = {
   state: string
   relay_command?: string
@@ -153,34 +144,6 @@ export type WhatsAppWebCompanionManifest = {
   command_channel: WhatsAppWebCompanionCommandChannel
   secret_policy: WhatsAppWebCompanionSecretPolicy
   remaining_blockers: string[]
-}
-
-export type WhatsAppWebCompanionRelayObservationRequest = {
-  account_id: string
-  event_family: string
-  provider_event_id: string
-  observed_at: string
-  metadata?: Record<string, unknown>
-}
-
-export type WhatsAppWebCompanionRelayObservationReceipt = {
-  account_id: string
-  provider_shape: 'whatsapp_web_companion'
-  runtime_kind: 'webview_companion'
-  window_label: string
-  event_family: string
-  provider_event_id: string
-  observed_at: string
-  target_runtime_bridge_path: string
-  typed_runtime_bridge_path: string
-  relay_state: string
-  relay_channel: string
-  sanitized_metadata: Record<string, unknown>
-  runtime_event_kind: string
-  import_batch_id: string
-  runtime_bridge_status: string
-  event_flow: string
-  completion_rule: string
 }
 
 export type WhatsAppRuntimeRemoveResponse = {

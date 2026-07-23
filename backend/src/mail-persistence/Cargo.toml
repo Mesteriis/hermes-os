@@ -13,4 +13,6 @@ owner = "mail"
 surface = "persistence"
 
 [dependencies]
-hermes-mail-core = { path = "../mail-core" }
+hermes-events-protocol = { path = "../platform/events" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring"] }

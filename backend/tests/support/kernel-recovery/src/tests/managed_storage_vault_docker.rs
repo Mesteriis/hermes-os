@@ -483,6 +483,8 @@ impl ManagedRuntimeEventCredentialHandler for UnauthenticatedNatsCredentialHandl
             encapped_key: delivery.encapped_key().to_vec(),
             ciphertext: delivery.ciphertext().to_vec(),
             tag: delivery.tag().to_vec(),
+            consumer_bindings: Vec::new(),
+            publish_subjects: Vec::new(),
         })
     }
 }

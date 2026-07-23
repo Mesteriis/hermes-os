@@ -26,8 +26,19 @@ function isKernelCoreGatewayAdapter(policy, source, target, targetPackageName) {
     && ['hermes-gateway-runtime', 'hermes-gateway-session'].includes(targetPackageName);
 }
 
+function isEventHubTransportRuntimeConsumer(policy, source, target, targetPackageName) {
+  return targetPackageName === 'hermes-events-jetstream'
+    && target
+    && target.role === policy.events.role
+    && target.owner === policy.events.owner
+    && target.surface === 'implementation'
+    && ['domain', 'integration'].includes(source.role)
+    && source.surface === 'runtime';
+}
+
 function isAllowedDependency(policy, source, target, targetPackageName) {
   if (isKernelCoreGatewayAdapter(policy, source, target, targetPackageName)) return true;
+  if (isEventHubTransportRuntimeConsumer(policy, source, target, targetPackageName)) return true;
   if (source.role === target.role && source.owner === target.owner) {
     return isAllowedSameOwnerDependency(source, target);
   }
@@ -229,15 +240,24 @@ export function validateDependencyEdges(policy, packages, descriptors) {
         target,
         dependency.name,
       );
+      const isEventHubTransportRuntimeConsumerEdge = isEventHubTransportRuntimeConsumer(
+        policy,
+        source,
+        target,
+        dependency.name,
+      );
 
       if (!sourceIsVaultOwner
         && source.role !== 'test'
         && targetIsVaultOwner
-        && dependency.name !== policy.vault.protocolPackage) {
+        && ![
+          policy.vault.protocolPackage,
+          policy.vault.managedClientPackage,
+        ].includes(dependency.name)) {
         violations.push(violation(
           'vault_private_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
-          'production packages outside Vault may depend only on the public Vault protocol',
+          'production packages outside Vault may depend only on public Vault contracts',
         ));
         continue;
       }
@@ -345,7 +365,8 @@ export function validateDependencyEdges(policy, packages, descriptors) {
       if (source.owner !== target.owner
         && target.surface !== 'contract'
         && !isSharedStorageVaultRouteConsumer
-        && !isCoreGatewayAdapter) {
+        && !isCoreGatewayAdapter
+        && !isEventHubTransportRuntimeConsumerEdge) {
         violations.push(violation(
           'implementation_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
@@ -356,6 +377,7 @@ export function validateDependencyEdges(policy, packages, descriptors) {
 
       if (!isSharedStorageVaultRouteConsumer
         && !isCoreGatewayAdapter
+        && !isEventHubTransportRuntimeConsumerEdge
         && !isAllowedDependency(policy, source, target, dependency.name)) {
         violations.push(violation(
           'forbidden_dependency',

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hide-whatsapp-web-companion"
+description = "Enables the hide_whatsapp_web_companion command without any pre-configured scope."
+commands.allow = ["hide_whatsapp_web_companion"]
+
+[[permission]]
+identifier = "deny-hide-whatsapp-web-companion"
+description = "Denies the hide_whatsapp_web_companion command without any pre-configured scope."
+commands.deny = ["hide_whatsapp_web_companion"]

@@ -15,4 +15,6 @@ surface = "contract"
 [dependencies]
 hermes-blob-client-contract = { path = "../client-contract" }
 hermes-runtime-protocol = { path = "../../runtime_protocol" }
+getrandom = "=0.3.4"
 prost = "=0.14.4"
+sha2 = "=0.10.9"

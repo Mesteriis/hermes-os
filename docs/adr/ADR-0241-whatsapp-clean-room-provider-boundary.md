@@ -27,16 +27,15 @@ are not promoted directly to durable business entities.
 
 ## Implementation state
 
-The clean-room API contract, core operation policy, provider projections,
-PostgreSQL-owned durable schema, runtime transport port, typed client IPC,
-versioned host-bridge contract/metadata adapter, provider-local capability
-catalog, admitted Unix client transport, Tauri host emission, generated
-provider client payloads and the managed identity/storage-lease bootstrap are
-implemented, including a generated client response envelope with typed
-account, lifecycle, query, message, dialog, participant, runtime-status,
-realtime, command and event response decoding.
-Kernel launch wiring still has to pass the non-secret storage
-binding/topology contract to this bootstrap; a database URL environment
-variable is not an allowed alternative. Live provider execution through the
-host-owned WebView remains migration work and must not be represented as
-complete.
+The versioned API and host bridge contracts, metadata-only core policy,
+owner-local durable observation/outbox persistence, typed client port and
+managed identity/storage bootstrap now exist. Provider projections beyond the
+metadata-only evidence boundary, Kernel launch wiring, command execution and
+live WebView execution remain open migration work. No database URL environment
+variable or provider secret handoff is admitted.
+
+The backend API/core/persistence/runtime packages remain an independent
+WhatsApp integration build unit. "Host-owned" applies only to browser/WebView
+execution and session state; it does not prohibit the integration's typed
+runtime, owner-local durable queue or event outbox. Backend WhatsApp packages
+must not depend on Tauri, Wry, WebKit or WebView runtimes.

@@ -61,13 +61,13 @@ pub struct WhatsAppCapabilityScope {
 pub fn capability_catalog(scope: Option<&WhatsAppCapabilityScope>) -> Vec<WhatsAppCapability> {
     let mut capabilities = vec![
         capability(
-            "runtime.fixture",
+            "runtime.hidden_webview",
             "runtime",
             Available,
             Read,
             false,
             true,
-            "Fixture runtime and append-only evidence ingest are available for local validation.",
+            "Hidden WebView companion is the only provider runtime and emits append-only evidence observations.",
         ),
         capability(
             "sessions.manual_state",
@@ -375,12 +375,12 @@ pub fn capability_catalog(scope: Option<&WhatsAppCapabilityScope>) -> Vec<WhatsA
 }
 
 fn apply_scope_overrides(capabilities: &mut [WhatsAppCapability], scope: &WhatsAppCapabilityScope) {
-    let runtime_kind = scope.runtime_kind.as_deref().unwrap_or("fixture");
+    let runtime_kind = scope.runtime_kind.as_deref().unwrap_or("webview_companion");
     let lifecycle = scope.lifecycle_state.as_deref().unwrap_or("linked");
     for item in capabilities {
         match item.capability.as_str() {
-            "runtime.fixture" if runtime_kind != "fixture" => {
-                block(item, "This account does not use the fixture-only runtime.");
+            "runtime.hidden_webview" if runtime_kind != "webview_companion" => {
+                block(item, "This account does not use the hidden WebView runtime.");
                 item.status = WhatsAppCapabilityState::Unsupported;
             }
             "sessions.restore" if matches!(lifecycle, "provisioning" | "link_required") => {
@@ -404,11 +404,11 @@ fn apply_scope_overrides(capabilities: &mut [WhatsAppCapability], scope: &WhatsA
             "auth.pair_code_link_start" if lifecycle == "qr_pending" => {
                 block(item, "QR linking is already pending for this account.");
             }
-            "media.download" if runtime_kind != "fixture" && !scope.media_download_available => {
+            "media.download" if !scope.media_download_available => {
                 block(item, "This runtime is not live-enabled for media download.");
             }
             "media.upload_send" | "media.voice_send"
-                if runtime_kind != "fixture" && !scope.media_upload_available =>
+                if !scope.media_upload_available =>
             {
                 block(item, "This runtime is not live-enabled for media upload.");
             }
@@ -426,7 +426,7 @@ fn apply_scope_overrides(capabilities: &mut [WhatsAppCapability], scope: &WhatsA
                         item,
                         "Provider commands are blocked while the account is not linked.",
                     );
-                } else if runtime_kind != "fixture" && !scope.live_send_available {
+                } else if !scope.live_send_available {
                     block(
                         item,
                         "This runtime is not live-enabled for provider execution.",

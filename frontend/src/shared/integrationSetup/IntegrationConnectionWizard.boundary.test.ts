@@ -38,7 +38,7 @@ describe('IntegrationConnectionWizard boundary', () => {
     expect(surface).toContain('useStartGmailOAuthSetupMutation')
     expect(surface).toContain('useSetupImapEmailAccountMutation')
     expect(surface).toContain('startTelegramQrLogin')
-    expect(surface).toContain('useStartHiddenWhatsappWebviewMutation')
+    expect(surface).toContain('useOpenWhatsappWebCompanionForPairingMutation')
     expect(surface).toContain('activeFlowIcon')
     expect(surface).toContain('handleSubmit')
     expect(surface).toContain('selectedProviderChecks')

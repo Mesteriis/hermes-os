@@ -1,7 +1,8 @@
 //! Authenticated, replayable SSE transport for client-safe Gateway frames.
 
 use std::convert::Infallible;
-use std::sync::Arc;
+use std::collections::{BTreeMap, VecDeque};
+use std::sync::{Arc, Mutex};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use bytes::Bytes;
@@ -32,6 +33,193 @@ pub trait BrowserRealtimeSubscriptionSource: Send + Sync {
         session: &BrowserSession,
         after_cursor: Option<&str>,
     ) -> Result<ClientRealtimeSubscriptionV1, String>;
+}
+
+#[derive(Clone)]
+pub struct InMemoryBrowserRealtimeSource {
+    owners: Arc<Mutex<BTreeMap<String, OwnerRealtimeState>>>,
+    history_limit: usize,
+}
+
+struct OwnerRealtimeState {
+    history: VecDeque<ClientRealtimeFrameV1>,
+    live: broadcast::Sender<ClientRealtimeFrameV1>,
+}
+
+#[derive(Clone)]
+pub struct BrowserRealtimePublisherV1 {
+    owner_id: String,
+    source: InMemoryBrowserRealtimeSource,
+}
+
+impl InMemoryBrowserRealtimeSource {
+    pub fn new(history_limit: usize) -> Result<Self, String> {
+        if !(1..=16_384).contains(&history_limit) {
+            return Err("Gateway realtime history limit is invalid".to_owned());
+        }
+        Ok(Self {
+            owners: Arc::new(Mutex::new(BTreeMap::new())),
+            history_limit,
+        })
+    }
+
+    pub fn admit_owner(
+        &self,
+        owner_id: impl Into<String>,
+    ) -> Result<BrowserRealtimePublisherV1, String> {
+        let owner_id = owner_id.into();
+        if !valid_owner_id(&owner_id) {
+            return Err("Gateway realtime owner is invalid".to_owned());
+        }
+        let mut owners = self
+            .owners
+            .lock()
+            .map_err(|_| "Gateway realtime state is unavailable".to_owned())?;
+        owners.entry(owner_id.clone()).or_insert_with(|| {
+            let (live, _) = broadcast::channel(self.history_limit);
+            OwnerRealtimeState {
+                history: VecDeque::with_capacity(self.history_limit),
+                live,
+            }
+        });
+        Ok(BrowserRealtimePublisherV1 {
+            owner_id,
+            source: self.clone(),
+        })
+    }
+
+    pub fn revoke_owner(&self, owner_id: &str) -> Result<bool, String> {
+        let state = self
+            .owners
+            .lock()
+            .map_err(|_| "Gateway realtime state is unavailable".to_owned())?
+            .remove(owner_id);
+        let Some(state) = state else {
+            return Ok(false);
+        };
+        let cursor = state
+            .history
+            .back()
+            .and_then(frame_cursor)
+            .unwrap_or_default();
+        let _ = state.live.send(stream_state(
+            ClientRealtimeStreamStateKindV1::ClientRealtimeStreamStateKindClosed,
+            cursor,
+        ));
+        Ok(true)
+    }
+
+    fn publish(
+        &self,
+        owner_id: &str,
+        frame: ClientRealtimeFrameV1,
+    ) -> Result<(), String> {
+        validate_client_realtime_frame(&frame)?;
+        let Some(Frame::Event(event)) = frame.frame.as_ref() else {
+            return Err("Gateway realtime publisher accepts only owner events".to_owned());
+        };
+        let mut owners = self
+            .owners
+            .lock()
+            .map_err(|_| "Gateway realtime state is unavailable".to_owned())?;
+        let state = owners
+            .get_mut(owner_id)
+            .ok_or_else(|| "Gateway realtime owner is not admitted".to_owned())?;
+        if let Some(existing) = state
+            .history
+            .iter()
+            .find(|candidate| frame_cursor(candidate) == Some(event.cursor.as_str()))
+        {
+            return (existing == &frame)
+                .then_some(())
+                .ok_or_else(|| "Gateway realtime cursor conflicts".to_owned());
+        }
+        if state.history.len() == self.history_limit {
+            state.history.pop_front();
+        }
+        state.history.push_back(frame.clone());
+        let _ = state.live.send(frame);
+        Ok(())
+    }
+
+    fn subscribe_owner(
+        &self,
+        owner_id: &str,
+        after_cursor: Option<&str>,
+    ) -> Result<ClientRealtimeSubscriptionV1, String> {
+        let owners = self
+            .owners
+            .lock()
+            .map_err(|_| "Gateway realtime state is unavailable".to_owned())?;
+        let state = owners
+            .get(owner_id)
+            .ok_or_else(|| "client realtime owner is not admitted".to_owned())?;
+        let live = state.live.subscribe();
+        let latest_cursor = state
+            .history
+            .back()
+            .and_then(frame_cursor)
+            .unwrap_or_default();
+        let replay = match after_cursor {
+            None => vec![stream_state(
+                ClientRealtimeStreamStateKindV1::ClientRealtimeStreamStateKindOpen,
+                latest_cursor,
+            )],
+            Some(cursor) => {
+                let Some(position) = state
+                    .history
+                    .iter()
+                    .position(|frame| frame_cursor(frame) == Some(cursor))
+                else {
+                    let earliest = state
+                        .history
+                        .front()
+                        .and_then(frame_cursor)
+                        .unwrap_or_default()
+                        .to_owned();
+                    drop(owners);
+                    let (closed, live) = broadcast::channel(1);
+                    drop(closed);
+                    return ClientRealtimeSubscriptionV1::new(
+                        vec![replay_gap_with_earliest(
+                            cursor,
+                            &earliest,
+                            "cursor_not_available",
+                        )],
+                        live,
+                    );
+                };
+                let mut replay = Vec::with_capacity(state.history.len() - position + 2);
+                replay.push(stream_state(
+                    ClientRealtimeStreamStateKindV1::ClientRealtimeStreamStateKindReplaying,
+                    cursor,
+                ));
+                replay.extend(state.history.iter().skip(position + 1).cloned());
+                replay.push(stream_state(
+                    ClientRealtimeStreamStateKindV1::ClientRealtimeStreamStateKindOpen,
+                    latest_cursor,
+                ));
+                replay
+            }
+        };
+        ClientRealtimeSubscriptionV1::new(replay, live)
+    }
+}
+
+impl BrowserRealtimePublisherV1 {
+    pub fn publish(&self, frame: ClientRealtimeFrameV1) -> Result<(), String> {
+        self.source.publish(&self.owner_id, frame)
+    }
+}
+
+impl BrowserRealtimeSubscriptionSource for InMemoryBrowserRealtimeSource {
+    fn subscribe(
+        &self,
+        session: &BrowserSession,
+        after_cursor: Option<&str>,
+    ) -> Result<ClientRealtimeSubscriptionV1, String> {
+        self.subscribe_owner(session.owner_id(), after_cursor)
+    }
 }
 
 /// A source must subscribe before taking its replay snapshot, preventing a
@@ -179,12 +367,34 @@ fn live_frames(
 }
 
 fn replay_gap(requested_cursor: &str, reason_code: &str) -> ClientRealtimeFrameV1 {
+    replay_gap_with_earliest(requested_cursor, "", reason_code)
+}
+
+fn replay_gap_with_earliest(
+    requested_cursor: &str,
+    earliest_available_cursor: &str,
+    reason_code: &str,
+) -> ClientRealtimeFrameV1 {
     ClientRealtimeFrameV1 {
         frame: Some(Frame::ReplayGap(ClientReplayGapV1 {
             requested_cursor: requested_cursor.to_owned(),
-            earliest_available_cursor: String::new(),
+            earliest_available_cursor: earliest_available_cursor.to_owned(),
             reason_code: reason_code.to_owned(),
         })),
+    }
+}
+
+fn stream_state(
+    state: ClientRealtimeStreamStateKindV1,
+    cursor: &str,
+) -> ClientRealtimeFrameV1 {
+    ClientRealtimeFrameV1 {
+        frame: Some(Frame::StreamState(
+            hermes_gateway_protocol::v1::ClientRealtimeStreamStateV1 {
+                state: state as i32,
+                cursor: cursor.to_owned(),
+            },
+        )),
     }
 }
 
@@ -216,6 +426,14 @@ fn valid_cursor(cursor: &str) -> bool {
         && cursor
             .bytes()
             .all(|byte| byte.is_ascii_graphic() && byte != b'\\' && byte != b'\"')
+}
+
+fn valid_owner_id(owner_id: &str) -> bool {
+    !owner_id.is_empty()
+        && owner_id.len() <= 96
+        && owner_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 fn response(status: StatusCode, body: &'static str) -> GatewayHttpResponse {

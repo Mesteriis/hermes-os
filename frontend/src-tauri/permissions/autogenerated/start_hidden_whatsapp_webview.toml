@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-hidden-whatsapp-webview"
+description = "Enables the start_hidden_whatsapp_webview command without any pre-configured scope."
+commands.allow = ["start_hidden_whatsapp_webview"]
+
+[[permission]]
+identifier = "deny-start-hidden-whatsapp-webview"
+description = "Denies the start_hidden_whatsapp_webview command without any pre-configured scope."
+commands.deny = ["start_hidden_whatsapp_webview"]

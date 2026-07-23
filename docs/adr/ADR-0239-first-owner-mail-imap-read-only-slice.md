@@ -85,7 +85,9 @@ attempts per adapter request. Mail owns cursor, retry, provider locator/source
 mapping and its outbox.
 
 Raw message is bounded to 1 MiB; only decoded `text/plain` up to 256 KiB may
-be persisted. HTML, attachments and raw MIME are neither stored nor emitted.
+be persisted. HTML and raw MIME are neither stored nor emitted. Attachment
+bytes are not stored or emitted by this slice; ADR-0246 separately permits
+only bounded attachment descriptors through Communications ingress.
 Oversized or no-text input yields metadata-only evidence. On UIDVALIDITY reset,
 source record may be reused only for an unambiguous `(Message-ID,
 INTERNALDATE, content digest)` match; otherwise a new evidence identity is
@@ -144,6 +146,7 @@ clean-room graph.
 
 Mail is intentionally narrow, useful and reversible: it proves provider to
 canonical evidence to client flow without letting raw mail create durable
-business truth. POP3, SMTP, OAuth variants, additional folders, HTML,
-attachments and any domain promotion each require their own capability/ADR and
-evidence rather than silently broadening this slice.
+business truth. POP3, SMTP, OAuth variants, additional folders, HTML and any
+domain promotion each require their own capability/ADR and evidence rather
+than silently broadening this slice. Attachment descriptors are governed by
+ADR-0246 and do not admit attachment bytes.
