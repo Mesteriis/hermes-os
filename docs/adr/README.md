@@ -61,6 +61,7 @@ policy через ссылки из новых документов.
 - [ADR-0250: Communications profile for nats_data_plane_v1](ADR-0250-communications-nats-data-plane-v1-admission-profile.md)
 - [ADR-0251: Opening client_gateway_v1 for owner contracts](ADR-0251-client-gateway-v1-opening-for-owner-contracts.md)
 - [ADR-0252: first_owner_v1 Communications admission](ADR-0252-first-owner-v1-communications-admission.md)
+- [ADR-0253: Communications legacy surface disposition](ADR-0253-communications-legacy-surface-disposition-and-clean-room-completion.md)
 
 Эти ADR фиксируют runtime, communication, storage, infrastructure lifecycle и
 границу между provider-specific experience и provider-neutral context, а также
