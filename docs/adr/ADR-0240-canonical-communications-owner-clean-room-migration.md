@@ -23,8 +23,10 @@ transport coverage remains Gateway platform evidence. A typed admitted opaque
 Blob receipt also reaches canonical body state while the public query response
 does not expose its Blob locator. A typed attachment descriptor reaches its
 canonical attachment anchor while the public anchor response does not expose
-the provider-local media locator. Blob data-path service conformance remains a
-separate platform proof.
+the provider-local media locator. A typed participant, reply and forward scope
+reaches canonical relationship projections without exposing provider-local
+identifiers through the public query contract. Blob data-path service
+conformance remains a separate platform proof.
 
 Depends on:
 

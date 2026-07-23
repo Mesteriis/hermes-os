@@ -633,6 +633,197 @@ pub(super) fn assert_communications_attachment_anchor_projection(
     }
 }
 
+pub(super) fn assert_communications_relationship_projection(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+) {
+    const PRIVATE_PARTICIPANT_ID: &str = "integration-private-participant-1";
+    const PRIVATE_REPLY_RECORD_ID: &str = "integration-private-reply-1";
+    const PRIVATE_FORWARD_RECORD_ID: &str = "integration-private-forward-1";
+    let draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
+        "managed-relationship-observation-1",
+        hermes_communications_ingress::SourceEnvelope {
+            provider: hermes_communications_ingress::ProviderProvenanceV1::Zulip,
+            external_record_id: "integration-private-relationship-record-1".to_owned(),
+            scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
+                external_account_id: "integration-private-relationship-account-1".to_owned(),
+                external_conversation_id: Some("integration-private-relationship-conversation-1".to_owned()),
+                external_participant_id: Some(PRIVATE_PARTICIPANT_ID.to_owned()),
+                external_media_id: None,
+                external_reply_to_record_id: Some(PRIVATE_REPLY_RECORD_ID.to_owned()),
+                external_forward_origin_record_id: Some(PRIVATE_FORWARD_RECORD_ID.to_owned()),
+            }),
+        },
+        hermes_communications_ingress::CommunicationEvidenceKindV1::EmailMessage,
+        hermes_communications_ingress::BodyAvailabilityV1::MetadataOnly,
+        hermes_communications_ingress::CommunicationDirectionV1::Incoming,
+        Some(1_783_024_003),
+    )
+    .expect("build relationship ingress draft");
+    let record = hermes_communications_ingress::build_observation_outbox_record_v1(
+        &draft,
+        &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+            runtime_instance_id: "integration-test-runtime-1".to_owned(),
+            runtime_generation: 1,
+            module_id: "integration-test-runtime".to_owned(),
+            recorded_at_unix_seconds: 1_783_024_003,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("build relationship typed ingress envelope");
+    let endpoint = store
+        .platform_event_hub_topology()
+        .expect("read Event Hub topology")
+        .expect("Event Hub topology")
+        .nats_endpoint()
+        .to_owned();
+    tokio::runtime::Runtime::new()
+        .expect("Tokio runtime")
+        .block_on(async move {
+            let context = async_nats::jetstream::new(
+                async_nats::connect(endpoint)
+                    .await
+                    .expect("connect disposable JetStream"),
+            );
+            context
+                .publish(
+                    "hermes.observation.v1.communications.communication_observed.v1",
+                    record.exact_bytes().to_vec().into(),
+                )
+                .await
+                .expect("publish relationship typed ingress envelope");
+        });
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let accounts = route_communications_query(
+            store,
+            supervisor,
+            11,
+            &CommunicationsQueryRequestV1 {
+                protocol_major: 1,
+                operation: Some(Operation::ListAccounts(ListAccountsRequestV1 { limit: 16 })),
+            }
+            .encode_to_vec(),
+        );
+        let Some(QueryResult::ListAccounts(accounts)) = accounts.result else {
+            panic!("Communications accounts query result");
+        };
+        let Some(account) = accounts.accounts.iter().find(|account| account.provider == 5) else {
+            assert!(std::time::Instant::now() < deadline, "relationship account was not projected");
+            std::thread::sleep(std::time::Duration::from_millis(25));
+            continue;
+        };
+        let conversations = route_communications_query(
+            store,
+            supervisor,
+            12,
+            &CommunicationsQueryRequestV1 {
+                protocol_major: 1,
+                operation: Some(Operation::ListConversations(
+                    hermes_communications_api::query_wire::ListConversationsRequestV1 {
+                        account_cursor_sha256: account.account_cursor_sha256.clone(),
+                        limit: 16,
+                    },
+                )),
+            }
+            .encode_to_vec(),
+        );
+        let Some(QueryResult::ListConversations(conversations)) = conversations.result else {
+            panic!("Communications conversations query result");
+        };
+        let Some(conversation) = conversations.conversations.first() else {
+            assert!(std::time::Instant::now() < deadline, "relationship conversation was not projected");
+            std::thread::sleep(std::time::Duration::from_millis(25));
+            continue;
+        };
+        let participants = route_communications_query(
+            store,
+            supervisor,
+            13,
+            &CommunicationsQueryRequestV1 {
+                protocol_major: 1,
+                operation: Some(Operation::ListConversationParticipants(
+                    hermes_communications_api::query_wire::ListConversationParticipantsRequestV1 {
+                        conversation_id: conversation.conversation_id.clone(),
+                        limit: 16,
+                    },
+                )),
+            }
+            .encode_to_vec(),
+        );
+        let Some(QueryResult::ListConversationParticipants(participants)) = participants.result else {
+            panic!("Communications participants query result");
+        };
+        let messages = route_communications_query(
+            store,
+            supervisor,
+            14,
+            &CommunicationsQueryRequestV1 {
+                protocol_major: 1,
+                operation: Some(Operation::ListConversationMessages(
+                    hermes_communications_api::query_wire::ListConversationMessagesRequestV1 {
+                        conversation_id: conversation.conversation_id.clone(),
+                        limit: 16,
+                    },
+                )),
+            }
+            .encode_to_vec(),
+        );
+        let Some(QueryResult::ListConversationMessages(messages)) = messages.result else {
+            panic!("Communications messages query result");
+        };
+        let Some(message) = messages.messages.first() else {
+            assert!(std::time::Instant::now() < deadline, "relationship message was not projected");
+            std::thread::sleep(std::time::Duration::from_millis(25));
+            continue;
+        };
+        let references = route_communications_query(
+            store,
+            supervisor,
+            15,
+            &CommunicationsQueryRequestV1 {
+                protocol_major: 1,
+                operation: Some(Operation::ListMessageReferences(
+                    hermes_communications_api::query_wire::ListMessageReferencesRequestV1 {
+                        message_id: message.message_id.clone(),
+                        limit: 16,
+                    },
+                )),
+            }
+            .encode_to_vec(),
+        );
+        let Some(QueryResult::ListMessageReferences(references)) = references.result else {
+            panic!("Communications references query result");
+        };
+        if !participants.participants.is_empty()
+            && references.references.iter().any(|reference| reference.kind == 1)
+            && references.references.iter().any(|reference| reference.kind == 2)
+        {
+            let participant_payload = CommunicationsQueryResponseV1 {
+                result: Some(QueryResult::ListConversationParticipants(participants)),
+                error_code: String::new(),
+            }
+            .encode_to_vec();
+            let reference_payload = CommunicationsQueryResponseV1 {
+                result: Some(QueryResult::ListMessageReferences(references)),
+                error_code: String::new(),
+            }
+            .encode_to_vec();
+            for private_id in [PRIVATE_PARTICIPANT_ID, PRIVATE_REPLY_RECORD_ID, PRIVATE_FORWARD_RECORD_ID] {
+                assert!(
+                    !participant_payload.windows(private_id.len()).any(|window| window == private_id.as_bytes())
+                        && !reference_payload.windows(private_id.len()).any(|window| window == private_id.as_bytes()),
+                    "public Communications relationships must not reveal provider-local identifiers",
+                );
+            }
+            return;
+        }
+        assert!(std::time::Instant::now() < deadline, "relationship projections were not committed");
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
 fn route_communications_query(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
