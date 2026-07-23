@@ -7,6 +7,7 @@ use std::{
 };
 
 use hermes_communications_persistence::CommunicationsDurablePersistence;
+use hermes_communications_domain::COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1;
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1, RuntimeSubscribePermitV1,
     request_managed_runtime_event_access,
@@ -178,6 +179,17 @@ impl CommunicationsEventRuntimeV1 {
             .verify_storage_ready()
             .await
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        let started_at_unix_seconds = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        persistence
+            .reconcile_search_projection_jobs(
+                COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1,
+                i64::try_from(started_at_unix_seconds.as_secs())
+                    .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?,
+            )
+            .await
+            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
         let search_access = CommunicationsSearchAccessV1::open(
             control_channel
                 .try_clone()
@@ -256,6 +268,21 @@ impl CommunicationsEventRuntimeV1 {
         )
         .await
         .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)
+    }
+
+    pub async fn reconcile_search_projection_jobs(
+        &self,
+    ) -> Result<usize, CommunicationsEventRuntimeErrorV1> {
+        let context = self
+            .canonical_event_context()
+            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        self.persistence
+            .reconcile_search_projection_jobs(
+                COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1,
+                context.recorded_at_unix_seconds,
+            )
+            .await
+            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)
     }
 
     fn canonical_event_context(&self) -> Result<CanonicalEventContextV1, CommunicationsDeliveryErrorV1> {

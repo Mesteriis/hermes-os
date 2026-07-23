@@ -6,8 +6,8 @@ use hermes_communications_domain::{
 use hermes_communications_persistence::{
     CommunicationsDerivedIndexFailureRecordV1, CommunicationsDerivedIndexFailureV1,
     CommunicationsDerivedIndexJobOperationV1, CommunicationsDerivedIndexJobV1,
+    communications_derived_index_job_id_v1,
 };
-use sha2::{Digest, Sha256};
 
 pub enum CommunicationsDerivedIndexWorkV1 {
     Job(CommunicationsDerivedIndexJobV1),
@@ -21,7 +21,7 @@ pub fn derived_index_work_from_decision_v1(
     match decision {
         CommunicationsSearchIndexDecisionV1::Ignore => None,
         CommunicationsSearchIndexDecisionV1::Index(job) => Some(CommunicationsDerivedIndexWorkV1::Job(CommunicationsDerivedIndexJobV1 {
-            job_id: job_id(job.evidence_id.bytes(), job.message_id.bytes(), job.projection_revision),
+            job_id: communications_derived_index_job_id_v1(job.evidence_id.bytes(), job.message_id.bytes(), job.projection_revision),
             operation: CommunicationsDerivedIndexJobOperationV1::Index,
             evidence_id: job.evidence_id,
             message_id: job.message_id,
@@ -32,7 +32,7 @@ pub fn derived_index_work_from_decision_v1(
             created_at_unix_seconds,
         })),
         CommunicationsSearchIndexDecisionV1::Remove { evidence_id, message_id, projection_revision, observed_at_unix_seconds } => Some(CommunicationsDerivedIndexWorkV1::Job(CommunicationsDerivedIndexJobV1 {
-            job_id: job_id(evidence_id.bytes(), message_id.bytes(), projection_revision),
+            job_id: communications_derived_index_job_id_v1(evidence_id.bytes(), message_id.bytes(), projection_revision),
             operation: CommunicationsDerivedIndexJobOperationV1::Remove,
             evidence_id,
             message_id,
@@ -51,14 +51,4 @@ pub fn derived_index_work_from_decision_v1(
             recorded_at_unix_seconds: created_at_unix_seconds,
         })),
     }
-}
-
-fn job_id(evidence_id: [u8; 16], message_id: [u8; 16], revision: u32) -> [u8; 16] {
-    let mut digest = Sha256::new();
-    digest.update(b"hermes.communications.derived-index-job.v1\0");
-    digest.update(evidence_id);
-    digest.update(message_id);
-    digest.update(revision.to_be_bytes());
-    let value: [u8; 32] = digest.finalize().into();
-    value[..16].try_into().expect("fixed SHA-256 prefix")
 }

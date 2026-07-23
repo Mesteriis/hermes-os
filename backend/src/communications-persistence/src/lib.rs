@@ -14,7 +14,7 @@ pub use search_job::{
     ClaimedCommunicationsDerivedIndexJobV1, CommunicationsDerivedIndexFailureRecordV1,
     CommunicationsDerivedIndexFailureV1,
     CommunicationsDerivedIndexJobErrorV1, CommunicationsDerivedIndexJobOperationV1,
-    CommunicationsDerivedIndexJobV1,
+    CommunicationsDerivedIndexJobV1, communications_derived_index_job_id_v1,
 };
 pub use schema::{
     COMMUNICATIONS_SCHEMA_V1, COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1,

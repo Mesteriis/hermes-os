@@ -8,8 +8,9 @@ lifecycle/normalization и owner-local PostgreSQL digest projection реализ
 declared, а runtime-only adapter для bounded private Blob read и zeroized Vault
 owner-key lease, а также one keyed-digest primitive реализованы. Canonical
 observation атомарно ставит owner-local index job; fenced lease worker пишет
-digest projection либо typed failure без plaintext. Canonical rebuild, query
-execution в Gateway и managed conformance ещё не реализованы. Runtime исполняет
+digest projection либо typed failure без plaintext. Bounded owner-local
+reconciliation rebuilds missing/stale projection jobs from canonical evidence.
+Query execution в Gateway и managed conformance ещё не реализованы. Runtime исполняет
 typed owner query через transient Vault-derived key и возвращает только
 canonical IDs; пока Gateway path не доказан, внешний client route остаётся
 fail-closed as unavailable. Legacy full-text HTTP search не переносится.
