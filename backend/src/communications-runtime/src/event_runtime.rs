@@ -3,7 +3,7 @@
 use std::{
     io,
     os::{fd::AsRawFd, unix::net::UnixStream},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use hermes_communications_persistence::CommunicationsDurablePersistence;
@@ -157,14 +157,7 @@ impl CommunicationsEventRuntimeV1 {
             ),
             vault_context,
         );
-        let lease_id = leases
-            .issue_runtime_credential(&binding)
-            .await
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
-        let password = leases
-            .resolve_runtime_credential(&binding, lease_id)
-            .await
-            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        let password = resolve_storage_runtime_credential(&mut leases, &binding).await?;
         let password = std::str::from_utf8(&password)
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
         let persistence = CommunicationsDurablePersistence::connect_runtime(
@@ -349,6 +342,24 @@ impl CommunicationsEventRuntimeV1 {
         )
         .await
     }
+}
+
+async fn resolve_storage_runtime_credential(
+    leases: &mut StorageVaultLeaseAdapterV1<InheritedKernelVaultRouteV1>,
+    binding: &StorageBindingV1,
+) -> Result<zeroize::Zeroizing<Vec<u8>>, CommunicationsEventRuntimeErrorV1> {
+    const MAX_ATTEMPTS: usize = 20;
+    for attempt in 0..MAX_ATTEMPTS {
+        if let Ok(lease_id) = leases.issue_runtime_credential(binding).await {
+            if let Ok(password) = leases.resolve_runtime_credential(binding, lease_id).await {
+                return Ok(password);
+            }
+        }
+        if attempt + 1 < MAX_ATTEMPTS {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+    Err(CommunicationsEventRuntimeErrorV1::Unavailable)
 }
 
 fn authenticate_managed_runtime(
