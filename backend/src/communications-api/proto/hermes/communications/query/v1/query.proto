@@ -14,6 +14,7 @@ message CommunicationsQueryRequestV1 {
     ListConversationParticipantsRequestV1 list_conversation_participants = 6;
     ListMessageAttachmentAnchorsRequestV1 list_message_attachment_anchors = 7;
     ListMessageReferencesRequestV1 list_message_references = 8;
+    SearchCommunicationsRequestV1 search_communications = 9;
   }
 }
 
@@ -26,6 +27,7 @@ message CommunicationsQueryResponseV1 {
     ListConversationParticipantsResponseV1 list_conversation_participants = 5;
     ListMessageAttachmentAnchorsResponseV1 list_message_attachment_anchors = 6;
     ListMessageReferencesResponseV1 list_message_references = 7;
+    SearchCommunicationsResponseV1 search_communications = 8;
   }
   string error_code = 15;
 }
@@ -69,6 +71,21 @@ message ListMessageReferencesRequestV1 {
   uint32 limit = 2;
 }
 message ListMessageReferencesResponseV1 { repeated MessageReferenceSummaryV1 references = 1; }
+
+// Exact-token owner-local derived search. Query text is transient at the
+// owner boundary and never appears in results, events or persistence rows.
+message SearchCommunicationsRequestV1 {
+  string query = 1;
+  uint32 limit = 2;
+}
+message SearchCommunicationsResponseV1 { repeated CommunicationSearchHitV1 hits = 1; }
+message CommunicationSearchHitV1 {
+  bytes evidence_id = 1;
+  bytes message_id = 2;
+  bytes conversation_id = 3;
+  int64 observed_at_unix_seconds = 4;
+  uint32 matched_token_count = 5;
+}
 
 message AccountSummaryV1 {
   bytes account_id = 1;

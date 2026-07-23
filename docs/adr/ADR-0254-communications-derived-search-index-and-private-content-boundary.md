@@ -2,8 +2,9 @@
 
 Статус: Принято
 Дата: 2026-07-23
-Состояние реализации: Принят prerequisite для canonical search. Typed search
-contract, owner-local derived index, Vault purpose and replay/rebuild
+Состояние реализации: typed public search contract и pure owner-local domain
+lifecycle/normalization реализованы. Derived persistence, private Blob read,
+Vault capability admission, durable replay/rebuild, Gateway route и managed
 conformance ещё не реализованы; legacy full-text HTTP search не переносится.
 
 Зависит от:

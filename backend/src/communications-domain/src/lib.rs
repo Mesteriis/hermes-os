@@ -15,6 +15,15 @@ use hermes_communications_api::{
 use hermes_communications_api::PACKAGE as API_PACKAGE;
 use sha2::{Digest, Sha256};
 
+mod search;
+pub use search::{
+    COMMUNICATIONS_SEARCH_MAX_DOCUMENT_BYTES_V1, COMMUNICATIONS_SEARCH_MAX_DOCUMENT_TOKENS_V1,
+    COMMUNICATIONS_SEARCH_MAX_QUERY_BYTES_V1, COMMUNICATIONS_SEARCH_MAX_QUERY_TOKENS_V1,
+    CommunicationsSearchDocumentV1, CommunicationsSearchIndexDecisionV1,
+    CommunicationsSearchIndexJobV1, CommunicationsSearchQueryV1, CommunicationsSearchTokenErrorV1,
+    decide_search_index_v1, normalize_search_document_tokens_v1, normalize_search_query_v1,
+};
+
 pub const PACKAGE: &str = "hermes-communications-domain";
 pub fn dependency() -> &'static str { API_PACKAGE }
 

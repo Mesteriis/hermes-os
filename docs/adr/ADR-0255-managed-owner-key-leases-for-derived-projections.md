@@ -2,9 +2,12 @@
 
 Статус: Принято
 Дата: 2026-07-23
-Состояние реализации: Требуемый platform contract принят, implementation
-отсутствует. Existing provider credential and session-store-key routes are not
-valid substitutes for an owner-local derived projection key.
+Состояние реализации: protocol, descriptor validation, Vault ensure/resolve,
+Kernel authorization and `ManagedOwnerDerivedKeyClientV1` реализованы в
+existing `hermes-managed-vault-client` platform package. Descriptor/policy
+negative conformance и Communications capability admission ещё не завершены.
+Existing provider credential and session-store-key routes are not valid
+substitutes for an owner-local derived projection key.
 
 Зависит от:
 
@@ -70,7 +73,8 @@ class and result.
 
 ## Contract boundaries
 
-- `ManagedOwnerKeyClientV1` is a platform package with no provider or domain
+- `ManagedOwnerDerivedKeyClientV1` lives in the existing
+  `hermes-managed-vault-client` platform package with no provider or domain
   dependency. It reuses common HPKE frame/binding transport, not copied crypto.
 - Provider credential client remains provider-configuration scoped and cannot
   invoke `issue_owner_key`.
@@ -88,7 +92,8 @@ class and result.
    provider credentials.
 3. Add Vault transport operation with atomic ensure/resolve semantics and
    encrypted owner-scoped persistence.
-4. Add `hermes-managed-owner-key-client` package using shared transport binding.
+4. Extend the existing `hermes-managed-vault-client` package with the
+   owner-derived-key client using shared transport binding.
 5. Add descriptor/policy evidence and conformance tests for wrong owner,
    purpose, capability, revision, stale generation and revoked grant.
 6. Only then admit the Communications `search.index.v1` capability and use the

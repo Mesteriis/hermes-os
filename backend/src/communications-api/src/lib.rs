@@ -305,6 +305,19 @@ pub struct ListMessageReferencesV1 {
     pub limit: u16,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SearchCommunicationsV1 {
+    pub query: String,
+    pub limit: u16,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CommunicationSearchHitV1 {
+    pub evidence_id: CommunicationObservationIdV1,
+    pub message_id: CommunicationMessageIdV1,
+    pub conversation_id: CommunicationConversationIdV1,
+    pub observed_at_unix_seconds: i64,
+    pub matched_token_count: u16,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GetCommunicationSummary { pub evidence_id: CommunicationObservationIdV1 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CommunicationsClientError { UnknownCommunication, DraftValidationFailed, DuplicateObservation, Unavailable }
