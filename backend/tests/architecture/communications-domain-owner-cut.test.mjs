@@ -74,6 +74,25 @@ test('Communications first owner inventory is exact and owner-local implementati
   assert.match(runtime, /relay_domain_outbox_once/);
 });
 
+test('Communications custody transfer keeps source receipts private and uses only the Blob client port', async () => {
+  const [persistenceSources, runtimeSources] = await Promise.all([
+    rustSources(COMMUNICATIONS_PERSISTENCE_ROOT),
+    rustSources(COMMUNICATIONS_RUNTIME_ROOT),
+  ]);
+  const custody = persistenceSources.find((source) => source.path.endsWith('/custody_transfer.rs'));
+  assert.ok(custody, 'Communications custody persistence is required');
+  assert.match(custody.content, /communications_body_custody_transfers/);
+  assert.match(custody.content, /source_custody_proof/);
+
+  const runtime = runtimeSources.map((source) => source.content).join('\n');
+  assert.match(runtime, /request_managed_blob_custody_transfer/);
+  assert.doesNotMatch(runtime, /hermes_blob_service|BlobContentLifecycleStore/);
+
+  for (const source of runtimeSources.filter((source) => source.path.includes('/query'))) {
+    assert.doesNotMatch(source.content, /source_blob_ref|source_custody_proof/);
+  }
+});
+
 async function rustSources(directory) {
   const entries = await readdir(directory, { recursive: true, withFileTypes: true });
   return Promise.all(entries

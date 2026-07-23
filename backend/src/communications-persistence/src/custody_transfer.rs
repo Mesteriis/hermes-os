@@ -9,7 +9,7 @@ use sqlx::Row;
 
 use crate::{
     CommunicationsDerivedIndexJobOperationV1, CommunicationsDerivedIndexJobV1,
-    CommunicationsDurablePersistence, CommunicationsPersistenceError,
+    CommunicationsDurablePersistence,
     communications_derived_index_job_id_v1,
 };
 
