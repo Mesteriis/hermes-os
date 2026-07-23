@@ -10,6 +10,7 @@ use hermes_communications_persistence::{
     COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1, communications_storage_bundle_v1,
 };
 use hermes_communications_runtime::admission::{
+    COMMUNICATIONS_BLOB_CAPABILITY_ID, COMMUNICATIONS_BLOB_QUOTA_BYTES,
     COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
     COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
     COMMUNICATIONS_STORAGE_CAPABILITY_ID, COMMUNICATIONS_QUERY_CAPABILITY_ID,
@@ -884,6 +885,12 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         8,
         5_000,
     );
+    let blob = hermes_kernel_control_store::ModuleBlobQuotaRequestV1::new(
+        COMMUNICATIONS_REGISTRATION,
+        COMMUNICATIONS_BLOB_CAPABILITY_ID,
+        COMMUNICATIONS_OWNER_ID,
+        COMMUNICATIONS_BLOB_QUOTA_BYTES,
+    );
     let recorded = communication_evidence_recorded_contract_reference_v1();
     let observed = hermes_communications_ingress::admission::communication_observed_contract_reference_v1();
     let routes = [
@@ -906,7 +913,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             &capabilities,
             std::slice::from_ref(&storage),
             &routes,
-            &[],
+            std::slice::from_ref(&blob),
         )
         .expect("record Communications registration");
     store
