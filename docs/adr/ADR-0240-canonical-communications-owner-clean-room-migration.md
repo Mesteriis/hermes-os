@@ -31,7 +31,9 @@ proves integration-owned physical body admission, custody transfer, owner-local
 derived indexing and a canonical-ID-only search hit. The frontend generation
 pipeline now includes the same versioned owner query descriptor, and its
 platform-level Connect client is distinct from the legacy provider operational
-client.
+client. The first clean-room client use case is an owner-local canonical search
+adapter: it accepts transient search text and returns only generated canonical
+search hits.
 
 Depends on:
 
