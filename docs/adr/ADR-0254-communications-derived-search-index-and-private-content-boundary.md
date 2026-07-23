@@ -6,9 +6,10 @@
 lifecycle/normalization и owner-local PostgreSQL digest projection реализованы.
 `communications.search.index.v1` capability с exact owner-derived-key purpose
 declared, а runtime-only adapter для bounded private Blob read и zeroized Vault
-owner-key lease реализован. Durable replay/rebuild, query execution, Gateway
-route и managed conformance ещё не реализованы; до них query fail-closed as
-unavailable. Legacy full-text HTTP search не переносится.
+owner-key lease, а также one keyed-digest primitive реализованы. Durable
+replay/rebuild, query execution, Gateway route и managed conformance ещё не
+реализованы; до них query fail-closed as unavailable. Legacy full-text HTTP
+search не переносится.
 
 Зависит от:
 
