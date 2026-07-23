@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use hermes_blob_runtime::{
     lease::BlobKeyLeaseV1,
-    storage::BlobContentLifecycleStore,
+    storage::{BlobContentLifecycleStore, BlobCustodyTransferRequestV1},
     vault::{BlobContentKeyFenceV1, BlobVaultKeyLeaseAdapterV1, BlobVaultRoutePortV1},
 };
 use hermes_runtime_protocol::v1::{
@@ -17,7 +17,9 @@ use prost::Message;
 
 use super::{
     framing,
-    session::{BlobDataSessionVerifierV1, VerifiedBlobCustodyTransferV1, VerifiedBlobDataSessionV1},
+    session::{
+        BlobDataSessionVerifierV1, VerifiedBlobCustodyTransferV1, VerifiedBlobDataSessionV1,
+    },
 };
 
 pub(crate) struct BlobDataService<R> {
@@ -159,17 +161,17 @@ where
             now,
         )?;
         self.store
-            .custody_transfer(
-                transfer.source_reference(),
-                transfer.source_access(),
-                &source_key,
-                transfer.target_reference(),
-                transfer.target_access(),
-                transfer.target_quota(),
-                &target_key,
-                transfer.expected_plaintext_sha256(),
-                now,
-            )
+            .custody_transfer(BlobCustodyTransferRequestV1 {
+                source_reference: transfer.source_reference(),
+                source_access: transfer.source_access(),
+                source_lease: &source_key,
+                target_reference: transfer.target_reference(),
+                target_access: transfer.target_access(),
+                target_quota: transfer.target_quota(),
+                target_lease: &target_key,
+                expected_plaintext_sha256: transfer.expected_plaintext_sha256(),
+                now_unix_ms: now,
+            })
             .map_err(|_| ())?;
         Ok(BlobDataResponseV1 {
             plaintext: Vec::new(),

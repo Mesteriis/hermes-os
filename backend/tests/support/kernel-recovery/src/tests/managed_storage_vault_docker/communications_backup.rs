@@ -1,7 +1,12 @@
 //! Disposable Docker evidence that Storage-owned offline recovery restores
 //! canonical Communications PostgreSQL state after destructive instance reset.
 
-use std::{fs, os::unix::fs::PermissionsExt, path::{Path, PathBuf}, process::Command};
+use std::{
+    fs,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use super::{required, storage_binary};
 
@@ -17,13 +22,27 @@ pub(super) fn assert_communications_storage_backup_restore(root: &Path) {
         "export-backup",
         [
             ("--pg-dump", tools.pg_dump.as_path()),
-            ("--host", Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST")).as_ref()),
-            ("--port", Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT")).as_ref()),
+            (
+                "--host",
+                Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST")),
+            ),
+            (
+                "--port",
+                Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT")),
+            ),
             ("--database", Path::new(DATABASE)),
             ("--username", Path::new("hermes_postgres_admin")),
             ("--ssl-mode", Path::new("disable")),
-            ("--password-file", Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE"))),
-            ("--output", backup_root.join("communications.dump").as_path()),
+            (
+                "--password-file",
+                Path::new(&required(
+                    "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE",
+                )),
+            ),
+            (
+                "--output",
+                backup_root.join("communications.dump").as_path(),
+            ),
         ],
     );
     reset_disposable_database(&tools.container, DATABASE);
@@ -32,18 +51,33 @@ pub(super) fn assert_communications_storage_backup_restore(root: &Path) {
         DATABASE,
         "SELECT to_regclass('hermes_data.communications_evidence_summaries') IS NULL",
     );
-    assert_eq!(absent.trim(), "t", "destructive reset must remove Communications state");
+    assert_eq!(
+        absent.trim(),
+        "t",
+        "destructive reset must remove Communications state"
+    );
     run_storage_recovery(
         "restore-backup",
         [
             ("--pg-restore", tools.pg_restore.as_path()),
             ("--psql", tools.psql.as_path()),
-            ("--host", Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST")).as_ref()),
-            ("--port", Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT")).as_ref()),
+            (
+                "--host",
+                Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_HOST")),
+            ),
+            (
+                "--port",
+                Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PORT")),
+            ),
             ("--database", Path::new(DATABASE)),
             ("--username", Path::new("hermes_postgres_admin")),
             ("--ssl-mode", Path::new("disable")),
-            ("--password-file", Path::new(&required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE"))),
+            (
+                "--password-file",
+                Path::new(&required(
+                    "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE",
+                )),
+            ),
             ("--input", backup_root.join("communications.dump").as_path()),
         ],
     );
@@ -52,7 +86,11 @@ pub(super) fn assert_communications_storage_backup_restore(root: &Path) {
         DATABASE,
         "SELECT count(*) > 0 FROM hermes_data.communications_evidence_summaries",
     );
-    assert_eq!(restored.trim(), "t", "restored PostgreSQL must retain canonical Communications evidence");
+    assert_eq!(
+        restored.trim(),
+        "t",
+        "restored PostgreSQL must retain canonical Communications evidence"
+    );
 }
 
 struct PostgresRecoveryTools {
@@ -66,7 +104,11 @@ impl PostgresRecoveryTools {
     fn install(root: &Path, target_database: &str) -> Self {
         let container = required("HERMES_STORAGE_AUTHENTICATED_POSTGRES_CONTAINER");
         assert!(container.bytes().all(|byte| byte.is_ascii_hexdigit()));
-        assert!(target_database.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'));
+        assert!(
+            target_database
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        );
         let directory = root.join("postgres-recovery-tools");
         fs::create_dir(&directory).expect("create PostgreSQL recovery tool directory");
         fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
@@ -74,19 +116,30 @@ impl PostgresRecoveryTools {
         let pg_dump = write_recovery_tool(
             &directory,
             "pg_dump",
-            &format!("#!/bin/sh\nset -eu\noutput=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    --file) output=$2; shift 2 ;;\n    *) shift ;;\n  esac\ndone\n[ -n \"$output\" ]\nexec docker exec {container} sh -ceu 'export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec pg_dump --format=custom --no-owner --no-privileges --dbname=hermes_storage_authenticated' > \"$output\"\n"),
+            &format!(
+                "#!/bin/sh\nset -eu\noutput=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    --file) output=$2; shift 2 ;;\n    *) shift ;;\n  esac\ndone\n[ -n \"$output\" ]\nexec docker exec {container} sh -ceu 'export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec pg_dump --format=custom --no-owner --no-privileges --dbname=hermes_storage_authenticated' > \"$output\"\n"
+            ),
         );
         let pg_restore = write_recovery_tool(
             &directory,
             "pg_restore",
-            &format!("#!/bin/sh\nset -eu\ninput=\nfor value in \"$@\"; do input=$value; done\n[ -n \"$input\" ]\ndocker cp \"$input\" {container}:/tmp/hermes-communications-recovery.dump\nexec docker exec {container} sh -ceu 'export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec pg_restore --no-owner --no-privileges --exit-on-error --single-transaction --dbname={target_database} /tmp/hermes-communications-recovery.dump'\n"),
+            &format!(
+                "#!/bin/sh\nset -eu\ninput=\nfor value in \"$@\"; do input=$value; done\n[ -n \"$input\" ]\ndocker cp \"$input\" {container}:/tmp/hermes-communications-recovery.dump\nexec docker exec {container} sh -ceu 'export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec pg_restore --no-owner --no-privileges --exit-on-error --single-transaction --dbname={target_database} /tmp/hermes-communications-recovery.dump'\n"
+            ),
         );
         let psql = write_recovery_tool(
             &directory,
             "psql",
-            &format!("#!/bin/sh\nset -eu\nquery=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    --command) query=$2; shift 2 ;;\n    *) shift ;;\n  esac\ndone\n[ -n \"$query\" ]\nexec docker exec {container} sh -ceu 'export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec psql --tuples-only --no-align --dbname={target_database} --command \"$1\"' -- \"$query\"\n"),
+            &format!(
+                "#!/bin/sh\nset -eu\nquery=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    --command) query=$2; shift 2 ;;\n    *) shift ;;\n  esac\ndone\n[ -n \"$query\" ]\nexec docker exec {container} sh -ceu 'export PGPASSWORD=\"$(cat /run/secrets/storage_postgres_admin_password)\"; exec psql --tuples-only --no-align --dbname={target_database} --command \"$1\"' -- \"$query\"\n"
+            ),
         );
-        Self { container, pg_dump, pg_restore, psql }
+        Self {
+            container,
+            pg_dump,
+            pg_restore,
+            psql,
+        }
     }
 }
 
@@ -117,12 +170,19 @@ fn postgres_command(container: &str, database: &str, query: &str) -> String {
         ])
         .output()
         .expect("start disposable PostgreSQL command");
-    assert!(output.status.success(), "disposable PostgreSQL command failed");
+    assert!(
+        output.status.success(),
+        "disposable PostgreSQL command failed"
+    );
     String::from_utf8(output.stdout).expect("PostgreSQL output is UTF-8")
 }
 
 fn reset_disposable_database(container: &str, database: &str) {
-    assert!(database.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'));
+    assert!(
+        database
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    );
     postgres_command(
         container,
         "postgres",
@@ -131,5 +191,9 @@ fn reset_disposable_database(container: &str, database: &str) {
         ),
     );
     postgres_command(container, "postgres", &format!("DROP DATABASE {database}"));
-    postgres_command(container, "postgres", &format!("CREATE DATABASE {database}"));
+    postgres_command(
+        container,
+        "postgres",
+        &format!("CREATE DATABASE {database}"),
+    );
 }
