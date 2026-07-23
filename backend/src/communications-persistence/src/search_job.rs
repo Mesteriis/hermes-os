@@ -30,7 +30,14 @@ impl CommunicationsDerivedIndexJobV1 {
             return Err(CommunicationsDerivedIndexJobErrorV1::InvalidShape);
         }
         match self.operation {
-            CommunicationsDerivedIndexJobOperationV1::Index if self.conversation_id.is_some() && self.blob.is_some() => Ok(()),
+            CommunicationsDerivedIndexJobOperationV1::Index
+                if self.conversation_id.is_some()
+                    && self.blob.as_ref().is_some_and(|blob| {
+                        (1..=64 * 1024 * 1024).contains(&blob.declared_bytes)
+                    }) =>
+            {
+                Ok(())
+            }
             CommunicationsDerivedIndexJobOperationV1::Remove if self.conversation_id.is_none() && self.blob.is_none() => Ok(()),
             _ => Err(CommunicationsDerivedIndexJobErrorV1::InvalidShape),
         }

@@ -5,7 +5,10 @@ use hermes_communications_api::{
     CommunicationObservationIdV1, CommunicationProviderProvenanceV1,
     CommunicationSourceCursorV1, RecordCommunicationEvidenceV1,
 };
-use hermes_communications_domain::{accept_command, canonicalize_communication};
+use hermes_communications_domain::{
+    COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1, accept_command,
+    canonicalize_communication, decide_search_index_v1,
+};
 use hermes_communications_ingress::{BodyAvailabilityV1, CommunicationDirectionV1 as IngressDirectionV1, CommunicationEvidenceKindV1, ProviderProvenanceV1};
 use hermes_communications_ingress::v1::CommunicationObservationV1;
 use hermes_communications_persistence::{
@@ -19,7 +22,10 @@ use hermes_events_jetstream::{
 };
 use prost::Message;
 
-use crate::canonical_outbox::{CanonicalEventContextV1, build_evidence_recorded_outbox_v1};
+use crate::{
+    canonical_outbox::{CanonicalEventContextV1, build_evidence_recorded_outbox_v1},
+    search_job::derived_index_job_from_decision_v1,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationsEventConsumeErrorV1 { InvalidEnvelope, WrongContract, InvalidPayload, DomainRejected, PersistenceRejected }
@@ -79,10 +85,15 @@ pub async fn consume_communication_observation_durable_v1(
         canonical_event_context,
     )
     .map_err(|_| CommunicationsEventConsumeErrorV1::DomainRejected)?;
+    let derived_index_job = derived_index_job_from_decision_v1(
+        decide_search_index_v1(&projection, COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1),
+        canonical_event_context.recorded_at_unix_seconds,
+    );
     persistence
         .persist_consumed_observation(
             record,
             projection,
+            derived_index_job.as_ref(),
             &canonical_outbox_record,
             canonical_event_context.recorded_at_unix_seconds,
         )

@@ -22,7 +22,10 @@ use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 
-use crate::{CommunicationsConsumeOutcomeV1, CommunicationsPersistenceError};
+use crate::{
+    CommunicationsConsumeOutcomeV1, CommunicationsDerivedIndexJobOperationV1,
+    CommunicationsDerivedIndexJobV1, CommunicationsPersistenceError,
+};
 
 
 pub struct CommunicationsDurablePersistence {
@@ -87,7 +90,7 @@ impl CommunicationsDurablePersistence {
 
     pub async fn verify_storage_ready(&self) -> Result<(), CommunicationsPersistenceError> {
         sqlx::query(
-            "SELECT 1 FROM hermes_data.communications_event_inbox, hermes_data.communications_evidence_summaries, hermes_data.communications_domain_outbox, hermes_data.communications_conversations, hermes_data.communications_accounts, hermes_data.communications_messages, hermes_data.communications_observed_participants, hermes_data.communications_attachment_anchors, hermes_data.communications_message_references, hermes_data.communications_derived_index_projections, hermes_data.communications_derived_index_token_digests LIMIT 0",
+            "SELECT 1 FROM hermes_data.communications_event_inbox, hermes_data.communications_evidence_summaries, hermes_data.communications_domain_outbox, hermes_data.communications_conversations, hermes_data.communications_accounts, hermes_data.communications_messages, hermes_data.communications_observed_participants, hermes_data.communications_attachment_anchors, hermes_data.communications_message_references, hermes_data.communications_derived_index_projections, hermes_data.communications_derived_index_token_digests, hermes_data.communications_derived_index_jobs LIMIT 0",
         )
             .execute(&self.pool)
             .await
@@ -99,6 +102,7 @@ impl CommunicationsDurablePersistence {
         &self,
         record: &OutboxRecordV1,
         projection: CanonicalCommunicationProjectionV1,
+        derived_index_job: Option<&CommunicationsDerivedIndexJobV1>,
         canonical_outbox_record: &OutboxRecordV1,
         created_at_unix_seconds: i64,
     ) -> Result<CommunicationsConsumeOutcomeV1, CommunicationsPersistenceError> {
@@ -284,6 +288,26 @@ impl CommunicationsDurablePersistence {
             .execute(&mut *transaction)
             .await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        }
+        if let Some(job) = derived_index_job {
+            job.validate()
+                .map_err(|_| CommunicationsPersistenceError::InvalidDerivedIndexJob)?;
+            sqlx::query("INSERT INTO hermes_data.communications_derived_index_jobs (job_id, operation, evidence_id, message_id, conversation_id, blob_ref, blob_reference_id, blob_declared_bytes, blob_sha256, projection_revision, observed_at_unix_seconds, created_at_unix_seconds) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (job_id) DO NOTHING")
+                .bind(job.job_id.as_slice())
+                .bind(match job.operation { CommunicationsDerivedIndexJobOperationV1::Index => 1_i16, CommunicationsDerivedIndexJobOperationV1::Remove => 2_i16 })
+                .bind(job.evidence_id.bytes().as_slice())
+                .bind(job.message_id.bytes().as_slice())
+                .bind(job.conversation_id.map(|value| value.bytes().to_vec()))
+                .bind(job.blob.as_ref().map(|value| value.blob_ref.as_str()))
+                .bind(job.blob.as_ref().map(|value| value.reference_id.to_vec()))
+                .bind(job.blob.as_ref().map(|value| i64::try_from(value.declared_bytes).expect("body byte limit fits i64")))
+                .bind(job.blob.as_ref().map(|value| value.sha256.to_vec()))
+                .bind(i32::try_from(job.projection_revision).map_err(|_| CommunicationsPersistenceError::InvalidDerivedIndexJob)?)
+                .bind(job.observed_at_unix_seconds)
+                .bind(job.created_at_unix_seconds)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         }
         sqlx::query("INSERT INTO hermes_data.communications_domain_outbox (message_id, envelope_sha256, exact_envelope_bytes, created_at_unix_seconds) VALUES ($1, $2, $3, $4) ON CONFLICT (message_id) DO NOTHING")
             .bind(canonical_outbox_record.message_id().as_slice())

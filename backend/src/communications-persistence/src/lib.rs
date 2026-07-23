@@ -29,6 +29,7 @@ pub enum CommunicationsConsumeOutcomeV1 {
 pub enum CommunicationsPersistenceError {
     DuplicateOperation,
     InboxHashConflict,
+    InvalidDerivedIndexJob,
     MissingCanonicalMessage,
     StorageUnavailable,
     InvalidRow,

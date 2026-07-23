@@ -10,6 +10,7 @@ pub const COMMUNICATIONS_SEARCH_MAX_QUERY_BYTES_V1: usize = 512;
 pub const COMMUNICATIONS_SEARCH_MAX_QUERY_TOKENS_V1: usize = 16;
 pub const COMMUNICATIONS_SEARCH_MAX_DOCUMENT_BYTES_V1: usize = 256 * 1024;
 pub const COMMUNICATIONS_SEARCH_MAX_DOCUMENT_TOKENS_V1: usize = 2_048;
+pub const COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1: u32 = 1;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommunicationsSearchQueryV1 {

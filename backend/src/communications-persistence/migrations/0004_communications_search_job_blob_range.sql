@@ -1,0 +1,6 @@
+ALTER TABLE hermes_data.communications_derived_index_jobs
+  DROP CONSTRAINT communications_derived_index_jobs_blob_declared_bytes_check;
+
+ALTER TABLE hermes_data.communications_derived_index_jobs
+  ADD CONSTRAINT communications_derived_index_jobs_blob_declared_bytes_check
+  CHECK (blob_declared_bytes IS NULL OR blob_declared_bytes BETWEEN 1 AND 67108864);

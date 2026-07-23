@@ -19,6 +19,7 @@ mod search;
 pub use search::{
     COMMUNICATIONS_SEARCH_MAX_DOCUMENT_BYTES_V1, COMMUNICATIONS_SEARCH_MAX_DOCUMENT_TOKENS_V1,
     COMMUNICATIONS_SEARCH_MAX_QUERY_BYTES_V1, COMMUNICATIONS_SEARCH_MAX_QUERY_TOKENS_V1,
+    COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1,
     CommunicationsSearchDocumentV1, CommunicationsSearchIndexDecisionV1,
     CommunicationsSearchIndexJobV1, CommunicationsSearchQueryV1, CommunicationsSearchTokenErrorV1,
     decide_search_index_v1, normalize_search_document_tokens_v1, normalize_search_query_v1,
