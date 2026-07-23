@@ -192,7 +192,7 @@ pub(super) fn assert_communications_search_query_delivery(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
 ) {
-    let payload = CommunicationsQueryRequestV1 {
+    let missing_payload = CommunicationsQueryRequestV1 {
         protocol_major: 1,
         operation: Some(Operation::SearchCommunications(SearchCommunicationsRequestV1 {
             query: "known-missing-token".to_owned(),
@@ -200,8 +200,54 @@ pub(super) fn assert_communications_search_query_delivery(
         })),
     }
     .encode_to_vec();
-    let query = route_communications_query(store, supervisor, 2, &payload);
+    let query = route_communications_query(store, supervisor, 2, &missing_payload);
     assert!(matches!(query.result, Some(QueryResult::SearchCommunications(hits)) if hits.hits.is_empty()));
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let payload = CommunicationsQueryRequestV1 {
+            protocol_major: 1,
+            operation: Some(Operation::SearchCommunications(SearchCommunicationsRequestV1 {
+                query: "fixture".to_owned(),
+                limit: 16,
+            })),
+        }
+        .encode_to_vec();
+        let query = route_communications_query(store, supervisor, 16, &payload);
+        let Some(QueryResult::SearchCommunications(hits)) = query.result else {
+            panic!("Communications search query result");
+        };
+        if !hits.hits.is_empty() {
+            assert!(hits.hits.iter().all(|hit| {
+                hit.evidence_id.len() == 16
+                    && hit.message_id.len() == 16
+                    && hit.conversation_id.len() == 16
+                    && hit.matched_token_count > 0
+            }));
+            let public_payload = CommunicationsQueryResponseV1 {
+                result: Some(QueryResult::SearchCommunications(hits)),
+                error_code: String::new(),
+            }
+            .encode_to_vec();
+            for private_value in [
+                "fixture source body for custody transfer",
+                "blob://fixture-source/admitted-body-1",
+            ] {
+                assert!(
+                    !public_payload
+                        .windows(private_value.len())
+                        .any(|window| window == private_value.as_bytes()),
+                    "public Communications search must not reveal private body or Blob locator",
+                );
+            }
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "transferred Communications body was not indexed",
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
 }
 
 pub(super) fn assert_stale_communications_target_cannot_issue_blob_custody_grant(
