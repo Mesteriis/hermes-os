@@ -3,15 +3,15 @@
 use std::collections::HashMap;
 
 use hermes_communications_ingress::{
-    AttachmentDescriptorV1, AttachmentDispositionV1, BodyAvailabilityV1,
-    CommunicationDirectionV1, CommunicationEvidenceKindV1, CommunicationObservationDraft,
-    ProviderProvenanceV1, SourceEnvelope, SourceScopeEnvelope,
-    new_scoped_communication_observation_draft, with_attachment_descriptor,
+    AttachmentDescriptorV1, AttachmentDispositionV1, BodyAvailabilityV1, CommunicationDirectionV1,
+    CommunicationEvidenceKindV1, CommunicationObservationDraft, ProviderProvenanceV1,
+    SourceEnvelope, SourceScopeEnvelope, new_scoped_communication_observation_draft,
+    with_attachment_descriptor,
 };
 use hermes_mail_api::{
     DEFAULT_WINDOW, MAX_PLAIN_TEXT_BYTES, MAX_WINDOWS, MailContractError::WindowLimitExceeded,
-    SYNC_DEADLINE_SECONDS, WINDOW_DEADLINE_SECONDS, valid_host, valid_mailbox,
-    valid_message_bytes, valid_port, valid_window, OutgoingMailV1,
+    OutgoingMailV1, SYNC_DEADLINE_SECONDS, WINDOW_DEADLINE_SECONDS, valid_host, valid_mailbox,
+    valid_message_bytes, valid_port, valid_window,
 };
 
 pub mod rfc822;
@@ -140,13 +140,19 @@ pub fn validate_sync_request(
     Ok(())
 }
 
-pub fn compose_rfc822(from_address: &str, message: &OutgoingMailV1) -> Result<String, MailContractError> {
+pub fn compose_rfc822(
+    from_address: &str,
+    message: &OutgoingMailV1,
+) -> Result<String, MailContractError> {
     if message.operation_id.trim().is_empty()
         || message.connection_id.trim().is_empty()
         || message.provider_conversation_id.trim().is_empty()
         || !valid_mailbox(from_address)
         || message.recipients.is_empty()
-        || message.recipients.iter().any(|recipient| !valid_mailbox(recipient))
+        || message
+            .recipients
+            .iter()
+            .any(|recipient| !valid_mailbox(recipient))
         || invalid_header(&message.subject)
         || message.subject.len() > 998
         || !valid_message_bytes(message.text_body.len())
@@ -173,10 +179,20 @@ pub fn draft_delivery_observation(
         return Err(MailContractError::InvalidPayload);
     }
     new_scoped_communication_observation_draft(
-        format!("{}:{}:{}", provider.as_str(), message.connection_id, message.operation_id),
+        format!(
+            "{}:{}:{}",
+            provider.as_str(),
+            message.connection_id,
+            message.operation_id
+        ),
         SourceEnvelope {
             provider,
-            external_record_id: format!("{}:{}:{}", provider.as_str(), message.connection_id, message.operation_id),
+            external_record_id: format!(
+                "{}:{}:{}",
+                provider.as_str(),
+                message.connection_id,
+                message.operation_id
+            ),
             scope: Some(SourceScopeEnvelope {
                 external_account_id: message.connection_id.clone(),
                 external_conversation_id: Some(message.provider_conversation_id.clone()),
@@ -199,7 +215,10 @@ fn invalid_header(value: &str) -> bool {
 }
 
 fn normalize_crlf(value: &str) -> String {
-    value.replace("\r\n", "\n").replace('\r', "\n").replace('\n', "\r\n")
+    value
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .replace('\n', "\r\n")
 }
 
 pub fn draft_ingress_observation(
@@ -269,29 +288,31 @@ pub fn draft_ingress_observation_with_body(
     .map_err(|_| MailContractError::InvalidPayload)
 }
 
+pub struct MailAttachmentIngressRequestV1 {
+    pub provider: ProviderProvenanceV1,
+    pub account_id: String,
+    pub message_source_id: String,
+    pub media_id: String,
+    pub filename: Option<String>,
+    pub media_type: String,
+    pub declared_bytes: u64,
+    pub disposition: AttachmentDispositionV1,
+}
+
 pub fn draft_attachment_ingress_observation(
     operation_id: &str,
-    provider: ProviderProvenanceV1,
-    account_id: impl Into<String>,
-    message_source_id: impl Into<String>,
-    media_id: impl Into<String>,
-    filename: Option<String>,
-    media_type: String,
-    declared_bytes: u64,
-    disposition: AttachmentDispositionV1,
+    request: MailAttachmentIngressRequestV1,
 ) -> Result<CommunicationObservationDraft, MailContractError> {
-    let message_source_id = message_source_id.into();
-    let media_id = media_id.into();
     let draft = new_scoped_communication_observation_draft(
         operation_id,
         SourceEnvelope {
-            provider,
-            external_record_id: format!("{message_source_id}:{media_id}"),
+            provider: request.provider,
+            external_record_id: format!("{}:{}", request.message_source_id, request.media_id),
             scope: Some(SourceScopeEnvelope {
-                external_account_id: account_id.into(),
-                external_conversation_id: Some(message_source_id),
+                external_account_id: request.account_id,
+                external_conversation_id: Some(request.message_source_id),
                 external_participant_id: None,
-                external_media_id: Some(media_id),
+                external_media_id: Some(request.media_id),
                 external_reply_to_record_id: None,
                 external_forward_origin_record_id: None,
             }),
@@ -302,13 +323,16 @@ pub fn draft_attachment_ingress_observation(
         None,
     )
     .map_err(|_| MailContractError::InvalidPayload)?;
-    with_attachment_descriptor(draft, AttachmentDescriptorV1 {
-        filename,
-        media_type,
-        declared_bytes,
-        sha256: None,
-        disposition,
-    })
+    with_attachment_descriptor(
+        draft,
+        AttachmentDescriptorV1 {
+            filename: request.filename,
+            media_type: request.media_type,
+            declared_bytes: request.declared_bytes,
+            sha256: None,
+            disposition: request.disposition,
+        },
+    )
     .map_err(|_| MailContractError::InvalidPayload)
 }
 
@@ -339,7 +363,9 @@ mod rfc822_composition_tests {
     #[test]
     fn composes_bounded_plain_text_rfc822_message() {
         let rendered = compose_rfc822("owner@example.test", &message()).expect("valid message");
-        assert!(rendered.starts_with("From: owner@example.test\r\nTo: recipient@example.test\r\nSubject: Report\r\n"));
+        assert!(rendered.starts_with(
+            "From: owner@example.test\r\nTo: recipient@example.test\r\nSubject: Report\r\n"
+        ));
         assert!(rendered.ends_with("\r\n\r\nline one\r\nline two"));
     }
 
@@ -347,18 +373,33 @@ mod rfc822_composition_tests {
     fn rejects_header_injection_in_subject_and_recipients() {
         let mut subject_injection = message();
         subject_injection.subject = "Report\r\nBcc: attacker@example.test".to_owned();
-        assert_eq!(compose_rfc822("owner@example.test", &subject_injection), Err(MailContractError::InvalidPayload));
+        assert_eq!(
+            compose_rfc822("owner@example.test", &subject_injection),
+            Err(MailContractError::InvalidPayload)
+        );
 
         let mut recipient_injection = message();
-        recipient_injection.recipients = vec!["recipient@example.test\r\nBcc: attacker@example.test".to_owned()];
-        assert_eq!(compose_rfc822("owner@example.test", &recipient_injection), Err(MailContractError::InvalidPayload));
+        recipient_injection.recipients =
+            vec!["recipient@example.test\r\nBcc: attacker@example.test".to_owned()];
+        assert_eq!(
+            compose_rfc822("owner@example.test", &recipient_injection),
+            Err(MailContractError::InvalidPayload)
+        );
     }
 
     #[test]
     fn delivery_observation_is_outgoing_and_provider_scoped() {
-        let draft = draft_delivery_observation(ProviderProvenanceV1::MailSmtp, &message()).expect("valid delivery observation");
+        let draft = draft_delivery_observation(ProviderProvenanceV1::MailSmtp, &message())
+            .expect("valid delivery observation");
         assert_eq!(draft.source.provider, ProviderProvenanceV1::MailSmtp);
         assert_eq!(draft.direction, CommunicationDirectionV1::Outgoing);
-        assert_eq!(draft.source.scope.as_ref().and_then(|scope| scope.external_conversation_id.as_deref()), Some("thread-1"));
+        assert_eq!(
+            draft
+                .source
+                .scope
+                .as_ref()
+                .and_then(|scope| scope.external_conversation_id.as_deref()),
+            Some("thread-1")
+        );
     }
 }
