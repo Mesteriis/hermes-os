@@ -9,6 +9,7 @@ pub struct ModuleVaultPurposeRequestV1 {
     secret_class: u8,
     action: u8,
     target_scope: u8,
+    key_schema_revision: u32,
 }
 
 impl ModuleVaultPurposeRequestV1 {
@@ -30,6 +31,30 @@ impl ModuleVaultPurposeRequestV1 {
             secret_class,
             action,
             target_scope,
+            key_schema_revision: 0,
+        }
+    }
+
+    #[must_use]
+    pub fn new_with_key_schema_revision(
+        registration_id: impl Into<String>,
+        capability_id: impl Into<String>,
+        purpose_id: impl Into<String>,
+        requested_lease_ttl_seconds: u16,
+        secret_class: u8,
+        action: u8,
+        target_scope: u8,
+        key_schema_revision: u32,
+    ) -> Self {
+        Self {
+            registration_id: registration_id.into(),
+            capability_id: capability_id.into(),
+            purpose_id: purpose_id.into(),
+            requested_lease_ttl_seconds,
+            secret_class,
+            action,
+            target_scope,
+            key_schema_revision,
         }
     }
 
@@ -47,4 +72,6 @@ impl ModuleVaultPurposeRequestV1 {
     pub const fn action(&self) -> u8 { self.action }
     #[must_use]
     pub const fn target_scope(&self) -> u8 { self.target_scope }
+    #[must_use]
+    pub const fn key_schema_revision(&self) -> u32 { self.key_schema_revision }
 }

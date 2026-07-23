@@ -167,10 +167,10 @@ fn bind_vault_purpose_requests(
     requests: &[DescriptorVaultPurposeRequest],
     registration: &ModuleRegistration,
 ) -> Vec<ModuleVaultPurposeRequestV1> {
-    requests.iter().map(|request| ModuleVaultPurposeRequestV1::new(
+    requests.iter().map(|request| ModuleVaultPurposeRequestV1::new_with_key_schema_revision(
         registration.registration_id(), &request.capability_id, &request.purpose_id,
         request.requested_lease_ttl_seconds, request.secret_class, request.action,
-        request.target_scope,
+        request.target_scope, request.key_schema_revision,
     )).collect()
 }
 
@@ -215,6 +215,7 @@ struct DescriptorVaultPurposeRequest {
     secret_class: u8,
     action: u8,
     target_scope: u8,
+    key_schema_revision: u32,
 }
 
 fn event_route_requests(
@@ -425,10 +426,18 @@ fn vault_purpose_requests(
             Some(CapabilityRequest::VaultPurpose(purpose)) => Some(purpose),
             _ => None,
         }) {
-            if VaultTargetScopeV1::try_from(purpose.target_scope).ok()
-                != Some(VaultTargetScopeV1::ConfigurationInstance)
-            {
+            let target_scope = VaultTargetScopeV1::try_from(purpose.target_scope).ok()
+                .ok_or_else(|| "module Vault purpose target scope is invalid".to_owned())?;
+            let owner_derived = target_scope == VaultTargetScopeV1::OwnerDerivedProjectionKey;
+            if target_scope != VaultTargetScopeV1::ConfigurationInstance && !owner_derived {
                 return Err("module Vault purpose target scope is invalid".to_owned());
+            }
+            if (owner_derived && (purpose.key_schema_revision == 0
+                || purpose.allowed_secret_classes != [VaultSecretClassV1::OwnerDerivedKey as i32]
+                || purpose.actions != [VaultActionV1::IssueOwnerDerivedKey as i32]))
+                || (!owner_derived && purpose.key_schema_revision != 0)
+            {
+                return Err("module Vault purpose request is invalid".to_owned());
             }
             let ttl = u16::try_from(purpose.requested_lease_ttl_seconds)
                 .map_err(|_| "module Vault purpose request is invalid".to_owned())?;
@@ -446,7 +455,8 @@ fn vault_purpose_requests(
                         requested_lease_ttl_seconds: ttl,
                         secret_class,
                         action,
-                        target_scope: VaultTargetScopeV1::ConfigurationInstance as u8,
+                        target_scope: target_scope as u8,
+                        key_schema_revision: purpose.key_schema_revision,
                     });
                 }
             }
