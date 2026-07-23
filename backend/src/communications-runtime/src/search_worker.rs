@@ -63,7 +63,12 @@ async fn execute_claimed_job(
 ) -> Result<(), ExecutionErrorV1> {
     match job.operation {
         CommunicationsDerivedIndexJobOperationV1::Remove => persistence
-            .remove_search_projection(job.message_id, job.projection_revision)
+            .remove_search_projection(
+                job.evidence_id,
+                job.message_id,
+                job.projection_revision,
+                job.observed_at_unix_seconds,
+            )
             .await
             .map(|_| ())
             .map_err(|_| ExecutionErrorV1::StorageUnavailable),

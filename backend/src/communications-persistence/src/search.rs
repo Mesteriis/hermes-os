@@ -36,7 +36,7 @@ impl CommunicationsDurablePersistence {
         let mut transaction = self.pool.begin().await
             .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         let applied = sqlx::query(
-            "INSERT INTO hermes_data.communications_derived_index_projections (message_id, evidence_id, conversation_id, observed_at_unix_seconds, projection_revision, indexed_at_unix_seconds) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (message_id) DO UPDATE SET evidence_id = EXCLUDED.evidence_id, conversation_id = EXCLUDED.conversation_id, observed_at_unix_seconds = EXCLUDED.observed_at_unix_seconds, projection_revision = EXCLUDED.projection_revision, indexed_at_unix_seconds = EXCLUDED.indexed_at_unix_seconds WHERE communications_derived_index_projections.projection_revision <= EXCLUDED.projection_revision RETURNING message_id",
+            "INSERT INTO hermes_data.communications_derived_index_projections (message_id, evidence_id, conversation_id, observed_at_unix_seconds, projection_revision, indexed_at_unix_seconds) SELECT $1, $2, $3, $4, $5, $6 WHERE NOT EXISTS (SELECT 1 FROM hermes_data.communications_derived_index_tombstones WHERE message_id = $1 AND (projection_revision > $5 OR (projection_revision = $5 AND observed_at_unix_seconds >= $4))) ON CONFLICT (message_id) DO UPDATE SET evidence_id = EXCLUDED.evidence_id, conversation_id = EXCLUDED.conversation_id, observed_at_unix_seconds = EXCLUDED.observed_at_unix_seconds, projection_revision = EXCLUDED.projection_revision, indexed_at_unix_seconds = EXCLUDED.indexed_at_unix_seconds WHERE communications_derived_index_projections.projection_revision < EXCLUDED.projection_revision OR (communications_derived_index_projections.projection_revision = EXCLUDED.projection_revision AND communications_derived_index_projections.observed_at_unix_seconds <= EXCLUDED.observed_at_unix_seconds) RETURNING message_id",
         )
         .bind(projection.message_id.bytes().as_slice())
         .bind(projection.evidence_id.bytes().as_slice())
@@ -52,6 +52,13 @@ impl CommunicationsDurablePersistence {
             transaction.rollback().await.map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
             return Ok(false);
         }
+        sqlx::query("DELETE FROM hermes_data.communications_derived_index_tombstones WHERE message_id = $1 AND (projection_revision < $2 OR (projection_revision = $2 AND observed_at_unix_seconds <= $3))")
+            .bind(projection.message_id.bytes().as_slice())
+            .bind(i32::try_from(projection.projection_revision).map_err(|_| CommunicationsPersistenceError::InvalidRow)?)
+            .bind(projection.observed_at_unix_seconds)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
         sqlx::query("DELETE FROM hermes_data.communications_derived_index_token_digests WHERE message_id = $1")
             .bind(projection.message_id.bytes().as_slice())
             .execute(&mut *transaction)
@@ -71,19 +78,39 @@ impl CommunicationsDurablePersistence {
 
     pub async fn remove_search_projection(
         &self,
+        evidence_id: CommunicationObservationIdV1,
         message_id: CommunicationMessageIdV1,
         projection_revision: u32,
+        observed_at_unix_seconds: i64,
     ) -> Result<bool, CommunicationsPersistenceError> {
         if projection_revision == 0 {
             return Err(CommunicationsPersistenceError::InvalidRow);
         }
-        sqlx::query("DELETE FROM hermes_data.communications_derived_index_projections WHERE message_id = $1 AND projection_revision <= $2")
+        let revision = i32::try_from(projection_revision).map_err(|_| CommunicationsPersistenceError::InvalidRow)?;
+        let mut transaction = self.pool.begin().await
+            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        let applied = sqlx::query("INSERT INTO hermes_data.communications_derived_index_tombstones (message_id, evidence_id, observed_at_unix_seconds, projection_revision, removed_at_unix_seconds) VALUES ($1, $2, $3, $4, $3) ON CONFLICT (message_id) DO UPDATE SET evidence_id = EXCLUDED.evidence_id, observed_at_unix_seconds = EXCLUDED.observed_at_unix_seconds, projection_revision = EXCLUDED.projection_revision, removed_at_unix_seconds = EXCLUDED.removed_at_unix_seconds WHERE hermes_data.communications_derived_index_tombstones.projection_revision < EXCLUDED.projection_revision OR (hermes_data.communications_derived_index_tombstones.projection_revision = EXCLUDED.projection_revision AND hermes_data.communications_derived_index_tombstones.observed_at_unix_seconds <= EXCLUDED.observed_at_unix_seconds) RETURNING message_id")
             .bind(message_id.bytes().as_slice())
-            .bind(i32::try_from(projection_revision).map_err(|_| CommunicationsPersistenceError::InvalidRow)?)
-            .execute(&self.pool)
+            .bind(evidence_id.bytes().as_slice())
+            .bind(observed_at_unix_seconds)
+            .bind(revision)
+            .fetch_optional(&mut *transaction)
             .await
-            .map(|result| result.rows_affected() == 1)
-            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)
+            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?
+            .is_some();
+        if !applied {
+            transaction.rollback().await.map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+            return Ok(false);
+        }
+        sqlx::query("DELETE FROM hermes_data.communications_derived_index_projections WHERE message_id = $1 AND (projection_revision < $2 OR (projection_revision = $2 AND observed_at_unix_seconds <= $3))")
+            .bind(message_id.bytes().as_slice())
+            .bind(revision)
+            .bind(observed_at_unix_seconds)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        transaction.commit().await.map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        Ok(true)
     }
 
     pub async fn search_by_token_digests(

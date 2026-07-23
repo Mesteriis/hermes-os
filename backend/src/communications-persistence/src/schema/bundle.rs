@@ -15,8 +15,10 @@ const SEARCH_JOB_LIFECYCLE_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0005_communications_search_job_lifecycle.sql");
 const CANONICAL_MESSAGE_BODY_STATE_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0006_communications_canonical_message_body_state.sql");
+const SEARCH_PROJECTION_TOMBSTONES_SCHEMA: &[u8] =
+    include_bytes!("../../migrations/0007_communications_search_projection_tombstones.sql");
 
-pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 6;
+pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 7;
 
 /// Immutable Communications schema admitted and applied only by Storage Control.
 #[must_use]
@@ -62,6 +64,12 @@ pub fn communications_storage_bundle_v1() -> StorageBundleV1 {
                 migration_id: "communications_canonical_message_body_state".to_owned(),
                 forward_sql_utf8: CANONICAL_MESSAGE_BODY_STATE_SCHEMA.to_vec(),
                 sha256: Sha256::digest(CANONICAL_MESSAGE_BODY_STATE_SCHEMA).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: 7,
+                migration_id: "communications_search_projection_tombstones".to_owned(),
+                forward_sql_utf8: SEARCH_PROJECTION_TOMBSTONES_SCHEMA.to_vec(),
+                sha256: Sha256::digest(SEARCH_PROJECTION_TOMBSTONES_SCHEMA).to_vec(),
             },
         ],
     }

@@ -13,6 +13,8 @@ execution в Gateway и managed conformance ещё не реализованы. 
 typed owner query через transient Vault-derived key и возвращает только
 canonical IDs; пока Gateway path не доказан, внешний client route остаётся
 fail-closed as unavailable. Legacy full-text HTTP search не переносится.
+Projection tombstone fence не допускает, чтобы stale Index job восстановил
+удалённое canonical message.
 
 Зависит от:
 
