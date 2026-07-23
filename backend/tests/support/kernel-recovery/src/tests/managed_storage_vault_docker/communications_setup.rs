@@ -232,11 +232,16 @@ pub(super) fn assert_communications_ingress_delivery(
     tokio::runtime::Runtime::new()
         .expect("Tokio runtime")
         .block_on(async move {
-            let context = async_nats::jetstream::new(
-                async_nats::connect(endpoint)
-                    .await
-                    .expect("connect disposable JetStream"),
-            );
+            use futures_util::StreamExt as _;
+
+            let client = async_nats::connect(endpoint)
+                .await
+                .expect("connect disposable JetStream");
+            let mut canonical_events = client
+                .subscribe("hermes.event.v1.communications.communication_evidence_recorded.v1")
+                .await
+                .expect("subscribe to exact canonical event subject");
+            let context = async_nats::jetstream::new(client);
             context
                 .publish(
                     "hermes.observation.v1.communications.communication_observed.v1",
@@ -244,6 +249,25 @@ pub(super) fn assert_communications_ingress_delivery(
                 )
                 .await
                 .expect("publish exact typed integration envelope");
+            let canonical = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                canonical_events.next(),
+            )
+            .await
+            .expect("canonical Communications event timeout")
+            .expect("canonical Communications event missing");
+            let envelope = hermes_events_protocol::validation::envelope::decode_envelope_v1(
+                canonical.payload.as_ref(),
+            )
+            .expect("canonical Communications envelope");
+            assert!(matches!(
+                envelope.contract.as_ref(),
+                Some(contract)
+                    if contract.owner == "communications"
+                        && contract.name == "communication_evidence_recorded"
+                        && contract.major == 1
+                        && contract.revision == 1
+            ));
         });
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);

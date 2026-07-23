@@ -13,8 +13,9 @@ runs against the disposable authenticated Storage/NATS/Vault contour through
 `test-authenticated-storage.mjs`; it proves the generic managed-domain launch
 with owner-local Storage and Event Hub credentials, a typed integration-shaped
 ingress observation and its resulting canonical owner projection through the
-managed owner query route. External authenticated Core Gateway client
-conformance remains open.
+managed owner query route, and the exact canonical outbox envelope on its
+catalog NATS subject. External authenticated Core Gateway client conformance
+remains open.
 
 Depends on:
 
