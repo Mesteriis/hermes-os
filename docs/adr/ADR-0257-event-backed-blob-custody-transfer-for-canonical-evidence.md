@@ -10,8 +10,8 @@ target custody grant, and commits the target-owned receipt only after Blob
 Platform completes its internal rewrap. Communications derived search may read
 only that Communications-owned Blob reference. A direct cross-owner Blob read
 is rejected by the current registration/capability fence and must remain
-rejected. Managed conformance covers altered receipts, stale source launches and
-revoked source registrations. Blob/Vault unavailability and target-grant
+rejected. Managed conformance covers altered receipts, stale source and target
+launches, and revoked source registrations. Blob/Vault unavailability and target-grant
 revocation remain separate required evidence; a nominal managed conformance
 pass does not replace them.
 
