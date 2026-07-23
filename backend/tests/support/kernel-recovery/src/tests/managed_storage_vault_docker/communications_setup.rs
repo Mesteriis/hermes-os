@@ -20,7 +20,9 @@ use hermes_communications_runtime::admission::{
     communication_evidence_recorded_contract_reference_v1,
 };
 use hermes_communications_runtime::query_client_port::encode_module_query_request_v1;
-use hermes_kernel_control_store::{ModuleBlobQuotaRequestV1, PlatformStorageBindingStateV1};
+use hermes_kernel_control_store::{
+    ModuleBlobQuotaRequestV1, ModuleRegistrationState, PlatformStorageBindingStateV1,
+};
 use hermes_runtime_protocol::v1::{
     BlobDataOperationV1, ManagedRuntimeBlobSessionRequestV1, ModuleClientResponseV1,
 };
@@ -438,7 +440,7 @@ pub(super) fn assert_communications_transferred_body_projection(
             reference_id,
             declared_bytes: u64::try_from(plaintext.len()).expect("fixture body size"),
             sha256: plaintext_sha256,
-            custody_transfer_source_proof: source_proof,
+            custody_transfer_source_proof: source_proof.clone(),
         },
     )
     .expect("attach admitted opaque Blob receipt");
@@ -484,6 +486,7 @@ pub(super) fn assert_communications_transferred_body_projection(
         });
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut revoked_source_published = false;
     loop {
         let accounts = route_communications_query(
             store,
@@ -545,8 +548,85 @@ pub(super) fn assert_communications_transferred_body_projection(
             panic!("Communications messages query result");
         };
         let transferred = messages.messages.iter().any(|message| message.body_state == 4);
-        let rejected = messages.messages.iter().any(|message| message.body_state == 3);
-        if transferred && rejected {
+        let rejected = messages
+            .messages
+            .iter()
+            .filter(|message| message.body_state == 3)
+            .count();
+        if transferred && rejected >= 1 && !revoked_source_published {
+            store
+                .transition_module_registration(
+                    FIXTURE_SOURCE_REGISTRATION,
+                    ModuleRegistrationState::Revoked,
+                )
+                .expect("revoke fixture source integration");
+            let revoked_draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
+                "managed-revoked-body-observation-1",
+                hermes_communications_ingress::SourceEnvelope {
+                    provider: hermes_communications_ingress::ProviderProvenanceV1::Telegram,
+                    external_record_id: "integration-private-body-record-revoked-1".to_owned(),
+                    scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
+                        external_account_id: "integration-private-body-account-1".to_owned(),
+                        external_conversation_id: Some("integration-private-body-conversation-1".to_owned()),
+                        external_participant_id: None,
+                        external_media_id: None,
+                        external_reply_to_record_id: None,
+                        external_forward_origin_record_id: None,
+                    }),
+                },
+                hermes_communications_ingress::CommunicationEvidenceKindV1::ChatMessage,
+                hermes_communications_ingress::BodyAvailabilityV1::AdmittedBlob,
+                hermes_communications_ingress::CommunicationDirectionV1::Incoming,
+                Some(1_783_024_002),
+            )
+            .expect("build revoked admitted-body ingress draft");
+            let revoked_draft = hermes_communications_ingress::with_admitted_body_blob(
+                revoked_draft,
+                hermes_communications_ingress::BodyBlobReceiptV1 {
+                    blob_ref: OPAQUE_BLOB_REFERENCE.to_owned(),
+                    reference_id,
+                    declared_bytes: u64::try_from(plaintext.len()).expect("fixture body size"),
+                    sha256: plaintext_sha256,
+                    custody_transfer_source_proof: source_proof.clone(),
+                },
+            )
+            .expect("attach revoked source opaque Blob receipt");
+            let revoked_record = hermes_communications_ingress::build_observation_outbox_record_v1(
+                &revoked_draft,
+                &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+                    runtime_instance_id: "integration-test-runtime-1".to_owned(),
+                    runtime_generation: 1,
+                    module_id: "integration-test-runtime".to_owned(),
+                    recorded_at_unix_seconds: 1_783_024_002,
+                    recorded_at_nanos: 0,
+                },
+            )
+            .expect("build revoked source typed ingress envelope");
+            let endpoint = store
+                .platform_event_hub_topology()
+                .expect("read Event Hub topology")
+                .expect("Event Hub topology")
+                .nats_endpoint()
+                .to_owned();
+            tokio::runtime::Runtime::new()
+                .expect("Tokio runtime")
+                .block_on(async move {
+                    async_nats::jetstream::new(
+                        async_nats::connect(endpoint)
+                            .await
+                            .expect("connect disposable JetStream"),
+                    )
+                    .publish(
+                        "hermes.observation.v1.communications.communication_observed.v1",
+                        revoked_record.exact_bytes().to_vec().into(),
+                    )
+                    .await
+                    .expect("publish revoked source typed ingress envelope");
+                });
+            revoked_source_published = true;
+            continue;
+        }
+        if transferred && rejected >= 2 {
             let public_payload = CommunicationsQueryResponseV1 {
                 result: Some(QueryResult::ListConversationMessages(messages)),
                 error_code: String::new(),
