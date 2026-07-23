@@ -140,6 +140,7 @@ mod tests {
     mod browser_device_identity;
     mod browser_gateway_session;
     mod capture_coordinator;
+    mod client_rpc_routes;
     mod common;
     mod control_plane_worker;
     mod control_store_media;
