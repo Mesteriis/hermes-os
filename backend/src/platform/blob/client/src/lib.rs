@@ -29,6 +29,7 @@ pub struct ManagedBlobSessionV1 {
     pub data_socket_path: PathBuf,
     pub grant: BlobDataSessionGrantV1,
     pub channel_binding: Vec<u8>,
+    pub custody_transfer_source_proof: Vec<u8>,
 }
 
 pub fn request_managed_blob_session(
@@ -38,6 +39,7 @@ pub fn request_managed_blob_session(
     reference_id: &[u8],
     declared_size: u64,
     backup_class: u32,
+    receipt_sha256: Option<&[u8; 32]>,
 ) -> Result<ManagedBlobSessionV1, BlobClientError> {
     if capability_id.is_empty()
         || capability_id.len() > 128
@@ -45,6 +47,8 @@ pub fn request_managed_blob_session(
         || reference_id.iter().all(|byte| *byte == 0)
         || declared_size == 0
         || !(1..=3).contains(&backup_class)
+        || (receipt_sha256.is_some()
+            && operation != BlobDataOperationV1::BlobDataOperationWriteV1)
     {
         return Err(BlobClientError::InvalidSessionRequest);
     }
@@ -65,6 +69,7 @@ pub fn request_managed_blob_session(
             declared_size,
             backup_class,
             ttl_seconds: 30,
+            receipt_sha256: receipt_sha256.map_or_else(Vec::new, |digest| digest.to_vec()),
         })),
     };
     let bytes = request.encode_to_vec();
@@ -92,6 +97,7 @@ pub fn request_managed_blob_session(
         || grant.declared_size != declared_size
         || grant.operation != operation as i32
         || grant.channel_binding_sha256 != Sha256::digest(&channel_binding).as_slice()
+        || (receipt_sha256.is_some() && delivery.custody_transfer_source_proof.is_empty())
     {
         return Err(BlobClientError::InvalidResponse);
     }
@@ -99,6 +105,7 @@ pub fn request_managed_blob_session(
         data_socket_path: PathBuf::from(delivery.data_socket_path),
         grant,
         channel_binding,
+        custody_transfer_source_proof: delivery.custody_transfer_source_proof,
     })
 }
 

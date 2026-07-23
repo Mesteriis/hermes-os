@@ -623,6 +623,7 @@ mod tests {
             reference_id: [7; 16],
             declared_bytes: 5,
             sha256: [8; 32],
+            custody_transfer_source_proof: vec![3; 96],
         };
         let admitted = admit_provider_event_body(draft.clone(), &event, &mut |_| Ok(receipt.clone()))
             .expect("admitted body");

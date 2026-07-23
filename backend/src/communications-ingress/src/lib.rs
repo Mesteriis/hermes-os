@@ -61,6 +61,7 @@ pub struct BodyBlobReceiptV1 {
     pub reference_id: [u8; 16],
     pub declared_bytes: u64,
     pub sha256: [u8; 32],
+    pub custody_transfer_source_proof: Vec<u8>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -221,6 +222,7 @@ pub fn build_observation_outbox_record_v1(
         body_blob: draft.body_blob.as_ref().map(|receipt| v1::BodyBlobReceiptV1 {
             blob_ref: receipt.blob_ref.clone(), reference_id: receipt.reference_id.to_vec(),
             declared_bytes: receipt.declared_bytes, sha256: receipt.sha256.to_vec(),
+            custody_transfer_source_proof: receipt.custody_transfer_source_proof.clone(),
         }),
         body_admission_failure: draft.body_admission_failure.map(body_admission_failure_value).unwrap_or_default(),
     }.encode_to_vec();
@@ -394,6 +396,7 @@ fn valid_body_blob_receipt(value: &BodyBlobReceiptV1) -> bool {
     !value.blob_ref.trim().is_empty() && value.blob_ref.len() <= 512 && value.blob_ref.is_ascii()
         && value.reference_id.iter().any(|byte| *byte != 0)
         && (1..=64 * 1024 * 1024).contains(&value.declared_bytes)
+        && (1..=2_048).contains(&value.custody_transfer_source_proof.len())
 }
 
 fn outbox_error(_: OutboxRecordError) -> ObservationEnvelopeBuildErrorV1 { ObservationEnvelopeBuildErrorV1::OutboxRejected }
@@ -433,6 +436,7 @@ mod body_admission_tests {
                 reference_id: [7; 16],
                 declared_bytes: 64,
                 sha256: [9; 32],
+                custody_transfer_source_proof: vec![4; 96],
             },
         )
         .expect("receipt");

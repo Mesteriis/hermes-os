@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::v1::{
-    BlobDataOperationV1, BlobDataSessionGrantV1, ManagedRuntimeBlobSessionDeliveryV1,
+    BlobCustodySourceProofV1, BlobDataOperationV1, BlobDataSessionGrantV1, ManagedRuntimeBlobSessionDeliveryV1,
     ManagedRuntimeBlobSessionRequestV1,
 };
 use prost::Message;
@@ -19,6 +19,7 @@ use crate::runtime::lifecycle::control::{
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeRelayPort;
 
 const MAX_SESSION_TTL_SECONDS: u32 = 30;
+const CUSTODY_SOURCE_PROOF_TTL_MS: u64 = 24 * 60 * 60 * 1_000;
 
 /// Kernel authority for an exact direct Blob data operation.
 pub(crate) struct BlobSessionHandlerV1 {
@@ -52,6 +53,15 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
                     && entry.grant_epoch() == expectation.grant_epoch()
             })
             .ok_or_else(|| "managed runtime Blob session request is denied".to_owned())?;
+        if (operation == BlobDataOperationV1::BlobDataOperationWriteV1
+            && !request.receipt_sha256.is_empty()
+            && (request.receipt_sha256.len() != 32
+                || request.receipt_sha256.iter().all(|byte| *byte == 0)))
+            || (operation != BlobDataOperationV1::BlobDataOperationWriteV1
+                && !request.receipt_sha256.is_empty())
+        {
+            return Err("managed runtime Blob session request is denied".to_owned());
+        }
         if entry.request().owner_id().is_empty()
             || request.declared_size == 0
             || request.declared_size > entry.request().max_bytes()
@@ -108,9 +118,15 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
         let mut message = b"hermes.blob-data-session.v1\0".to_vec();
         message.extend_from_slice(&grant.encode_to_vec());
         grant.kernel_authorization_signature_raw = signer.sign(&message).to_vec();
+        let custody_transfer_source_proof = if request.receipt_sha256.is_empty() {
+            Vec::new()
+        } else {
+            issue_custody_source_proof(&signer, &grant, &request.receipt_sha256, now)?
+        };
         Ok(ManagedRuntimeBlobSessionDeliveryV1 {
             data_socket_path: launch::data_socket_path(&self.data_dir).display().to_string(),
             grant: Some(grant),
+            custody_transfer_source_proof,
         })
     }
 }
@@ -126,6 +142,41 @@ pub(crate) fn valid_request(request: &ManagedRuntimeBlobSessionRequestV1) -> boo
         && request.declared_size > 0
         && (1..=3).contains(&request.backup_class)
         && (1..=MAX_SESSION_TTL_SECONDS).contains(&request.ttl_seconds)
+        && (request.receipt_sha256.is_empty()
+            || (request.receipt_sha256.len() == 32
+                && request.receipt_sha256.iter().any(|byte| *byte != 0)))
+}
+
+fn issue_custody_source_proof(
+    signer: &FileDeviceSigner,
+    grant: &BlobDataSessionGrantV1,
+    receipt_sha256: &[u8],
+    now_unix_ms: u64,
+) -> Result<Vec<u8>, String> {
+    let expires_at_unix_ms = now_unix_ms
+        .checked_add(CUSTODY_SOURCE_PROOF_TTL_MS)
+        .ok_or_else(|| "managed runtime Blob session request is unavailable".to_owned())?;
+    let mut proof = BlobCustodySourceProofV1 {
+        major: 1,
+        kernel_instance_id: grant.kernel_instance_id.clone(),
+        owner_id: grant.owner_id.clone(),
+        registration_id: grant.registration_id.clone(),
+        capability_id: grant.capability_id.clone(),
+        runtime_instance_id: grant.runtime_instance_id.clone(),
+        runtime_generation: grant.runtime_generation,
+        grant_epoch: grant.grant_epoch,
+        key_revision: grant.key_revision,
+        reference_id: grant.reference_id.clone(),
+        declared_size: grant.declared_size,
+        receipt_sha256: receipt_sha256.to_vec(),
+        issued_at_unix_ms: now_unix_ms,
+        expires_at_unix_ms,
+        kernel_authorization_signature_raw: Vec::new(),
+    };
+    let mut message = b"hermes.blob-custody-source-proof.v1\0".to_vec();
+    message.extend_from_slice(&proof.encode_to_vec());
+    proof.kernel_authorization_signature_raw = signer.sign(&message).to_vec();
+    Ok(proof.encode_to_vec())
 }
 
 fn now_unix_ms() -> Result<u64, String> {

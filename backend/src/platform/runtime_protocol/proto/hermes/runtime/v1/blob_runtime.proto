@@ -42,6 +42,27 @@ message BlobDataSessionGrantV1 {
   uint64 blob_runtime_generation = 20;
 }
 
+// Durable, non-readable proof that an exact producer-owned Blob reference was
+// admitted for a typed evidence receipt. It is not a Blob data grant: only the
+// custody-transfer platform operation may consume it.
+message BlobCustodySourceProofV1 {
+  uint32 major = 1;
+  string kernel_instance_id = 2;
+  string owner_id = 3;
+  string registration_id = 4;
+  string capability_id = 5;
+  string runtime_instance_id = 6;
+  uint64 runtime_generation = 7;
+  uint64 grant_epoch = 8;
+  uint64 key_revision = 9;
+  bytes reference_id = 10;
+  uint64 declared_size = 11;
+  bytes receipt_sha256 = 12;
+  uint64 issued_at_unix_ms = 13;
+  uint64 expires_at_unix_ms = 14;
+  bytes kernel_authorization_signature_raw = 15;
+}
+
 enum BlobBackupClassV1 {
   BLOB_BACKUP_CLASS_UNSPECIFIED_V1 = 0;
   BLOB_BACKUP_CLASS_REQUIRED_V1 = 1;

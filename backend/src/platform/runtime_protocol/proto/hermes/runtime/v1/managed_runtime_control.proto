@@ -91,10 +91,15 @@ message ManagedRuntimeBlobSessionRequestV1 {
   uint64 declared_size = 6;
   uint32 backup_class = 7;
   uint32 ttl_seconds = 8;
+  // Present only for a typed admitted-body write. Kernel signs it into a
+  // durable custody proof; it never receives the plaintext.
+  bytes receipt_sha256 = 9;
 }
 message ManagedRuntimeBlobSessionDeliveryV1 {
   string data_socket_path = 1;
   BlobDataSessionGrantV1 grant = 2;
+  // Empty for ordinary Blob sessions. This proof cannot authorize a read.
+  bytes custody_transfer_source_proof = 3;
 }
 message ManagedRuntimeControlRequestV1 {
   oneof operation {

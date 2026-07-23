@@ -93,6 +93,7 @@ impl CommunicationsSearchAccessV1 {
                 &blob.reference_id,
                 blob.declared_bytes,
                 1,
+                None,
             ).map_err(|_| CommunicationsSearchAccessErrorV1::Denied)?;
             BlobDataClient::new(session.data_socket_path)
                 .and_then(|client| client.read_range(session.grant, session.channel_binding, 0, read_end))

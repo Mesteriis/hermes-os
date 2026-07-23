@@ -245,6 +245,7 @@ pub fn serve_admitted_provider_loop(admitted: TelegramAdmittedRuntime) -> Result
                             &intent.reference_id,
                             intent.declared_size,
                             intent.backup_class,
+                            None,
                         )
                         .map_err(|_| {
                             TdlibError::Protocol(
@@ -283,6 +284,7 @@ fn admit_telegram_plaintext(
     let mut reference_id = [0_u8; 16];
     getrandom::fill(&mut reference_id).map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
     if reference_id.iter().all(|byte| *byte == 0) { return Err(BodyAdmissionFailureV1::SourceUnavailable); }
+    let sha256: [u8; 32] = Sha256::digest(plaintext).into();
     control_channel.set_nonblocking(false).map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
     let session = request_managed_blob_session(
         control_channel,
@@ -291,19 +293,21 @@ fn admit_telegram_plaintext(
         &reference_id,
         u64::try_from(plaintext.len()).map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
         1,
+        Some(&sha256),
     );
     let restored = control_channel.set_nonblocking(true);
     let session = session.map_err(|_| BodyAdmissionFailureV1::PolicyRejected)?;
     restored.map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
+    let custody_transfer_source_proof = session.custody_transfer_source_proof;
     BlobDataClient::new(session.data_socket_path)
         .and_then(|client| client.write(session.grant, session.channel_binding, plaintext.to_vec()))
         .map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
-    let sha256: [u8; 32] = Sha256::digest(plaintext).into();
     Ok(BodyBlobReceiptV1 {
         blob_ref: format!("blob-content:{}", hex_reference_id(&reference_id)),
         reference_id,
         declared_bytes: u64::try_from(plaintext.len()).map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
         sha256,
+        custody_transfer_source_proof,
     })
 }
 
@@ -363,6 +367,7 @@ fn authorize_media_for_request<T: hermes_telegram_tdlib::TdlibTransport>(
         &media.blob.reference_id,
         media.blob.declared_size,
         media.blob.backup_class,
+        None,
     )
     .map_err(|_| "Telegram Blob session request was denied".to_owned())?;
     runtime

@@ -451,6 +451,7 @@ fn admit_inbound_plaintext(
     let mut reference_id = [0_u8; 16];
     getrandom::fill(&mut reference_id).map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
     if reference_id.iter().all(|byte| *byte == 0) { return Err(BodyAdmissionFailureV1::SourceUnavailable); }
+    let sha256: [u8; 32] = Sha256::digest(plaintext).into();
     control_channel.set_nonblocking(false).map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
     let delivery = request_managed_blob_session(
         control_channel,
@@ -459,19 +460,21 @@ fn admit_inbound_plaintext(
         &reference_id,
         u64::try_from(plaintext.len()).map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
         1,
+        Some(&sha256),
     );
     let restored = control_channel.set_nonblocking(true);
     let delivery = delivery.map_err(|_| BodyAdmissionFailureV1::PolicyRejected)?;
     restored.map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
+    let custody_transfer_source_proof = delivery.custody_transfer_source_proof;
     BlobDataClient::new(delivery.data_socket_path)
         .and_then(|client| client.write(delivery.grant, delivery.channel_binding, plaintext.to_vec()))
         .map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
-    let sha256: [u8; 32] = Sha256::digest(plaintext).into();
     Ok(BodyBlobReceiptV1 {
         blob_ref: format!("blob-content:{}", reference_id.iter().map(|byte| format!("{byte:02x}")).collect::<String>()),
         reference_id,
         declared_bytes: u64::try_from(plaintext.len()).map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
         sha256,
+        custody_transfer_source_proof,
     })
 }
 
@@ -490,6 +493,7 @@ fn authorize_blob_session(
         &blob.reference_id,
         blob.declared_size,
         blob.backup_class,
+        None,
     )
     .map_err(|_| super::ZulipRuntimeErrorV1::Credential)?;
     let session = crate::blob::ZulipBlobSessionV1 {

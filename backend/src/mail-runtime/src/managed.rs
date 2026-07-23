@@ -792,6 +792,7 @@ impl MailAdmittedRuntime {
         let mut reference_id = [0_u8; 16];
         getrandom::fill(&mut reference_id).map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
         if reference_id.iter().all(|byte| *byte == 0) { return Err(BodyAdmissionFailureV1::SourceUnavailable); }
+        let sha256: [u8; 32] = Sha256::digest(plaintext).into();
         self.control_channel.set_nonblocking(false).map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
         let session = request_managed_blob_session(
             &mut self.control_channel,
@@ -800,19 +801,21 @@ impl MailAdmittedRuntime {
             &reference_id,
             u64::try_from(plaintext.len()).map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
             1,
+            Some(&sha256),
         );
         let restored = self.control_channel.set_nonblocking(true);
         let session = session.map_err(|_| BodyAdmissionFailureV1::PolicyRejected)?;
         restored.map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
+        let custody_transfer_source_proof = session.custody_transfer_source_proof;
         BlobDataClient::new(session.data_socket_path)
             .and_then(|client| client.write(session.grant, session.channel_binding, plaintext.to_vec()))
             .map_err(|_| BodyAdmissionFailureV1::SourceUnavailable)?;
-        let sha256: [u8; 32] = Sha256::digest(plaintext).into();
         Ok(BodyBlobReceiptV1 {
             blob_ref: format!("blob-content:{}", hex_reference_id(&reference_id)),
             reference_id,
             declared_bytes: u64::try_from(plaintext.len()).map_err(|_| BodyAdmissionFailureV1::SizeLimitExceeded)?,
             sha256,
+            custody_transfer_source_proof,
         })
     }
 }
