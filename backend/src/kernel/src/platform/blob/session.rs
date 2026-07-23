@@ -184,6 +184,17 @@ impl BlobSessionHandlerV1 {
         {
             return Err("managed runtime Blob custody transfer is denied".to_owned());
         }
+        let source_launch = self
+            .store
+            .effective_managed_launch_record(&source.registration_id)
+            .map_err(|_| "managed runtime Blob custody transfer is denied".to_owned())?
+            .ok_or_else(|| "managed runtime Blob custody transfer is denied".to_owned())?;
+        if source_launch.runtime_instance_id() != source.runtime_instance_id
+            || source_launch.runtime_generation() != source.runtime_generation
+            || source_launch.grant_epoch() != source.grant_epoch
+        {
+            return Err("managed runtime Blob custody transfer is denied".to_owned());
+        }
         let blob = status::read_current(&self.store, &self.relay)?;
         let mut session_id = [0_u8; 16];
         getrandom::fill(&mut session_id)

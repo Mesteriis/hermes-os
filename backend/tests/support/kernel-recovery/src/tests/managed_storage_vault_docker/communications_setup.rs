@@ -36,6 +36,7 @@ const COMMUNICATIONS_RUNTIME_INSTANCE_ID: &str = "020202020202020202020202020202
 const FIXTURE_SOURCE_REGISTRATION: &str = "fixture-source-integration";
 const FIXTURE_SOURCE_CAPABILITY_ID: &str = "fixture-source.blob.v1";
 const FIXTURE_SOURCE_RUNTIME_INSTANCE_ID: &str = "03030303030303030303030303030303";
+const FIXTURE_SOURCE_RUNTIME_INSTANCE_ID_V2: &str = "04040404040404040404040404040404";
 
 pub(super) fn configured_communications_store(root: &Path, kernel: &Path) -> SqliteControlStore {
     let store = configured_store(root, kernel);
@@ -486,6 +487,7 @@ pub(super) fn assert_communications_transferred_body_projection(
         });
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut stale_source_published = false;
     let mut revoked_source_published = false;
     loop {
         let accounts = route_communications_query(
@@ -553,7 +555,126 @@ pub(super) fn assert_communications_transferred_body_projection(
             .iter()
             .filter(|message| message.body_state == 3)
             .count();
-        if transferred && rejected >= 1 && !revoked_source_published {
+        if transferred && rejected >= 1 && !stale_source_published {
+            store
+                .record_managed_launch(&ManagedLaunchRecord::new(
+                    FIXTURE_SOURCE_REGISTRATION,
+                    FIXTURE_SOURCE_RUNTIME_INSTANCE_ID_V2,
+                    1,
+                    1,
+                    2,
+                    source_grant_epoch,
+                ))
+                .expect("record fixture source integration successor launch");
+            let stale_draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
+                "managed-stale-body-observation-1",
+                hermes_communications_ingress::SourceEnvelope {
+                    provider: hermes_communications_ingress::ProviderProvenanceV1::Telegram,
+                    external_record_id: "integration-private-body-record-stale-1".to_owned(),
+                    scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
+                        external_account_id: "integration-private-body-account-1".to_owned(),
+                        external_conversation_id: Some("integration-private-body-conversation-1".to_owned()),
+                        external_participant_id: None,
+                        external_media_id: None,
+                        external_reply_to_record_id: None,
+                        external_forward_origin_record_id: None,
+                    }),
+                },
+                hermes_communications_ingress::CommunicationEvidenceKindV1::ChatMessage,
+                hermes_communications_ingress::BodyAvailabilityV1::AdmittedBlob,
+                hermes_communications_ingress::CommunicationDirectionV1::Incoming,
+                Some(1_783_024_002),
+            )
+            .expect("build stale admitted-body ingress draft");
+            let stale_draft = hermes_communications_ingress::with_admitted_body_blob(
+                stale_draft,
+                hermes_communications_ingress::BodyBlobReceiptV1 {
+                    blob_ref: OPAQUE_BLOB_REFERENCE.to_owned(),
+                    reference_id,
+                    declared_bytes: u64::try_from(plaintext.len()).expect("fixture body size"),
+                    sha256: plaintext_sha256,
+                    custody_transfer_source_proof: source_proof.clone(),
+                },
+            )
+            .expect("attach stale source opaque Blob receipt");
+            let stale_record = hermes_communications_ingress::build_observation_outbox_record_v1(
+                &stale_draft,
+                &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+                    runtime_instance_id: "integration-test-runtime-1".to_owned(),
+                    runtime_generation: 1,
+                    module_id: "integration-test-runtime".to_owned(),
+                    recorded_at_unix_seconds: 1_783_024_002,
+                    recorded_at_nanos: 0,
+                },
+            )
+            .expect("build stale source typed ingress envelope");
+            let endpoint = store
+                .platform_event_hub_topology()
+                .expect("read Event Hub topology")
+                .expect("Event Hub topology")
+                .nats_endpoint()
+                .to_owned();
+            tokio::runtime::Runtime::new()
+                .expect("Tokio runtime")
+                .block_on(async move {
+                    async_nats::jetstream::new(
+                        async_nats::connect(endpoint)
+                            .await
+                            .expect("connect disposable JetStream"),
+                    )
+                    .publish(
+                        "hermes.observation.v1.communications.communication_observed.v1",
+                        stale_record.exact_bytes().to_vec().into(),
+                    )
+                    .await
+                    .expect("publish stale source typed ingress envelope");
+                });
+            stale_source_published = true;
+            continue;
+        }
+        if transferred && rejected >= 2 && !revoked_source_published {
+            let current_reference_id = [9; 16];
+            let current_channel_binding = vec![7; 32];
+            let current_delivery = BlobSessionHandlerV1::new(
+                Arc::clone(store),
+                supervisor.relay_port(),
+                kernel_data.to_path_buf(),
+            )
+            .issue_blob_session(
+                &ManagedRuntimeExpectation::new(
+                    FIXTURE_SOURCE_REGISTRATION,
+                    FIXTURE_SOURCE_RUNTIME_INSTANCE_ID_V2,
+                    "integration.fixture-source",
+                    2,
+                    source_grant_epoch,
+                    [3; 32],
+                    None,
+                ),
+                ManagedRuntimeBlobSessionRequestV1 {
+                    request_id: vec![5; 16],
+                    capability_id: FIXTURE_SOURCE_CAPABILITY_ID.to_owned(),
+                    operation: BlobDataOperationV1::BlobDataOperationWriteV1 as u32,
+                    channel_binding_sha256: Sha256::digest(&current_channel_binding).to_vec(),
+                    reference_id: current_reference_id.to_vec(),
+                    declared_size: u64::try_from(plaintext.len()).expect("fixture body size"),
+                    backup_class: 1,
+                    ttl_seconds: 30,
+                    receipt_sha256: plaintext_sha256.to_vec(),
+                    custody_source_proof: Vec::new(),
+                    evidence_id: Vec::new(),
+                    evidence_envelope_sha256: Vec::new(),
+                },
+            )
+            .expect("issue successor source integration Blob write session");
+            let current_source_proof = current_delivery.custody_transfer_source_proof;
+            BlobDataClient::new(current_delivery.data_socket_path)
+                .expect("open successor source Blob data client")
+                .write(
+                    current_delivery.grant.expect("successor source Blob write grant"),
+                    current_channel_binding,
+                    plaintext.to_vec(),
+                )
+                .expect("write successor source Blob content");
             store
                 .transition_module_registration(
                     FIXTURE_SOURCE_REGISTRATION,
@@ -584,10 +705,10 @@ pub(super) fn assert_communications_transferred_body_projection(
                 revoked_draft,
                 hermes_communications_ingress::BodyBlobReceiptV1 {
                     blob_ref: OPAQUE_BLOB_REFERENCE.to_owned(),
-                    reference_id,
+                    reference_id: current_reference_id,
                     declared_bytes: u64::try_from(plaintext.len()).expect("fixture body size"),
                     sha256: plaintext_sha256,
-                    custody_transfer_source_proof: source_proof.clone(),
+                    custody_transfer_source_proof: current_source_proof,
                 },
             )
             .expect("attach revoked source opaque Blob receipt");
@@ -626,7 +747,7 @@ pub(super) fn assert_communications_transferred_body_projection(
             revoked_source_published = true;
             continue;
         }
-        if transferred && rejected >= 2 {
+        if transferred && rejected >= 3 {
             let public_payload = CommunicationsQueryResponseV1 {
                 result: Some(QueryResult::ListConversationMessages(messages)),
                 error_code: String::new(),
@@ -1141,10 +1262,32 @@ fn record_fixture_source_integration(store: &SqliteControlStore) -> u64 {
             std::slice::from_ref(&blob),
         )
         .expect("record fixture source integration registration");
-    store
+    let grant_epoch = store
         .approve_module_registration(FIXTURE_SOURCE_REGISTRATION, &capabilities)
         .expect("approve fixture source integration capability")
-        .grant_epoch()
+        .grant_epoch();
+    store
+        .record_bundled_managed_launch_binding(&BundledManagedLaunchBinding::new(
+            FIXTURE_SOURCE_REGISTRATION,
+            1,
+            "fixture-source-distribution",
+            "integration.fixture-source",
+            Sha256::digest(b"fixture-source-integration-binary").into(),
+            Sha256::digest(b"fixture-source-integration").into(),
+            None,
+        ))
+        .expect("record fixture source integration release binding");
+    store
+        .record_managed_launch(&ManagedLaunchRecord::new(
+            FIXTURE_SOURCE_REGISTRATION,
+            FIXTURE_SOURCE_RUNTIME_INSTANCE_ID,
+            1,
+            1,
+            1,
+            grant_epoch,
+        ))
+        .expect("record fixture source integration launch");
+    grant_epoch
 }
 
 fn record_communications_runtime_fixture(
