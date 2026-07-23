@@ -184,7 +184,7 @@ fn assert_current_owner_bootstrap(bootstrap: &ClientBootstrapResponseV1) {
 }
 
 fn assert_current_surface_availability(bootstrap: &ClientBootstrapResponseV1) {
-    assert_eq!(bootstrap.surfaces.len(), 11);
+    assert_eq!(bootstrap.surfaces.len(), 9);
     let settings_surface = bootstrap
         .surfaces
         .iter()

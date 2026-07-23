@@ -73,12 +73,14 @@ fn control_store_rejects_foreign_or_duplicate_client_rpc_routes_atomically() {
                 .create_pending_registration_with_all_descriptor_requests(
                     &registration(),
                     &["notes.query".to_owned()],
-                    &[],
-                    &[],
-                    &[],
-                    &[],
-                    &[],
-                    &routes,
+                    hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1 {
+                        storage: &[],
+                        events: &[],
+                        blobs: &[],
+                        scheduler: &[],
+                        vault_purposes: &[],
+                        client_rpc_routes: &routes,
+                    },
                 )
                 .is_err()
         );

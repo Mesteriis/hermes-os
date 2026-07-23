@@ -15,7 +15,7 @@ mod storage_topology;
 pub use event_hub_topology::EventHubTopologyStore;
 pub use events_authority::EventsAuthorityStore;
 pub use health_recovery::HealthRecoveryStore;
-pub use module_registry::ModuleRegistryStore;
+pub use module_registry::{ModuleDescriptorRegistrationRequestsV1, ModuleRegistryStore};
 pub use operation_journal::OperationJournalStore;
 pub use owner_identity::OwnerIdentityStore;
 pub use runtime_trust::RuntimeTrustStore;

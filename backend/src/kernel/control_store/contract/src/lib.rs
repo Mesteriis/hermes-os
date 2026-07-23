@@ -30,9 +30,10 @@ pub use operation::{
     OperationAdmissionV1, OperationIdV1, OperationStatusV1, OperationTerminalOutcomeV1,
 };
 pub use ports::{
-    EventHubTopologyStore, EventsAuthorityStore, HealthRecoveryStore, ModuleRegistryStore,
-    OperationJournalStore, OwnerIdentityStore, RuntimeTrustStore, SettingsRegistryStore,
-    StorageBindingStore, StorageBundleStore, StorageTopologyStore,
+    EventHubTopologyStore, EventsAuthorityStore, HealthRecoveryStore,
+    ModuleDescriptorRegistrationRequestsV1, ModuleRegistryStore, OperationJournalStore,
+    OwnerIdentityStore, RuntimeTrustStore, SettingsRegistryStore, StorageBindingStore,
+    StorageBundleStore, StorageTopologyStore,
 };
 pub use recovery::RecoveryFences;
 pub use runtime::{

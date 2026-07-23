@@ -1,9 +1,8 @@
 //! Module registrations, grants, and external runtime attestations.
 
 use hermes_kernel_control_store::{
-    ExternalRuntimeAttestation, GrantSet, ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1, ModuleEventRouteRequestV1,
-    ModuleGrantSnapshot, ModuleRegistration, ModuleRegistrationState, ModuleSchedulerJobRequestV1,
-    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1,
+    ExternalRuntimeAttestation, GrantSet, ModuleBlobQuotaRequestV1, ModuleEventRouteRequestV1,
+    ModuleGrantSnapshot, ModuleRegistration, ModuleRegistrationState, ModuleStorageRequestV1,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -47,11 +46,14 @@ impl SqliteControlStore {
         self.create_pending_registration_with_descriptor_requests(
             registration,
             requested_capability_ids,
-            storage_requests,
-            event_requests,
-            blob_requests,
-            &[],
-            &[],
+            hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1 {
+                storage: storage_requests,
+                events: event_requests,
+                blobs: blob_requests,
+                scheduler: &[],
+                vault_purposes: &[],
+                client_rpc_routes: &[],
+            },
         )
     }
 
@@ -59,15 +61,12 @@ impl SqliteControlStore {
         &self,
         registration: &ModuleRegistration,
         requested_capability_ids: &[String],
-        storage_requests: &[ModuleStorageRequestV1],
-        event_requests: &[ModuleEventRouteRequestV1],
-        blob_requests: &[ModuleBlobQuotaRequestV1],
-        scheduler_requests: &[ModuleSchedulerJobRequestV1],
-        vault_purpose_requests: &[ModuleVaultPurposeRequestV1],
+        requests: hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1<'_>,
     ) -> Result<(), StoreError> {
         self.create_pending_registration_with_all_descriptor_requests(
-            registration, requested_capability_ids, storage_requests, event_requests, blob_requests,
-            scheduler_requests, vault_purpose_requests, &[],
+            registration,
+            requested_capability_ids,
+            requests,
         )
     }
 
@@ -75,32 +74,35 @@ impl SqliteControlStore {
         &self,
         registration: &ModuleRegistration,
         requested_capability_ids: &[String],
-        storage_requests: &[ModuleStorageRequestV1],
-        event_requests: &[ModuleEventRouteRequestV1],
-        blob_requests: &[ModuleBlobQuotaRequestV1],
-        scheduler_requests: &[ModuleSchedulerJobRequestV1],
-        vault_purpose_requests: &[ModuleVaultPurposeRequestV1],
-        client_rpc_routes: &[ModuleClientRpcRouteV1],
+        requests: hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1<'_>,
     ) -> Result<(), StoreError> {
         validate_pending_registration(registration, requested_capability_ids)?;
-        validate_storage_requests(registration, requested_capability_ids, storage_requests)?;
-        validate_event_route_requests(registration, requested_capability_ids, event_requests)?;
-        validate_blob_quota_requests(registration, requested_capability_ids, blob_requests)?;
+        validate_storage_requests(registration, requested_capability_ids, requests.storage)?;
+        validate_event_route_requests(registration, requested_capability_ids, requests.events)?;
+        validate_blob_quota_requests(registration, requested_capability_ids, requests.blobs)?;
         validate_scheduler_job_requests(
             registration,
             requested_capability_ids,
-            scheduler_requests,
+            requests.scheduler,
         )?;
-        validate_vault_purpose_requests(registration, requested_capability_ids, vault_purpose_requests)?;
-        validate_client_rpc_routes(registration, requested_capability_ids, client_rpc_routes)?;
+        validate_vault_purpose_requests(
+            registration,
+            requested_capability_ids,
+            requests.vault_purposes,
+        )?;
+        validate_client_rpc_routes(
+            registration,
+            requested_capability_ids,
+            requests.client_rpc_routes,
+        )?;
         let registration = registration.clone();
         let capabilities = requested_capability_ids.to_vec();
-        let storage_requests = storage_requests.to_vec();
-        let event_requests = event_requests.to_vec();
-        let blob_requests = blob_requests.to_vec();
-        let scheduler_requests = scheduler_requests.to_vec();
-        let vault_purpose_requests = vault_purpose_requests.to_vec();
-        let client_rpc_routes = client_rpc_routes.to_vec();
+        let storage_requests = requests.storage.to_vec();
+        let event_requests = requests.events.to_vec();
+        let blob_requests = requests.blobs.to_vec();
+        let scheduler_requests = requests.scheduler.to_vec();
+        let vault_purpose_requests = requests.vault_purposes.to_vec();
+        let client_rpc_routes = requests.client_rpc_routes.to_vec();
         self.with_connection(move |connection| {
             let transaction = connection.transaction()?;
             insert_pending_registration(&transaction, &registration, &capabilities)?;

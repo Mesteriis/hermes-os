@@ -26,11 +26,14 @@ fn control_store_retains_owner_bound_scheduler_job_contracts_atomically() {
         .create_pending_registration_with_descriptor_requests(
             &registration(),
             &["scheduler.jobs".to_owned()],
-            &[],
-            &[],
-            &[],
-            std::slice::from_ref(&request),
-            &[],
+            hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1 {
+                storage: &[],
+                events: &[],
+                blobs: &[],
+                scheduler: std::slice::from_ref(&request),
+                vault_purposes: &[],
+                client_rpc_routes: &[],
+            },
         )
         .expect("persist pending registration and Scheduler request together");
 
@@ -81,11 +84,14 @@ fn control_store_rejects_foreign_or_duplicate_scheduler_job_contracts_atomically
                 .create_pending_registration_with_descriptor_requests(
                     &registration(),
                     &["scheduler.jobs".to_owned()],
-                    &[],
-                    &[],
-                    &[],
-                    &requests,
-                    &[],
+                    hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1 {
+                        storage: &[],
+                        events: &[],
+                        blobs: &[],
+                        scheduler: &requests,
+                        vault_purposes: &[],
+                        client_rpc_routes: &[],
+                    },
                 )
                 .is_err()
         );
@@ -143,11 +149,14 @@ fn scheduler_schedule_admission_requires_the_current_exact_approved_job_contract
         .create_pending_registration_with_descriptor_requests(
             &registration(),
             &["scheduler.jobs".to_owned()],
-            &[],
-            &[],
-            &[],
-            std::slice::from_ref(&request),
-            &[],
+            hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1 {
+                storage: &[],
+                events: &[],
+                blobs: &[],
+                scheduler: std::slice::from_ref(&request),
+                vault_purposes: &[],
+                client_rpc_routes: &[],
+            },
         )
         .expect("persist Scheduler job request");
     store

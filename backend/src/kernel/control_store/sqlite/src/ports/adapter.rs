@@ -4,9 +4,10 @@ use hermes_kernel_control_store::{
     BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1, BundledManagedLaunchBinding, ControlStore,
     EventHubTopologyStore, EventsAuthorityStore, ExternalRuntimeAttestation,
     ExternalRuntimeIdentity, GrantSet, HealthRecoveryStore, InitialOwnerIdentity,
-    ManagedLaunchRecord, ModuleBlobQuotaRequestV1, ModuleEventRouteRequestV1, ModuleGrantSnapshot,
-    ModuleRegistration, ModuleRegistrationState, ModuleRegistryStore, ModuleSchedulerJobRequestV1, ModuleClientRpcRouteV1,
-    ModuleStorageRequestV1, ModuleVaultPurposeRequestV1, OwnerIdentityStore, OwnerPinnedArtifactBinding,
+    ManagedLaunchRecord, ModuleBlobQuotaRequestV1, ModuleClientRpcRouteV1,
+    ModuleEventRouteRequestV1, ModuleGrantSnapshot, ModuleRegistration, ModuleRegistrationState,
+    ModuleRegistryStore, ModuleSchedulerJobRequestV1, ModuleStorageRequestV1,
+    ModuleVaultPurposeRequestV1, OwnerIdentityStore, OwnerPinnedArtifactBinding,
     PlatformEventHubTopologyV1, PlatformEventsAuthorityConfigurationV1,
     PlatformManagedProcessBinding, PlatformManagedProcessLaunch, PlatformStorageTopology,
     RuntimeTrustStore, ServerBootstrapPairing, SettingsApplyState, SettingsDesiredSnapshot,
@@ -130,37 +131,26 @@ impl ModuleRegistryStore for SqliteControlStore {
         &self,
         registration: &ModuleRegistration,
         capabilities: &[String],
-        storage_requests: &[ModuleStorageRequestV1],
-        event_requests: &[ModuleEventRouteRequestV1],
-        blob_requests: &[ModuleBlobQuotaRequestV1],
-        scheduler_requests: &[ModuleSchedulerJobRequestV1],
-        vault_purpose_requests: &[ModuleVaultPurposeRequestV1],
+        requests: hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1<'_>,
     ) -> Result<(), Self::Error> {
         SqliteControlStore::create_pending_registration_with_descriptor_requests(
             self,
             registration,
             capabilities,
-            storage_requests,
-            event_requests,
-            blob_requests,
-            scheduler_requests,
-            vault_purpose_requests,
+            requests,
         )
     }
     fn create_pending_registration_with_all_descriptor_requests(
         &self,
         registration: &ModuleRegistration,
         capabilities: &[String],
-        storage_requests: &[ModuleStorageRequestV1],
-        event_requests: &[ModuleEventRouteRequestV1],
-        blob_requests: &[ModuleBlobQuotaRequestV1],
-        scheduler_requests: &[ModuleSchedulerJobRequestV1],
-        vault_purpose_requests: &[ModuleVaultPurposeRequestV1],
-        client_rpc_routes: &[ModuleClientRpcRouteV1],
+        requests: hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1<'_>,
     ) -> Result<(), Self::Error> {
         SqliteControlStore::create_pending_registration_with_all_descriptor_requests(
-            self, registration, capabilities, storage_requests, event_requests, blob_requests,
-            scheduler_requests, vault_purpose_requests, client_rpc_routes,
+            self,
+            registration,
+            capabilities,
+            requests,
         )
     }
     fn module_registration(&self, id: &str) -> Result<Option<ModuleRegistration>, Self::Error> {
@@ -200,7 +190,9 @@ impl ModuleRegistryStore for SqliteControlStore {
     ) -> Result<Vec<ModuleEventRouteRequestV1>, Self::Error> {
         SqliteControlStore::module_event_route_requests(self, registration_id, capability_id)
     }
-    fn approved_module_client_rpc_routes(&self) -> Result<Vec<ModuleClientRpcRouteV1>, Self::Error> {
+    fn approved_module_client_rpc_routes(
+        &self,
+    ) -> Result<Vec<ModuleClientRpcRouteV1>, Self::Error> {
         SqliteControlStore::approved_module_client_rpc_routes(self)
     }
     fn module_blob_quota_request(

@@ -70,12 +70,14 @@ where
         match store.create_pending_registration_with_all_descriptor_requests(
             &registration,
             requests.capability_ids(),
-            &bound.storage,
-            &bound.events,
-            &bound.blobs,
-            &bound.scheduler,
-            &bound.vault_purposes,
-            &bound.client_rpc_routes,
+            hermes_kernel_control_store::ModuleDescriptorRegistrationRequestsV1 {
+                storage: &bound.storage,
+                events: &bound.events,
+                blobs: &bound.blobs,
+                scheduler: &bound.scheduler,
+                vault_purposes: &bound.vault_purposes,
+                client_rpc_routes: &bound.client_rpc_routes,
+            },
         ) {
             Ok(()) => return Ok(registration),
             Err(
