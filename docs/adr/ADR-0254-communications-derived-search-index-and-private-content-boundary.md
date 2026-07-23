@@ -11,17 +11,18 @@ observation атомарно ставит owner-local index job; fenced lease wo
 digest projection либо typed failure без plaintext. Bounded owner-local
 reconciliation rebuilds missing/stale projection jobs from canonical evidence.
 Runtime исполняет typed owner query через transient Vault-derived key и
-возвращает только canonical IDs. Generic Kernel capability router покрыт
-managed fixture, но внешний Core Gateway delivery и live managed conformance
-ещё не доказаны; до этого внешний client route остаётся fail-closed as
-unavailable. Legacy full-text HTTP search не переносится.
+возвращает только canonical IDs. Live managed Storage/NATS/Vault contour
+проверяет delivery search query через generic owner capability router. Отдельное
+external Core Gateway ConnectRPC conformance остаётся required evidence для
+public client delivery. Legacy full-text HTTP search не переносится.
 Projection tombstone fence не допускает, чтобы stale Index job восстановил
 удалённое canonical message.
 
-Ignored managed-contour fixture routes a generated empty search request through
-the generic Kernel capability router and asserts a typed empty hit list. Its
-live pass remains pending while the disposable Docker contour cannot allocate
-its networks; the fixture itself is not treated as completed conformance.
+Managed-contour fixture routes a generated empty search request through the
+generic Kernel capability router and asserts a typed empty hit list against
+the disposable authenticated Storage/NATS/Vault contour. This proves managed
+owner delivery only; it is not a substitute for the external Core Gateway
+ConnectRPC evidence.
 
 Зависит от:
 
