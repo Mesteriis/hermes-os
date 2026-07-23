@@ -11,8 +11,10 @@ const SEARCH_JOBS_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0003_communications_search_jobs.sql");
 const SEARCH_JOB_BLOB_RANGE_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0004_communications_search_job_blob_range.sql");
+const SEARCH_JOB_LIFECYCLE_SCHEMA: &[u8] =
+    include_bytes!("../../migrations/0005_communications_search_job_lifecycle.sql");
 
-pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 4;
+pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 5;
 
 /// Immutable Communications schema admitted and applied only by Storage Control.
 #[must_use]
@@ -46,6 +48,12 @@ pub fn communications_storage_bundle_v1() -> StorageBundleV1 {
                 migration_id: "communications_search_job_blob_range".to_owned(),
                 forward_sql_utf8: SEARCH_JOB_BLOB_RANGE_SCHEMA.to_vec(),
                 sha256: Sha256::digest(SEARCH_JOB_BLOB_RANGE_SCHEMA).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: 5,
+                migration_id: "communications_search_job_lifecycle".to_owned(),
+                forward_sql_utf8: SEARCH_JOB_LIFECYCLE_SCHEMA.to_vec(),
+                sha256: Sha256::digest(SEARCH_JOB_LIFECYCLE_SCHEMA).to_vec(),
             },
         ],
     }

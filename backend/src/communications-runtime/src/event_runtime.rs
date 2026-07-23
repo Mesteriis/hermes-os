@@ -33,6 +33,8 @@ use crate::{
     canonical_outbox::CanonicalEventContextV1,
     consumer::{CommunicationsDeliveryErrorV1, consume_next_observation_v1},
     domain_outbox::{CommunicationsDomainOutboxRelayErrorV1, relay_domain_outbox_once},
+    search_access::CommunicationsSearchAccessV1,
+    search_worker::process_next_derived_index_job_v1,
 };
 
 const MAX_FRAME_BYTES: usize = 512 * 1024;
@@ -51,6 +53,7 @@ pub struct CommunicationsEventRuntimeV1 {
     observation_permit: RuntimeSubscribePermitV1,
     domain_publish_permit: RuntimePublishPermitV1,
     persistence: CommunicationsDurablePersistence,
+    search_access: CommunicationsSearchAccessV1,
     runtime_instance_id: String,
     runtime_generation: u64,
 }
@@ -175,6 +178,14 @@ impl CommunicationsEventRuntimeV1 {
             .verify_storage_ready()
             .await
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        let search_access = CommunicationsSearchAccessV1::open(
+            control_channel
+                .try_clone()
+                .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?,
+            admission,
+            &storage_configuration,
+        )
+        .map_err(|_| CommunicationsEventRuntimeErrorV1::Admission)?;
         control_channel
             .set_nonblocking(true)
             .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
@@ -184,6 +195,7 @@ impl CommunicationsEventRuntimeV1 {
             observation_permit,
             domain_publish_permit,
             persistence,
+            search_access,
             runtime_instance_id: admission.runtime_instance_id.clone(),
             runtime_generation: admission.runtime_generation,
         })
@@ -218,11 +230,31 @@ impl CommunicationsEventRuntimeV1 {
         Ok(true)
     }
 
-    pub async fn consume_next(&self) -> Result<(), CommunicationsDeliveryErrorV1> {
+    pub async fn consume_next(&mut self) -> Result<(), CommunicationsDeliveryErrorV1> {
         let canonical_event_context = self.canonical_event_context()?;
         consume_next_observation_v1(&self.persistence, &self.connection, &self.observation_permit, &canonical_event_context)
             .await
-            .map(|_| ())
+            .map(|_| ())?;
+        self.process_next_derived_index_job()
+            .await
+            .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
+        Ok(())
+    }
+
+    pub async fn process_next_derived_index_job(
+        &mut self,
+    ) -> Result<bool, CommunicationsEventRuntimeErrorV1> {
+        let context = self
+            .canonical_event_context()
+            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        process_next_derived_index_job_v1(
+            &self.persistence,
+            &mut self.search_access,
+            &format!("{}:{}", self.runtime_instance_id, self.runtime_generation),
+            context.recorded_at_unix_seconds,
+        )
+        .await
+        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)
     }
 
     fn canonical_event_context(&self) -> Result<CanonicalEventContextV1, CommunicationsDeliveryErrorV1> {

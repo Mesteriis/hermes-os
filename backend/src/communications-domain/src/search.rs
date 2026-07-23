@@ -36,8 +36,12 @@ pub struct CommunicationsSearchIndexJobV1 {
 pub enum CommunicationsSearchIndexDecisionV1 {
     Index(CommunicationsSearchIndexJobV1),
     Remove { evidence_id: CommunicationObservationIdV1, message_id: CommunicationMessageIdV1, projection_revision: u32, observed_at_unix_seconds: i64 },
+    Reject { evidence_id: CommunicationObservationIdV1, message_id: CommunicationMessageIdV1, projection_revision: u32, observed_at_unix_seconds: i64, reason: CommunicationsSearchIndexRejectionV1 },
     Ignore,
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CommunicationsSearchIndexRejectionV1 { DocumentLimit }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationsSearchTokenErrorV1 {
@@ -62,6 +66,15 @@ pub fn decide_search_index_v1(
     let Some(blob) = projection.summary.body_blob.as_ref() else {
         return CommunicationsSearchIndexDecisionV1::Remove { evidence_id: projection.summary.evidence_id, message_id: message.message_id, projection_revision, observed_at_unix_seconds: projection.summary.observed_at_unix_seconds };
     };
+    if blob.declared_bytes > u64::try_from(COMMUNICATIONS_SEARCH_MAX_DOCUMENT_BYTES_V1).expect("bounded constant") {
+        return CommunicationsSearchIndexDecisionV1::Reject {
+            evidence_id: projection.summary.evidence_id,
+            message_id: message.message_id,
+            projection_revision,
+            observed_at_unix_seconds: projection.summary.observed_at_unix_seconds,
+            reason: CommunicationsSearchIndexRejectionV1::DocumentLimit,
+        };
+    }
     CommunicationsSearchIndexDecisionV1::Index(CommunicationsSearchIndexJobV1 {
         evidence_id: projection.summary.evidence_id,
         message_id: message.message_id,

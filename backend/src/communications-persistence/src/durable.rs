@@ -24,6 +24,7 @@ use sqlx::{
 
 use crate::{
     CommunicationsConsumeOutcomeV1, CommunicationsDerivedIndexJobOperationV1,
+    CommunicationsDerivedIndexFailureRecordV1, CommunicationsDerivedIndexFailureV1,
     CommunicationsDerivedIndexJobV1, CommunicationsPersistenceError,
 };
 
@@ -90,7 +91,7 @@ impl CommunicationsDurablePersistence {
 
     pub async fn verify_storage_ready(&self) -> Result<(), CommunicationsPersistenceError> {
         sqlx::query(
-            "SELECT 1 FROM hermes_data.communications_event_inbox, hermes_data.communications_evidence_summaries, hermes_data.communications_domain_outbox, hermes_data.communications_conversations, hermes_data.communications_accounts, hermes_data.communications_messages, hermes_data.communications_observed_participants, hermes_data.communications_attachment_anchors, hermes_data.communications_message_references, hermes_data.communications_derived_index_projections, hermes_data.communications_derived_index_token_digests, hermes_data.communications_derived_index_jobs LIMIT 0",
+            "SELECT 1 FROM hermes_data.communications_event_inbox, hermes_data.communications_evidence_summaries, hermes_data.communications_domain_outbox, hermes_data.communications_conversations, hermes_data.communications_accounts, hermes_data.communications_messages, hermes_data.communications_observed_participants, hermes_data.communications_attachment_anchors, hermes_data.communications_message_references, hermes_data.communications_derived_index_projections, hermes_data.communications_derived_index_token_digests, hermes_data.communications_derived_index_jobs, hermes_data.communications_derived_index_failures LIMIT 0",
         )
             .execute(&self.pool)
             .await
@@ -103,6 +104,7 @@ impl CommunicationsDurablePersistence {
         record: &OutboxRecordV1,
         projection: CanonicalCommunicationProjectionV1,
         derived_index_job: Option<&CommunicationsDerivedIndexJobV1>,
+        derived_index_failure: Option<&CommunicationsDerivedIndexFailureRecordV1>,
         canonical_outbox_record: &OutboxRecordV1,
         created_at_unix_seconds: i64,
     ) -> Result<CommunicationsConsumeOutcomeV1, CommunicationsPersistenceError> {
@@ -305,6 +307,22 @@ impl CommunicationsDurablePersistence {
                 .bind(i32::try_from(job.projection_revision).map_err(|_| CommunicationsPersistenceError::InvalidDerivedIndexJob)?)
                 .bind(job.observed_at_unix_seconds)
                 .bind(job.created_at_unix_seconds)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;
+        }
+        if let Some(failure) = derived_index_failure {
+            if failure.failure != CommunicationsDerivedIndexFailureV1::DocumentLimit
+                || failure.projection_revision == 0
+            {
+                return Err(CommunicationsPersistenceError::InvalidDerivedIndexJob);
+            }
+            sqlx::query("INSERT INTO hermes_data.communications_derived_index_failures (evidence_id, message_id, projection_revision, observed_at_unix_seconds, failure_code, recorded_at_unix_seconds) VALUES ($1, $2, $3, $4, 6, $5) ON CONFLICT (evidence_id) DO NOTHING")
+                .bind(failure.evidence_id.bytes().as_slice())
+                .bind(failure.message_id.bytes().as_slice())
+                .bind(i32::try_from(failure.projection_revision).map_err(|_| CommunicationsPersistenceError::InvalidDerivedIndexJob)?)
+                .bind(failure.observed_at_unix_seconds)
+                .bind(failure.recorded_at_unix_seconds)
                 .execute(&mut *transaction)
                 .await
                 .map_err(|_| CommunicationsPersistenceError::StorageUnavailable)?;

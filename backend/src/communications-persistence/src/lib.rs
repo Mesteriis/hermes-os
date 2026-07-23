@@ -11,6 +11,8 @@ pub use search::{
     CommunicationsSearchProjectionWriteV1, CommunicationsSearchProjectionWriteErrorV1,
 };
 pub use search_job::{
+    ClaimedCommunicationsDerivedIndexJobV1, CommunicationsDerivedIndexFailureRecordV1,
+    CommunicationsDerivedIndexFailureV1,
     CommunicationsDerivedIndexJobErrorV1, CommunicationsDerivedIndexJobOperationV1,
     CommunicationsDerivedIndexJobV1,
 };
