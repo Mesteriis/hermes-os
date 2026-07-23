@@ -6,8 +6,8 @@
 работе. Exact owner inventory, module descriptor, settings schema, capability
 GrantSet, Storage bundle, NATS routes и owner query route закреплены executable
 policy. Managed Docker conformance доказывает owner-local PostgreSQL
-backup/restore round trip для canonical Communications evidence через Storage
-offline recovery contract. До полного admission остаётся полная проверка
+backup, destructive reset disposable PostgreSQL instance и restore canonical
+Communications evidence через Storage offline recovery contract. До полного admission остаётся полная проверка
 acceptance matrix ниже. Kernel остаётся в честном `module_control_plane`:
 отдельное production state `ready` ещё не реализовано.
 

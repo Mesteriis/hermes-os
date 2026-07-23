@@ -10,7 +10,10 @@ use hermes_communications_runtime::{
     admission::{
         communications_module_descriptor_v1, communications_settings_schema_bytes_v1,
     },
-    event_runtime::{CommunicationsEventRuntimeV1, CommunicationsRuntimeAdmissionV1},
+    event_runtime::{
+        CommunicationsEventRuntimeErrorV1, CommunicationsEventRuntimeV1,
+        CommunicationsRuntimeAdmissionV1,
+    },
 };
 use hermes_communications_persistence::communications_storage_bundle_v1;
 use hermes_runtime_protocol::{
@@ -134,7 +137,10 @@ where
         &configuration.event_hub_endpoint,
         configuration.event_credential_revision,
         storage,
-    )).map_err(|_| "Communications runtime admission was rejected".to_owned())?;
+    )).map_err(|error| format!(
+        "Communications runtime startup failed: {}",
+        runtime_startup_reason_code(error),
+    ))?;
     loop {
         executor.block_on(consume_or_tick(&mut runtime))?;
         let now = SystemTime::now().duration_since(UNIX_EPOCH)
@@ -143,6 +149,13 @@ where
             .map_err(|_| "Communications runtime clock is unavailable".to_owned())?;
         executor.block_on(runtime.relay_domain_outbox(now))
             .map_err(|_| "Communications runtime outbox relay failed".to_owned())?;
+    }
+}
+
+const fn runtime_startup_reason_code(error: CommunicationsEventRuntimeErrorV1) -> &'static str {
+    match error {
+        CommunicationsEventRuntimeErrorV1::Admission => "admission_rejected",
+        CommunicationsEventRuntimeErrorV1::Unavailable => "dependency_unavailable",
     }
 }
 
