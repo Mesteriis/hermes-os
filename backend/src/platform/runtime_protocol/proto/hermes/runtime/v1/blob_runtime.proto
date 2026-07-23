@@ -63,6 +63,31 @@ message BlobCustodySourceProofV1 {
   bytes kernel_authorization_signature_raw = 15;
 }
 
+// One-use Kernel authorization for an internal Blob rewrap from the source
+// proof fence to exactly one receiver-owned target fence. Neither runtime can
+// use this grant to receive plaintext over its control channel.
+message BlobCustodyTransferGrantV1 {
+  uint32 major = 1;
+  string kernel_instance_id = 2;
+  bytes session_id = 3;
+  bytes channel_binding_sha256 = 4;
+  bytes evidence_id = 5;
+  bytes evidence_envelope_sha256 = 6;
+  BlobCustodySourceProofV1 source = 7;
+  string target_owner_id = 8;
+  string target_registration_id = 9;
+  string target_capability_id = 10;
+  string target_runtime_instance_id = 11;
+  uint64 target_runtime_generation = 12;
+  uint64 target_grant_epoch = 13;
+  uint64 target_key_revision = 14;
+  uint64 target_quota_max_bytes = 15;
+  bytes target_reference_id = 16;
+  uint64 expires_at_unix_ms = 17;
+  uint64 blob_runtime_generation = 18;
+  bytes kernel_authorization_signature_raw = 19;
+}
+
 enum BlobBackupClassV1 {
   BLOB_BACKUP_CLASS_UNSPECIFIED_V1 = 0;
   BLOB_BACKUP_CLASS_REQUIRED_V1 = 1;
@@ -74,6 +99,7 @@ enum BlobDataOperationV1 {
   BLOB_DATA_OPERATION_UNSPECIFIED_V1 = 0;
   BLOB_DATA_OPERATION_WRITE_V1 = 1;
   BLOB_DATA_OPERATION_READ_RANGE_V1 = 2;
+  BLOB_DATA_OPERATION_CUSTODY_TRANSFER_V1 = 3;
 }
 
 message BlobDataRequestV1 {

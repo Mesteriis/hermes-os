@@ -94,12 +94,18 @@ message ManagedRuntimeBlobSessionRequestV1 {
   // Present only for a typed admitted-body write. Kernel signs it into a
   // durable custody proof; it never receives the plaintext.
   bytes receipt_sha256 = 9;
+  // Required only for custody transfer. Kernel verifies this proof and binds
+  // the resulting target reference to the exact consumed evidence envelope.
+  bytes custody_source_proof = 10;
+  bytes evidence_id = 11;
+  bytes evidence_envelope_sha256 = 12;
 }
 message ManagedRuntimeBlobSessionDeliveryV1 {
   string data_socket_path = 1;
   BlobDataSessionGrantV1 grant = 2;
   // Empty for ordinary Blob sessions. This proof cannot authorize a read.
   bytes custody_transfer_source_proof = 3;
+  BlobCustodyTransferGrantV1 custody_transfer_grant = 4;
 }
 message ManagedRuntimeControlRequestV1 {
   oneof operation {

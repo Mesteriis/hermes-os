@@ -523,6 +523,10 @@ fn authorize_blob_session(
             }
             current.as_mut().ok_or(super::ZulipRuntimeErrorV1::Credential)?.register(session)
         }
+        BlobDataOperationV1::BlobDataOperationCustodyTransferV1
+        | BlobDataOperationV1::BlobDataOperationUnspecifiedV1 => {
+            Err(super::ZulipRuntimeErrorV1::Credential)
+        }
         _ => Err(super::ZulipRuntimeErrorV1::Credential),
     }
 }

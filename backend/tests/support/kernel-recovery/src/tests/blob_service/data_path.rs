@@ -91,6 +91,7 @@ fn request(
                 end_exclusive: 5,
             })
         }
+        BlobDataOperationV1::BlobDataOperationCustodyTransferV1 => unreachable!(),
         BlobDataOperationV1::BlobDataOperationUnspecifiedV1 => unreachable!(),
     };
     BlobDataRequestV1 {

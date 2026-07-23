@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use hermes_blob_client_contract::{BlobReadError, BlobReadPort};
 use hermes_runtime_protocol::v1::{
-    BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1,
+    BlobCustodyTransferGrantV1, BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1,
     BlobDataWriteRequestV1, BlobDataOperationV1,
     ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
     ManagedRuntimeControlResponseV1, blob_data_request_v1::Operation,
@@ -30,6 +30,97 @@ pub struct ManagedBlobSessionV1 {
     pub grant: BlobDataSessionGrantV1,
     pub channel_binding: Vec<u8>,
     pub custody_transfer_source_proof: Vec<u8>,
+}
+
+/// Kernel-authorized internal rewrap request. It transports no source bytes,
+/// key material, provider identity, or target storage path.
+pub struct ManagedBlobCustodyTransferV1 {
+    pub data_socket_path: PathBuf,
+    pub grant: BlobCustodyTransferGrantV1,
+    pub channel_binding: Vec<u8>,
+}
+
+pub fn request_managed_blob_custody_transfer(
+    channel: &mut UnixStream,
+    capability_id: &str,
+    source_reference_id: &[u8; 16],
+    declared_size: u64,
+    receipt_sha256: &[u8; 32],
+    custody_source_proof: &[u8],
+    evidence_id: &[u8; 16],
+    evidence_envelope_sha256: &[u8; 32],
+) -> Result<ManagedBlobCustodyTransferV1, BlobClientError> {
+    if capability_id.is_empty()
+        || capability_id.len() > 128
+        || source_reference_id.iter().all(|byte| *byte == 0)
+        || declared_size == 0
+        || receipt_sha256.iter().all(|byte| *byte == 0)
+        || custody_source_proof.is_empty()
+        || custody_source_proof.len() > 2_048
+        || evidence_id.iter().all(|byte| *byte == 0)
+        || evidence_envelope_sha256.iter().all(|byte| *byte == 0)
+    {
+        return Err(BlobClientError::InvalidSessionRequest);
+    }
+    let mut request_id = [0_u8; 16];
+    let mut channel_binding = vec![0_u8; 32];
+    getrandom::fill(&mut request_id).map_err(|_| BlobClientError::Unavailable)?;
+    getrandom::fill(&mut channel_binding).map_err(|_| BlobClientError::Unavailable)?;
+    if request_id.iter().all(|byte| *byte == 0) || channel_binding.iter().all(|byte| *byte == 0) {
+        return Err(BlobClientError::Unavailable);
+    }
+    let request = ManagedRuntimeControlRequestV1 {
+        operation: Some(ControlOperation::IssueBlobSession(ManagedRuntimeBlobSessionRequestV1 {
+            request_id: request_id.to_vec(),
+            capability_id: capability_id.to_owned(),
+            operation: BlobDataOperationV1::BlobDataOperationCustodyTransferV1 as u32,
+            channel_binding_sha256: Sha256::digest(&channel_binding).to_vec(),
+            reference_id: source_reference_id.to_vec(),
+            declared_size,
+            backup_class: 1,
+            ttl_seconds: 30,
+            receipt_sha256: receipt_sha256.to_vec(),
+            custody_source_proof: custody_source_proof.to_vec(),
+            evidence_id: evidence_id.to_vec(),
+            evidence_envelope_sha256: evidence_envelope_sha256.to_vec(),
+        })),
+    };
+    let bytes = request.encode_to_vec();
+    if bytes.len() > CONTROL_FRAME_BYTES {
+        return Err(BlobClientError::InvalidSessionRequest);
+    }
+    channel
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .and_then(|_| channel.set_write_timeout(Some(Duration::from_secs(5))))
+        .map_err(|error| BlobClientError::Io(error.to_string()))?;
+    write_frame(channel, &bytes)?;
+    let response = ManagedRuntimeControlResponseV1::decode(read_frame(channel)?.as_slice())
+        .map_err(|_| BlobClientError::InvalidResponse)?;
+    channel
+        .set_read_timeout(None)
+        .and_then(|_| channel.set_write_timeout(None))
+        .map_err(|error| BlobClientError::Io(error.to_string()))?;
+    let delivery = match response.result {
+        Some(ControlResult::BlobSessionDelivery(delivery)) if response.error_code.is_empty() => delivery,
+        _ => return Err(BlobClientError::Rejected("managed_blob_custody_transfer_denied".to_owned())),
+    };
+    let grant = delivery.custody_transfer_grant.ok_or(BlobClientError::InvalidResponse)?;
+    if delivery.grant.is_some()
+        || !delivery.custody_transfer_source_proof.is_empty()
+        || !Path::new(&delivery.data_socket_path).is_absolute()
+        || grant.evidence_id.as_slice() != evidence_id.as_slice()
+        || grant.evidence_envelope_sha256.as_slice() != evidence_envelope_sha256.as_slice()
+        || grant.channel_binding_sha256 != Sha256::digest(&channel_binding).as_slice()
+        || grant.target_reference_id.len() != 16
+        || grant.target_reference_id.iter().all(|byte| *byte == 0)
+    {
+        return Err(BlobClientError::InvalidResponse);
+    }
+    Ok(ManagedBlobCustodyTransferV1 {
+        data_socket_path: PathBuf::from(delivery.data_socket_path),
+        grant,
+        channel_binding,
+    })
 }
 
 pub fn request_managed_blob_session(
@@ -70,6 +161,9 @@ pub fn request_managed_blob_session(
             backup_class,
             ttl_seconds: 30,
             receipt_sha256: receipt_sha256.map_or_else(Vec::new, |digest| digest.to_vec()),
+            custody_source_proof: Vec::new(),
+            evidence_id: Vec::new(),
+            evidence_envelope_sha256: Vec::new(),
         })),
     };
     let bytes = request.encode_to_vec();
