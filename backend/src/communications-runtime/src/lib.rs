@@ -4,6 +4,7 @@ pub mod admission;
 pub mod attachment_safety;
 pub mod canonical_outbox;
 pub mod consumer;
+pub mod custody_worker;
 pub mod domain_outbox;
 pub mod event_runtime;
 pub mod query;

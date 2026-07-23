@@ -2,11 +2,15 @@
 
 Статус: Принято
 Дата: 2026-07-23
-Состояние реализации: Требуется. Existing Mail/Zulip/Telegram integration
-admission writes a Blob reference under the producer registration and publishes
-only a typed opaque receipt. Communications derived search may read only a
-Communications-owned Blob reference. A direct cross-owner Blob read is rejected
-by the current registration/capability fence and must remain rejected.
+Состояние реализации: Реализован source slice, runtime conformance ещё
+требуется. Mail/Zulip/Telegram integration admission writes a Blob reference
+under the producer registration and publishes only a typed opaque receipt.
+Communications persists the receipt in a private leased work queue, asks Kernel
+for an evidence-bound target custody grant, and commits the target-owned receipt
+only after Blob Platform completes its internal rewrap. Communications derived
+search may read only that Communications-owned Blob reference. A direct
+cross-owner Blob read is rejected by the current registration/capability fence
+and must remain rejected.
 
 Зависит от:
 
@@ -73,6 +77,12 @@ creating an index job. A duplicate event or transfer retry returns the same
 target receipt. A missing, revoked, expired, altered or wrong-owner source is a
 typed owner-local admission/index failure and never falls back to a
 cross-owner read.
+
+The private work queue is owned by Communications persistence. It has an
+expiring worker lease, terminal completion/rejection states and no public query
+surface. Blob unavailability leaves the item pending for a later fenced retry;
+a policy rejection becomes terminal and still creates neither a canonical Blob
+receipt nor an index job.
 
 ## Non-goals
 

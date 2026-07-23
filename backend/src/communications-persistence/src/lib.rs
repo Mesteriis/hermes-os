@@ -5,10 +5,14 @@ pub const PACKAGE: &str = "hermes-communications-persistence";
 use hermes_communications_api::CommunicationObservationIdV1;
 
 mod durable;
+mod custody_transfer;
 mod search;
 mod search_job;
 mod schema;
 pub use durable::CommunicationsDurablePersistence;
+pub use custody_transfer::{
+    ClaimedCommunicationsBodyCustodyTransferV1, CommunicationsBodyCustodyTransferErrorV1,
+};
 pub use search::{
     CommunicationsSearchProjectionWriteV1, CommunicationsSearchProjectionWriteErrorV1,
 };

@@ -33,6 +33,7 @@ use prost::Message;
 use crate::{
     canonical_outbox::CanonicalEventContextV1,
     consumer::{CommunicationsDeliveryErrorV1, consume_next_observation_v1},
+    custody_worker::process_next_body_custody_transfer_v1,
     domain_outbox::{CommunicationsDomainOutboxRelayErrorV1, relay_domain_outbox_once},
     search_access::CommunicationsSearchAccessV1,
     search_worker::process_next_derived_index_job_v1,
@@ -272,10 +273,29 @@ impl CommunicationsEventRuntimeV1 {
         consume_next_observation_v1(&self.persistence, &self.connection, &self.observation_permit, &canonical_event_context)
             .await
             .map(|_| ())?;
+        self.process_next_body_custody_transfer()
+            .await
+            .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
         self.process_next_derived_index_job()
             .await
             .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
         Ok(())
+    }
+
+    pub async fn process_next_body_custody_transfer(
+        &mut self,
+    ) -> Result<bool, CommunicationsEventRuntimeErrorV1> {
+        let context = self
+            .canonical_event_context()
+            .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)?;
+        process_next_body_custody_transfer_v1(
+            &mut self.control_channel,
+            &self.persistence,
+            &format!("{}:{}", self.runtime_instance_id, self.runtime_generation),
+            context.recorded_at_unix_seconds,
+        )
+        .await
+        .map_err(|_| CommunicationsEventRuntimeErrorV1::Unavailable)
     }
 
     pub async fn process_next_derived_index_job(
