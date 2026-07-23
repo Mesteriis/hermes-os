@@ -19,7 +19,10 @@ and proves inbox idempotency by observing no second canonical event. External
 authenticated Core Gateway application routing is also covered: a logical
 owner Browser WebAuthn session reaches the descriptor-declared ConnectRPC
 Communications query route and the managed runtime response. Listener/TLS
-transport coverage remains Gateway platform evidence.
+transport coverage remains Gateway platform evidence. A typed admitted opaque
+Blob receipt also reaches canonical body state while the public query response
+does not expose its Blob locator; Blob data-path service conformance remains a
+separate platform proof.
 
 Depends on:
 
