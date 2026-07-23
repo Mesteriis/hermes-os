@@ -127,6 +127,9 @@ impl VaultService {
             } => {
                 self.generate_opaque_token_once(lease_id, audience, *secret_class, now_unix_seconds)
             }
+            VaultTransportCommandV1::EnsureOwnerDerivedKey { lease_id } => {
+                self.ensure_owner_derived_key_once(lease_id, audience, now_unix_seconds)
+            }
             VaultTransportCommandV1::ReplaceLease {
                 lease_id,
                 secret_class,
@@ -300,6 +303,36 @@ impl VaultService {
             .map_err(|_| VaultServiceError::SecretUnavailable)?;
         Ok(Zeroizing::new(record_id.as_bytes().to_vec()))
     }
+
+    fn ensure_owner_derived_key_once(
+        &mut self,
+        lease_id: &LeaseIdV1,
+        audience: &LeaseAudienceV1,
+        now_unix_seconds: u64,
+    ) -> Result<Zeroizing<Vec<u8>>, VaultServiceError> {
+        let lease = self.consume_action(
+            lease_id,
+            audience,
+            VaultActionV1::IssueOwnerDerivedKey,
+            now_unix_seconds,
+        )?;
+        let scope = scope_for_lease(
+            &lease,
+            hermes_vault_protocol::SecretClassV1::OwnerDerivedKey,
+            lease.request().secret_revision(),
+        )?;
+        if let Ok(existing) = self.store.resolve_current_secret(&scope) {
+            return Ok(existing);
+        }
+        let key = generate_secret_material(hermes_vault_protocol::SecretClassV1::OwnerDerivedKey)?;
+        match self.store.store_secret(&scope, key.as_slice()) {
+            Ok(_) => Ok(key),
+            Err(_) => self
+                .store
+                .resolve_current_secret(&scope)
+                .map_err(|_| VaultServiceError::SecretUnavailable),
+        }
+    }
 }
 
 fn log_developer_command(command: &VaultTransportCommandV1) {
@@ -312,6 +345,7 @@ fn log_developer_command(command: &VaultTransportCommandV1) {
         VaultTransportCommandV1::ResolveLease { .. } => "resolve_lease",
         VaultTransportCommandV1::StoreLease { .. } => "store_lease",
         VaultTransportCommandV1::GenerateOpaqueToken { .. } => "generate_opaque_token",
+        VaultTransportCommandV1::EnsureOwnerDerivedKey { .. } => "ensure_owner_derived_key",
         VaultTransportCommandV1::ReplaceLease { .. } => "replace_lease",
     };
     eprintln!("developer_vault_command={name}");

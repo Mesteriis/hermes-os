@@ -88,6 +88,38 @@ fn owner_derived_key_is_generated_inside_vault_and_resolves_as_32_raw_bytes() {
     assert_eq!(key.len(), 32);
 }
 
+#[test]
+fn ensure_owner_derived_key_returns_the_same_vault_generated_key() {
+    let temporary = private_temporary_directory();
+    let audience = storage_audience();
+    let mut service = VaultService::new(initialize_store(&temporary), 3).expect("Vault service");
+    let first = ensure_owner_derived_key(&mut service, &audience, 100);
+    let second = ensure_owner_derived_key(&mut service, &audience, 102);
+    assert_eq!(first.len(), 32);
+    assert_eq!(first, second);
+}
+
+fn ensure_owner_derived_key(
+    service: &mut VaultService,
+    audience: &LeaseAudienceV1,
+    now: u64,
+) -> zeroize::Zeroizing<Vec<u8>> {
+    let lease = issue_for(
+        service,
+        audience,
+        SecretClassV1::OwnerDerivedKey,
+        VaultActionV1::IssueOwnerDerivedKey,
+        now,
+    );
+    service
+        .execute_command_once(
+            &VaultTransportCommandV1::EnsureOwnerDerivedKey { lease_id: lease },
+            audience,
+            now + 1,
+        )
+        .expect("ensured owner-derived key")
+}
+
 fn private_temporary_directory() -> TempDir {
     let temporary = TempDir::new().expect("temporary Vault directory");
     std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))

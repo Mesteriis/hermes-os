@@ -11,6 +11,7 @@ const REPLACE_LEASE_OPERATION: u8 = 3;
 const REVOKE_AUDIENCE_OPERATION: u8 = 4;
 const ISSUE_LEASE_OPERATION: u8 = 5;
 const GENERATE_OPAQUE_TOKEN_OPERATION: u8 = 6;
+const ENSURE_OWNER_DERIVED_KEY_OPERATION: u8 = 7;
 const RESOLVE_LEASE_BYTES: usize = 35;
 const STORE_LEASE_HEADER_BYTES: usize = RESOLVE_LEASE_BYTES;
 const REPLACE_LEASE_HEADER_BYTES: usize = STORE_LEASE_HEADER_BYTES + 16;
@@ -33,6 +34,9 @@ pub enum VaultTransportCommandV1 {
     GenerateOpaqueToken {
         lease_id: LeaseIdV1,
         secret_class: SecretClassV1,
+    },
+    EnsureOwnerDerivedKey {
+        lease_id: LeaseIdV1,
     },
     ReplaceLease {
         lease_id: LeaseIdV1,
@@ -78,6 +82,11 @@ impl VaultTransportCommandV1 {
                 lease_id,
                 secret_class,
             } => encode_lease_command(GENERATE_OPAQUE_TOKEN_OPERATION, lease_id, *secret_class),
+            Self::EnsureOwnerDerivedKey { lease_id } => encode_lease_command(
+                ENSURE_OWNER_DERIVED_KEY_OPERATION,
+                lease_id,
+                SecretClassV1::OwnerDerivedKey,
+            ),
             Self::ReplaceLease {
                 lease_id,
                 secret_class,
@@ -111,6 +120,9 @@ impl VaultTransportCommandV1 {
             }
             GENERATE_OPAQUE_TOKEN_OPERATION if bytes.len() == RESOLVE_LEASE_BYTES => {
                 decode_generate_opaque_token(bytes[2], &bytes[3..])
+            }
+            ENSURE_OWNER_DERIVED_KEY_OPERATION if bytes.len() == RESOLVE_LEASE_BYTES => {
+                decode_ensure_owner_derived_key(bytes[2], &bytes[3..])
             }
             STORE_LEASE_OPERATION => decode_store_lease(bytes[2], &bytes[3..]),
             REPLACE_LEASE_OPERATION => decode_replace_lease(bytes[2], &bytes[3..]),
@@ -200,6 +212,17 @@ fn decode_generate_opaque_token(
         lease_id,
         secret_class,
     })
+}
+
+fn decode_ensure_owner_derived_key(
+    secret_class: u8,
+    bytes: &[u8],
+) -> Result<VaultTransportCommandV1, VaultTransportCommandError> {
+    (secret_class == SecretClassV1::OwnerDerivedKey.code() as u8)
+        .then_some(())
+        .ok_or(VaultTransportCommandError::Malformed)?;
+    let lease_id = decode_lease_id(bytes)?;
+    Ok(VaultTransportCommandV1::EnsureOwnerDerivedKey { lease_id })
 }
 
 fn decode_lease_id(bytes: &[u8]) -> Result<LeaseIdV1, VaultTransportCommandError> {
