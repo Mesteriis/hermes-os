@@ -1684,12 +1684,14 @@ dependencies = [
 name = "hermes-communications-runtime"
 version = "0.1.0"
 dependencies = [
+ "hermes-blob-client",
  "hermes-communications-api",
  "hermes-communications-domain",
  "hermes-communications-ingress",
  "hermes-communications-persistence",
  "hermes-events-jetstream",
  "hermes-events-protocol",
+ "hermes-managed-vault-client",
  "hermes-runtime-protocol",
  "hermes-storage-protocol",
  "hermes-storage-vault",
@@ -1698,6 +1700,7 @@ dependencies = [
  "prost-types 0.14.4",
  "sha2 0.11.0",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

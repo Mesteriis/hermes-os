@@ -1281,6 +1281,10 @@
       ],
       "hermes-communications-runtime": [
         {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-communications-ingress",
           "kind": "normal"
         },
@@ -1302,6 +1306,10 @@
         },
         {
           "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-managed-vault-client",
           "kind": "normal"
         },
         {
@@ -3444,6 +3452,14 @@
             "rt-multi-thread",
             "time"
           ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
         }
       ]
     },
@@ -3773,6 +3789,7 @@
         "communications.events.v1",
         "communications.observe.v1",
         "communications.query.v1",
+        "communications.search.index.v1",
         "communications.storage.v1"
       ]
     },

@@ -522,12 +522,14 @@ const MAIL_COMMUNICATIONS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
   'hermes-communications-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
     { name: 'hermes-communications-ingress', kind: 'normal' },
     { name: 'hermes-communications-api', kind: 'normal' },
     { name: 'hermes-communications-domain', kind: 'normal' },
     { name: 'hermes-communications-persistence', kind: 'normal' },
     { name: 'hermes-events-jetstream', kind: 'normal' },
     { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-managed-vault-client', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
     { name: 'hermes-storage-vault', kind: 'normal' },
@@ -994,6 +996,7 @@ const MAIL_COMMUNICATIONS_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt', 'rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -1160,6 +1163,7 @@ const FIRST_OWNER_INVENTORY = {
     'communications.events.v1',
     'communications.observe.v1',
     'communications.query.v1',
+    'communications.search.index.v1',
     'communications.storage.v1',
   ],
 };

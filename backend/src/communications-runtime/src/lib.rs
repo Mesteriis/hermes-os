@@ -9,3 +9,4 @@ pub mod event_runtime;
 pub mod query;
 pub mod query_client_port;
 pub mod query_port;
+pub mod search_access;
