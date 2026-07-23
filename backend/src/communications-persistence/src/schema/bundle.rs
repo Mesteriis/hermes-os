@@ -7,8 +7,10 @@ const INITIAL_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0001_communications_state.sql");
 const SEARCH_PROJECTION_SCHEMA: &[u8] =
     include_bytes!("../../migrations/0002_communications_search_projection.sql");
+const SEARCH_JOBS_SCHEMA: &[u8] =
+    include_bytes!("../../migrations/0003_communications_search_jobs.sql");
 
-pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 2;
+pub const COMMUNICATIONS_STORAGE_BUNDLE_REVISION_V1: u32 = 3;
 
 /// Immutable Communications schema admitted and applied only by Storage Control.
 #[must_use]
@@ -30,6 +32,12 @@ pub fn communications_storage_bundle_v1() -> StorageBundleV1 {
                 migration_id: "communications_search_projection".to_owned(),
                 forward_sql_utf8: SEARCH_PROJECTION_SCHEMA.to_vec(),
                 sha256: Sha256::digest(SEARCH_PROJECTION_SCHEMA).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: 3,
+                migration_id: "communications_search_jobs".to_owned(),
+                forward_sql_utf8: SEARCH_JOBS_SCHEMA.to_vec(),
+                sha256: Sha256::digest(SEARCH_JOBS_SCHEMA).to_vec(),
             },
         ],
     }
