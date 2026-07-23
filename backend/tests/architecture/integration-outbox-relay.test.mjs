@@ -17,3 +17,34 @@ test('every Communications integration relay publishes exact durable envelopes',
     assert.match(source, /mark_communications_outbox_published\(record\.message_id\(\), published_at_unix_seconds\)/);
   }
 });
+
+test('integration packages reach Communications only through its ingress contract', () => {
+  const policy = JSON.parse(
+    readFileSync(join(backendRoot, 'architecture', 'policy.json'), 'utf8'),
+  );
+  const communicationsPackages = new Set([
+    'hermes-communications-api',
+    'hermes-communications-domain',
+    'hermes-communications-ingress',
+    'hermes-communications-persistence',
+    'hermes-communications-runtime',
+  ]);
+
+  for (const owner of ['mail', 'telegram', 'zulip', 'whatsapp']) {
+    const integrationPackages = policy.implementation.productionPackages.filter(
+      (entry) => entry.role === 'integration' && entry.owner === owner,
+    );
+    assert.ok(integrationPackages.length > 0, `missing ${owner} integration inventory`);
+
+    for (const integrationPackage of integrationPackages) {
+      const communicationsDependencies = (policy.implementation.workspaceDependencyAllowlist[integrationPackage.name] ?? [])
+        .map((dependency) => dependency.name)
+        .filter((name) => communicationsPackages.has(name));
+      assert.deepEqual(
+        communicationsDependencies,
+        communicationsDependencies.length === 0 ? [] : ['hermes-communications-ingress'],
+        `${integrationPackage.name} has a direct Communications implementation edge`,
+      );
+    }
+  }
+});
