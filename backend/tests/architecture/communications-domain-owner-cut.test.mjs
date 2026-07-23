@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 const BACKEND_ROOT = new URL('../..', import.meta.url);
+const COMMUNICATIONS_INGRESS_ROOT = new URL('src/communications-ingress/src/', BACKEND_ROOT);
+const COMMUNICATIONS_API_ROOT = new URL('src/communications-api/src/', BACKEND_ROOT);
 const COMMUNICATIONS_DOMAIN_ROOT = new URL('src/communications-domain/src/', BACKEND_ROOT);
 const COMMUNICATIONS_PERSISTENCE_ROOT = new URL('src/communications-persistence/src/', BACKEND_ROOT);
 const COMMUNICATIONS_RUNTIME_ROOT = new URL('src/communications-runtime/src/', BACKEND_ROOT);
@@ -34,8 +36,10 @@ test('Communications domain does not import integration or Blob implementations'
 });
 
 test('Communications first owner inventory is exact and owner-local implementations stay provider-free', async () => {
-  const [policySource, domainSources, persistenceSources, runtimeSources] = await Promise.all([
+  const [policySource, ingressSources, apiSources, domainSources, persistenceSources, runtimeSources] = await Promise.all([
     readFile(POLICY_PATH, 'utf8'),
+    rustSources(COMMUNICATIONS_INGRESS_ROOT),
+    rustSources(COMMUNICATIONS_API_ROOT),
     rustSources(COMMUNICATIONS_DOMAIN_ROOT),
     rustSources(COMMUNICATIONS_PERSISTENCE_ROOT),
     rustSources(COMMUNICATIONS_RUNTIME_ROOT),
@@ -65,7 +69,7 @@ test('Communications first owner inventory is exact and owner-local implementati
     'first_owner_v1 must not carry integration build units in its production inventory',
   );
 
-  for (const source of [...domainSources, ...persistenceSources, ...runtimeSources]) {
+  for (const source of [...ingressSources, ...apiSources, ...domainSources, ...persistenceSources, ...runtimeSources]) {
     for (const implementation of FORBIDDEN_INTEGRATION_IMPLEMENTATIONS) {
       assert.ok(
         !source.content.includes(implementation),
@@ -74,6 +78,7 @@ test('Communications first owner inventory is exact and owner-local implementati
     }
     assert.ok(!source.content.includes('references/backend-legacy'), `${source.path} uses legacy source`);
     assert.ok(!source.content.includes('references/'), `${source.path} uses reference fallback`);
+    assert.doesNotMatch(source.content, /\b(?:HashMap|BTreeMap|serde_json)\b/, `${source.path} uses a generic owner payload shape`);
   }
 
   const runtime = runtimeSources.map((source) => source.content).join('\n');
