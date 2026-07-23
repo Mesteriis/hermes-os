@@ -369,6 +369,48 @@ pub(super) fn assert_communications_transferred_body_projection(
             plaintext.to_vec(),
         )
         .expect("write source integration Blob content");
+    let rejected_draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
+        "managed-rejected-body-observation-1",
+        hermes_communications_ingress::SourceEnvelope {
+            provider: hermes_communications_ingress::ProviderProvenanceV1::Telegram,
+            external_record_id: "integration-private-body-record-rejected-1".to_owned(),
+            scope: Some(hermes_communications_ingress::SourceScopeEnvelope {
+                external_account_id: "integration-private-body-account-1".to_owned(),
+                external_conversation_id: Some("integration-private-body-conversation-1".to_owned()),
+                external_participant_id: None,
+                external_media_id: None,
+                external_reply_to_record_id: None,
+                external_forward_origin_record_id: None,
+            }),
+        },
+        hermes_communications_ingress::CommunicationEvidenceKindV1::ChatMessage,
+        hermes_communications_ingress::BodyAvailabilityV1::AdmittedBlob,
+        hermes_communications_ingress::CommunicationDirectionV1::Incoming,
+        Some(1_783_024_000),
+    )
+    .expect("build rejected admitted-body ingress draft");
+    let rejected_draft = hermes_communications_ingress::with_admitted_body_blob(
+        rejected_draft,
+        hermes_communications_ingress::BodyBlobReceiptV1 {
+            blob_ref: OPAQUE_BLOB_REFERENCE.to_owned(),
+            reference_id,
+            declared_bytes: u64::try_from(plaintext.len()).expect("fixture body size"),
+            sha256: [9; 32],
+            custody_transfer_source_proof: source_proof.clone(),
+        },
+    )
+    .expect("attach altered opaque Blob receipt");
+    let rejected_record = hermes_communications_ingress::build_observation_outbox_record_v1(
+        &rejected_draft,
+        &hermes_communications_ingress::ObservationEnvelopeContextV1 {
+            runtime_instance_id: "integration-test-runtime-1".to_owned(),
+            runtime_generation: 1,
+            module_id: "integration-test-runtime".to_owned(),
+            recorded_at_unix_seconds: 1_783_024_000,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("build altered admitted-body typed ingress envelope");
     let draft = hermes_communications_ingress::new_scoped_communication_observation_draft(
         "managed-admitted-body-observation-1",
         hermes_communications_ingress::SourceEnvelope {
@@ -425,6 +467,13 @@ pub(super) fn assert_communications_transferred_body_projection(
                     .await
                     .expect("connect disposable JetStream"),
             );
+            context
+                .publish(
+                    "hermes.observation.v1.communications.communication_observed.v1",
+                    rejected_record.exact_bytes().to_vec().into(),
+                )
+                .await
+                .expect("publish altered admitted-body typed ingress envelope");
             context
                 .publish(
                     "hermes.observation.v1.communications.communication_observed.v1",
@@ -495,7 +544,9 @@ pub(super) fn assert_communications_transferred_body_projection(
         let Some(QueryResult::ListConversationMessages(messages)) = messages.result else {
             panic!("Communications messages query result");
         };
-        if messages.messages.iter().any(|message| message.body_state == 4) {
+        let transferred = messages.messages.iter().any(|message| message.body_state == 4);
+        let rejected = messages.messages.iter().any(|message| message.body_state == 3);
+        if transferred && rejected {
             let public_payload = CommunicationsQueryResponseV1 {
                 result: Some(QueryResult::ListConversationMessages(messages)),
                 error_code: String::new(),
@@ -509,7 +560,10 @@ pub(super) fn assert_communications_transferred_body_projection(
             );
             return;
         }
-        assert!(std::time::Instant::now() < deadline, "transferred body message was not projected");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "custody transfer must retain a policy-rejected body without blocking a valid body"
+        );
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
 }
