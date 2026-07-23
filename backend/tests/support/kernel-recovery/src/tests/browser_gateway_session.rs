@@ -10,7 +10,7 @@ use hermes_gateway_protocol::{
 };
 use hermes_gateway_runtime::{
     BrowserAuthenticationRouter, BrowserPairingRouter, BrowserRealtimeSubscriptionSource,
-    ClientRealtimeSubscriptionV1, GatewayApplicationRouter,
+    ClientRealtimeSubscriptionV1, GatewayApplicationRouter, InMemoryBrowserRealtimeSource,
 };
 use hermes_gateway_session::{
     BrowserCredentialMaterialV1, BrowserGatewaySessionService, BrowserPairingManager,
@@ -161,6 +161,63 @@ fn authentication_http_fixture() -> AuthenticationHttpFixture {
         router,
         runtime,
     }
+}
+
+pub(super) fn admit_browser_test_device(
+    store: &Arc<SqliteControlStore>,
+    logical_owner_id: &str,
+) {
+    store
+        .admit_browser_device(
+            &BrowserDeviceEnrollmentV1::new(
+                hermes_kernel_control_store::BrowserDeviceEnrollmentInputV1 {
+                    owner_id: logical_owner_id.to_owned(),
+                    device_id: "browser-1".to_owned(),
+                    credential_id: vec![1],
+                    cose_public_key: valid_browser_cose_key(),
+                    browser_key_public_key: valid_browser_local_key(),
+                    rp_id: "hub.local".to_owned(),
+                    sign_count: 0,
+                    backup_eligible: false,
+                    backup_state: false,
+                },
+            )
+            .expect("valid browser enrollment"),
+            1,
+        )
+        .expect("admit browser device");
+}
+
+pub(super) fn authenticate_gateway_router(
+    router: &GatewayApplicationRouter<ControlStoreBrowserAuthority, InMemoryBrowserRealtimeSource>,
+    runtime: &tokio::runtime::Runtime,
+) -> String {
+    let begin = runtime.block_on(router.route(begin_authentication_request("https://hub.local")));
+    assert_eq!(begin.status(), StatusCode::OK);
+    let begin_body = runtime
+        .block_on(begin.into_body().collect())
+        .expect("begin response body")
+        .to_bytes();
+    let ceremony: serde_json::Value = serde_json::from_slice(&begin_body).expect("begin JSON");
+    let authentication_id = ceremony["authentication_id"].as_str().expect("authentication ID");
+    let challenge = ceremony["public_key"]["challenge"].as_str().expect("WebAuthn challenge");
+    let browser_key_challenge = ceremony["browser_key_challenge"].as_str().expect("browser key challenge");
+    let response = runtime.block_on(router.route(finish_authentication_request(
+        authentication_id,
+        &signed_browser_assertion(challenge, 1),
+        browser_key_challenge,
+    )));
+    assert_eq!(response.status(), StatusCode::OK);
+    response
+        .headers()
+        .get("set-cookie")
+        .expect("secure browser cookie")
+        .to_str()
+        .expect("cookie header")
+        .split(';')
+        .next()
+        .expect("session cookie pair")
+        .to_owned()
 }
 
 fn begin_browser_authentication(fixture: &AuthenticationHttpFixture) -> (String, String, String) {

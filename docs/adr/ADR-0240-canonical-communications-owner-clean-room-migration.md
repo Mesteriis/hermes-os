@@ -16,7 +16,10 @@ ingress observation and its resulting canonical owner projection through the
 managed owner query route, and the exact canonical outbox envelope on its
 catalog NATS subject. The same live contour redelivers the exact ingress bytes
 and proves inbox idempotency by observing no second canonical event. External
-authenticated Core Gateway client conformance remains open.
+authenticated Core Gateway application routing is also covered: a logical
+owner Browser WebAuthn session reaches the descriptor-declared ConnectRPC
+Communications query route and the managed runtime response. Listener/TLS
+transport coverage remains Gateway platform evidence.
 
 Depends on:
 

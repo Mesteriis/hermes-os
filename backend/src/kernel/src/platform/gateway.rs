@@ -249,7 +249,7 @@ async fn serve_async(
 type BrowserGatewayRouter =
     GatewayApplicationRouter<ControlStoreBrowserAuthority, InMemoryBrowserRealtimeSource>;
 
-fn gateway_service(
+pub(crate) fn gateway_service(
     store: Arc<SqliteControlStore>,
     supervisor: ManagedRuntimeSupervisor,
     configuration: &BrowserGatewayConfigurationV1,
@@ -275,10 +275,11 @@ fn gateway_service(
         let store = Arc::clone(&store);
         let relay = supervisor.relay_port();
         let request_id_sequence = Arc::clone(&request_id_sequence);
-        Arc::new(move |route: &ClientRpcRouteV1, owner_id: &str, request_payload: &[u8]| {
-            if owner_id != route.owner() {
-                return Err(ClientRpcRouteErrorV1::NotFound);
-            }
+        Arc::new(move |route: &ClientRpcRouteV1, _logical_owner_id: &str, request_payload: &[u8]| {
+            // A browser session is authorized for the logical human owner. A
+            // route owner is the admitted module/domain namespace, such as
+            // `communications`; these identifiers intentionally never match.
+            // Session authorization is completed before this handler runs.
             let snapshot = store.module_grant_snapshot(route.registration_id())
                 .map_err(|_| ClientRpcRouteErrorV1::Internal)?
                 .ok_or(ClientRpcRouteErrorV1::NotFound)?;

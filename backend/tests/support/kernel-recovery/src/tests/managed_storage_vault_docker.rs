@@ -151,6 +151,14 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
         std::env::set_var("HERMES_TEST_KERNEL_EXECUTABLE", release.kernel());
     }
     let store = Arc::new(configured_communications_store(&root, release.kernel()));
+    store
+        .claim_initial_owner(&hermes_kernel_control_store::InitialOwnerIdentity::new(
+            "owner-1",
+            "desktop-1",
+            [4; 65],
+        ))
+        .expect("claim logical browser owner");
+    super::browser_gateway_session::admit_browser_test_device(&store, "owner-1");
     let _ = FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
@@ -187,12 +195,78 @@ fn managed_communications_domain_starts_with_owner_local_storage_and_events() {
     assert_communications_ingress_delivery(&store, &supervisor);
     assert_communications_query_delivery(&store, &supervisor);
     assert_communications_search_query_delivery(&store, &supervisor);
+    assert_communications_gateway_query_delivery(&store, &supervisor, &root);
 
     supervisor.shutdown().expect("stop managed processes");
     unsafe {
         std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
     }
     std::fs::remove_dir_all(root).expect("remove fixture");
+}
+
+fn assert_communications_gateway_query_delivery(
+    store: &Arc<SqliteControlStore>,
+    supervisor: &ManagedRuntimeSupervisor,
+    root: &std::path::Path,
+) {
+    use http_body_util::BodyExt as _;
+
+    let configuration = crate::platform::gateway::BrowserGatewayConfigurationV1::new(
+        "127.0.0.1:9443".parse().expect("loopback Gateway address"),
+        "https://hub.local".to_owned(),
+        "hub.local".to_owned(),
+        root.join("gateway-cert.der"),
+        root.join("gateway-key.der"),
+    )
+    .expect("Gateway configuration");
+    let router = crate::platform::gateway::gateway_service(
+        Arc::clone(store),
+        supervisor.clone(),
+        &configuration,
+        None,
+    )
+    .expect("compose owner Gateway routes");
+    let runtime = tokio::runtime::Runtime::new().expect("Gateway test runtime");
+    let cookie = super::browser_gateway_session::authenticate_gateway_router(&router, &runtime);
+    let payload = prost::Message::encode_to_vec(
+        &hermes_communications_api::query_wire::CommunicationsQueryRequestV1 {
+            protocol_major: 1,
+            operation: Some(
+                hermes_communications_api::query_wire::communications_query_request_v1::Operation::ListAccounts(
+                    hermes_communications_api::query_wire::ListAccountsRequestV1 { limit: 16 },
+                ),
+            ),
+        },
+    );
+    let response = runtime.block_on(router.route(
+        hyper::Request::builder()
+            .method("POST")
+            .uri("/hermes.communications.query.v1.CommunicationsQueryService/Query")
+            .header("content-type", "application/connect+proto")
+            .header("cookie", cookie)
+            .body(http_body_util::Full::new(hyper::body::Bytes::from(payload)))
+            .expect("Gateway owner query request"),
+    ));
+    assert_eq!(response.status(), hyper::StatusCode::OK);
+    assert_eq!(
+        response.headers().get("content-type").and_then(|value| value.to_str().ok()),
+        Some("application/proto"),
+    );
+    assert_eq!(
+        response.headers().get("connect-protocol-version").and_then(|value| value.to_str().ok()),
+        Some("1"),
+    );
+    let bytes = runtime
+        .block_on(response.into_body().collect())
+        .expect("Gateway owner query response")
+        .to_bytes();
+    let response = hermes_communications_api::query_wire::CommunicationsQueryResponseV1::decode(bytes.as_ref())
+        .expect("decode Gateway Communications query response");
+    assert!(matches!(
+        response.result,
+        Some(hermes_communications_api::query_wire::communications_query_response_v1::Result::ListAccounts(accounts))
+            if !accounts.accounts.is_empty()
+    ));
 }
 
 struct SchedulerRecoveryFixture {
