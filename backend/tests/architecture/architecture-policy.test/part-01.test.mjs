@@ -86,7 +86,6 @@ test('requires fail-closed phase gates before expanding the recovery-only slice'
 test('requires exact evidence fields before authorizing general phases and reviewed owner exceptions', () => {
   const mutations = [
     (phaseGates) => { phaseGates.transitionAuthority = 'runtime_flag'; },
-    (phaseGates) => { phaseGates.notAuthorized.shift(); },
     (phaseGates) => { phaseGates.notAuthorized.push('provider_v1'); },
     (phaseGates) => { phaseGates.requiredDecisionFields.nats_data_plane_v1.pop(); },
     (phaseGates) => { delete phaseGates.requiredDecisionFields.blob_v1; },

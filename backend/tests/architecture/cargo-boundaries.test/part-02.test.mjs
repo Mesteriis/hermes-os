@@ -475,10 +475,10 @@ test('keeps WhatsApp implementation in the hidden host WebView boundary', () => 
       role: 'integration',
       owner: 'whatsapp',
       surface: 'runtime',
-    }),
+    }, [dependency('wry')]),
   ];
 
-  assert.ok(codes(validateCargoMetadata(canonicalPolicyForTests(), metadata(packages))).has('host_only_integration'));
+  assert.ok(codes(validateCargoMetadata(canonicalPolicyForTests(), metadata(packages))).has('host_execution_dependency'));
 });
 
 

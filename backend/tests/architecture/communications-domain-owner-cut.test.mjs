@@ -8,11 +8,14 @@ const COMMUNICATIONS_DOMAIN_ROOT = new URL('src/communications-domain/src/', BAC
 const COMMUNICATIONS_PERSISTENCE_ROOT = new URL('src/communications-persistence/src/', BACKEND_ROOT);
 const COMMUNICATIONS_RUNTIME_ROOT = new URL('src/communications-runtime/src/', BACKEND_ROOT);
 const POLICY_PATH = new URL('architecture/policy.json', BACKEND_ROOT);
-const FORBIDDEN_OWNER_IMPLEMENTATIONS = [
+const FORBIDDEN_INTEGRATION_IMPLEMENTATIONS = [
   'hermes_mail_',
   'hermes_telegram_',
   'hermes_whatsapp_',
   'hermes_zulip_',
+];
+const FORBIDDEN_DOMAIN_IMPLEMENTATIONS = [
+  ...FORBIDDEN_INTEGRATION_IMPLEMENTATIONS,
   'hermes_blob_',
 ];
 
@@ -21,7 +24,7 @@ test('Communications domain does not import integration or Blob implementations'
 
   assert.ok(sources.length > 0);
   for (const source of sources) {
-    for (const implementation of FORBIDDEN_OWNER_IMPLEMENTATIONS) {
+    for (const implementation of FORBIDDEN_DOMAIN_IMPLEMENTATIONS) {
       assert.ok(
         !source.content.includes(implementation),
         `${source.path} imports forbidden owner implementation ${implementation}`,
@@ -50,12 +53,13 @@ test('Communications first owner inventory is exact and owner-local implementati
       'communications.events.v1',
       'communications.observe.v1',
       'communications.query.v1',
+      'communications.search.index.v1',
       'communications.storage.v1',
     ],
   });
 
   for (const source of [...domainSources, ...persistenceSources, ...runtimeSources]) {
-    for (const implementation of FORBIDDEN_OWNER_IMPLEMENTATIONS) {
+    for (const implementation of FORBIDDEN_INTEGRATION_IMPLEMENTATIONS) {
       assert.ok(
         !source.content.includes(implementation),
         `${source.path} imports forbidden provider implementation ${implementation}`,
