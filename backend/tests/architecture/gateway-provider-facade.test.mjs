@@ -8,6 +8,8 @@ const GATEWAY_RUNTIME_ROOT = new URL('src/api/gateway/runtime/src/', BACKEND_ROO
 const GATEWAY_CONTRACT_ROOT = new URL('src/api/gateway/contracts/proto/', BACKEND_ROOT);
 const GATEWAY_CONTRACT_MANIFEST = new URL('src/api/gateway/contracts/Cargo.toml', BACKEND_ROOT);
 const KERNEL_MANIFEST = new URL('src/kernel/Cargo.toml', BACKEND_ROOT);
+const KERNEL_GATEWAY = new URL('src/kernel/src/platform/gateway.rs', BACKEND_ROOT);
+const GATEWAY_CONTRACT_BUILD = new URL('src/api/gateway/contracts/build.rs', BACKEND_ROOT);
 const COMMUNICATIONS_QUERY_CONTRACT = new URL(
   'src/communications-api/proto/hermes/communications/query/v1/query.proto',
   BACKEND_ROOT,
@@ -91,6 +93,20 @@ test('Communications query remains an owner contract, not a Gateway wrapper serv
   assert.match(ownerContract, /service CommunicationsQueryService/);
   for (const contract of gatewayContracts) {
     assert.doesNotMatch(contract, /CommunicationsQueryService/);
+  }
+});
+
+test('Gateway route composition is owner-neutral and has no owner schema build edge', async () => {
+  const [kernelGateway, gatewayBuild] = await Promise.all([
+    readFile(KERNEL_GATEWAY, 'utf8'),
+    readFile(GATEWAY_CONTRACT_BUILD, 'utf8'),
+  ]);
+
+  for (const marker of ['COMMUNICATIONS_', 'CommunicationsQuery', 'communications.query']) {
+    assert.ok(!kernelGateway.includes(marker), `Kernel Gateway hardcodes owner route marker ${marker}`);
+  }
+  for (const marker of ['communications-api', 'communications_query_schema', 'communications-query-v1.bin']) {
+    assert.ok(!gatewayBuild.includes(marker), `Gateway contracts retain owner schema build edge ${marker}`);
   }
 });
 
