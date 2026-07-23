@@ -19,7 +19,7 @@ use crate::tests::platform_vault::live as vault_fixture;
 #[ignore = "builds and launches the real Blob and Vault runtime binaries"]
 fn managed_blob_writes_and_reads_through_the_live_vault_route() {
     let root = unique_target_root("hermes-blob-data-path");
-    let data = vault_fixture::private_directory(root.join("kernel"));
+    let data = vault_fixture::private_directory(short_runtime_directory());
     let runtime = short_runtime_directory();
     vault_fixture::initialize_vault(&data);
     let release = installed_release(&root);
@@ -34,7 +34,7 @@ fn managed_blob_writes_and_reads_through_the_live_vault_route() {
     let blob_generation =
         launch::start_from_kernel(&supervisor, &store, release.kernel(), &data, &runtime)
             .expect("start Blob service");
-    let socket = runtime.join("blob").join("data.sock");
+    let socket = launch::data_socket_path(&data);
     let signer = FileDeviceSigner::open_for_instance(&data).expect("open Kernel signer");
 
     let write = request(
@@ -49,6 +49,7 @@ fn managed_blob_writes_and_reads_through_the_live_vault_route() {
         exchange(&socket, write.clone()).unwrap_or_else(|error| failure(&supervisor, error));
     assert!(written.accepted && written.error_code.is_empty());
     assert_denied(exchange(&socket, write).unwrap_or_else(|error| failure(&supervisor, error)));
+    assert_cross_capability_read_denied(&socket, &signer, blob_generation, &supervisor);
     assert_stale_generation_denied(&socket, &signer, blob_generation, &supervisor);
     let read = exchange(
         &socket,
@@ -67,6 +68,7 @@ fn managed_blob_writes_and_reads_through_the_live_vault_route() {
 
     supervisor.shutdown().expect("stop managed children");
     std::fs::remove_dir_all(root).expect("remove fixture directory");
+    std::fs::remove_dir_all(data).expect("remove short Kernel data directory");
     std::fs::remove_dir_all(runtime).expect("remove short runtime directory");
 }
 
@@ -177,6 +179,36 @@ fn assert_stale_generation_denied(
         b"hello",
     );
     assert_denied(exchange(socket, stale).unwrap_or_else(|error| failure(supervisor, error)));
+}
+
+fn assert_cross_capability_read_denied(
+    socket: &std::path::Path,
+    signer: &FileDeviceSigner,
+    blob_generation: u64,
+    supervisor: &ManagedRuntimeSupervisor,
+) {
+    let mut cross_capability = request(
+        signer,
+        BlobDataOperationV1::BlobDataOperationReadRangeV1,
+        [5; 16],
+        [6; 32],
+        blob_generation,
+        b"",
+    );
+    let grant = cross_capability.grant.as_mut().expect("Blob grant");
+    grant.registration_id = "communications-runtime".to_owned();
+    grant.capability_id = "communications.blob.v1".to_owned();
+    resign_grant(signer, grant);
+    assert_denied(
+        exchange(socket, cross_capability).unwrap_or_else(|error| failure(supervisor, error)),
+    );
+}
+
+fn resign_grant(signer: &FileDeviceSigner, grant: &mut BlobDataSessionGrantV1) {
+    grant.kernel_authorization_signature_raw.clear();
+    let mut message = b"hermes.blob-data-session.v1\0".to_vec();
+    message.extend_from_slice(&grant.encode_to_vec());
+    grant.kernel_authorization_signature_raw = signer.sign(&message).to_vec();
 }
 
 fn write_frame(stream: &mut UnixStream, bytes: &[u8]) -> Result<(), String> {
