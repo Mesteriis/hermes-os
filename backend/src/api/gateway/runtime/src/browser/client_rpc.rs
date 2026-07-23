@@ -51,7 +51,6 @@ impl<A> ClientRpcRouter<A> where A: BrowserAuthenticationAuthority {
         if body.is_empty() { return invalid_argument(); }
         let owner_id = session.owner_id().to_owned(); let route = self.route.clone(); let handler = Arc::clone(&self.handler);
         let response_payload = match timeout_at(deadline, task::spawn_blocking(move || handler(&route, &owner_id, &body))).await { Ok(Ok(Ok(response))) => response, Ok(Ok(Err(error))) => return route_error(error), Ok(Err(_)) => return internal(), Err(_) => return deadline_exceeded() };
-        if response_payload.is_empty() { return unavailable(); }
         protobuf_response(response_payload)
     }
 }
@@ -67,3 +66,19 @@ fn unavailable() -> GatewayHttpResponse { connect_error(StatusCode::SERVICE_UNAV
 fn internal() -> GatewayHttpResponse { connect_error(StatusCode::INTERNAL_SERVER_ERROR, "internal") }
 fn deadline_exceeded() -> GatewayHttpResponse { connect_error(StatusCode::GATEWAY_TIMEOUT, "deadline_exceeded") }
 fn connect_error(status: StatusCode, code: &'static str) -> GatewayHttpResponse { Response::builder().status(status).header(CACHE_CONTROL, "no-store").header(CONNECT_PROTOCOL_VERSION, "1").header(CONNECT_ERROR_CODE, code).body(full_gateway_body(Bytes::new())).expect("Gateway Connect error is valid") }
+
+#[cfg(test)]
+mod tests {
+    use http_body_util::BodyExt;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn preserves_a_valid_empty_protobuf_response() {
+        let response = protobuf_response(Vec::new());
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get(CONTENT_TYPE).and_then(|value| value.to_str().ok()), Some("application/proto"));
+        assert!(response.into_body().collect().await.expect("response body").to_bytes().is_empty());
+    }
+}
