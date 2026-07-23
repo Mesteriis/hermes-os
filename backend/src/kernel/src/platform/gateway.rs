@@ -7,11 +7,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use hermes_gateway_runtime::{
-    BrowserBootstrapRouter, BrowserPairingRouter, ClientRpcRouteErrorV1,
-    ClientRpcRouteHandler, ClientRpcRouteV1, ClientRpcRouter, InMemoryBrowserRealtimeSource,
-    GatewayApplicationRouter, GatewayHttp3ListenerV1, GatewayLanDevelopmentListenerV1,
-    GatewayLoopbackTlsListenerV1, GatewayTechnicalRouter,
-    GatewayTlsListenerV1, PairedRemoteProfileV1, SharedBrowserPairingManager,
+    BrowserBootstrapRouter, BrowserPairingRouter, ClientRpcRouteErrorV1, ClientRpcRouteHandler,
+    ClientRpcRouteV1, ClientRpcRouter, GatewayApplicationRouter, GatewayHttp3ListenerV1,
+    GatewayLanDevelopmentListenerV1, GatewayLoopbackTlsListenerV1, GatewayTechnicalRouter,
+    GatewayTlsListenerV1, InMemoryBrowserRealtimeSource, PairedRemoteProfileV1,
+    SharedBrowserPairingManager,
 };
 use hermes_gateway_session::{
     BrowserGatewaySessionService, BrowserPairingChallengeV1, BrowserPairingManager,
@@ -27,7 +27,7 @@ use tokio::sync::watch;
 
 use crate::identity::browser_gateway::ControlStoreBrowserAuthority;
 use crate::modules::capability::router::{
-    route_managed_client_request, ManagedCapabilityRouteRequest,
+    ManagedCapabilityRouteRequest, route_managed_client_request,
 };
 use crate::platform::macos::native_launch;
 use crate::runtime::lifecycle::supervisor::ManagedRuntimeSupervisor;
@@ -259,12 +259,14 @@ pub(crate) fn gateway_service(
     let verifier =
         BrowserWebauthnVerifier::new(&configuration.rp_id, &configuration.exact_https_origin)
             .map_err(|_| "browser Gateway origin or RP ID is invalid".to_owned())?;
-    let session = Arc::new(BrowserGatewaySessionService::new(
-        authority,
-        verifier,
-        configuration.exact_https_origin.clone(),
-    )
-    .map_err(|_| "browser Gateway session service is unavailable".to_owned())?);
+    let session = Arc::new(
+        BrowserGatewaySessionService::new(
+            authority,
+            verifier,
+            configuration.exact_https_origin.clone(),
+        )
+        .map_err(|_| "browser Gateway session service is unavailable".to_owned())?,
+    );
     let realtime = InMemoryBrowserRealtimeSource::new(1_024)
         .map_err(|_| "browser Gateway realtime source is unavailable".to_owned())?;
     let request_id_sequence = Arc::new(AtomicU64::new(0));
@@ -275,53 +277,81 @@ pub(crate) fn gateway_service(
         let store = Arc::clone(&store);
         let relay = supervisor.relay_port();
         let request_id_sequence = Arc::clone(&request_id_sequence);
-        Arc::new(move |route: &ClientRpcRouteV1, _logical_owner_id: &str, request_payload: &[u8]| {
-            // A browser session is authorized for the logical human owner. A
-            // route owner is the admitted module/domain namespace, such as
-            // `communications`; these identifiers intentionally never match.
-            // Session authorization is completed before this handler runs.
-            let snapshot = store.module_grant_snapshot(route.registration_id())
-                .map_err(|_| ClientRpcRouteErrorV1::Internal)?
-                .ok_or(ClientRpcRouteErrorV1::NotFound)?;
-            if snapshot.registration().owner_id() != route.owner() {
-                return Err(ClientRpcRouteErrorV1::NotFound);
-            }
-            let grants = snapshot.effective_grants().ok_or(ClientRpcRouteErrorV1::NotFound)?;
-            if grants.capability_ids().binary_search_by(|candidate| candidate.as_str().cmp(route.capability_id())).is_err() {
-                return Err(ClientRpcRouteErrorV1::NotFound);
-            }
-            let launch = store
-                .effective_managed_launch_record(route.registration_id())
-                .map_err(|_| ClientRpcRouteErrorV1::Internal)?
-                .ok_or(ClientRpcRouteErrorV1::Unavailable)?;
-            let request_id = request_id_sequence.fetch_add(1, Ordering::Relaxed).max(1);
-            let request = encode_owner_client_rpc_module_request(
-                snapshot.registration().module_id(), route, request_id, request_payload,
-            ).map_err(|_| ClientRpcRouteErrorV1::InvalidArgument)?;
-            let route = ManagedCapabilityRouteRequest::new(
-                snapshot.registration().registration_id(),
-                launch.runtime_instance_id(),
-                launch.runtime_generation(),
-                grants.grant_epoch(),
-                route.capability_id(),
-                &request,
-            );
-            let response_bytes = route_managed_client_request(&*store, &relay, &route)
-                .map_err(map_managed_client_rpc_route_error)?;
-            let response = ModuleClientResponseV1::decode(response_bytes.as_slice())
-                .map_err(|_| ClientRpcRouteErrorV1::Internal)?;
-            if !response.error_code.is_empty() {
-                return Err(ClientRpcRouteErrorV1::Internal);
-            }
-            Ok(response.response_payload)
-        })
+        Arc::new(
+            move |route: &ClientRpcRouteV1, _logical_owner_id: &str, request_payload: &[u8]| {
+                // A browser session is authorized for the logical human owner. A
+                // route owner is the admitted module/domain namespace, such as
+                // `communications`; these identifiers intentionally never match.
+                // Session authorization is completed before this handler runs.
+                let snapshot = store
+                    .module_grant_snapshot(route.registration_id())
+                    .map_err(|_| ClientRpcRouteErrorV1::Internal)?
+                    .ok_or(ClientRpcRouteErrorV1::NotFound)?;
+                if snapshot.registration().owner_id() != route.owner() {
+                    return Err(ClientRpcRouteErrorV1::NotFound);
+                }
+                let grants = snapshot
+                    .effective_grants()
+                    .ok_or(ClientRpcRouteErrorV1::NotFound)?;
+                if grants
+                    .capability_ids()
+                    .binary_search_by(|candidate| candidate.as_str().cmp(route.capability_id()))
+                    .is_err()
+                {
+                    return Err(ClientRpcRouteErrorV1::NotFound);
+                }
+                let launch = store
+                    .effective_managed_launch_record(route.registration_id())
+                    .map_err(|_| ClientRpcRouteErrorV1::Internal)?
+                    .ok_or(ClientRpcRouteErrorV1::Unavailable)?;
+                let request_id = request_id_sequence.fetch_add(1, Ordering::Relaxed).max(1);
+                let request = encode_owner_client_rpc_module_request(
+                    snapshot.registration().module_id(),
+                    route,
+                    request_id,
+                    request_payload,
+                )
+                .map_err(|_| ClientRpcRouteErrorV1::InvalidArgument)?;
+                let route = ManagedCapabilityRouteRequest::new(
+                    snapshot.registration().registration_id(),
+                    launch.runtime_instance_id(),
+                    launch.runtime_generation(),
+                    grants.grant_epoch(),
+                    route.capability_id(),
+                    &request,
+                );
+                let response_bytes = route_managed_client_request(&*store, &relay, &route)
+                    .map_err(map_managed_client_rpc_route_error)?;
+                let response = ModuleClientResponseV1::decode(response_bytes.as_slice())
+                    .map_err(|_| ClientRpcRouteErrorV1::Internal)?;
+                if !response.error_code.is_empty() {
+                    return Err(ClientRpcRouteErrorV1::Internal);
+                }
+                Ok(response.response_payload)
+            },
+        )
     };
-    let client_rpc_routes = client_rpc_routes.into_iter().map(|route| {
-        ClientRpcRouter::new(Arc::clone(&session), ClientRpcRouteV1::new(
-            route.registration_id(), route.capability_id(), route.owner(), route.contract_name(),
-            route.contract_major(), route.contract_revision(), *route.contract_schema_sha256(), route.path(),
-        ), Arc::clone(&client_rpc_handler))
-    }).collect();
+    let client_rpc_routes = client_rpc_routes
+        .into_iter()
+        .map(|route| {
+            ClientRpcRouter::new(
+                Arc::clone(&session),
+                ClientRpcRouteV1::new(
+                    route.registration_id(),
+                    route.capability_id(),
+                    route.owner(),
+                    route.contract_name(),
+                    hermes_gateway_runtime::ClientRpcContractVersionV1 {
+                        major: route.contract_major(),
+                        revision: route.contract_revision(),
+                    },
+                    *route.contract_schema_sha256(),
+                    route.path(),
+                ),
+                Arc::clone(&client_rpc_handler),
+            )
+        })
+        .collect();
     let mut service = GatewayApplicationRouter::new(true, Arc::clone(&session), realtime)
         .with_client_rpc_routes(client_rpc_routes)
         .map_err(str::to_owned)?;

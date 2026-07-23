@@ -7,7 +7,10 @@ mod session;
 
 pub use auth::{BrowserAuthenticationRouter, SharedBrowserGatewaySessionService};
 pub use bootstrap::BrowserBootstrapRouter;
-pub use client_rpc::{ClientRpcRouteErrorV1, ClientRpcRouteHandler, ClientRpcRouteV1, ClientRpcRouter};
 pub use client_bootstrap::ClientBootstrapRouter;
+pub use client_rpc::{
+    ClientRpcContractVersionV1, ClientRpcRouteErrorV1, ClientRpcRouteHandler, ClientRpcRouteV1,
+    ClientRpcRouter,
+};
 pub use pairing::{BrowserPairingRouter, SharedBrowserPairingManager};
 pub use session::BrowserSessionStatusRouter;

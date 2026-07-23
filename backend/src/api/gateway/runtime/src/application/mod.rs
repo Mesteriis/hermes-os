@@ -18,8 +18,7 @@ use hyper::{Response, StatusCode};
 use crate::{
     BrowserAuthenticationRouter, BrowserBootstrapRouter, BrowserPairingRouter,
     BrowserRealtimeRouter, BrowserRealtimeSubscriptionSource, BrowserSessionStatusRouter,
-    ClientRpcRouter, GatewayHttpResponse, GatewayTechnicalRouter,
-    ClientBootstrapRouter,
+    ClientBootstrapRouter, ClientRpcRouter, GatewayHttpResponse, GatewayTechnicalRouter,
     SharedBrowserGatewaySessionService,
 };
 
@@ -97,8 +96,10 @@ where
         self
     }
 
-    #[must_use]
-    pub fn with_client_rpc_routes(mut self, routes: Vec<ClientRpcRouter<A>>) -> Result<Self, &'static str> {
+    pub fn with_client_rpc_routes(
+        mut self,
+        routes: Vec<ClientRpcRouter<A>>,
+    ) -> Result<Self, &'static str> {
         let mut paths = std::collections::BTreeSet::new();
         if !routes.iter().all(|route| paths.insert(route.path())) {
             return Err("duplicate owner ClientRpc route");
@@ -177,7 +178,11 @@ where
         if path == CLIENT_BOOTSTRAP_PATH {
             return self.client_bootstrap.route(request).await;
         }
-        if let Some(router) = self.client_rpc_routes.iter().find(|router| router.path() == path) {
+        if let Some(router) = self
+            .client_rpc_routes
+            .iter()
+            .find(|router| router.path() == path)
+        {
             return router.route(request).await;
         }
         if path.starts_with(AUTHENTICATION_PREFIX) {
@@ -257,14 +262,6 @@ where
         path if client_rpc_routes.iter().any(|route| route.path() == path) => "client_rpc",
         _ => "unknown",
     }
-}
-
-fn not_found() -> GatewayHttpResponse {
-    Response::builder()
-        .status(StatusCode::NOT_FOUND)
-        .header("cache-control", "no-store")
-        .body(crate::full_gateway_body(Bytes::from_static(b"unimplemented\n")))
-        .expect("Gateway not found response is valid")
 }
 
 fn forbidden() -> GatewayHttpResponse {

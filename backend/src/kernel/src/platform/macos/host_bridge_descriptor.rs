@@ -2,7 +2,7 @@
 
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 use hermes_runtime_protocol::{
@@ -54,7 +54,11 @@ pub(crate) fn publish(
         .mode(0o400)
         .open(&temporary)
         .map_err(|_| "managed host route descriptor is unavailable".to_owned())?;
-    if file.write_all(&configuration.encode_to_vec()).and_then(|_| file.sync_all()).is_err() {
+    if file
+        .write_all(&configuration.encode_to_vec())
+        .and_then(|_| file.sync_all())
+        .is_err()
+    {
         let _ = std::fs::remove_file(&temporary);
         return Err("managed host route descriptor is unavailable".to_owned());
     }
@@ -99,6 +103,8 @@ fn current_uid() -> u32 {
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
     use super::*;
 
     #[test]
