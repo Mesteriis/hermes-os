@@ -1414,17 +1414,23 @@ fn parse_message_media(content: Option<&Value>) -> Option<TelegramMessageMedia> 
         "messageDocument" => (
             TelegramMediaKind::Document,
             content.get("document"),
-            content.get("document").and_then(|value| value.get("document")),
+            content
+                .get("document")
+                .and_then(|value| value.get("document")),
         ),
         "messageAnimation" => (
             TelegramMediaKind::Animation,
             content.get("animation"),
-            content.get("animation").and_then(|value| value.get("animation")),
+            content
+                .get("animation")
+                .and_then(|value| value.get("animation")),
         ),
         "messageVoiceNote" => (
             TelegramMediaKind::VoiceNote,
             content.get("voice_note"),
-            content.get("voice_note").and_then(|value| value.get("voice")),
+            content
+                .get("voice_note")
+                .and_then(|value| value.get("voice")),
         ),
         _ => return None,
     };
@@ -1445,7 +1451,7 @@ fn parse_message_media(content: Option<&Value>) -> Option<TelegramMessageMedia> 
         content_type: metadata
             .and_then(|value| value.get("mime_type"))
             .and_then(Value::as_str)
-            .filter(|value| valid_content_type(value))
+            .filter(valid_content_type)
             .map(ToOwned::to_owned),
     })
 }
@@ -1920,7 +1926,9 @@ impl TdJsonLibrary {
     /// No host-library discovery is permitted for a managed runtime.
     pub fn load_exact(path: &Path) -> Result<Self, TdlibError> {
         if !path.is_absolute() {
-            return Err(TdlibError::Protocol("TDLib artifact path is not absolute".to_owned()));
+            return Err(TdlibError::Protocol(
+                "TDLib artifact path is not absolute".to_owned(),
+            ));
         }
         let metadata = std::fs::symlink_metadata(path)
             .map_err(|_| TdlibError::Protocol("TDLib artifact is unavailable".to_owned()))?;
