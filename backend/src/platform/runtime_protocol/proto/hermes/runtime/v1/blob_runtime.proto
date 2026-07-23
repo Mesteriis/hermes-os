@@ -61,6 +61,8 @@ message BlobCustodySourceProofV1 {
   uint64 issued_at_unix_ms = 13;
   uint64 expires_at_unix_ms = 14;
   bytes kernel_authorization_signature_raw = 15;
+  BlobBackupClassV1 backup_class = 16;
+  uint64 reference_expires_at_unix_ms = 17;
 }
 
 // One-use Kernel authorization for an internal Blob rewrap from the source
@@ -108,6 +110,7 @@ message BlobDataRequestV1 {
   oneof operation {
     BlobDataWriteRequestV1 write = 3;
     BlobDataReadRangeRequestV1 read_range = 4;
+    BlobDataCustodyTransferRequestV1 custody_transfer = 5;
   }
 }
 
@@ -116,6 +119,11 @@ message BlobDataWriteRequestV1 { bytes plaintext = 1; }
 message BlobDataReadRangeRequestV1 {
   uint64 start = 1;
   uint64 end_exclusive = 2;
+}
+
+message BlobDataCustodyTransferRequestV1 {
+  BlobCustodyTransferGrantV1 grant = 1;
+  bytes channel_binding = 2;
 }
 
 message BlobDataResponseV1 {

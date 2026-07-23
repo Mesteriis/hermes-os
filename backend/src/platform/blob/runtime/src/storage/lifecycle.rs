@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use hermes_blob_protocol::{BlobAccessFenceV1, BlobQuotaGrantV1, BlobRangeV1, BlobRefV1};
+use sha2::{Digest, Sha256};
 
 use crate::lease::BlobKeyLeaseV1;
 use crate::metadata::{BlobDeletionReservationV1, BlobMetadataError, BlobMetadataLedger};
@@ -103,6 +104,68 @@ impl BlobContentLifecycleStore {
             .map_err(BlobLifecycleError::Storage)
     }
 
+    /// Re-encrypts verified source content into a receiver-owned reference.
+    /// Plaintext remains inside Blob runtime and the source object is retained.
+    pub fn custody_transfer(
+        &self,
+        source_reference: &BlobRefV1,
+        source_access: &BlobAccessFenceV1,
+        source_lease: &BlobKeyLeaseV1,
+        target_reference: &BlobRefV1,
+        target_access: &BlobAccessFenceV1,
+        target_quota: &BlobQuotaGrantV1,
+        target_lease: &BlobKeyLeaseV1,
+        expected_plaintext_sha256: &[u8; 32],
+        now_unix_ms: u64,
+    ) -> Result<(), BlobLifecycleError> {
+        let full_source = BlobRangeV1::new(
+            0,
+            source_reference.declared_size(),
+            source_reference.declared_size(),
+        )
+        .map_err(|_| BlobLifecycleError::Integrity)?;
+        let plaintext = self.read_range(
+            source_reference,
+            source_access,
+            source_lease,
+            full_source,
+            now_unix_ms,
+        )?;
+        if Sha256::digest(&plaintext).as_slice() != expected_plaintext_sha256 {
+            return Err(BlobLifecycleError::Integrity);
+        }
+        match self.write_new(
+            target_reference,
+            target_access,
+            target_quota,
+            target_lease,
+            &plaintext,
+            now_unix_ms,
+        ) {
+            Ok(()) => Ok(()),
+            Err(BlobLifecycleError::Metadata(BlobMetadataError::AlreadyExists))
+            | Err(BlobLifecycleError::Storage(BlobStorageError::AlreadyExists)) => {
+                let full_target = BlobRangeV1::new(
+                    0,
+                    target_reference.declared_size(),
+                    target_reference.declared_size(),
+                )
+                .map_err(|_| BlobLifecycleError::Integrity)?;
+                let existing = self.read_range(
+                    target_reference,
+                    target_access,
+                    target_lease,
+                    full_target,
+                    now_unix_ms,
+                )?;
+                (Sha256::digest(existing).as_slice() == expected_plaintext_sha256)
+                    .then_some(())
+                    .ok_or(BlobLifecycleError::Integrity)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     pub fn reserve_deletion(
         &self,
         reference: &BlobRefV1,
@@ -199,6 +262,7 @@ impl BlobContentLifecycleStore {
 
 #[derive(Debug)]
 pub enum BlobLifecycleError {
+    Integrity,
     Metadata(BlobMetadataError),
     Storage(BlobStorageError),
 }

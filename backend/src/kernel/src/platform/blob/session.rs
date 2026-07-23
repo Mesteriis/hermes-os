@@ -320,6 +320,8 @@ fn issue_custody_source_proof(
         issued_at_unix_ms: now_unix_ms,
         expires_at_unix_ms,
         kernel_authorization_signature_raw: Vec::new(),
+        backup_class: grant.backup_class,
+        reference_expires_at_unix_ms: grant.reference_expires_at_unix_ms,
     };
     let mut message = b"hermes.blob-custody-source-proof.v1\0".to_vec();
     message.extend_from_slice(&proof.encode_to_vec());

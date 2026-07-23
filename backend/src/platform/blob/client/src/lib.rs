@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use hermes_blob_client_contract::{BlobReadError, BlobReadPort};
 use hermes_runtime_protocol::v1::{
-    BlobCustodyTransferGrantV1, BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1,
+    BlobCustodyTransferGrantV1, BlobDataCustodyTransferRequestV1, BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1, BlobDataSessionGrantV1,
     BlobDataWriteRequestV1, BlobDataOperationV1,
     ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
     ManagedRuntimeControlResponseV1, blob_data_request_v1::Operation,
@@ -267,6 +267,25 @@ impl BlobDataClient {
         })?;
         if response.accepted {
             return Ok(response.plaintext);
+        }
+        Err(BlobClientError::Rejected(response.error_code))
+    }
+
+    pub fn custody_transfer(
+        &self,
+        grant: BlobCustodyTransferGrantV1,
+        channel_binding: Vec<u8>,
+    ) -> Result<(), BlobClientError> {
+        let response = self.request(BlobDataRequestV1 {
+            grant: None,
+            channel_binding: Vec::new(),
+            operation: Some(Operation::CustodyTransfer(BlobDataCustodyTransferRequestV1 {
+                grant: Some(grant),
+                channel_binding,
+            })),
+        })?;
+        if response.accepted {
+            return Ok(());
         }
         Err(BlobClientError::Rejected(response.error_code))
     }
