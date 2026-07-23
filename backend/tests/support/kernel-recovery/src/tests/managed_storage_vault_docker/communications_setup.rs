@@ -268,6 +268,22 @@ pub(super) fn assert_communications_ingress_delivery(
                         && contract.major == 1
                         && contract.revision == 1
             ));
+            context
+                .publish(
+                    "hermes.observation.v1.communications.communication_observed.v1",
+                    record.exact_bytes().to_vec().into(),
+                )
+                .await
+                .expect("republish exact typed integration envelope");
+            assert!(
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(1),
+                    canonical_events.next(),
+                )
+                .await
+                .is_err(),
+                "duplicate ingress must not produce a second canonical event"
+            );
         });
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);

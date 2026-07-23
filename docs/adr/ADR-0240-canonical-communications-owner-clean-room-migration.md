@@ -14,8 +14,9 @@ runs against the disposable authenticated Storage/NATS/Vault contour through
 with owner-local Storage and Event Hub credentials, a typed integration-shaped
 ingress observation and its resulting canonical owner projection through the
 managed owner query route, and the exact canonical outbox envelope on its
-catalog NATS subject. External authenticated Core Gateway client conformance
-remains open.
+catalog NATS subject. The same live contour redelivers the exact ingress bytes
+and proves inbox idempotency by observing no second canonical event. External
+authenticated Core Gateway client conformance remains open.
 
 Depends on:
 
