@@ -438,6 +438,8 @@ pub(super) fn assert_communications_transferred_body_projection(
     store: &Arc<SqliteControlStore>,
     supervisor: &ManagedRuntimeSupervisor,
     kernel_data: &Path,
+    kernel: &Path,
+    runtime_dir: &Path,
 ) {
     const OPAQUE_BLOB_REFERENCE: &str = "blob://fixture-source/admitted-body-1";
     let source_grant_epoch = record_fixture_source_integration(store);
@@ -575,6 +577,7 @@ pub(super) fn assert_communications_transferred_body_projection(
         .expect("Event Hub topology")
         .nats_endpoint()
         .to_owned();
+    supervisor.stop("blob").expect("stop Blob for custody outage");
     tokio::runtime::Runtime::new()
         .expect("Tokio runtime")
         .block_on(async move {
@@ -598,6 +601,26 @@ pub(super) fn assert_communications_transferred_body_projection(
                 .await
                 .expect("publish admitted-body typed ingress envelope");
         });
+
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    assert!(
+        supervisor
+            .is_active(COMMUNICATIONS_REGISTRATION)
+            .expect("read Communications process state during Blob outage"),
+        "a transient Blob outage must not stop the Communications owner runtime",
+    );
+    assert_eq!(
+        crate::platform::blob::launch::start_from_kernel(
+            supervisor,
+            store,
+            kernel,
+            kernel_data,
+            runtime_dir,
+        )
+        .expect("restart signed Blob runtime after custody outage"),
+        2,
+        "Blob restart uses a successor managed runtime generation",
+    );
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     let mut stale_source_published = false;

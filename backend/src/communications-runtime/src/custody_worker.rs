@@ -88,6 +88,10 @@ pub async fn process_next_body_custody_transfer_v1(
                 return Ok(true);
             }
             BlobCustodyTransferFailureV1::RetryPending => {
+                persistence
+                    .release_body_custody_transfer(&claimed)
+                    .await
+                    .map_err(storage_error)?;
                 return Err(CommunicationsCustodyWorkerErrorV1::RetryPending);
             }
         },

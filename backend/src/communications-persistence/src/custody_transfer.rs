@@ -201,6 +201,21 @@ impl CommunicationsDurablePersistence {
             .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
         Ok(true)
     }
+
+    pub async fn release_body_custody_transfer(
+        &self,
+        claimed: &ClaimedCommunicationsBodyCustodyTransferV1,
+    ) -> Result<bool, CommunicationsBodyCustodyTransferErrorV1> {
+        let result = sqlx::query(
+            "UPDATE hermes_data.communications_body_custody_transfer_lifecycle SET claimed_by = NULL, lease_expires_at_unix_seconds = NULL WHERE evidence_id = $1 AND state = 1 AND claimed_by = $2",
+        )
+        .bind(claimed.evidence_id.bytes().as_slice())
+        .bind(&claimed.worker_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|_| CommunicationsBodyCustodyTransferErrorV1::StorageUnavailable)?;
+        Ok(result.rows_affected() == 1)
+    }
 }
 
 async fn enqueue_index_job(
