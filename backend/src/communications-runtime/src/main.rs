@@ -159,6 +159,11 @@ async fn consume_or_tick(runtime: &mut CommunicationsEventRuntimeV1) -> Result<(
             .map_err(|_| "Communications runtime event delivery failed".to_owned()),
         () = tokio::time::sleep(Duration::from_secs(1)) => {
             runtime
+                .process_next_body_custody_transfer()
+                .await
+                .map(|_| ())
+                .map_err(|_| "Communications runtime body custody worker failed".to_owned())?;
+            runtime
                 .reconcile_search_projection_jobs()
                 .await
                 .map_err(|_| "Communications runtime derived index rebuild failed".to_owned())?;
