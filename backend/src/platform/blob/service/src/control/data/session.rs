@@ -275,7 +275,7 @@ fn decode_transfer(grant: &BlobCustodyTransferGrantV1) -> Result<VerifiedBlobCus
         grant.target_owner_id.clone(), grant.target_registration_id.clone(), grant.target_capability_id.clone(),
         grant.target_grant_epoch, grant.target_quota_max_bytes,
     ).map_err(|_| ())?;
-    if source.owner_id() != target_reference.owner_id()
+    if source.owner_id != target_reference.owner_id()
         || !target_quota.matches(&target_access)
         || source.key_revision == 0
         || grant.target_key_revision == 0
