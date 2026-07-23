@@ -491,8 +491,12 @@ fn value_matches_setting_type(value: &setting_value_v1::Value, value_type: i32) 
 
 #[cfg(test)]
 mod tests {
-    use super::valid_vault_purpose_request;
-    use crate::v1::{VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1, VaultTargetScopeV1};
+    use super::{validate_descriptor_v1, valid_vault_purpose_request};
+    use crate::v1::{
+        CapabilityCriticalityV1, CapabilityDescriptorV1, ClientRpcRouteV1, ContractReferenceV1,
+        ModuleDescriptorV1, ModuleKindV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
+        VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1, VaultTargetScopeV1,
+    };
 
     fn owner_derived_key_purpose() -> VaultPurposeRequestV1 {
         VaultPurposeRequestV1 {
@@ -517,5 +521,56 @@ mod tests {
         let mut wrong_action = owner_derived_key_purpose();
         wrong_action.actions = vec![VaultActionV1::Resolve as i32];
         assert!(!valid_vault_purpose_request(&wrong_action));
+    }
+
+    #[test]
+    fn client_rpc_surface_requires_one_exact_connect_path() {
+        let mut descriptor = client_rpc_descriptor();
+        assert_eq!(validate_descriptor_v1(&descriptor), Ok(()));
+
+        descriptor.capabilities[0].provides[0].client_rpc_route = None;
+        assert!(validate_descriptor_v1(&descriptor).is_err());
+
+        let mut descriptor = client_rpc_descriptor();
+        descriptor.capabilities[0].provides[0].client_rpc_route = Some(ClientRpcRouteV1 {
+            path: "/hermes.notes.v1.NotesQueryService/../Query".to_owned(),
+        });
+        assert!(validate_descriptor_v1(&descriptor).is_err());
+
+        let mut descriptor = client_rpc_descriptor();
+        descriptor.capabilities[0].provides[0].kind = ProvidedSurfaceKindV1::QueryRpc as i32;
+        assert!(validate_descriptor_v1(&descriptor).is_err());
+    }
+
+    fn client_rpc_descriptor() -> ModuleDescriptorV1 {
+        ModuleDescriptorV1 {
+            descriptor_major: 1,
+            descriptor_revision: 1,
+            module_id: "module_notes".to_owned(),
+            owner_id: "owner_notes".to_owned(),
+            module_kind: ModuleKindV1::Domain as i32,
+            module_version: "1".to_owned(),
+            build_id: "build".to_owned(),
+            capabilities: vec![CapabilityDescriptorV1 {
+                capability_id: "notes.query".to_owned(),
+                capability_revision: 1,
+                criticality: CapabilityCriticalityV1::Required as i32,
+                provides: vec![ProvidedSurfaceV1 {
+                    kind: ProvidedSurfaceKindV1::ClientRpc as i32,
+                    contract: Some(ContractReferenceV1 {
+                        owner: "owner_notes".to_owned(),
+                        name: "notes.query".to_owned(),
+                        major: 1,
+                        revision: 1,
+                        schema_sha256: vec![7; 32],
+                    }),
+                    client_rpc_route: Some(ClientRpcRouteV1 {
+                        path: "/hermes.notes.v1.NotesQueryService/Query".to_owned(),
+                    }),
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
     }
 }
