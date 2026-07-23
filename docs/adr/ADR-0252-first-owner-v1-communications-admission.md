@@ -2,10 +2,13 @@
 
 Статус: Принято
 Дата: 2026-07-23
-Состояние реализации: реализовано и открыто. Exact owner inventory, module
-descriptor, settings schema, capability GrantSet, Storage bundle, NATS routes и
-owner query route закреплены executable policy. Kernel остаётся в честном
-`module_control_plane`: отдельное production state `ready` ещё не реализовано.
+Состояние реализации: policy admission открыт, live owner admission остаётся в
+работе. Exact owner inventory, module descriptor, settings schema, capability
+GrantSet, Storage bundle, NATS routes и owner query route закреплены executable
+policy. До полного admission остаются live PostgreSQL backup/restore round trip
+для Communications и полная проверка acceptance matrix ниже. Kernel остаётся в
+честном `module_control_plane`: отдельное production state `ready` ещё не
+реализовано.
 
 Зависит от:
 
