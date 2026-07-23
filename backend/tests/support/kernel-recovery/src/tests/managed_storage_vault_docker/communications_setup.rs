@@ -1,17 +1,22 @@
 use super::*;
 
+use hermes_communications_api::query_wire::{
+    CommunicationsQueryRequestV1, CommunicationsQueryResponseV1, ListAccountsRequestV1,
+    communications_query_request_v1::Operation,
+    communications_query_response_v1::Result as QueryResult,
+};
 use hermes_communications_persistence::communications_storage_bundle_v1;
 use hermes_communications_runtime::admission::{
     COMMUNICATIONS_EVENTS_CAPABILITY_ID, COMMUNICATIONS_MODULE_ID,
     COMMUNICATIONS_OBSERVE_CAPABILITY_ID, COMMUNICATIONS_OWNER_ID,
-    COMMUNICATIONS_STORAGE_CAPABILITY_ID, communications_module_descriptor_v1,
+    COMMUNICATIONS_STORAGE_CAPABILITY_ID, COMMUNICATIONS_QUERY_CAPABILITY_ID,
+    communications_module_descriptor_v1,
     communications_settings_schema_bytes_v1,
     communication_evidence_recorded_contract_reference_v1,
 };
+use hermes_communications_runtime::query_client_port::encode_module_query_request_v1;
 use hermes_kernel_control_store::PlatformStorageBindingStateV1;
-use hermes_runtime_protocol::v1::{
-    ModuleKindV1, SettingsSchemaRefV1,
-};
+use hermes_runtime_protocol::v1::ModuleClientResponseV1;
 
 pub(super) const COMMUNICATIONS_REGISTRATION: &str = "communications-runtime";
 const COMMUNICATIONS_RUNTIME_INSTANCE_ID: &str = "02020202020202020202020202020202";
@@ -143,6 +148,44 @@ pub(super) fn start_communications_domain(
         },
     )
     .expect("start Communications domain")
+}
+
+pub(super) fn assert_communications_query_delivery(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+) {
+    let payload = CommunicationsQueryRequestV1 {
+        protocol_major: 1,
+        operation: Some(Operation::ListAccounts(ListAccountsRequestV1 { limit: 16 })),
+    }
+    .encode_to_vec();
+    let request = encode_module_query_request_v1(1, &payload)
+        .expect("encode Communications query module request");
+    let launch = store
+        .effective_managed_launch_record(COMMUNICATIONS_REGISTRATION)
+        .expect("read Communications launch")
+        .expect("Communications launch is active");
+    let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+        COMMUNICATIONS_REGISTRATION,
+        launch.runtime_instance_id(),
+        launch.runtime_generation(),
+        launch.grant_epoch(),
+        COMMUNICATIONS_QUERY_CAPABILITY_ID,
+        &request,
+    );
+    let bytes = crate::modules::capability::router::route_managed_client_request(
+        store,
+        &supervisor.relay_port(),
+        &route,
+    )
+    .expect("route exact Communications owner query");
+    let response = ModuleClientResponseV1::decode(bytes.as_slice())
+        .expect("decode Communications module response");
+    assert_eq!(response.request_id, 1);
+    assert!(response.error_code.is_empty());
+    let query = CommunicationsQueryResponseV1::decode(response.response_payload.as_slice())
+        .expect("decode Communications query response");
+    assert!(matches!(query.result, Some(QueryResult::ListAccounts(accounts)) if accounts.accounts.is_empty()));
 }
 
 fn record_communications_registration(store: &SqliteControlStore, descriptor: &[u8]) -> u64 {
